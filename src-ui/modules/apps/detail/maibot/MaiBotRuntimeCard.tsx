@@ -4,7 +4,11 @@
 import { MessageCircle, RotateCw } from 'lucide-react';
 import { Button, Card, Spinner } from '../../../../shared/ui';
 import type { AppInstance } from '../../../../core/ipc/types';
-import { useMaiBotRestart, useMaiBotStats, useMaiBotStatus } from '../../../../hooks/apps/useMaiBotRuntime';
+import {
+    useMaiBotRestart,
+    useMaiBotStats,
+    useMaiBotStatus,
+} from '../../../../hooks/apps/useMaiBotRuntime';
 
 export function formatUptime(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -24,7 +28,9 @@ export function formatTokens(n: number): string {
 
 const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="font-display text-[17px] font-semibold tabular-nums leading-tight text-text">{value}</span>
+        <span className="font-display text-[17px] font-semibold tabular-nums leading-tight text-text">
+            {value}
+        </span>
         <span className="text-2xs text-text-tertiary">{label}</span>
     </div>
 );
@@ -42,7 +48,10 @@ export const MaiBotRuntimeCard: React.FC<{
 
     const s = status.data;
     const head = ok
-        ? [s?.version && `v${s.version}`, s?.uptime_secs !== undefined && `已运行 ${formatUptime(s.uptime_secs)}`]
+        ? [
+              s?.version && `v${s.version}`,
+              s?.uptime_secs !== undefined && `已运行 ${formatUptime(s.uptime_secs)}`,
+          ]
               .filter(Boolean)
               .join(' · ')
         : null;
@@ -56,7 +65,9 @@ export const MaiBotRuntimeCard: React.FC<{
                     ) : (
                         <>
                             {s?.gate === 'unreachable' && <Spinner size="sm" />}
-                            <span className="text-text-secondary">{s?.message || '正在连麦麦的 WebUI…'}</span>
+                            <span className="text-text-secondary">
+                                {s?.message || '正在连麦麦的 WebUI…'}
+                            </span>
                         </>
                     )}
                 </div>
@@ -84,7 +95,9 @@ export const MaiBotRuntimeCard: React.FC<{
                     <Stat label="用掉 token" value={formatTokens(stats.data.total_tokens)} />
                     <Stat
                         label="花费（按模型页的价格）"
-                        value={stats.data.total_cost > 0 ? `¥${stats.data.total_cost.toFixed(2)}` : '—'}
+                        value={
+                            stats.data.total_cost > 0 ? `¥${stats.data.total_cost.toFixed(2)}` : '—'
+                        }
                     />
                 </div>
             )}

@@ -22,7 +22,11 @@ export function useDebugHistory(query: DebugHistoryQuery) {
             try {
                 return await onebotDebugService.history(query);
             } catch (err) {
-                pushErrorBar({ key: 'debug-history', title: '读取调用历史失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: 'debug-history',
+                    title: '读取调用历史失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },
@@ -40,7 +44,11 @@ export function useHistoryEntry(id: string | null) {
             try {
                 return await onebotDebugService.historyEntry(id);
             } catch (err) {
-                pushErrorBar({ key: `debug-history-entry:${id}`, title: '读取历史记录失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: `debug-history-entry:${id}`,
+                    title: '读取历史记录失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },
@@ -59,7 +67,11 @@ export function useClearHistory() {
             client.removeQueries({ queryKey: debugHistoryEntryPrefix });
         },
         onError: (err) => {
-            pushErrorBar({ key: 'debug-history-clear', title: '清空调用历史失败', raw: errorText(err) });
+            pushErrorBar({
+                key: 'debug-history-clear',
+                title: '清空调用历史失败',
+                raw: errorText(err),
+            });
         },
     });
 }

@@ -23,17 +23,22 @@ vi.mock('../ui/pushErrorBar', () => ({
 }));
 
 // 模块级的域事件桥：测试里自己决定什么时候发 bot_state_changed
-const domainHandlers: Array<(event: { kind: string; snapshot: { bot_id: string; state: string } }) => void> = [];
+const domainHandlers: Array<
+    (event: { kind: string; snapshot: { bot_id: string; state: string } }) => void
+> = [];
 
 vi.mock('../../core/services/domain-event-hub', () => ({
-    subscribeDomainEvents: (fn: (event: { kind: string; snapshot: { bot_id: string; state: string } }) => void) => {
+    subscribeDomainEvents: (
+        fn: (event: { kind: string; snapshot: { bot_id: string; state: string } }) => void,
+    ) => {
         domainHandlers.push(fn);
         return () => {};
     },
 }));
 
 const emitBotState = (botId: string, state: string): void => {
-    for (const h of domainHandlers) h({ kind: 'bot_state_changed', snapshot: { bot_id: botId, state } });
+    for (const h of domainHandlers)
+        h({ kind: 'bot_state_changed', snapshot: { bot_id: botId, state } });
 };
 
 import { debugEventStore as store } from './debugEventStore';
@@ -93,7 +98,8 @@ const failedSend = (seq: number, requestId = 'req-1'): DebugEvent => ({
 
 const wordingOf = (requestId: string) => {
     for (const item of bot()?.chat.items ?? []) {
-        if ((item.kind === 'message' || item.kind === 'call') && item.call?.requestId === requestId) return item.call.wording;
+        if ((item.kind === 'message' || item.kind === 'call') && item.call?.requestId === requestId)
+            return item.call.wording;
     }
     return 'missing';
 };
@@ -123,10 +129,16 @@ interface Wire {
 }
 
 /** 装一个 subscribe：可预先给积压（在回包前同步推，和浏览器预览的 mock 一样），返回的 wire 用来推实时批次 */
-function installSubscribe(opts: { backlog?: DebugEvent[]; receiver?: DebugReceiverInfo } = {}): Wire[] {
+function installSubscribe(
+    opts: { backlog?: DebugEvent[]; receiver?: DebugReceiverInfo } = {},
+): Wire[] {
     const wires: Wire[] = [];
     subscribeMock.mockImplementation(
-        async (_bot: string, _source: unknown, onBatch: (b: DebugEventBatch) => void): Promise<DebugSubscribeResponse> => {
+        async (
+            _bot: string,
+            _source: unknown,
+            onBatch: (b: DebugEventBatch) => void,
+        ): Promise<DebugSubscribeResponse> => {
             if (opts.backlog?.length) onBatch(batch(opts.backlog));
             const subscriptionId = `sub-${wires.length + 1}`;
             wires.push({ push: (events) => onBatch(batch(events)), subscriptionId });
@@ -249,7 +261,10 @@ describe('订阅与积压', () => {
     });
 
     it('回包前同步补来的积压也会应用', async () => {
-        installSubscribe({ backlog: [groupMessage(1), groupMessage(2)], receiver: info({ buffered: 2 }) });
+        installSubscribe({
+            backlog: [groupMessage(1), groupMessage(2)],
+            receiver: info({ buffered: 2 }),
+        });
 
         await store.ensureReceiving(BOT, AUTO, SELF);
         runFrame();
@@ -268,7 +283,10 @@ describe('订阅与积压', () => {
         expect(unsubscribeMock).toHaveBeenCalledWith('sub-1');
         expect(bot().subscriptionId).toBeNull();
 
-        installSubscribe({ backlog: [...backlog, groupMessage(4)], receiver: info({ buffered: 4 }) });
+        installSubscribe({
+            backlog: [...backlog, groupMessage(4)],
+            receiver: info({ buffered: 4 }),
+        });
         await store.ensureReceiving(BOT, AUTO, SELF);
         runFrame();
 
@@ -300,7 +318,9 @@ describe('订阅与积压', () => {
 
     it('等订阅回包的时候页面已经走了：回包一到就退订，不留观众', async () => {
         let resolveSubscribe!: (r: DebugSubscribeResponse) => void;
-        subscribeMock.mockReturnValue(new Promise<DebugSubscribeResponse>((r) => (resolveSubscribe = r)));
+        subscribeMock.mockReturnValue(
+            new Promise<DebugSubscribeResponse>((r) => (resolveSubscribe = r)),
+        );
         const pending = store.ensureReceiving(BOT, AUTO, SELF);
 
         store.releaseView(BOT);
@@ -313,7 +333,9 @@ describe('订阅与积压', () => {
 
     it('前一个订阅还在路上、又来了另一条通道的请求：等的时候页面走了（releaseView）就不再订', async () => {
         let resolveFirst!: (r: DebugSubscribeResponse) => void;
-        subscribeMock.mockReturnValueOnce(new Promise<DebugSubscribeResponse>((r) => (resolveFirst = r)));
+        subscribeMock.mockReturnValueOnce(
+            new Promise<DebugSubscribeResponse>((r) => (resolveFirst = r)),
+        );
         const first = store.ensureReceiving(BOT, AUTO, SELF);
         const queued = store.ensureReceiving(BOT, { kind: 'ws', name: 'main' }, SELF);
 
@@ -328,7 +350,9 @@ describe('订阅与积压', () => {
 
     it('排队等待期间页面没走：照常换到新通道；连着排了两个不同通道时最后一个说了算', async () => {
         let resolveFirst!: (r: DebugSubscribeResponse) => void;
-        subscribeMock.mockReturnValueOnce(new Promise<DebugSubscribeResponse>((r) => (resolveFirst = r)));
+        subscribeMock.mockReturnValueOnce(
+            new Promise<DebugSubscribeResponse>((r) => (resolveFirst = r)),
+        );
         const first = store.ensureReceiving(BOT, AUTO, SELF);
         const second = store.ensureReceiving(BOT, { kind: 'ws', name: 'a' }, SELF);
         const third = store.ensureReceiving(BOT, { kind: 'http', name: 'b' }, SELF);
@@ -337,7 +361,11 @@ describe('订阅与积压', () => {
         resolveFirst({ subscription_id: 'first', receiver: info() });
         await Promise.all([first, second, third]);
 
-        expect(subscribeMock.mock.calls.map((c) => c[1])).toEqual([AUTO, { kind: 'ws', name: 'a' }, { kind: 'http', name: 'b' }]);
+        expect(subscribeMock.mock.calls.map((c) => c[1])).toEqual([
+            AUTO,
+            { kind: 'ws', name: 'a' },
+            { kind: 'http', name: 'b' },
+        ]);
         expect(bot().subscriptionId).toBe('sub-2');
     });
 
@@ -360,7 +388,9 @@ describe('订阅与积压', () => {
 
         expect(bot().error).toBe('Bot 未运行');
         expect(bot().subscriptionId).toBeNull();
-        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: `debug-receive:${BOT}` }));
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ key: `debug-receive:${BOT}` }),
+        );
 
         installSubscribe();
         await store.ensureReceiving(BOT, AUTO, SELF);
@@ -410,7 +440,11 @@ describe('接收器 Stopped 之后重新订阅', () => {
 
         wires[0].push([receiverEvent(1, { state: 'reconnecting', attempt: 2, retry_in_ms: 2000 })]);
         runFrame();
-        expect(bot().receiver?.state).toEqual({ state: 'reconnecting', attempt: 2, retry_in_ms: 2000 });
+        expect(bot().receiver?.state).toEqual({
+            state: 'reconnecting',
+            attempt: 2,
+            retry_in_ms: 2000,
+        });
         expect(bot().subscriptionId).toBe('sub-1');
 
         wires[0].push([receiverEvent(2, { state: 'connected' })]);
@@ -494,7 +528,10 @@ describe('已丢弃条数（时间线顶部的「更早的 N 条已丢弃」）'
 
         store.releaseView(BOT);
         // 接收器重建：seq 接着往后编，first_seq 恰好是下一条，什么都不能算丢
-        installSubscribe({ backlog: [groupMessage(3)], receiver: info({ buffered: 1, first_seq: 3 }) });
+        installSubscribe({
+            backlog: [groupMessage(3)],
+            receiver: info({ buffered: 1, first_seq: 3 }),
+        });
         await store.ensureReceiving(BOT, AUTO, SELF);
         runFrame();
 
@@ -510,14 +547,20 @@ describe('已丢弃条数（时间线顶部的「更早的 N 条已丢弃」）'
 
         store.releaseView(BOT);
         // 离开期间又进了十几条，3–12 被挤掉，缓冲从 13 开始
-        installSubscribe({ backlog: [groupMessage(13), groupMessage(14)], receiver: info({ buffered: 2, first_seq: 13 }) });
+        installSubscribe({
+            backlog: [groupMessage(13), groupMessage(14)],
+            receiver: info({ buffered: 2, first_seq: 13 }),
+        });
         await store.ensureReceiving(BOT, AUTO, SELF);
         runFrame();
         expect(bot().unseenDropped).toBe(10);
 
         store.releaseView(BOT);
         // 再离开一次，15–19 又被挤掉
-        installSubscribe({ backlog: [groupMessage(20)], receiver: info({ buffered: 1, first_seq: 20 }) });
+        installSubscribe({
+            backlog: [groupMessage(20)],
+            receiver: info({ buffered: 1, first_seq: 20 }),
+        });
         await store.ensureReceiving(BOT, AUTO, SELF);
         runFrame();
         expect(bot().unseenDropped).toBe(15);
@@ -567,7 +610,9 @@ describe('会话与停止', () => {
 
         stopReceiverMock.mockRejectedValueOnce('后端没响应');
         await store.stopReceiving(BOT);
-        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: `debug-stop-receiver:${BOT}` }));
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ key: `debug-stop-receiver:${BOT}` }),
+        );
         expect(bot().subscriptionId).toBe('sub-2');
     });
 
@@ -583,7 +628,17 @@ describe('会话与停止', () => {
             {
                 seq: 2,
                 at_ms: 1_700_000_000_002,
-                body: { kind: 'ob11', payload: { post_type: 'notice', notice_type: 'notify', sub_type: 'poke', group_id: 100001, user_id: 20001, target_id: SELF } },
+                body: {
+                    kind: 'ob11',
+                    payload: {
+                        post_type: 'notice',
+                        notice_type: 'notify',
+                        sub_type: 'poke',
+                        group_id: 100001,
+                        user_id: 20001,
+                        target_id: SELF,
+                    },
+                },
             },
         ]);
         runFrame();
@@ -601,7 +656,10 @@ describe('会话与停止', () => {
         expect(bot().chat.selfId).toBe(SELF);
 
         store.releaseView(BOT);
-        installSubscribe({ backlog: [...backlog, groupMessage(3)], receiver: info({ buffered: 3 }) });
+        installSubscribe({
+            backlog: [...backlog, groupMessage(3)],
+            receiver: info({ buffered: 3 }),
+        });
         await store.ensureReceiving(BOT, AUTO, SELF);
         runFrame();
 

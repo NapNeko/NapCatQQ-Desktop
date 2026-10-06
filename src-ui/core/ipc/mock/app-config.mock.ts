@@ -47,22 +47,76 @@ import { withMockDelay } from './bootstrap.mock';
 
 const KARIN_DOCS: AppConfigDocument[] = [
     { id: 'env', label: '.env', rel_path: '.env', format: 'dot_env', hot_reload: true },
-    { id: 'config', label: 'config.json', rel_path: '@karinjs/config/config.json', format: 'json', hot_reload: true },
-    { id: 'adapter', label: 'adapter.json', rel_path: '@karinjs/config/adapter.json', format: 'json', hot_reload: true },
-    { id: 'groups', label: 'groups.json', rel_path: '@karinjs/config/groups.json', format: 'json', hot_reload: true },
-    { id: 'privates', label: 'privates.json', rel_path: '@karinjs/config/privates.json', format: 'json', hot_reload: true },
-    { id: 'render', label: 'render.json', rel_path: '@karinjs/config/render.json', format: 'json', hot_reload: true },
-    { id: 'redis', label: 'redis.json', rel_path: '@karinjs/config/redis.json', format: 'json', hot_reload: false },
+    {
+        id: 'config',
+        label: 'config.json',
+        rel_path: '@karinjs/config/config.json',
+        format: 'json',
+        hot_reload: true,
+    },
+    {
+        id: 'adapter',
+        label: 'adapter.json',
+        rel_path: '@karinjs/config/adapter.json',
+        format: 'json',
+        hot_reload: true,
+    },
+    {
+        id: 'groups',
+        label: 'groups.json',
+        rel_path: '@karinjs/config/groups.json',
+        format: 'json',
+        hot_reload: true,
+    },
+    {
+        id: 'privates',
+        label: 'privates.json',
+        rel_path: '@karinjs/config/privates.json',
+        format: 'json',
+        hot_reload: true,
+    },
+    {
+        id: 'render',
+        label: 'render.json',
+        rel_path: '@karinjs/config/render.json',
+        format: 'json',
+        hot_reload: true,
+    },
+    {
+        id: 'redis',
+        label: 'redis.json',
+        rel_path: '@karinjs/config/redis.json',
+        format: 'json',
+        hot_reload: false,
+    },
 ];
 
 const NONEBOT2_DOCS: AppConfigDocument[] = [
     { id: 'env', label: '.env', rel_path: '.env', format: 'dot_env', hot_reload: false },
-    { id: 'env_prod', label: '.env.prod', rel_path: '.env.prod', format: 'dot_env', hot_reload: false },
-    { id: 'pyproject', label: 'pyproject.toml', rel_path: 'pyproject.toml', format: 'toml', hot_reload: false },
+    {
+        id: 'env_prod',
+        label: '.env.prod',
+        rel_path: '.env.prod',
+        format: 'dot_env',
+        hot_reload: false,
+    },
+    {
+        id: 'pyproject',
+        label: 'pyproject.toml',
+        rel_path: 'pyproject.toml',
+        format: 'toml',
+        hot_reload: false,
+    },
 ];
 
 const ASTRBOT_DOCS: AppConfigDocument[] = [
-    { id: 'cmd_config', label: 'cmd_config.json', rel_path: 'data/cmd_config.json', format: 'json', hot_reload: false },
+    {
+        id: 'cmd_config',
+        label: 'cmd_config.json',
+        rel_path: 'data/cmd_config.json',
+        format: 'json',
+        hot_reload: false,
+    },
 ];
 
 /** NeoBot 两份 TOML（对齐后端 neobot_config_documents 的 id / rel_path / hot_reload） */
@@ -84,8 +138,20 @@ const NEOBOT_DOCS: AppConfigDocument[] = [
 ];
 
 const MAIBOT_DOCS: AppConfigDocument[] = [
-    { id: 'bot_config', label: '主配置 bot_config.toml', rel_path: 'config/bot_config.toml', format: 'toml', hot_reload: true },
-    { id: 'model_config', label: '模型配置 model_config.toml', rel_path: 'config/model_config.toml', format: 'toml', hot_reload: true },
+    {
+        id: 'bot_config',
+        label: '主配置 bot_config.toml',
+        rel_path: 'config/bot_config.toml',
+        format: 'toml',
+        hot_reload: true,
+    },
+    {
+        id: 'model_config',
+        label: '模型配置 model_config.toml',
+        rel_path: 'config/model_config.toml',
+        format: 'toml',
+        hot_reload: true,
+    },
     {
         id: 'adapter_config',
         label: 'NapCat 适配器 config.toml',
@@ -96,9 +162,21 @@ const MAIBOT_DOCS: AppConfigDocument[] = [
 ];
 
 const KOISHI_DOCS: AppConfigDocument[] = [
-    { id: 'koishi', label: 'koishi.yml', rel_path: 'koishi.yml', format: 'yaml', hot_reload: false },
+    {
+        id: 'koishi',
+        label: 'koishi.yml',
+        rel_path: 'koishi.yml',
+        format: 'yaml',
+        hot_reload: false,
+    },
     { id: 'env', label: '.env', rel_path: '.env', format: 'dot_env', hot_reload: false },
-    { id: 'package', label: 'package.json', rel_path: 'package.json', format: 'json', hot_reload: false },
+    {
+        id: 'package',
+        label: 'package.json',
+        rel_path: 'package.json',
+        format: 'json',
+        hot_reload: false,
+    },
 ];
 
 const KOISHI_TEXT: Record<string, string> = {
@@ -108,21 +186,30 @@ const KOISHI_TEXT: Record<string, string> = {
 };
 
 const MAIBOT_TEXT: Record<string, string> = {
-    bot_config: '[inner]\nversion = "8.14.40"\n\n[webui]\nport = 23001\n\n[maim_message]\nws_server_port = 23002\n',
+    bot_config:
+        '[inner]\nversion = "8.14.40"\n\n[webui]\nport = 23001\n\n[maim_message]\nws_server_port = 23002\n',
     model_config: '[inner]\nversion = "1.17.9"\n',
     adapter_config: '[plugin]\nconfig_version = "0.1.0"\nenabled = false\n',
 };
 
 /** 和后端 yunzai_config_documents 一致：config/config 下九份，server / redis / db 只在启动时读 */
-const YUNZAI_DOCS: AppConfigDocument[] = ['bot', 'other', 'group', 'server', 'redis', 'renderer', 'db', 'milky', 'satori'].map(
-    (name) => ({
-        id: name,
-        label: `${name}.yaml`,
-        rel_path: `config/config/${name}.yaml`,
-        format: 'yaml',
-        hot_reload: !['server', 'redis', 'db'].includes(name),
-    }),
-);
+const YUNZAI_DOCS: AppConfigDocument[] = [
+    'bot',
+    'other',
+    'group',
+    'server',
+    'redis',
+    'renderer',
+    'db',
+    'milky',
+    'satori',
+].map((name) => ({
+    id: name,
+    label: `${name}.yaml`,
+    rel_path: `config/config/${name}.yaml`,
+    format: 'yaml',
+    hot_reload: !['server', 'redis', 'db'].includes(name),
+}));
 
 const YUNZAI_TEXT: Record<string, string> = {
     bot: '# 日志等级\nlog_level: info\n# 渲染用的浏览器，留空用装时下载的\nchromium_path:\n',
@@ -206,13 +293,31 @@ interface KarinState {
 }
 
 const karinStates = new Map<string, KarinState>();
-const nbStates = new Map<string, { config: NoneBot2InstanceConfig; docRev: Record<string, number> }>();
-const abStates = new Map<string, { config: AstrBotInstanceConfig; docRev: Record<string, number> }>();
-const mbStates = new Map<string, { config: MaiBotInstanceConfig; docRev: Record<string, number> }>();
-const koStates = new Map<string, { config: KoishiInstanceConfig; docRev: Record<string, number> }>();
-const yzStates = new Map<string, { config: YunzaiInstanceConfig; docRev: Record<string, number> }>();
+const nbStates = new Map<
+    string,
+    { config: NoneBot2InstanceConfig; docRev: Record<string, number> }
+>();
+const abStates = new Map<
+    string,
+    { config: AstrBotInstanceConfig; docRev: Record<string, number> }
+>();
+const mbStates = new Map<
+    string,
+    { config: MaiBotInstanceConfig; docRev: Record<string, number> }
+>();
+const koStates = new Map<
+    string,
+    { config: KoishiInstanceConfig; docRev: Record<string, number> }
+>();
+const yzStates = new Map<
+    string,
+    { config: YunzaiInstanceConfig; docRev: Record<string, number> }
+>();
 const rawStates = new Map<string, { text: Record<string, string>; rev: Record<string, number> }>();
-function neobotState(inst: AppInstance): { text: Record<string, string>; rev: Record<string, number> } {
+function neobotState(inst: AppInstance): {
+    text: Record<string, string>;
+    rev: Record<string, number>;
+} {
     let s = rawStates.get(inst.id);
     if (!s) {
         s = { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } };
@@ -230,14 +335,22 @@ function mbState(instance: AppInstance) {
         s = { config: maibotDefaultConfig(instance.port), docRev };
         s.config.webui_token = 'Ncd_mockMockMockMockMock';
         if (instance.link && s.config.adapter) {
-            s.config.adapter = { ...s.config.adapter, enabled: true, napcat_port: 23456, has_token: true };
+            s.config.adapter = {
+                ...s.config.adapter,
+                enabled: true,
+                napcat_port: 23456,
+                has_token: true,
+            };
         }
         mbStates.set(instance.id, s);
     }
     return s;
 }
 
-function mbEnvelope(s: { config: MaiBotInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+function mbEnvelope(s: {
+    config: MaiBotInstanceConfig;
+    docRev: Record<string, number>;
+}): AppInstanceConfigEnvelope {
     return {
         config: { framework: 'maibot', data: structuredClone(s.config) },
         revision: combined(s.docRev, MAIBOT_DOCS),
@@ -258,7 +371,10 @@ function koState(instance: AppInstance) {
     return s;
 }
 
-function koEnvelope(s: { config: KoishiInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+function koEnvelope(s: {
+    config: KoishiInstanceConfig;
+    docRev: Record<string, number>;
+}): AppInstanceConfigEnvelope {
     return {
         config: { framework: 'koishi', data: structuredClone(s.config) },
         revision: combined(s.docRev, KOISHI_DOCS.slice(0, 1)),
@@ -311,7 +427,10 @@ function yzState(instance: AppInstance) {
     return s;
 }
 
-function yzEnvelope(s: { config: YunzaiInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+function yzEnvelope(s: {
+    config: YunzaiInstanceConfig;
+    docRev: Record<string, number>;
+}): AppInstanceConfigEnvelope {
     return {
         config: { framework: 'yunzai', data: structuredClone(s.config) },
         revision: combined(s.docRev, YUNZAI_DOCS),
@@ -393,7 +512,11 @@ function seedKarin(instance: AppInstance): KarinState {
         LOG_MAX_CONNECTIONS: '日志实时Api最多支持同时连接数',
     };
     config.env.custom = [
-        { key: 'LOG_API_MAX_CONNECTIONS', value: '5', comment: '日志实时Api最多支持同时连接数（旧键）' },
+        {
+            key: 'LOG_API_MAX_CONNECTIONS',
+            value: '5',
+            comment: '日志实时Api最多支持同时连接数（旧键）',
+        },
     ];
     config.config.master = ['console', '10001'];
     const docRev: Record<string, number> = {};
@@ -458,7 +581,10 @@ function abState(instance: AppInstance) {
     return s;
 }
 
-function abEnvelope(s: { config: AstrBotInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+function abEnvelope(s: {
+    config: AstrBotInstanceConfig;
+    docRev: Record<string, number>;
+}): AppInstanceConfigEnvelope {
     return {
         config: { framework: 'astrbot', data: structuredClone(s.config) },
         revision: combined(s.docRev, ASTRBOT_DOCS),
@@ -470,7 +596,10 @@ function abEnvelope(s: { config: AstrBotInstanceConfig; docRev: Record<string, n
     };
 }
 
-function nbEnvelope(s: { config: NoneBot2InstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+function nbEnvelope(s: {
+    config: NoneBot2InstanceConfig;
+    docRev: Record<string, number>;
+}): AppInstanceConfigEnvelope {
     return {
         config: { framework: 'nonebot2', data: structuredClone(s.config) },
         revision: combined(s.docRev, NONEBOT2_DOCS),
@@ -565,7 +694,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 return withMockDelay(yzEnvelope(yzState(inst)));
             }
             if (inst.framework_id !== 'karin') {
-                throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
+                throw makeAppConfigError(
+                    'unsupported',
+                    `该应用端暂不支持类型化配置: ${inst.framework_id}`,
+                );
             }
             return withMockDelay(envelope(karinState(inst)));
         },
@@ -580,7 +712,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'nonebot2' && config.framework === 'nonebot2') {
                 const s = nbState(inst);
                 if (baseRevision != null && baseRevision !== combined(s.docRev, NONEBOT2_DOCS)) {
-                    throw makeAppConfigError('conflict', '配置已被修改（config），请重新加载后再保存');
+                    throw makeAppConfigError(
+                        'conflict',
+                        '配置已被修改（config），请重新加载后再保存',
+                    );
                 }
                 const next = structuredClone(config.data);
                 const issues = validateNoneBot2Config(next);
@@ -618,7 +753,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'astrbot' && config.framework === 'astrbot') {
                 const s = abState(inst);
                 if (baseRevision != null && baseRevision !== combined(s.docRev, ASTRBOT_DOCS)) {
-                    throw makeAppConfigError('conflict', '配置已被修改（cmd_config），请重新加载后再保存');
+                    throw makeAppConfigError(
+                        'conflict',
+                        '配置已被修改（cmd_config），请重新加载后再保存',
+                    );
                 }
                 const next = structuredClone(config.data);
                 const issues = validateAstrBotConfig(next);
@@ -656,7 +794,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'maibot' && config.framework === 'maibot') {
                 const s = mbState(inst);
                 if (baseRevision != null && baseRevision !== combined(s.docRev, MAIBOT_DOCS)) {
-                    throw makeAppConfigError('conflict', '配置已被修改（bot_config），请重新加载后再保存');
+                    throw makeAppConfigError(
+                        'conflict',
+                        '配置已被修改（bot_config），请重新加载后再保存',
+                    );
                 }
                 const next = structuredClone(config.data);
                 const issues = validateMaiBotConfig(next);
@@ -669,7 +810,8 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 }
                 const before = s.config;
                 const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
-                if (changed(before.bot, next.bot)) s.docRev.bot_config = (s.docRev.bot_config ?? 0) + 1;
+                if (changed(before.bot, next.bot))
+                    s.docRev.bot_config = (s.docRev.bot_config ?? 0) + 1;
                 if (changed(before.models, next.models)) {
                     s.docRev.model_config = (s.docRev.model_config ?? 0) + 1;
                 }
@@ -678,15 +820,18 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 }
                 // 和后端一样：只在启动时读的字段（端口、日志、插件运行时…）改了才提示重启
                 const restartFields =
-                    before.bot.webui.port !== next.bot.webui.port
-                    || changed(before.bot.maim_message, next.bot.maim_message)
-                    || changed(before.bot.log, next.bot.log)
-                    || before.bot.plugin_runtime.enabled !== next.bot.plugin_runtime.enabled;
+                    before.bot.webui.port !== next.bot.webui.port ||
+                    changed(before.bot.maim_message, next.bot.maim_message) ||
+                    changed(before.bot.log, next.bot.log) ||
+                    before.bot.plugin_runtime.enabled !== next.bot.plugin_runtime.enabled;
                 // 只读字段以落盘为准
                 s.config = {
-                    ...next, webui_token: before.webui_token, adapter: next.adapter && before.adapter
-                        ? { ...before.adapter, chat: next.adapter.chat }
-                        : before.adapter
+                    ...next,
+                    webui_token: before.webui_token,
+                    adapter:
+                        next.adapter && before.adapter
+                            ? { ...before.adapter, chat: next.adapter.chat }
+                            : before.adapter,
                 };
                 let portChanged = false;
                 if (next.bot.webui.port !== inst.port) {
@@ -705,8 +850,14 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             }
             if (inst.framework_id === 'koishi' && config.framework === 'koishi') {
                 const s = koState(inst);
-                if (baseRevision != null && baseRevision !== combined(s.docRev, KOISHI_DOCS.slice(0, 1))) {
-                    throw makeAppConfigError('conflict', '配置已被修改（koishi.yml），请重新加载后再保存');
+                if (
+                    baseRevision != null &&
+                    baseRevision !== combined(s.docRev, KOISHI_DOCS.slice(0, 1))
+                ) {
+                    throw makeAppConfigError(
+                        'conflict',
+                        '配置已被修改（koishi.yml），请重新加载后再保存',
+                    );
                 }
                 const next = structuredClone(config.data);
                 const issues = validateKoishiConfig(next);
@@ -717,7 +868,8 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                         issues,
                     );
                 }
-                if (JSON.stringify(s.config) !== JSON.stringify(next)) s.docRev.koishi = (s.docRev.koishi ?? 0) + 1;
+                if (JSON.stringify(s.config) !== JSON.stringify(next))
+                    s.docRev.koishi = (s.docRev.koishi ?? 0) + 1;
                 s.config = next;
                 const port = koishiServer(next).port;
                 let portChanged = false;
@@ -739,7 +891,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'yunzai' && config.framework === 'yunzai') {
                 const s = yzState(inst);
                 if (baseRevision != null && baseRevision !== combined(s.docRev, YUNZAI_DOCS)) {
-                    throw makeAppConfigError('conflict', '配置已被修改（other），请重新加载后再保存');
+                    throw makeAppConfigError(
+                        'conflict',
+                        '配置已被修改（other），请重新加载后再保存',
+                    );
                 }
                 const next = structuredClone(config.data);
                 const issues = validateYunzaiConfig(next);
@@ -752,11 +907,24 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 }
                 const before = s.config;
                 const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
-                for (const key of ['bot', 'other', 'group', 'server', 'redis', 'renderer'] as const) {
+                for (const key of [
+                    'bot',
+                    'other',
+                    'group',
+                    'server',
+                    'redis',
+                    'renderer',
+                ] as const) {
                     if (changed(before[key], next[key])) s.docRev[key] = (s.docRev[key] ?? 0) + 1;
                 }
                 // auth 里别的头是读出来给提示的，不从表单写回
-                s.config = { ...next, server: { ...next.server, extra_auth_headers: before.server.extra_auth_headers } };
+                s.config = {
+                    ...next,
+                    server: {
+                        ...next.server,
+                        extra_auth_headers: before.server.extra_auth_headers,
+                    },
+                };
                 let portChanged = false;
                 if (next.server.port !== inst.port) {
                     deps.publish({ ...inst, port: next.server.port }, 'port_changed');
@@ -767,13 +935,17 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     config: env.config,
                     revision: env.revision,
                     documents: env.documents,
-                    restart_required: yunzaiRestartInputsChanged(before, next) && inst.state === 'running',
+                    restart_required:
+                        yunzaiRestartInputsChanged(before, next) && inst.state === 'running',
                     relinked: !!inst.link && yunzaiLinkInputsChanged(before, next),
                     port_changed: portChanged,
                 });
             }
             if (inst.framework_id !== 'karin' || config.framework !== 'karin') {
-                throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
+                throw makeAppConfigError(
+                    'unsupported',
+                    `该应用端暂不支持类型化配置: ${inst.framework_id}`,
+                );
             }
             const s = karinState(inst);
             if (baseRevision != null) {
@@ -782,7 +954,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     s.docRev.config += 1;
                 }
                 if (baseRevision !== combined(s.docRev, KARIN_DOCS)) {
-                    throw makeAppConfigError('conflict', '配置已被修改（config），请重新加载后再保存');
+                    throw makeAppConfigError(
+                        'conflict',
+                        '配置已被修改（config），请重新加载后再保存',
+                    );
                 }
             }
             const next = structuredClone(config.data);
@@ -845,7 +1020,8 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 const raw = yunzaiRaw(inst);
                 return withMockDelay({
                     doc_id: docId,
-                    text: raw.text[docId] ?? (docId.startsWith('plugin:') ? YUNZAI_PLUGIN_TEXT : ''),
+                    text:
+                        raw.text[docId] ?? (docId.startsWith('plugin:') ? YUNZAI_PLUGIN_TEXT : ''),
                     revision: rev(raw.rev[docId] ?? 0),
                 });
             }
@@ -859,7 +1035,11 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             }
             if (inst.framework_id === 'karin') {
                 const s = karinState(inst);
-                return withMockDelay({ doc_id: docId, text: karinDocText(s, docId), revision: rev(s.docRev[docId] ?? 0) });
+                return withMockDelay({
+                    doc_id: docId,
+                    text: karinDocText(s, docId),
+                    revision: rev(s.docRev[docId] ?? 0),
+                });
             }
             if (inst.framework_id === 'astrbot') {
                 const raw = astrbotRaw(inst);
@@ -881,13 +1061,23 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (!raw) {
                 raw =
                     inst.framework_id === 'maibot'
-                        ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
+                        ? {
+                              text: { ...MAIBOT_TEXT },
+                              rev: { bot_config: 1, model_config: 1, adapter_config: 1 },
+                          }
                         : inst.framework_id === 'koishi'
-                            ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
-                            : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                          ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
+                          : {
+                                text: { ...NONEBOT2_TEXT },
+                                rev: { env: 1, env_prod: 1, pyproject: 1 },
+                            };
                 rawStates.set(inst.id, raw);
             }
-            return withMockDelay({ doc_id: docId, text: raw.text[docId] ?? '', revision: rev(raw.rev[docId] ?? 0) });
+            return withMockDelay({
+                doc_id: docId,
+                text: raw.text[docId] ?? '',
+                revision: rev(raw.rev[docId] ?? 0),
+            });
         },
 
         writeConfigText: async (
@@ -901,7 +1091,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 const raw = yunzaiRaw(inst);
                 const current = rev(raw.rev[docId] ?? 0);
                 if (baseRevision != null && baseRevision !== current) {
-                    throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                    throw makeAppConfigError(
+                        'conflict',
+                        `配置已被修改（${docId}），请重新加载后再保存`,
+                    );
                 }
                 raw.rev[docId] = (raw.rev[docId] ?? 0) + 1;
                 raw.text[docId] = text;
@@ -923,7 +1116,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     const raw = astrbotRaw(inst);
                     const current = rev(raw.rev[docId] ?? 0);
                     if (baseRevision != null && baseRevision !== current) {
-                        throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                        throw makeAppConfigError(
+                            'conflict',
+                            `配置已被修改（${docId}），请重新加载后再保存`,
+                        );
                     }
                     raw.rev[docId] = (raw.rev[docId] ?? 0) + 1;
                     raw.text[docId] = text;
@@ -932,7 +1128,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 const s = karinState(inst);
                 const current = rev(s.docRev[docId] ?? 0);
                 if (baseRevision != null && baseRevision !== current) {
-                    throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                    throw makeAppConfigError(
+                        'conflict',
+                        `配置已被修改（${docId}），请重新加载后再保存`,
+                    );
                 }
                 s.docRev[docId] = (s.docRev[docId] ?? 0) + 1;
                 s.rawOverride[docId] = text;
@@ -953,7 +1152,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 const s = karinState(inst);
                 const current = rev(s.docRev[docId] ?? 0);
                 if (baseRevision != null && baseRevision !== current) {
-                    throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                    throw makeAppConfigError(
+                        'conflict',
+                        `配置已被修改（${docId}），请重新加载后再保存`,
+                    );
                 }
                 s.docRev[docId] = (s.docRev[docId] ?? 0) + 1;
                 s.rawOverride[docId] = text;
@@ -971,17 +1173,26 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     inst.framework_id === 'astrbot'
                         ? { text: { ...ASTRBOT_TEXT }, rev: { cmd_config: 1 } }
                         : inst.framework_id === 'maibot'
-                            ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
-                            : inst.framework_id === 'koishi'
-                                ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
-                                : inst.framework_id === 'neobot'
-                                    ? { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } }
-                                    : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                          ? {
+                                text: { ...MAIBOT_TEXT },
+                                rev: { bot_config: 1, model_config: 1, adapter_config: 1 },
+                            }
+                          : inst.framework_id === 'koishi'
+                            ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
+                            : inst.framework_id === 'neobot'
+                              ? { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } }
+                              : {
+                                    text: { ...NONEBOT2_TEXT },
+                                    rev: { env: 1, env_prod: 1, pyproject: 1 },
+                                };
                 rawStates.set(inst.id, raw);
             }
             const current = rev(raw.rev[docId] ?? 0);
             if (baseRevision != null && baseRevision !== current) {
-                throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                throw makeAppConfigError(
+                    'conflict',
+                    `配置已被修改（${docId}），请重新加载后再保存`,
+                );
             }
             raw.rev[docId] = (raw.rev[docId] ?? 0) + 1;
             raw.text[docId] = text;

@@ -69,8 +69,7 @@ export const mockReleaseSnapshot: ReleaseSnapshot = {
         version: '0.2.0',
         tag: 'watch-v0.2.0',
         published_at: BigInt(NOW - 86400 * 2),
-        html_url:
-            'https://github.com/NapNeko/NapCatQQ-Desktop/releases/tag/watch-v0.2.0',
+        html_url: 'https://github.com/NapNeko/NapCatQQ-Desktop/releases/tag/watch-v0.2.0',
         release_notes: [
             '## ncd-watch 0.2.0',
             '',

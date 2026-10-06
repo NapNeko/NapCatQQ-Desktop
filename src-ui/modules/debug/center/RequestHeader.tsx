@@ -7,8 +7,21 @@
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Copy, FileCode2, Star, Timer, X } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
-import { Badge, Button, Popover, PopoverAnchor, PopoverContent, PopoverTrigger, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
-import { debugWorkspaceStore, useDebugWorkspaceSelector } from '../../../hooks/debug/debugWorkspaceStore';
+import {
+    Badge,
+    Button,
+    Popover,
+    PopoverAnchor,
+    PopoverContent,
+    PopoverTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '../../../shared/ui';
+import {
+    debugWorkspaceStore,
+    useDebugWorkspaceSelector,
+} from '../../../hooks/debug/debugWorkspaceStore';
 import { searchActions } from '../../../core/domain/debug/catalogView';
 import type { ParamsParse } from '../../../core/domain/debug/paramsText';
 import type { DebugActionSpec } from '../../../core/ipc/generated/debug/DebugActionSpec';
@@ -16,7 +29,12 @@ import type { DebugActionSummary } from '../../../core/ipc/generated/debug/Debug
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugRequestDraft } from '../../../core/ipc/generated/debug/DebugRequestDraft';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
-import { SAFETY_DOT_CLASS, SAFETY_LABEL, SAFETY_TEXT, SAFETY_TONE } from '../../../core/domain/debug/safety';
+import {
+    SAFETY_DOT_CLASS,
+    SAFETY_LABEL,
+    SAFETY_TEXT,
+    SAFETY_TONE,
+} from '../../../core/domain/debug/safety';
 import { IconTip, copyWithToast } from './centerParts';
 import { ExportSnippetDialog } from './ExportSnippetDialog';
 import { markSeeded } from './seedState';
@@ -60,11 +78,16 @@ export const RequestHeader = memo(function RequestHeader({
     const action = tab.action.trim();
     const safety = spec?.safety ?? summary?.safety ?? null;
     const known = !!spec || !!summary;
-    const otherPresent = spec ? (spec.other_backend?.present ?? null) : (summary?.other_backend_present ?? null);
-    const paramDiff = spec ? (spec.other_backend?.breaking ?? false) : (summary?.param_diff ?? false);
+    const otherPresent = spec
+        ? (spec.other_backend?.present ?? null)
+        : (summary?.other_backend_present ?? null);
+    const paramDiff = spec
+        ? (spec.other_backend?.breaking ?? false)
+        : (summary?.param_diff ?? false);
     const stream = spec?.stream ?? summary?.stream ?? false;
     const supported = spec?.supported ?? summary?.supported ?? true;
-    const onlyLabel = otherPresent === false && target ? (target.backend === 'napcat' ? '仅 NC' : '仅 SL') : null;
+    const onlyLabel =
+        otherPresent === false && target ? (target.backend === 'napcat' ? '仅 NC' : '仅 SL') : null;
 
     const rootRef = useRef<HTMLDivElement>(null);
     // 参数改过的标签上敲了新接口名：先记着，等用户选「替换当前标签」还是「新开标签」
@@ -86,7 +109,9 @@ export const RequestHeader = memo(function RequestHeader({
     };
 
     const focusActionInput = (scope: Element | null | undefined) =>
-        requestAnimationFrame(() => scope?.querySelector<HTMLElement>('[role="combobox"][aria-label="接口名"]')?.focus());
+        requestAnimationFrame(() =>
+            scope?.querySelector<HTMLElement>('[role="combobox"][aria-label="接口名"]')?.focus(),
+        );
 
     /** 原地换：参数留在这个标签里，记成已填过，说明读到后不会被当成空标签重新填 */
     const replaceInPlace = (next: string) => {
@@ -124,22 +149,42 @@ export const RequestHeader = memo(function RequestHeader({
     };
 
     return (
-        <div ref={rootRef} className="@container shrink-0 border-b border-border-subtle/70 px-3 pb-2 pt-2">
+        <div
+            ref={rootRef}
+            className="@container shrink-0 border-b border-border-subtle/70 px-3 pb-2 pt-2"
+        >
             <div className="flex min-w-0 items-center gap-1">
-                <ActionInput key={tab.id} value={tab.action} catalog={catalog} onCommit={commitAction} />
+                <ActionInput
+                    key={tab.id}
+                    value={tab.action}
+                    catalog={catalog}
+                    onCommit={commitAction}
+                />
                 <IconTip icon={Star} label="收藏这个请求" disabled={!action} onClick={onSave} />
-                <IconTip icon={Copy} label="复制请求 JSON" hint="action + params" disabled={!action} onClick={copyRequest} />
+                <IconTip
+                    icon={Copy}
+                    label="复制请求 JSON"
+                    hint="action + params"
+                    disabled={!action}
+                    onClick={copyRequest}
+                />
                 <IconTip
                     icon={FileCode2}
                     label="导出调用代码"
-                    hint={parsed.ok ? '按当前动作、参数和通道生成 curl / JavaScript / Python' : '参数 JSON 有错，改好才能导出'}
+                    hint={
+                        parsed.ok
+                            ? '按当前动作、参数和通道生成 curl / JavaScript / Python'
+                            : '参数 JSON 有错，改好才能导出'
+                    }
                     disabled={!action || !parsed.ok}
                     onClick={() => setExportOpen(true)}
                 />
                 <TimeoutButton tab={tab} />
             </div>
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
-                {action && specLoading && !known && <span className="text-2xs text-text-tertiary">正在读取说明…</span>}
+                {action && specLoading && !known && (
+                    <span className="text-2xs text-text-tertiary">正在读取说明…</span>
+                )}
                 {action && !specLoading && !known && (
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -147,14 +192,22 @@ export const RequestHeader = memo(function RequestHeader({
                                 目录里没有
                             </Badge>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom">照样可以发；没有分级时按「有副作用」处理</TooltipContent>
+                        <TooltipContent side="bottom">
+                            照样可以发；没有分级时按「有副作用」处理
+                        </TooltipContent>
                     </Tooltip>
                 )}
                 {safety && (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Badge tone={SAFETY_TONE[safety]} tabIndex={0}>
-                                <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', SAFETY_DOT_CLASS[safety])} />
+                                <span
+                                    aria-hidden
+                                    className={cn(
+                                        'h-1.5 w-1.5 rounded-full',
+                                        SAFETY_DOT_CLASS[safety],
+                                    )}
+                                />
                                 {SAFETY_LABEL[safety]}
                             </Badge>
                         </TooltipTrigger>
@@ -162,7 +215,10 @@ export const RequestHeader = memo(function RequestHeader({
                     </Tooltip>
                 )}
                 {summaryFrom && (
-                    <Badge tone="neutral" title={`目录里没有单列这个变体，分级按 ${summaryFrom} 算`}>
+                    <Badge
+                        tone="neutral"
+                        title={`目录里没有单列这个变体，分级按 ${summaryFrom} 算`}
+                    >
                         按 {summaryFrom} 分级
                     </Badge>
                 )}
@@ -178,16 +234,26 @@ export const RequestHeader = memo(function RequestHeader({
                     </Badge>
                 )}
                 {!supported && (
-                    <Badge tone="danger" title="当前 Bot 的版本没有实现它，调用多半返回「不支持的 API」">
+                    <Badge
+                        tone="danger"
+                        title="当前 Bot 的版本没有实现它，调用多半返回「不支持的 API」"
+                    >
                         当前 Bot 不支持
                     </Badge>
                 )}
                 {(spec?.summary || summary?.summary) && (
-                    <span className="min-w-0 flex-1 truncate text-xs text-text-secondary" title={spec?.summary ?? summary?.summary}>
+                    <span
+                        className="min-w-0 flex-1 truncate text-xs text-text-secondary"
+                        title={spec?.summary ?? summary?.summary}
+                    >
                         {spec?.summary ?? summary?.summary}
                     </span>
                 )}
-                {!action && <span className="text-xs text-text-tertiary">填一个接口名，或者从左边目录里点一个</span>}
+                {!action && (
+                    <span className="text-xs text-text-tertiary">
+                        填一个接口名，或者从左边目录里点一个
+                    </span>
+                )}
             </div>
             {renameTo && (
                 <RenameChoice
@@ -386,7 +452,12 @@ function ActionInput({
             >
                 {/* 列表和底下的提示都不许抢焦点：输入框一失焦草稿就作废了 */}
                 <div onMouseDown={(e) => e.preventDefault()}>
-                    <div id={listId} role="listbox" aria-label="接口建议" className="max-h-72 overflow-y-auto">
+                    <div
+                        id={listId}
+                        role="listbox"
+                        aria-label="接口建议"
+                        className="max-h-72 overflow-y-auto"
+                    >
                         {matches.map((a, i) => (
                             <div
                                 key={a.name}
@@ -395,11 +466,24 @@ function ActionInput({
                                 aria-selected={i === idx}
                                 onMouseMove={() => i !== idx && setHl(i)}
                                 onClick={() => commit(a.name)}
-                                className={cn('flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5', i === idx && 'bg-inset')}
+                                className={cn(
+                                    'flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1.5',
+                                    i === idx && 'bg-inset',
+                                )}
                             >
-                                <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', SAFETY_DOT_CLASS[a.safety])} />
-                                <span className="shrink-0 font-mono text-[12.5px] text-text">{a.name}</span>
-                                <span className="min-w-0 truncate text-2xs text-text-tertiary">{a.summary}</span>
+                                <span
+                                    aria-hidden
+                                    className={cn(
+                                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                                        SAFETY_DOT_CLASS[a.safety],
+                                    )}
+                                />
+                                <span className="shrink-0 font-mono text-[12.5px] text-text">
+                                    {a.name}
+                                </span>
+                                <span className="min-w-0 truncate text-2xs text-text-tertiary">
+                                    {a.summary}
+                                </span>
                             </div>
                         ))}
                     </div>
@@ -432,7 +516,9 @@ function TimeoutButton({ tab }: { tab: DebugRequestDraft }) {
                                 'inline-flex h-7 shrink-0 items-center gap-1 rounded-sm px-1.5 text-[12px] tabular-nums transition-colors',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                                 'data-[state=open]:bg-inset',
-                                custom ? 'text-brand hover:bg-brand-soft' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                                custom
+                                    ? 'text-brand hover:bg-brand-soft'
+                                    : 'text-text-tertiary hover:bg-inset hover:text-text',
                             )}
                         >
                             <Timer size={14} strokeWidth={2} aria-hidden />
@@ -459,7 +545,8 @@ function TimeoutEditor({ tab, onDone }: { tab: DebugRequestDraft; onDone: () => 
         if (raw === '') debugWorkspaceStore.setTimeout(tab.id, null);
         else if (/^\d+$/.test(raw)) {
             const s = Number(raw);
-            if (s >= MIN_TIMEOUT_S && s <= MAX_TIMEOUT_S) debugWorkspaceStore.setTimeout(tab.id, s * 1000);
+            if (s >= MIN_TIMEOUT_S && s <= MAX_TIMEOUT_S)
+                debugWorkspaceStore.setTimeout(tab.id, s * 1000);
         }
     };
     return (
@@ -485,7 +572,9 @@ function TimeoutEditor({ tab, onDone }: { tab: DebugRequestDraft; onDone: () => 
                     aria-invalid={!valid || undefined}
                     className={cn(
                         'h-8 w-24 rounded-sm border bg-field px-2 font-mono text-sm tabular-nums text-text outline-none focus:ring-2 focus:ring-inset',
-                        valid ? 'border-border-subtle focus:border-brand focus:ring-brand' : 'border-danger focus:ring-danger',
+                        valid
+                            ? 'border-border-subtle focus:border-brand focus:ring-brand'
+                            : 'border-danger focus:ring-danger',
                     )}
                 />
                 <span className="text-xs text-text-secondary">秒</span>
@@ -502,7 +591,12 @@ function TimeoutEditor({ tab, onDone }: { tab: DebugRequestDraft; onDone: () => 
                     恢复默认
                 </Button>
             </div>
-            <p className={cn('text-2xs leading-snug', valid ? 'text-text-tertiary' : 'text-danger')}>
+            <p
+                className={cn(
+                    'text-2xs leading-snug',
+                    valid ? 'text-text-tertiary' : 'text-danger',
+                )}
+            >
                 {valid
                     ? `${MIN_TIMEOUT_S}–${MAX_TIMEOUT_S} 秒，默认 ${DEFAULT_TIMEOUT_S}。超时只是不再等，上游可能已经执行了。`
                     : `要填 ${MIN_TIMEOUT_S} 到 ${MAX_TIMEOUT_S} 之间的整数`}

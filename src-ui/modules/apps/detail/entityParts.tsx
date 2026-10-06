@@ -143,7 +143,12 @@ export const EntityRow: React.FC<{
                     {tags}
                 </span>
                 {subtitle && (
-                    <span className={cn('block truncate text-xs text-text-tertiary', mono && 'font-mono')}>
+                    <span
+                        className={cn(
+                            'block truncate text-xs text-text-tertiary',
+                            mono && 'font-mono',
+                        )}
+                    >
                         {subtitle}
                     </span>
                 )}
@@ -216,7 +221,9 @@ export const FormDialog: React.FC<{
 }) => (
     <Dialog open={open} onOpenChange={(o) => !o && !busy && onCancel()}>
         <DialogContent size={size} hideClose dismissOnOutsideClick={false}>
-            <DialogHeader className={headerActions ? 'flex-row items-start justify-between gap-4' : undefined}>
+            <DialogHeader
+                className={headerActions ? 'flex-row items-start justify-between gap-4' : undefined}
+            >
                 <div className="flex min-w-0 flex-col gap-1">
                     <DialogTitle>{title}</DialogTitle>
                     {description && <DialogDescription>{description}</DialogDescription>}
@@ -228,7 +235,12 @@ export const FormDialog: React.FC<{
                 <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
                     取消
                 </Button>
-                <Button variant="primary" size="sm" onClick={onConfirm} disabled={confirmDisabled || busy}>
+                <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={onConfirm}
+                    disabled={confirmDisabled || busy}
+                >
                     {busy && <Spinner size="sm" className="text-white" />}
                     {confirmLabel}
                 </Button>

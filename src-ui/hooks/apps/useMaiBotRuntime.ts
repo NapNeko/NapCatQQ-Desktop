@@ -15,12 +15,16 @@ import type {
 } from '../../core/ipc/types';
 
 // 运行状态进键：停了再起是另一份数据，不会拿停之前的「运行中」顶着
-export const maibotStatusKey = (id: string, running: boolean) => ['maibotStatus', id, running] as const;
+export const maibotStatusKey = (id: string, running: boolean) =>
+    ['maibotStatus', id, running] as const;
 export const maibotStatsKey = (id: string, hours: number) => ['maibotStats', id, hours] as const;
 export const maibotSessionsKey = (id: string) => ['maibotSessions', id] as const;
 export const maibotMcpStatusKey = (id: string) => ['maibotMcpStatus', id] as const;
 
-const NOT_RUNNING: MaiBotRuntimeStatus = { gate: 'not_running', message: '启动麦麦后才能看运行状态' };
+const NOT_RUNNING: MaiBotRuntimeStatus = {
+    gate: 'not_running',
+    message: '启动麦麦后才能看运行状态',
+};
 
 function fail(title: string, key: string) {
     return (err: unknown) => {
@@ -84,7 +88,10 @@ export function useMaiBotRestart(instanceId: string, instanceName: string) {
                 autoDismissMs: 5000,
             });
             // 上游半秒后才退出，立刻查会看到旧进程还活着
-            setTimeout(() => void qc.invalidateQueries({ queryKey: ['maibotStatus', instanceId] }), 1500);
+            setTimeout(
+                () => void qc.invalidateQueries({ queryKey: ['maibotStatus', instanceId] }),
+                1500,
+            );
         },
         onError: fail('重启失败', `maibot-restart:${instanceId}`),
     });
@@ -93,13 +100,16 @@ export function useMaiBotRestart(instanceId: string, instanceName: string) {
 /** 拉模型列表、测连接、试连 MCP：结果只给发起的那张卡用，不进缓存 */
 export function useMaiBotProbes(instanceId: string) {
     const providerModels = useMutation({
-        mutationFn: (provider: MaiBotAPIProvider) => appFrameworkService.maibotProviderModels(instanceId, provider),
+        mutationFn: (provider: MaiBotAPIProvider) =>
+            appFrameworkService.maibotProviderModels(instanceId, provider),
     });
     const testProvider = useMutation({
-        mutationFn: (provider: MaiBotAPIProvider) => appFrameworkService.maibotTestProvider(instanceId, provider),
+        mutationFn: (provider: MaiBotAPIProvider) =>
+            appFrameworkService.maibotTestProvider(instanceId, provider),
     });
     const testMcp = useMutation({
-        mutationFn: (server: MaiBotMCPServerItemConfig) => appFrameworkService.maibotTestMcp(instanceId, server),
+        mutationFn: (server: MaiBotMCPServerItemConfig) =>
+            appFrameworkService.maibotTestMcp(instanceId, server),
     });
     return { providerModels, testProvider, testMcp };
 }

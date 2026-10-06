@@ -51,7 +51,9 @@ export function TerminalFileEditor({ file, onSave, onClose }: Props) {
                 >
                     <DialogHeader>
                         <DialogTitle>{file ? baseName(file.path) : ''}</DialogTitle>
-                        <p className="truncate font-mono text-[11px] text-text-tertiary">{file?.path}</p>
+                        <p className="truncate font-mono text-[11px] text-text-tertiary">
+                            {file?.path}
+                        </p>
                     </DialogHeader>
                     <SyntaxTextEditor
                         value={draft}
@@ -64,7 +66,11 @@ export function TerminalFileEditor({ file, onSave, onClose }: Props) {
                         <Button variant="ghost" onClick={onClose}>
                             {dirty ? '不保存' : '关闭'}
                         </Button>
-                        <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+                        <Button
+                            variant="primary"
+                            disabled={!dirty || saving}
+                            onClick={() => void save()}
+                        >
                             {saving ? '保存中…' : '保存'}
                         </Button>
                     </DialogFooter>

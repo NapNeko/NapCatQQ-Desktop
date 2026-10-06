@@ -33,8 +33,7 @@ export function clampTaskQueueCleanupSliderMs(raw: unknown): number {
         return DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS;
     }
     const stepped =
-        Math.round(raw / TASK_QUEUE_CLEANUP_SLIDER_STEP) *
-        TASK_QUEUE_CLEANUP_SLIDER_STEP;
+        Math.round(raw / TASK_QUEUE_CLEANUP_SLIDER_STEP) * TASK_QUEUE_CLEANUP_SLIDER_STEP;
     return Math.max(
         TASK_QUEUE_CLEANUP_SLIDER_MIN,
         Math.min(TASK_QUEUE_CLEANUP_SLIDER_MAX, stepped),
@@ -62,19 +61,19 @@ export function taskQueueCleanupFromAppSettings(slice: {
         };
     }
     const lingerRaw = slice.taskQueueCleanupLingerMs;
-    const hasLinger =
-        lingerRaw !== undefined && lingerRaw !== null;
+    const hasLinger = lingerRaw !== undefined && lingerRaw !== null;
     const storedMs = hasLinger
-        ? (typeof lingerRaw === 'bigint'
-              ? clampTaskQueueCleanupStoredMs(Number(lingerRaw))
-              : clampTaskQueueCleanupStoredMs(lingerRaw))
+        ? typeof lingerRaw === 'bigint'
+            ? clampTaskQueueCleanupStoredMs(Number(lingerRaw))
+            : clampTaskQueueCleanupStoredMs(lingerRaw)
         : DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS;
     if (!hasLinger || storedMs > 0) {
         return {
             taskQueueCleanupEnabled: true,
-            taskQueueCleanupLingerMs: storedMs > 0
-                ? clampTaskQueueCleanupSliderMs(storedMs)
-                : DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS,
+            taskQueueCleanupLingerMs:
+                storedMs > 0
+                    ? clampTaskQueueCleanupSliderMs(storedMs)
+                    : DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS,
         };
     }
     return {
@@ -90,9 +89,10 @@ export function taskQueueCleanupDraftFromStored(
 }
 
 /** 写入 app-settings.json 的扁平字段。 */
-export function taskQueueCleanupToStoredFields(
-    draft: TaskQueueCleanupDraftSlice,
-): { taskQueueCleanupEnabled: boolean; taskQueueCleanupLingerMs: number } {
+export function taskQueueCleanupToStoredFields(draft: TaskQueueCleanupDraftSlice): {
+    taskQueueCleanupEnabled: boolean;
+    taskQueueCleanupLingerMs: number;
+} {
     if (!draft.taskQueueCleanupEnabled) {
         return {
             taskQueueCleanupEnabled: false,
@@ -101,23 +101,17 @@ export function taskQueueCleanupToStoredFields(
     }
     return {
         taskQueueCleanupEnabled: true,
-        taskQueueCleanupLingerMs: clampTaskQueueCleanupSliderMs(
-            draft.taskQueueCleanupLingerMs,
-        ),
+        taskQueueCleanupLingerMs: clampTaskQueueCleanupSliderMs(draft.taskQueueCleanupLingerMs),
     };
 }
 
 /** 当前是否应对终态任务安排移除计时器。 */
-export function shouldScheduleTaskQueueTerminalCleanup(
-    prefs: TaskQueueCleanupPrefs,
-): boolean {
+export function shouldScheduleTaskQueueTerminalCleanup(prefs: TaskQueueCleanupPrefs): boolean {
     return prefs.taskQueueCleanupEnabled;
 }
 
 /** 终态保留毫秒；关闭自动清理时返回 null。 */
-export function taskQueueTerminalLingerMs(
-    prefs: TaskQueueCleanupPrefs,
-): number | null {
+export function taskQueueTerminalLingerMs(prefs: TaskQueueCleanupPrefs): number | null {
     if (!prefs.taskQueueCleanupEnabled) return null;
     return clampTaskQueueCleanupSliderMs(prefs.taskQueueCleanupLingerMs);
 }
@@ -134,9 +128,7 @@ export function trimTerminalTasksInRecord<T>(
     maxTerminal: number,
 ): TrimTerminalTasksResult<T> {
     if (maxTerminal <= 0) {
-        const removedIds = Object.keys(tasks).filter((id) =>
-            isTerminal(tasks[id]),
-        );
+        const removedIds = Object.keys(tasks).filter((id) => isTerminal(tasks[id]));
         if (removedIds.length === 0) {
             return { tasks, removedIds: [] };
         }

@@ -11,12 +11,7 @@ export type ActionStatus = 'pending' | 'running' | 'paused' | 'success' | 'faile
 
 /// 后端 download_stage 字符串的强类型映射。未识别的字符串走 'unknown'
 /// 让 UI fallback 到 message 文本。
-export type DownloadStage =
-    | 'racing'
-    | 'streaming'
-    | 'switching_mirror'
-    | 'resuming'
-    | 'unknown';
+export type DownloadStage = 'racing' | 'streaming' | 'switching_mirror' | 'resuming' | 'unknown';
 
 export interface ActionLogLine {
     level: ProgressLogLevel;
@@ -113,7 +108,7 @@ function deriveOverallPercent(totalSteps: number, step: number, stepPercent: num
     if (totalSteps <= 0) return clampPercent(stepPercent);
     const normalizedStep = Math.max(1, Math.min(step, totalSteps));
     const completedBefore = normalizedStep - 1;
-    const raw = ((completedBefore * 100) + clampPercent(stepPercent)) / totalSteps;
+    const raw = (completedBefore * 100 + clampPercent(stepPercent)) / totalSteps;
     return clampPercent(raw);
 }
 

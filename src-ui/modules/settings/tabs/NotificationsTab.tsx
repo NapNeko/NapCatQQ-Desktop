@@ -99,33 +99,20 @@ function channelSummary(ch: WebhookChannelDraft): string {
     return '未填写地址';
 }
 
-export function NotificationsTab({
-    draft,
-    patchDraft,
-    settingsDirty = false,
-}: Props) {
+export function NotificationsTab({ draft, patchDraft, settingsDirty = false }: Props) {
     const [testing, setTesting] = useState<string | null>(null);
     const ncdWatchEnabled = useFeatureEnabled('ncdWatch');
     const [editor, setEditor] = useState<ChannelEditorState | null>(null);
-    const [editorMount, setEditorMount] = useState<ChannelEditorState | null>(
-        null,
-    );
+    const [editorMount, setEditorMount] = useState<ChannelEditorState | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [emailEditorOpen, setEmailEditorOpen] = useState(false);
-    const [emailEditorDraft, setEmailEditorDraft] =
-        useState<EmailEditorDraft | null>(null);
+    const [emailEditorDraft, setEmailEditorDraft] = useState<EmailEditorDraft | null>(null);
     const [emailPreset, setEmailPreset] = useState('');
     const [oneBotEditorOpen, setOneBotEditorOpen] = useState(false);
-    const [oneBotEditorDraft, setOneBotEditorDraft] =
-        useState<OneBotEditorDraft | null>(null);
-    const [oneBotCandidates, setOneBotCandidates] = useState<OneBotCandidate[]>(
-        [],
-    );
-    const [oneBotCandidatesLoading, setOneBotCandidatesLoading] =
-        useState(false);
-    const [oneBotEnablingId, setOneBotEnablingId] = useState<string | null>(
-        null,
-    );
+    const [oneBotEditorDraft, setOneBotEditorDraft] = useState<OneBotEditorDraft | null>(null);
+    const [oneBotCandidates, setOneBotCandidates] = useState<OneBotCandidate[]>([]);
+    const [oneBotCandidatesLoading, setOneBotCandidatesLoading] = useState(false);
+    const [oneBotEnablingId, setOneBotEnablingId] = useState<string | null>(null);
     const [history, setHistory] = useState<
         Awaited<ReturnType<typeof settingsService.listOfflineDeliveryHistory>>
     >([]);
@@ -157,16 +144,12 @@ export function NotificationsTab({
     };
 
     if (!draft) {
-        return (
-            <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
-        );
+        return <p className="text-[13px] text-text-tertiary">正在加载设置…</p>;
     }
 
     const channels = draft.webHookChannels;
     const deleteTarget = channels.find((c) => c.id === deleteId) ?? null;
-    const enabledChannelCount = channels.filter(
-        (c) => c.enabled && c.url.trim(),
-    ).length;
+    const enabledChannelCount = channels.filter((c) => c.enabled && c.url.trim()).length;
 
     const updateChannels = (next: WebhookChannelDraft[]) => {
         const first = next.find((c) => c.enabled && c.url.trim()) ?? next[0];
@@ -194,9 +177,7 @@ export function NotificationsTab({
     const closeEditor = () => setEditor(null);
 
     const patchEditorDraft = (patch: Partial<WebhookChannelDraft>) => {
-        setEditor((cur) =>
-            cur ? { ...cur, draft: { ...cur.draft, ...patch } } : cur,
-        );
+        setEditor((cur) => (cur ? { ...cur, draft: { ...cur.draft, ...patch } } : cur));
     };
 
     const saveEditor = () => {
@@ -213,9 +194,7 @@ export function NotificationsTab({
         if (editor.mode === 'create') {
             updateChannels([...channels, nextDraft]);
         } else {
-            updateChannels(
-                channels.map((c) => (c.id === editor.id ? nextDraft : c)),
-            );
+            updateChannels(channels.map((c) => (c.id === editor.id ? nextDraft : c)));
         }
         setEditor(null);
     };
@@ -257,21 +236,19 @@ export function NotificationsTab({
             draft.onebotMessengerBotIds.length > 0
                 ? [...draft.onebotMessengerBotIds]
                 : draft.onebotMessengerBotId.trim()
-                    ? [draft.onebotMessengerBotId.trim()]
-                    : [];
+                  ? [draft.onebotMessengerBotId.trim()]
+                  : [];
         const targetIds =
             draft.onebotTargetIds.length > 0
                 ? [...draft.onebotTargetIds]
                 : draft.onebotTargetId > 0
-                    ? [draft.onebotTargetId]
-                    : [];
+                  ? [draft.onebotTargetId]
+                  : [];
         setOneBotEditorDraft({
             onebotMessengerBotIds: messengerIds,
-            onebotTargetType:
-                draft.onebotTargetType === 'group' ? 'group' : 'private',
+            onebotTargetType: draft.onebotTargetType === 'group' ? 'group' : 'private',
             onebotTargetIds: targetIds,
-            onebotMessageTemplate:
-                draft.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
+            onebotMessageTemplate: draft.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
         });
         setOneBotEditorOpen(true);
         setOneBotCandidatesLoading(true);
@@ -295,8 +272,7 @@ export function NotificationsTab({
             onebotTargetIds: targetIds,
             onebotTargetId: targetIds[0] ?? 0,
             onebotMessageTemplate:
-                oneBotEditorDraft.onebotMessageTemplate.trim() ||
-                DEFAULT_ONEBOT_MESSAGE,
+                oneBotEditorDraft.onebotMessageTemplate.trim() || DEFAULT_ONEBOT_MESSAGE,
         });
         setOneBotEditorOpen(false);
     };
@@ -322,8 +298,8 @@ export function NotificationsTab({
                 result.action === 'already_ready'
                     ? '已具备环回 HTTP'
                     : result.action === 'enabled'
-                        ? '已启用现有 HTTP 服务'
-                        : '已自动创建环回 HTTP 服务';
+                      ? '已启用现有 HTTP 服务'
+                      : '已自动创建环回 HTTP 服务';
             const scopeHint =
                 result.candidate.scope === 'remote'
                     ? '远端配置已写入；保存后同步 ncd-watch。运行中会尽量热更新。'
@@ -353,8 +329,7 @@ export function NotificationsTab({
                 key: 'offline-webhook-test',
                 tone: 'success',
                 title: '测试已发送',
-                content:
-                    '到目标服务确认是否收到。',
+                content: '到目标服务确认是否收到。',
             });
         } catch (err) {
             pushErrorBar({
@@ -381,58 +356,40 @@ export function NotificationsTab({
             draft.onebotMessengerBotIds.length > 0
                 ? draft.onebotMessengerBotIds
                 : draft.onebotMessengerBotId.trim()
-                    ? [draft.onebotMessengerBotId.trim()]
-                    : [],
-        onebotTargetType:
-            draft.onebotTargetType === 'group' ? 'group' : 'private',
+                  ? [draft.onebotMessengerBotId.trim()]
+                  : [],
+        onebotTargetType: draft.onebotTargetType === 'group' ? 'group' : 'private',
         onebotTargetIds:
             draft.onebotTargetIds.length > 0
                 ? draft.onebotTargetIds
                 : draft.onebotTargetId > 0
-                    ? [draft.onebotTargetId]
-                    : [],
-        onebotMessageTemplate:
-            draft.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
+                  ? [draft.onebotTargetId]
+                  : [],
+        onebotMessageTemplate: draft.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
     };
 
     return (
         <SettingsTabSections>
-            <SettingsSection
-                title="桌面通知"
-                description="主窗口隐藏或进入轻量模式时仍会提醒"
-            >
+            <SettingsSection title="桌面通知" description="主窗口隐藏或进入轻量模式时仍会提醒">
                 <FieldRow
                     label="Bot 掉线"
                     description="还需在 Bot 高级设置里打开「掉线时发送通知」（NapCat / SnowLuma 均需）；此开关同时门控 Webhook / 邮件 / OneBot"
                 >
                     <Switch
                         checked={draft.notifyOnOffline}
-                        onCheckedChange={(v) =>
-                            patchDraft({ notifyOnOffline: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ notifyOnOffline: v })}
                     />
                 </FieldRow>
-                <FieldRow
-                    label="Bot 异常退出"
-                    description="所有 Bot 进程非正常结束时"
-                >
+                <FieldRow label="Bot 异常退出" description="所有 Bot 进程非正常结束时">
                     <Switch
                         checked={draft.notifyOnBotCrashed}
-                        onCheckedChange={(v) =>
-                            patchDraft({ notifyOnBotCrashed: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ notifyOnBotCrashed: v })}
                     />
                 </FieldRow>
-                <FieldRow
-                    label="被踢下线"
-                    description="所有 Bot 被踢下线或登录失效时"
-                    isLast
-                >
+                <FieldRow label="被踢下线" description="所有 Bot 被踢下线或登录失效时" isLast>
                     <Switch
                         checked={draft.notifyOnLoginKicked}
-                        onCheckedChange={(v) =>
-                            patchDraft({ notifyOnLoginKicked: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ notifyOnLoginKicked: v })}
                     />
                 </FieldRow>
             </SettingsSection>
@@ -443,15 +400,10 @@ export function NotificationsTab({
                 title="投递行为"
                 description="恢复通知、掉线防抖与投递历史（仅内存，重启清空）"
             >
-                <FieldRow
-                    label="上线恢复通知"
-                    description="掉线后恢复上线时再推一次；默认关闭"
-                >
+                <FieldRow label="上线恢复通知" description="掉线后恢复上线时再推一次；默认关闭">
                     <Switch
                         checked={draft.notifyOnRecovered}
-                        onCheckedChange={(v) =>
-                            patchDraft({ notifyOnRecovered: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ notifyOnRecovered: v })}
                     />
                 </FieldRow>
                 <FieldRow
@@ -474,10 +426,7 @@ export function NotificationsTab({
                         className="w-28"
                     />
                 </FieldRow>
-                <FieldRow
-                    label="历史条数上限"
-                    description="内存保留最近 N 条；0 不记录"
-                >
+                <FieldRow label="历史条数上限" description="内存保留最近 N 条；0 不记录">
                     <NumberField
                         value={draft.offlineDeliveryHistoryLimit}
                         min={0}
@@ -503,12 +452,7 @@ export function NotificationsTab({
                     }
                     isLast
                 >
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={openHistoryDialog}
-                    >
+                    <Button type="button" variant="secondary" size="sm" onClick={openHistoryDialog}>
                         <ActionMotionIcon icon={History} size={14} />
                         查看记录
                     </Button>
@@ -529,19 +473,13 @@ export function NotificationsTab({
                 >
                     <Switch
                         checked={draft.botOfflineWebHookNotice}
-                        onCheckedChange={(v) =>
-                            patchDraft({ botOfflineWebHookNotice: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ botOfflineWebHookNotice: v })}
                     />
                 </FieldRow>
 
                 {draft.botOfflineWebHookNotice ? (
                     channels.length === 0 ? (
-                        <FieldRow
-                            label="推送通道"
-                            description="还没有通道"
-                            isLast
-                        >
+                        <FieldRow label="推送通道" description="还没有通道" isLast>
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -559,8 +497,8 @@ export function NotificationsTab({
                                 const status = !ch.enabled
                                     ? '已关闭'
                                     : !ch.url.trim()
-                                        ? '缺地址'
-                                        : ch.method || 'POST';
+                                      ? '缺地址'
+                                      : ch.method || 'POST';
                                 return (
                                     <FieldRow
                                         key={ch.id}
@@ -572,24 +510,16 @@ export function NotificationsTab({
                                             <span
                                                 className={cn(
                                                     'mr-1 h-1.5 w-1.5 shrink-0 rounded-full',
-                                                    ready
-                                                        ? 'bg-success'
-                                                        : 'bg-text-tertiary/45',
+                                                    ready ? 'bg-success' : 'bg-text-tertiary/45',
                                                 )}
                                                 aria-hidden
                                             />
                                             {!ch.enabled ? (
-                                                <Badge
-                                                    tone="neutral"
-                                                    appearance="soft"
-                                                >
+                                                <Badge tone="neutral" appearance="soft">
                                                     已关闭
                                                 </Badge>
                                             ) : !ch.url.trim() ? (
-                                                <Badge
-                                                    tone="warning"
-                                                    appearance="soft"
-                                                >
+                                                <Badge tone="warning" appearance="soft">
                                                     缺地址
                                                 </Badge>
                                             ) : null}
@@ -600,24 +530,16 @@ export function NotificationsTab({
                                                 aria-label={`编辑 ${channelDisplayName(ch)}`}
                                                 onClick={() => openEdit(ch)}
                                             >
-                                                <ActionMotionIcon
-                                                    icon={Pencil}
-                                                    size={14}
-                                                />
+                                                <ActionMotionIcon icon={Pencil} size={14} />
                                             </Button>
                                             <Button
                                                 type="button"
                                                 variant="ghost"
                                                 size="sm"
                                                 aria-label={`删除 ${channelDisplayName(ch)}`}
-                                                onClick={() =>
-                                                    setDeleteId(ch.id)
-                                                }
+                                                onClick={() => setDeleteId(ch.id)}
                                             >
-                                                <ActionMotionIcon
-                                                    icon={Trash2}
-                                                    size={14}
-                                                />
+                                                <ActionMotionIcon icon={Trash2} size={14} />
                                             </Button>
                                         </div>
                                     </FieldRow>
@@ -644,7 +566,9 @@ export function NotificationsTab({
                     <span className="flex items-center gap-2">
                         邮件通知
                         {draft.botOfflineEmailNotice && !emailIsReady(emailDraft) ? (
-                            <Badge tone="warning" appearance="soft">待完善</Badge>
+                            <Badge tone="warning" appearance="soft">
+                                待完善
+                            </Badge>
                         ) : null}
                     </span>
                 }
@@ -674,9 +598,7 @@ export function NotificationsTab({
                         ) : null}
                         <Switch
                             checked={draft.botOfflineEmailNotice}
-                            onCheckedChange={(v) =>
-                                patchDraft({ botOfflineEmailNotice: v })
-                            }
+                            onCheckedChange={(v) => patchDraft({ botOfflineEmailNotice: v })}
                         />
                     </div>
                 </FieldRow>
@@ -687,7 +609,9 @@ export function NotificationsTab({
                     <span className="flex items-center gap-2">
                         OneBot 通知
                         {draft.onebotNoticeEnabled && !oneBotIsReady(oneBotDraft) ? (
-                            <Badge tone="warning" appearance="soft">待完善</Badge>
+                            <Badge tone="warning" appearance="soft">
+                                待完善
+                            </Badge>
                         ) : null}
                     </span>
                 }
@@ -718,9 +642,7 @@ export function NotificationsTab({
                         ) : null}
                         <Switch
                             checked={draft.onebotNoticeEnabled}
-                            onCheckedChange={(v) =>
-                                patchDraft({ onebotNoticeEnabled: v })
-                            }
+                            onCheckedChange={(v) => patchDraft({ onebotNoticeEnabled: v })}
                         />
                     </div>
                 </FieldRow>
@@ -731,66 +653,42 @@ export function NotificationsTab({
                 description="错误提示需手动关闭；以下三类可自动消失"
             >
                 <FieldRow label="说明">
-                    <InfoBarDismissSliderPresence
-                        visible={draft.infoBarDismissInfoEnabled}
-                    >
+                    <InfoBarDismissSliderPresence visible={draft.infoBarDismissInfoEnabled}>
                         <InfoBarDismissDurationSlider
                             value={draft.infoBarDismissInfoMs}
-                            defaultMs={
-                                DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissInfoMs
-                            }
-                            onChange={(v) =>
-                                patchDraft({ infoBarDismissInfoMs: v })
-                            }
+                            defaultMs={DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissInfoMs}
+                            onChange={(v) => patchDraft({ infoBarDismissInfoMs: v })}
                         />
                     </InfoBarDismissSliderPresence>
                     <Switch
                         checked={draft.infoBarDismissInfoEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ infoBarDismissInfoEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ infoBarDismissInfoEnabled: v })}
                     />
                 </FieldRow>
                 <FieldRow label="成功">
-                    <InfoBarDismissSliderPresence
-                        visible={draft.infoBarDismissSuccessEnabled}
-                    >
+                    <InfoBarDismissSliderPresence visible={draft.infoBarDismissSuccessEnabled}>
                         <InfoBarDismissDurationSlider
                             value={draft.infoBarDismissSuccessMs}
-                            defaultMs={
-                                DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissSuccessMs
-                            }
-                            onChange={(v) =>
-                                patchDraft({ infoBarDismissSuccessMs: v })
-                            }
+                            defaultMs={DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissSuccessMs}
+                            onChange={(v) => patchDraft({ infoBarDismissSuccessMs: v })}
                         />
                     </InfoBarDismissSliderPresence>
                     <Switch
                         checked={draft.infoBarDismissSuccessEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ infoBarDismissSuccessEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ infoBarDismissSuccessEnabled: v })}
                     />
                 </FieldRow>
                 <FieldRow label="警告" isLast>
-                    <InfoBarDismissSliderPresence
-                        visible={draft.infoBarDismissWarningEnabled}
-                    >
+                    <InfoBarDismissSliderPresence visible={draft.infoBarDismissWarningEnabled}>
                         <InfoBarDismissDurationSlider
                             value={draft.infoBarDismissWarningMs}
-                            defaultMs={
-                                DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissWarningMs
-                            }
-                            onChange={(v) =>
-                                patchDraft({ infoBarDismissWarningMs: v })
-                            }
+                            defaultMs={DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissWarningMs}
+                            onChange={(v) => patchDraft({ infoBarDismissWarningMs: v })}
                         />
                     </InfoBarDismissSliderPresence>
                     <Switch
                         checked={draft.infoBarDismissWarningEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ infoBarDismissWarningEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ infoBarDismissWarningEnabled: v })}
                     />
                 </FieldRow>
             </SettingsSection>
@@ -836,9 +734,7 @@ export function NotificationsTab({
                 }}
                 onPresetChange={setEmailPreset}
                 onDraftChange={(patch) =>
-                    setEmailEditorDraft((current) =>
-                        current ? { ...current, ...patch } : current,
-                    )
+                    setEmailEditorDraft((current) => (current ? { ...current, ...patch } : current))
                 }
                 onSave={saveEmailEditor}
             />
@@ -889,12 +785,7 @@ export function NotificationsTab({
                         >
                             取消
                         </Button>
-                        <Button
-                            type="button"
-                            variant="danger"
-                            size="sm"
-                            onClick={confirmDelete}
-                        >
+                        <Button type="button" variant="danger" size="sm" onClick={confirmDelete}>
                             删除
                         </Button>
                     </DialogFooter>

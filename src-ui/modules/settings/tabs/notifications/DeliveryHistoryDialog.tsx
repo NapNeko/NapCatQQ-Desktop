@@ -38,12 +38,24 @@ function DeliveryResultBadge({
     value: 'ok' | 'failed' | 'skipped';
 }) {
     if (value === 'ok') {
-        return <Badge tone="success" appearance="soft">{label} 已发送</Badge>;
+        return (
+            <Badge tone="success" appearance="soft">
+                {label} 已发送
+            </Badge>
+        );
     }
     if (value === 'failed') {
-        return <Badge tone="danger" appearance="soft">{label} 失败</Badge>;
+        return (
+            <Badge tone="danger" appearance="soft">
+                {label} 失败
+            </Badge>
+        );
     }
-    return <Badge tone="neutral" appearance="soft">{label} 未投递</Badge>;
+    return (
+        <Badge tone="neutral" appearance="soft">
+            {label} 未投递
+        </Badge>
+    );
 }
 
 export function DeliveryHistoryDialog({
@@ -71,9 +83,7 @@ export function DeliveryHistoryDialog({
                             {history.length} 条
                         </Badge>
                     </div>
-                    <DialogDescription>
-                        本次运行的通知结果；重启后清空。
-                    </DialogDescription>
+                    <DialogDescription>本次运行的通知结果；重启后清空。</DialogDescription>
                 </DialogHeader>
 
                 <div className="min-h-0 overflow-hidden rounded-sm border border-border-subtle bg-field">
@@ -111,7 +121,10 @@ export function DeliveryHistoryDialog({
                                     {!h.debounced ? (
                                         <div className="flex flex-wrap gap-1.5">
                                             <DeliveryResultBadge label="桌面" value={h.toast} />
-                                            <DeliveryResultBadge label="Webhook" value={h.webhook} />
+                                            <DeliveryResultBadge
+                                                label="Webhook"
+                                                value={h.webhook}
+                                            />
                                             <DeliveryResultBadge label="邮件" value={h.email} />
                                             <DeliveryResultBadge label="OneBot" value={h.onebot} />
                                         </div>
@@ -146,11 +159,7 @@ export function DeliveryHistoryDialog({
                     >
                         清空记录
                     </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => onOpenChange(false)}
-                    >
+                    <Button type="button" size="sm" onClick={() => onOpenChange(false)}>
                         完成
                     </Button>
                 </DialogFooter>

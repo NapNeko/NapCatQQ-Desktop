@@ -7,10 +7,21 @@ import { cn } from '../../../shared/utils/cn';
 import { Button, Spinner } from '../../../shared/ui';
 import { receiverStateCopy } from '../../../core/domain/debug/receiverCopy';
 import type { ChatItem } from '../../../core/domain/debug/chat';
-import { rejectLine, handleRequestCall, requestLine } from '../../../core/domain/debug/requestHandling';
+import {
+    rejectLine,
+    handleRequestCall,
+    requestLine,
+} from '../../../core/domain/debug/requestHandling';
 import { DangerConfirmDialog, dangerConfirmSkipped } from '../DangerConfirmDialog';
 import { useChatView } from './chatContext';
-import { callLine, clockTime, countFormat, dayLabel, gapRange, originLabel } from '../../../core/domain/debug/chatFormat';
+import {
+    callLine,
+    clockTime,
+    countFormat,
+    dayLabel,
+    gapRange,
+    originLabel,
+} from '../../../core/domain/debug/chatFormat';
 import { HoverActions, useRowHover } from './MessageBubble';
 import { useCopy } from './rightParts';
 
@@ -18,13 +29,22 @@ type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
 
 export function TimeSeparator({ at }: { at: number }) {
     return (
-        <div className="px-3 pb-0.5 pt-2.5 text-center text-2xs tabular-nums text-text-tertiary" role="separator">
+        <div
+            className="px-3 pb-0.5 pt-2.5 text-center text-2xs tabular-nums text-text-tertiary"
+            role="separator"
+        >
             {dayLabel(at)}
         </div>
     );
 }
 
-export const NoticeRow = memo(function NoticeRow({ item, showSessionName }: { item: Of<'notice'>; showSessionName: boolean }) {
+export const NoticeRow = memo(function NoticeRow({
+    item,
+    showSessionName,
+}: {
+    item: Of<'notice'>;
+    showSessionName: boolean;
+}) {
     const api = useChatView();
     const ref = useRef<HTMLDivElement>(null);
     const hover = useRowHover();
@@ -40,7 +60,9 @@ export const NoticeRow = memo(function NoticeRow({ item, showSessionName }: { it
                 {item.text}
                 {sessionName ? ` · ${sessionName}` : ''}
             </button>
-            {hover.active && <HoverActions item={item} side="right" anchorRef={ref} onHold={hover.hold} />}
+            {hover.active && (
+                <HoverActions item={item} side="right" anchorRef={ref} onHold={hover.hold} />
+            )}
         </div>
     );
 });
@@ -59,7 +81,10 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
     const [plan, setPlan] = useState(() => api.previewFill(item));
     const refreshPlan = () => setPlan(api.previewFill(item));
     const user = api.nameOf(item.userId) ?? String(item.userId);
-    const group = item.groupId !== undefined ? (api.sessionName(`group:${item.groupId}`) ?? String(item.groupId)) : '';
+    const group =
+        item.groupId !== undefined
+            ? (api.sessionName(`group:${item.groupId}`) ?? String(item.groupId))
+            : '';
     const title = requestLine(item, user, group);
     const Icon = item.requestType === 'friend' ? UserPlus : Users;
 
@@ -90,10 +115,14 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                 <div className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-text">
                     <Icon size={13} aria-hidden className="shrink-0 text-brand" />
                     <span className="min-w-0 flex-1 truncate">{title}</span>
-                    <span className="shrink-0 text-2xs font-normal tabular-nums text-text-tertiary">{clockTime(item.at)}</span>
+                    <span className="shrink-0 text-2xs font-normal tabular-nums text-text-tertiary">
+                        {clockTime(item.at)}
+                    </span>
                 </div>
                 {item.comment && (
-                    <p className="mt-1 break-words text-xs leading-relaxed text-text-secondary">验证消息：{item.comment}</p>
+                    <p className="mt-1 break-words text-xs leading-relaxed text-text-secondary">
+                        验证消息：{item.comment}
+                    </p>
                 )}
                 {handle && (
                     <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
@@ -104,12 +133,17 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                                     outcome.approve ? 'text-success' : 'text-text-tertiary',
                                 )}
                             >
-                                <Check size={12} strokeWidth={2.4} aria-hidden />
-                                已{outcome.approve ? '同意' : '拒绝'}
+                                <Check size={12} strokeWidth={2.4} aria-hidden />已
+                                {outcome.approve ? '同意' : '拒绝'}
                             </span>
                         ) : (
                             <>
-                                <Button size="sm" variant="secondary" disabled={sending} onClick={() => void act(true)}>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={sending}
+                                    onClick={() => void act(true)}
+                                >
                                     {sending && outcome.approve ? (
                                         <Spinner size="xs" label="正在同意" />
                                     ) : (
@@ -117,7 +151,12 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                                     )}
                                     同意
                                 </Button>
-                                <Button size="sm" variant="ghost" disabled={sending} onClick={onReject}>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={sending}
+                                    onClick={onReject}
+                                >
                                     {sending && !outcome.approve ? (
                                         <Spinner size="xs" label="正在拒绝" />
                                     ) : (
@@ -128,14 +167,19 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                             </>
                         )}
                         {outcome.state === 'failed' && (
-                            <span className="min-w-0 truncate text-2xs text-danger" title={outcome.reason}>
+                            <span
+                                className="min-w-0 truncate text-2xs text-danger"
+                                title={outcome.reason}
+                            >
                                 {outcome.reason}
                             </span>
                         )}
                     </div>
                 )}
                 <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-2xs text-text-tertiary">
-                    <span className="min-w-0 max-w-full truncate font-mono text-[10.5px]">flag: {item.flag || '（无）'}</span>
+                    <span className="min-w-0 max-w-full truncate font-mono text-[10.5px]">
+                        flag: {item.flag || '（无）'}
+                    </span>
                     <span className="flex-1" />
                     {item.flag && (
                         <button
@@ -143,7 +187,11 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                             onClick={() => copy(item.flag)}
                             className="inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 hover:bg-inset hover:text-text"
                         >
-                            {copied ? <Check size={11} aria-hidden /> : <Copy size={11} aria-hidden />}
+                            {copied ? (
+                                <Check size={11} aria-hidden />
+                            ) : (
+                                <Copy size={11} aria-hidden />
+                            )}
                             {copied ? '已复制' : '复制 flag'}
                         </button>
                     )}
@@ -167,7 +215,9 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                         }}
                         className={cn(
                             'inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5',
-                            plan.ok ? 'hover:bg-inset hover:text-text' : 'cursor-not-allowed opacity-50',
+                            plan.ok
+                                ? 'hover:bg-inset hover:text-text'
+                                : 'cursor-not-allowed opacity-50',
                         )}
                     >
                         <FileInput size={11} aria-hidden />
@@ -276,7 +326,10 @@ export const DroppedRow = memo(function DroppedRow({ item }: { item: Of<'dropped
 /** 时间线最顶上：更早的已经被缓冲挤掉了 */
 export function TrimmedNote({ count }: { count: number }) {
     return (
-        <div role="note" className="flex items-center gap-2 px-6 pb-1 pt-2 text-2xs text-text-tertiary">
+        <div
+            role="note"
+            className="flex items-center gap-2 px-6 pb-1 pt-2 text-2xs text-text-tertiary"
+        >
             <span aria-hidden className="h-px flex-1 border-t border-dashed border-border" />
             <span>更早的 {countFormat.format(count)} 条已丢弃</span>
             <span aria-hidden className="h-px flex-1 border-t border-dashed border-border" />

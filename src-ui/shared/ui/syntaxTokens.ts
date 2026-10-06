@@ -75,7 +75,14 @@ function tokenizeJson(source: string): Tok[] {
             let j = i + 1;
             while (j < n) {
                 const c = source[j]!;
-                if ((c >= '0' && c <= '9') || c === '.' || c === 'e' || c === 'E' || c === '+' || c === '-') {
+                if (
+                    (c >= '0' && c <= '9') ||
+                    c === '.' ||
+                    c === 'e' ||
+                    c === 'E' ||
+                    c === '+' ||
+                    c === '-'
+                ) {
                     j += 1;
                     continue;
                 }
@@ -142,7 +149,13 @@ function tokenizeDotenv(source: string): Tok[] {
             continue;
         }
         let eq = i;
-        while (eq < n && source[eq] !== '=' && source[eq] !== '\n' && source[eq] !== '\r' && source[eq] !== '#') {
+        while (
+            eq < n &&
+            source[eq] !== '=' &&
+            source[eq] !== '\n' &&
+            source[eq] !== '\r' &&
+            source[eq] !== '#'
+        ) {
             eq += 1;
         }
         if (eq < n && source[eq] === '=') {
@@ -152,13 +165,15 @@ function tokenizeDotenv(source: string): Tok[] {
             const quote = source[i];
             if (quote === '"' || quote === "'") {
                 let j = i + 1;
-                while (j < n && source[j] !== quote && source[j] !== '\n' && source[j] !== '\r') j += 1;
+                while (j < n && source[j] !== quote && source[j] !== '\n' && source[j] !== '\r')
+                    j += 1;
                 if (j < n && source[j] === quote) j += 1;
                 push('string', source.slice(i, j));
                 i = j;
             } else {
                 let j = i;
-                while (j < n && source[j] !== '\n' && source[j] !== '\r' && source[j] !== '#') j += 1;
+                while (j < n && source[j] !== '\n' && source[j] !== '\r' && source[j] !== '#')
+                    j += 1;
                 push('plain', source.slice(i, j));
                 i = j;
             }
@@ -269,7 +284,8 @@ function yamlKeyColon(line: string, from: number): number {
     for (let i = from; i < line.length; i += 1) {
         const c = line[i]!;
         if (c === '#' && i > from && line[i - 1] === ' ') return -1;
-        if (c === ':' && (i + 1 === line.length || line[i + 1] === ' ' || line[i + 1] === '\t')) return i;
+        if (c === ':' && (i + 1 === line.length || line[i + 1] === ' ' || line[i + 1] === '\t'))
+            return i;
     }
     return -1;
 }
@@ -279,7 +295,8 @@ function yamlScalarKind(value: string): TokKind {
     if (t.startsWith('"') || t.startsWith("'")) return 'string';
     if (YAML_BOOL.has(t)) return 'bool';
     if (YAML_NULL.has(t)) return 'null';
-    if (/^[-+]?(\d[\d_]*)(\.\d+)?([eE][-+]?\d+)?$/.test(t) || /^0x[0-9a-fA-F]+$/.test(t)) return 'number';
+    if (/^[-+]?(\d[\d_]*)(\.\d+)?([eE][-+]?\d+)?$/.test(t) || /^0x[0-9a-fA-F]+$/.test(t))
+        return 'number';
     return 'plain';
 }
 

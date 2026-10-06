@@ -9,40 +9,36 @@ import { forwardRef, type HTMLAttributes } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 
-const cardVariants = cva(
-    'rounded-md transition-shadow duration-200',
-    {
-        variants: {
-            variant: {
-                default: 'bg-surface shadow-card',
-                hero: 'rounded-lg shadow-card border border-border-subtle bg-[var(--surface-hero)]',
-                inset: 'bg-inset',
-                outlined: 'bg-surface border border-border-subtle',
-                ghost: 'bg-transparent',
-            },
-            padding: {
-                none: 'p-0',
-                sm: 'p-3',
-                md: 'p-5',
-                lg: 'p-6',
-                xl: 'p-8',
-            },
-            hover: {
-                none: '',
-                lift: 'hover:shadow-popover hover:-translate-y-px',
-            },
+const cardVariants = cva('rounded-md transition-shadow duration-200', {
+    variants: {
+        variant: {
+            default: 'bg-surface shadow-card',
+            hero: 'rounded-lg shadow-card border border-border-subtle bg-[var(--surface-hero)]',
+            inset: 'bg-inset',
+            outlined: 'bg-surface border border-border-subtle',
+            ghost: 'bg-transparent',
         },
-        defaultVariants: {
-            variant: 'default',
-            padding: 'md',
-            hover: 'none',
+        padding: {
+            none: 'p-0',
+            sm: 'p-3',
+            md: 'p-5',
+            lg: 'p-6',
+            xl: 'p-8',
+        },
+        hover: {
+            none: '',
+            lift: 'hover:shadow-popover hover:-translate-y-px',
         },
     },
-);
+    defaultVariants: {
+        variant: 'default',
+        padding: 'md',
+        hover: 'none',
+    },
+});
 
 export interface CardProps
-    extends HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof cardVariants> { }
+    extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof cardVariants> {}
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
     ({ className, variant, padding, hover, ...props }, ref) => (
@@ -79,15 +75,12 @@ export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadi
 );
 CardTitle.displayName = 'CardTitle';
 
-export const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
-    ({ className, ...props }, ref) => (
-        <p
-            ref={ref}
-            className={cn('text-xs text-text-tertiary', className)}
-            {...props}
-        />
-    ),
-);
+export const CardDescription = forwardRef<
+    HTMLParagraphElement,
+    HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+    <p ref={ref} className={cn('text-xs text-text-tertiary', className)} {...props} />
+));
 CardDescription.displayName = 'CardDescription';
 
 export const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(

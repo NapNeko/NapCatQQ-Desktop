@@ -47,7 +47,11 @@ export function runtimeDepsFor(
         const row = runtimeRows.find((r) => r.info.id === id);
         const state = row?.status.state;
         const ready =
-            state === 'installed' ? true : state === 'not_installed' || state === 'unusable' ? false : null;
+            state === 'installed'
+                ? true
+                : state === 'not_installed' || state === 'unusable'
+                  ? false
+                  : null;
         return { label: row?.info.display_name ?? displayNameOf(id), ready };
     });
 }
@@ -62,7 +66,11 @@ export function appFrameworkStatusBadge(opts: {
     if (opts.installing) return { tone: 'brand', label: '安装中' };
     if (opts.instanceCount === 0) return { tone: 'neutral', label: '未安装', dot: true };
     if (opts.runningCount > 0) {
-        return { tone: 'success', label: `运行中 ${opts.runningCount}/${opts.instanceCount}`, dot: true };
+        return {
+            tone: 'success',
+            label: `运行中 ${opts.runningCount}/${opts.instanceCount}`,
+            dot: true,
+        };
     }
     return { tone: 'brand', label: `${opts.instanceCount} 个实例`, dot: true };
 }
@@ -111,7 +119,12 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
                 导入
             </Button>
             <Button size="sm" variant="primary" onClick={onCreate} disabled={disabled}>
-                <ActionMotionIcon icon={Plus} size={13} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
+                <ActionMotionIcon
+                    icon={Plus}
+                    size={13}
+                    strokeWidth={2.4}
+                    motion={EMPHASIS_MOTION}
+                />
                 新建实例
             </Button>
         </div>

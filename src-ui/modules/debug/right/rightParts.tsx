@@ -1,6 +1,15 @@
 // 右栏各处共用的小零件：出错只坏一条的边界、复制并提示「已复制」、头像、小图标按钮。
 
-import { Component, forwardRef, useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import {
+    Component,
+    forwardRef,
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type ButtonHTMLAttributes,
+    type ReactNode,
+} from 'react';
 import { cn } from '../../../shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
 import { avatarUrl, initialOf } from '../../../core/domain/debug/chatFormat';
@@ -34,7 +43,11 @@ export class SafeBoundary extends Component<SafeProps, { failed: boolean }> {
 
     render(): ReactNode {
         if (this.state.failed) {
-            return this.props.fallback ?? <span className="text-2xs text-text-tertiary">[这条显示不了]</span>;
+            return (
+                this.props.fallback ?? (
+                    <span className="text-2xs text-text-tertiary">[这条显示不了]</span>
+                )
+            );
         }
         return this.props.children;
     }
@@ -79,7 +92,17 @@ export function useCopy(): { copied: string | null; copy: (text: string, tag?: s
 // 有上限，5 分钟后过期再试
 const failedAvatars = new ExpiringSet(CACHE_MAX, FAILURE_TTL_MS);
 
-export function Avatar({ id, name, mine, className }: { id: number; name: string; mine?: boolean; className?: string }) {
+export function Avatar({
+    id,
+    name,
+    mine,
+    className,
+}: {
+    id: number;
+    name: string;
+    mine?: boolean;
+    className?: string;
+}) {
     const url = avatarUrl(id);
     const [failed, setFailed] = useState(() => url === null || failedAvatars.has(String(id)));
     return (

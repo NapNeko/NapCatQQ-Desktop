@@ -11,14 +11,14 @@ const ITEMS = [
 ];
 
 function renderSelect() {
-    return render(<Select items={ITEMS} value="a" onValueChange={() => { }} />);
+    return render(<Select items={ITEMS} value="a" onValueChange={() => {}} />);
 }
 
 // Radix Select 打开时会用到这几个 jsdom 没有的 DOM API
 beforeAll(() => {
     Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => { };
-    Element.prototype.scrollIntoView ??= () => { };
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
 });
 
 afterEach(() => {
@@ -34,7 +34,7 @@ describe('Select 弹出层进场', () => {
 
         await user.click(screen.getByRole('combobox'));
         const listbox = await screen.findByRole('listbox');
-        rerender(<Select items={ITEMS} value="a" onValueChange={() => { }} />);
+        rerender(<Select items={ITEMS} value="a" onValueChange={() => {}} />);
 
         expect(fromTo.mock.calls.filter(([target]) => target === listbox)).toHaveLength(1);
     });

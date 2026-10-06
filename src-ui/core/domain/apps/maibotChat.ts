@@ -48,7 +48,8 @@ type Json = Record<string, unknown>;
 const obj = (v: unknown): Json | undefined =>
     v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : undefined;
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+const num = (v: unknown): number | undefined =>
+    typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 const nowSecs = () => Date.now() / 1000;
 
 function textSegments(text: string): MaiBotChatSegment[] {
@@ -71,12 +72,17 @@ function segmentOf(raw: unknown): MaiBotChatSegment | null {
         case 'at':
             return {
                 type: 'at',
-                name: str(d?.target_user_cardname) || str(d?.target_user_nickname) || str(d?.target_user_id),
+                name:
+                    str(d?.target_user_cardname) ||
+                    str(d?.target_user_nickname) ||
+                    str(d?.target_user_id),
             };
         case 'reply':
             return {
                 type: 'reply',
-                sender: str(d?.target_message_sender_cardname) || str(d?.target_message_sender_nickname),
+                sender:
+                    str(d?.target_message_sender_cardname) ||
+                    str(d?.target_message_sender_nickname),
                 text: str(d?.target_message_content),
             };
         case 'file':
@@ -89,7 +95,9 @@ function segmentOf(raw: unknown): MaiBotChatSegment | null {
 }
 
 function segmentsOf(raw: unknown, fallbackText: string): MaiBotChatSegment[] {
-    const segs = Array.isArray(raw) ? raw.map(segmentOf).filter((s): s is MaiBotChatSegment => s !== null) : [];
+    const segs = Array.isArray(raw)
+        ? raw.map(segmentOf).filter((s): s is MaiBotChatSegment => s !== null)
+        : [];
     return segs.length > 0 ? segs : textSegments(fallbackText);
 }
 
@@ -142,7 +150,10 @@ function chatEvent(d: Json): MaiBotChatEvent | null {
                     id: str(d.message_id),
                     fromBot: false,
                     senderName: str(obj(d.sender)?.name),
-                    segments: text || pics.length > 0 ? [...textSegments(text), ...pics] : textSegments(str(d.content)),
+                    segments:
+                        text || pics.length > 0
+                            ? [...textSegments(text), ...pics]
+                            : textSegments(str(d.content)),
                     at: num(d.timestamp) ?? nowSecs(),
                 },
             };
@@ -154,7 +165,10 @@ function chatEvent(d: Json): MaiBotChatEvent | null {
                     id: '',
                     fromBot: true,
                     senderName: str(obj(d.sender)?.name),
-                    segments: d.message_type === 'rich' ? segmentsOf(d.segments, str(d.content)) : textSegments(str(d.content)),
+                    segments:
+                        d.message_type === 'rich'
+                            ? segmentsOf(d.segments, str(d.content))
+                            : textSegments(str(d.content)),
                     at: num(d.timestamp) ?? nowSecs(),
                 },
             };
@@ -163,7 +177,12 @@ function chatEvent(d: Json): MaiBotChatEvent | null {
         case 'system':
         case 'error':
             return str(d.content)
-                ? { kind: 'notice', text: str(d.content), at: num(d.timestamp) ?? nowSecs(), error: d.type === 'error' }
+                ? {
+                      kind: 'notice',
+                      text: str(d.content),
+                      at: num(d.timestamp) ?? nowSecs(),
+                      error: d.type === 'error',
+                  }
                 : null;
         case 'nickname_updated':
             return str(d.user_name) ? { kind: 'nickname', userName: str(d.user_name) } : null;
@@ -186,7 +205,12 @@ export function parseChatFrame(raw: string): MaiBotChatFrame | null {
             return { op: 'pong' };
         case 'response': {
             const err = obj(f.error);
-            return { op: 'response', id: str(f.id), ok: f.ok === true, error: err ? str(err.message) || str(err.code) : undefined };
+            return {
+                op: 'response',
+                id: str(f.id),
+                ok: f.ok === true,
+                error: err ? str(err.message) || str(err.code) : undefined,
+            };
         }
         case 'event': {
             if (f.domain === 'system') return f.event === 'ready' ? { op: 'ready' } : null;
@@ -205,20 +229,36 @@ const call = (id: string, session: string, method: string, data?: Json) =>
 export const chatFrames = {
     ping: () => JSON.stringify({ op: 'ping' }),
     /** 桌面端报成 launcher（上游认的原生客户端形态）；restore 时上游不再发欢迎语 */
-    open: (id: string, session: string, userId: string, userName: string, restore: boolean, version: string) =>
+    open: (
+        id: string,
+        session: string,
+        userId: string,
+        userName: string,
+        restore: boolean,
+        version: string,
+    ) =>
         call(id, session, 'session.open', {
             user_id: userId,
             user_name: userName,
             client: { type: 'launcher', name: 'NapCatQQ Desktop', version },
             restore,
         }),
-    send: (id: string, session: string, userName: string, text: string, images: readonly MaiBotChatImage[]) =>
+    send: (
+        id: string,
+        session: string,
+        userName: string,
+        text: string,
+        images: readonly MaiBotChatImage[],
+    ) =>
         call(id, session, 'message.send', {
             content: text,
             user_name: userName,
-            images: images.slice(0, CHAT_IMAGE_MAX).map((i) => ({ name: i.name, mime_type: i.mimeType, base64: i.base64 })),
+            images: images
+                .slice(0, CHAT_IMAGE_MAX)
+                .map((i) => ({ name: i.name, mime_type: i.mimeType, base64: i.base64 })),
         }),
-    rename: (id: string, session: string, userName: string) => call(id, session, 'session.update_nickname', { user_name: userName }),
+    rename: (id: string, session: string, userName: string) =>
+        call(id, session, 'session.update_nickname', { user_name: userName }),
     close: (id: string, session: string) => call(id, session, 'session.close'),
 };
 
@@ -237,7 +277,11 @@ export function timelineMarks(messages: readonly Pick<MaiBotChatMessage, 'fromBo
     return messages.map((m, i) => {
         const prev = i > 0 ? messages[i - 1] : undefined;
         const showTime = !prev || m.at - prev.at > TIME_GAP_SECS;
-        return { showTime, showSender: showTime || !prev || prev.fromBot !== m.fromBot || m.at - prev.at > GROUP_GAP_SECS };
+        return {
+            showTime,
+            showSender:
+                showTime || !prev || prev.fromBot !== m.fromBot || m.at - prev.at > GROUP_GAP_SECS,
+        };
     });
 }
 
@@ -250,5 +294,7 @@ export function chatTimeLabel(secs: number, now = new Date()): string {
     yesterday.setDate(now.getDate() - 1);
     if (d.toDateString() === yesterday.toDateString()) return `昨天 ${hm}`;
     const md = `${d.getMonth() + 1}月${d.getDate()}日`;
-    return d.getFullYear() === now.getFullYear() ? `${md} ${hm}` : `${d.getFullYear()}年${md} ${hm}`;
+    return d.getFullYear() === now.getFullYear()
+        ? `${md} ${hm}`
+        : `${d.getFullYear()}年${md} ${hm}`;
 }

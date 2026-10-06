@@ -16,7 +16,10 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ProgressEvent } from '../../core/ipc/types';
-import { scheduleTaskQueueTerminalCleanup, trimTerminalTasksWhenAutoCleanupOff } from '../task-queue/taskQueueTerminalLinger';
+import {
+    scheduleTaskQueueTerminalCleanup,
+    trimTerminalTasksWhenAutoCleanupOff,
+} from '../task-queue/taskQueueTerminalLinger';
 
 export interface DockerDeployProgressStoreState {
     tasks: Record<string, ActionProgressView>;

@@ -28,10 +28,7 @@ import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion'
 /// useGSAP 插件注册(模块级,只跑一次)。
 gsap.registerPlugin(useGSAP);
 
-export type EnterFn = (
-    el: HTMLElement,
-    env: MotionEnv,
-) => gsap.core.Timeline | gsap.core.Tween;
+export type EnterFn = (el: HTMLElement, env: MotionEnv) => gsap.core.Timeline | gsap.core.Tween;
 export type ExitFn = EnterFn;
 
 interface GsapPresenceProps {
@@ -48,13 +45,7 @@ interface GsapPresenceProps {
     onExited?: () => void;
 }
 
-export function GsapPresence({
-    visible,
-    children,
-    onEnter,
-    onExit,
-    onExited,
-}: GsapPresenceProps) {
+export function GsapPresence({ visible, children, onEnter, onExit, onExited }: GsapPresenceProps) {
     const env = useMotion();
     const ref = useRef<HTMLElement | null>(null);
     const activeAnimRef = useRef<gsap.core.Tween | gsap.core.Timeline | null>(null);

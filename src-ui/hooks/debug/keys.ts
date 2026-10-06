@@ -41,8 +41,11 @@ export const debugReceiversKey = ['debug', 'receivers'] as const;
 
 export const debugStorageNoticesKey = ['debug', 'storage-notices'] as const;
 
-export const debugContactsKey = (botId: string, kind: 'group' | 'friend' | 'member', groupId?: string | number | null) =>
-    ['debug', 'contacts', botId, kind, groupId ?? null] as const;
+export const debugContactsKey = (
+    botId: string,
+    kind: 'group' | 'friend' | 'member',
+    groupId?: string | number | null,
+) => ['debug', 'contacts', botId, kind, groupId ?? null] as const;
 
 /** 通道 id 的字符串形式，做比较和 map 键用（后端也是把它当 map 键） */
 export function channelIdKey(id: DebugChannelId): string {

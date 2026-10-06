@@ -16,23 +16,16 @@ interface Props {
 
 export function WindowTab({ draft, patchDraft }: Props) {
     if (!draft) {
-        return (
-            <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
-        );
+        return <p className="text-[13px] text-text-tertiary">正在加载设置…</p>;
     }
 
     return (
         <SettingsTabSections>
             <SettingsSection title="关闭与托盘">
-                <FieldRow
-                    label="点击关闭按钮"
-                    description="有本机 Bot 运行时会拦截退出"
-                >
+                <FieldRow label="点击关闭按钮" description="有本机 Bot 运行时会拦截退出">
                     <Select
                         value={draft.closeAction}
-                        onValueChange={(v) =>
-                            patchDraft({ closeAction: v as CloseAction })
-                        }
+                        onValueChange={(v) => patchDraft({ closeAction: v as CloseAction })}
                         items={[
                             { value: 'close', label: '关闭程序' },
                             { value: 'tray', label: '最小化到托盘' },
@@ -47,8 +40,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
                                 value={draft.afterCloseUiBehavior}
                                 onValueChange={(v) =>
                                     patchDraft({
-                                        afterCloseUiBehavior:
-                                            v as AfterCloseUiBehavior,
+                                        afterCloseUiBehavior: v as AfterCloseUiBehavior,
                                     })
                                 }
                                 items={[
@@ -67,30 +59,25 @@ export function WindowTab({ draft, patchDraft }: Props) {
                                 ]}
                             />
                         </FieldRow>
-                        {draft.afterCloseUiBehavior ===
-                            'delayed_lightweight' && (
-                                <FieldRow label="释放前等待">
-                                    <Select
-                                        value={String(
-                                            draft.enterLightweightDelaySecs,
-                                        )}
-                                        onValueChange={(v) =>
-                                            patchDraft({
-                                                enterLightweightDelaySecs: Number(
-                                                    v,
-                                                ),
-                                            })
-                                        }
-                                        items={[
-                                            { value: '60', label: '1 分钟' },
-                                            { value: '180', label: '3 分钟' },
-                                            { value: '300', label: '5 分钟' },
-                                            { value: '900', label: '15 分钟' },
-                                            { value: '1800', label: '30 分钟' },
-                                        ]}
-                                    />
-                                </FieldRow>
-                            )}
+                        {draft.afterCloseUiBehavior === 'delayed_lightweight' && (
+                            <FieldRow label="释放前等待">
+                                <Select
+                                    value={String(draft.enterLightweightDelaySecs)}
+                                    onValueChange={(v) =>
+                                        patchDraft({
+                                            enterLightweightDelaySecs: Number(v),
+                                        })
+                                    }
+                                    items={[
+                                        { value: '60', label: '1 分钟' },
+                                        { value: '180', label: '3 分钟' },
+                                        { value: '300', label: '5 分钟' },
+                                        { value: '900', label: '15 分钟' },
+                                        { value: '1800', label: '30 分钟' },
+                                    ]}
+                                />
+                            </FieldRow>
+                        )}
                     </>
                 )}
             </SettingsSection>
@@ -102,16 +89,10 @@ export function WindowTab({ draft, patchDraft }: Props) {
                 >
                     <Switch
                         checked={draft.launchOnStartup}
-                        onCheckedChange={(v) =>
-                            patchDraft({ launchOnStartup: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ launchOnStartup: v })}
                     />
                 </FieldRow>
-                <FieldRow
-                    label="启动时"
-                    description="仅托盘：Bot 照常运行，从托盘打开界面"
-                    isLast
-                >
+                <FieldRow label="启动时" description="仅托盘：Bot 照常运行，从托盘打开界面" isLast>
                     <Select
                         value={draft.uiModeOnStartup}
                         onValueChange={(v) =>

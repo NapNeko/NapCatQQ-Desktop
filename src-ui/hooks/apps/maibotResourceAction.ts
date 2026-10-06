@@ -10,7 +10,11 @@ import type { MaiBotResourceDone } from '../../core/ipc/types';
 
 /** 挑本机文件、读拖进来的文件（试聊的图、表情包上传、知识库导入）：只碰本机，不碰实例。
  *  失败弹错误条、当什么都没挑，页面上不用各自兜 */
-export function localFilesOrNothing<T>(run: Promise<T[]>, key: string, title: string): Promise<T[]> {
+export function localFilesOrNothing<T>(
+    run: Promise<T[]>,
+    key: string,
+    title: string,
+): Promise<T[]> {
     return run.catch((err: unknown): T[] => {
         pushErrorBar({ key, title, raw: errorText(err) });
         return [];
@@ -46,7 +50,11 @@ export function useResourceAction<A>(
             }
         },
         onError: (err) => {
-            pushErrorBar({ key: `${String(key[0])}-fail:${instanceId}`, title: failTitle, raw: toAppConfigError(err).message });
+            pushErrorBar({
+                key: `${String(key[0])}-fail:${instanceId}`,
+                title: failTitle,
+                raw: toAppConfigError(err).message,
+            });
         },
     });
 }

@@ -70,7 +70,15 @@ const SEED_RELATIONS: [string, string, string, number][] = [
 ];
 
 type Paragraph = { id: string; source: string; content: string; created: number; deleted: boolean };
-type Relation = { id: string; s: string; p: string; o: string; para: string; created: number; deleted: boolean };
+type Relation = {
+    id: string;
+    s: string;
+    p: string;
+    o: string;
+    para: string;
+    created: number;
+    deleted: boolean;
+};
 type Fact = { id: string; key: string; value: string; created: number };
 type Task = MaiBotMemoryTask & { names: string[]; texts: string[]; startedAt: number };
 type Op = MaiBotMemoryDeleteOp & { paragraphIds: string[]; relationIds: string[] };
@@ -112,14 +120,36 @@ function seed(): Store {
     ];
     const tasks: Task[] = [
         {
-            id: 'task-seed-1', source: 'upload', status: 'done', progress: 1, total_chunks: 6, done_chunks: 6, failed_chunks: 0,
-            file_count: 2, error: '', created_at: t - 86400 * 2, finished_at: t - 86400 * 2 + 40,
-            names: ['麦麦设定.md', '聊天记录.txt'], texts: [], startedAt: 0,
+            id: 'task-seed-1',
+            source: 'upload',
+            status: 'done',
+            progress: 1,
+            total_chunks: 6,
+            done_chunks: 6,
+            failed_chunks: 0,
+            file_count: 2,
+            error: '',
+            created_at: t - 86400 * 2,
+            finished_at: t - 86400 * 2 + 40,
+            names: ['麦麦设定.md', '聊天记录.txt'],
+            texts: [],
+            startedAt: 0,
         },
         {
-            id: 'task-seed-2', source: 'paste', status: 'done_with_errors', progress: 1, total_chunks: 4, done_chunks: 3,
-            failed_chunks: 1, file_count: 1, error: '1 块抽取超时', created_at: t - 3600 * 5, finished_at: t - 3600 * 5 + 30,
-            names: ['群聊 · 摸鱼小分队'], texts: [], startedAt: 0,
+            id: 'task-seed-2',
+            source: 'paste',
+            status: 'done_with_errors',
+            progress: 1,
+            total_chunks: 4,
+            done_chunks: 3,
+            failed_chunks: 1,
+            file_count: 1,
+            error: '1 块抽取超时',
+            created_at: t - 3600 * 5,
+            finished_at: t - 3600 * 5 + 30,
+            names: ['群聊 · 摸鱼小分队'],
+            texts: [],
+            startedAt: 0,
         },
     ];
     return { paragraphs, relations, facts, tasks, ops: [], seq: 100 };
@@ -140,7 +170,8 @@ function store(inst: AppInstance): Store {
 function advance(s: Store) {
     const t = now();
     for (const task of s.tasks) {
-        if (task.status !== 'queued' && task.status !== 'running' && task.status !== 'preparing') continue;
+        if (task.status !== 'queued' && task.status !== 'running' && task.status !== 'preparing')
+            continue;
         const progress = Math.min(1, (t - task.startedAt) / TASK_SECONDS);
         task.progress = progress;
         task.status = progress <= 0.05 ? 'queued' : progress < 1 ? 'running' : 'done';
@@ -149,12 +180,27 @@ function advance(s: Store) {
             task.finished_at = t;
             task.texts.forEach((text, i) => {
                 const source = task.names[i] ?? task.names[0];
-                for (const line of text.split(/\n+/).map((l) => l.trim()).filter(Boolean).slice(0, 6)) {
+                for (const line of text
+                    .split(/\n+/)
+                    .map((l) => l.trim())
+                    .filter(Boolean)
+                    .slice(0, 6)) {
                     const id = `p${s.seq++}`;
                     s.paragraphs.push({ id, source, content: line, created: t, deleted: false });
                     // 「A 喜欢 B」这种句式抽一条关系，够预览用
-                    const m = /^(.{1,6}?)(喜欢|讨厌|认识|养了|在玩)(.{1,8}?)[。！，,.!]?$/.exec(line);
-                    if (m) s.relations.push({ id: `r${s.seq++}`, s: m[1], p: m[2], o: m[3], para: id, created: t, deleted: false });
+                    const m = /^(.{1,6}?)(喜欢|讨厌|认识|养了|在玩)(.{1,8}?)[。！，,.!]?$/.exec(
+                        line,
+                    );
+                    if (m)
+                        s.relations.push({
+                            id: `r${s.seq++}`,
+                            s: m[1],
+                            p: m[2],
+                            o: m[3],
+                            para: id,
+                            created: t,
+                            deleted: false,
+                        });
                 }
             });
         }
@@ -182,27 +228,57 @@ const entityName = (id: string) => decodeURIComponent(id.replace(/^e-/, ''));
 
 function paragraphRecord(p: Paragraph): MaiBotMemoryRecord {
     return {
-        kind: 'paragraph', id: p.id, title: trim(p.content, 60), summary: p.content, source: p.source,
-        status: p.deleted ? 'deleted' : 'active', active: !p.deleted, created_at: p.created, knowledge_type: 'mixed',
+        kind: 'paragraph',
+        id: p.id,
+        title: trim(p.content, 60),
+        summary: p.content,
+        source: p.source,
+        status: p.deleted ? 'deleted' : 'active',
+        active: !p.deleted,
+        created_at: p.created,
+        knowledge_type: 'mixed',
     };
 }
 
 function relationRecord(r: Relation): MaiBotMemoryRecord {
     return {
-        kind: 'relation', id: r.id, title: `${r.s} ${r.p} ${r.o}`, summary: '置信度 0.86', source: r.para,
-        status: r.deleted ? 'inactive' : 'active', active: !r.deleted, created_at: r.created, confidence: 0.86,
+        kind: 'relation',
+        id: r.id,
+        title: `${r.s} ${r.p} ${r.o}`,
+        summary: '置信度 0.86',
+        source: r.para,
+        status: r.deleted ? 'inactive' : 'active',
+        active: !r.deleted,
+        created_at: r.created,
+        confidence: 0.86,
     };
 }
 
 function entityRecord(e: { name: string; mentions: number; created: number }): MaiBotMemoryRecord {
     return {
-        kind: 'entity', id: entityId(e.name), title: e.name, summary: `由 ${e.mentions} 条有效段落支撑`, source: '',
-        status: 'active', active: true, created_at: e.created, mentions: e.mentions,
+        kind: 'entity',
+        id: entityId(e.name),
+        title: e.name,
+        summary: `由 ${e.mentions} 条有效段落支撑`,
+        source: '',
+        status: 'active',
+        active: true,
+        created_at: e.created,
+        mentions: e.mentions,
     };
 }
 
 function factRecord(f: Fact): MaiBotMemoryRecord {
-    return { kind: 'fact', id: f.id, title: `${f.key}: ${f.value}`, summary: 'person', source: '', status: 'active', active: true, created_at: f.created };
+    return {
+        kind: 'fact',
+        id: f.id,
+        title: `${f.key}: ${f.value}`,
+        summary: 'person',
+        source: '',
+        status: 'active',
+        active: true,
+        created_at: f.created,
+    };
 }
 
 function allRecords(s: Store, includeInactive: boolean): MaiBotMemoryRecord[] {
@@ -215,10 +291,17 @@ function allRecords(s: Store, includeInactive: boolean): MaiBotMemoryRecord[] {
 }
 
 /** 删一批会连带删到什么：段落连着它抽出来的关系，实体连着提到它的关系 */
-function reach(s: Store, t: MaiBotMemoryDeleteTarget): { paragraphs: Paragraph[]; relations: Relation[] } {
+function reach(
+    s: Store,
+    t: MaiBotMemoryDeleteTarget,
+): { paragraphs: Paragraph[]; relations: Relation[] } {
     const live = s.paragraphs.filter((p) => !p.deleted);
     const paragraphs =
-        t.kind === 'paragraph' ? live.filter((p) => t.ids.includes(p.id)) : t.kind === 'source' ? live.filter((p) => t.ids.includes(p.source)) : [];
+        t.kind === 'paragraph'
+            ? live.filter((p) => t.ids.includes(p.id))
+            : t.kind === 'source'
+              ? live.filter((p) => t.ids.includes(p.source))
+              : [];
     const names = t.kind === 'entity' ? t.ids.map(entityName) : [];
     const relations = s.relations.filter(
         (r) =>
@@ -231,7 +314,12 @@ function reach(s: Store, t: MaiBotMemoryDeleteTarget): { paragraphs: Paragraph[]
     return { paragraphs, relations };
 }
 
-const counts = (p: number, r: number, e = 0, src = 0): MaiBotMemoryCounts => ({ paragraphs: p, relations: r, entities: e, sources: src });
+const counts = (p: number, r: number, e = 0, src = 0): MaiBotMemoryCounts => ({
+    paragraphs: p,
+    relations: r,
+    entities: e,
+    sources: src,
+});
 const strip = ({ names: _n, texts: _t, startedAt: _s, ...task }: Task): MaiBotMemoryTask => task;
 const isText = (p: string) => /\.(txt|md|json)$/i.test(p);
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
@@ -244,18 +332,37 @@ export const mockMaiBotMemory = {
 
     importSetup(inst: AppInstance): Promise<MaiBotMemoryImportSetup> {
         store(inst);
-        return withMockDelay({ limits: { max_file_mb: 20, max_files: 200, max_paste_chars: 200_000, poll_ms: 1000 }, chats: CHATS });
+        return withMockDelay({
+            limits: { max_file_mb: 20, max_files: 200, max_paste_chars: 200_000, poll_ms: 1000 },
+            chats: CHATS,
+        });
     },
 
     importMemory(inst: AppInstance, req: MaiBotMemoryImport): Promise<MaiBotMemoryTask> {
         const s = store(inst);
         const t = now();
-        const names = req.op === 'paste' ? [req.name.trim() || `粘贴 ${new Date().toLocaleTimeString('zh-CN')}`] : req.paths.map(baseName);
-        const texts = req.op === 'paste' ? [req.content] : names.map((n) => `${n.replace(/\.\w+$/, '')}里说麦麦喜欢小狗。`);
+        const names =
+            req.op === 'paste'
+                ? [req.name.trim() || `粘贴 ${new Date().toLocaleTimeString('zh-CN')}`]
+                : req.paths.map(baseName);
+        const texts =
+            req.op === 'paste'
+                ? [req.content]
+                : names.map((n) => `${n.replace(/\.\w+$/, '')}里说麦麦喜欢小狗。`);
         const task: Task = {
-            id: `task-${s.seq++}`, source: req.op === 'paste' ? 'paste' : 'upload', status: 'queued', progress: 0,
-            total_chunks: Math.max(2, texts.join('').length % 7), done_chunks: 0, failed_chunks: 0, file_count: names.length,
-            error: '', created_at: t, names, texts, startedAt: t,
+            id: `task-${s.seq++}`,
+            source: req.op === 'paste' ? 'paste' : 'upload',
+            status: 'queued',
+            progress: 0,
+            total_chunks: Math.max(2, texts.join('').length % 7),
+            done_chunks: 0,
+            failed_chunks: 0,
+            file_count: names.length,
+            error: '',
+            created_at: t,
+            names,
+            texts,
+            startedAt: t,
         };
         s.tasks.unshift(task);
         return withMockDelay(strip(task));
@@ -267,13 +374,22 @@ export const mockMaiBotMemory = {
 
     task(inst: AppInstance, id: string): Promise<MaiBotMemoryTaskDetail> {
         const task = store(inst).tasks.find((x) => x.id === id);
-        if (!task) return Promise.reject(makeAppConfigError('invalid', '这个导入任务没了（麦麦重启过就会清空）'));
+        if (!task)
+            return Promise.reject(
+                makeAppConfigError('invalid', '这个导入任务没了（麦麦重启过就会清空）'),
+            );
         const per = Math.max(1, Math.round(task.total_chunks / task.names.length));
         return withMockDelay({
             task: strip(task),
             files: task.names.map((name, i) => ({
-                name, status: task.status, progress: task.progress, total_chunks: per, done_chunks: Math.round(per * task.progress),
-                failed_chunks: i === 0 ? task.failed_chunks : 0, error: i === 0 ? task.error : '', warnings: [],
+                name,
+                status: task.status,
+                progress: task.progress,
+                total_chunks: per,
+                done_chunks: Math.round(per * task.progress),
+                failed_chunks: i === 0 ? task.failed_chunks : 0,
+                error: i === 0 ? task.error : '',
+                warnings: [],
             })),
         });
     },
@@ -281,14 +397,28 @@ export const mockMaiBotMemory = {
     taskAction(inst: AppInstance, a: MaiBotMemoryTaskAction): Promise<MaiBotMemoryTask> {
         const s = store(inst);
         const task = s.tasks.find((x) => x.id === a.id);
-        if (!task) return Promise.reject(makeAppConfigError('invalid', '这个导入任务没了（麦麦重启过就会清空）'));
+        if (!task)
+            return Promise.reject(
+                makeAppConfigError('invalid', '这个导入任务没了（麦麦重启过就会清空）'),
+            );
         if (a.op === 'cancel') {
             task.status = 'cancelled';
             task.finished_at = now();
             return withMockDelay(strip(task));
         }
         const t = now();
-        const retry: Task = { ...task, id: `task-${s.seq++}`, status: 'queued', progress: 0, done_chunks: 0, failed_chunks: 0, error: '', created_at: t, finished_at: undefined, startedAt: t };
+        const retry: Task = {
+            ...task,
+            id: `task-${s.seq++}`,
+            status: 'queued',
+            progress: 0,
+            done_chunks: 0,
+            failed_chunks: 0,
+            error: '',
+            created_at: t,
+            finished_at: undefined,
+            startedAt: t,
+        };
         s.tasks.unshift(retry);
         return withMockDelay(strip(retry));
     },
@@ -297,27 +427,50 @@ export const mockMaiBotMemory = {
         const kw = q.search.trim().toLowerCase();
         const kinds = q.kinds.length ? q.kinds : RECORD_KINDS;
         const items = allRecords(store(inst), q.include_inactive)
-            .filter((r) => kinds.includes(r.kind) && (!kw || `${r.title} ${r.summary} ${r.source}`.toLowerCase().includes(kw)))
+            .filter(
+                (r) =>
+                    kinds.includes(r.kind) &&
+                    (!kw || `${r.title} ${r.summary} ${r.source}`.toLowerCase().includes(kw)),
+            )
             .slice(0, q.limit);
         const n = (k: MaiBotMemoryRecordKind) => items.filter((r) => r.kind === k).length;
-        return withMockDelay({ items, counts: { paragraph: n('paragraph'), entity: n('entity'), relation: n('relation'), fact: n('fact') } });
+        return withMockDelay({
+            items,
+            counts: {
+                paragraph: n('paragraph'),
+                entity: n('entity'),
+                relation: n('relation'),
+                fact: n('fact'),
+            },
+        });
     },
 
-    record(inst: AppInstance, kind: MaiBotMemoryRecordKind, id: string): Promise<MaiBotMemoryRecordDetail> {
+    record(
+        inst: AppInstance,
+        kind: MaiBotMemoryRecordKind,
+        id: string,
+    ): Promise<MaiBotMemoryRecordDetail> {
         const s = store(inst);
         const record = allRecords(s, true).find((r) => r.kind === kind && r.id === id);
         if (!record) return Promise.reject(makeAppConfigError('invalid', '这条记忆没找到'));
         const rels =
-            kind === 'relation' ? s.relations.filter((r) => r.id === id)
-            : kind === 'paragraph' ? s.relations.filter((r) => r.para === id)
-            : kind === 'entity' ? s.relations.filter((r) => r.s === entityName(id) || r.o === entityName(id))
-            : [];
-        const paras = s.paragraphs.filter((p) => rels.some((r) => r.para === p.id) || (kind === 'paragraph' && p.id === id));
+            kind === 'relation'
+                ? s.relations.filter((r) => r.id === id)
+                : kind === 'paragraph'
+                  ? s.relations.filter((r) => r.para === id)
+                  : kind === 'entity'
+                    ? s.relations.filter((r) => r.s === entityName(id) || r.o === entityName(id))
+                    : [];
+        const paras = s.paragraphs.filter(
+            (p) => rels.some((r) => r.para === p.id) || (kind === 'paragraph' && p.id === id),
+        );
         const names = new Set(rels.flatMap((r) => [r.s, r.o]));
         return withMockDelay({
             record,
             paragraphs: paras.filter((p) => p.id !== id).map(paragraphRecord),
-            entities: entities(s).filter((e) => names.has(e.name) && entityId(e.name) !== id).map(entityRecord),
+            entities: entities(s)
+                .filter((e) => names.has(e.name) && entityId(e.name) !== id)
+                .map(entityRecord),
             relations: rels.filter((r) => r.id !== id).map(relationRecord),
             facts: [],
         });
@@ -326,54 +479,102 @@ export const mockMaiBotMemory = {
     sources(inst: AppInstance): Promise<MaiBotMemorySource[]> {
         const map = new Map<string, MaiBotMemorySource>();
         for (const p of store(inst).paragraphs.filter((x) => !x.deleted)) {
-            const src = map.get(p.source) ?? { source: p.source, paragraphs: 0, last_updated: p.created };
+            const src = map.get(p.source) ?? {
+                source: p.source,
+                paragraphs: 0,
+                last_updated: p.created,
+            };
             src.paragraphs += 1;
             src.last_updated = Math.max(src.last_updated ?? 0, p.created);
             map.set(p.source, src);
         }
-        return withMockDelay([...map.values()].sort((a, b) => (b.last_updated ?? 0) - (a.last_updated ?? 0)));
+        return withMockDelay(
+            [...map.values()].sort((a, b) => (b.last_updated ?? 0) - (a.last_updated ?? 0)),
+        );
     },
 
-    deleteAction(inst: AppInstance, a: MaiBotMemoryDeleteAction): Promise<MaiBotMemoryDeleteResult> {
+    deleteAction(
+        inst: AppInstance,
+        a: MaiBotMemoryDeleteAction,
+    ): Promise<MaiBotMemoryDeleteResult> {
         const s = store(inst);
         if (a.op === 'restore') {
             const op = s.ops.find((o) => o.id === a.operation_id);
-            if (!op || op.status === 'restored') return Promise.reject(makeAppConfigError('invalid', '这次删除已经恢复过了'));
+            if (!op || op.status === 'restored')
+                return Promise.reject(makeAppConfigError('invalid', '这次删除已经恢复过了'));
             s.paragraphs.forEach((p) => op.paragraphIds.includes(p.id) && (p.deleted = false));
             s.relations.forEach((r) => op.relationIds.includes(r.id) && (r.deleted = false));
             op.status = 'restored';
             op.restored_at = now();
-            return withMockDelay({ counts: counts(0, 0), samples: [], operation_id: op.id, message: '恢复了' });
+            return withMockDelay({
+                counts: counts(0, 0),
+                samples: [],
+                operation_id: op.id,
+                message: '恢复了',
+            });
         }
         const hit = reach(s, a.target);
-        const c = counts(hit.paragraphs.length, hit.relations.length, a.target.kind === 'entity' ? a.target.ids.length : 0, a.target.kind === 'source' ? a.target.ids.length : 0);
-        if (hit.paragraphs.length + hit.relations.length === 0) return Promise.reject(makeAppConfigError('invalid', '未命中可删除内容'));
+        const c = counts(
+            hit.paragraphs.length,
+            hit.relations.length,
+            a.target.kind === 'entity' ? a.target.ids.length : 0,
+            a.target.kind === 'source' ? a.target.ids.length : 0,
+        );
+        if (hit.paragraphs.length + hit.relations.length === 0)
+            return Promise.reject(makeAppConfigError('invalid', '未命中可删除内容'));
         if (a.op === 'preview') {
             const samples = [
-                ...hit.paragraphs.map((p) => ({ kind: 'paragraph', label: p.source, preview: trim(p.content, 80) })),
-                ...hit.relations.map((r) => ({ kind: 'relation', label: `${r.s} ${r.p} ${r.o}`, preview: `${r.s} ${r.p} ${r.o}` })),
+                ...hit.paragraphs.map((p) => ({
+                    kind: 'paragraph',
+                    label: p.source,
+                    preview: trim(p.content, 80),
+                })),
+                ...hit.relations.map((r) => ({
+                    kind: 'relation',
+                    label: `${r.s} ${r.p} ${r.o}`,
+                    preview: `${r.s} ${r.p} ${r.o}`,
+                })),
             ];
             return withMockDelay({ counts: c, samples, operation_id: '', message: '' });
         }
         hit.paragraphs.forEach((p) => (p.deleted = true));
         hit.relations.forEach((r) => (r.deleted = true));
         const op: Op = {
-            id: `op-${s.seq++}`, mode: a.target.kind, status: 'executed', reason: 'desktop', created_at: now(), counts: c,
-            paragraphIds: hit.paragraphs.map((p) => p.id), relationIds: hit.relations.map((r) => r.id),
+            id: `op-${s.seq++}`,
+            mode: a.target.kind,
+            status: 'executed',
+            reason: 'desktop',
+            created_at: now(),
+            counts: c,
+            paragraphIds: hit.paragraphs.map((p) => p.id),
+            relationIds: hit.relations.map((r) => r.id),
         };
         s.ops.unshift(op);
-        const parts = [c.paragraphs && `${c.paragraphs} 段`, c.relations && `${c.relations} 条关系`].filter(Boolean);
-        return withMockDelay({ counts: c, samples: [], operation_id: op.id, message: `删掉了 ${parts.join('、')}` });
+        const parts = [
+            c.paragraphs && `${c.paragraphs} 段`,
+            c.relations && `${c.relations} 条关系`,
+        ].filter(Boolean);
+        return withMockDelay({
+            counts: c,
+            samples: [],
+            operation_id: op.id,
+            message: `删掉了 ${parts.join('、')}`,
+        });
     },
 
     deleteOps(inst: AppInstance): Promise<MaiBotMemoryDeleteOp[]> {
-        return withMockDelay(store(inst).ops.map(({ paragraphIds: _p, relationIds: _r, ...op }) => op));
+        return withMockDelay(
+            store(inst).ops.map(({ paragraphIds: _p, relationIds: _r, ...op }) => op),
+        );
     },
 
     graph(inst: AppInstance, maxNodes: number): Promise<MaiBotMemoryGraph> {
         const s = store(inst);
         const live = s.relations.filter((r) => !r.deleted);
-        const pairs = new Map<string, { source: string; target: string; label: string[]; relations: number }>();
+        const pairs = new Map<
+            string,
+            { source: string; target: string; label: string[]; relations: number }
+        >();
         for (const r of live) {
             const key = `${r.s}\u0000${r.o}`;
             const e = pairs.get(key) ?? { source: r.s, target: r.o, label: [], relations: 0 };
@@ -381,9 +582,16 @@ export const mockMaiBotMemory = {
             e.relations += 1;
             pairs.set(key, e);
         }
-        const edges = [...pairs.values()].map((e) => ({ source: e.source, target: e.target, label: e.label.join('、'), relations: e.relations, evidence: e.relations }));
+        const edges = [...pairs.values()].map((e) => ({
+            source: e.source,
+            target: e.target,
+            label: e.label.join('、'),
+            relations: e.relations,
+            evidence: e.relations,
+        }));
         const degree = new Map<string, number>();
-        for (const e of edges) for (const n of [e.source, e.target]) degree.set(n, (degree.get(n) ?? 0) + 1);
+        for (const e of edges)
+            for (const n of [e.source, e.target]) degree.set(n, (degree.get(n) ?? 0) + 1);
         const nodes = [...degree.entries()]
             .map(([id, d]) => ({ id, degree: d }))
             .sort((a, b) => b.degree - a.degree || a.id.localeCompare(b.id))
@@ -405,8 +613,20 @@ export const mockMaiBotMemory = {
             id,
             hash: entityId(id),
             mentions: paras.length,
-            relations: rels.map((r) => ({ hash: r.id, subject: r.s, predicate: r.p, object: r.o, confidence: 0.86, paragraphs: 1 })),
-            paragraphs: paras.map((p) => ({ hash: p.id, preview: p.content, source: p.source, created_at: p.created })),
+            relations: rels.map((r) => ({
+                hash: r.id,
+                subject: r.s,
+                predicate: r.p,
+                object: r.o,
+                confidence: 0.86,
+                paragraphs: 1,
+            })),
+            paragraphs: paras.map((p) => ({
+                hash: p.id,
+                preview: p.content,
+                source: p.source,
+                created_at: p.created,
+            })),
         });
     },
 
@@ -415,8 +635,12 @@ export const mockMaiBotMemory = {
         if (!kw) return withMockDelay([]);
         const s = store(inst);
         const hits: MaiBotMemoryGraphHit[] = [
-            ...entities(s).filter((e) => e.name.includes(kw)).map((e) => ({ kind: 'entity', title: e.name, node: e.name })),
-            ...s.relations.filter((r) => !r.deleted && r.p.includes(kw)).map((r) => ({ kind: 'relation', title: `${r.s} ${r.p} ${r.o}`, node: r.s })),
+            ...entities(s)
+                .filter((e) => e.name.includes(kw))
+                .map((e) => ({ kind: 'entity', title: e.name, node: e.name })),
+            ...s.relations
+                .filter((r) => !r.deleted && r.p.includes(kw))
+                .map((r) => ({ kind: 'relation', title: `${r.s} ${r.p} ${r.o}`, node: r.s })),
         ];
         return withMockDelay(hits.slice(0, 20));
     },
@@ -434,8 +658,15 @@ export const mockMaiBotMemory = {
         return withMockDelay(
             paths.map((path, i) => {
                 const name = baseName(path);
-                if (!isText(path)) return { path, name, size: 48_213, problem: '只收 txt / md / json' };
-                if (name.includes('旧')) return { path, name, size: 9_120, problem: '不是 UTF-8 编码，另存为 UTF-8 再导' };
+                if (!isText(path))
+                    return { path, name, size: 48_213, problem: '只收 txt / md / json' };
+                if (name.includes('旧'))
+                    return {
+                        path,
+                        name,
+                        size: 9_120,
+                        problem: '不是 UTF-8 编码，另存为 UTF-8 再导',
+                    };
                 return { path, name, size: 3_400 + i * 5_120 };
             }),
         );

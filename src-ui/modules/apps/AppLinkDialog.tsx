@@ -95,7 +95,7 @@ export function AppLinkDialog({
     }, [open, presetInstanceId, presetBotId]);
 
     const instance = instances.find((i) => i.id === instanceId) ?? null;
-    const botConfig = botId ? configs[botId] ?? null : null;
+    const botConfig = botId ? (configs[botId] ?? null) : null;
     const botHost = botConfig ? botHostId(botConfig.bot.runtime_target) : null;
     // Bot 配置页进来时 Bot 是预填的，选不了别的，只能在这里说清楚为什么对接不了
     const botIsDocker = isDockerBot(botConfig?.bot.deploymentType);
@@ -126,7 +126,8 @@ export function AppLinkDialog({
                 const name = cfg?.bot.name?.trim();
                 const host = cfg ? botHostId(cfg.bot.runtime_target) : null;
                 const docker = isDockerBot(cfg?.bot.deploymentType);
-                const allowed = !instance || !host ? true : appLinkPairEnabled(host, instance.host_id);
+                const allowed =
+                    !instance || !host ? true : appLinkPairEnabled(host, instance.host_id);
                 const note = docker
                     ? DOCKER_BOT_NOTE
                     : instance && host
@@ -155,7 +156,8 @@ export function AppLinkDialog({
         );
     };
 
-    const rebinding = instance?.link && instance.link.bot_id !== botId ? instance.link.bot_id : null;
+    const rebinding =
+        instance?.link && instance.link.bot_id !== botId ? instance.link.bot_id : null;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -191,7 +193,8 @@ export function AppLinkDialog({
 
                     {botIsDocker && (
                         <p className="text-2xs text-warning">
-                            这个 Bot 是 Docker 部署的，它在容器里，容器里的 127.0.0.1 不是宿主机，应用端连不上，暂不支持对接。
+                            这个 Bot 是 Docker 部署的，它在容器里，容器里的 127.0.0.1
+                            不是宿主机，应用端连不上，暂不支持对接。
                         </p>
                     )}
 
@@ -212,7 +215,12 @@ export function AppLinkDialog({
                 </div>
 
                 <DialogFooter>
-                    <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={applying}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                        disabled={applying}
+                    >
                         取消
                     </Button>
                     <Button
@@ -294,7 +302,8 @@ function PlanPreview({
             </div>
             {rebindingFrom && (
                 <p className="text-2xs text-warning">
-                    该实例目前对接的是 Bot {rebindingFrom}，应用后会改绑到 Bot {plan.bot_id}，旧 Bot 上的同名连接会被移除。
+                    该实例目前对接的是 Bot {rebindingFrom}，应用后会改绑到 Bot {plan.bot_id}，旧 Bot
+                    上的同名连接会被移除。
                 </p>
             )}
         </div>

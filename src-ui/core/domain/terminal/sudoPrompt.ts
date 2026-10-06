@@ -5,7 +5,8 @@
 // 光秃秃的 `Password:` / `密码：` 只有正在跑的命令里带 sudo / su 时才认，
 // 免得在 ssh 别的机器、mysql -p 这种要别的密码的地方误导人去填提权密码。
 
-const ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[P^_X][^\x1b]*\x1b\\|[ -/]*[0-~])/g;
+const ESCAPES =
+    /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[P^_X][^\x1b]*\x1b\\|[ -/]*[0-~])/g;
 
 export function stripAnsi(text: string): string {
     return text.replace(ESCAPES, '');

@@ -2,7 +2,14 @@
 
 import { useState } from 'react';
 import { MessagesSquare, Plus, Star, Trash2, UserRound } from 'lucide-react';
-import { Badge, Button, FormSection, StringListField, SyntaxTextEditor, TextField } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    FormSection,
+    StringListField,
+    SyntaxTextEditor,
+    TextField,
+} from '../../../../shared/ui';
 import { ConfigForm } from '../karin/configLayout';
 import { AstrBotRuntimeGate, dashboardReady } from './AstrBotRuntimeGate';
 import { ConfirmDelete, EmptyHint, EntityRow, FormDialog } from './parts';
@@ -29,14 +36,26 @@ export const AstrBotPersonaTab: React.FC<{
     onGoTab: (tab: string) => void;
     onStart: () => void;
     starting: boolean;
-}> = ({ instanceId, status, statusLoading, defaultPersona, onSetDefault, formDisabled, onGoTab, onStart, starting }) => {
+}> = ({
+    instanceId,
+    status,
+    statusLoading,
+    defaultPersona,
+    onSetDefault,
+    formDisabled,
+    onGoTab,
+    onStart,
+    starting,
+}) => {
     const ready = dashboardReady(status);
     const personas = useAstrBotPersonas(instanceId, ready);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [pendingDelete, setPendingDelete] = useState<AstrBotPersona | null>(null);
     const list = personas.data ?? [];
 
-    const idTaken = draft?.mode === 'create' && list.some((p) => p.persona_id === draft.persona.persona_id.trim());
+    const idTaken =
+        draft?.mode === 'create' &&
+        list.some((p) => p.persona_id === draft.persona.persona_id.trim());
 
     const newButton = (
         <Button
@@ -66,7 +85,11 @@ export const AstrBotPersonaTab: React.FC<{
                 {list.length === 0 ? (
                     <EmptyHint
                         icon={UserRound}
-                        title={ready ? '还没有人格，新建一个来定下机器人的说话方式' : '连上控制台后可以管理人格'}
+                        title={
+                            ready
+                                ? '还没有人格，新建一个来定下机器人的说话方式'
+                                : '连上控制台后可以管理人格'
+                        }
                         action={ready ? newButton : undefined}
                     />
                 ) : (
@@ -95,14 +118,26 @@ export const AstrBotPersonaTab: React.FC<{
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className={cn('h-7 w-7', isDefault && 'text-warning hover:text-warning')}
-                                                aria-label={isDefault ? '当前默认人格' : '设为默认人格'}
+                                                className={cn(
+                                                    'h-7 w-7',
+                                                    isDefault && 'text-warning hover:text-warning',
+                                                )}
+                                                aria-label={
+                                                    isDefault ? '当前默认人格' : '设为默认人格'
+                                                }
                                                 aria-pressed={isDefault}
-                                                title={isDefault ? '当前默认人格' : '设为默认人格（要保存）'}
+                                                title={
+                                                    isDefault
+                                                        ? '当前默认人格'
+                                                        : '设为默认人格（要保存）'
+                                                }
                                                 disabled={formDisabled || isDefault}
                                                 onClick={() => onSetDefault(p.persona_id)}
                                             >
-                                                <Star size={13} fill={isDefault ? 'currentColor' : 'none'} />
+                                                <Star
+                                                    size={13}
+                                                    fill={isDefault ? 'currentColor' : 'none'}
+                                                />
                                             </Button>
                                             <Button
                                                 variant="ghost"
@@ -116,7 +151,11 @@ export const AstrBotPersonaTab: React.FC<{
                                             </Button>
                                         </>
                                     }
-                                    onOpen={ready ? () => setDraft({ mode: 'edit', persona: p }) : undefined}
+                                    onOpen={
+                                        ready
+                                            ? () => setDraft({ mode: 'edit', persona: p })
+                                            : undefined
+                                    }
                                 />
                             );
                         })}
@@ -128,7 +167,11 @@ export const AstrBotPersonaTab: React.FC<{
                 <FormDialog
                     open
                     size="lg"
-                    title={draft.mode === 'create' ? '新建人格' : `编辑人格 · ${draft.persona.persona_id}`}
+                    title={
+                        draft.mode === 'create'
+                            ? '新建人格'
+                            : `编辑人格 · ${draft.persona.persona_id}`
+                    }
                     confirmLabel={draft.mode === 'create' ? '创建' : '保存'}
                     confirmDisabled={!draft.persona.persona_id.trim() || idTaken}
                     busy={personas.upsert.isPending}
@@ -136,7 +179,10 @@ export const AstrBotPersonaTab: React.FC<{
                     onConfirm={() => {
                         void personas.upsert
                             .mutateAsync({
-                                persona: { ...draft.persona, persona_id: draft.persona.persona_id.trim() },
+                                persona: {
+                                    ...draft.persona,
+                                    persona_id: draft.persona.persona_id.trim(),
+                                },
                                 creating: draft.mode === 'create',
                             })
                             .then(() => setDraft(null));
@@ -150,18 +196,27 @@ export const AstrBotPersonaTab: React.FC<{
                             className="font-mono"
                             placeholder="唯一，创建后不能改"
                             error={idTaken ? '已有同名人格' : undefined}
-                            onValueChange={(persona_id) => setDraft({ ...draft, persona: { ...draft.persona, persona_id } })}
+                            onValueChange={(persona_id) =>
+                                setDraft({ ...draft, persona: { ...draft.persona, persona_id } })
+                            }
                         />
                     )}
                     <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-text-secondary">系统提示词</label>
+                        <label className="text-xs font-medium text-text-secondary">
+                            系统提示词
+                        </label>
                         <div className="flex h-48 flex-col">
                             <SyntaxTextEditor
                                 mode="plain"
                                 wrap
                                 value={draft.persona.system_prompt}
                                 aria-label="系统提示词"
-                                onChange={(system_prompt) => setDraft({ ...draft, persona: { ...draft.persona, system_prompt } })}
+                                onChange={(system_prompt) =>
+                                    setDraft({
+                                        ...draft,
+                                        persona: { ...draft.persona, system_prompt },
+                                    })
+                                }
                             />
                         </div>
                     </div>
@@ -169,7 +224,9 @@ export const AstrBotPersonaTab: React.FC<{
                         label="开场对话"
                         value={draft.persona.begin_dialogs}
                         mono={false}
-                        onChange={(begin_dialogs) => setDraft({ ...draft, persona: { ...draft.persona, begin_dialogs } })}
+                        onChange={(begin_dialogs) =>
+                            setDraft({ ...draft, persona: { ...draft.persona, begin_dialogs } })
+                        }
                     />
                 </FormDialog>
             )}
@@ -186,7 +243,9 @@ export const AstrBotPersonaTab: React.FC<{
                 onCancel={() => setPendingDelete(null)}
                 onConfirm={() => {
                     if (!pendingDelete) return;
-                    void personas.remove.mutateAsync(pendingDelete.persona_id).then(() => setPendingDelete(null));
+                    void personas.remove
+                        .mutateAsync(pendingDelete.persona_id)
+                        .then(() => setPendingDelete(null));
                 }}
             />
         </ConfigForm>

@@ -5,14 +5,24 @@
 
 import { useState, type ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
-import { KOISHI_CONFIG_FORM, effective, isLinkNode, nodePathOfIssue } from '../../../../core/domain/apps/koishiConfig';
+import {
+    KOISHI_CONFIG_FORM,
+    effective,
+    isLinkNode,
+    nodePathOfIssue,
+} from '../../../../core/domain/apps/koishiConfig';
 import { useAppConfigForm } from '../../../../hooks/apps/useAppConfigForm';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
 import { AppStoreTab } from '../AppStoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useSyncNavBadges } from '../useSyncNavBadges';
-import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule, NavBadgeTone } from '../frameworkUi';
+import type {
+    FrameworkDetailProps,
+    FrameworkNavGroup,
+    FrameworkUiModule,
+    NavBadgeTone,
+} from '../frameworkUi';
 import { KoishiOverviewTab } from './KoishiOverviewTab';
 import { KoishiServerTab } from './KoishiServerTab';
 import { KoishiGlobalTab } from './KoishiGlobalTab';
@@ -63,7 +73,13 @@ function tabForIssue(path: string): string {
     return 'global';
 }
 
-function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
+function KoishiFrameworkDetail({
+    instance,
+    onSaveHandle,
+    onGoTab,
+    onOpenLink,
+    onNavBadges,
+}: FrameworkDetailProps) {
     const running = instance.state === 'running';
     const form = useAppConfigForm(KOISHI_CONFIG_FORM, instance.id, instance.display_name, running);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
@@ -72,10 +88,15 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
 
     const badges: Record<string, NavBadgeTone> = {};
     // 对接过了但对接条目被停用：Bot 连得上端口，Koishi 不认
-    if (form.form && instance.link && !effective(form.form.plugins).some(isLinkNode)) badges.plugins = 'warn';
+    if (form.form && instance.link && !effective(form.form.plugins).some(isLinkNode))
+        badges.plugins = 'warn';
     useSyncNavBadges(onNavBadges, badges);
 
-    const pane = (tab: string, body: (cfg: NonNullable<typeof form.form>) => ReactNode, fill = false) =>
+    const pane = (
+        tab: string,
+        body: (cfg: NonNullable<typeof form.form>) => ReactNode,
+        fill = false,
+    ) =>
         form.isLoading && !form.form ? (
             <TabsContent key={tab} value={tab} className="flex min-h-0 flex-1 flex-col pt-2">
                 <PaneLoading text="正在读取 koishi.yml…" />
@@ -98,7 +119,10 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
 
     return (
         <>
-            <TabsContent value="market" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="market"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <AppStoreTab
                     instance={instance}
                     resource="plugin"
@@ -108,16 +132,25 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     }}
                 />
             </TabsContent>
-            <TabsContent value="sandbox" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="sandbox"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <KoishiSandboxTab instance={instance} />
             </TabsContent>
             <TabsContent value="commands" className="pb-8 pt-2">
                 <KoishiCommandsTab instance={instance} />
             </TabsContent>
-            <TabsContent value="database" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="database"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <KoishiDatabaseTab instance={instance} />
             </TabsContent>
-            <TabsContent value="files" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="files"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <KoishiFilesTab instance={instance} />
             </TabsContent>
             {pane('overview', (cfg) => (
@@ -139,7 +172,9 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     {...common}
                 />
             ))}
-            {pane('global', (cfg) => <KoishiGlobalTab instance={instance} config={cfg} {...common} />)}
+            {pane('global', (cfg) => (
+                <KoishiGlobalTab instance={instance} config={cfg} {...common} />
+            ))}
             {pane(
                 'plugins',
                 (cfg) => (
@@ -155,7 +190,12 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                 true,
             )}
             {pane('connection', (cfg) => (
-                <KoishiConnectionTab instance={instance} config={cfg} onGoTab={onGoTab} onOpenLink={onOpenLink} />
+                <KoishiConnectionTab
+                    instance={instance}
+                    config={cfg}
+                    onGoTab={onGoTab}
+                    onOpenLink={onOpenLink}
+                />
             ))}
         </>
     );

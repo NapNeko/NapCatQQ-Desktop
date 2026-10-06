@@ -23,7 +23,12 @@ import {
     type MaiBotModelSetupIssue,
     type MaiBotProviderPreset,
 } from '../../../../core/domain/apps/maibotConfig';
-import { fieldOf, MODEL_SCHEMA, newItemFor, nodeAt } from '../../../../core/domain/apps/maibotSchema';
+import {
+    fieldOf,
+    MODEL_SCHEMA,
+    newItemFor,
+    nodeAt,
+} from '../../../../core/domain/apps/maibotSchema';
 import type {
     MaiBotAPIProvider,
     MaiBotInstanceConfig,
@@ -43,7 +48,8 @@ import { AdvancedToggle, useRevealOnError, type AdvancedSections } from './advan
 
 type TaskKey = (typeof MAIBOT_TASK_KEYS)[number];
 
-const isTaskKey = (k: string | undefined): k is TaskKey => (MAIBOT_TASK_KEYS as readonly string[]).includes(k ?? '');
+const isTaskKey = (k: string | undefined): k is TaskKey =>
+    (MAIBOT_TASK_KEYS as readonly string[]).includes(k ?? '');
 
 const TASKS: Readonly<Record<TaskKey, { title: string; hint: string }>> = {
     replyer: { title: '回复', hint: '影响麦麦说话的表现' },
@@ -69,7 +75,11 @@ const TASK_NODE = nodeAt(MODEL_SCHEMA, ['model_task_config']);
 const MODEL_NODE = nodeAt(MODEL_SCHEMA, ['models']);
 
 // 三个小节各自的「高级选项」展开状态
-const SECTION = { providers: 'models/providers', models: 'models/models', tasks: 'models/tasks' } as const;
+const SECTION = {
+    providers: 'models/providers',
+    models: 'models/models',
+    tasks: 'models/tasks',
+} as const;
 
 const SETUP_TEXT: Record<Exclude<MaiBotModelSetupIssue, null>, string> = {
     no_provider: '还没有提供商。先加一个，填上接口地址和 API Key。',
@@ -95,7 +105,8 @@ const PresetMenu: React.FC<{ onPick: (p: MaiBotProviderPreset) => void; disabled
             <div
                 className="overflow-y-auto overscroll-contain"
                 style={{
-                    maxHeight: 'min(24rem, calc(var(--radix-popover-content-available-height, 24rem) - 8px))',
+                    maxHeight:
+                        'min(24rem, calc(var(--radix-popover-content-available-height, 24rem) - 8px))',
                 }}
             >
                 {MAIBOT_PROVIDER_PRESETS.map((p) => (
@@ -153,15 +164,21 @@ export const MaiBotModelsTab: React.FC<{
     const errPaths = Object.keys(errors).map((k) => k.split('/'));
     const errOn = (list: string, fields: readonly string[]) =>
         errPaths.some((p) => p[1] === list && fields.includes(p[3] ?? ''));
-    const hiddenTaskErr = errPaths.some((p) => p[1] === 'model_task_config' && isTaskKey(p[2]) && taskHidden(p[2]));
+    const hiddenTaskErr = errPaths.some(
+        (p) => p[1] === 'model_task_config' && isTaskKey(p[2]) && taskHidden(p[2]),
+    );
     const revealed: string[] = [];
     if (errOn('api_providers', PROVIDER_ADVANCED_FIELDS)) revealed.push(SECTION.providers);
     if (errOn('models', MODEL_ADVANCED_FIELDS)) revealed.push(SECTION.models);
-    if (errOn('model_task_config', TASK_ADVANCED_FIELDS) || hiddenTaskErr) revealed.push(SECTION.tasks);
+    if (errOn('model_task_config', TASK_ADVANCED_FIELDS) || hiddenTaskErr)
+        revealed.push(SECTION.tasks);
     useRevealOnError(advancedSections, revealed);
 
     const setProvider = (i: number, p: MaiBotAPIProvider) =>
-        setModels({ ...models, api_providers: models.api_providers.map((x, j) => (j === i ? p : x)) });
+        setModels({
+            ...models,
+            api_providers: models.api_providers.map((x, j) => (j === i ? p : x)),
+        });
     const setModel = (i: number, m: MaiBotModelInfo) =>
         setModels({ ...models, models: models.models.map((x, j) => (j === i ? m : x)) });
 
@@ -170,7 +187,12 @@ export const MaiBotModelsTab: React.FC<{
         const taken = new Set(models.models.map((m) => m.name));
         let name = identifier;
         for (let n = 2; taken.has(name); n += 1) name = `${identifier}-${n}`;
-        const next = { ...freshModel(models), api_provider: provider, model_identifier: identifier, name };
+        const next = {
+            ...freshModel(models),
+            api_provider: provider,
+            model_identifier: identifier,
+            name,
+        };
         setModels({ ...models, models: [...models.models, next] });
     };
 
@@ -211,14 +233,19 @@ export const MaiBotModelsTab: React.FC<{
                             onPick={(preset) =>
                                 setModels({
                                     ...models,
-                                    api_providers: [...models.api_providers, newMaiBotProvider(models.api_providers, preset)],
+                                    api_providers: [
+                                        ...models.api_providers,
+                                        newMaiBotProvider(models.api_providers, preset),
+                                    ],
                                 })
                             }
                         />
                     </>
                 }
             >
-                {errors['models/api_providers'] && <p className="text-2xs text-danger">{errors['models/api_providers']}</p>}
+                {errors['models/api_providers'] && (
+                    <p className="text-2xs text-danger">{errors['models/api_providers']}</p>
+                )}
                 {models.api_providers.map((p, i) => (
                     <ProviderCard
                         key={i}
@@ -230,7 +257,10 @@ export const MaiBotModelsTab: React.FC<{
                         onChange={(next) => setProvider(i, next)}
                         onRename={(from, to) => setModels(renameMaiBotProvider(models, from, to))}
                         onRemove={() =>
-                            setModels({ ...models, api_providers: models.api_providers.filter((_, j) => j !== i) })
+                            setModels({
+                                ...models,
+                                api_providers: models.api_providers.filter((_, j) => j !== i),
+                            })
                         }
                         footer={
                             live && (
@@ -259,13 +289,21 @@ export const MaiBotModelsTab: React.FC<{
                 actions={
                     <>
                         {models.models.length > 0 && (
-                            <AdvancedToggle open={open.models} onToggle={() => advancedSections.toggle(SECTION.models)} />
+                            <AdvancedToggle
+                                open={open.models}
+                                onToggle={() => advancedSections.toggle(SECTION.models)}
+                            />
                         )}
                         <Button
                             size="sm"
                             variant="secondary"
                             disabled={disabled}
-                            onClick={() => setModels({ ...models, models: [...models.models, freshModel(models)] })}
+                            onClick={() =>
+                                setModels({
+                                    ...models,
+                                    models: [...models.models, freshModel(models)],
+                                })
+                            }
                         >
                             <ActionMotionIcon icon={Plus} size={13} />
                             加模型
@@ -273,7 +311,9 @@ export const MaiBotModelsTab: React.FC<{
                     </>
                 }
             >
-                {errors['models/models'] && <p className="text-2xs text-danger">{errors['models/models']}</p>}
+                {errors['models/models'] && (
+                    <p className="text-2xs text-danger">{errors['models/models']}</p>
+                )}
                 {models.models.map((m, i) => (
                     <ModelCard
                         key={i}
@@ -285,12 +325,19 @@ export const MaiBotModelsTab: React.FC<{
                         showAdvanced={open.models}
                         onChange={(next) => setModel(i, next)}
                         onRename={(from, to) => setModels(renameMaiBotModel(models, from, to))}
-                        onRemove={() => setModels({ ...models, models: models.models.filter((_, j) => j !== i) })}
+                        onRemove={() =>
+                            setModels({
+                                ...models,
+                                models: models.models.filter((_, j) => j !== i),
+                            })
+                        }
                         identifierExtra={
                             live && (
                                 <ModelIdPicker
                                     instanceId={instanceId}
-                                    provider={models.api_providers.find((p) => p.name === m.api_provider)}
+                                    provider={models.api_providers.find(
+                                        (p) => p.name === m.api_provider,
+                                    )}
                                     current={m.model_identifier}
                                     onPick={(id) => pickIdentifier(i, id)}
                                     disabled={disabled}
@@ -304,7 +351,12 @@ export const MaiBotModelsTab: React.FC<{
             <FormSection
                 title="任务分配"
                 description="每个任务从上面的模型里挑，可以挑多个轮换"
-                actions={<AdvancedToggle open={open.tasks} onToggle={() => advancedSections.toggle(SECTION.tasks)} />}
+                actions={
+                    <AdvancedToggle
+                        open={open.tasks}
+                        onToggle={() => advancedSections.toggle(SECTION.tasks)}
+                    />
+                }
             >
                 {tasks.map((k) => (
                     <TaskCard
@@ -319,7 +371,10 @@ export const MaiBotModelsTab: React.FC<{
                         disabled={disabled}
                         showAdvanced={open.tasks}
                         onChange={(next) =>
-                            setModels({ ...models, model_task_config: { ...models.model_task_config, [k]: next } })
+                            setModels({
+                                ...models,
+                                model_task_config: { ...models.model_task_config, [k]: next },
+                            })
                         }
                     />
                 ))}

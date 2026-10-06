@@ -1,12 +1,7 @@
 // 浏览器预览模式下的 Bot 假数据库 + 假状态机。
 // 真 IPC 实装在 `core/services/bot.service.ts` 等文件。
 
-import type {
-    BatchResultResponse,
-    BotActorSnapshot,
-    BotStatus,
-    LogSnapshot,
-} from '../types';
+import type { BatchResultResponse, BotActorSnapshot, BotStatus, LogSnapshot } from '../types';
 import type { BotConfig } from '../generated/domain/BotConfig';
 import type { ImportedNetworkConfig } from '../generated/domain/ImportedNetworkConfig';
 import { emitMockEvent } from './events.mock';
@@ -68,7 +63,13 @@ export function buildMockBotConfig(botId: string): BotConfig {
             name: `Bot-${botId.slice(-2)}`,
             QQID: Number(botId),
             musicSignUrl: 'http://sign.example.com/api',
-            autoRestartSchedule: { enable: false, mode: 'interval', time_unit: 'h', duration: 6, cron: '' },
+            autoRestartSchedule: {
+                enable: false,
+                mode: 'interval',
+                time_unit: 'h',
+                duration: 6,
+                cron: '',
+            },
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',
@@ -108,7 +109,14 @@ export function buildMockBotConfig(botId: string): BotConfig {
             fileLogLevel: 'debug',
             consoleLogLevel: 'info',
             o3HookMode: 1,
-            bypass: { hook: false, window: false, module: false, process: false, container: false, js: false },
+            bypass: {
+                hook: false,
+                window: false,
+                module: false,
+                process: false,
+                container: false,
+                js: false,
+            },
         },
     };
 }
@@ -235,9 +243,7 @@ export async function mockBatchStart(botIds: string[]): Promise<BatchResultRespo
         );
         succeeded.push(id);
     }
-    return new Promise((resolve) =>
-        setTimeout(() => resolve({ succeeded, failed }), 300),
-    );
+    return new Promise((resolve) => setTimeout(() => resolve({ succeeded, failed }), 300));
 }
 
 export async function mockBatchStop(botIds: string[]): Promise<BatchResultResponse> {
@@ -260,9 +266,7 @@ export async function mockBatchStop(botIds: string[]): Promise<BatchResultRespon
         );
         succeeded.push(id);
     }
-    return new Promise((resolve) =>
-        setTimeout(() => resolve({ succeeded, failed }), 300),
-    );
+    return new Promise((resolve) => setTimeout(() => resolve({ succeeded, failed }), 300));
 }
 
 export async function mockBatchDelete(botIds: string[]): Promise<BatchResultResponse> {
@@ -277,9 +281,7 @@ export async function mockBatchDelete(botIds: string[]): Promise<BatchResultResp
         mockSnapshots.splice(idx, 1);
         succeeded.push(id);
     }
-    return new Promise((resolve) =>
-        setTimeout(() => resolve({ succeeded, failed }), 300),
-    );
+    return new Promise((resolve) => setTimeout(() => resolve({ succeeded, failed }), 300));
 }
 
 export async function mockUpsertBotConfig(config: BotConfig): Promise<BotActorSnapshot> {
@@ -288,9 +290,7 @@ export async function mockUpsertBotConfig(config: BotConfig): Promise<BotActorSn
     if (existing) {
         existing.revision += 1;
         existing.last_transition = 'Config updated';
-        return new Promise((resolve) =>
-            setTimeout(() => resolve({ ...existing }), 200),
-        );
+        return new Promise((resolve) => setTimeout(() => resolve({ ...existing }), 200));
     }
     const created: BotActorSnapshot = {
         bot_id: botId,
@@ -302,9 +302,7 @@ export async function mockUpsertBotConfig(config: BotConfig): Promise<BotActorSn
         last_error: undefined,
     };
     mockSnapshots.push(created);
-    return new Promise((resolve) =>
-        setTimeout(() => resolve({ ...created }), 200),
-    );
+    return new Promise((resolve) => setTimeout(() => resolve({ ...created }), 200));
 }
 
 export async function mockDeleteBotConfig(botId: string): Promise<void> {
@@ -315,9 +313,6 @@ export async function mockDeleteBotConfig(botId: string): Promise<void> {
 }
 
 export const mockLogSnapshot: LogSnapshot = {
-    lines: [
-        '[mock] BotLogPage 处于浏览器预览模式',
-        '[mock] 真实日志会在 Tauri 应用内显示',
-    ],
+    lines: ['[mock] BotLogPage 处于浏览器预览模式', '[mock] 真实日志会在 Tauri 应用内显示'],
     total_lines: 2,
 };

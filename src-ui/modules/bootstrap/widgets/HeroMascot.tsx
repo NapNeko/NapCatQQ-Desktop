@@ -220,7 +220,13 @@ export const HeroMascot: React.FC<HeroMascotProps> = ({ stageRef, quips, reactio
                     gsap.fromTo(
                         el,
                         { autoAlpha: 0, scale: 0.72, y: 8, transformOrigin: '100% 50%' },
-                        { autoAlpha: 1, scale: 1, y: 0, duration: env.duration('base'), ease: env.ease.pop },
+                        {
+                            autoAlpha: 1,
+                            scale: 1,
+                            y: 0,
+                            duration: env.duration('base'),
+                            ease: env.ease.pop,
+                        },
                     )
                 }
                 onExit={(el, env) =>

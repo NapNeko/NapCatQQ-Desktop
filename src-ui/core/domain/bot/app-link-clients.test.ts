@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    isAppLinkConnectionName,
-    replaceAppLinkClients,
-} from './connections';
+import { isAppLinkConnectionName, replaceAppLinkClients } from './connections';
 import type { WebsocketClientConfig } from '../../ipc/generated/domain/WebsocketClientConfig';
 
 function client(name: string, url: string): WebsocketClientConfig {
@@ -22,10 +19,7 @@ function client(name: string, url: string): WebsocketClientConfig {
 
 describe('replaceAppLinkClients', () => {
     it('keeps user connections and takes ncd-app slots from server', () => {
-        const draft = [
-            client('mine', 'ws://a'),
-            client('ncd-app:k1', 'ws://old'),
-        ];
+        const draft = [client('mine', 'ws://a'), client('ncd-app:k1', 'ws://old')];
         const server = [client('ncd-app:k1', 'ws://new')];
         expect(replaceAppLinkClients(draft, server)).toEqual([
             client('mine', 'ws://a'),

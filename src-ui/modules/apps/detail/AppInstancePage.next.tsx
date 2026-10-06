@@ -25,7 +25,12 @@ import { PaneLoading } from './PaneStatus';
 import { RawFilesTab } from './RawFilesTab';
 import { SaveBar } from './SaveBar';
 import { STORE_TOOLBAR_SLOT_ID } from './storeToolbar';
-import { buildDetailNav, resolveFrameworkUi, type FrameworkSaveHandle, type NavBadges } from './frameworkUi';
+import {
+    buildDetailNav,
+    resolveFrameworkUi,
+    type FrameworkSaveHandle,
+    type NavBadges,
+} from './frameworkUi';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
@@ -129,11 +134,15 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
 
     const busy = apps.pendingId === instance.id || instance.state === 'installing';
     const showSaveBar = !!ui && ui.typedTabs.has(activeTab);
-    const fillPane = activeTab === 'raw' || activeTab === 'log' || !!ui?.fillPaneTabs.has(activeTab);
+    const fillPane =
+        activeTab === 'raw' || activeTab === 'log' || !!ui?.fillPaneTabs.has(activeTab);
 
     // 填错的页亮红点，盖过框架给的下一步 / 冲突点：挡着保存的事最急
     const issueTabs = ui && saveHandle ? saveHandle.issuePaths.map(ui.tabForIssue) : [];
-    const badges: NavBadges = { ...navBadges, ...Object.fromEntries(issueTabs.map((t) => [t, 'error' as const])) };
+    const badges: NavBadges = {
+        ...navBadges,
+        ...Object.fromEntries(issueTabs.map((t) => [t, 'error' as const])),
+    };
     const firstIssueTab = issueTabs[0];
 
     return (
@@ -162,7 +171,9 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onWebUi={() => void apps.openWebUi(instance.id)}
                     onRefresh={() => apps.refresh(instance.id)}
                     onDelete={() => setDeleteOpen(true)}
-                    onAutoStartChange={(autoStart) => apps.setAutoStart({ id: instance.id, autoStart })}
+                    onAutoStartChange={(autoStart) =>
+                        apps.setAutoStart({ id: instance.id, autoStart })
+                    }
                     latestVersion={latestVersion}
                     hasUpdate={hasUpdate}
                     onReinstall={installed ? () => setReinstallOpen(true) : undefined}
@@ -173,13 +184,20 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                         instance={instance}
                         busy={busy}
                         onInstall={() => apps.install(instance.id, installVersion)}
-                        onPickVersion={versions.data === null ? undefined : () => setReinstallOpen(true)}
+                        onPickVersion={
+                            versions.data === null ? undefined : () => setReinstallOpen(true)
+                        }
                         installVersion={installVersion}
                         latestVersion={latestVersion}
                         onViewTasks={onViewTasks}
                     />
                 ) : (
-                    <Tabs value={activeTab} onValueChange={goTab} orientation="vertical" className="flex min-h-0 flex-1">
+                    <Tabs
+                        value={activeTab}
+                        onValueChange={goTab}
+                        orientation="vertical"
+                        className="flex min-h-0 flex-1"
+                    >
                         <DetailSideNav groups={nav} badges={badges} />
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                             {/* 插件商店把搜索 / 筛选挂进来；别的页没往里放东西时整行不占位 */}
@@ -204,7 +222,10 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         onNavBadges={setNavBadges}
                                     />
                                 )}
-                                <TabsContent value="version" className="flex min-h-0 flex-1 flex-col pt-2">
+                                <TabsContent
+                                    value="version"
+                                    className="flex min-h-0 flex-1 flex-col pt-2"
+                                >
                                     <InstanceVersionTab
                                         instance={instance}
                                         latestVersion={latestVersion}
@@ -218,10 +239,16 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         }}
                                     />
                                 </TabsContent>
-                                <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+                                <TabsContent
+                                    value="raw"
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+                                >
                                     <RawFilesTab instance={instance} />
                                 </TabsContent>
-                                <TabsContent value="log" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+                                <TabsContent
+                                    value="log"
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+                                >
                                     <InstanceLogTab instance={instance} />
                                 </TabsContent>
                             </div>
@@ -296,15 +323,7 @@ const NotInstalledBody: React.FC<{
     installVersion: string | null;
     latestVersion: string | null;
     onViewTasks?: () => void;
-}> = ({
-    instance,
-    busy,
-    onInstall,
-    onPickVersion,
-    installVersion,
-    latestVersion,
-    onViewTasks,
-}) =>
+}> = ({ instance, busy, onInstall, onPickVersion, installVersion, latestVersion, onViewTasks }) =>
     instance.state === 'installing' ? (
         <PagePlaceholder className="gap-3 py-16">
             <p className="text-sm text-text-secondary">正在安装，完成后即可配置</p>

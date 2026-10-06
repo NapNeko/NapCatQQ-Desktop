@@ -4,10 +4,18 @@ import { useState } from 'react';
 import { Bot, Paperclip, User } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { chatTimeLabel, type MaiBotChatMessage, type MaiBotChatSegment } from '../../../../core/domain/apps/maibotChat';
+import {
+    chatTimeLabel,
+    type MaiBotChatMessage,
+    type MaiBotChatSegment,
+} from '../../../../core/domain/apps/maibotChat';
 
 /** 麦麦配了 QQ 号就拉 qlogo 头像（和人物页同一个源），拉不到或没配用图标 */
-export const ChatAvatar: React.FC<{ bot: boolean; qq?: string; className?: string }> = ({ bot, qq, className }) => {
+export const ChatAvatar: React.FC<{ bot: boolean; qq?: string; className?: string }> = ({
+    bot,
+    qq,
+    className,
+}) => {
     const [failed, setFailed] = useState(false);
     const useQq = bot && !!qq && /^[1-9]\d{4,11}$/.test(qq) && !failed;
     return (
@@ -39,12 +47,20 @@ export const ChatAvatar: React.FC<{ bot: boolean; qq?: string; className?: strin
 const onlyPictures = (segs: readonly MaiBotChatSegment[]) =>
     segs.length > 0 && segs.every((s) => s.type === 'image' || s.type === 'emoji');
 
-const Segment: React.FC<{ seg: MaiBotChatSegment; mine: boolean; onPreview: (src: string) => void }> = ({ seg, mine, onPreview }) => {
+const Segment: React.FC<{
+    seg: MaiBotChatSegment;
+    mine: boolean;
+    onPreview: (src: string) => void;
+}> = ({ seg, mine, onPreview }) => {
     switch (seg.type) {
         case 'text':
             return <span className="whitespace-pre-wrap break-words">{seg.text}</span>;
         case 'at':
-            return <span className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>@{seg.name} </span>;
+            return (
+                <span className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>
+                    @{seg.name}{' '}
+                </span>
+            );
         case 'reply':
             return (
                 <span className="mb-1 block border-l-2 border-border pl-2 text-2xs leading-relaxed text-text-tertiary">
@@ -69,7 +85,9 @@ const Segment: React.FC<{ seg: MaiBotChatSegment; mine: boolean; onPreview: (src
                         draggable={false}
                         className={cn(
                             'block object-contain',
-                            seg.type === 'emoji' ? 'h-24 w-24' : 'max-h-60 min-h-16 min-w-16 max-w-[15rem]',
+                            seg.type === 'emoji'
+                                ? 'h-24 w-24'
+                                : 'max-h-60 min-h-16 min-w-16 max-w-[15rem]',
                         )}
                     />
                 </button>
@@ -84,7 +102,11 @@ const Segment: React.FC<{ seg: MaiBotChatSegment; mine: boolean; onPreview: (src
                 </span>
             );
         case 'forward':
-            return <span className="text-text-tertiary">[合并转发{seg.count > 0 ? ` · ${seg.count} 条` : ''}]</span>;
+            return (
+                <span className="text-text-tertiary">
+                    [合并转发{seg.count > 0 ? ` · ${seg.count} 条` : ''}]
+                </span>
+            );
         case 'other':
             return <span className="text-text-tertiary">{seg.text}</span>;
     }
@@ -99,10 +121,29 @@ export const MessageRow: React.FC<{
     const mine = !m.fromBot;
     const bare = onlyPictures(m.segments);
     return (
-        <div className={cn('flex items-start gap-2.5', mine && 'flex-row-reverse', showSender ? 'mt-3' : 'mt-1')}>
-            {showSender ? <ChatAvatar bot={m.fromBot} qq={botQq} /> : <span className="w-8 shrink-0" />}
-            <div className={cn('flex min-w-0 max-w-[min(34rem,78%)] flex-col', mine ? 'items-end' : 'items-start')}>
-                {showSender && <span className="mb-1 px-1 text-2xs text-text-tertiary">{m.senderName || (mine ? '我' : '麦麦')}</span>}
+        <div
+            className={cn(
+                'flex items-start gap-2.5',
+                mine && 'flex-row-reverse',
+                showSender ? 'mt-3' : 'mt-1',
+            )}
+        >
+            {showSender ? (
+                <ChatAvatar bot={m.fromBot} qq={botQq} />
+            ) : (
+                <span className="w-8 shrink-0" />
+            )}
+            <div
+                className={cn(
+                    'flex min-w-0 max-w-[min(34rem,78%)] flex-col',
+                    mine ? 'items-end' : 'items-start',
+                )}
+            >
+                {showSender && (
+                    <span className="mb-1 px-1 text-2xs text-text-tertiary">
+                        {m.senderName || (mine ? '我' : '麦麦')}
+                    </span>
+                )}
                 <div
                     className={cn(
                         'text-[13.5px] leading-relaxed text-text',
@@ -120,7 +161,9 @@ export const MessageRow: React.FC<{
                     {m.segments.length === 0 ? (
                         <span className="text-text-tertiary">（空消息）</span>
                     ) : (
-                        m.segments.map((s, i) => <Segment key={i} seg={s} mine={mine} onPreview={onPreview} />)
+                        m.segments.map((s, i) => (
+                            <Segment key={i} seg={s} mine={mine} onPreview={onPreview} />
+                        ))
                     )}
                 </div>
             </div>
@@ -162,11 +205,20 @@ export const TypingRow: React.FC<{ botName: string; botQq?: string }> = ({ botNa
     </div>
 );
 
-export const ImagePreview: React.FC<{ src: string | null; onClose: () => void }> = ({ src, onClose }) => (
+export const ImagePreview: React.FC<{ src: string | null; onClose: () => void }> = ({
+    src,
+    onClose,
+}) => (
     <Dialog open={src !== null} onOpenChange={(o) => !o && onClose()}>
         <DialogContent size="lg">
             <DialogTitle className="sr-only">看大图</DialogTitle>
-            {src && <img src={src} alt="" className="mx-auto max-h-[70vh] max-w-full rounded-md object-contain" />}
+            {src && (
+                <img
+                    src={src}
+                    alt=""
+                    className="mx-auto max-h-[70vh] max-w-full rounded-md object-contain"
+                />
+            )}
         </DialogContent>
     </Dialog>
 );

@@ -18,10 +18,7 @@ export interface FormSectionProps extends Omit<HTMLAttributes<HTMLElement>, 'tit
 }
 
 export const FormSection = forwardRef<HTMLElement, FormSectionProps>(
-    (
-        { title, description, actions, layout = 'vertical', children, className, ...rest },
-        ref,
-    ) => (
+    ({ title, description, actions, layout = 'vertical', children, className, ...rest }, ref) => (
         <section ref={ref} className={cn('min-w-0 space-y-4', className)} {...rest}>
             {(title || actions) && (
                 <div className="space-y-1.5">

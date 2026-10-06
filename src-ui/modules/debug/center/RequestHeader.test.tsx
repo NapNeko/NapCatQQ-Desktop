@@ -26,12 +26,16 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) =>
-                (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
         },
     ),
 }));
-vi.mock('../../../core/services/domain-event-hub', () => ({ subscribeDomainEvents: () => () => {} }));
+vi.mock('../../../core/services/domain-event-hub', () => ({
+    subscribeDomainEvents: () => () => {},
+}));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 import { TooltipProvider } from '../../../shared/ui';
@@ -52,7 +56,11 @@ const BOT: DebugTarget = {
     online: true,
 };
 
-function summary(name: string, safety: DebugActionSummary['safety'], text = name): DebugActionSummary {
+function summary(
+    name: string,
+    safety: DebugActionSummary['safety'],
+    text = name,
+): DebugActionSummary {
     return {
         name,
         aliases: [],
@@ -129,7 +137,12 @@ function okResponse(req: DebugCallRequest): DebugCallResponse {
 }
 
 async function renderColumn(tabs: DebugRequestDraft[], active = tabs[0]?.id ?? null) {
-    service.workspace.mockResolvedValue({ ...defaultWorkspace(), tabs, active_tab: active, selected_bot: BOT.bot_id });
+    service.workspace.mockResolvedValue({
+        ...defaultWorkspace(),
+        tabs,
+        active_tab: active,
+        selected_bot: BOT.bot_id,
+    });
     await debugWorkspaceStore.load();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = ({ children }: { children: ReactNode }) => (
@@ -138,21 +151,37 @@ async function renderColumn(tabs: DebugRequestDraft[], active = tabs[0]?.id ?? n
         </QueryClientProvider>
     );
     return render(
-        <CenterColumn target={BOT} callChannel={{ kind: 'auto' }} onOpenPalette={vi.fn()} onRevealCallChannel={vi.fn()} />,
+        <CenterColumn
+            target={BOT}
+            callChannel={{ kind: 'auto' }}
+            onOpenPalette={vi.fn()}
+            onRevealCallChannel={vi.fn()}
+        />,
         { wrapper },
     );
 }
 
 const actionInput = () => screen.getByRole('combobox', { name: '接口名' }) as HTMLInputElement;
-const activeTab = () => debugWorkspaceStore.getSnapshot().ws.tabs.find((t) => t.id === debugWorkspaceStore.getSnapshot().ws.active_tab);
-const editorCalls = () => service.call.mock.calls.map((c) => c[0] as DebugCallRequest).filter((r) => r.origin === 'editor');
+const activeTab = () =>
+    debugWorkspaceStore
+        .getSnapshot()
+        .ws.tabs.find((t) => t.id === debugWorkspaceStore.getSnapshot().ws.active_tab);
+const editorCalls = () =>
+    service.call.mock.calls
+        .map((c) => c[0] as DebugCallRequest)
+        .filter((r) => r.origin === 'editor');
 
 beforeAll(() => {
     Element.prototype.hasPointerCapture ??= () => false;
     Element.prototype.releasePointerCapture ??= () => {};
     Element.prototype.setPointerCapture ??= () => {};
     Element.prototype.scrollIntoView ??= () => {};
-    Range.prototype.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+    Range.prototype.getClientRects ??= () =>
+        ({
+            length: 0,
+            item: () => null,
+            [Symbol.iterator]: [][Symbol.iterator],
+        }) as unknown as DOMRectList;
     Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 });
 
@@ -171,8 +200,15 @@ beforeEach(() => {
         auto_call: { kind: 'internal' },
         auto_events: { kind: 'internal' },
     });
-    service.catalog.mockResolvedValue({ backend: 'napcat', source: 'live', snapshot_version: 't', actions: CATALOG });
-    service.describe.mockImplementation(async (_b: string, _k: string, name: string) => SPECS[name] ?? null);
+    service.catalog.mockResolvedValue({
+        backend: 'napcat',
+        source: 'live',
+        snapshot_version: 't',
+        actions: CATALOG,
+    });
+    service.describe.mockImplementation(
+        async (_b: string, _k: string, name: string) => SPECS[name] ?? null,
+    );
     service.collections.mockResolvedValue({ version: 1, folders: [], requests: [] });
     service.cancel.mockResolvedValue(undefined);
     service.call.mockImplementation(async (req: DebugCallRequest) => okResponse(req));
@@ -298,7 +334,10 @@ describe('目录外的变体按原接口分级', () => {
 
     it('send_group_msg_async 按有副作用处理，不弹确认；完全不认识的名字也按有副作用处理', async () => {
         const user = userEvent.setup();
-        await renderColumn([tab('t1', 'send_group_msg_async', '{}'), tab('t2', 'totally_unknown', '{}')]);
+        await renderColumn([
+            tab('t1', 'send_group_msg_async', '{}'),
+            tab('t2', 'totally_unknown', '{}'),
+        ]);
         expect(await screen.findByText('按 send_group_msg 分级')).toBeInTheDocument();
         expect(screen.getByText('有副作用')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByRole('button', { name: /^发送/ })).toBeEnabled());
@@ -332,7 +371,9 @@ describe('标签条', () => {
         await renderColumn([tab('t1', 'get_status')]);
         screen.getByRole('tab', { name: /get_status/ }).focus();
         await user.keyboard('{Delete}');
-        await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: '新请求' })));
+        await waitFor(() =>
+            expect(document.activeElement).toBe(screen.getByRole('button', { name: '新请求' })),
+        );
     });
 });
 
@@ -376,7 +417,9 @@ describe('修复第 2 轮', () => {
 
         // 说明读到后也不会被当成空标签重新填
         await waitFor(() => expect(actionInput()).toHaveValue('get_group_list'));
-        expect(JSON.parse(ws().tabs.find((t) => t.id === renamed.id)!.params_text)).toEqual({ x: 1 });
+        expect(JSON.parse(ws().tabs.find((t) => t.id === renamed.id)!.params_text)).toEqual({
+            x: 1,
+        });
 
         act(() => {
             debugWorkspaceStore.openAction('delete_msg');
@@ -387,9 +430,19 @@ describe('修复第 2 轮', () => {
 
     it('改过参数的标签选「替换当前标签」：原地换接口，参数、通道留着，旧结果丢掉；之后从目录点接口另开', async () => {
         const user = userEvent.setup();
-        await renderColumn([{ ...tab('t1', 'get_group_info', '{\n  "group_id": 7\n}'), channel: { kind: 'internal' } }]);
+        await renderColumn([
+            {
+                ...tab('t1', 'get_group_info', '{\n  "group_id": 7\n}'),
+                channel: { kind: 'internal' },
+            },
+        ]);
         debugWorkspaceStore.setRun('t1', {
-            last: { response: okResponse({ request_id: 'r0' } as DebugCallRequest), at: 1, botId: BOT.bot_id, action: 'get_group_info' },
+            last: {
+                response: okResponse({ request_id: 'r0' } as DebugCallRequest),
+                at: 1,
+                botId: BOT.bot_id,
+                action: 'get_group_info',
+            },
         });
         await user.tripleClick(actionInput());
         await user.keyboard('get_group_list{Enter}');
@@ -397,13 +450,25 @@ describe('修复第 2 轮', () => {
 
         const ws = () => debugWorkspaceStore.getSnapshot().ws;
         expect(ws().tabs).toEqual([
-            { id: 't1', action: 'get_group_list', params_text: '{\n  "group_id": 7\n}', timeout_ms: null, channel: { kind: 'internal' } },
+            {
+                id: 't1',
+                action: 'get_group_list',
+                params_text: '{\n  "group_id": 7\n}',
+                timeout_ms: null,
+                channel: { kind: 'internal' },
+            },
         ]);
         expect(debugWorkspaceStore.getRun('t1')).toBeUndefined();
         expect(screen.queryByRole('group', { name: /参数改过了/ })).not.toBeInTheDocument();
         await waitFor(() => expect(actionInput()).toHaveFocus());
         // 说明读到后参数也不会被重新填
-        await waitFor(() => expect(service.describe).toHaveBeenCalledWith(BOT.bot_id, BOT.backend, 'get_group_list'));
+        await waitFor(() =>
+            expect(service.describe).toHaveBeenCalledWith(
+                BOT.bot_id,
+                BOT.backend,
+                'get_group_list',
+            ),
+        );
         expect(ws().tabs[0].params_text).toBe('{\n  "group_id": 7\n}');
         act(() => {
             debugWorkspaceStore.openAction('get_status');
@@ -436,7 +501,9 @@ describe('修复第 2 轮', () => {
         await user.keyboard('{ArrowDown}{ArrowDown}');
         expect(screen.getAllByRole('option')[2]).toHaveAttribute('aria-selected', 'true');
         await user.keyboard('{Escape}');
-        await waitFor(() => expect(screen.queryByRole('listbox', { name: '接口建议' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('listbox', { name: '接口建议' })).not.toBeInTheDocument(),
+        );
         await user.keyboard('{ArrowDown}');
         await screen.findByRole('listbox', { name: '接口建议' });
         expect(screen.getAllByRole('option')[0]).toHaveAttribute('aria-selected', 'true');
@@ -467,23 +534,36 @@ describe('修复第 2 轮', () => {
         await user.click(screen.getByRole('button', { name: '新开标签' }));
         expect(open).toHaveBeenCalledWith('get_status', { newTab: true });
         const ws = debugWorkspaceStore.getSnapshot().ws;
-        expect(JSON.parse(ws.tabs.find((t) => t.id === ws.active_tab)!.params_text)).toEqual({ group_id: 7 });
+        expect(JSON.parse(ws.tabs.find((t) => t.id === ws.active_tab)!.params_text)).toEqual({
+            group_id: 7,
+        });
     });
 
     it('Ctrl+W 这类在别处关掉当前标签时，掉了的焦点交给接替的标签；焦点在别处时不抢', async () => {
         const user = userEvent.setup();
-        await renderColumn([tab('t1', 'get_status'), tab('t2', 'get_group_list'), tab('t3', 'send_group_msg')], 't1');
+        await renderColumn(
+            [tab('t1', 'get_status'), tab('t2', 'get_group_list'), tab('t3', 'send_group_msg')],
+            't1',
+        );
         // 焦点在当前标签里面（接口名输入框），页面的 Ctrl+W 调的就是 closeTab
         await user.click(actionInput());
         act(() => debugWorkspaceStore.closeTab('t1'));
-        await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('tab', { name: /get_group_list/ })));
+        await waitFor(() =>
+            expect(document.activeElement).toBe(
+                screen.getByRole('tab', { name: /get_group_list/ }),
+            ),
+        );
 
         // 焦点在中栏外面：关标签不抢焦点
         const outside = document.createElement('button');
         document.body.appendChild(outside);
         outside.focus();
         act(() => debugWorkspaceStore.closeTab('t2'));
-        await waitFor(() => expect(within(screen.getByRole('tablist', { name: '请求标签' })).getAllByRole('tab')).toHaveLength(1));
+        await waitFor(() =>
+            expect(
+                within(screen.getByRole('tablist', { name: '请求标签' })).getAllByRole('tab'),
+            ).toHaveLength(1),
+        );
         expect(document.activeElement).toBe(outside);
         outside.remove();
     });
@@ -495,17 +575,29 @@ describe('换 Bot 后「改没改过」（M2：只拿填进去的那份初始参
     const NC_INITIAL = '{\n  "group_id": ""\n}';
 
     function mockTwoBackends() {
-        service.describe.mockImplementation(async (botId: string, _backend: string, name: string) => {
-            if (name === 'get_group_info') {
-                return botId === SL_BOT.bot_id ? spec('get_group_info', { summary: 'SL 取群信息' }) : spec('get_group_info', { examples: [{ group_id: '' }] });
-            }
-            return SPECS[name] ?? null;
-        });
+        service.describe.mockImplementation(
+            async (botId: string, _backend: string, name: string) => {
+                if (name === 'get_group_info') {
+                    return botId === SL_BOT.bot_id
+                        ? spec('get_group_info', { summary: 'SL 取群信息' })
+                        : spec('get_group_info', { examples: [{ group_id: '' }] });
+                }
+                return SPECS[name] ?? null;
+            },
+        );
     }
 
-    async function switchTo(view: ReturnType<typeof renderColumn> extends Promise<infer R> ? R : never, target: DebugTarget) {
+    async function switchTo(
+        view: ReturnType<typeof renderColumn> extends Promise<infer R> ? R : never,
+        target: DebugTarget,
+    ) {
         view.rerender(
-            <CenterColumn target={target} callChannel={{ kind: 'auto' }} onOpenPalette={vi.fn()} onRevealCallChannel={vi.fn()} />,
+            <CenterColumn
+                target={target}
+                callChannel={{ kind: 'auto' }}
+                onOpenPalette={vi.fn()}
+                onRevealCallChannel={vi.fn()}
+            />,
         );
         // 「SL 取群信息」只在 SL 的说明真的渲染出来后才会出现，此时「改没改过」的判断一定已经按新数据跑过
         await screen.findByText(target === SL_BOT ? 'SL 取群信息' : '获取群信息');
@@ -554,7 +646,9 @@ describe('换 Bot 后「改没改过」（M2：只拿填进去的那份初始参
         await user.tripleClick(actionInput());
         await user.keyboard('get_status');
         await user.keyboard('{Control>}{Enter}{/Control}');
-        expect(await screen.findByRole('group', { name: /参数改过了，换成 get_status/ })).toBeInTheDocument();
+        expect(
+            await screen.findByRole('group', { name: /参数改过了，换成 get_status/ }),
+        ).toBeInTheDocument();
     });
 
     it('换回同一个 Bot、路由切走再回来：行为和原来一样，还是不亮小点', async () => {

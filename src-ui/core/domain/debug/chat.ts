@@ -50,7 +50,15 @@ export type ChatItem =
           call?: ChatCallState;
           raw: unknown;
       }
-    | { kind: 'notice'; key: string; seq: number; at: number; session?: SessionKey; text: string; raw: unknown }
+    | {
+          kind: 'notice';
+          key: string;
+          seq: number;
+          at: number;
+          session?: SessionKey;
+          text: string;
+          raw: unknown;
+      }
     | {
           kind: 'request';
           key: string;
@@ -74,7 +82,15 @@ export type ChatItem =
           summary: string;
           raw: unknown;
       }
-    | { kind: 'meta'; key: string; seq: number; at: number; text: string; heartbeat: boolean; raw: unknown }
+    | {
+          kind: 'meta';
+          key: string;
+          seq: number;
+          at: number;
+          text: string;
+          heartbeat: boolean;
+          raw: unknown;
+      }
     | { kind: 'gap'; key: string; seq: number; at: number; fromMs: number; toMs: number }
     | { kind: 'dropped'; key: string; seq: number; at: number; count: number }
     | { kind: 'receiver'; key: string; seq: number; at: number; state: DebugReceiverState };
@@ -130,7 +146,8 @@ const FORWARD_ACTIONS: ReadonlySet<string> = new Set([
     'send_forward_msg',
 ]);
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** QQ 号 / 群号 / 消息 id：数字或纯数字字符串都认（NapCat 的参数是字符串） */
 function num(v: unknown): number | undefined {
@@ -142,7 +159,8 @@ function num(v: unknown): number | undefined {
     return undefined;
 }
 
-const text = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+const text = (v: unknown): string =>
+    typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
 /** 通知里的人：认得名字给名字，否则给号；连号都没有是「某人」 */
 function who(v: unknown, names: ReadonlyMap<number, string>): string {
@@ -172,14 +190,19 @@ function noticeText(p: Record<string, unknown>, names: ReadonlyMap<number, strin
     const opId = num(p.operator_id);
     switch (type) {
         case 'group_increase':
-            return sub === 'invite' && opId !== undefined && opId !== userId ? `${op} 邀请 ${user} 加入了群` : `${user} 加入了群`;
+            return sub === 'invite' && opId !== undefined && opId !== userId
+                ? `${op} 邀请 ${user} 加入了群`
+                : `${user} 加入了群`;
         case 'group_decrease':
             // kick_me 是 Bot 自己被踢，user_id 就是 Bot
-            return sub === 'kick' || sub === 'kick_me' ? `${op} 把 ${user} 移出了群` : `${user} 离开了群`;
+            return sub === 'kick' || sub === 'kick_me'
+                ? `${op} 把 ${user} 移出了群`
+                : `${user} 离开了群`;
         case 'group_ban': {
             // user_id 为 0 是全员禁言
             const whole = num(p.user_id) === 0;
-            if (sub === 'lift_ban') return whole ? `${op} 关闭了全员禁言` : `${op} 解除了 ${user} 的禁言`;
+            if (sub === 'lift_ban')
+                return whole ? `${op} 关闭了全员禁言` : `${op} 解除了 ${user} 的禁言`;
             return whole ? `${op} 开启了全员禁言` : `${op} 禁言了 ${user} ${num(p.duration) ?? 0}s`;
         }
         case 'group_recall':
@@ -191,7 +214,8 @@ function noticeText(p: Record<string, unknown>, names: ReadonlyMap<number, strin
         case 'friend_recall':
             return `${user} 撤回了一条消息`;
         case 'notify':
-            if (sub === 'poke') return `${who(p.sender_id ?? p.user_id, names)} 戳了戳 ${who(p.target_id, names)}`;
+            if (sub === 'poke')
+                return `${who(p.sender_id ?? p.user_id, names)} 戳了戳 ${who(p.target_id, names)}`;
             return sub ? `notify/${sub}` : 'notify';
         case 'group_admin':
             return sub === 'unset' ? `${user} 被取消了管理员` : `${user} 成为了管理员`;
@@ -203,7 +227,10 @@ function noticeText(p: Record<string, unknown>, names: ReadonlyMap<number, strin
             return `${user} 成为了你的好友`;
         case 'essence': {
             const author = num(p.sender_id) !== undefined ? who(p.sender_id, names) : null;
-            if (sub === 'delete') return author ? `${op} 取消了 ${author} 的一条精华消息` : `${op} 取消了一条精华消息`;
+            if (sub === 'delete')
+                return author
+                    ? `${op} 取消了 ${author} 的一条精华消息`
+                    : `${op} 取消了一条精华消息`;
             return author ? `${op} 把 ${author} 的一条消息设为精华` : `${op} 把一条消息设为精华`;
         }
         case 'group_card': {
@@ -220,7 +247,11 @@ function noticeSession(p: Record<string, unknown>): SessionKey | undefined {
     const groupId = num(p.group_id);
     if (groupId !== undefined) return groupKey(groupId);
     const type = text(p.notice_type);
-    if (type === 'friend_recall' || type === 'friend_add' || (type === 'notify' && text(p.sub_type) === 'poke')) {
+    if (
+        type === 'friend_recall' ||
+        type === 'friend_add' ||
+        (type === 'notify' && text(p.sub_type) === 'poke')
+    ) {
         const userId = num(p.user_id);
         if (userId !== undefined) return privateKey(userId);
     }
@@ -232,7 +263,14 @@ function metaText(p: Record<string, unknown>): { text: string; heartbeat: boolea
     if (type === 'heartbeat') return { text: '心跳', heartbeat: true };
     if (type === 'lifecycle') {
         const sub = text(p.sub_type);
-        const label = sub === 'connect' ? '连接建立' : sub === 'enable' ? 'Bot 已启用' : sub === 'disable' ? 'Bot 已停用' : sub;
+        const label =
+            sub === 'connect'
+                ? '连接建立'
+                : sub === 'enable'
+                  ? 'Bot 已启用'
+                  : sub === 'disable'
+                    ? 'Bot 已停用'
+                    : sub;
         return { text: label ? `生命周期：${label}` : '生命周期', heartbeat: false };
     }
     return { text: type || '元事件', heartbeat: false };
@@ -290,7 +328,11 @@ function sessionOfSend(action: string, params: unknown): SessionKey | undefined 
 }
 
 function segmentsOfSend(action: string, params: Record<string, unknown>): Segment[] {
-    if (FORWARD_ACTIONS.has(action) && params.message === undefined && params.messages !== undefined) {
+    if (
+        FORWARD_ACTIONS.has(action) &&
+        params.message === undefined &&
+        params.messages !== undefined
+    ) {
         return [{ type: 'forward', data: { messages: params.messages } }];
     }
     return normalizeMessage(params.message);
@@ -378,7 +420,10 @@ class Draft {
         return items.length - 1;
     }
 
-    touchSession(key: SessionKey, patch: { name?: string; at: number; unreadDelta?: number }): void {
+    touchSession(
+        key: SessionKey,
+        patch: { name?: string; at: number; unreadDelta?: number },
+    ): void {
         const sessions = this.ownSessions();
         const prev = sessions[key];
         const sep = key.indexOf(':');
@@ -423,7 +468,12 @@ function copyNames(src: ReadonlyMap<number, string>): Map<number, string> {
     return out;
 }
 
-function reduceMessage(d: Draft, e: DebugEvent, p: Record<string, unknown>, active: SessionKey | 'all'): void {
+function reduceMessage(
+    d: Draft,
+    e: DebugEvent,
+    p: Record<string, unknown>,
+    active: SessionKey | 'all',
+): void {
     const sent = p.post_type === 'message_sent';
     const senderObj = isRecord(p.sender) ? p.sender : {};
     const userId = num(p.user_id) ?? num(senderObj.user_id) ?? 0;
@@ -431,9 +481,12 @@ function reduceMessage(d: Draft, e: DebugEvent, p: Record<string, unknown>, acti
         const self = num(p.self_id);
         if (self !== undefined) d.selfId = self;
     }
-    const direction: 'in' | 'out' = sent || (d.selfId !== undefined && userId === d.selfId) ? 'out' : 'in';
+    const direction: 'in' | 'out' =
+        sent || (d.selfId !== undefined && userId === d.selfId) ? 'out' : 'in';
 
-    const isGroup = p.message_type === 'group' || (p.message_type === undefined && num(p.group_id) !== undefined);
+    const isGroup =
+        p.message_type === 'group' ||
+        (p.message_type === undefined && num(p.group_id) !== undefined);
     // 自己发的私聊，对话对象是 target_id；别人发来的，对话对象是发送者
     const session: SessionKey = isGroup
         ? groupKey(num(p.group_id) ?? 0)
@@ -462,7 +515,8 @@ function reduceMessage(d: Draft, e: DebugEvent, p: Record<string, unknown>, acti
     };
 
     // 自发消息可能已经由调用回包先建了气泡：把事件里的内容并进去，保留原来的位置和调用状态
-    const existing = direction === 'out' && messageId !== undefined ? d.findOut(messageId) : undefined;
+    const existing =
+        direction === 'out' && messageId !== undefined ? d.findOut(messageId) : undefined;
     if (existing) {
         const { item: prev, index } = existing;
         d.ownItems()[index] = {
@@ -484,8 +538,16 @@ function reduceMessage(d: Draft, e: DebugEvent, p: Record<string, unknown>, acti
     d.touchSession(session, { name, at: e.at_ms, unreadDelta: unread });
 }
 
-function reduceCall(d: Draft, e: DebugEvent, r: DebugCallRecord, callWording: CallWording | undefined): void {
-    const wording = r.ok === false && r.request_id !== null && callWording ? callWording(r.request_id) : undefined;
+function reduceCall(
+    d: Draft,
+    e: DebugEvent,
+    r: DebugCallRecord,
+    callWording: CallWording | undefined,
+): void {
+    const wording =
+        r.ok === false && r.request_id !== null && callWording
+            ? callWording(r.request_id)
+            : undefined;
     const call = callStateOf(r, wording);
     if (SEND_ACTIONS.has(r.action) && r.ok !== null) {
         const session = sessionOfSend(r.action, r.params);
@@ -548,7 +610,12 @@ function reduceCall(d: Draft, e: DebugEvent, r: DebugCallRecord, callWording: Ca
     });
 }
 
-function reduceOb11(d: Draft, e: DebugEvent, p: Record<string, unknown>, active: SessionKey | 'all'): void {
+function reduceOb11(
+    d: Draft,
+    e: DebugEvent,
+    p: Record<string, unknown>,
+    active: SessionKey | 'all',
+): void {
     switch (p.post_type) {
         case 'message':
         case 'message_sent':
@@ -626,7 +693,11 @@ export interface ReduceOptions {
  * 整批都被跳过时原样返回传入的 state（引用不变，React 不会重渲染）。
  * 「未读」只统计别人发来、且不在当前会话里的消息；正在看「全部」时所有消息都在眼前，不计未读。
  */
-export function reduceEvents(state: ChatState, events: DebugEvent[], opts: ReduceOptions): ChatState {
+export function reduceEvents(
+    state: ChatState,
+    events: DebugEvent[],
+    opts: ReduceOptions,
+): ChatState {
     const d = new Draft(state);
     for (const e of events) {
         if (e.seq <= d.lastSeq) continue;
@@ -640,13 +711,32 @@ export function reduceEvents(state: ChatState, events: DebugEvent[], opts: Reduc
                 reduceCall(d, e, body.record, opts.callWording);
                 break;
             case 'gap':
-                d.push({ kind: 'gap', key: `e${e.seq}`, seq: e.seq, at: e.at_ms, fromMs: body.from_ms, toMs: body.to_ms });
+                d.push({
+                    kind: 'gap',
+                    key: `e${e.seq}`,
+                    seq: e.seq,
+                    at: e.at_ms,
+                    fromMs: body.from_ms,
+                    toMs: body.to_ms,
+                });
                 break;
             case 'dropped':
-                d.push({ kind: 'dropped', key: `e${e.seq}`, seq: e.seq, at: e.at_ms, count: body.count });
+                d.push({
+                    kind: 'dropped',
+                    key: `e${e.seq}`,
+                    seq: e.seq,
+                    at: e.at_ms,
+                    count: body.count,
+                });
                 break;
             case 'receiver':
-                d.push({ kind: 'receiver', key: `e${e.seq}`, seq: e.seq, at: e.at_ms, state: body.state });
+                d.push({
+                    kind: 'receiver',
+                    key: `e${e.seq}`,
+                    seq: e.seq,
+                    at: e.at_ms,
+                    state: body.state,
+                });
                 break;
             default: {
                 // 后端加了新的事件体而前端没跟上时，这里会编译报错

@@ -42,10 +42,7 @@ export function useReleases(): UseReleasesResult {
         retry: 2,
     });
 
-    const snapshot = useMemo(
-        () => normalizeReleaseSnapshot(query.data),
-        [query.data],
-    );
+    const snapshot = useMemo(() => normalizeReleaseSnapshot(query.data), [query.data]);
 
     const refetch = useCallback(() => {
         // fetchQuery 会尊重 staleTime：若仍设 FIVE_MINUTES，5 分钟内点刷新

@@ -21,7 +21,9 @@ import { cn } from '../../../shared/utils/cn';
 export const STORE_TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';
 
 function ToolbarPortal({ children }: { children: ReactNode }) {
-    const [dock, setDock] = useState<HTMLElement | null>(() => document.getElementById(STORE_TOOLBAR_SLOT_ID));
+    const [dock, setDock] = useState<HTMLElement | null>(() =>
+        document.getElementById(STORE_TOOLBAR_SLOT_ID),
+    );
     useEffect(() => {
         setDock(document.getElementById(STORE_TOOLBAR_SLOT_ID));
     }, []);
@@ -84,8 +86,18 @@ export function StoreToolbar<V extends string>({
                 <span className="hidden min-w-[1.25rem] text-right text-2xs tabular-nums text-text-tertiary sm:inline">
                     {count}
                 </span>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="刷新" onClick={onReload}>
-                    <ActionMotionIcon icon={RefreshCw} size={13} motion={loading ? 'spin' : 'none'} />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    aria-label="刷新"
+                    onClick={onReload}
+                >
+                    <ActionMotionIcon
+                        icon={RefreshCw}
+                        size={13}
+                        motion={loading ? 'spin' : 'none'}
+                    />
                 </Button>
             </div>
         </ToolbarPortal>

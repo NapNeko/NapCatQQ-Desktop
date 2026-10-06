@@ -1,10 +1,7 @@
 // 设置页 Desktop 会话日志：Tab 可见时轮询 tail（避免 desktop_log 事件风暴卡死 UI）。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    buildDesktopHistoryEntries,
-    type LogEntry,
-} from '../../core/domain/events/log-buffer';
+import { buildDesktopHistoryEntries, type LogEntry } from '../../core/domain/events/log-buffer';
 import {
     desktopLevelToIpcFilter,
     type DesktopLogLevelFilterValue,

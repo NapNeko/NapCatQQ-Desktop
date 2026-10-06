@@ -46,7 +46,11 @@ export const InstanceVersionTab: React.FC<{
                             {latestVersion ? 'v' + latestVersion : '未知'}
                         </span>
                     </span>
-                    {updatable && <Badge tone="warning" appearance="soft">有新版本</Badge>}
+                    {updatable && (
+                        <Badge tone="warning" appearance="soft">
+                            有新版本
+                        </Badge>
+                    )}
                 </div>
                 {!installed && (
                     <p className="mt-2 text-2xs text-text-tertiary">
@@ -63,8 +67,7 @@ export const InstanceVersionTab: React.FC<{
 
                 {versions === null ? (
                     <p className="text-xs leading-relaxed text-text-secondary">
-                        这个框架不支持按版本安装，只能装上游最新正式版——
-                        在「更多」里点重装即可。
+                        这个框架不支持按版本安装，只能装上游最新正式版—— 在「更多」里点重装即可。
                     </p>
                 ) : versions.length === 0 ? (
                     <p className="text-xs leading-relaxed text-text-secondary">

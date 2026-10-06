@@ -1,8 +1,19 @@
 // Karin「响应规则」：groups / privates。匹配顺序收进 Popover，不常驻。
 
 import { Plus } from 'lucide-react';
-import { Button, FormSection, Popover, PopoverContent, PopoverTrigger } from '../../../../shared/ui';
-import { KARIN_GROUP_RULE_KEYS, KARIN_PRIVATE_RULE_KEYS, newGroupRule, newPrivateRule } from '../../../../core/domain/apps/karinConfig';
+import {
+    Button,
+    FormSection,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '../../../../shared/ui';
+import {
+    KARIN_GROUP_RULE_KEYS,
+    KARIN_PRIVATE_RULE_KEYS,
+    newGroupRule,
+    newPrivateRule,
+} from '../../../../core/domain/apps/karinConfig';
 import { ConfigForm } from './configLayout';
 import { ScopedRuleEditor } from './ScopedRuleEditor';
 import type { KarinTabProps } from './KarinBasicTab';
@@ -14,14 +25,14 @@ export const KarinRulesTab: React.FC<KarinTabProps> = ({ config, onChange, error
                 title="群 / 频道"
                 actions={
                     <div className="flex items-center gap-2">
-                        <MatchOrderPopover
-                            text="Bot:selfId:guildId:channelId → Bot:selfId:groupId → Bot:selfId → global → default。开启继承时未设置的项沿用上级。"
-                        />
+                        <MatchOrderPopover text="Bot:selfId:guildId:channelId → Bot:selfId:groupId → Bot:selfId → global → default。开启继承时未设置的项沿用上级。" />
                         <Button
                             size="sm"
                             variant="secondary"
                             disabled={disabled}
-                            onClick={() => onChange({ ...config, groups: [...config.groups, newGroupRule()] })}
+                            onClick={() =>
+                                onChange({ ...config, groups: [...config.groups, newGroupRule()] })
+                            }
                         >
                             <Plus size={13} /> 添加
                         </Button>
@@ -39,9 +50,14 @@ export const KarinRulesTab: React.FC<KarinTabProps> = ({ config, onChange, error
                         errors={errors}
                         disabled={disabled}
                         onChange={(next) =>
-                            onChange({ ...config, groups: config.groups.map((r, j) => (j === i ? next : r)) })
+                            onChange({
+                                ...config,
+                                groups: config.groups.map((r, j) => (j === i ? next : r)),
+                            })
                         }
-                        onRemove={() => onChange({ ...config, groups: config.groups.filter((_, j) => j !== i) })}
+                        onRemove={() =>
+                            onChange({ ...config, groups: config.groups.filter((_, j) => j !== i) })
+                        }
                     />
                 ))}
             </FormSection>
@@ -55,7 +71,12 @@ export const KarinRulesTab: React.FC<KarinTabProps> = ({ config, onChange, error
                             size="sm"
                             variant="secondary"
                             disabled={disabled}
-                            onClick={() => onChange({ ...config, privates: [...config.privates, newPrivateRule()] })}
+                            onClick={() =>
+                                onChange({
+                                    ...config,
+                                    privates: [...config.privates, newPrivateRule()],
+                                })
+                            }
                         >
                             <Plus size={13} /> 添加
                         </Button>
@@ -73,9 +94,17 @@ export const KarinRulesTab: React.FC<KarinTabProps> = ({ config, onChange, error
                         errors={errors}
                         disabled={disabled}
                         onChange={(next) =>
-                            onChange({ ...config, privates: config.privates.map((r, j) => (j === i ? next : r)) })
+                            onChange({
+                                ...config,
+                                privates: config.privates.map((r, j) => (j === i ? next : r)),
+                            })
                         }
-                        onRemove={() => onChange({ ...config, privates: config.privates.filter((_, j) => j !== i) })}
+                        onRemove={() =>
+                            onChange({
+                                ...config,
+                                privates: config.privates.filter((_, j) => j !== i),
+                            })
+                        }
                     />
                 ))}
             </FormSection>
@@ -94,7 +123,9 @@ const MatchOrderPopover: React.FC<{ text: string }> = ({ text }) => (
             </button>
         </PopoverTrigger>
         <PopoverContent side="bottom" align="end" sideOffset={6}>
-            <p className="max-w-xs font-mono text-[12px] leading-relaxed text-text-secondary">{text}</p>
+            <p className="max-w-xs font-mono text-[12px] leading-relaxed text-text-secondary">
+                {text}
+            </p>
         </PopoverContent>
     </Popover>
 );

@@ -3,7 +3,15 @@
 
 import { useState } from 'react';
 import { ExternalLink, Library, Plus, Trash2, X } from 'lucide-react';
-import { Badge, Button, FormSection, NumberField, Select, Switch, TextField } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    FormSection,
+    NumberField,
+    Select,
+    Switch,
+    TextField,
+} from '../../../../shared/ui';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import { embeddingSources } from '../../../../core/domain/apps/astrbotConfig';
 import { AstrBotRuntimeGate, dashboardReady } from './AstrBotRuntimeGate';
@@ -27,7 +35,18 @@ export const AstrBotKbTab: React.FC<{
     onGoTab: (tab: string) => void;
     onStart: () => void;
     starting: boolean;
-}> = ({ instanceId, status, statusLoading, config, onChange, formDisabled, onOpenWebUi, onGoTab, onStart, starting }) => {
+}> = ({
+    instanceId,
+    status,
+    statusLoading,
+    config,
+    onChange,
+    formDisabled,
+    onOpenWebUi,
+    onGoTab,
+    onStart,
+    starting,
+}) => {
     const ready = dashboardReady(status);
     const kbs = useAstrBotKbs(instanceId, ready);
     const embeddings = embeddingSources(config);
@@ -39,9 +58,14 @@ export const AstrBotKbTab: React.FC<{
 
     const k = config.kb;
     const mounted = new Set(k.names);
-    const setKb = (patch: Partial<AstrBotInstanceConfig['kb']>) => onChange({ ...config, kb: { ...k, ...patch } });
+    const setKb = (patch: Partial<AstrBotInstanceConfig['kb']>) =>
+        onChange({ ...config, kb: { ...k, ...patch } });
     const setMounted = (name: string, on: boolean) =>
-        setKb({ names: on ? [...k.names.filter((n) => n !== name), name] : k.names.filter((n) => n !== name) });
+        setKb({
+            names: on
+                ? [...k.names.filter((n) => n !== name), name]
+                : k.names.filter((n) => n !== name),
+        });
     // 在 WebUI 里删掉的库名还留在配置里，只能在这里摘掉
     const orphans = ready ? k.names.filter((n) => !list.some((kb) => kb.kb_name === n)) : [];
 
@@ -103,7 +127,9 @@ export const AstrBotKbTab: React.FC<{
                             ) : embeddings.length === 0 ? (
                                 <>
                                     建知识库要先有一个向量嵌入提供商。
-                                    <JumpLink tab="models" onGo={onGoTab}>去「模型」页加</JumpLink>
+                                    <JumpLink tab="models" onGo={onGoTab}>
+                                        去「模型」页加
+                                    </JumpLink>
                                 </>
                             ) : (
                                 '还没有知识库'
@@ -177,14 +203,18 @@ export const AstrBotKbTab: React.FC<{
                         value={k.fusion_top_k}
                         min={1}
                         disabled={formDisabled}
-                        onValueChange={(fusion_top_k) => setKb({ fusion_top_k: fusion_top_k ?? k.fusion_top_k })}
+                        onValueChange={(fusion_top_k) =>
+                            setKb({ fusion_top_k: fusion_top_k ?? k.fusion_top_k })
+                        }
                     />
                     <NumberField
                         label="最终保留"
                         value={k.final_top_k}
                         min={1}
                         disabled={formDisabled}
-                        onValueChange={(final_top_k) => setKb({ final_top_k: final_top_k ?? k.final_top_k })}
+                        onValueChange={(final_top_k) =>
+                            setKb({ final_top_k: final_top_k ?? k.final_top_k })
+                        }
                     />
                 </div>
                 <Switch
@@ -201,7 +231,9 @@ export const AstrBotKbTab: React.FC<{
                     size="sm"
                     title="新建知识库"
                     confirmLabel="创建"
-                    confirmDisabled={!draft.kb_name.trim() || nameTaken || !draft.embedding_provider_id.trim()}
+                    confirmDisabled={
+                        !draft.kb_name.trim() || nameTaken || !draft.embedding_provider_id.trim()
+                    }
                     busy={kbs.create.isPending}
                     onCancel={() => setDraft(null)}
                     onConfirm={() => {
@@ -227,7 +259,9 @@ export const AstrBotKbTab: React.FC<{
                         value={draft.embedding_provider_id || undefined}
                         items={embeddings.map((s) => ({ value: s.id, label: s.id }))}
                         hint="建好后不能换"
-                        onValueChange={(embedding_provider_id) => setDraft({ ...draft, embedding_provider_id })}
+                        onValueChange={(embedding_provider_id) =>
+                            setDraft({ ...draft, embedding_provider_id })
+                        }
                     />
                 </FormDialog>
             )}

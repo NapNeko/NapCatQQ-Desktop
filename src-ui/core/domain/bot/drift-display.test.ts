@@ -50,9 +50,7 @@ describe('transformDriftEntries', () => {
             {
                 file: 'onebot.json',
                 path: 'network.httpServers',
-                internal: [
-                    { name: 'server1', enable: true, host: '127.0.0.1', port: 3000 },
-                ],
+                internal: [{ name: 'server1', enable: true, host: '127.0.0.1', port: 3000 }],
                 external: [],
             },
             {
@@ -75,4 +73,3 @@ describe('transformDriftEntries', () => {
         expect(displays[1].theirs).toEqual({ kind: 'scalar', text: 'valB' });
     });
 });
-

@@ -23,8 +23,8 @@ export function useBotSnapshots(options?: { disablePolling?: boolean }) {
             options?.disablePolling
                 ? false
                 : Date.now() - mountedAt.current < 30_000
-                    ? 2_500
-                    : false,
+                  ? 2_500
+                  : false,
     });
 
     useEffect(() => {

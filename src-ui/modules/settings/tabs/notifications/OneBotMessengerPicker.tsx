@@ -46,9 +46,7 @@ export function OneBotMessengerPicker({
 }) {
     const [query, setQuery] = useState('');
     const selectedSet = new Set(selected);
-    const selectedMissing = selected.filter(
-        (id) => !candidates.some((item) => item.bot_id === id),
-    );
+    const selectedMissing = selected.filter((id) => !candidates.some((item) => item.bot_id === id));
     const localEligible = candidates.filter(
         (item) => item.scope !== 'remote' && item.eligible,
     ).length;
@@ -95,9 +93,7 @@ export function OneBotMessengerPicker({
             const key = isLocal
                 ? 'local'
                 : `remote:${item.server_id ?? item.server_label ?? 'unknown'}`;
-            const label = isLocal
-                ? '本机'
-                : item.server_label?.trim() || item.server_id || '远端';
+            const label = isLocal ? '本机' : item.server_label?.trim() || item.server_id || '远端';
             let group = map.get(key);
             if (!group) {
                 group = { key, label, isLocal, items: [] };
@@ -185,9 +181,7 @@ export function OneBotMessengerPicker({
                 <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <p className="text-[13px] font-medium text-text">
-                                发送方 Bot
-                            </p>
+                            <p className="text-[13px] font-medium text-text">发送方 Bot</p>
                             <Badge tone="neutral" appearance="soft">
                                 已选 {selected.length}
                             </Badge>
@@ -195,9 +189,7 @@ export function OneBotMessengerPicker({
                         <p className="mt-0.5 text-[11.5px] leading-relaxed text-text-tertiary">
                             同机多 Bot 冗余，不跨服务器发 OneBot
                             {localEligible > 0 ? ` · 本机可发 ${localEligible}` : ''}
-                            {remoteWatchReady > 0
-                                ? ` · 远端同机 ${remoteWatchReady}`
-                                : ''}
+                            {remoteWatchReady > 0 ? ` · 远端同机 ${remoteWatchReady}` : ''}
                         </p>
                     </div>
                 </div>
@@ -205,9 +197,7 @@ export function OneBotMessengerPicker({
                 {selected.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                         {selected.map((id, index) => {
-                            const candidate = candidates.find(
-                                (item) => item.bot_id === id,
-                            );
+                            const candidate = candidates.find((item) => item.bot_id === id);
                             const label = candidate?.name || id;
                             const isRemote = candidate?.scope === 'remote';
                             return (
@@ -255,9 +245,7 @@ export function OneBotMessengerPicker({
                                         type="button"
                                         aria-label={`移除 ${label}`}
                                         onClick={() =>
-                                            onChange(
-                                                selected.filter((item) => item !== id),
-                                            )
+                                            onChange(selected.filter((item) => item !== id))
                                         }
                                         className="rounded-xs p-0.5 text-text-tertiary transition-colors hover:bg-field hover:text-text"
                                     >
@@ -285,9 +273,7 @@ export function OneBotMessengerPicker({
                 ) : groups.length === 0 && selectedMissing.length === 0 ? (
                     <div className="flex h-full min-h-[10rem] flex-col items-center justify-center gap-1 px-4 py-8 text-center">
                         <p className="text-[13px] text-text-secondary">
-                            {candidates.length === 0
-                                ? '还没有可作发送方的 Bot'
-                                : '没有匹配的 Bot'}
+                            {candidates.length === 0 ? '还没有可作发送方的 Bot' : '没有匹配的 Bot'}
                         </p>
                         <p className="text-[11.5px] text-text-tertiary">
                             {candidates.length === 0
@@ -327,9 +313,7 @@ export function OneBotMessengerPicker({
                                                 <div className="flex items-stretch gap-0">
                                                     <button
                                                         type="button"
-                                                        onClick={() =>
-                                                            toggle(candidate.bot_id)
-                                                        }
+                                                        onClick={() => toggle(candidate.bot_id)}
                                                         className="flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-inset/40"
                                                     >
                                                         <span
@@ -398,11 +382,7 @@ export function OneBotMessengerPicker({
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() =>
-                                        onChange(
-                                            selected.filter((item) => item !== id),
-                                        )
-                                    }
+                                    onClick={() => onChange(selected.filter((item) => item !== id))}
                                 >
                                     移除
                                 </Button>

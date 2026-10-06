@@ -126,7 +126,8 @@ export function useAstrBotAbconfs(instanceId: string, enabled: boolean) {
 export function useAstrBotSourceModels(instanceId: string) {
     return useMutation<string[], unknown, string>({
         mutationFn: (sourceId) => appFrameworkService.astrbotListSourceModels(instanceId, sourceId),
-        onError: (err, sourceId) => fail('拉取模型列表失败', `astrbot-models:${instanceId}:${sourceId}`)(err),
+        onError: (err, sourceId) =>
+            fail('拉取模型列表失败', `astrbot-models:${instanceId}:${sourceId}`)(err),
     });
 }
 

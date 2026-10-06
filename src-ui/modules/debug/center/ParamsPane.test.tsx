@@ -25,12 +25,16 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) =>
-                (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
         },
     ),
 }));
-vi.mock('../../../core/services/domain-event-hub', () => ({ subscribeDomainEvents: () => () => {} }));
+vi.mock('../../../core/services/domain-event-hub', () => ({
+    subscribeDomainEvents: () => () => {},
+}));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 import { TooltipProvider } from '../../../shared/ui';
@@ -84,7 +88,9 @@ const SEND_GROUP_MSG: DebugActionSpec = {
 function workspace(params_text: string): DebugWorkspace {
     return {
         ...defaultWorkspace(),
-        tabs: [{ id: 't1', action: 'send_group_msg', params_text, timeout_ms: null, channel: null }],
+        tabs: [
+            { id: 't1', action: 'send_group_msg', params_text, timeout_ms: null, channel: null },
+        ],
         active_tab: 't1',
         selected_bot: BOT.bot_id,
     };
@@ -117,7 +123,12 @@ async function renderColumn(params_text = '{}') {
         </QueryClientProvider>
     );
     return render(
-        <CenterColumn target={BOT} callChannel={{ kind: 'auto' }} onOpenPalette={vi.fn()} onRevealCallChannel={vi.fn()} />,
+        <CenterColumn
+            target={BOT}
+            callChannel={{ kind: 'auto' }}
+            onOpenPalette={vi.fn()}
+            onRevealCallChannel={vi.fn()}
+        />,
         { wrapper },
     );
 }
@@ -128,7 +139,12 @@ beforeAll(() => {
     Element.prototype.setPointerCapture ??= () => {};
     Element.prototype.scrollIntoView ??= () => {};
     // CodeMirror 量文字尺寸时用到，jsdom 没有
-    Range.prototype.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+    Range.prototype.getClientRects ??= () =>
+        ({
+            length: 0,
+            item: () => null,
+            [Symbol.iterator]: [][Symbol.iterator],
+        }) as unknown as DOMRectList;
     Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 });
 
@@ -146,7 +162,12 @@ beforeEach(() => {
         auto_call: { kind: 'internal' },
         auto_events: { kind: 'internal' },
     });
-    service.catalog.mockResolvedValue({ backend: 'snowluma', source: 'live', snapshot_version: 't', actions: [] });
+    service.catalog.mockResolvedValue({
+        backend: 'snowluma',
+        source: 'live',
+        snapshot_version: 't',
+        actions: [],
+    });
     service.describe.mockImplementation(async (_bot: string, _backend: string, name: string) =>
         name === 'send_group_msg' ? SEND_GROUP_MSG : null,
     );
@@ -181,7 +202,11 @@ describe('参数表单 ⇄ JSON 同步', () => {
     it('说明读到后按必填项填上初始参数（算作没改过）；整数群号空着不填 0，表单上标「必填」', async () => {
         await renderColumn('{}');
         await waitFor(() => expect(JSON.parse(tabText())).toEqual({ message: '' }));
-        await waitFor(() => expect(document.getElementById('debug-param-t1-group_id')).toHaveAccessibleDescription(/必填/));
+        await waitFor(() =>
+            expect(document.getElementById('debug-param-t1-group_id')).toHaveAccessibleDescription(
+                /必填/,
+            ),
+        );
         // 表单里出现各个字段
         expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument();
         expect(document.getElementById('debug-param-t1-auto_escape')).toBeInTheDocument();
@@ -193,7 +218,9 @@ describe('参数表单 ⇄ JSON 同步', () => {
         const user = userEvent.setup();
         const { container } = await renderColumn('{\n  "group_id": 0,\n  "message": "hi"\n}');
         const input = await waitFor(() => {
-            const el = document.getElementById('debug-param-t1-group_id') as HTMLInputElement | null;
+            const el = document.getElementById(
+                'debug-param-t1-group_id',
+            ) as HTMLInputElement | null;
             if (!el) throw new Error('还没画出表单');
             return el;
         });
@@ -211,23 +238,35 @@ describe('参数表单 ⇄ JSON 同步', () => {
     it('在 JSON 里改，表单跟着变；布尔开关写回 JSON', async () => {
         const user = userEvent.setup();
         const { container } = await renderColumn('{\n  "group_id": 1,\n  "message": "x"\n}');
-        await waitFor(() => expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument());
+        await waitFor(() =>
+            expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument(),
+        );
 
         typeIntoEditor(editorView(container), '{"group_id": 123456, "message": "早上好"}');
         expect(tabText()).toBe('{"group_id": 123456, "message": "早上好"}');
         await waitFor(() =>
-            expect((document.getElementById('debug-param-t1-group_id') as HTMLInputElement).value).toBe('123456'),
+            expect(
+                (document.getElementById('debug-param-t1-group_id') as HTMLInputElement).value,
+            ).toBe('123456'),
         );
-        expect((document.getElementById('debug-param-t1-message') as HTMLTextAreaElement).value).toBe('早上好');
+        expect(
+            (document.getElementById('debug-param-t1-message') as HTMLTextAreaElement).value,
+        ).toBe('早上好');
 
         await user.click(document.getElementById('debug-param-t1-auto_escape') as HTMLElement);
-        expect(JSON.parse(tabText())).toEqual({ group_id: 123456, message: '早上好', auto_escape: true });
+        expect(JSON.parse(tabText())).toEqual({
+            group_id: 123456,
+            message: '早上好',
+            auto_escape: true,
+        });
     });
 
     it('JSON 写坏时表单锁住并提示出错的行，改好后恢复；文本不丢', async () => {
         const user = userEvent.setup();
         const { container } = await renderColumn('{\n  "group_id": 1,\n  "message": "x"\n}');
-        await waitFor(() => expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument());
+        await waitFor(() =>
+            expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument(),
+        );
 
         const broken = '{\n  "group_id": 1,\n  "message": \n}';
         typeIntoEditor(editorView(container), broken);
@@ -240,7 +279,9 @@ describe('参数表单 ⇄ JSON 同步', () => {
         typeIntoEditor(editorView(container), '{"group_id": 1, "message": "ok"}');
         await waitFor(() => expect(screen.queryByText(/改好后表单恢复/)).not.toBeInTheDocument());
         await user.click(screen.getByRole('radio', { name: '表单' }));
-        expect((document.getElementById('debug-param-t1-message') as HTMLTextAreaElement).value).toBe('ok');
+        expect(
+            (document.getElementById('debug-param-t1-message') as HTMLTextAreaElement).value,
+        ).toBe('ok');
     });
 
     it('说明里没有的键列在「其它参数」里，点了去 JSON 编辑', async () => {
@@ -311,7 +352,9 @@ describe('说明读取中与一次性的跳转', () => {
         await act(async () => {
             resolveSpec(SEND_GROUP_MSG);
         });
-        await waitFor(() => expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument());
+        await waitFor(() =>
+            expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument(),
+        );
         expect(screen.getByRole('radio', { name: '表单' })).toHaveAttribute('aria-checked', 'true');
     });
 
@@ -342,7 +385,9 @@ describe('说明读取中与一次性的跳转', () => {
     it('「去 JSON 修改」只跳一次行，切回表单再切 JSON 不会把焦点抢进编辑器', async () => {
         const user = userEvent.setup();
         const { container } = await renderColumn('{\n  "group_id": 1,\n  "message": "x"\n}');
-        await waitFor(() => expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument());
+        await waitFor(() =>
+            expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument(),
+        );
         typeIntoEditor(editorView(container), '{\n  "group_id": 1,\n');
         await user.click(await screen.findByRole('button', { name: /去 JSON 修改/ }));
         await waitFor(() => expect(container.querySelector('.cm-content')).toHaveFocus());
@@ -364,19 +409,34 @@ describe('群成员选择器跟着群号走，但不跟每个按键', () => {
         );
         service.workspace.mockResolvedValue({
             ...workspace('{}'),
-            tabs: [{ id: 't1', action: 'set_group_kick', params_text: '{}', timeout_ms: null, channel: null }],
+            tabs: [
+                {
+                    id: 't1',
+                    action: 'set_group_kick',
+                    params_text: '{}',
+                    timeout_ms: null,
+                    channel: null,
+                },
+            ],
         });
         await debugWorkspaceStore.load();
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         render(
             <QueryClientProvider client={client}>
                 <TooltipProvider>
-                    <CenterColumn target={BOT} callChannel={{ kind: 'auto' }} onOpenPalette={vi.fn()} onRevealCallChannel={vi.fn()} />
+                    <CenterColumn
+                        target={BOT}
+                        callChannel={{ kind: 'auto' }}
+                        onOpenPalette={vi.fn()}
+                        onRevealCallChannel={vi.fn()}
+                    />
                 </TooltipProvider>
             </QueryClientProvider>,
         );
         const group = await waitFor(() => {
-            const el = document.getElementById('debug-param-t1-group_id') as HTMLInputElement | null;
+            const el = document.getElementById(
+                'debug-param-t1-group_id',
+            ) as HTMLInputElement | null;
             if (!el) throw new Error('还没画出表单');
             return el;
         });

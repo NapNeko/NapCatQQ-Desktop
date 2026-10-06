@@ -33,11 +33,16 @@ export const PortSyncBadge: React.FC = () => (
                 同步端口
             </Badge>
         </TooltipTrigger>
-        <TooltipContent>改完会同步实例端口；已对接时一并改协议 Bot 的连接地址。监听口需重启才换。</TooltipContent>
+        <TooltipContent>
+            改完会同步实例端口；已对接时一并改协议 Bot 的连接地址。监听口需重启才换。
+        </TooltipContent>
     </Tooltip>
 );
 
-export const FieldLabel: React.FC<{ text: string; children?: React.ReactNode }> = ({ text, children }) => (
+export const FieldLabel: React.FC<{ text: string; children?: React.ReactNode }> = ({
+    text,
+    children,
+}) => (
     <span className="inline-flex items-center gap-1.5">
         {text}
         {children}

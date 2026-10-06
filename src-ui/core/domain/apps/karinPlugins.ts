@@ -8,7 +8,11 @@ import {
     overlayInstalledFromTasks,
     type PluginTaskHint,
 } from './pluginCatalog';
-import type { KarinPluginInstalled, KarinPluginKind, KarinPluginMarketEntry } from '../../ipc/types';
+import type {
+    KarinPluginInstalled,
+    KarinPluginKind,
+    KarinPluginMarketEntry,
+} from '../../ipc/types';
 
 export type KarinPluginKindFilter = 'all' | KarinPluginKind;
 

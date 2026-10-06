@@ -5,7 +5,16 @@
 import type { ConfigFormSpec } from './appConfigForm';
 import type { AppConfigIssue, YunzaiGroupOverride, YunzaiInstanceConfig } from '../../ipc/types';
 
-export const YUNZAI_LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'fatal', 'mark', 'error', 'off'] as const;
+export const YUNZAI_LOG_LEVELS = [
+    'trace',
+    'debug',
+    'info',
+    'warn',
+    'fatal',
+    'mark',
+    'error',
+    'off',
+] as const;
 
 /** renderer.yaml 的 name；空串 = 按模板里有没有脚本自动挑 */
 export const YUNZAI_RENDERERS: ReadonlyArray<{ value: string; label: string }> = [
@@ -126,7 +135,10 @@ function checkIds(out: AppConfigIssue[], path: string, items: readonly string[])
 export function validateYunzaiConfig(cfg: YunzaiInstanceConfig): AppConfigIssue[] {
     const out: AppConfigIssue[] = [];
     if (!(YUNZAI_LOG_LEVELS as readonly string[]).includes(cfg.bot.log_level)) {
-        out.push({ path: 'bot/log_level', message: `只能是 ${YUNZAI_LOG_LEVELS.join(' / ')} 之一` });
+        out.push({
+            path: 'bot/log_level',
+            message: `只能是 ${YUNZAI_LOG_LEVELS.join(' / ')} 之一`,
+        });
     }
     if (!YUNZAI_RENDERERS.some((r) => r.value === cfg.renderer.name)) {
         out.push({ path: 'renderer/name', message: '只能是自动、puppeteer 或 shotium' });
@@ -166,7 +178,8 @@ export function validateYunzaiConfig(cfg: YunzaiInstanceConfig): AppConfigIssue[
         const key = o.key.trim();
         const path = `group/overrides/${i}/key`;
         if (!key) out.push({ path, message: '填群号、Bot号:default 或 Bot号:群号' });
-        else if (key === 'default') out.push({ path, message: 'default 是所有群的默认，不用再单独加' });
+        else if (key === 'default')
+            out.push({ path, message: 'default 是所有群的默认，不用再单独加' });
         else if (/[\s#]/.test(key)) out.push({ path, message: '不能带空格或 #' });
         else if (seen.has(key)) out.push({ path, message: '重复了' });
         seen.add(key);
@@ -188,19 +201,22 @@ export function yunzaiLinkInputsChanged(a: YunzaiInstanceConfig, b: YunzaiInstan
 }
 
 /** 和后端 `restart_inputs_changed` 同一份清单：只在启动时读的那些 */
-export function yunzaiRestartInputsChanged(a: YunzaiInstanceConfig, b: YunzaiInstanceConfig): boolean {
+export function yunzaiRestartInputsChanged(
+    a: YunzaiInstanceConfig,
+    b: YunzaiInstanceConfig,
+): boolean {
     const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
     return (
-        a.server.port !== b.server.port
-        || !same(a.redis, b.redis)
-        || a.bot.file_watch !== b.bot.file_watch
-        || a.bot.update_time !== b.bot.update_time
-        || a.bot.restart_time !== b.bot.restart_time
-        || !same(a.bot.update_cron, b.bot.update_cron)
-        || !same(a.bot.restart_cron, b.bot.restart_cron)
-        || !same(a.bot.stop_cron, b.bot.stop_cron)
-        || !same(a.bot.start_cron, b.bot.start_cron)
-        || a.bot.plugin_load_timeout !== b.bot.plugin_load_timeout
+        a.server.port !== b.server.port ||
+        !same(a.redis, b.redis) ||
+        a.bot.file_watch !== b.bot.file_watch ||
+        a.bot.update_time !== b.bot.update_time ||
+        a.bot.restart_time !== b.bot.restart_time ||
+        !same(a.bot.update_cron, b.bot.update_cron) ||
+        !same(a.bot.restart_cron, b.bot.restart_cron) ||
+        !same(a.bot.stop_cron, b.bot.stop_cron) ||
+        !same(a.bot.start_cron, b.bot.start_cron) ||
+        a.bot.plugin_load_timeout !== b.bot.plugin_load_timeout
     );
 }
 
@@ -211,7 +227,8 @@ export function yunzaiNeedsMaster(cfg: YunzaiInstanceConfig): boolean {
 
 /** 一条单独设置里写了几项（卡片标题旁的计数） */
 export function yunzaiOverrideFieldCount(o: YunzaiGroupOverride): number {
-    return Object.entries(o).filter(([k, v]) => k !== 'key' && v !== undefined && v !== null).length;
+    return Object.entries(o).filter(([k, v]) => k !== 'key' && v !== undefined && v !== null)
+        .length;
 }
 
 /** 单独设置的键是什么意思，给卡片副标题 */

@@ -57,7 +57,10 @@ interface LayerSpec {
 //
 // 头和怀里猫之间不是直线：头发左下缘是条斜线（(322,370) 到发尾 (437,402)），
 // 窗口沿着它往下让 4 单位切，猫举起来时耳朵是钻进头发底下，不是被切平。
-const HAIR_EDGE = [296, 374, 322, 374, 329, 379, 340, 384, 360, 389, 391, 394, 411, 399, 429, 404, 440, 406, 462, 406];
+const HAIR_EDGE = [
+    296, 374, 322, 374, 329, 379, 340, 384, 360, 389, 391, 394, 411, 399, 429, 404, 440, 406, 462,
+    406,
+];
 const HAIR_EDGE_REVERSED = (() => {
     const out: number[] = [];
     for (let i = HAIR_EDGE.length - 2; i >= 0; i -= 2) out.push(HAIR_EDGE[i], HAIR_EDGE[i + 1]);
@@ -75,7 +78,14 @@ const SOLE_FOOTPRINTS: readonly Poly[] = [
 
 const LAYERS: readonly LayerSpec[] = [
     // 地上那只猫的窗口到 1406，猫那一列的地面从 1398 起，别和它重叠
-    { name: 'ground', shapes: [[0, 1398, 372, 1536], [372, 1392, 1024, 1536]], inFigure: false },
+    {
+        name: 'ground',
+        shapes: [
+            [0, 1398, 372, 1536],
+            [372, 1392, 1024, 1536],
+        ],
+        inFigure: false,
+    },
     {
         name: 'body',
         shapes: [
@@ -141,7 +151,12 @@ export function approxBBox(d: string): Rect | null {
 }
 
 function intersects(a: Rect, b: Rect, margin = 1): boolean {
-    return a[0] <= b[2] + margin && a[2] >= b[0] - margin && a[1] <= b[3] + margin && a[3] >= b[1] - margin;
+    return (
+        a[0] <= b[2] + margin &&
+        a[2] >= b[0] - margin &&
+        a[1] <= b[3] + margin &&
+        a[3] >= b[1] - margin
+    );
 }
 
 function isRect(shape: Shape): shape is Rect {
@@ -160,7 +175,9 @@ function rectMarkup([x0, y0, x1, y1]: Rect, extra = ''): string {
 }
 
 function shapeMarkup(shape: Shape, extra = ''): string {
-    return isRect(shape) ? rectMarkup(shape, extra) : `<polygon points="${shape.join(' ')}"${extra}/>`;
+    return isRect(shape)
+        ? rectMarkup(shape, extra)
+        : `<polygon points="${shape.join(' ')}"${extra}/>`;
 }
 
 /**
@@ -179,13 +196,23 @@ export function buildRiggedMascotMarkup(svgText: string, idPrefix: string): stri
 
     const clipId = (name: string) => `${idPrefix}-${name}`;
     const defs = LAYERS.map(
-        (layer) => `<clipPath id="${clipId(layer.name)}">${layer.shapes.map((s) => shapeMarkup(s)).join('')}</clipPath>`,
+        (layer) =>
+            `<clipPath id="${clipId(layer.name)}">${layer.shapes.map((s) => shapeMarkup(s)).join('')}</clipPath>`,
     ).join('');
 
     // 素材里有一条整个落在画布左侧外面的废 path（x 在 -1024..0），先扔掉。
-    const onCanvas = paths.filter((p) => p.bbox !== null && p.bbox[2] > 0 && p.bbox[0] < 1024 && p.bbox[3] > 0 && p.bbox[1] < 1536);
+    const onCanvas = paths.filter(
+        (p) =>
+            p.bbox !== null &&
+            p.bbox[2] > 0 &&
+            p.bbox[0] < 1024 &&
+            p.bbox[3] > 0 &&
+            p.bbox[1] < 1536,
+    );
 
-    const groundPatches = GROUND_COVERS.map((s) => shapeMarkup(s, ` fill="${SILHOUETTE}"`)).join('');
+    const groundPatches = GROUND_COVERS.map((s) => shapeMarkup(s, ` fill="${SILHOUETTE}"`)).join(
+        '',
+    );
 
     const layerMarkup = (layer: LayerSpec): string => {
         const bounds = layer.shapes.map(shapeBBox);
@@ -199,8 +226,12 @@ export function buildRiggedMascotMarkup(svgText: string, idPrefix: string): stri
     };
 
     const ground = layerMarkup(LAYERS[0]);
-    const figure = LAYERS.filter((l) => l.inFigure).map(layerMarkup).join('');
-    const rest = LAYERS.filter((l) => !l.inFigure && l.name !== 'ground').map(layerMarkup).join('');
+    const figure = LAYERS.filter((l) => l.inFigure)
+        .map(layerMarkup)
+        .join('');
+    const rest = LAYERS.filter((l) => !l.inFigure && l.name !== 'ground')
+        .map(layerMarkup)
+        .join('');
 
     return (
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1536" width="100%" height="100%">` +

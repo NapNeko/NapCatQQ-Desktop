@@ -43,9 +43,7 @@ function RadioGroupInner<V extends string>(
 ) {
     return (
         <div className={cn('flex flex-col gap-1.5', className)}>
-            {label && (
-                <span className="text-xs font-medium text-text-secondary">{label}</span>
-            )}
+            {label && <span className="text-xs font-medium text-text-secondary">{label}</span>}
             <RadixRadio.Root
                 ref={ref}
                 value={value}
@@ -152,9 +150,7 @@ function RadioItemView<V extends string>({
             </RadixRadio.Item>
             <span className="flex flex-col gap-0.5 leading-tight">
                 <span className="text-sm text-text">{item.label}</span>
-                {item.hint && (
-                    <span className="text-2xs text-text-tertiary">{item.hint}</span>
-                )}
+                {item.hint && <span className="text-2xs text-text-tertiary">{item.hint}</span>}
             </span>
         </label>
     );

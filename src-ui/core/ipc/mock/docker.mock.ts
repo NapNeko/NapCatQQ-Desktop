@@ -66,9 +66,7 @@ export const mockImages: ImageInfo[] = [
 /// 拉镜像 mock：返回官方镜像名。
 export function mockDeployed(flavor: DockerDeploySpec['flavor']): DeployedContainer {
     const image =
-        flavor === 'napcat'
-            ? 'mlikiowa/napcat-docker:latest'
-            : 'motricseven7/snowluma:latest';
+        flavor === 'napcat' ? 'mlikiowa/napcat-docker:latest' : 'motricseven7/snowluma:latest';
     return { flavor, image };
 }
 
@@ -80,23 +78,51 @@ export function mockProgressSequence(taskId: string): void {
     const ts = () => BigInt(Date.now());
     // 用 unknown 中转：ProgressEvent 是 discriminated union，对象字面量无法直接推断变体。
     const ev = (raw: object): ProgressEvent =>
-        ({ v: 1, timestamp_ms: ts(), ...raw } as unknown as ProgressEvent);
+        ({ v: 1, timestamp_ms: ts(), ...raw }) as unknown as ProgressEvent;
 
     const steps: Array<[number, object]> = [
-        [0,    { kind: 'started', total_steps: 2 }],
-        [100,  { kind: 'step_begin', step: 1, message: '探测 docker 状态' }],
-        [200,  { kind: 'step_end', step: 1, ok: true }],
-        [300,  { kind: 'step_begin', step: 2, message: '拉取镜像' }],
-        [600,  { kind: 'step_progress', step: 2, percent: 12, message: '镜像层 1/3 · 12%', docker_layers: [
-            { id: 'aabbccdd1122', phase: '下载中', detail: '[=>       ] 5MB/40MB', done: false },
-            { id: '112233445566', phase: '等待', detail: null, done: false },
-            { id: 'deadbeefcafe', phase: '完成', detail: null, done: true },
-        ]}],
-        [1200, { kind: 'step_progress', step: 2, percent: 55, message: '镜像层 2/3 · 55%', docker_layers: [
-            { id: 'aabbccdd1122', phase: '解压中', detail: null, done: true },
-            { id: '112233445566', phase: '下载中', detail: '[====>    ] 20MB/30MB', done: false },
-            { id: 'deadbeefcafe', phase: '完成', detail: null, done: true },
-        ]}],
+        [0, { kind: 'started', total_steps: 2 }],
+        [100, { kind: 'step_begin', step: 1, message: '探测 docker 状态' }],
+        [200, { kind: 'step_end', step: 1, ok: true }],
+        [300, { kind: 'step_begin', step: 2, message: '拉取镜像' }],
+        [
+            600,
+            {
+                kind: 'step_progress',
+                step: 2,
+                percent: 12,
+                message: '镜像层 1/3 · 12%',
+                docker_layers: [
+                    {
+                        id: 'aabbccdd1122',
+                        phase: '下载中',
+                        detail: '[=>       ] 5MB/40MB',
+                        done: false,
+                    },
+                    { id: '112233445566', phase: '等待', detail: null, done: false },
+                    { id: 'deadbeefcafe', phase: '完成', detail: null, done: true },
+                ],
+            },
+        ],
+        [
+            1200,
+            {
+                kind: 'step_progress',
+                step: 2,
+                percent: 55,
+                message: '镜像层 2/3 · 55%',
+                docker_layers: [
+                    { id: 'aabbccdd1122', phase: '解压中', detail: null, done: true },
+                    {
+                        id: '112233445566',
+                        phase: '下载中',
+                        detail: '[====>    ] 20MB/30MB',
+                        done: false,
+                    },
+                    { id: 'deadbeefcafe', phase: '完成', detail: null, done: true },
+                ],
+            },
+        ],
         [1800, { kind: 'step_end', step: 2, ok: true }],
         [2000, { kind: 'finished', ok: true }],
     ];

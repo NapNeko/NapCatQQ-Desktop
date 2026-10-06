@@ -19,7 +19,12 @@ export const dataRootMigrateService = {
                 local_active_bots: 0,
                 tree_entries: [
                     { name: 'config/', kind: 'dir', bytes: BigInt(48 * 1024), note: null },
-                    { name: 'components/', kind: 'dir', bytes: BigInt(10 * 1024 * 1024), note: null },
+                    {
+                        name: 'components/',
+                        kind: 'dir',
+                        bytes: BigInt(10 * 1024 * 1024),
+                        note: null,
+                    },
                     { name: 'secrets/', kind: 'dir', bytes: BigInt(4 * 1024), note: null },
                     { name: 'ssh_keys/', kind: 'dir', bytes: BigInt(2 * 1024), note: null },
                     { name: 'state/', kind: 'dir', bytes: BigInt(128 * 1024), note: null },

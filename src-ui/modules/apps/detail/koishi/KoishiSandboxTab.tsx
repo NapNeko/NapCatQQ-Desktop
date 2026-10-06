@@ -13,7 +13,10 @@ import {
     sandboxChannel,
     type KoishiSegment,
 } from '../../../../core/domain/apps/koishiConsole';
-import { useKoishiSandboxMessages, useKoishiSandboxSend } from '../../../../hooks/apps/useKoishiConsole';
+import {
+    useKoishiSandboxMessages,
+    useKoishiSandboxSend,
+} from '../../../../hooks/apps/useKoishiConsole';
 import type { AppInstance, KoishiSandboxMessage } from '../../../../core/ipc/types';
 
 type Mode = 'private' | 'guild';
@@ -30,7 +33,10 @@ export const KoishiSandboxTab: React.FC<{ instance: AppInstance }> = ({ instance
     const listRef = useRef<HTMLDivElement>(null);
 
     const rows = useMemo(
-        () => (messages.data ?? []).filter((m) => m.platform === KOISHI_SANDBOX_PLATFORM && m.channel === channel),
+        () =>
+            (messages.data ?? []).filter(
+                (m) => m.platform === KOISHI_SANDBOX_PLATFORM && m.channel === channel,
+            ),
         [messages.data, channel],
     );
 
@@ -93,14 +99,23 @@ export const KoishiSandboxTab: React.FC<{ instance: AppInstance }> = ({ instance
                         />
                     </div>
                 )}
-                <span className="text-2xs text-text-tertiary">不连 QQ，指令和插件走的是实例里的真管线</span>
+                <span className="text-2xs text-text-tertiary">
+                    不连 QQ，指令和插件走的是实例里的真管线
+                </span>
                 <div className="ml-auto">
                     <Button
                         size="sm"
                         variant="ghost"
                         disabled={!running || rows.length === 0 || send.isPending}
                         title="上游沙盒的清屏指令"
-                        onClick={() => void send.mutateAsync({ platform: KOISHI_SANDBOX_PLATFORM, user, channel, content: 'clear' })}
+                        onClick={() =>
+                            void send.mutateAsync({
+                                platform: KOISHI_SANDBOX_PLATFORM,
+                                user,
+                                channel,
+                                content: 'clear',
+                            })
+                        }
                     >
                         <Eraser size={13} />
                         清屏
@@ -121,7 +136,9 @@ export const KoishiSandboxTab: React.FC<{ instance: AppInstance }> = ({ instance
                 ) : messages.error ? (
                     <Hint text={messages.error.message} error />
                 ) : rows.length === 0 ? (
-                    <Hint text={`说点什么试试，比如 help；这里是${mode === 'guild' ? '群聊' : '私聊'}模式`} />
+                    <Hint
+                        text={`说点什么试试，比如 help；这里是${mode === 'guild' ? '群聊' : '私聊'}模式`}
+                    />
                 ) : (
                     rows.map((m, i) => (
                         <Bubble key={m.id} msg={m} prev={rows[i - 1]} selfName={user} />
@@ -163,7 +180,11 @@ export const KoishiSandboxTab: React.FC<{ instance: AppInstance }> = ({ instance
                     onClick={() => void submit()}
                     aria-label="发送"
                 >
-                    {send.isPending ? <Spinner size="sm" className="text-white" /> : <Send size={13} />}
+                    {send.isPending ? (
+                        <Spinner size="sm" className="text-white" />
+                    ) : (
+                        <Send size={13} />
+                    )}
                     发送
                 </Button>
             </div>
@@ -175,17 +196,38 @@ function Hint({ text, error, spinner }: { text: string; error?: boolean; spinner
     return (
         <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center">
             {spinner && <Spinner size="sm" />}
-            <p className={cn('max-w-md text-xs leading-relaxed', error ? 'text-danger' : 'text-text-tertiary')}>{text}</p>
+            <p
+                className={cn(
+                    'max-w-md text-xs leading-relaxed',
+                    error ? 'text-danger' : 'text-text-tertiary',
+                )}
+            >
+                {text}
+            </p>
         </div>
     );
 }
 
-function Bubble({ msg, prev, selfName }: { msg: KoishiSandboxMessage; prev?: KoishiSandboxMessage; selfName: string }) {
+function Bubble({
+    msg,
+    prev,
+    selfName,
+}: {
+    msg: KoishiSandboxMessage;
+    prev?: KoishiSandboxMessage;
+    selfName: string;
+}) {
     const mine = msg.user !== 'koishi';
     const segments = useMemo(() => parseKoishiMessage(msg.content), [msg.content]);
     const showSender = !prev || prev.user !== msg.user;
     return (
-        <div className={cn('flex items-start gap-2.5', mine && 'flex-row-reverse', showSender ? 'mt-3' : 'mt-1')}>
+        <div
+            className={cn(
+                'flex items-start gap-2.5',
+                mine && 'flex-row-reverse',
+                showSender ? 'mt-3' : 'mt-1',
+            )}
+        >
             {showSender ? (
                 <span
                     className={cn(
@@ -198,14 +240,23 @@ function Bubble({ msg, prev, selfName }: { msg: KoishiSandboxMessage; prev?: Koi
             ) : (
                 <span className="w-8 shrink-0" />
             )}
-            <div className={cn('flex min-w-0 max-w-[min(34rem,78%)] flex-col', mine ? 'items-end' : 'items-start')}>
+            <div
+                className={cn(
+                    'flex min-w-0 max-w-[min(34rem,78%)] flex-col',
+                    mine ? 'items-end' : 'items-start',
+                )}
+            >
                 {showSender && (
-                    <span className="mb-1 px-1 text-2xs text-text-tertiary">{mine ? selfName : 'Koishi'}</span>
+                    <span className="mb-1 px-1 text-2xs text-text-tertiary">
+                        {mine ? selfName : 'Koishi'}
+                    </span>
                 )}
                 <div
                     className={cn(
                         'rounded-lg px-3 py-2 text-[13.5px] leading-relaxed text-text',
-                        mine ? 'rounded-tr-sm bg-brand-soft' : 'rounded-tl-sm border border-border-subtle bg-surface',
+                        mine
+                            ? 'rounded-tr-sm bg-brand-soft'
+                            : 'rounded-tl-sm border border-border-subtle bg-surface',
                     )}
                 >
                     {segments.length === 0 ? (
@@ -225,7 +276,9 @@ function Seg({ seg, mine }: { seg: KoishiSegment; mine: boolean }) {
             return <span className="whitespace-pre-wrap break-words">{seg.text}</span>;
         case 'at':
             return (
-                <span className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>@{seg.name || seg.id} </span>
+                <span className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>
+                    @{seg.name || seg.id}{' '}
+                </span>
             );
         case 'img':
             return (

@@ -1,15 +1,6 @@
 // 日志 Tab 统一工具条：筛选 + 操作（原 sticky 与卡片内条合并为一条）。
 
-import {
-    Copy,
-    FolderOpen,
-    Minus,
-    Pause,
-    Play,
-    Plus,
-    RefreshCw,
-    Search,
-} from 'lucide-react';
+import { Copy, FolderOpen, Minus, Pause, Play, Plus, RefreshCw, Search } from 'lucide-react';
 import {
     DESKTOP_LOG_LEVEL_OPTIONS,
     type DesktopLogLevelFilterValue,

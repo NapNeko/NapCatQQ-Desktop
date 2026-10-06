@@ -28,7 +28,13 @@ const Heart: React.FC = () => (
             strokeWidth="1.2"
             strokeLinejoin="round"
         />
-        <path d="M8.2 10.2c.3-1.1 1-1.8 2.1-2.1" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" />
+        <path
+            d="M8.2 10.2c.3-1.1 1-1.8 2.1-2.1"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+        />
     </svg>
 );
 
@@ -41,7 +47,14 @@ const Exclaim: React.FC = () => (
             strokeWidth="1.1"
             strokeLinejoin="round"
         />
-        <circle cx="12" cy="18.6" r="1.9" fill="var(--brand-500)" stroke="var(--brand-700)" strokeWidth="1.1" />
+        <circle
+            cx="12"
+            cy="18.6"
+            r="1.9"
+            fill="var(--brand-500)"
+            stroke="var(--brand-700)"
+            strokeWidth="1.1"
+        />
     </svg>
 );
 
@@ -69,7 +82,13 @@ const Sweat: React.FC = () => (
             strokeWidth="1.1"
             strokeLinejoin="round"
         />
-        <path d="M9.4 14.2c0 1.4.8 2.4 1.9 2.8" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" />
+        <path
+            d="M9.4 14.2c0 1.4.8 2.4 1.9 2.8"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+        />
     </svg>
 );
 
@@ -84,8 +103,19 @@ const Z_GLYPHS = [
 const Zz: React.FC = () => (
     <span className="relative block h-6 w-8">
         {Z_GLYPHS.map((z) => (
-            <span key={z.d} data-z className="ndf-mascot-z absolute inset-0" style={{ transformOrigin: z.origin }}>
-                <svg viewBox="0 0 32 24" width="32" height="24" aria-hidden style={{ filter: 'drop-shadow(0 0 1.5px var(--surface-hero))' }}>
+            <span
+                key={z.d}
+                data-z
+                className="ndf-mascot-z absolute inset-0"
+                style={{ transformOrigin: z.origin }}
+            >
+                <svg
+                    viewBox="0 0 32 24"
+                    width="32"
+                    height="24"
+                    aria-hidden
+                    style={{ filter: 'drop-shadow(0 0 1.5px var(--surface-hero))' }}
+                >
                     <path
                         d={z.d}
                         fill="none"
@@ -140,12 +170,26 @@ export const MascotEmote: React.FC<MascotEmoteProps> = ({ emote, className }) =>
 
         switch (shown.kind) {
             case 'heart':
-                tl.fromTo(el, { scale: 0, y: 10, autoAlpha: 0 }, { scale: 1, y: 0, autoAlpha: 1, duration: s(0.32), ease: m.ease.pop })
+                tl.fromTo(
+                    el,
+                    { scale: 0, y: 10, autoAlpha: 0 },
+                    { scale: 1, y: 0, autoAlpha: 1, duration: s(0.32), ease: m.ease.pop },
+                )
                     .to(el, { y: -6, duration: s(0.5), ease: 'sine.inOut', yoyo: true, repeat: 1 })
-                    .to(el, { y: -22, autoAlpha: 0, scale: 0.8, duration: s(0.6), ease: 'power2.in' });
+                    .to(el, {
+                        y: -22,
+                        autoAlpha: 0,
+                        scale: 0.8,
+                        duration: s(0.6),
+                        ease: 'power2.in',
+                    });
                 break;
             case 'exclaim':
-                tl.fromTo(el, { scale: 0, y: 8, autoAlpha: 0 }, { scale: 1.15, y: 0, autoAlpha: 1, duration: s(0.18), ease: 'power3.out' })
+                tl.fromTo(
+                    el,
+                    { scale: 0, y: 8, autoAlpha: 0 },
+                    { scale: 1.15, y: 0, autoAlpha: 1, duration: s(0.18), ease: 'power3.out' },
+                )
                     .to(el, { scale: 1, duration: s(0.25), ease: m.ease.release })
                     .fromTo(el, { x: -3 }, { x: 0, duration: s(0.5), ease: 'ndf-wiggle' }, '<')
                     .to(el, { autoAlpha: 0, y: -8, duration: s(0.35), ease: 'power2.in' }, '+=0.7');
@@ -153,17 +197,55 @@ export const MascotEmote: React.FC<MascotEmoteProps> = ({ emote, className }) =>
             case 'sparkle': {
                 const ray = el.querySelector('[data-ray]');
                 const dots = el.querySelectorAll('[data-dot]');
-                tl.fromTo(el, { scale: 0, rotate: -40, autoAlpha: 0 }, { scale: 1, rotate: 0, autoAlpha: 1, duration: s(0.35), ease: m.ease.pop })
+                tl.fromTo(
+                    el,
+                    { scale: 0, rotate: -40, autoAlpha: 0 },
+                    { scale: 1, rotate: 0, autoAlpha: 1, duration: s(0.35), ease: m.ease.pop },
+                )
                     .to(el, { rotate: 25, duration: s(1.1), ease: 'sine.inOut' }, '<')
-                    .to(ray ?? el, { scale: 0.85, duration: s(0.3), yoyo: true, repeat: 3, ease: 'sine.inOut', transformOrigin: '50% 50%' }, '<0.1')
-                    .fromTo(dots, { scale: 0 }, { scale: 1, duration: s(0.25), stagger: 0.12, ease: m.ease.pop, transformOrigin: '50% 50%' }, '<0.15')
-                    .to(el, { autoAlpha: 0, scale: 0.6, duration: s(0.4), ease: 'power2.in' }, '-=0.1');
+                    .to(
+                        ray ?? el,
+                        {
+                            scale: 0.85,
+                            duration: s(0.3),
+                            yoyo: true,
+                            repeat: 3,
+                            ease: 'sine.inOut',
+                            transformOrigin: '50% 50%',
+                        },
+                        '<0.1',
+                    )
+                    .fromTo(
+                        dots,
+                        { scale: 0 },
+                        {
+                            scale: 1,
+                            duration: s(0.25),
+                            stagger: 0.12,
+                            ease: m.ease.pop,
+                            transformOrigin: '50% 50%',
+                        },
+                        '<0.15',
+                    )
+                    .to(
+                        el,
+                        { autoAlpha: 0, scale: 0.6, duration: s(0.4), ease: 'power2.in' },
+                        '-=0.1',
+                    );
                 break;
             }
             case 'sweat':
-                tl.fromTo(el, { y: -6, autoAlpha: 0, scale: 0.7 }, { y: 4, autoAlpha: 1, scale: 1, duration: s(0.3), ease: 'power2.out' })
+                tl.fromTo(
+                    el,
+                    { y: -6, autoAlpha: 0, scale: 0.7 },
+                    { y: 4, autoAlpha: 1, scale: 1, duration: s(0.3), ease: 'power2.out' },
+                )
                     .to(el, { y: 16, duration: s(0.9), ease: 'power1.in' })
-                    .to(el, { autoAlpha: 0, scaleY: 0.6, duration: s(0.25), ease: 'power2.in' }, '-=0.2');
+                    .to(
+                        el,
+                        { autoAlpha: 0, scaleY: 0.6, duration: s(0.25), ease: 'power2.in' },
+                        '-=0.2',
+                    );
                 break;
         }
         return () => {
@@ -174,9 +256,17 @@ export const MascotEmote: React.FC<MascotEmoteProps> = ({ emote, className }) =>
     if (!shown) return null;
     const Glyph = GLYPH[shown.kind];
     const speed = Math.max(0.5, m.speed);
-    const zzTiming = { '--ndf-z-dur': `${2.8 / speed}s`, '--ndf-z-gap': `${0.9 / speed}s` } as React.CSSProperties;
+    const zzTiming = {
+        '--ndf-z-dur': `${2.8 / speed}s`,
+        '--ndf-z-gap': `${0.9 / speed}s`,
+    } as React.CSSProperties;
     return (
-        <div ref={ref} className={className} style={{ transformOrigin: '50% 100%', ...(shown.kind === 'zz' ? zzTiming : null) }} aria-hidden>
+        <div
+            ref={ref}
+            className={className}
+            style={{ transformOrigin: '50% 100%', ...(shown.kind === 'zz' ? zzTiming : null) }}
+            aria-hidden
+        >
             <Glyph />
         </div>
     );

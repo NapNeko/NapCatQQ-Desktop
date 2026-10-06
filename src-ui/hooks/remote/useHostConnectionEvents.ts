@@ -34,7 +34,10 @@ export function useHostConnectionEvents(): void {
 
     useEffect(() => {
         const unsubscribe = subscribeDomainEvents((event: DomainEvent) => {
-            if (event.kind === 'host_connection_lost' || event.kind === 'host_connection_recovered') {
+            if (
+                event.kind === 'host_connection_lost' ||
+                event.kind === 'host_connection_recovered'
+            ) {
                 // 事件 payload 里 server_id 是 ServerProfile.id，对应前端 hostId = `remote:${server_id}`
                 const serverId: string | undefined = (event as any).server_id;
                 if (!serverId) return;

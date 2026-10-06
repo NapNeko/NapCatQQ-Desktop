@@ -138,7 +138,11 @@ export function useAppInstanceLog(instanceId: string | null, running = false) {
     useEffect(() => {
         if (!instanceId || !running) return;
         appFrameworkService.refresh(instanceId).catch((err) => {
-            pushErrorBar({ key: `app-log-follow:${instanceId}`, title: '接不上实例日志', raw: errorText(err) });
+            pushErrorBar({
+                key: `app-log-follow:${instanceId}`,
+                title: '接不上实例日志',
+                raw: errorText(err),
+            });
         });
     }, [instanceId, running]);
     const snapshot = useSyncExternalStore(subscribe, store.getSnapshot, store.getSnapshot);

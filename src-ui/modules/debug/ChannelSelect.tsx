@@ -3,7 +3,14 @@
 // 每行给出状态、地址、打码后的 token、能干什么，自带「测试连通」；做不了这件事的行禁用并写明原因。
 // 状态不好的行照样能选——用户多半正要去修它，选上再测一次最顺手。
 
-import { memo, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+    memo,
+    useEffect,
+    useRef,
+    useState,
+    type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
+} from 'react';
 import { Bot, Check, ChevronDown, Package, RefreshCw, type LucideIcon } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import { Button, Popover, PopoverContent, PopoverTrigger, Spinner } from '../../shared/ui';
@@ -12,7 +19,11 @@ import type { AppRoute } from '../../shared/components/next/Sidebar';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useTestChannel } from '../../hooks/debug/useDebugChannels';
 import { channelIdKey } from '../../hooks/debug/keys';
-import { NO_CHANNEL_EXITS, channelShortLabel, channelStatusCopy } from '../../core/domain/debug/channelCopy';
+import {
+    NO_CHANNEL_EXITS,
+    channelShortLabel,
+    channelStatusCopy,
+} from '../../core/domain/debug/channelCopy';
 import {
     AUTO_CHANNEL,
     channelSelectable,
@@ -27,7 +38,10 @@ import type { DebugChannelInfo } from '../../core/ipc/generated/debug/DebugChann
 import type { DebugChannels } from '../../core/ipc/generated/debug/DebugChannels';
 import type { DebugChannelStatus } from '../../core/ipc/generated/debug/DebugChannelStatus';
 
-const COPY: Record<ChannelPurpose, { prefix: string; title: string; hint: string; autoHint: string }> = {
+const COPY: Record<
+    ChannelPurpose,
+    { prefix: string; title: string; hint: string; autoHint: string }
+> = {
     call: {
         prefix: '调用',
         title: '调用通道',
@@ -103,11 +117,12 @@ export const ChannelSelect = memo(function ChannelSelect({
 
     const label = channelTriggerLabel(channels, value, purpose);
     const effective = findChannel(channels, effectiveChannelId(channels, value, purpose));
-    const dotTone: StatusDotTone = loading && !channels
-        ? 'idle'
-        : label.none || label.missing
-            ? 'danger'
-            : statusTone(effective?.status);
+    const dotTone: StatusDotTone =
+        loading && !channels
+            ? 'idle'
+            : label.none || label.missing
+              ? 'danger'
+              : statusTone(effective?.status);
 
     const choose = (id: DebugChannelId) => {
         onChange(id);
@@ -122,9 +137,14 @@ export const ChannelSelect = memo(function ChannelSelect({
 
     const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-        const list = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[data-channel-option]:not(:disabled)') ?? []);
+        const list = Array.from(
+            listRef.current?.querySelectorAll<HTMLButtonElement>(
+                '[data-channel-option]:not(:disabled)',
+            ) ?? [],
+        );
         const idx = list.indexOf(document.activeElement as HTMLButtonElement);
-        const next = e.key === 'ArrowDown' ? Math.min(list.length - 1, idx + 1) : Math.max(0, idx - 1);
+        const next =
+            e.key === 'ArrowDown' ? Math.min(list.length - 1, idx + 1) : Math.max(0, idx - 1);
         e.preventDefault();
         list[next]?.focus();
     };
@@ -143,7 +163,9 @@ export const ChannelSelect = memo(function ChannelSelect({
                         'disabled:cursor-not-allowed disabled:opacity-50',
                     )}
                 >
-                    <span className="shrink-0 text-2xs font-medium text-text-tertiary">{copy.prefix}</span>
+                    <span className="shrink-0 text-2xs font-medium text-text-tertiary">
+                        {copy.prefix}
+                    </span>
                     <StatusDot tone={dotTone} size={6} className="shrink-0" />
                     <span
                         className={cn(
@@ -171,14 +193,18 @@ export const ChannelSelect = memo(function ChannelSelect({
                 onOpenAutoFocus={(e) => {
                     e.preventDefault();
                     (
-                        listRef.current?.querySelector<HTMLButtonElement>('[data-channel-option][aria-checked="true"]') ??
+                        listRef.current?.querySelector<HTMLButtonElement>(
+                            '[data-channel-option][aria-checked="true"]',
+                        ) ??
                         listRef.current?.querySelector<HTMLButtonElement>('[data-channel-option]')
                     )?.focus();
                 }}
             >
                 <div className="border-b border-border-subtle/70 px-3 py-2.5">
                     <p className="font-display text-[13px] font-semibold text-text">{copy.title}</p>
-                    <p className="mt-0.5 text-2xs text-text-tertiary">{copy.hint}按 Bot 记住你的选择。</p>
+                    <p className="mt-0.5 text-2xs text-text-tertiary">
+                        {copy.hint}按 Bot 记住你的选择。
+                    </p>
                 </div>
 
                 <div
@@ -308,15 +334,28 @@ function AutoRow({
     const autoInfo = findChannel(channels, autoId);
     const status = autoInfo ? channelStatusCopy(autoInfo.status) : null;
     return (
-        <div className={cn('rounded-sm transition-colors', selected ? 'bg-brand-soft/50 hover:bg-brand-soft/70' : 'hover:bg-inset')}>
+        <div
+            className={cn(
+                'rounded-sm transition-colors',
+                selected ? 'bg-brand-soft/50 hover:bg-brand-soft/70' : 'hover:bg-inset',
+            )}
+        >
             <OptionButton selected={selected} onChoose={onChoose}>
                 <span className="block text-[13px] font-medium text-text">自动</span>
-                <span className="mt-0.5 block text-2xs text-text-tertiary">{COPY[purpose].autoHint}</span>
+                <span className="mt-0.5 block text-2xs text-text-tertiary">
+                    {COPY[purpose].autoHint}
+                </span>
                 <span className="mt-1 flex min-w-0 items-center gap-1.5 text-2xs">
                     {autoId ? (
                         <>
-                            <span className="text-text-secondary">眼下：{channelShortLabel(autoId)}</span>
-                            {status && <span className={cn('truncate', TONE_TEXT[status.tone])}>· {status.text}</span>}
+                            <span className="text-text-secondary">
+                                眼下：{channelShortLabel(autoId)}
+                            </span>
+                            {status && (
+                                <span className={cn('truncate', TONE_TEXT[status.tone])}>
+                                    · {status.text}
+                                </span>
+                            )}
                         </>
                     ) : (
                         <span className="text-danger">眼下没有能用的通道</span>
@@ -329,7 +368,12 @@ function AutoRow({
                     {NO_CHANNEL_EXITS.map((exit) => {
                         const ExitIcon = EXIT_ICON[exit.route];
                         return (
-                            <Button key={exit.route} size="sm" variant="secondary" onClick={() => onNavigate(exit.route)}>
+                            <Button
+                                key={exit.route}
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => onNavigate(exit.route)}
+                            >
                                 {ExitIcon ? <ExitIcon size={12} aria-hidden /> : null}
                                 {exit.label}
                             </Button>
@@ -403,16 +447,22 @@ function ChannelRow({
                     title={selectable.ok ? undefined : selectable.reason}
                 >
                     <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate text-[13px] font-medium text-text">{info.label}</span>
+                        <span className="truncate text-[13px] font-medium text-text">
+                            {info.label}
+                        </span>
                     </span>
                     <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs">
                         <StatusDot tone={TONE_DOT[status.tone]} size={6} className="shrink-0" />
-                        <span className={cn('truncate', TONE_TEXT[status.tone])}>{status.text}</span>
+                        <span className={cn('truncate', TONE_TEXT[status.tone])}>
+                            {status.text}
+                        </span>
                     </span>
                     {(info.endpoint || info.token_hint) && (
                         <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 font-mono text-[10.5px] text-text-tertiary">
                             {info.endpoint && <span className="truncate">{info.endpoint}</span>}
-                            {info.token_hint && <span className="shrink-0">token {info.token_hint}</span>}
+                            {info.token_hint && (
+                                <span className="shrink-0">token {info.token_hint}</span>
+                            )}
                         </span>
                     )}
                     <span className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -420,7 +470,9 @@ function ChannelRow({
                         <CapabilityChip on={info.can_receive} label="可收事件" />
                     </span>
                     {!selectable.ok && selectable.reason && (
-                        <span className="mt-1 block text-2xs text-text-secondary">{selectable.reason}</span>
+                        <span className="mt-1 block text-2xs text-text-secondary">
+                            {selectable.reason}
+                        </span>
                     )}
                 </OptionButton>
                 <button
@@ -431,8 +483,8 @@ function ChannelRow({
                         canTest
                             ? '测一下这条通道现在通不通'
                             : running
-                                ? '这条通道不支持'
-                                : 'Bot 没在运行，启动后再测'
+                              ? '这条通道不支持'
+                              : 'Bot 没在运行，启动后再测'
                     }
                     className={cn(
                         'mr-1 mt-1.5 inline-flex h-6 shrink-0 items-center gap-1 rounded-xs px-1.5 text-2xs font-medium text-text-secondary transition-colors',
@@ -450,10 +502,14 @@ function ChannelRow({
                     role="status"
                     className={cn(
                         'pb-2 pl-8 pr-2 text-2xs',
-                        result.kind === 'failed' ? 'text-danger' : TONE_TEXT[channelStatusCopy(result.status).tone],
+                        result.kind === 'failed'
+                            ? 'text-danger'
+                            : TONE_TEXT[channelStatusCopy(result.status).tone],
                     )}
                 >
-                    {result.kind === 'failed' ? '测试没跑成，原因见上方提示条' : `测完了：${channelStatusCopy(result.status).text}`}
+                    {result.kind === 'failed'
+                        ? '测试没跑成，原因见上方提示条'
+                        : `测完了：${channelStatusCopy(result.status).text}`}
                 </p>
             )}
         </div>
@@ -465,7 +521,9 @@ function CapabilityChip({ on, label }: { on: boolean; label: string }) {
         <span
             className={cn(
                 'inline-flex h-4 items-center rounded-xs px-1 text-[10px] font-medium leading-none',
-                on ? 'bg-success-soft text-success' : 'bg-inset text-text-disabled line-through decoration-text-disabled/60',
+                on
+                    ? 'bg-success-soft text-success'
+                    : 'bg-inset text-text-disabled line-through decoration-text-disabled/60',
             )}
         >
             {label}

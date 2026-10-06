@@ -49,7 +49,9 @@ function api(overrides: Partial<ChatViewApi> = {}): ChatViewApi {
 function renderCard(entry: RequestItem, apiOverrides: Partial<ChatViewApi> = {}) {
     const wrapper = ({ children }: { children: ReactNode }) => (
         <TooltipProvider>
-            <ChatViewContext.Provider value={api(apiOverrides)}>{children}</ChatViewContext.Provider>
+            <ChatViewContext.Provider value={api(apiOverrides)}>
+                {children}
+            </ChatViewContext.Provider>
         </TooltipProvider>
     );
     return render(<RequestCard item={entry} />, { wrapper });
@@ -97,14 +99,18 @@ describe('RequestCard 同意 / 拒绝', () => {
 
         await user.click(screen.getByRole('button', { name: '拒绝' }));
         fireEvent.click(await screen.findByRole('button', { name: '取消' }));
-        await waitFor(() => expect(screen.queryByText('会拒绝 小明 的加好友请求')).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByText('会拒绝 小明 的加好友请求')).not.toBeInTheDocument(),
+        );
         expect(handleRequest).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: '拒绝' })).toBeInTheDocument();
     });
 
     it('处理失败：按钮留着可以重试，失败原因写在卡片上', async () => {
         const user = userEvent.setup();
-        const handleRequest = vi.fn(async () => ({ ok: false, reason: 'retcode 1400 · 权限不足' }) as const);
+        const handleRequest = vi.fn(
+            async () => ({ ok: false, reason: 'retcode 1400 · 权限不足' }) as const,
+        );
         renderCard(item(), { handleRequest });
 
         await user.click(screen.getByRole('button', { name: '同意' }));
@@ -119,7 +125,12 @@ describe('RequestCard 同意 / 拒绝', () => {
         const invite = item({
             requestType: 'group',
             groupId: 100001,
-            raw: { post_type: 'request', request_type: 'group', sub_type: 'invite', group_id: 100001 },
+            raw: {
+                post_type: 'request',
+                request_type: 'group',
+                sub_type: 'invite',
+                group_id: 100001,
+            },
         });
         renderCard(invite, { sessionName: (key) => (key === 'group:100001' ? '甲群' : undefined) });
 

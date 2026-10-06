@@ -3,10 +3,21 @@
 
 import { useRef, type ReactNode } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
-import { NumberField, Select, Switch, TextAreaField, TextField, type SelectItem } from '../../../../shared/ui';
+import {
+    NumberField,
+    Select,
+    Switch,
+    TextAreaField,
+    TextField,
+    type SelectItem,
+} from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import { MAIBOT_PLACEHOLDER_API_KEY } from '../../../../core/domain/apps/maibotConfig';
-import type { MaiBotAPIProvider, MaiBotModelInfo, MaiBotTaskConfig } from '../../../../core/ipc/types';
+import type {
+    MaiBotAPIProvider,
+    MaiBotModelInfo,
+    MaiBotTaskConfig,
+} from '../../../../core/ipc/types';
 import { CONFIG_PAIR } from '../karin/configLayout';
 import { StringMapEditor } from './listEditors';
 import { WIDE } from './SchemaForm';
@@ -44,7 +55,9 @@ export const TASK_ADVANCED_FIELDS: readonly string[] = ['slow_threshold', 'hard_
 
 /** 文件里写了列表外的值（插件扩展的接口类型之类）也得选得中，不然一渲染就像被清掉了 */
 function withCurrent(items: readonly SelectItem[], value: string): SelectItem[] {
-    return !value || items.some((i) => i.value === value) ? [...items] : [...items, { value, label: value }];
+    return !value || items.some((i) => i.value === value)
+        ? [...items]
+        : [...items, { value, label: value }];
 }
 
 const CLIENT_TYPES: SelectItem[] = [
@@ -155,7 +168,17 @@ export const ProviderCard: React.FC<{
     onRemove: () => void;
     /** 运行中才有的测连接 / 拉模型 */
     footer?: ReactNode;
-}> = ({ provider: p, path, errors, disabled, showAdvanced, onChange, onRename, onRemove, footer }) => {
+}> = ({
+    provider: p,
+    path,
+    errors,
+    disabled,
+    showAdvanced,
+    onChange,
+    onRename,
+    onRemove,
+    footer,
+}) => {
     const set = (patch: Partial<MaiBotAPIProvider>) => onChange({ ...p, ...patch });
     const err = (k: string) => errors[`${path}/${k}`];
     const typeLabel = CLIENT_TYPES.find((t) => t.value === p.client_type)?.label ?? p.client_type;
@@ -262,7 +285,9 @@ export const ProviderCard: React.FC<{
                         items={withCurrent(TOOL_ARG_MODES, p.tool_argument_parse_mode)}
                         value={p.tool_argument_parse_mode}
                         disabled={disabled}
-                        onValueChange={(tool_argument_parse_mode) => set({ tool_argument_parse_mode })}
+                        onValueChange={(tool_argument_parse_mode) =>
+                            set({ tool_argument_parse_mode })
+                        }
                     />
                     <NumberField
                         label="失败重试次数"
@@ -286,7 +311,9 @@ export const ProviderCard: React.FC<{
                         value={p.retry_interval}
                         error={err('retry_interval')}
                         disabled={disabled}
-                        onValueChange={(v) => set({ retry_interval: numOrKeep(v, p.retry_interval) })}
+                        onValueChange={(v) =>
+                            set({ retry_interval: numOrKeep(v, p.retry_interval) })
+                        }
                     />
                     {p.client_type !== 'gemini' && (
                         <>
@@ -340,7 +367,18 @@ export const ModelCard: React.FC<{
     onRemove: () => void;
     /** 运行中才有：模型标识下面的「从服务商列表里挑」 */
     identifierExtra?: ReactNode;
-}> = ({ model: m, path, errors, providers, disabled, showAdvanced, onChange, onRename, onRemove, identifierExtra }) => {
+}> = ({
+    model: m,
+    path,
+    errors,
+    providers,
+    disabled,
+    showAdvanced,
+    onChange,
+    onRename,
+    onRemove,
+    identifierExtra,
+}) => {
     const set = (patch: Partial<MaiBotModelInfo>) => onChange({ ...m, ...patch });
     const err = (k: string) => errors[`${path}/${k}`];
     const providerItems = withCurrent(
@@ -453,7 +491,9 @@ export const ModelCard: React.FC<{
                             min={0}
                             value={m.cache_price_in}
                             disabled={disabled}
-                            onValueChange={(v) => set({ cache_price_in: numOrKeep(v, m.cache_price_in) })}
+                            onValueChange={(v) =>
+                                set({ cache_price_in: numOrKeep(v, m.cache_price_in) })
+                            }
                         />
                     ) : (
                         <span className="hidden sm:block" />
@@ -509,7 +549,9 @@ const ModelPicker: React.FC<{
                         key={`${name}-${i}`}
                         className={cn(
                             'inline-flex h-7 items-center gap-1.5 rounded-full border pl-2.5 pr-1 font-mono text-xs',
-                            errorAt(i) ? 'border-danger/50 bg-danger-soft/40 text-danger' : 'border-brand/30 bg-brand/10 text-text',
+                            errorAt(i)
+                                ? 'border-danger/50 bg-danger-soft/40 text-danger'
+                                : 'border-brand/30 bg-brand/10 text-text',
                         )}
                     >
                         <span className="text-2xs text-text-tertiary">{i + 1}</span>
@@ -558,14 +600,30 @@ export const TaskCard: React.FC<{
     disabled?: boolean;
     showAdvanced: boolean;
     onChange: (next: MaiBotTaskConfig) => void;
-}> = ({ title, hint, required, task: t, path, errors, models, disabled, showAdvanced, onChange }) => {
+}> = ({
+    title,
+    hint,
+    required,
+    task: t,
+    path,
+    errors,
+    models,
+    disabled,
+    showAdvanced,
+    onChange,
+}) => {
     const set = (patch: Partial<MaiBotTaskConfig>) => onChange({ ...t, ...patch });
     const err = (k: string) => errors[`${path}/${k}`];
     return (
         <Card
             title={title}
             meta={
-                <span className={cn('shrink-0 text-2xs', required && !t.model_list.length ? 'text-warning' : 'text-text-tertiary')}>
+                <span
+                    className={cn(
+                        'shrink-0 text-2xs',
+                        required && !t.model_list.length ? 'text-warning' : 'text-text-tertiary',
+                    )}
+                >
                     {required ? '必须挑' : hint}
                 </span>
             }
@@ -618,7 +676,9 @@ export const TaskCard: React.FC<{
                             value={t.slow_threshold}
                             error={err('slow_threshold')}
                             disabled={disabled}
-                            onValueChange={(v) => set({ slow_threshold: numOrKeep(v, t.slow_threshold) })}
+                            onValueChange={(v) =>
+                                set({ slow_threshold: numOrKeep(v, t.slow_threshold) })
+                            }
                         />
                         <NumberField
                             label="硬超时（秒）"
@@ -628,7 +688,9 @@ export const TaskCard: React.FC<{
                             value={t.hard_timeout}
                             error={err('hard_timeout')}
                             disabled={disabled}
-                            onValueChange={(v) => set({ hard_timeout: numOrKeep(v, t.hard_timeout) })}
+                            onValueChange={(v) =>
+                                set({ hard_timeout: numOrKeep(v, t.hard_timeout) })
+                            }
                         />
                     </>
                 )}

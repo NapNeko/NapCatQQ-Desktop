@@ -63,11 +63,11 @@ export function useQQProcessList() {
                         prev.map((row) =>
                             row.pid === p.pid
                                 ? {
-                                    ...row,
-                                    loginProbed: true,
-                                    loginUin: info?.uin ?? '',
-                                    loginNickname: info?.nickname ?? '',
-                                }
+                                      ...row,
+                                      loginProbed: true,
+                                      loginUin: info?.uin ?? '',
+                                      loginNickname: info?.nickname ?? '',
+                                  }
                                 : row,
                         ),
                     );

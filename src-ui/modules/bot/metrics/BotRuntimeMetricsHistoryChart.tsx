@@ -288,9 +288,7 @@ export function BotRuntimeMetricsHistoryChart({
     const reactId = useId().replace(/:/g, '');
     const gradientId = `metrics-hist-${reactId}`;
     // compact 左侧略宽：短刻度（如 256M）+ nowrap，避免单位被挤换行
-    const pad = compact
-        ? { top: 6, right: 8, bottom: 14, left: 40 }
-        : PADDING;
+    const pad = compact ? { top: 6, right: 8, bottom: 14, left: 40 } : PADDING;
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -314,10 +312,7 @@ export function BotRuntimeMetricsHistoryChart({
         () => pointsFromValues(values, innerW, innerH, domain.min, domain.max),
         [values, innerW, innerH, domain.min, domain.max],
     );
-    const clipped = useMemo(
-        () => clipDisplayPoints(rawPoints, 0, innerW),
-        [rawPoints, innerW],
-    );
+    const clipped = useMemo(() => clipDisplayPoints(rawPoints, 0, innerW), [rawPoints, innerW]);
     const linePath = useMemo(() => buildSmoothPath(clipped), [clipped]);
     const areaPath = useMemo(
         () => buildAreaPath(linePath, clipped, innerH, 0),
@@ -341,9 +336,7 @@ export function BotRuntimeMetricsHistoryChart({
     const activeChartPoint = activeIdx != null ? clipped[activeIdx] : null;
 
     const headerValue =
-        activeValue != null && Number.isFinite(activeValue)
-            ? formatY(series, activeValue)
-            : '—';
+        activeValue != null && Number.isFinite(activeValue) ? formatY(series, activeValue) : '—';
     const activeTime = formatChartTime(activePoint?.at_ms);
     const firstTime = formatChartTime(points[0]?.at_ms);
     const lastTime = formatChartTime(points[points.length - 1]?.at_ms);
@@ -483,7 +476,11 @@ export function BotRuntimeMetricsHistoryChart({
                             <defs>
                                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={accentColor} stopOpacity={0.26} />
-                                    <stop offset="100%" stopColor={accentColor} stopOpacity={0.02} />
+                                    <stop
+                                        offset="100%"
+                                        stopColor={accentColor}
+                                        stopOpacity={0.02}
+                                    />
                                 </linearGradient>
                             </defs>
                             <g transform={`translate(${pad.left}, ${pad.top})`}>
@@ -502,17 +499,17 @@ export function BotRuntimeMetricsHistoryChart({
                                 ) : null}
                                 {showDots
                                     ? clipped.map((p, i) =>
-                                        i % dotStride === 0 || i === clipped.length - 1 ? (
-                                            <circle
-                                                key={i}
-                                                cx={p.x}
-                                                cy={p.y}
-                                                r={1.8}
-                                                fill={accentColor}
-                                                fillOpacity={0.85}
-                                            />
-                                        ) : null,
-                                    )
+                                          i % dotStride === 0 || i === clipped.length - 1 ? (
+                                              <circle
+                                                  key={i}
+                                                  cx={p.x}
+                                                  cy={p.y}
+                                                  r={1.8}
+                                                  fill={accentColor}
+                                                  fillOpacity={0.85}
+                                              />
+                                          ) : null,
+                                      )
                                     : null}
                                 {hoverIdx != null && activeChartPoint ? (
                                     <HoverIndicator

@@ -74,8 +74,7 @@ export function WebhookMessageBuilder({
     const lastEmittedRef = useRef(bodyTemplate);
     const applyingHistoryRef = useRef(false);
 
-    const kind: WebhookServiceKind =
-        serviceHint ?? detectWebhookService(rawDraft);
+    const kind: WebhookServiceKind = serviceHint ?? detectWebhookService(rawDraft);
     const meta = serviceFieldMeta(kind);
     const isCustom = kind === 'custom';
 
@@ -141,10 +140,7 @@ export function WebhookMessageBuilder({
         applyingHistoryRef.current = false;
     }, [applyTemplateLocal, onBodyTemplateChange, serviceHint]);
 
-    const emitVisual = (
-        next: WebhookVisualFields,
-        nextKind: WebhookServiceKind = kind,
-    ) => {
+    const emitVisual = (next: WebhookVisualFields, nextKind: WebhookServiceKind = kind) => {
         if (nextKind === 'custom') return;
         const serialized = serializeVisualFields(nextKind, next);
         setRawDraft(serialized);
@@ -160,8 +156,7 @@ export function WebhookMessageBuilder({
     };
 
     const insertVar = (token: string) => {
-        const target =
-            activeFieldRef.current ?? (meta.showBody ? 'body' : 'title');
+        const target = activeFieldRef.current ?? (meta.showBody ? 'body' : 'title');
         if (target === 'group' || (target === 'title' && !meta.showTitle)) {
             const key = meta.showBody ? 'body' : 'title';
             patchFields({ [key]: `${fields[key]}${token}` });
@@ -210,28 +205,21 @@ export function WebhookMessageBuilder({
             <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-sm border border-border-subtle bg-inset/20 p-3">
                 <div className="flex shrink-0 items-start justify-between gap-2">
                     <div className="min-w-0 space-y-0.5">
-                        <p className="text-xs font-medium text-text-secondary">
-                            消息内容
-                        </p>
+                        <p className="text-xs font-medium text-text-secondary">消息内容</p>
                         {isCustom ? (
                             <p className="text-[11.5px] leading-relaxed text-text-tertiary">
                                 结构未识别，直接编辑 JSON
                             </p>
                         ) : null}
                     </div>
-                    <Badge
-                        tone={isCustom ? 'warning' : 'brand'}
-                        appearance="soft"
-                    >
+                    <Badge tone={isCustom ? 'warning' : 'brand'} appearance="soft">
                         {isCustom ? '自定义' : labelOf(kind)}
                     </Badge>
                 </div>
 
                 {isCustom ? (
                     <div className="flex flex-1 flex-col justify-center gap-2 rounded-sm border border-dashed border-border-subtle bg-field/40 px-3 py-6 text-center">
-                        <p className="text-[13px] text-text-secondary">
-                            自定义 payload
-                        </p>
+                        <p className="text-[13px] text-text-secondary">自定义 payload</p>
                         <p className="text-[11.5px] leading-relaxed text-text-tertiary">
                             可选服务类型套用模板，或直接编辑 JSON
                         </p>
@@ -239,9 +227,7 @@ export function WebhookMessageBuilder({
                 ) : (
                     <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden p-0.5">
                         <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] text-text-tertiary">
-                                插入变量
-                            </span>
+                            <span className="text-[11px] text-text-tertiary">插入变量</span>
                             {TEMPLATE_VARS.map((v) => (
                                 <button
                                     key={v.key}
@@ -269,9 +255,7 @@ export function WebhookMessageBuilder({
                                     name="webhook-msg-title"
                                     autoComplete="off"
                                     value={fields.title}
-                                    onValueChange={(v) =>
-                                        patchFields({ title: v })
-                                    }
+                                    onValueChange={(v) => patchFields({ title: v })}
                                     onFocus={() => {
                                         activeFieldRef.current = 'title';
                                     }}
@@ -297,9 +281,7 @@ export function WebhookMessageBuilder({
                                     onFocus={() => {
                                         activeFieldRef.current = 'body';
                                     }}
-                                    onChange={(e) =>
-                                        patchFields({ body: e.target.value })
-                                    }
+                                    onChange={(e) => patchFields({ body: e.target.value })}
                                     className={cn(
                                         'block min-h-[8rem] w-full flex-1 resize-none rounded-sm bg-field px-3 py-2',
                                         'text-sm leading-relaxed text-text',
@@ -320,9 +302,7 @@ export function WebhookMessageBuilder({
                                     name="webhook-msg-group"
                                     autoComplete="off"
                                     value={fields.group}
-                                    onValueChange={(v) =>
-                                        patchFields({ group: v })
-                                    }
+                                    onValueChange={(v) => patchFields({ group: v })}
                                     onFocus={() => {
                                         activeFieldRef.current = 'group';
                                     }}
@@ -336,14 +316,9 @@ export function WebhookMessageBuilder({
             <section className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden rounded-sm border border-border-subtle bg-inset/20 p-3">
                 <div className="flex shrink-0 items-start justify-between gap-2">
                     <div className="min-w-0 space-y-0.5">
-                        <p className="text-xs font-medium text-text-secondary">
-                            原始 JSON
-                        </p>
+                        <p className="text-xs font-medium text-text-secondary">原始 JSON</p>
                     </div>
-                    <Badge
-                        tone={jsonOk ? 'success' : 'danger'}
-                        appearance="soft"
-                    >
+                    <Badge tone={jsonOk ? 'success' : 'danger'} appearance="soft">
                         {jsonOk ? '合法' : '非法'}
                     </Badge>
                 </div>

@@ -5,7 +5,11 @@ import { AlertTriangle } from 'lucide-react';
 import { FormSection, RadioGroup, StringListField, Switch } from '../../../../shared/ui';
 import { ConfigForm } from '../karin/configLayout';
 import { maibotChatDropsEverything } from '../../../../core/domain/apps/maibotConfig';
-import type { MaiBotChatFilter, MaiBotInstanceConfig, MaiBotListMode } from '../../../../core/ipc/types';
+import type {
+    MaiBotChatFilter,
+    MaiBotInstanceConfig,
+    MaiBotListMode,
+} from '../../../../core/ipc/types';
 
 const MODE_ITEMS: { value: MaiBotListMode; label: string }[] = [
     { value: 'whitelist', label: '只回名单里的' },

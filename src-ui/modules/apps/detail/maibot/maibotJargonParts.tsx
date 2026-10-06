@@ -20,31 +20,58 @@ export const JargonRow: React.FC<{
         <div
             className={cn(
                 'group flex items-center gap-2.5 rounded-md border px-3 py-2.5 transition-colors',
-                selected ? 'border-brand/40 bg-brand-soft/30' : 'border-border-subtle bg-surface hover:border-border',
+                selected
+                    ? 'border-brand/40 bg-brand-soft/30'
+                    : 'border-border-subtle bg-surface hover:border-border',
             )}
         >
             <RowCheck checked={selected} onPick={onPick} />
-            <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
+            <button
+                type="button"
+                onClick={onEdit}
+                className="min-w-0 flex-1 text-left focus-visible:outline-none"
+            >
                 <span className="flex min-w-0 items-center gap-1.5">
-                    <span className={cn('truncate text-[13.5px] font-medium', used ? 'text-text' : 'text-text-secondary')}>
+                    <span
+                        className={cn(
+                            'truncate text-[13.5px] font-medium',
+                            used ? 'text-text' : 'text-text-secondary',
+                        )}
+                    >
                         {item.content}
                     </span>
-                    {item.is_global && <Globe size={12} className="shrink-0 text-info" aria-label="全局" />}
-                    {item.pinned && <Pin size={12} className="shrink-0 text-brand" aria-label="固定含义" />}
+                    {item.is_global && (
+                        <Globe size={12} className="shrink-0 text-info" aria-label="全局" />
+                    )}
+                    {item.pinned && (
+                        <Pin size={12} className="shrink-0 text-brand" aria-label="固定含义" />
+                    )}
                     {!used && (
                         <Badge tone="neutral" className="shrink-0">
                             {item.meaning ? '不算黑话' : '还没推出含义'}
                         </Badge>
                     )}
                 </span>
-                {item.meaning && <span className="mt-0.5 block truncate text-xs text-text-secondary">{item.meaning}</span>}
+                {item.meaning && (
+                    <span className="mt-0.5 block truncate text-xs text-text-secondary">
+                        {item.meaning}
+                    </span>
+                )}
             </button>
             <span className="hidden shrink-0 text-right text-2xs text-text-tertiary sm:block">
-                <span className="block max-w-[12rem] truncate">{item.is_global ? '所有聊天' : item.chat_names.join('、')}</span>
+                <span className="block max-w-[12rem] truncate">
+                    {item.is_global ? '所有聊天' : item.chat_names.join('、')}
+                </span>
                 <span className="block">遇见 {item.count} 次</span>
             </span>
             <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="编辑" onClick={onEdit}>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="编辑"
+                    onClick={onEdit}
+                >
                     <Pencil size={13} />
                 </Button>
                 <Button
@@ -96,7 +123,13 @@ export const JargonDialog: React.FC<{
             onCancel={onCancel}
             onConfirm={onConfirm}
         >
-            <TextField label="词" autoFocus placeholder="比如：yyds" value={draft.content} onValueChange={(content) => set({ content })} />
+            <TextField
+                label="词"
+                autoFocus
+                placeholder="比如：yyds"
+                value={draft.content}
+                onValueChange={(content) => set({ content })}
+            />
             <TextAreaField
                 label="含义"
                 minRows={2}
@@ -104,7 +137,12 @@ export const JargonDialog: React.FC<{
                 value={draft.meaning}
                 onValueChange={(meaning) => set({ meaning })}
             />
-            <Switch label="全局" hint="所有聊天都按这个意思理解" checked={draft.is_global} onCheckedChange={(is_global) => set({ is_global })} />
+            <Switch
+                label="全局"
+                hint="所有聊天都按这个意思理解"
+                checked={draft.is_global}
+                onCheckedChange={(is_global) => set({ is_global })}
+            />
             {/* 上游每条都要挂在至少一个聊天上，全局的也是；全局时这里只管归档，不管在哪用 */}
             <PickList
                 label={draft.is_global ? '记在哪些聊天下' : '用在哪些聊天里'}

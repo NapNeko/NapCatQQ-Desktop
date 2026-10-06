@@ -7,27 +7,57 @@ export function useSmoothWheel(scroll: RefObject<HTMLDivElement>, enabled: boole
     useEffect(() => {
         const element = scroll.current;
         if (!element || !enabled) return;
-        let frame = 0; let remaining = 0; let last = 0;
-        const cancel = () => { cancelAnimationFrame(frame); frame = 0; remaining = 0; last = 0; };
+        let frame = 0;
+        let remaining = 0;
+        let last = 0;
+        const cancel = () => {
+            cancelAnimationFrame(frame);
+            frame = 0;
+            remaining = 0;
+            last = 0;
+        };
         stop.current = cancel;
         const tick = (now: number) => {
             const elapsed = last ? Math.min(32, now - last) : 16;
             last = now;
-            const step = Math.abs(remaining) < 1 ? remaining : Math.sign(remaining) * Math.max(1, Math.abs(remaining) * (1 - Math.exp(-elapsed / 55)));
+            const step =
+                Math.abs(remaining) < 1
+                    ? remaining
+                    : Math.sign(remaining) *
+                      Math.max(1, Math.abs(remaining) * (1 - Math.exp(-elapsed / 55)));
             const before = element.scrollTop;
             element.scrollTop += step;
             remaining -= element.scrollTop - before;
-            if (Math.abs(remaining) < .1 || Math.abs(element.scrollTop - before) < .01) cancel();
+            if (Math.abs(remaining) < 0.1 || Math.abs(element.scrollTop - before) < 0.01) cancel();
             else frame = requestAnimationFrame(tick);
         };
         const wheel = (event: WheelEvent) => {
-            if (event.defaultPrevented || event.ctrlKey || event.shiftKey || event.deltaX || !event.deltaY) { cancel(); return; }
-            const discrete = event.deltaMode !== 0 || Math.abs(event.deltaY) >= 80 && Number.isInteger(event.deltaY);
-            if (!discrete) { cancel(); return; }
+            if (
+                event.defaultPrevented ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.deltaX ||
+                !event.deltaY
+            ) {
+                cancel();
+                return;
+            }
+            const discrete =
+                event.deltaMode !== 0 ||
+                (Math.abs(event.deltaY) >= 80 && Number.isInteger(event.deltaY));
+            if (!discrete) {
+                cancel();
+                return;
+            }
             event.preventDefault();
-            const delta = event.deltaY * (event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? element.clientHeight : 1);
+            const delta =
+                event.deltaY *
+                (event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? element.clientHeight : 1);
             if (Math.sign(delta) !== Math.sign(remaining)) remaining = 0;
-            remaining = Math.max(-element.clientHeight * 2, Math.min(element.clientHeight * 2, remaining + delta));
+            remaining = Math.max(
+                -element.clientHeight * 2,
+                Math.min(element.clientHeight * 2, remaining + delta),
+            );
             if (!frame) frame = requestAnimationFrame(tick);
         };
         element.addEventListener('wheel', wheel, { passive: false });
@@ -35,7 +65,9 @@ export function useSmoothWheel(scroll: RefObject<HTMLDivElement>, enabled: boole
         element.addEventListener('keydown', cancel);
         element.addEventListener('touchstart', cancel, { passive: true });
         return () => {
-            cancel(); stop.current = () => {}; element.removeEventListener('wheel', wheel);
+            cancel();
+            stop.current = () => {};
+            element.removeEventListener('wheel', wheel);
             element.removeEventListener('pointerdown', cancel);
             element.removeEventListener('keydown', cancel);
             element.removeEventListener('touchstart', cancel);

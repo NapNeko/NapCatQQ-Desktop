@@ -11,7 +11,8 @@ export const AUTO_CHANNEL: DebugChannelId = { kind: 'auto' };
 
 export function sameChannel(a: DebugChannelId, b: DebugChannelId): boolean {
     if (a.kind !== b.kind) return false;
-    if ((a.kind === 'http' || a.kind === 'ws') && (b.kind === 'http' || b.kind === 'ws')) return a.name === b.name;
+    if ((a.kind === 'http' || a.kind === 'ws') && (b.kind === 'http' || b.kind === 'ws'))
+        return a.name === b.name;
     return true;
 }
 
@@ -20,10 +21,15 @@ export function sameChannel(a: DebugChannelId, b: DebugChannelId): boolean {
  * 状态不好（连不上、token 错）的照样能选：用户可能正要去修，选上再测一次最方便；
  * 只有「根本做不了」的才禁用。
  */
-export function channelSelectable(info: DebugChannelInfo, purpose: ChannelPurpose): { ok: boolean; reason?: string } {
+export function channelSelectable(
+    info: DebugChannelInfo,
+    purpose: ChannelPurpose,
+): { ok: boolean; reason?: string } {
     if (info.status.kind === 'unsupported') return { ok: false, reason: info.status.reason };
-    if (purpose === 'call' && !info.can_call) return { ok: false, reason: '这条通道只能收事件，不能发起调用' };
-    if (purpose === 'events' && !info.can_receive) return { ok: false, reason: '这条通道只能调用，收不了事件' };
+    if (purpose === 'call' && !info.can_call)
+        return { ok: false, reason: '这条通道只能收事件，不能发起调用' };
+    if (purpose === 'events' && !info.can_receive)
+        return { ok: false, reason: '这条通道只能调用，收不了事件' };
     return { ok: true };
 }
 
@@ -38,7 +44,10 @@ export function effectiveChannelId(
     return purpose === 'call' ? channels.auto_call : channels.auto_events;
 }
 
-export function findChannel(channels: DebugChannels | undefined, id: DebugChannelId | null): DebugChannelInfo | null {
+export function findChannel(
+    channels: DebugChannels | undefined,
+    id: DebugChannelId | null,
+): DebugChannelInfo | null {
     if (!channels || !id) return null;
     return channels.channels.find((c) => sameChannel(c.id, id)) ?? null;
 }
@@ -62,4 +71,3 @@ export function channelTriggerLabel(
     const missing = !!channels && !findChannel(channels, choice);
     return { text: channelShortLabel(choice), missing, none: false };
 }
-

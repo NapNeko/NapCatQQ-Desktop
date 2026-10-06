@@ -44,7 +44,10 @@ dir('/home/napcat', [
     ['.bashrc', false, 3771],
     ['notes.txt', false, 120],
 ]);
-dir('/home/napcat/ncd', [['apps', true, 0], ['tools', true, 0]]);
+dir('/home/napcat/ncd', [
+    ['apps', true, 0],
+    ['tools', true, 0],
+]);
 dir('/home/napcat/ncd/apps', [['maibot', true, 0]]);
 dir('/home/napcat/ncd/apps/maibot', [['m1', true, 0]]);
 dir('/home/napcat/ncd/apps/maibot/m1', [
@@ -58,10 +61,24 @@ dir('/home/napcat/ncd/apps/maibot/m1', [
 
 // 本机终端的假目录：空路径是「此电脑」，列各个盘（和后端一样，盘根的上一级就是它）
 const WIN_DIRS: Record<string, [string, boolean, number][]> = {
-    'C:\\': [['Program Files', true, 0], ['Users', true, 0], ['Windows', true, 0]],
-    'C:\\Users': [['napcat', true, 0], ['Public', true, 0]],
-    'C:\\Users\\napcat': [['Desktop', true, 0], ['Documents', true, 0], ['.gitconfig', false, 210]],
-    'D:\\': [['NapCatQQ', true, 0], ['backup.zip', false, 7_340_032]],
+    'C:\\': [
+        ['Program Files', true, 0],
+        ['Users', true, 0],
+        ['Windows', true, 0],
+    ],
+    'C:\\Users': [
+        ['napcat', true, 0],
+        ['Public', true, 0],
+    ],
+    'C:\\Users\\napcat': [
+        ['Desktop', true, 0],
+        ['Documents', true, 0],
+        ['.gitconfig', false, 210],
+    ],
+    'D:\\': [
+        ['NapCatQQ', true, 0],
+        ['backup.zip', false, 7_340_032],
+    ],
     'D:\\NapCatQQ': [['apps', true, 0]],
 };
 
@@ -97,24 +114,47 @@ function listWindows(path: string): TerminalDirListing {
 
 const TEXTS: Record<string, string> = {
     '/home/napcat/notes.txt': '# 备忘\n麦麦的配置在 ncd/apps/maibot/m1/config\n',
-    '/home/napcat/ncd/apps/maibot/m1/pyproject.toml': '[project]\nname = "maibot"\nversion = "1.2.5"\n',
+    '/home/napcat/ncd/apps/maibot/m1/pyproject.toml':
+        '[project]\nname = "maibot"\nversion = "1.2.5"\n',
 };
 
-function titleFor(target: TerminalTarget): { title: string; host: string; linux: boolean; cwd: string } {
+function titleFor(target: TerminalTarget): {
+    title: string;
+    host: string;
+    linux: boolean;
+    cwd: string;
+} {
     switch (target.kind) {
         case 'local':
-            return { title: '本机 · PowerShell 7', host: '本机', linux: false, cwd: 'C:\\Users\\napcat' };
+            return {
+                title: '本机 · PowerShell 7',
+                host: '本机',
+                linux: false,
+                cwd: 'C:\\Users\\napcat',
+            };
         case 'server':
-            return { title: target.server_id, host: target.server_id, linux: true, cwd: '/home/napcat' };
+            return {
+                title: target.server_id,
+                host: target.server_id,
+                linux: true,
+                cwd: '/home/napcat',
+            };
         case 'bot':
             return {
-                title: target.host_dir ? `Bot ${target.bot_id} 部署目录 · vps1` : `Bot ${target.bot_id} · vps1`,
+                title: target.host_dir
+                    ? `Bot ${target.bot_id} 部署目录 · vps1`
+                    : `Bot ${target.bot_id} · vps1`,
                 host: 'vps1',
                 linux: true,
                 cwd: '/home/napcat/Napcat',
             };
         case 'app_instance':
-            return { title: '麦麦 · vps1', host: 'vps1', linux: true, cwd: '/home/napcat/ncd/apps/maibot/m1' };
+            return {
+                title: '麦麦 · vps1',
+                host: 'vps1',
+                linux: true,
+                cwd: '/home/napcat/ncd/apps/maibot/m1',
+            };
     }
 }
 
@@ -129,11 +169,17 @@ function osc(body: string) {
 
 function prompt(s: MockSession) {
     if (s.info.host_os === 'windows') {
-        emit(s, `${osc(`633;P;Cwd=${s.cwd.replace(/\\/g, '\\\\')}`)}${osc('633;A')}PS ${s.cwd}> ${osc('633;B')}`);
+        emit(
+            s,
+            `${osc(`633;P;Cwd=${s.cwd.replace(/\\/g, '\\\\')}`)}${osc('633;A')}PS ${s.cwd}> ${osc('633;B')}`,
+        );
         return;
     }
     const shown = s.cwd.replace(/^\/home\/napcat/, '~');
-    emit(s, `${osc(`633;P;Cwd=${s.cwd}`)}${osc('633;A')}${ESC}[32mnapcat@vps1${ESC}[0m:${ESC}[34m${shown}${ESC}[0m$ ${osc('633;B')}`);
+    emit(
+        s,
+        `${osc(`633;P;Cwd=${s.cwd}`)}${osc('633;A')}${ESC}[32mnapcat@vps1${ESC}[0m:${ESC}[34m${shown}${ESC}[0m$ ${osc('633;B')}`,
+    );
 }
 
 function resolvePath(cwd: string, arg: string): string {
@@ -174,7 +220,11 @@ function run(s: MockSession, raw: string) {
             out.push(s.cwd);
             break;
         case 'ls':
-            out.push((FILES[s.cwd] ?? []).map((e) => (e.is_dir ? `${ESC}[34m${e.name}${ESC}[0m` : e.name)).join('  '));
+            out.push(
+                (FILES[s.cwd] ?? [])
+                    .map((e) => (e.is_dir ? `${ESC}[34m${e.name}${ESC}[0m` : e.name))
+                    .join('  '),
+            );
             break;
         case 'cd': {
             const next = resolvePath(s.cwd, args[0] ?? '~');
@@ -198,7 +248,13 @@ function run(s: MockSession, raw: string) {
             out.push(...DEMO_LOG);
             break;
         case 'uv':
-            out.push('Package      Version', '------------ -------', 'aiohttp      3.12.4', 'maim-message 0.3.9', 'openai       1.93.0');
+            out.push(
+                'Package      Version',
+                '------------ -------',
+                'aiohttp      3.12.4',
+                'maim-message 0.3.9',
+                'openai       1.93.0',
+            );
             break;
         case 'sudo':
             s.sudoPending = args.join(' ');
@@ -225,7 +281,8 @@ function finish(s: MockSession, code: number) {
 
 function input(s: MockSession, data: string) {
     let text = data;
-    if (text.includes(`${ESC}[200~`)) text = text.replace(`${ESC}[200~`, '').replace(`${ESC}[201~`, '');
+    if (text.includes(`${ESC}[200~`))
+        text = text.replace(`${ESC}[200~`, '').replace(`${ESC}[201~`, '');
     for (const ch of text) {
         if (s.sudoPending !== null) {
             if (ch === '\r') {
@@ -266,7 +323,11 @@ function get(id: string): MockSession {
 export const terminalMock = {
     async localShells(): Promise<LocalShellOption[]> {
         return [
-            { kind: 'pwsh', label: 'PowerShell 7', path: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' },
+            {
+                kind: 'pwsh',
+                label: 'PowerShell 7',
+                path: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+            },
             { kind: 'windows_powershell', label: 'Windows PowerShell', path: 'powershell.exe' },
             { kind: 'cmd', label: '命令提示符', path: 'cmd.exe' },
             { kind: 'git_bash', label: 'Git Bash', path: 'C:\\Program Files\\Git\\bin\\bash.exe' },
@@ -306,10 +367,21 @@ export const terminalMock = {
                   ]
                 : [{ label: '磁盘', command: 'df -h' }],
         };
-        const s: MockSession = { info, cwd: meta.cwd, line: '', history: '', handlers: null, sudoPending: null };
+        const s: MockSession = {
+            info,
+            cwd: meta.cwd,
+            line: '',
+            history: '',
+            handlers: null,
+            sudoPending: null,
+        };
         sessions.set(id, s);
         emit(s, `${ESC}[2m${meta.linux ? `目录 · ${meta.cwd}` : 'PowerShell 7.5.2'}${ESC}[0m\r\n`);
-        if (isApp) emit(s, `${ESC}[2mpython 和 uv 已指向这个实例的 .venv；装包用 uv pip install${ESC}[0m\r\n`);
+        if (isApp)
+            emit(
+                s,
+                `${ESC}[2mpython 和 uv 已指向这个实例的 .venv；装包用 uv pip install${ESC}[0m\r\n`,
+            );
         emit(s, `${ESC}[2m（浏览器预览里的假终端，输入 help 看能用的命令）${ESC}[0m\r\n`);
         prompt(s);
         return info;
@@ -346,7 +418,8 @@ export const terminalMock = {
     },
 
     async stats(_id: string): Promise<ServerStats> {
-        const jitter = (base: number, spread: number) => base + Math.round((Math.random() - 0.5) * spread);
+        const jitter = (base: number, spread: number) =>
+            base + Math.round((Math.random() - 0.5) * spread);
         return {
             cpu_percent: jitter(23, 20),
             cores: 2,
@@ -371,7 +444,11 @@ export const terminalMock = {
         const entries = FILES[clean];
         if (!entries) throw new Error(`找不到 ${clean}`);
         const cut = clean.lastIndexOf('/');
-        return { path: clean, parent: clean === '/' ? undefined : clean.slice(0, cut) || '/', entries };
+        return {
+            path: clean,
+            parent: clean === '/' ? undefined : clean.slice(0, cut) || '/',
+            entries,
+        };
     },
 
     async readText(_id: string, path: string): Promise<TerminalTextFile> {
@@ -390,7 +467,15 @@ export const terminalMock = {
         if (!(FILES[parent] ?? []).some((e) => e.name === name)) {
             FILES[parent] = [
                 ...(FILES[parent] ?? []),
-                { name, path, is_dir: true, is_symlink: false, size: 0, modified: Math.floor(Date.now() / 1000), mode: 'rwxr-xr-x' },
+                {
+                    name,
+                    path,
+                    is_dir: true,
+                    is_symlink: false,
+                    size: 0,
+                    modified: Math.floor(Date.now() / 1000),
+                    mode: 'rwxr-xr-x',
+                },
             ];
         }
     },

@@ -8,9 +8,7 @@ export function importableBackendLabel(backend: ImportableRemoteBot['backend']):
     return backend === 'snowluma' ? 'SnowLuma' : 'NapCat';
 }
 
-export function importableDeploymentLabel(
-    deployment: ImportableRemoteBot['deployment'],
-): string {
+export function importableDeploymentLabel(deployment: ImportableRemoteBot['deployment']): string {
     return deployment === 'docker' ? 'Docker' : '直接运行';
 }
 

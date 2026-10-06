@@ -11,7 +11,10 @@ const FLAVORS_KEY = ['botFlavors'] as const;
 /// 当 botSnapshots 列表的 bot_id 集合（key）发生变化时自动 refetch。
 export function useBotFlavorMap(snapshots: { bot_id: string }[]): Record<string, Flavor> {
     // 加入 bot_id 集合到 queryKey，新增 bot 时触发重拉。
-    const idsKey = snapshots.map((b) => b.bot_id).sort().join(',');
+    const idsKey = snapshots
+        .map((b) => b.bot_id)
+        .sort()
+        .join(',');
 
     const query = useQuery({
         queryKey: [...FLAVORS_KEY, idsKey],

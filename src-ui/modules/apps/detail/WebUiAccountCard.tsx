@@ -78,7 +78,10 @@ export const WebUiAccountCard: React.FC<{ instance: AppInstance }> = ({ instance
                 </div>
             )}
 
-            <Dialog open={resetOpen} onOpenChange={(o) => !o && !acct.isResetting && setResetOpen(false)}>
+            <Dialog
+                open={resetOpen}
+                onOpenChange={(o) => !o && !acct.isResetting && setResetOpen(false)}
+            >
                 <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>重置 WebUI 密码</DialogTitle>

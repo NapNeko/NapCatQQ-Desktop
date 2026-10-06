@@ -7,7 +7,10 @@ const SEPARATORS = /[,，、;；\s]+/;
 
 /** 一段输入拆成标签：「开心，得意 嘿嘿」→ 三个 */
 export function splitEmojiTags(raw: string): string[] {
-    return raw.split(SEPARATORS).map((t) => t.trim()).filter(Boolean);
+    return raw
+        .split(SEPARATORS)
+        .map((t) => t.trim())
+        .filter(Boolean);
 }
 
 /** 每一项都再拆一遍，去空、去重，保持先后 */

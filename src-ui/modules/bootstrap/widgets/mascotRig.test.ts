@@ -7,7 +7,8 @@ describe('MASCOT_PARTS 与 cat_girl.svg 对得上', () => {
     it('每个 node-id 在素材里恰好出现一次，且都是 path', () => {
         for (const ids of Object.values(MASCOT_PARTS)) {
             for (const id of ids) {
-                const matches = rawCatGirl.match(new RegExp(`<path[^>]*node-id="${id}"`, 'g')) ?? [];
+                const matches =
+                    rawCatGirl.match(new RegExp(`<path[^>]*node-id="${id}"`, 'g')) ?? [];
                 expect(matches, `node-id=${id}`).toHaveLength(1);
             }
         }

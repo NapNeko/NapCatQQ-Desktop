@@ -4,7 +4,11 @@ import { AppBootGate } from './app/AppBootGate';
 import { AppProvidersNext } from './app/AppProvidersNext';
 import { isTauri } from './core/ipc/transport';
 import { DEBUG_WINDOW_LABEL } from './core/services/debug-window.service';
-import { CHAT_WINDOW_LABEL, isChatPopoutWindow, markChatPopoutWindow } from './core/services/chat-desktop.service';
+import {
+    CHAT_WINDOW_LABEL,
+    isChatPopoutWindow,
+    markChatPopoutWindow,
+} from './core/services/chat-desktop.service';
 
 // 屏蔽 WebView/浏览器默认右键菜单（后退/刷新/审查），输入框除外（保留系统复制粘贴）
 document.addEventListener('contextmenu', (e) => {
@@ -42,9 +46,8 @@ function render(tree: React.ReactElement) {
 async function renderDebugPopout(): Promise<void> {
     // 弹出窗是独立 WebView：跳过主应用的 Splash/启动闸门，但仍走 provider + 磁盘偏好水合，
     // 主题 / 动画 / 圆角才能跟主窗一致（偏好权威在 app-settings.json，不指望 localStorage 跨窗共享）
-    const { hydrateAppUiPreferencesFromDisk } = await import(
-        './hooks/preferences/useAppUiPreferencesBootstrap'
-    );
+    const { hydrateAppUiPreferencesFromDisk } =
+        await import('./hooks/preferences/useAppUiPreferencesBootstrap');
     const { applySideEffects } = await import('./hooks/preferences/preferencesStore');
     const { syncRootChromeBackground } = await import('./core/design/surfaceCanvas');
     const { markDebugPopoutWindow } = await import('./core/services/debug-window.service');
@@ -64,19 +67,27 @@ async function renderDebugPopout(): Promise<void> {
 
 async function renderChatPopout(): Promise<void> {
     markChatPopoutWindow();
-    const { hydrateAppUiPreferencesFromDisk } = await import('./hooks/preferences/useAppUiPreferencesBootstrap');
+    const { hydrateAppUiPreferencesFromDisk } =
+        await import('./hooks/preferences/useAppUiPreferencesBootstrap');
     const { applySideEffects } = await import('./hooks/preferences/preferencesStore');
     const { syncRootChromeBackground } = await import('./core/design/surfaceCanvas');
     const { ChatPopoutApp } = await import('./app/ChatPopoutApp');
-    applySideEffects(); syncRootChromeBackground();
-    await hydrateAppUiPreferencesFromDisk(); syncRootChromeBackground();
-    render(<AppProvidersNext><ChatPopoutApp /></AppProvidersNext>);
+    applySideEffects();
+    syncRootChromeBackground();
+    await hydrateAppUiPreferencesFromDisk();
+    syncRootChromeBackground();
+    render(
+        <AppProvidersNext>
+            <ChatPopoutApp />
+        </AppProvidersNext>,
+    );
 }
 
 void (async () => {
     const label = await currentWindowLabel();
     if (label === CHAT_WINDOW_LABEL || isChatPopoutWindow()) {
-        await renderChatPopout(); return;
+        await renderChatPopout();
+        return;
     }
     if (label === DEBUG_WINDOW_LABEL) {
         await renderDebugPopout();

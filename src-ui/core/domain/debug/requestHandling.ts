@@ -5,7 +5,8 @@ import type { ChatItem } from './chat';
 
 export type RequestItem = Extract<ChatItem, { kind: 'request' }>;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** 加群请求是「申请加入」还是「邀请 Bot」；事件里没写 sub_type 时按申请处理 */
 function isInvite(item: RequestItem): boolean {
@@ -41,5 +42,7 @@ export function requestLine(item: RequestItem, user: string, group: string): str
 /** 「拒绝」二次确认的后果句，和危险确认框里别的接口一个口吻 */
 export function rejectLine(item: RequestItem, user: string, group: string): string {
     if (item.requestType === 'friend') return `会拒绝 ${user} 的加好友请求`;
-    return isInvite(item) ? `会拒绝 ${user} 拉 Bot 进群 ${group} 的邀请` : `会拒绝 ${user} 加群 ${group} 的申请`;
+    return isInvite(item)
+        ? `会拒绝 ${user} 拉 Bot 进群 ${group} 的邀请`
+        : `会拒绝 ${user} 加群 ${group} 的申请`;
 }

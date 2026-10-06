@@ -15,7 +15,12 @@ import {
 import type { DebugWorkspace } from '../../ipc/generated/debug/DebugWorkspace';
 
 // 两栏都没拖过
-const base = { left_collapsed: false, right_collapsed: false, left_width: UNSET_COLUMN_WIDTH, right_width: UNSET_COLUMN_WIDTH };
+const base = {
+    left_collapsed: false,
+    right_collapsed: false,
+    left_width: UNSET_COLUMN_WIDTH,
+    right_width: UNSET_COLUMN_WIDTH,
+};
 
 describe('clampColumnWidth', () => {
     it('夹在上下限之内，坏值回到默认', () => {
@@ -30,7 +35,11 @@ describe('clampColumnWidth', () => {
 
 describe('resolveColumns', () => {
     it('没量到宽度时直接用想要的宽度', () => {
-        expect(resolveColumns(base, null)).toEqual({ left: 240, right: 380, splitters: SPLITTER_WIDTH * 2 });
+        expect(resolveColumns(base, null)).toEqual({
+            left: 240,
+            right: 380,
+            splitters: SPLITTER_WIDTH * 2,
+        });
     });
 
     it('放得下时不动', () => {
@@ -48,11 +57,23 @@ describe('resolveColumns', () => {
     });
 
     it('工作台不到 1100 宽时，没拖过的栏换成窄的默认值（左 220 / 右 320）；拖过的照旧', () => {
-        expect(resolveColumns(base, 1099)).toMatchObject({ left: NARROW_DEFAULTS.left, right: NARROW_DEFAULTS.right });
-        expect(resolveColumns(base, NARROW_WORKBENCH_WIDTH)).toMatchObject({ left: 240, right: 380 });
-        expect(resolveColumns({ ...base, left_width: 300 }, 1099)).toMatchObject({ left: 300, right: 320 });
+        expect(resolveColumns(base, 1099)).toMatchObject({
+            left: NARROW_DEFAULTS.left,
+            right: NARROW_DEFAULTS.right,
+        });
+        expect(resolveColumns(base, NARROW_WORKBENCH_WIDTH)).toMatchObject({
+            left: 240,
+            right: 380,
+        });
+        expect(resolveColumns({ ...base, left_width: 300 }, 1099)).toMatchObject({
+            left: 300,
+            right: 320,
+        });
         // 恰好拖到宽工作台的默认值也是拖过的：不弹回窄的默认值
-        expect(resolveColumns({ ...base, left_width: 240, right_width: 380 }, 1099)).toMatchObject({ left: 240, right: 380 });
+        expect(resolveColumns({ ...base, left_width: 240, right_width: 380 }, 1099)).toMatchObject({
+            left: 240,
+            right: 380,
+        });
         // 窄默认值也放不下时照样按规则挤：220 + 320 + 8 + 420 = 968
         expect(resolveColumns(base, 948)).toMatchObject({ left: 220, right: 300 });
         // 还没量到宽度时不知道窄不窄，用想要的宽度
@@ -81,7 +102,9 @@ describe('dragBounds', () => {
         const available = 1100;
         const resolved = resolveColumns(base, available);
         // 左栏最多 = 1100 - 右 380 - 8 - 420 = 292
-        expect(dragBounds('left', available, resolved).max).toBe(available - 380 - 8 - CENTER_MIN_WIDTH);
+        expect(dragBounds('left', available, resolved).max).toBe(
+            available - 380 - 8 - CENTER_MIN_WIDTH,
+        );
     });
 
     it('连下限都保不住时上限退到下限', () => {
@@ -94,12 +117,22 @@ describe('upgradeLayoutWidths', () => {
     const ws = (version: number, left_width: number, right_width: number) =>
         ({
             version,
-            layout: { left_collapsed: false, right_collapsed: true, left_width, right_width, right_view: 'list' },
+            layout: {
+                left_collapsed: false,
+                right_collapsed: true,
+                left_width,
+                right_width,
+                right_view: 'list',
+            },
         }) as DebugWorkspace;
 
     it('旧版本里等于默认值的宽度当作没拖过，拖过的原样留着，版本号升上去', () => {
-        expect(upgradeLayoutWidths(ws(1, 240, 380))).toEqual(ws(EXPLICIT_WIDTH_VERSION, UNSET_COLUMN_WIDTH, UNSET_COLUMN_WIDTH));
-        expect(upgradeLayoutWidths(ws(1, 260, 380))).toEqual(ws(EXPLICIT_WIDTH_VERSION, 260, UNSET_COLUMN_WIDTH));
+        expect(upgradeLayoutWidths(ws(1, 240, 380))).toEqual(
+            ws(EXPLICIT_WIDTH_VERSION, UNSET_COLUMN_WIDTH, UNSET_COLUMN_WIDTH),
+        );
+        expect(upgradeLayoutWidths(ws(1, 260, 380))).toEqual(
+            ws(EXPLICIT_WIDTH_VERSION, 260, UNSET_COLUMN_WIDTH),
+        );
     });
 
     it('已经是新版本的不动：240 / 380 就是用户拖到的宽度', () => {

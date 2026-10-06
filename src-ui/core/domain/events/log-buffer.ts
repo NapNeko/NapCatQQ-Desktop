@@ -12,14 +12,7 @@ import { cutAnsi, parseAnsi, type AnsiSpan, type AnsiText } from './ansi';
 export type LogChannel = 'stdout' | 'stderr' | 'unknown';
 
 export type LogLevel =
-    | 'trace'
-    | 'debug'
-    | 'info'
-    | 'success'
-    | 'warn'
-    | 'error'
-    | 'fatal'
-    | 'unknown';
+    'trace' | 'debug' | 'info' | 'success' | 'warn' | 'error' | 'fatal' | 'unknown';
 
 export interface LogEntry {
     id: string;
@@ -211,16 +204,13 @@ function normalizeLevel(raw: string): LogLevel {
     }
 }
 
-
 // NapCat 控制台: `07-11 17:06:19 [info] nick | msg`（sanitize 后）；麦麦也是 `月-日 时:分:秒` 打头
 // 捕获组: 月日 / 时分秒 / 正文
-const NAPCAT_TS_PREFIX =
-    /^(\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2}:\d{2})\s+(.*)$/;
+const NAPCAT_TS_PREFIX = /^(\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2}:\d{2})\s+(.*)$/;
 const NAPCAT_STAMP = /^\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}:\d{2}/;
 
 // Koishi: `2026-09-29 21:22:14 [I] loader apply plugin …`，全年月日 + 单字母等级 + 来源名打头
-const KOISHI_TS_PREFIX =
-    /^\d{4}-\d{2}-\d{2}\s+(\d{1,2}:\d{2}:\d{2})\s+\[([DIWES])\]\s+(.*)$/;
+const KOISHI_TS_PREFIX = /^\d{4}-\d{2}-\d{2}\s+(\d{1,2}:\d{2}:\d{2})\s+\[([DIWES])\]\s+(.*)$/;
 
 const KOISHI_LEVEL_LETTER: Record<string, LogLevel> = {
     D: 'debug',
@@ -408,7 +398,10 @@ export interface ParsedDesktopLogLine {
 }
 
 function desktopLegacyLevelToLogLevel(tag: string): LogLevel {
-    const inner = tag.replace(/^\[|\]$/g, '').trim().toUpperCase();
+    const inner = tag
+        .replace(/^\[|\]$/g, '')
+        .trim()
+        .toUpperCase();
     switch (inner) {
         case 'EROR':
             return 'error';
@@ -542,7 +535,13 @@ export function buildHistoryEntries(lines: string[], now = ''): LogEntry[] {
     for (let idx = 0; idx < lines.length; idx++) {
         const raw = lines[idx];
         if (!raw) continue;
-        const entry = buildEntry(raw, 'unknown', now, out[out.length - 1], `hist-${idx}-${counter++}`);
+        const entry = buildEntry(
+            raw,
+            'unknown',
+            now,
+            out[out.length - 1],
+            `hist-${idx}-${counter++}`,
+        );
         if (entry) out.push(entry);
     }
     return out;
@@ -556,8 +555,7 @@ export function appendLine(
 ): LogEntry[] {
     const entry = buildEntry(line, channel, now, logs[logs.length - 1], nextId());
     if (!entry) return logs;
-    const next =
-        logs.length >= MAX_LINES ? logs.slice(logs.length - MAX_LINES + 1) : logs.slice();
+    const next = logs.length >= MAX_LINES ? logs.slice(logs.length - MAX_LINES + 1) : logs.slice();
     next.push(entry);
     return next;
 }
@@ -602,7 +600,10 @@ export function filterLogs(
 ): LogEntry[] {
     const q = query.toLowerCase();
     return logs.filter((log) => {
-        const haystack = [log.text, log.context, log.scope, log.rawLine].filter(Boolean).join(' ').toLowerCase();
+        const haystack = [log.text, log.context, log.scope, log.rawLine]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
         const matchesSearch = !q || haystack.includes(q);
         const matchesChannel = channelFilter === 'all' || log.channel === channelFilter;
         const matchesLevel = levelFilter === 'all' || log.level === levelFilter;
@@ -621,7 +622,9 @@ export function serializeLogs(logs: LogEntry[]): string {
 
 /// 按级别给一个用于 BotCard / BotLogPage 的色调标签，
 /// 调用方可据此挑 Tailwind class / Fluent Badge color。
-export function logLevelTone(level: LogLevel): 'danger' | 'warning' | 'success' | 'info' | 'neutral' {
+export function logLevelTone(
+    level: LogLevel,
+): 'danger' | 'warning' | 'success' | 'info' | 'neutral' {
     switch (level) {
         case 'fatal':
         case 'error':

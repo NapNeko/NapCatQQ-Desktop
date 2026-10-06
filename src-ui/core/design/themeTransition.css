@@ -7,7 +7,7 @@
    圆心 / 终态半径 / 时长由 themeTransition.ts 在过渡开始前写入 --theme-reveal-* 变量。 */
 
 @property --theme-reveal-hole {
-    syntax: '<length>';
+    syntax: "<length>";
     inherits: true;
     initial-value: 0px;
 }
@@ -28,7 +28,7 @@ html[data-theme-reveal] {
     --theme-reveal-old-anim: theme-reveal-hole, theme-reveal-old-dim;
 }
 
-html[data-theme-reveal='rich'] {
+html[data-theme-reveal="rich"] {
     --theme-reveal-inner: 44px;
     --theme-reveal-outer: 120px;
     --theme-reveal-core: 6px;
@@ -62,46 +62,64 @@ html[data-theme-reveal]::view-transition-new(root) {
 }
 
 /* 光环 + 回声带。品牌色变量从 html 继承，此时 data-theme 已是新主题，所以晕色跟新主题走。 */
-html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-group(root) {
+html[data-theme-reveal]:not([data-theme-reveal="basic"])::view-transition-group(root) {
     animation-name: theme-reveal-hole;
-    background: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
-            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
-            color-mix(in srgb, var(--accent-400) 70%, var(--brand-300)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
-            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
-            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
-            var(--brand-300) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
-            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
-            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
-            color-mix(in srgb, var(--brand-400) 55%, transparent) calc(var(--theme-reveal-hole) - var(--theme-reveal-core)),
-            var(--brand-50) var(--theme-reveal-hole),
-            var(--brand-300) calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
-            color-mix(in srgb, var(--brand-400) 60%, transparent) calc(var(--theme-reveal-hole) + var(--theme-reveal-outer) * 0.3),
-            color-mix(in srgb, var(--accent-400) 25%, transparent) calc(var(--theme-reveal-hole) + var(--theme-reveal-outer) * 0.65),
-            transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-outer)));
+    background: radial-gradient(
+        circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+        transparent
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
+        color-mix(in srgb, var(--accent-400) 70%, var(--brand-300))
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
+        transparent
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
+        transparent
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
+        var(--brand-300) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
+        transparent
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
+        transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
+        color-mix(in srgb, var(--brand-400) 55%, transparent)
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-core)),
+        var(--brand-50) var(--theme-reveal-hole),
+        var(--brand-300) calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
+        color-mix(in srgb, var(--brand-400) 60%, transparent)
+            calc(var(--theme-reveal-hole) + var(--theme-reveal-outer) * 0.3),
+        color-mix(in srgb, var(--accent-400) 25%, transparent)
+            calc(var(--theme-reveal-hole) + var(--theme-reveal-outer) * 0.65),
+        transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-outer))
+    );
 }
 
 /* 新主题层：圆内实、靠波前一段渐隐让光环从内侧透出来；两道回声环处半透明，露出下面 group 的回声带。
    同时整层从高亮高饱和冷却回正常：刚被揭开的区域像被光波"烫"过。 */
-html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-new(root) {
+html[data-theme-reveal]:not([data-theme-reveal="basic"])::view-transition-new(root) {
     animation-name: var(--theme-reveal-new-anim);
-    -webkit-mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
-            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
-            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
-            transparent var(--theme-reveal-hole));
-    mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
-            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
-            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
-            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
-            transparent var(--theme-reveal-hole));
+    -webkit-mask-image: radial-gradient(
+        circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
+        rgb(0 0 0 / var(--theme-reveal-echo-a))
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
+        rgb(0 0 0 / var(--theme-reveal-echo-a))
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
+        transparent var(--theme-reveal-hole)
+    );
+    mask-image: radial-gradient(
+        circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
+        rgb(0 0 0 / var(--theme-reveal-echo-a))
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
+        rgb(0 0 0 / var(--theme-reveal-echo-a))
+            calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
+        #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
+        transparent var(--theme-reveal-hole)
+    );
 }
 
 @keyframes theme-reveal-new-heat {
@@ -129,14 +147,18 @@ html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-new(ro
 }
 
 /* 旧主题层：波前外侧先让出一小圈纯光，再随光晕渐显回旧内容；整层随过渡褪色变暗，像被新主题"挤走" */
-html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-old(root) {
+html[data-theme-reveal]:not([data-theme-reveal="basic"])::view-transition-old(root) {
     animation-name: var(--theme-reveal-old-anim);
-    -webkit-mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
-            transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
-            #000 calc(var(--theme-reveal-hole) + var(--theme-reveal-outer)));
-    mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
-            transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
-            #000 calc(var(--theme-reveal-hole) + var(--theme-reveal-outer)));
+    -webkit-mask-image: radial-gradient(
+        circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+        transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
+        #000 calc(var(--theme-reveal-hole) + var(--theme-reveal-outer))
+    );
+    mask-image: radial-gradient(
+        circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+        transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
+        #000 calc(var(--theme-reveal-hole) + var(--theme-reveal-outer))
+    );
 }
 
 @keyframes theme-reveal-old-dim {
@@ -170,17 +192,20 @@ html[data-theme-reveal]::view-transition-group(theme-origin-3) {
 }
 
 html[data-theme-reveal]::view-transition-new(theme-origin-1) {
-    animation: theme-origin-bloom calc(var(--theme-reveal-dur, 1100ms) * 0.5) cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: theme-origin-bloom calc(var(--theme-reveal-dur, 1100ms) * 0.5)
+        cubic-bezier(0.16, 1, 0.3, 1) both;
     transform-origin: center;
 }
 
 html[data-theme-reveal]::view-transition-new(theme-origin-2) {
-    animation: theme-origin-burst calc(var(--theme-reveal-dur, 1100ms) * 0.6) cubic-bezier(0.16, 1, 0.3, 1) calc(var(--theme-reveal-dur, 1100ms) * 0.05) both;
+    animation: theme-origin-burst calc(var(--theme-reveal-dur, 1100ms) * 0.6)
+        cubic-bezier(0.16, 1, 0.3, 1) calc(var(--theme-reveal-dur, 1100ms) * 0.05) both;
     transform-origin: center;
 }
 
 html[data-theme-reveal]::view-transition-new(theme-origin-3) {
-    animation: theme-origin-burst calc(var(--theme-reveal-dur, 1100ms) * 0.66) cubic-bezier(0.16, 1, 0.3, 1) calc(var(--theme-reveal-dur, 1100ms) * 0.14) both;
+    animation: theme-origin-burst calc(var(--theme-reveal-dur, 1100ms) * 0.66)
+        cubic-bezier(0.16, 1, 0.3, 1) calc(var(--theme-reveal-dur, 1100ms) * 0.14) both;
     transform-origin: center;
 }
 
@@ -226,20 +251,22 @@ html[data-theme-reveal]::view-transition-new(theme-origin-3) {
     pointer-events: none;
 }
 
-.ndf-theme-origin-ring[data-ring='1'] {
+.ndf-theme-origin-ring[data-ring="1"] {
     width: 240px;
     height: 240px;
     margin: -120px;
     border: none;
     box-shadow: none;
-    background: radial-gradient(circle,
-            var(--brand-50) 0,
-            color-mix(in srgb, var(--brand-300) 75%, transparent) 22%,
-            color-mix(in srgb, var(--brand-400) 35%, transparent) 48%,
-            transparent 72%);
+    background: radial-gradient(
+        circle,
+        var(--brand-50) 0,
+        color-mix(in srgb, var(--brand-300) 75%, transparent) 22%,
+        color-mix(in srgb, var(--brand-400) 35%, transparent) 48%,
+        transparent 72%
+    );
 }
 
-.ndf-theme-origin-ring[data-ring='3'] {
+.ndf-theme-origin-ring[data-ring="3"] {
     border-width: 1.5px;
     border-color: var(--accent-400);
     box-shadow: 0 0 18px color-mix(in srgb, var(--accent-400) 60%, transparent);
@@ -256,11 +283,11 @@ html[data-theme-reveal]::view-transition-new(theme-origin-3) {
 }
 
 /* basic：宿主不支持 @property 时退回硬边圆扩散（无光环、无蓄力） */
-html[data-theme-reveal='basic']::view-transition-old(root) {
+html[data-theme-reveal="basic"]::view-transition-old(root) {
     animation-name: theme-reveal-old-still;
 }
 
-html[data-theme-reveal='basic']::view-transition-new(root) {
+html[data-theme-reveal="basic"]::view-transition-new(root) {
     animation-name: theme-reveal-circle;
 }
 
@@ -270,12 +297,14 @@ html[data-theme-reveal='basic']::view-transition-new(root) {
     }
 
     to {
-        clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%));
+        clip-path: circle(
+            var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%)
+        );
     }
 }
 
 @keyframes theme-reveal-old-still {
-
     from,
-    to {}
+    to {
+    }
 }

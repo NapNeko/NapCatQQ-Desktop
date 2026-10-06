@@ -26,10 +26,7 @@ function isDetectFailureReason(reason: string): boolean {
     return true;
 }
 
-function pushIfNotSuppressed(
-    alertKey: string,
-    opts: Parameters<typeof pushInfoBar>[0],
-): void {
+function pushIfNotSuppressed(alertKey: string, opts: Parameters<typeof pushInfoBar>[0]): void {
     if (isComponentPageAlertSuppressed(alertKey)) return;
     pushInfoBar({
         ...opts,
@@ -80,10 +77,7 @@ export function useComponentPageAlerts(
                     continue;
                 }
                 const { status } = hostRow;
-                if (
-                    status.state === 'unknown' &&
-                    isDetectFailureReason(status.reason)
-                ) {
+                if (status.state === 'unknown' && isDetectFailureReason(status.reason)) {
                     const heading = `${row.info.display_name} · ${hostRow.host.display_name}`;
                     pushIfNotSuppressed(key, {
                         tone: 'danger',

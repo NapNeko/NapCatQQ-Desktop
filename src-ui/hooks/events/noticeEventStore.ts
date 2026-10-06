@@ -10,10 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import { createStore } from '../utils/createStore';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
-import {
-    isNoticeEvent,
-    type NoticeEventRecord,
-} from '../../core/domain/events/notice-aggregator';
+import { isNoticeEvent, type NoticeEventRecord } from '../../core/domain/events/notice-aggregator';
 import type { DomainEvent } from '../../core/ipc/types';
 
 export interface StoredNoticeEvent extends NoticeEventRecord {

@@ -37,7 +37,8 @@ describe('normalizeFeatures', () => {
 
     it('框架名单去重、丢掉空值和非字符串', () => {
         expect(
-            normalizeFeatures({ hiddenAppFrameworks: ['karin', 'karin', '', 3, 'maibot'] }).hiddenAppFrameworks,
+            normalizeFeatures({ hiddenAppFrameworks: ['karin', 'karin', '', 3, 'maibot'] })
+                .hiddenAppFrameworks,
         ).toEqual(['karin', 'maibot']);
     });
 });
@@ -49,7 +50,9 @@ describe('featuresEqual', () => {
         const a = { ...DEFAULT_FEATURES, hiddenAppFrameworks: ['karin', 'maibot'] };
         const b = { ...DEFAULT_FEATURES, hiddenAppFrameworks: ['maibot', 'karin'] };
         expect(featuresEqual(a, b)).toBe(true);
-        expect(featuresEqual(a, { ...DEFAULT_FEATURES, hiddenAppFrameworks: ['karin'] })).toBe(false);
+        expect(featuresEqual(a, { ...DEFAULT_FEATURES, hiddenAppFrameworks: ['karin'] })).toBe(
+            false,
+        );
     });
 });
 
@@ -84,23 +87,35 @@ describe('featureOffBlock', () => {
         const usage = { ...EMPTY_FEATURE_USAGE, botsByBackend: { napcat: 0, snowluma: 3 } };
         expect(featureOffBlock('snowluma', DEFAULT_FEATURES, usage)).toContain('3 个 Bot');
         expect(featureOffBlock('napcat', DEFAULT_FEATURES, usage)).toBeNull();
-        expect(featureOffBlock('napcat', { ...DEFAULT_FEATURES, snowluma: false }, EMPTY_FEATURE_USAGE)).toBe(
-            '两个协议端至少留一个',
-        );
+        expect(
+            featureOffBlock(
+                'napcat',
+                { ...DEFAULT_FEATURES, snowluma: false },
+                EMPTY_FEATURE_USAGE,
+            ),
+        ).toBe('两个协议端至少留一个');
     });
 
     it('应用端有实例在跑、远端装着 ncd-watch 时不让关', () => {
-        expect(featureOffBlock('apps', DEFAULT_FEATURES, { ...EMPTY_FEATURE_USAGE, activeAppInstances: 1 })).toContain(
-            '1 个实例',
-        );
-        expect(featureOffBlock('ncdWatch', DEFAULT_FEATURES, { ...EMPTY_FEATURE_USAGE, hostsWithNcdWatch: 2 })).toContain(
-            '2 台远端主机',
-        );
+        expect(
+            featureOffBlock('apps', DEFAULT_FEATURES, {
+                ...EMPTY_FEATURE_USAGE,
+                activeAppInstances: 1,
+            }),
+        ).toContain('1 个实例');
+        expect(
+            featureOffBlock('ncdWatch', DEFAULT_FEATURES, {
+                ...EMPTY_FEATURE_USAGE,
+                hostsWithNcdWatch: 2,
+            }),
+        ).toContain('2 台远端主机');
         expect(featureOffBlock('terminal', DEFAULT_FEATURES, EMPTY_FEATURE_USAGE)).toBeNull();
     });
 
     it('关终端只提醒会关掉开着的', () => {
-        expect(featureOffWarning('terminal', { ...EMPTY_FEATURE_USAGE, openTerminals: 2 })).toContain('2 个终端');
+        expect(
+            featureOffWarning('terminal', { ...EMPTY_FEATURE_USAGE, openTerminals: 2 }),
+        ).toContain('2 个终端');
         expect(featureOffWarning('terminal', EMPTY_FEATURE_USAGE)).toBeNull();
     });
 });

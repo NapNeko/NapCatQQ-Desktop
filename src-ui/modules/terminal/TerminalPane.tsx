@@ -18,7 +18,12 @@ import { useRef } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
 import { terminalLayout, useTerminalLayout } from '../../hooks/terminal/terminalPrefs';
-import { isLive, sessionTitle, terminalStore, useTerminalSession } from '../../hooks/terminal/terminalStore';
+import {
+    isLive,
+    sessionTitle,
+    terminalStore,
+    useTerminalSession,
+} from '../../hooks/terminal/terminalStore';
 import { terminalIo } from '../../hooks/terminal/terminalIo';
 import { useTerminalExternal } from '../../hooks/terminal/useTerminalExternal';
 import { targetKey } from '../../core/domain/terminal/commands';
@@ -33,7 +38,13 @@ import { TerminalView } from './TerminalView';
 
 export function TargetIcon({ target, size = 12 }: { target: TerminalTarget; size?: number }) {
     const Icon =
-        target.kind === 'local' ? Monitor : target.kind === 'server' ? Server : target.kind === 'bot' ? Bot : Blocks;
+        target.kind === 'local'
+            ? Monitor
+            : target.kind === 'server'
+              ? Server
+              : target.kind === 'bot'
+                ? Bot
+                : Blocks;
     return <Icon size={size} className="shrink-0" />;
 }
 
@@ -52,7 +63,17 @@ function statusText(status: TerminalStatus): string | null {
     }
 }
 
-function HeaderButton({ title, onClick, active, children }: { title: string; onClick(): void; active?: boolean; children: React.ReactNode }) {
+function HeaderButton({
+    title,
+    onClick,
+    active,
+    children,
+}: {
+    title: string;
+    onClick(): void;
+    active?: boolean;
+    children: React.ReactNode;
+}) {
     return (
         <button
             type="button"
@@ -62,7 +83,9 @@ function HeaderButton({ title, onClick, active, children }: { title: string; onC
             onClick={onClick}
             className={cn(
                 'flex h-6 w-6 items-center justify-center rounded-xs transition-colors',
-                active ? 'bg-accent-soft text-text' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                active
+                    ? 'bg-accent-soft text-text'
+                    : 'text-text-tertiary hover:bg-inset hover:text-text',
             )}
         >
             {children}
@@ -70,7 +93,15 @@ function HeaderButton({ title, onClick, active, children }: { title: string; onC
     );
 }
 
-function MenuRow({ onClick, children, danger }: { onClick(): void; children: React.ReactNode; danger?: boolean }) {
+function MenuRow({
+    onClick,
+    children,
+    danger,
+}: {
+    onClick(): void;
+    children: React.ReactNode;
+    danger?: boolean;
+}) {
     return (
         <button
             type="button"
@@ -120,7 +151,10 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
 
     return (
         <div
-            className={cn('relative flex min-h-0 min-w-0 flex-1 flex-col', focused ? '' : 'opacity-[0.97]')}
+            className={cn(
+                'relative flex min-h-0 min-w-0 flex-1 flex-col',
+                focused ? '' : 'opacity-[0.97]',
+            )}
             data-terminal-drop={sessionId}
         >
             {showHeader && (
@@ -131,9 +165,14 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                     )}
                 >
                     <TargetIcon target={info.target} />
-                    <span className="max-w-[40%] shrink-0 truncate font-medium">{sessionTitle(view)}</span>
+                    <span className="max-w-[40%] shrink-0 truncate font-medium">
+                        {sessionTitle(view)}
+                    </span>
                     {view.cwd && (
-                        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={view.cwd}>
+                        <span
+                            className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary"
+                            title={view.cwd}
+                        >
                             {view.cwd}
                         </span>
                     )}
@@ -154,7 +193,10 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                         snippets={info.snippets}
                         onPick={(cmd) => runtime?.fillInput(cmd)}
                     />
-                    <HeaderButton title="搜索（Ctrl+Shift+F）" onClick={() => runtime?.view?.openSearch()}>
+                    <HeaderButton
+                        title="搜索（Ctrl+Shift+F）"
+                        onClick={() => runtime?.view?.openSearch()}
+                    >
                         <Search size={13} />
                     </HeaderButton>
                     {info.features.files && (
@@ -184,7 +226,10 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                             <MenuRow
                                 onClick={() =>
                                     runtime &&
-                                    void terminalIo.exportText(`${sessionTitle(view).replace(/[\\/:*?"<>|\s·]+/g, '-')}.log`, runtime.bufferText())
+                                    void terminalIo.exportText(
+                                        `${sessionTitle(view).replace(/[\\/:*?"<>|\s·]+/g, '-')}.log`,
+                                        runtime.bufferText(),
+                                    )
                                 }
                             >
                                 <FileDown size={13} />
@@ -215,16 +260,31 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                     <div
                         className={cn(
                             'h-full transition-[width] duration-300',
-                            view.progress.state === 2 ? 'bg-danger' : view.progress.state === 4 ? 'bg-warning' : 'bg-accent',
+                            view.progress.state === 2
+                                ? 'bg-danger'
+                                : view.progress.state === 4
+                                  ? 'bg-warning'
+                                  : 'bg-accent',
                             view.progress.state === 3 && 'w-1/3 animate-pulse',
                         )}
-                        style={view.progress.state === 3 ? undefined : { width: `${view.progress.value}%` }}
+                        style={
+                            view.progress.state === 3
+                                ? undefined
+                                : { width: `${view.progress.value}%` }
+                        }
                     />
                 </div>
             )}
             <div className="flex min-h-0 flex-1">
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" style={{ background: 'var(--ncd-term-bg)' }}>
-                    <TerminalView sessionId={sessionId} focused={focused && visible} dropHint={dropHint} />
+                <div
+                    className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+                    style={{ background: 'var(--ncd-term-bg)' }}
+                >
+                    <TerminalView
+                        sessionId={sessionId}
+                        focused={focused && visible}
+                        dropHint={dropHint}
+                    />
                 </div>
                 {filesOpen && (
                     <TerminalFilesPanel

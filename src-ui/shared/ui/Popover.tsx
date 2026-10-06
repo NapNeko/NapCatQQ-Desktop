@@ -61,11 +61,7 @@ export function Popover({
     };
     return (
         <PopoverOpenContext.Provider value={actualOpen}>
-            <RadixPopover.Root
-                open={actualOpen}
-                onOpenChange={handleChange}
-                modal={modal}
-            >
+            <RadixPopover.Root open={actualOpen} onOpenChange={handleChange} modal={modal}>
                 {children}
             </RadixPopover.Root>
         </PopoverOpenContext.Provider>
@@ -109,8 +105,10 @@ function enterOffset(side: string): { x: number; y: number } {
     }
 }
 
-interface PopoverContentProps
-    extends Omit<ComponentPropsWithoutRef<typeof RadixPopover.Content>, 'forceMount'> {
+interface PopoverContentProps extends Omit<
+    ComponentPropsWithoutRef<typeof RadixPopover.Content>,
+    'forceMount'
+> {
     children?: ReactNode;
 }
 
@@ -140,18 +138,27 @@ export const PopoverContent = forwardRef<
         const [focusCycle, setFocusCycle] = useState(0);
         if (open !== lastOpen) {
             setLastOpen(open);
-            if (open) setFocusCycle(value => value + 1);
+            if (open) setFocusCycle((value) => value + 1);
         }
-        const attachRef = useCallback((node: HTMLDivElement | null) => {
-            elRef.current = node;
-            setElement(node);
-            if (typeof _ref === 'function') _ref(node);
-            else if (_ref) _ref.current = node;
-        }, [_ref]);
+        const attachRef = useCallback(
+            (node: HTMLDivElement | null) => {
+                elRef.current = node;
+                setElement(node);
+                if (typeof _ref === 'function') _ref(node);
+                else if (_ref) _ref.current = node;
+            },
+            [_ref],
+        );
         // Radix 会重新组合 ref；短暂解绑同一个节点不能中止仍在播放的动画。
-        useEffect(() => () => {
-            if (element) { gsap.killTweensOf(element); gsap.killTweensOf(element.children); }
-        }, [element]);
+        useEffect(
+            () => () => {
+                if (element) {
+                    gsap.killTweensOf(element);
+                    gsap.killTweensOf(element.children);
+                }
+            },
+            [element],
+        );
 
         // 保留到退出动画结束；重新挂载才能重启 Radix 的焦点生命周期。
         const [present, setPresent] = useState(false);
@@ -235,9 +242,9 @@ export const PopoverContent = forwardRef<
                         duration: m.duration('fast') * 0.6,
                         ease: m.ease.exit,
                         onComplete: () => {
-                                if (openRef.current || elRef.current !== el) return;
-                                gsap.set(el, { display: 'none' });
-                                setPresent(false);
+                            if (openRef.current || elRef.current !== el) return;
+                            gsap.set(el, { display: 'none' });
+                            setPresent(false);
                         },
                     });
                 }
@@ -268,7 +275,7 @@ export const PopoverContent = forwardRef<
                             className,
                         )}
                         {...contentProps}
-                        onCloseAutoFocus={event => {
+                        onCloseAutoFocus={(event) => {
                             // 快速重开时旧 FocusScope 的卸载不能把焦点拉回触发器。
                             if (openRef.current) event.preventDefault();
                             else onCloseAutoFocus?.(event);

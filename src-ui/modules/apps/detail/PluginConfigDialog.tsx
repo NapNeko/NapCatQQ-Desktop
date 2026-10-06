@@ -22,7 +22,11 @@ import { errorText } from '../../../core/domain/errors';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { PluginSchemaForm, type PluginConfigObject } from './PluginSchemaForm';
-import type { AppConfigDocument, AppConfigError, AppPluginConfigSchema } from '../../../core/ipc/types';
+import type {
+    AppConfigDocument,
+    AppConfigError,
+    AppPluginConfigSchema,
+} from '../../../core/ipc/types';
 
 const WORKSPACE = 'flex h-[min(64dvh,560px)] min-h-[22rem] min-w-0 flex-1 flex-col overflow-hidden';
 const NO_DOCS: AppConfigDocument[] = [];
@@ -36,7 +40,9 @@ function editorMode(format: AppConfigDocument['format']): SyntaxMode {
 function parseObject(text: string): PluginConfigObject | null {
     try {
         const v: unknown = JSON.parse(text);
-        return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as PluginConfigObject) : null;
+        return typeof v === 'object' && v !== null && !Array.isArray(v)
+            ? (v as PluginConfigObject)
+            : null;
     } catch {
         return null;
     }
@@ -85,7 +91,12 @@ export const PluginConfigDialog: React.FC<{
                 </DialogHeader>
 
                 {listing.isLoading ? (
-                    <div className={cn(WORKSPACE, 'items-center justify-center gap-2 text-sm text-text-tertiary')}>
+                    <div
+                        className={cn(
+                            WORKSPACE,
+                            'items-center justify-center gap-2 text-sm text-text-tertiary',
+                        )}
+                    >
                         <Spinner size="sm" /> 读取配置…
                     </div>
                 ) : docsError ? (
@@ -94,7 +105,11 @@ export const PluginConfigDialog: React.FC<{
                     </div>
                 ) : docs.length === 0 ? (
                     <div className={cn(WORKSPACE, 'items-center justify-center gap-2 text-center')}>
-                        <ActionMotionIcon icon={FileCode} size={28} className="text-text-tertiary" />
+                        <ActionMotionIcon
+                            icon={FileCode}
+                            size={28}
+                            className="text-text-tertiary"
+                        />
                         <p className="text-sm text-text-secondary">还没有配置文件</p>
                     </div>
                 ) : (
@@ -151,8 +166,12 @@ const PluginConfigWorkspace: React.FC<{
         });
     }, [active?.id, instanceId, text.error]);
 
-    const formValue = useMemo(() => (schema && mode === 'form' ? parseObject(draft) : null), [draft, mode, schema]);
-    const formBroken = schema !== null && mode === 'form' && formValue === null && draft.trim() !== '';
+    const formValue = useMemo(
+        () => (schema && mode === 'form' ? parseObject(draft) : null),
+        [draft, mode, schema],
+    );
+    const formBroken =
+        schema !== null && mode === 'form' && formValue === null && draft.trim() !== '';
 
     const precheck = (): boolean => {
         if (!active) return false;
@@ -257,7 +276,9 @@ const PluginConfigWorkspace: React.FC<{
                 )}
                 {syntaxError && <p className="mb-2 shrink-0 text-xs text-danger">{syntaxError}</p>}
                 {formBroken && (
-                    <p className="mb-2 shrink-0 text-xs text-danger">当前内容不是合法的 JSON 对象，切到源码修正。</p>
+                    <p className="mb-2 shrink-0 text-xs text-danger">
+                        当前内容不是合法的 JSON 对象，切到源码修正。
+                    </p>
                 )}
                 {schema && mode === 'form' && formValue !== null ? (
                     <PluginSchemaForm
@@ -299,7 +320,11 @@ const PluginConfigWorkspace: React.FC<{
                     onClick={() => void save()}
                     disabled={!dirty || text.isWriting}
                 >
-                    {text.isWriting ? <Spinner size="xs" /> : <ActionMotionIcon icon={Save} size={13} />}
+                    {text.isWriting ? (
+                        <Spinner size="xs" />
+                    ) : (
+                        <ActionMotionIcon icon={Save} size={13} />
+                    )}
                     保存
                 </Button>
             </DialogFooter>

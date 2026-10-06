@@ -96,7 +96,9 @@ function DraftEnable({
         return (
             <Switch
                 checked={data.console.isLocal}
-                onCheckedChange={(isLocal) => setData({ ...data, console: { ...data.console, isLocal } })}
+                onCheckedChange={(isLocal) =>
+                    setData({ ...data, console: { ...data.console, isLocal } })
+                }
                 label="仅本机"
             />
         );
@@ -105,7 +107,9 @@ function DraftEnable({
         return (
             <Switch
                 checked={data.env.http_enable}
-                onCheckedChange={(http_enable) => setData({ ...data, env: { ...data.env, http_enable } })}
+                onCheckedChange={(http_enable) =>
+                    setData({ ...data, env: { ...data.env, http_enable } })
+                }
                 label="启用此连接"
             />
         );
@@ -203,7 +207,11 @@ function DraftFields({
                     />
                     <NumberField
                         label="鉴权超时（秒）"
-                        error={pickErr(error, fieldErrors['adapter/onebot/ws_server/timeout'], '超时')}
+                        error={pickErr(
+                            error,
+                            fieldErrors['adapter/onebot/ws_server/timeout'],
+                            '超时',
+                        )}
                         value={data.ws_server.timeout}
                         min={1}
                         onValueChange={(v) =>
@@ -250,7 +258,9 @@ function DraftFields({
                         value={data.row.self_id}
                         error={pickErr(error, undefined, 'self_id')}
                         className="font-mono"
-                        onValueChange={(self_id) => setData({ ...data, row: { ...data.row, self_id } })}
+                        onValueChange={(self_id) =>
+                            setData({ ...data, row: { ...data.row, self_id } })
+                        }
                     />
                     <TextField
                         label="Token"
@@ -330,7 +340,10 @@ function trimDraft(data: KarinConnDraft): KarinConnDraft {
         return { ...data, envKey: data.envKey.trim() };
     }
     if (data.kind === 'forwardWs') {
-        return { ...data, row: { ...data.row, url: data.row.url.trim(), token: data.row.token.trim() } };
+        return {
+            ...data,
+            row: { ...data.row, url: data.row.url.trim(), token: data.row.token.trim() },
+        };
     }
     if (data.kind === 'onebotHttp') {
         return {
@@ -357,7 +370,11 @@ function trimDraft(data: KarinConnDraft): KarinConnDraft {
 
 function validateDraft(data: KarinConnDraft): string | null {
     if (data.kind === 'webui') {
-        if (!Number.isInteger(data.env.http_port) || data.env.http_port < 1 || data.env.http_port > 65535) {
+        if (
+            !Number.isInteger(data.env.http_port) ||
+            data.env.http_port < 1 ||
+            data.env.http_port > 65535
+        ) {
             return '端口需在 1–65535';
         }
         return null;
@@ -378,7 +395,11 @@ function validateDraft(data: KarinConnDraft): string | null {
     return null;
 }
 
-function pickErr(local: string | null, field: string | undefined, needle: string): string | undefined {
+function pickErr(
+    local: string | null,
+    field: string | undefined,
+    needle: string,
+): string | undefined {
     if (local && local.includes(needle)) return local;
     return field;
 }

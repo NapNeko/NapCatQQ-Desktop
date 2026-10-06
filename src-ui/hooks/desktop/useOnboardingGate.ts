@@ -11,7 +11,9 @@ import { errorText } from '../../core/domain/errors';
 
 export type OnboardingDialogMode = 'choice' | 'guide';
 
-type NavigateFn = (route: 'overview' | 'bots' | 'components' | 'docker' | 'remote' | 'tasks' | 'settings') => void;
+type NavigateFn = (
+    route: 'overview' | 'bots' | 'components' | 'docker' | 'remote' | 'tasks' | 'settings',
+) => void;
 
 export function useOnboardingGate() {
     const [open, setOpen] = useState(false);

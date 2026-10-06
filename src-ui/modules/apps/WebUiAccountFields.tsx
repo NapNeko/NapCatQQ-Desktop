@@ -45,7 +45,11 @@ const ValueRow: React.FC<{
     placeholder?: string;
 }> = ({ label, value, secret = false, placeholder }) => {
     const [shown, setShown] = useState(!secret);
-    const display = value ? (shown ? value : '•'.repeat(Math.min(value.length, 16))) : placeholder ?? '—';
+    const display = value
+        ? shown
+            ? value
+            : '•'.repeat(Math.min(value.length, 16))
+        : (placeholder ?? '—');
     return (
         <div className="flex items-center gap-2">
             <span className="w-14 shrink-0 text-xs text-text-secondary">{label}</span>

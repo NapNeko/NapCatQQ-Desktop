@@ -15,7 +15,8 @@ export function readEntry(key: string): ComposerEntry {
 }
 
 export function writeEntry(key: string, entry: ComposerEntry): void {
-    if (entry.text === '' && entry.mentions.length === 0 && entry.rich.length === 0) drafts.delete(key);
+    if (entry.text === '' && entry.mentions.length === 0 && entry.rich.length === 0)
+        drafts.delete(key);
     else drafts.set(key, entry);
 }
 

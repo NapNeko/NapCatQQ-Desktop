@@ -149,7 +149,14 @@ const MEMBER_ROW = obj({
 const MESSAGE_ID_ROW = obj({ message_id: T.int });
 
 /** 样例回包的外壳：NapCat 的示例是完整的 OB11 回复 */
-const reply = (data: unknown) => ({ status: 'ok', retcode: 0, data, message: '', wording: '', echo: null });
+const reply = (data: unknown) => ({
+    status: 'ok',
+    retcode: 0,
+    data,
+    message: '',
+    wording: '',
+    echo: null,
+});
 
 const COMMON_ERRORS: DebugErrorExample[] = [
     { retcode: 1400, message: '请求参数错误' },
@@ -170,7 +177,8 @@ const DEFS: ActionDef[] = [
         name: 'get_login_info',
         aliases: ['get_self_info'],
         summary: '获取登录号信息',
-        description: '返回当前登录的 QQ 号和昵称。调试台里用它确认 Bot 是不是在线、连的是不是想连的那个号。',
+        description:
+            '返回当前登录的 QQ 号和昵称。调试台里用它确认 Bot 是不是在线、连的是不是想连的那个号。',
         category: 'account',
         safety: 'read_only',
         params: [],
@@ -204,7 +212,8 @@ const DEFS: ActionDef[] = [
     {
         name: 'bot_exit',
         summary: '让 Bot 退出登录并结束进程',
-        description: '会让当前 QQ 下线，进程退出后需要在 Bot 页重新启动。仅在确实要关掉这个号时使用。',
+        description:
+            '会让当前 QQ 下线，进程退出后需要在 Bot 页重新启动。仅在确实要关掉这个号时使用。',
         category: 'account',
         safety: 'dangerous',
         params: [],
@@ -218,7 +227,8 @@ const DEFS: ActionDef[] = [
     {
         name: 'send_group_msg',
         summary: '发送群消息',
-        description: '向指定群发送消息。`message` 可以是消息段数组，也可以是带 CQ 码的字符串；返回新消息的 message_id。',
+        description:
+            '向指定群发送消息。`message` 可以是消息段数组，也可以是带 CQ 码的字符串；返回新消息的 message_id。',
         category: 'message',
         safety: 'side_effect',
         params: [gid(), message(), autoEscape()],
@@ -251,7 +261,11 @@ const DEFS: ActionDef[] = [
         category: 'message',
         safety: 'side_effect',
         params: [
-            { name: 'message_type', desc: '消息类型，不填则按 group_id / user_id 判断', values: ['group', 'private'] },
+            {
+                name: 'message_type',
+                desc: '消息类型，不填则按 group_id / user_id 判断',
+                values: ['group', 'private'],
+            },
             { name: 'user_id', role: 'user_id', desc: '对方 QQ 号，私聊时必填' },
             { name: 'group_id', role: 'group_id', desc: '群号，群聊时必填' },
             message(),
@@ -291,10 +305,13 @@ const DEFS: ActionDef[] = [
         name: 'delete_msg',
         aliases: ['recall_msg'],
         summary: '撤回消息',
-        description: '撤回一条消息。Bot 只能撤回自己 2 分钟内发的消息，或在有管理权限时撤回别人的。',
+        description:
+            '撤回一条消息。Bot 只能撤回自己 2 分钟内发的消息，或在有管理权限时撤回别人的。',
         category: 'message',
         safety: 'dangerous',
-        params: [{ name: 'message_id', role: 'message_id', desc: '要撤回的消息 ID', required: true }],
+        params: [
+            { name: 'message_id', role: 'message_id', desc: '要撤回的消息 ID', required: true },
+        ],
         returns: T.nul,
         example: { message_id: '1700000001' },
         returnData: null,
@@ -306,7 +323,14 @@ const DEFS: ActionDef[] = [
         summary: '获取合并转发内容',
         category: 'message',
         safety: 'read_only',
-        params: [{ name: 'message_id', role: 'message_id', desc: '合并转发的消息 ID 或 res_id', required: true }],
+        params: [
+            {
+                name: 'message_id',
+                role: 'message_id',
+                desc: '合并转发的消息 ID 或 res_id',
+                required: true,
+            },
+        ],
         returns: obj({ messages: arr({ type: 'object' }) }),
         returnsText: '对象：messages，每项含 sender、time、content',
         example: { message_id: '7300000000000000001' },
@@ -328,7 +352,12 @@ const DEFS: ActionDef[] = [
         safety: 'side_effect',
         params: [
             gid(),
-            { name: 'messages', type: 'array', desc: '转发节点列表，每个节点是 node 消息段', required: true },
+            {
+                name: 'messages',
+                type: 'array',
+                desc: '转发节点列表，每个节点是 node 消息段',
+                required: true,
+            },
         ],
         returns: obj({ message_id: T.int, res_id: T.str }),
         example: {
@@ -336,7 +365,11 @@ const DEFS: ActionDef[] = [
             messages: [
                 {
                     type: 'node',
-                    data: { user_id: '10001', nickname: '小明', content: [{ type: 'text', data: { text: '早' } }] },
+                    data: {
+                        user_id: '10001',
+                        nickname: '小明',
+                        content: [{ type: 'text', data: { text: '早' } }],
+                    },
                 },
             ],
         },
@@ -391,7 +424,16 @@ const DEFS: ActionDef[] = [
         params: [gid(), noCache({ only: 'napcat' })],
         returns: arr(MEMBER_ROW),
         example: { group_id: '100001' },
-        returnData: [{ group_id: 100001, user_id: 10001, nickname: '小明', card: '', role: 'owner', title: '' }],
+        returnData: [
+            {
+                group_id: 100001,
+                user_id: 10001,
+                nickname: '小明',
+                card: '',
+                role: 'owner',
+                title: '',
+            },
+        ],
         errorExamples: [{ retcode: 1200, message: '群不存在' }, ...COMMON_ERRORS],
     },
     {
@@ -403,7 +445,14 @@ const DEFS: ActionDef[] = [
         returns: MEMBER_ROW,
         returnsText: '对象：与群成员列表里的一项相同',
         example: { group_id: '100001', user_id: '10001' },
-        returnData: { group_id: 100001, user_id: 10001, nickname: '小明', card: '', role: 'owner', title: '' },
+        returnData: {
+            group_id: 100001,
+            user_id: 10001,
+            nickname: '小明',
+            card: '',
+            role: 'owner',
+            title: '',
+        },
         errorExamples: [{ retcode: 1200, message: '群成员不存在' }, ...COMMON_ERRORS],
     },
 
@@ -441,7 +490,12 @@ const DEFS: ActionDef[] = [
         params: [
             gid(),
             member('要移出的成员'),
-            { name: 'reject_add_request', type: 'boolean', desc: '同时拒绝这个人再次加群', default: false },
+            {
+                name: 'reject_add_request',
+                type: 'boolean',
+                desc: '同时拒绝这个人再次加群',
+                default: false,
+            },
         ],
         returns: T.nul,
         example: { group_id: '100001', user_id: '10002' },
@@ -454,7 +508,10 @@ const DEFS: ActionDef[] = [
         summary: '开关全员禁言',
         category: 'group_admin',
         safety: 'dangerous',
-        params: [gid(), { name: 'enable', type: 'boolean', desc: 'true 开启，false 关闭', default: true }],
+        params: [
+            gid(),
+            { name: 'enable', type: 'boolean', desc: 'true 开启，false 关闭', default: true },
+        ],
         returns: T.nul,
         example: { group_id: '100001', enable: true },
         returnData: null,
@@ -466,7 +523,11 @@ const DEFS: ActionDef[] = [
         summary: '设置群名片',
         category: 'group_admin',
         safety: 'side_effect',
-        params: [gid(), member('要改名片的成员'), { name: 'card', type: 'string', desc: '新名片，留空为清除' }],
+        params: [
+            gid(),
+            member('要改名片的成员'),
+            { name: 'card', type: 'string', desc: '新名片，留空为清除' },
+        ],
         returns: T.nul,
         example: { group_id: '100001', user_id: '10002', card: '测试员' },
         returnData: null,
@@ -490,9 +551,23 @@ const DEFS: ActionDef[] = [
         category: 'friend',
         safety: 'read_only',
         params: [uid(), noCache()],
-        returns: obj({ user_id: T.int, nickname: T.str, sex: T.str, age: T.int, qid: T.str, long_nick: T.str }),
+        returns: obj({
+            user_id: T.int,
+            nickname: T.str,
+            sex: T.str,
+            age: T.int,
+            qid: T.str,
+            long_nick: T.str,
+        }),
         example: { user_id: '10001' },
-        returnData: { user_id: 10001, nickname: '小明', sex: 'unknown', age: 0, qid: '', long_nick: '' },
+        returnData: {
+            user_id: 10001,
+            nickname: '小明',
+            sex: 'unknown',
+            age: 0,
+            qid: '',
+            long_nick: '',
+        },
         errorExamples: COMMON_ERRORS,
     },
     {
@@ -559,10 +634,26 @@ const DEFS: ActionDef[] = [
         safety: 'side_effect',
         params: [
             gid(),
-            { name: 'file', role: 'file', type: 'string', desc: 'Bot 所在机器上的文件路径，或 http(s) 地址', required: true },
+            {
+                name: 'file',
+                role: 'file',
+                type: 'string',
+                desc: 'Bot 所在机器上的文件路径，或 http(s) 地址',
+                required: true,
+            },
             { name: 'name', type: 'string', desc: '文件在群里显示的名字', required: true },
-            { name: 'folder_id', type: 'string', desc: '目标文件夹 ID，不填为根目录', only: 'napcat' },
-            { name: 'folder', type: 'string', desc: '目标文件夹 ID，不填为根目录', only: 'snowluma' },
+            {
+                name: 'folder_id',
+                type: 'string',
+                desc: '目标文件夹 ID，不填为根目录',
+                only: 'napcat',
+            },
+            {
+                name: 'folder',
+                type: 'string',
+                desc: '目标文件夹 ID，不填为根目录',
+                only: 'snowluma',
+            },
         ],
         returns: T.nul,
         example: { group_id: '100001', file: '/tmp/report.pdf', name: 'report.pdf' },
@@ -611,11 +702,28 @@ const DEFS: ActionDef[] = [
             gid(),
             { name: 'file_id', type: 'string', desc: '文件 ID', required: true },
             { name: 'current_parent_directory', type: 'string', desc: '当前目录', required: true },
-            { name: 'target_parent_directory', type: 'string', desc: '目标目录', required: true, only: 'napcat' },
-            { name: 'target_directory', type: 'string', desc: '目标目录', required: true, only: 'snowluma' },
+            {
+                name: 'target_parent_directory',
+                type: 'string',
+                desc: '目标目录',
+                required: true,
+                only: 'napcat',
+            },
+            {
+                name: 'target_directory',
+                type: 'string',
+                desc: '目标目录',
+                required: true,
+                only: 'snowluma',
+            },
         ],
         returns: T.nul,
-        example: { group_id: '100001', file_id: '/abcd-1234', current_parent_directory: '/', target_parent_directory: '/docs' },
+        example: {
+            group_id: '100001',
+            file_id: '/abcd-1234',
+            current_parent_directory: '/',
+            target_parent_directory: '/docs',
+        },
         returnData: null,
         errorExamples: [{ retcode: 1200, message: '文件不存在' }, ...COMMON_ERRORS],
     },
@@ -626,7 +734,16 @@ const DEFS: ActionDef[] = [
         summary: '获取收藏的自定义表情',
         category: 'face',
         safety: 'read_only',
-        params: [{ name: 'count', type: 'integer', desc: '最多返回几个', default: 48, minimum: 1, maximum: 200 }],
+        params: [
+            {
+                name: 'count',
+                type: 'integer',
+                desc: '最多返回几个',
+                default: 48,
+                minimum: 1,
+                maximum: 200,
+            },
+        ],
         returns: arr(T.str),
         returnData: ['https://example.invalid/face/1.png'],
         errorExamples: COMMON_ERRORS,
@@ -636,12 +753,18 @@ const DEFS: ActionDef[] = [
     {
         name: 'upload_file_stream',
         summary: '分片上传文件（流式）',
-        description: '把大文件切片后逐片发给 Bot，再由 Bot 合并落盘。本期调试台只提供文档，调用按钮置灰。',
+        description:
+            '把大文件切片后逐片发给 Bot，再由 Bot 合并落盘。本期调试台只提供文档，调用按钮置灰。',
         category: 'stream',
         safety: 'side_effect',
         stream: true,
         params: [
-            { name: 'stream_id', type: 'string', desc: '同一个文件的分片共用一个 ID', required: true },
+            {
+                name: 'stream_id',
+                type: 'string',
+                desc: '同一个文件的分片共用一个 ID',
+                required: true,
+            },
             { name: 'chunk_data', type: 'string', desc: '本片内容（base64）' },
             { name: 'chunk_index', type: 'integer', desc: '本片序号，从 0 起' },
             { name: 'total_chunks', type: 'integer', desc: '总片数' },
@@ -649,7 +772,12 @@ const DEFS: ActionDef[] = [
             { name: 'filename', type: 'string', desc: '落盘文件名' },
         ],
         returns: obj({ type: T.str, stream_id: T.str, status: T.str, received_chunks: T.int }),
-        returnData: { type: 'stream', stream_id: 's1', status: 'chunk_received', received_chunks: 1 },
+        returnData: {
+            type: 'stream',
+            stream_id: 's1',
+            status: 'chunk_received',
+            received_chunks: 1,
+        },
         errorExamples: COMMON_ERRORS,
     },
 
@@ -662,7 +790,9 @@ const DEFS: ActionDef[] = [
         backends: ['napcat'],
         params: [],
         returns: arr(obj({ type: T.str, rkey: T.str, created_at: T.int, ttl: T.int })),
-        returnData: [{ type: 'private', rkey: '&rkey=CAQSKAB6JW...', created_at: 1759190400, ttl: 86400 }],
+        returnData: [
+            { type: 'private', rkey: '&rkey=CAQSKAB6JW...', created_at: 1759190400, ttl: 86400 },
+        ],
         errorExamples: COMMON_ERRORS,
     },
     {
@@ -689,12 +819,22 @@ const DEFS: ActionDef[] = [
         params: [],
         returns: obj({
             note: T.str,
-            rows: arr(obj({ seq: T.int, group_id: T.int, user_id: T.int, nickname: T.str, text: T.str })),
+            rows: arr(
+                obj({ seq: T.int, group_id: T.int, user_id: T.int, nickname: T.str, text: T.str }),
+            ),
         }),
         returnsText: '对象：note，以及约五万行的 rows',
         returnData: {
             note: '预览用的超大回包：结果区只显示前 256 KiB，完整内容请另存',
-            rows: [{ seq: 1, group_id: 100001, user_id: 10001, nickname: '小明', text: '第 1 行：预览用的填充数据' }],
+            rows: [
+                {
+                    seq: 1,
+                    group_id: 100001,
+                    user_id: 10001,
+                    nickname: '小明',
+                    text: '第 1 行：预览用的填充数据',
+                },
+            ],
         },
         errorExamples: COMMON_ERRORS,
         invariants: ['只在浏览器预览里有', '回包超过 5 MiB，调试台只给前 256 KiB 的预览'],
@@ -705,9 +845,12 @@ const DEFS: ActionDef[] = [
 // 生成
 // ---------------------------------------------------------------------------
 
-const otherOf = (backend: BackendType): BackendType => (backend === 'napcat' ? 'snowluma' : 'napcat');
-const hasBackend = (def: ActionDef, backend: BackendType) => !def.backends || def.backends.includes(backend);
-const isRequired = (p: ParamDef, backend: BackendType) => p.requiredOn?.[backend] ?? p.required === true;
+const otherOf = (backend: BackendType): BackendType =>
+    backend === 'napcat' ? 'snowluma' : 'napcat';
+const hasBackend = (def: ActionDef, backend: BackendType) =>
+    !def.backends || def.backends.includes(backend);
+const isRequired = (p: ParamDef, backend: BackendType) =>
+    p.requiredOn?.[backend] ?? p.required === true;
 const visibleParams = (def: ActionDef, backend: BackendType) =>
     def.params.filter((p) => !p.only || p.only === backend);
 
@@ -726,7 +869,10 @@ function propertySchema(p: ParamDef, backend: BackendType): Record<string, unkno
         schema = { type: typeof p.values[0] === 'number' ? 'integer' : 'string', enum: p.values };
     } else if (type === 'boolean') {
         // TypeBox 生成的布尔参数：NapCat 同时接受字符串 "true" / "false"
-        schema = backend === 'napcat' ? { anyOf: [{ type: 'boolean' }, { type: 'string' }] } : { type: 'boolean' };
+        schema =
+            backend === 'napcat'
+                ? { anyOf: [{ type: 'boolean' }, { type: 'string' }] }
+                : { type: 'boolean' };
     } else if (type === 'array') {
         schema = { type: 'array', items: { type: 'object' } };
     } else if (type === 'object') {
@@ -772,12 +918,16 @@ function comparableType(schema: Record<string, unknown>): string {
     if (typeof role === 'string' && ID_ROLES.has(role)) return 'id';
     if (role === 'message') return 'message';
     const any = schema.anyOf;
-    if (Array.isArray(any) && any.some((s) => (s as Record<string, unknown>).type === 'boolean')) return 'boolean';
+    if (Array.isArray(any) && any.some((s) => (s as Record<string, unknown>).type === 'boolean'))
+        return 'boolean';
     return typeText(schema).replace(/\binteger\b/g, 'number');
 }
 
 /** 真正必须由调用方给出的参数：列在 required 里且没写 default（NapCat 会把带默认值的也列进去） */
-function requiredWithoutDefault(props: Record<string, Record<string, unknown>>, required: Set<string>): Set<string> {
+function requiredWithoutDefault(
+    props: Record<string, Record<string, unknown>>,
+    required: Set<string>,
+): Set<string> {
     const out = new Set<string>();
     for (const name of required) {
         const prop = props[name];
@@ -813,16 +963,23 @@ function diffParams(
             diffs.push({ name, diff: { kind: 'only_here' } });
         } else if (comparableType(mine) !== comparableType(other)) {
             typeClash = true;
-            diffs.push({ name, diff: { kind: 'type_differs', here: typeText(mine), other: typeText(other) } });
+            diffs.push({
+                name,
+                diff: { kind: 'type_differs', here: typeText(mine), other: typeText(other) },
+            });
         } else if (reqA.has(name) !== reqB.has(name)) {
-            diffs.push({ name, diff: { kind: 'required_differs', here: reqA.has(name), other: reqB.has(name) } });
+            diffs.push({
+                name,
+                diff: { kind: 'required_differs', here: reqA.has(name), other: reqB.has(name) },
+            });
         }
     }
     for (const name of Object.keys(propsB)) {
         if (!propsA[name]) diffs.push({ name, diff: { kind: 'only_other' } });
     }
-    const lacksRequired = [...strictA].some((name) => propsB[name] === undefined)
-        || [...strictB].some((name) => propsA[name] === undefined);
+    const lacksRequired =
+        [...strictA].some((name) => propsB[name] === undefined) ||
+        [...strictB].some((name) => propsA[name] === undefined);
     return { diffs, breaking: typeClash || lacksRequired };
 }
 
@@ -876,8 +1033,14 @@ export interface MockSpecOptions {
 }
 
 /** 按名字或别名取一个动作的完整说明；这个后端没有就返回 null */
-export function buildMockSpec(backend: BackendType, nameOrAlias: string, opts: MockSpecOptions): DebugActionSpec | null {
-    const base = baseSpecs(backend).find((s) => s.name === nameOrAlias || s.aliases.includes(nameOrAlias));
+export function buildMockSpec(
+    backend: BackendType,
+    nameOrAlias: string,
+    opts: MockSpecOptions,
+): DebugActionSpec | null {
+    const base = baseSpecs(backend).find(
+        (s) => s.name === nameOrAlias || s.aliases.includes(nameOrAlias),
+    );
     if (!base) return null;
     return { ...base, supported: !opts.unsupported?.has(base.name), source: opts.source };
 }
@@ -903,7 +1066,11 @@ export function buildMockCatalog(backend: BackendType, opts: MockSpecOptions): D
         source: opts.source,
         snapshot_version: backend === 'napcat' ? '4.15.18' : '0.9.0',
         actions: baseSpecs(backend).map((base) =>
-            summarize({ ...base, supported: !opts.unsupported?.has(base.name), source: opts.source }),
+            summarize({
+                ...base,
+                supported: !opts.unsupported?.has(base.name),
+                source: opts.source,
+            }),
         ),
     };
 }

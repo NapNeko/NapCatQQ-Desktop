@@ -12,11 +12,7 @@ import type { WebsocketClientConfig } from '../../ipc/generated/domain/Websocket
 import type { BackendType } from '../../ipc/generated/domain/BackendType';
 
 export type ConnectionKind =
-    | 'httpServer'
-    | 'httpSseServer'
-    | 'httpClient'
-    | 'websocketServer'
-    | 'websocketClient';
+    'httpServer' | 'httpSseServer' | 'httpClient' | 'websocketServer' | 'websocketClient';
 
 export type ConnectionConfig =
     | HttpServerConfig
@@ -206,8 +202,13 @@ export function collectAllNames(connect: ConnectConfig): string[] {
     ];
 }
 
-export interface ConnectionValidationOk { ok: true; }
-export interface ConnectionValidationFail { ok: false; reason: string; }
+export interface ConnectionValidationOk {
+    ok: true;
+}
+export interface ConnectionValidationFail {
+    ok: false;
+    reason: string;
+}
 export type ConnectionValidationResult = ConnectionValidationOk | ConnectionValidationFail;
 
 /// 单条连接保存前校验。挡住明显错误，详细规则交给后端。

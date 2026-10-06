@@ -39,7 +39,13 @@ import { MaiBotModelsTab } from './MaiBotModelsTab';
 import { MaiBotSchemaTab } from './MaiBotSchemaTab';
 import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPages';
 
-const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
+const TYPED_TABS = new Set([
+    'overview',
+    'models',
+    'chat',
+    'connection',
+    ...Object.keys(MAIBOT_SCHEMA_PAGES),
+]);
 // 插件商店、提示词、资源页这些自己落盘，不是表单：铺满内容区、不挂保存条
 const FILL_PANE = new Set([
     'trychat',
@@ -53,7 +59,13 @@ const FILL_PANE = new Set([
     'behavior',
 ]);
 
-function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
+function MaiBotFrameworkDetail({
+    instance,
+    onSaveHandle,
+    onGoTab,
+    onOpenLink,
+    onNavBadges,
+}: FrameworkDetailProps) {
     const form = useAppConfigForm(MAIBOT_CONFIG_FORM, instance.id, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
@@ -62,7 +74,8 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
     // 知识库在哪一块；「记忆」页的「记忆图谱」「导入知识」直接跳到对应那块
     const [knowledgeView, setKnowledgeView] = useState<KnowledgeView>('browse');
     const goTab = (tab: string, view?: string) => {
-        if (tab === 'knowledge' && (view === 'import' || view === 'browse' || view === 'graph')) setKnowledgeView(view);
+        if (tab === 'knowledge' && (view === 'import' || view === 'browse' || view === 'graph'))
+            setKnowledgeView(view);
         onGoTab(tab);
     };
 
@@ -102,20 +115,40 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
 
     const common = { onChange: form.setForm, errors: form.errors, disabled: form.saving };
     // 资源页没连上时给的「启动麦麦」
-    const startProps = { onStart: () => apps.start(instance.id), starting: apps.pendingId === instance.id };
+    const startProps = {
+        onStart: () => apps.start(instance.id),
+        starting: apps.pendingId === instance.id,
+    };
 
     return (
         <>
-            <TabsContent value="trychat" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="trychat"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotTryChatTab instance={instance} status={status} {...startProps} />
             </TabsContent>
-            <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="plugins"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <AppStoreTab instance={instance} resource="plugin" />
             </TabsContent>
-            <TabsContent value="prompts" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
-                <MaiBotPromptsTab instance={instance} status={status} drafts={promptDrafts} {...startProps} />
+            <TabsContent
+                value="prompts"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
+                <MaiBotPromptsTab
+                    instance={instance}
+                    status={status}
+                    drafts={promptDrafts}
+                    {...startProps}
+                />
             </TabsContent>
-            <TabsContent value="expressions" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="expressions"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotExpressionsTab
                     instance={instance}
                     status={status}
@@ -124,10 +157,16 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     {...startProps}
                 />
             </TabsContent>
-            <TabsContent value="jargon" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="jargon"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotJargonTab instance={instance} status={status} {...startProps} />
             </TabsContent>
-            <TabsContent value="emoji" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="emoji"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotEmojisTab
                     instance={instance}
                     status={status}
@@ -136,10 +175,16 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     {...startProps}
                 />
             </TabsContent>
-            <TabsContent value="persons" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="persons"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotPersonsTab instance={instance} status={status} {...startProps} />
             </TabsContent>
-            <TabsContent value="knowledge" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="knowledge"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotKnowledgeTab
                     instance={instance}
                     status={status}
@@ -149,7 +194,10 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     {...startProps}
                 />
             </TabsContent>
-            <TabsContent value="behavior" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+            <TabsContent
+                value="behavior"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2"
+            >
                 <MaiBotBehaviorTab
                     instance={instance}
                     status={status}
@@ -180,8 +228,12 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     live={live}
                 />
             ))}
-            {pane('chat', (cfg) => <MaiBotChatTab config={cfg} {...common} />)}
-            {pane('connection', (cfg) => <MaiBotConnectionTab instance={instance} config={cfg} {...common} />)}
+            {pane('chat', (cfg) => (
+                <MaiBotChatTab config={cfg} {...common} />
+            ))}
+            {pane('connection', (cfg) => (
+                <MaiBotConnectionTab instance={instance} config={cfg} {...common} />
+            ))}
             {Object.entries(MAIBOT_SCHEMA_PAGES).map(([tab, page]) =>
                 pane(tab, (cfg) => (
                     <MaiBotSchemaTab
@@ -196,7 +248,11 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                         onGoTab={goTab}
                         intro={
                             tab === 'mcp' && live ? (
-                                <McpStatusPanel instanceId={instance.id} servers={cfg.bot.mcp.servers} status={mcp.data} />
+                                <McpStatusPanel
+                                    instanceId={instance.id}
+                                    servers={cfg.bot.mcp.servers}
+                                    status={mcp.data}
+                                />
                             ) : undefined
                         }
                     />

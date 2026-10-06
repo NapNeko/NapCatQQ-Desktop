@@ -76,7 +76,11 @@ function persistGroups(groups: TerminalGroup[], activeGroup: string | null) {
     }
 }
 
-function setGroups(groups: TerminalGroup[], activeGroup: string | null, extra: Partial<TerminalState> = {}) {
+function setGroups(
+    groups: TerminalGroup[],
+    activeGroup: string | null,
+    extra: Partial<TerminalState> = {},
+) {
     set({ groups, activeGroup, ...extra });
     persistGroups(groups, activeGroup);
 }
@@ -141,14 +145,19 @@ function restoreGroups(ids: string[]): { groups: TerminalGroup[]; activeGroup: s
         });
     }
     for (const id of ids) {
-        if (!used.has(id)) groups.push({ id: newGroupId(), panes: [id], split: 'row', ratio: 0.5, focused: id });
+        if (!used.has(id))
+            groups.push({ id: newGroupId(), panes: [id], split: 'row', ratio: 0.5, focused: id });
     }
     const activeGroup =
         groups.find((g) => g.id === saved.activeGroup)?.id ?? groups[groups.length - 1]?.id ?? null;
     return { groups, activeGroup };
 }
 
-function sameTarget(a: TerminalSessionInfo, target: TerminalTarget, shell: LocalShellKind | undefined): boolean {
+function sameTarget(
+    a: TerminalSessionInfo,
+    target: TerminalTarget,
+    shell: LocalShellKind | undefined,
+): boolean {
     if (targetKey(a.target) !== targetKey(target)) return false;
     return target.kind !== 'local' || !shell || a.shell === shell;
 }
@@ -179,12 +188,21 @@ export const terminalStore = {
     /// splitFrom 给了就放进那个会话所在的标签里分屏
     async open(
         target: TerminalTarget,
-        opts: { shell?: LocalShellKind; forceNew?: boolean; splitFrom?: string; split?: TerminalSplit } = {},
+        opts: {
+            shell?: LocalShellKind;
+            forceNew?: boolean;
+            splitFrom?: string;
+            split?: TerminalSplit;
+        } = {},
     ): Promise<string | null> {
-        const shell = opts.shell ?? (target.kind === 'local' ? terminalPrefs.get().defaultShell ?? undefined : undefined);
+        const shell =
+            opts.shell ??
+            (target.kind === 'local' ? (terminalPrefs.get().defaultShell ?? undefined) : undefined);
         if (!opts.forceNew && !opts.splitFrom) {
             const existing = Object.values(get().sessions).find(
-                (s) => sameTarget(s.info, target, opts.shell) && (s.info.status.kind === 'running' || s.info.status.kind === 'starting'),
+                (s) =>
+                    sameTarget(s.info, target, opts.shell) &&
+                    (s.info.status.kind === 'running' || s.info.status.kind === 'starting'),
             );
             if (existing) {
                 terminalStore.focusPane(existing.info.id as string);
@@ -201,17 +219,34 @@ export const terminalStore = {
             const intoSplit = !!host && host.panes.length < 2;
             if (host && intoSplit) {
                 groups = groups.map((g) =>
-                    g.id === host.id ? { ...g, panes: [...g.panes, id], split: opts.split ?? 'row', ratio: 0.5, focused: id } : g,
+                    g.id === host.id
+                        ? {
+                              ...g,
+                              panes: [...g.panes, id],
+                              split: opts.split ?? 'row',
+                              ratio: 0.5,
+                              focused: id,
+                          }
+                        : g,
                 );
                 activeGroup = host.id;
             } else {
-                const group: TerminalGroup = { id: newGroupId(), panes: [id], split: 'row', ratio: 0.5, focused: id };
+                const group: TerminalGroup = {
+                    id: newGroupId(),
+                    panes: [id],
+                    split: 'row',
+                    ratio: 0.5,
+                    focused: id,
+                };
                 groups = [...groups, group];
                 activeGroup = group.id;
             }
             // 会话和它的标签一次放进去：终端运行时一看到新会话就接输出，
             // 中间要是有「有会话没标签」的一刻，头几个字节会被当成后台输出亮活动点
-            const sessions = { ...get().sessions, [id]: viewOf(info, !intoSplit && terminalLayout.get().filesOpen) };
+            const sessions = {
+                ...get().sessions,
+                [id]: viewOf(info, !intoSplit && terminalLayout.get().filesOpen),
+            };
             setGroups(groups, activeGroup, { sessions, open: true, busy: false });
             return id;
         } catch (err) {
@@ -231,7 +266,9 @@ export const terminalStore = {
     focusPane(sessionId: string) {
         const group = groupOf(sessionId);
         if (!group) return;
-        const groups = get().groups.map((g) => (g.id === group.id ? { ...g, focused: sessionId } : g));
+        const groups = get().groups.map((g) =>
+            g.id === group.id ? { ...g, focused: sessionId } : g,
+        );
         setGroups(groups, group.id, { open: true });
         clearActivityOf(group);
     },
@@ -243,16 +280,25 @@ export const terminalStore = {
             .map((g) => {
                 if (!g.panes.includes(sessionId)) return g;
                 const panes = g.panes.filter((p) => p !== sessionId);
-                return { ...g, panes, focused: panes.includes(g.focused) ? g.focused : (panes[0] ?? '') };
+                return {
+                    ...g,
+                    panes,
+                    focused: panes.includes(g.focused) ? g.focused : (panes[0] ?? ''),
+                };
             })
             .filter((g) => g.panes.length > 0);
         let nextActive = activeGroup;
         if (!nextGroups.some((g) => g.id === activeGroup)) {
             const index = groups.findIndex((g) => g.id === activeGroup);
-            nextActive = nextGroups[Math.min(Math.max(index, 0), nextGroups.length - 1)]?.id ?? null;
+            nextActive =
+                nextGroups[Math.min(Math.max(index, 0), nextGroups.length - 1)]?.id ?? null;
         }
         set({ sessions: rest });
-        setGroups(nextGroups, nextActive, nextGroups.length === 0 ? { open: false, maximized: false } : {});
+        setGroups(
+            nextGroups,
+            nextActive,
+            nextGroups.length === 0 ? { open: false, maximized: false } : {},
+        );
         try {
             await terminalService.close(sessionId);
         } catch {
@@ -273,7 +319,8 @@ export const terminalStore = {
     },
 
     async closeOthers(groupId: string) {
-        for (const g of get().groups.filter((x) => x.id !== groupId)) await terminalStore.closeGroup(g.id);
+        for (const g of get().groups.filter((x) => x.id !== groupId))
+            await terminalStore.closeGroup(g.id);
     },
 
     async restart(sessionId: string) {
@@ -358,7 +405,8 @@ export const terminalStore = {
         const current = get().sessions[sessionId];
         if (!current || current.activity === activity) return;
         // 跑完了命令的提示比「有新输出」更要紧，不被后者盖掉
-        if (activity === 'output' && (current.activity === 'ok' || current.activity === 'fail')) return;
+        if (activity === 'output' && (current.activity === 'ok' || current.activity === 'fail'))
+            return;
         patchSession(sessionId, { activity });
     },
 
@@ -367,7 +415,8 @@ export const terminalStore = {
     },
 
     setSudoPrompt(sessionId: string, sudoPrompt: boolean) {
-        if (get().sessions[sessionId]?.sudoPrompt !== sudoPrompt) patchSession(sessionId, { sudoPrompt });
+        if (get().sessions[sessionId]?.sudoPrompt !== sudoPrompt)
+            patchSession(sessionId, { sudoPrompt });
     },
 };
 
@@ -399,6 +448,9 @@ export function isLive(status: TerminalStatus): boolean {
 }
 
 /** 给别的页面用的入口：Bot 卡片、应用端详情、远端主机卡片 */
-export function openTerminal(target: TerminalTarget, opts?: { shell?: LocalShellKind; forceNew?: boolean }) {
+export function openTerminal(
+    target: TerminalTarget,
+    opts?: { shell?: LocalShellKind; forceNew?: boolean },
+) {
     return terminalStore.open(target, opts);
 }

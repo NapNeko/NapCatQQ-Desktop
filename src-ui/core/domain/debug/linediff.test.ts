@@ -56,7 +56,10 @@ describe('diffLines', () => {
         const tail = ['  "tail": 9', '}'];
         const midA = Array.from({ length: 499 }, (_, i) => `  "a${i}": ${i},`);
         const midB = Array.from({ length: 499 }, (_, i) => `  "b${i}": ${i},`);
-        const rows = diffLines([...head, ...midA, ...tail].join('\n'), [...head, ...midB, ...tail].join('\n'));
+        const rows = diffLines(
+            [...head, ...midA, ...tail].join('\n'),
+            [...head, ...midB, ...tail].join('\n'),
+        );
 
         expect(rows.slice(0, head.length).every((r) => r.kind === 'same')).toBe(true);
         expect(rows.slice(-tail.length).every((r) => r.kind === 'same')).toBe(true);
@@ -67,7 +70,10 @@ describe('diffLines', () => {
 
     it('大文本但行数乘积没超限时照样走 LCS（改动在中间也对得齐）', () => {
         const padA = Array.from({ length: 300 }, (_, i) => `same ${i}`);
-        const rows = diffLines([...padA, 'old', ...padA].join('\n'), [...padA, 'new', ...padA].join('\n'));
+        const rows = diffLines(
+            [...padA, 'old', ...padA].join('\n'),
+            [...padA, 'new', ...padA].join('\n'),
+        );
         expect(rows.filter((r) => r.kind !== 'same')).toEqual([
             { kind: 'remove', left: 'old', right: null },
             { kind: 'add', left: null, right: 'new' },

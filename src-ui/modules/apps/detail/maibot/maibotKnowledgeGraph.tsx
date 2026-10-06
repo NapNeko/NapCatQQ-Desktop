@@ -23,11 +23,11 @@ const SIZES = [
     { value: '240', label: '240' },
 ] as const;
 
-export const KnowledgeGraph: React.FC<{ instanceId: string; switcher: ReactNode; onImport: () => void }> = ({
-    instanceId,
-    switcher,
-    onImport,
-}) => {
+export const KnowledgeGraph: React.FC<{
+    instanceId: string;
+    switcher: ReactNode;
+    onImport: () => void;
+}> = ({ instanceId, switcher, onImport }) => {
     const [size, setSize] = useState<'60' | '120' | '240'>('120');
     const [selected, setSelected] = useState<string | null>(null);
     const [centerOn, setCenterOn] = useState<string | null>(null);
@@ -80,9 +80,17 @@ export const KnowledgeGraph: React.FC<{ instanceId: string; switcher: ReactNode;
                                             onClick={() => jump(h.node)}
                                             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-inset"
                                         >
-                                            <span className="shrink-0 text-2xs text-text-tertiary">{h.kind === 'relation' ? '关系' : '实体'}</span>
-                                            <span className="min-w-0 flex-1 truncate">{h.title}</span>
-                                            {!shown.has(h.node) && <span className="shrink-0 text-2xs text-text-disabled">不在画面里</span>}
+                                            <span className="shrink-0 text-2xs text-text-tertiary">
+                                                {h.kind === 'relation' ? '关系' : '实体'}
+                                            </span>
+                                            <span className="min-w-0 flex-1 truncate">
+                                                {h.title}
+                                            </span>
+                                            {!shown.has(h.node) && (
+                                                <span className="shrink-0 text-2xs text-text-disabled">
+                                                    不在画面里
+                                                </span>
+                                            )}
                                         </button>
                                     </li>
                                 ))}
@@ -102,7 +110,12 @@ export const KnowledgeGraph: React.FC<{ instanceId: string; switcher: ReactNode;
                     画了 {data.nodes.length} / 共 {data.total_nodes} 个点
                 </span>
             )}
-            <Button size="sm" variant="ghost" onClick={() => setFitSignal((n) => n + 1)} disabled={!data || data.nodes.length === 0}>
+            <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setFitSignal((n) => n + 1)}
+                disabled={!data || data.nodes.length === 0}
+            >
                 <Maximize2 size={13} />
                 看全图
             </Button>
@@ -145,7 +158,13 @@ export const KnowledgeGraph: React.FC<{ instanceId: string; switcher: ReactNode;
                             loading={node.isFetching && !node.data}
                             busy={del.busy}
                             onGo={jump}
-                            onDelete={(d) => d.hash && del.start({ kind: 'entity', ids: [d.hash] }, `「${d.id}」和它的关系`)}
+                            onDelete={(d) =>
+                                d.hash &&
+                                del.start(
+                                    { kind: 'entity', ids: [d.hash] },
+                                    `「${d.id}」和它的关系`,
+                                )
+                            }
                             onClose={() => setSelected(null)}
                         />
                     )}
@@ -172,11 +191,18 @@ const NodePanel: React.FC<{
                 <h3 className="truncate font-display text-md font-semibold text-text">{id}</h3>
                 {detail && (
                     <p className="mt-0.5 text-2xs text-text-tertiary">
-                        {detail.relations.length} 条关系 · 出现在 {detail.mentions || detail.paragraphs.length} 段里
+                        {detail.relations.length} 条关系 · 出现在{' '}
+                        {detail.mentions || detail.paragraphs.length} 段里
                     </p>
                 )}
             </div>
-            <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="关掉" onClick={onClose}>
+            <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                aria-label="关掉"
+                onClick={onClose}
+            >
                 <X size={14} />
             </Button>
         </header>
@@ -198,10 +224,27 @@ const NodePanel: React.FC<{
                                     onClick={() => onGo(other)}
                                     className="group flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-inset"
                                 >
-                                    <span className={cn('truncate', r.subject === id ? 'text-text-secondary' : 'text-text')}>{r.subject}</span>
+                                    <span
+                                        className={cn(
+                                            'truncate',
+                                            r.subject === id ? 'text-text-secondary' : 'text-text',
+                                        )}
+                                    >
+                                        {r.subject}
+                                    </span>
                                     <span className="shrink-0 text-brand">{r.predicate}</span>
-                                    <span className={cn('min-w-0 flex-1 truncate', r.object === id ? 'text-text-secondary' : 'text-text')}>{r.object}</span>
-                                    <ArrowRight size={12} className="shrink-0 text-text-disabled opacity-0 group-hover:opacity-100" />
+                                    <span
+                                        className={cn(
+                                            'min-w-0 flex-1 truncate',
+                                            r.object === id ? 'text-text-secondary' : 'text-text',
+                                        )}
+                                    >
+                                        {r.object}
+                                    </span>
+                                    <ArrowRight
+                                        size={12}
+                                        className="shrink-0 text-text-disabled opacity-0 group-hover:opacity-100"
+                                    />
                                 </button>
                             );
                         })}
@@ -212,8 +255,14 @@ const NodePanel: React.FC<{
                         <h4 className="text-xs font-medium text-text-secondary">出处</h4>
                         {detail.paragraphs.map((p) => (
                             <div key={p.hash} className="rounded-sm bg-field px-2.5 py-2">
-                                <p className="line-clamp-3 text-xs leading-relaxed text-text">{p.preview}</p>
-                                {p.source && <p className="mt-1 truncate text-2xs text-text-tertiary">{p.source}</p>}
+                                <p className="line-clamp-3 text-xs leading-relaxed text-text">
+                                    {p.preview}
+                                </p>
+                                {p.source && (
+                                    <p className="mt-1 truncate text-2xs text-text-tertiary">
+                                        {p.source}
+                                    </p>
+                                )}
                             </div>
                         ))}
                     </section>

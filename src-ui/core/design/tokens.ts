@@ -5,10 +5,7 @@
 // 普通组件应该走 className + tailwind utility / 或直接 var(--xxx)，
 // 不要从这里 import 字面值。动画 token 在 core/design/motion.ts。
 
-import {
-    catppuccinFlavors,
-    type CatppuccinFlavorName,
-} from './catppuccin';
+import { catppuccinFlavors, type CatppuccinFlavorName } from './catppuccin';
 
 export const tokens = {
     brand: {
@@ -56,56 +53,64 @@ export type Tokens = typeof tokens;
 export const catppuccinSemantic: Record<
     CatppuccinFlavorName,
     {
-        brand500: string; accent500: string; success: string; warning: string; danger: string; info: string;
-        textPrimary: string; canvas: string; card: string; textOnBrand: string
+        brand500: string;
+        accent500: string;
+        success: string;
+        warning: string;
+        danger: string;
+        info: string;
+        textPrimary: string;
+        canvas: string;
+        card: string;
+        textOnBrand: string;
     }
 > = {
     latte: {
-        brand500: catppuccinFlavors.latte.mauve,    // #8839ef
-        accent500: catppuccinFlavors.latte.pink,    // #ea76cb
-        success: catppuccinFlavors.latte.green,     // #40a02b
-        warning: catppuccinFlavors.latte.yellow,    // #df8e1d
-        danger: catppuccinFlavors.latte.red,        // #d20f39
-        info: catppuccinFlavors.latte.blue,         // #1e66f5
-        textPrimary: catppuccinFlavors.latte.text,  // #4c4f69
-        canvas: catppuccinFlavors.latte.base,       // #eff1f5
-        card: catppuccinFlavors.latte.mantle,       // #e6e9ef
+        brand500: catppuccinFlavors.latte.mauve, // #8839ef
+        accent500: catppuccinFlavors.latte.pink, // #ea76cb
+        success: catppuccinFlavors.latte.green, // #40a02b
+        warning: catppuccinFlavors.latte.yellow, // #df8e1d
+        danger: catppuccinFlavors.latte.red, // #d20f39
+        info: catppuccinFlavors.latte.blue, // #1e66f5
+        textPrimary: catppuccinFlavors.latte.text, // #4c4f69
+        canvas: catppuccinFlavors.latte.base, // #eff1f5
+        card: catppuccinFlavors.latte.mantle, // #e6e9ef
         textOnBrand: '#ffffff',
     },
     frappe: {
-        brand500: catppuccinFlavors.frappe.mauve,    // #ca9ee6
-        accent500: catppuccinFlavors.frappe.pink,    // #f4b8e4
-        success: catppuccinFlavors.frappe.green,     // #a6d189
-        warning: catppuccinFlavors.frappe.yellow,    // #e5c890
-        danger: catppuccinFlavors.frappe.red,        // #e78284
-        info: catppuccinFlavors.frappe.blue,         // #8caaee
-        textPrimary: catppuccinFlavors.frappe.text,  // #c6d0f5
-        canvas: catppuccinFlavors.frappe.base,       // #303446
-        card: catppuccinFlavors.frappe.mantle,       // #292c3c
+        brand500: catppuccinFlavors.frappe.mauve, // #ca9ee6
+        accent500: catppuccinFlavors.frappe.pink, // #f4b8e4
+        success: catppuccinFlavors.frappe.green, // #a6d189
+        warning: catppuccinFlavors.frappe.yellow, // #e5c890
+        danger: catppuccinFlavors.frappe.red, // #e78284
+        info: catppuccinFlavors.frappe.blue, // #8caaee
+        textPrimary: catppuccinFlavors.frappe.text, // #c6d0f5
+        canvas: catppuccinFlavors.frappe.base, // #303446
+        card: catppuccinFlavors.frappe.mantle, // #292c3c
         textOnBrand: '#ffffff',
     },
     macchiato: {
-        brand500: catppuccinFlavors.macchiato.mauve,   // #c6a0f6
-        accent500: catppuccinFlavors.macchiato.pink,    // #f5bde6
-        success: catppuccinFlavors.macchiato.green,     // #a6da95
-        warning: catppuccinFlavors.macchiato.yellow,    // #eed49f
-        danger: catppuccinFlavors.macchiato.red,        // #ed8796
-        info: catppuccinFlavors.macchiato.blue,         // #8aadf4
-        textPrimary: catppuccinFlavors.macchiato.text,  // #cad3f5
-        canvas: catppuccinFlavors.macchiato.base,       // #24273a
-        card: catppuccinFlavors.macchiato.mantle,       // #1e2030
+        brand500: catppuccinFlavors.macchiato.mauve, // #c6a0f6
+        accent500: catppuccinFlavors.macchiato.pink, // #f5bde6
+        success: catppuccinFlavors.macchiato.green, // #a6da95
+        warning: catppuccinFlavors.macchiato.yellow, // #eed49f
+        danger: catppuccinFlavors.macchiato.red, // #ed8796
+        info: catppuccinFlavors.macchiato.blue, // #8aadf4
+        textPrimary: catppuccinFlavors.macchiato.text, // #cad3f5
+        canvas: catppuccinFlavors.macchiato.base, // #24273a
+        card: catppuccinFlavors.macchiato.mantle, // #1e2030
         textOnBrand: '#ffffff',
     },
     mocha: {
-        brand500: catppuccinFlavors.mocha.mauve,   // #cba6f7
-        accent500: catppuccinFlavors.mocha.pink,    // #f5c2e7
-        success: catppuccinFlavors.mocha.green,     // #a6e3a1
-        warning: catppuccinFlavors.mocha.yellow,    // #f9e2af
-        danger: catppuccinFlavors.mocha.red,        // #f38ba8
-        info: catppuccinFlavors.mocha.blue,         // #89b4fa
-        textPrimary: catppuccinFlavors.mocha.text,  // #cdd6f4
-        canvas: catppuccinFlavors.mocha.base,       // #1e1e2e
-        card: catppuccinFlavors.mocha.mantle,       // #181825
+        brand500: catppuccinFlavors.mocha.mauve, // #cba6f7
+        accent500: catppuccinFlavors.mocha.pink, // #f5c2e7
+        success: catppuccinFlavors.mocha.green, // #a6e3a1
+        warning: catppuccinFlavors.mocha.yellow, // #f9e2af
+        danger: catppuccinFlavors.mocha.red, // #f38ba8
+        info: catppuccinFlavors.mocha.blue, // #89b4fa
+        textPrimary: catppuccinFlavors.mocha.text, // #cdd6f4
+        canvas: catppuccinFlavors.mocha.base, // #1e1e2e
+        card: catppuccinFlavors.mocha.mantle, // #181825
         textOnBrand: '#ffffff',
     },
 } as const;

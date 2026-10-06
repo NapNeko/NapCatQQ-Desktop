@@ -18,8 +18,10 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) =>
-                (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
         },
     ),
 }));
@@ -54,7 +56,10 @@ beforeAll(() => {
             return (this as HTMLElement).dataset.testid === 'chat-scroller' ? 600 : 60;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 380 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 380,
+    });
     Element.prototype.hasPointerCapture ??= () => false;
     Element.prototype.releasePointerCapture ??= () => {};
     Element.prototype.setPointerCapture ??= () => {};
@@ -72,21 +77,23 @@ beforeEach(() => {
     for (const fn of Object.values(service)) fn.mockReset();
     preferencesStore.setMotionEnabled(false);
     service.unsubscribe.mockResolvedValue(undefined);
-    service.subscribe.mockImplementation(async (botId: string, _source: unknown, onBatch: (b: DebugEventBatch) => void) => {
-        push = onBatch;
-        return {
-            subscription_id: 'sub-1',
-            receiver: {
-                bot_id: botId,
-                source: { kind: 'internal' },
-                state: { state: 'connected' },
-                buffered: 0,
-                dropped_total: 0,
-                first_seq: 1,
-                viewers: 1,
-            },
-        };
-    });
+    service.subscribe.mockImplementation(
+        async (botId: string, _source: unknown, onBatch: (b: DebugEventBatch) => void) => {
+            push = onBatch;
+            return {
+                subscription_id: 'sub-1',
+                receiver: {
+                    bot_id: botId,
+                    source: { kind: 'internal' },
+                    state: { state: 'connected' },
+                    buffered: 0,
+                    dropped_total: 0,
+                    first_seq: 1,
+                    viewers: 1,
+                },
+            };
+        },
+    );
     service.call.mockImplementation(async (req: { request_id: string; action: string }) => {
         if (req.action === 'get_group_member_list') {
             return ok(req.request_id, [
@@ -161,7 +168,11 @@ const PRIVATE_MSG = ob11(2, {
 async function seed(events: DebugEvent[]) {
     await debugEventStore.ensureReceiving(BOT.bot_id, { kind: 'auto' }, BOT.qq_id);
     act(() => push?.({ v: 1, bot_id: BOT.bot_id, events }));
-    await waitFor(() => expect(debugEventStore.getSnapshot().bots[BOT.bot_id]?.chat.items.length).toBe(events.length));
+    await waitFor(() =>
+        expect(debugEventStore.getSnapshot().bots[BOT.bot_id]?.chat.items.length).toBe(
+            events.length,
+        ),
+    );
 }
 
 function renderColumn() {
@@ -178,7 +189,8 @@ function renderColumn() {
 function scrollMetrics(el: HTMLElement, view: number) {
     let top = 0;
     const calls: Array<{ to: number; max: number }> = [];
-    const height = () => parseFloat((el.firstElementChild as HTMLElement | null)?.style.height ?? '') || view;
+    const height = () =>
+        parseFloat((el.firstElementChild as HTMLElement | null)?.style.height ?? '') || view;
     const maxTop = () => Math.max(0, height() - view);
     Object.defineProperty(el, 'scrollHeight', { configurable: true, get: height });
     Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => view });
@@ -189,7 +201,9 @@ function scrollMetrics(el: HTMLElement, view: number) {
             top = Math.max(0, Math.min(v, maxTop()));
         },
     });
-    (el as HTMLElement & { scrollTo: (o: ScrollToOptions) => void }).scrollTo = (o: ScrollToOptions) => {
+    (el as HTMLElement & { scrollTo: (o: ScrollToOptions) => void }).scrollTo = (
+        o: ScrollToOptions,
+    ) => {
         if (typeof o.top !== 'number') return;
         calls.push({ to: o.top, max: maxTop() });
         top = Math.max(0, Math.min(o.top, maxTop()));
@@ -200,7 +214,8 @@ function scrollMetrics(el: HTMLElement, view: number) {
         get top() {
             return top;
         },
-        pulledToBottom: (since: number) => calls.slice(since).some((c) => c.to >= c.max - 1 && c.max > 0),
+        pulledToBottom: (since: number) =>
+            calls.slice(since).some((c) => c.to >= c.max - 1 && c.max > 0),
         scrollTo(value: number) {
             top = Math.max(0, Math.min(value, maxTop()));
             fireEvent.scroll(el);
@@ -234,7 +249,11 @@ describe('Composer（在右栏里）', () => {
         const list = await screen.findByRole('listbox', { name: '群成员' });
         await within(list).findByText('阿强');
         expect(service.call).toHaveBeenCalledWith(
-            expect.objectContaining({ action: 'get_group_member_list', params: { group_id: 100001 }, origin: 'picker' }),
+            expect.objectContaining({
+                action: 'get_group_member_list',
+                params: { group_id: 100001 },
+                origin: 'picker',
+            }),
         );
         await user.click(within(list).getByText('阿强'));
         expect(textbox()).toHaveValue('@阿强 ');
@@ -320,7 +339,14 @@ describe('Composer（在右栏里）', () => {
                 ...base,
                 result: {
                     kind: 'ok',
-                    outcome: { ...base.result.outcome, ok: false, status: 'failed', retcode: 1200, wording: '消息内容为空', message: 'EMPTY' },
+                    outcome: {
+                        ...base.result.outcome,
+                        ok: false,
+                        status: 'failed',
+                        retcode: 1200,
+                        wording: '消息内容为空',
+                        message: 'EMPTY',
+                    },
                 },
             };
         });
@@ -330,7 +356,9 @@ describe('Composer（在右栏里）', () => {
         await waitFor(() => expect(textbox()).toBeEnabled());
         await user.type(textbox(), '测试一下');
         await user.keyboard('{Enter}');
-        expect(await screen.findByRole('alert')).toHaveTextContent('没发出去：retcode 1200 · 消息内容为空');
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            '没发出去：retcode 1200 · 消息内容为空',
+        );
 
         const sent = lastSend() as unknown as { request_id: string; params: unknown };
         act(() =>
@@ -360,7 +388,9 @@ describe('Composer（在右栏里）', () => {
                 ],
             }),
         );
-        expect(await screen.findByText('↗ send_group_msg · ✗ retcode 1200 · 消息内容为空')).toBeInTheDocument();
+        expect(
+            await screen.findByText('↗ send_group_msg · ✗ retcode 1200 · 消息内容为空'),
+        ).toBeInTheDocument();
     });
 
     it('Shift + Enter 换行，不发送', async () => {
@@ -457,8 +487,14 @@ describe('Composer（在右栏里）', () => {
         await user.type(textbox(), '@');
         const list = await screen.findByRole('listbox', { name: '群成员' });
         await within(list).findByText('阿强');
-        expect(within(list).getByRole('option', { name: /全体成员/ })).toHaveAttribute('aria-selected', 'false');
-        expect(within(list).getByRole('option', { name: /阿强/ })).toHaveAttribute('aria-selected', 'true');
+        expect(within(list).getByRole('option', { name: /全体成员/ })).toHaveAttribute(
+            'aria-selected',
+            'false',
+        );
+        expect(within(list).getByRole('option', { name: /阿强/ })).toHaveAttribute(
+            'aria-selected',
+            'true',
+        );
         await user.keyboard('{Enter}');
         expect(textbox()).toHaveValue('@阿强 ');
     });
@@ -514,7 +550,9 @@ describe('Composer（在右栏里）', () => {
         expect(button).not.toHaveAttribute('title');
         await user.hover(button);
         // jsdom 里 GSAP 的进场样式让气泡算作不可见，按 hidden 也一起找
-        expect(await screen.findByRole('tooltip', { hidden: true })).toHaveTextContent('发送（Enter）');
+        expect(await screen.findByRole('tooltip', { hidden: true })).toHaveTextContent(
+            '发送（Enter）',
+        );
         expect(button).toHaveAttribute('aria-describedby');
     });
 
@@ -580,12 +618,18 @@ describe('Composer（在右栏里）', () => {
         expect(within(dialog).getByLabelText('文字内容')).toHaveValue('看看这个');
         await user.click(within(dialog).getByRole('combobox'));
         await user.click(within(await screen.findByRole('listbox')).getByText('图片'));
-        fireEvent.change(within(dialog).getByLabelText('图片地址'), { target: { value: 'http://a/1.png' } });
+        fireEvent.change(within(dialog).getByLabelText('图片地址'), {
+            target: { value: 'http://a/1.png' },
+        });
         await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument(),
+        );
 
         // 文字进了构建内容摘要，输入框清空；发出去顺序 = 回复 + 文字 + 图片
-        expect(screen.getByRole('button', { name: '编辑构建内容' })).toHaveTextContent('构建：看看这个[图片]');
+        expect(screen.getByRole('button', { name: '编辑构建内容' })).toHaveTextContent(
+            '构建：看看这个[图片]',
+        );
         expect(textbox()).toHaveValue('');
         await user.click(textbox());
         await user.keyboard('{Enter}');
@@ -605,7 +649,9 @@ describe('Composer（在右栏里）', () => {
         );
 
         // 发完构建内容清空，下一条只有手打的字
-        await waitFor(() => expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument(),
+        );
         await user.type(textbox(), '第二句');
         await user.keyboard('{Enter}');
         await waitFor(() => expect(textbox()).toHaveValue(''));
@@ -632,7 +678,9 @@ describe('Composer（在右栏里）', () => {
         await user.click(within(dialog).getAllByRole('button', { name: '上移' })[1] as HTMLElement);
         fireEvent.change(within(dialog).getByLabelText('QQ 号'), { target: { value: '10003' } });
         await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument(),
+        );
 
         expect(textbox()).toHaveValue('@10003 你好');
         expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument();
@@ -663,17 +711,25 @@ describe('Composer（在右栏里）', () => {
         let dialog = await screen.findByRole('dialog', { name: '消息构建器' });
         await user.click(within(dialog).getByRole('combobox'));
         await user.click(within(await screen.findByRole('listbox')).getByText('图片'));
-        fireEvent.change(within(dialog).getByLabelText('图片地址'), { target: { value: 'http://a/1.png' } });
+        fireEvent.change(within(dialog).getByLabelText('图片地址'), {
+            target: { value: 'http://a/1.png' },
+        });
         await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument(),
+        );
 
         // 有图片段，点「转回文字输入」直接打开构建器
         await user.click(screen.getByRole('button', { name: '转回文字输入' }));
         dialog = await screen.findByRole('dialog', { name: '消息构建器' });
         // 删掉图片那一行，剩下的都是文字 → 写回折叠进输入框
-        await user.click(within(dialog).getAllByRole('button', { name: '删掉这段' })[1] as HTMLElement);
+        await user.click(
+            within(dialog).getAllByRole('button', { name: '删掉这段' })[1] as HTMLElement,
+        );
         await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument(),
+        );
         expect(textbox()).toHaveValue('看看这个');
         expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument();
     });
@@ -698,7 +754,9 @@ describe('Composer（在右栏里）', () => {
                 ],
             }),
         );
-        const chip = await screen.findByRole('button', { name: '接收状态：重连中（第 2 次，3 秒后），点击管理' });
+        const chip = await screen.findByRole('button', {
+            name: '接收状态：重连中（第 2 次，3 秒后），点击管理',
+        });
         expect(chip).toHaveTextContent('重连中（第 2 次，3 秒后）');
 
         act(() =>
@@ -709,13 +767,17 @@ describe('Composer（在右栏里）', () => {
                     {
                         seq: 11,
                         at_ms: T0 + 11_000,
-                        body: { kind: 'receiver', state: { state: 'stopped', reason: 'Bot 已停止' }, source: { kind: 'internal' } },
+                        body: {
+                            kind: 'receiver',
+                            state: { state: 'stopped', reason: 'Bot 已停止' },
+                            source: { kind: 'internal' },
+                        },
                     },
                 ],
             }),
         );
-        expect(await screen.findByRole('button', { name: '接收状态：已停止：Bot 已停止，点击管理' })).toHaveTextContent(
-            '已停止：Bot 已停止',
-        );
+        expect(
+            await screen.findByRole('button', { name: '接收状态：已停止：Bot 已停止，点击管理' }),
+        ).toHaveTextContent('已停止：Bot 已停止');
     });
 });

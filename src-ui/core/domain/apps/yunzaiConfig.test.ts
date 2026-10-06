@@ -22,7 +22,11 @@ describe('yunzaiConfig', () => {
         cfg.redis.port = 24100;
         cfg.other.master = ['123'];
         cfg.other.master_qq = ['1 2'];
-        cfg.group.overrides = [newYunzaiGroupOverride('default'), newYunzaiGroupOverride('555'), newYunzaiGroupOverride('555')];
+        cfg.group.overrides = [
+            newYunzaiGroupOverride('default'),
+            newYunzaiGroupOverride('555'),
+            newYunzaiGroupOverride('555'),
+        ];
         const paths = validateYunzaiConfig(cfg).map((i) => i.path);
         expect(paths).toEqual(
             expect.arrayContaining([

@@ -29,7 +29,11 @@ export interface ContactPickerProps extends FieldProps {
 }
 
 export function ContactPicker(props: ContactPickerProps) {
-    return props.kind === 'member' ? <MemberContactPicker {...props} /> : <PlainContactPicker {...props} />;
+    return props.kind === 'member' ? (
+        <MemberContactPicker {...props} />
+    ) : (
+        <PlainContactPicker {...props} />
+    );
 }
 
 function PlainContactPicker({ kind, target, groupId: _groupId, ...field }: ContactPickerProps) {
@@ -57,17 +61,20 @@ function MemberContactPicker({ target, groupId, ...field }: ContactPickerProps) 
     // 群列表多半已经在缓存里（同一张表单上的群号字段就在用它），拿来判断填的群号是不是完整的
     const groups = useDebugContacts(target, 'group');
     const known = settled !== null && groups.options.some((g) => String(g.id) === settled);
-    const complete = settled !== null && Number(settled) > 0 && (known || settled.length >= MIN_GROUP_DIGITS);
+    const complete =
+        settled !== null && Number(settled) > 0 && (known || settled.length >= MIN_GROUP_DIGITS);
     const contacts = useDebugContacts(target, 'member', complete ? settled : null);
 
     let unavailable: string | null = null;
     if (!target) unavailable = '先在顶栏选一个 Bot；也可以直接填号';
     else if (!target.running) unavailable = 'Bot 没在运行，列表拉不到，直接填号就行';
     else if (typed === null || Number(typed) <= 0) unavailable = '先填 group_id，才能从群成员里挑';
-    else if (typed === settled && !complete) unavailable = `群号「${typed}」看着还没填完，填完整才去拉成员列表`;
+    else if (typed === settled && !complete)
+        unavailable = `群号「${typed}」看着还没填完，填完整才去拉成员列表`;
 
     // 群号还在变（停手等待中）且看着像完整的：列表先转圈，别把上一个群的成员当成这个群的
-    const looksComplete = (id: string) => groups.options.some((g) => String(g.id) === id) || id.length >= MIN_GROUP_DIGITS;
+    const looksComplete = (id: string) =>
+        groups.options.some((g) => String(g.id) === id) || id.length >= MIN_GROUP_DIGITS;
     const waiting = typed !== null && typed !== settled && looksComplete(typed);
     return (
         <PickerCombo

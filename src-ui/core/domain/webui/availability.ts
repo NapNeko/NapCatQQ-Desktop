@@ -9,9 +9,7 @@ export interface NapcatWebuiBinding {
 }
 
 /// NapCat：等 napcat_webui_available 事件聚合到 (port, token) 才可用。
-export function isNapcatWebuiAvailable(
-    binding: NapcatWebuiBinding | null | undefined,
-): boolean {
+export function isNapcatWebuiAvailable(binding: NapcatWebuiBinding | null | undefined): boolean {
     return !!binding && typeof binding.port === 'number' && !!binding.token;
 }
 

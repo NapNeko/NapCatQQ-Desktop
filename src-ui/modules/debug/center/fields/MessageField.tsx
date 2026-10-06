@@ -15,7 +15,11 @@ export function MessageField(props: FieldProps) {
     const { value, onChange, invalid, inputId, describedBy, disabled } = props;
     // 值本身的形状说了算（JSON 视图里改成数组，这边就跟着切）；没填时用上次选的
     const [preferred, setPreferred] = useState<Mode>(Array.isArray(value) ? 'json' : 'text');
-    const mode: Mode = Array.isArray(value) ? 'json' : typeof value === 'string' ? 'text' : preferred;
+    const mode: Mode = Array.isArray(value)
+        ? 'json'
+        : typeof value === 'string'
+          ? 'text'
+          : preferred;
     const backToText = mode === 'json' ? segmentsToText(value ?? []) : '';
     const canText = mode === 'text' || backToText !== null;
 
@@ -42,13 +46,17 @@ export function MessageField(props: FieldProps) {
                             value: 'text',
                             label: '文本',
                             disabled: !canText || disabled,
-                            title: canText ? undefined : '消息里有图片、@ 之类的非文本段，换成文本会丢内容',
+                            title: canText
+                                ? undefined
+                                : '消息里有图片、@ 之类的非文本段，换成文本会丢内容',
                         },
                         { value: 'json', label: '消息段 JSON', disabled },
                     ]}
                 />
                 <span className="truncate text-2xs text-text-tertiary">
-                    {mode === 'text' ? '按 CQ 码解析，比如 [CQ:face,id=14]' : '数组，每项形如 {"type":"text","data":{"text":"…"}}'}
+                    {mode === 'text'
+                        ? '按 CQ 码解析，比如 [CQ:face,id=14]'
+                        : '数组，每项形如 {"type":"text","data":{"text":"…"}}'}
                 </span>
             </div>
             {mode === 'text' ? (
@@ -75,7 +83,12 @@ function MessageText({
     describedBy,
     disabled,
 }: Pick<FieldProps, 'value' | 'onChange' | 'invalid' | 'inputId' | 'describedBy' | 'disabled'>) {
-    const [text, setText] = useTextDraft(value, valueText, (t) => (t === '' ? undefined : t), onChange);
+    const [text, setText] = useTextDraft(
+        value,
+        valueText,
+        (t) => (t === '' ? undefined : t),
+        onChange,
+    );
     return (
         <textarea
             id={inputId}

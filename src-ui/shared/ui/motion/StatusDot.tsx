@@ -10,13 +10,7 @@
 import type { CSSProperties } from 'react';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 
-export type StatusDotTone =
-    | 'success'
-    | 'running'
-    | 'warning'
-    | 'danger'
-    | 'idle'
-    | 'loading';
+export type StatusDotTone = 'success' | 'running' | 'warning' | 'danger' | 'idle' | 'loading';
 
 interface StatusDotProps {
     tone: StatusDotTone;
@@ -46,7 +40,11 @@ export function StatusDot({ tone, size = 8, className }: StatusDotProps) {
         // 单程 = 整轮一半，alternate 往返刚好一轮
         '--ndf-status-dur': `${((f.breathDuration / Math.max(0.5, m.speed)) * (tone === 'danger' ? 0.7 : 1)) / 2}s`,
     };
-    const breathe = pulsing ? (f.overshoot ? ' ndf-status-breathe-rich' : ' ndf-status-breathe') : '';
+    const breathe = pulsing
+        ? f.overshoot
+            ? ' ndf-status-breathe-rich'
+            : ' ndf-status-breathe'
+        : '';
 
     return (
         <span

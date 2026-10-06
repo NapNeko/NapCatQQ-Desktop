@@ -1,1 +1,5 @@
-.native-chat-conversation-row[data-highlighted=true] .native-chat-conversation-button { outline: 2px solid var(--border-focus); outline-offset: -2px; background: var(--surface-inset); }
+.native-chat-conversation-row[data-highlighted="true"] .native-chat-conversation-button {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+    background: var(--surface-inset);
+}

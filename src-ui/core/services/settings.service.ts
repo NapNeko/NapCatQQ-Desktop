@@ -38,10 +38,7 @@ import {
     type CloseAction,
 } from '../../hooks/preferences/preferencesStore';
 
-export type AfterCloseUiBehavior =
-    | 'hide'
-    | 'delayed_lightweight'
-    | 'immediate_lightweight';
+export type AfterCloseUiBehavior = 'hide' | 'delayed_lightweight' | 'immediate_lightweight';
 export type UiModeOnStartup = 'normal' | 'tray_only';
 
 export {
@@ -148,8 +145,7 @@ function mirrorWebhookFlat(channels: WebhookChannelDraft[]): {
     body: string;
     method: string;
 } {
-    const first =
-        channels.find((c) => c.enabled && c.url.trim()) ?? channels[0];
+    const first = channels.find((c) => c.enabled && c.url.trim()) ?? channels[0];
     if (!first) {
         return {
             url: '',
@@ -187,10 +183,8 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
     const flat = mirrorWebhookFlat(channels);
     return {
         botLoginCheckIntervalMs: Number(dto.settings.poller.botLoginCheckInterval),
-        botOfflineWebHookNotice:
-            dto.settings.poller.botOfflineWebHookNotice ?? false,
-        botOfflineEmailNotice:
-            dto.settings.poller.botOfflineEmailNotice ?? false,
+        botOfflineWebHookNotice: dto.settings.poller.botOfflineWebHookNotice ?? false,
+        botOfflineEmailNotice: dto.settings.poller.botOfflineEmailNotice ?? false,
         performanceMonitorEnabled: dto.settings.performanceMonitorEnabled,
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             Number(dto.settings.performanceMonitorInterval),
@@ -210,16 +204,11 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
         }),
         githubPat: dto.githubPat ?? '',
         closeAction,
-        afterCloseUiBehavior: normalizeAfterClose(
-            dto.settings.afterCloseUiBehavior,
-        ),
-        enterLightweightDelaySecs: Number(
-            dto.settings.enterLightweightDelaySecs ?? 300,
-        ),
+        afterCloseUiBehavior: normalizeAfterClose(dto.settings.afterCloseUiBehavior),
+        enterLightweightDelaySecs: Number(dto.settings.enterLightweightDelaySecs ?? 300),
         uiModeOnStartup: normalizeUiModeOnStartup(dto.settings.uiModeOnStartup),
         launchOnStartup: dto.settings.launchOnStartup ?? false,
-        minimizeToTrayCountsAsHidden:
-            dto.settings.minimizeToTrayCountsAsHidden ?? true,
+        minimizeToTrayCountsAsHidden: dto.settings.minimizeToTrayCountsAsHidden ?? true,
         notifyOnOffline: dto.settings.notifyOnOffline ?? true,
         notifyOnBotCrashed: dto.settings.notifyOnBotCrashed ?? true,
         notifyOnLoginKicked: dto.settings.notifyOnLoginKicked ?? true,
@@ -228,7 +217,9 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
         // 不落扁平字段：MCP 设置没有设置页控件，整段带回（丢一次保存服务就被关掉）
         mcp: dto.settings.mcp,
         remoteHostHealthProbeEnabled: dto.settings.remoteHostHealthProbeEnabled ?? true,
-        remoteHostHealthProbeIntervalMs: Number(dto.settings.remoteHostHealthProbeIntervalMs ?? 30_000),
+        remoteHostHealthProbeIntervalMs: Number(
+            dto.settings.remoteHostHealthProbeIntervalMs ?? 30_000,
+        ),
         webHookChannels: channels,
         webHookUrl: flat.url || (wh?.WebHookUrl ?? ''),
         webHookSecret: flat.secret || (wh?.WebHookSecret ?? ''),
@@ -245,8 +236,7 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
         onebotTargetType: dto.settings.onebotOfflineNotice?.onebotTargetType ?? 'private',
         onebotMessageTemplate:
             dto.settings.onebotOfflineNotice?.onebotMessageTemplate ?? DEFAULT_ONEBOT_MESSAGE,
-        notifyOnRecovered:
-            dto.settings.poller.offlineNotifyBehavior?.notifyOnRecovered ?? false,
+        notifyOnRecovered: dto.settings.poller.offlineNotifyBehavior?.notifyOnRecovered ?? false,
         offlineDebounceSeconds: Number(
             dto.settings.poller.offlineNotifyBehavior?.debounceSeconds ?? 0,
         ),
@@ -335,8 +325,7 @@ type AppSettingsDtoInvoke = {
 };
 
 function uiPreferencesForInvoke(ui: AppUiPreferences): AppUiPreferences {
-    const n = (v: bigint | number) =>
-        typeof v === 'bigint' ? Number(v) : v;
+    const n = (v: bigint | number) => (typeof v === 'bigint' ? Number(v) : v);
     return {
         ...ui,
         infoBarDismissInfoMs: n(ui.infoBarDismissInfoMs) as unknown as bigint,
@@ -351,11 +340,11 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
         s.webHookChannels.length > 0
             ? s.webHookChannels
             : coerceWebhookChannels({
-                url: s.webHookUrl,
-                secret: s.webHookSecret,
-                bodyTemplate: s.webHookJson,
-                method: s.webHookMethod,
-            });
+                  url: s.webHookUrl,
+                  secret: s.webHookSecret,
+                  bodyTemplate: s.webHookJson,
+                  method: s.webHookMethod,
+              });
     const flat = mirrorWebhookFlat(channels);
     return {
         settings: {
@@ -437,23 +426,23 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
     };
 }
 
-function normalizeOneBotIdsFromDto(raw: {
-    onebotMessengerBotId?: string;
-    onebotMessengerBotIds?: string[];
-    onebotTargetId?: number;
-    onebotTargetIds?: number[];
-} | null | undefined): Pick<
+function normalizeOneBotIdsFromDto(
+    raw:
+        | {
+              onebotMessengerBotId?: string;
+              onebotMessengerBotIds?: string[];
+              onebotTargetId?: number;
+              onebotTargetIds?: number[];
+          }
+        | null
+        | undefined,
+): Pick<
     BackendSettings,
-    | 'onebotMessengerBotId'
-    | 'onebotMessengerBotIds'
-    | 'onebotTargetId'
-    | 'onebotTargetIds'
+    'onebotMessengerBotId' | 'onebotMessengerBotIds' | 'onebotTargetId' | 'onebotTargetIds'
 > {
     const messengerIds = dedupeStrings([
         ...(raw?.onebotMessengerBotIds ?? []),
-        ...(raw?.onebotMessengerBotId
-            ? raw.onebotMessengerBotId.split(/[,，;\s]+/)
-            : []),
+        ...(raw?.onebotMessengerBotId ? raw.onebotMessengerBotId.split(/[,，;\s]+/) : []),
     ]);
     const targetIds = dedupeNumbers([
         ...(raw?.onebotTargetIds ?? []).map((n) => Number(n) || 0),
@@ -538,23 +527,20 @@ export const settingsService = {
         });
     },
 
-    testWebhook: async (
-        channelId?: string,
-        channel?: WebhookChannelDraft,
-    ): Promise<void> => {
+    testWebhook: async (channelId?: string, channel?: WebhookChannelDraft): Promise<void> => {
         if (isTauri) {
             await invoke<void>('test_offline_webhook', {
                 channelId: channelId ?? null,
                 channel: channel
                     ? {
-                        id: channel.id,
-                        name: channel.name,
-                        enabled: channel.enabled,
-                        url: channel.url,
-                        secret: channel.secret,
-                        body_template: channel.bodyTemplate,
-                        method: channel.method,
-                    }
+                          id: channel.id,
+                          name: channel.name,
+                          enabled: channel.enabled,
+                          url: channel.url,
+                          secret: channel.secret,
+                          body_template: channel.bodyTemplate,
+                          method: channel.method,
+                      }
                     : null,
             });
             return;
@@ -640,9 +626,7 @@ export const settingsService = {
         return invoke<OneBotMessengerCandidate[]>('list_onebot_messenger_candidates');
     },
 
-    ensureOneBotMessengerHttp: async (
-        botId: string,
-    ): Promise<EnsureOneBotMessengerHttpResult> => {
+    ensureOneBotMessengerHttp: async (botId: string): Promise<EnsureOneBotMessengerHttpResult> => {
         if (!isTauri) {
             return {
                 bot_id: botId,

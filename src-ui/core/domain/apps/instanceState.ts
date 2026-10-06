@@ -1,10 +1,6 @@
 // 应用实例状态的展示元数据（列表行与详情页头部共用），以及从任务表认出某个实例的安装任务。
 
-import type {
-    AppInstance,
-    AppInstanceState,
-    DeploymentTaskSnapshot,
-} from '../../ipc/types';
+import type { AppInstance, AppInstanceState, DeploymentTaskSnapshot } from '../../ipc/types';
 
 export const STATE_META: Record<
     AppInstanceState,
@@ -32,14 +28,17 @@ function appInstallTaskTarget(instance: AppInstance): string {
     return `${instance.framework_id}@${instance.id}`;
 }
 
-export function matchesAppInstallTask(task: DeploymentTaskSnapshot, instance: AppInstance): boolean {
+export function matchesAppInstallTask(
+    task: DeploymentTaskSnapshot,
+    instance: AppInstance,
+): boolean {
     if (task.kind.kind !== 'component_action') return false;
     if (!INSTALL_ACTIONS.has(task.kind.action)) return false;
     const expect = appInstallTaskTarget(instance);
     return task.resources.some(
         (resource) =>
-            resource.kind === 'install_target'
-            && (resource.target === expect || resource.target === instance.install_dir),
+            resource.kind === 'install_target' &&
+            (resource.target === expect || resource.target === instance.install_dir),
     );
 }
 

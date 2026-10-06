@@ -57,6 +57,12 @@ export function componentLogoIcon(id: ComponentId | AppFrameworkId): ReactNode |
     if (!src) return undefined;
     const fit = UNCROPPED_LOGOS.has(src) ? 'object-contain' : 'rounded-full object-cover';
     return (
-        <img src={src} alt="" aria-hidden draggable={false} className={`h-6 w-6 select-none ${fit}`} />
+        <img
+            src={src}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className={`h-6 w-6 select-none ${fit}`}
+        />
     );
 }

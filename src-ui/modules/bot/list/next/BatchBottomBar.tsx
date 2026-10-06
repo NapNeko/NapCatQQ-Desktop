@@ -78,123 +78,119 @@ export function BatchBottomBar({
     // 内层 GsapPresence 自由动 x/y/scale 不影响居中。
     return (
         <BodyPortal>
-        <div className="float-above-terminal pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-            <GsapPresence visible={visible} onEnter={enter} onExit={exit}>
-                <BarBody>
-                    <div
-                        className="
+            <div className="float-above-terminal pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+                <GsapPresence visible={visible} onEnter={enter} onExit={exit}>
+                    <BarBody>
+                        <div
+                            className="
                             pointer-events-auto flex items-center gap-2 rounded-full
                             bg-elevated px-4 py-2 ring-1 ring-border-subtle shadow-popover
                             backdrop-blur-sm whitespace-nowrap
                         "
-                        role="toolbar"
-                        aria-label="批量管理"
-                    >
-                        <span className="select-none text-xs font-medium tabular-nums text-text-secondary">
-                            已选{' '}
-                            <Counter value={selectedCount} className="font-semibold text-text" />
-                            {' '}/ {totalCount}
-                        </span>
-
-                        <Divider />
-
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={allSelected ? onSelectNone : onSelectAll}
-                            disabled={busy || totalCount === 0}
+                            role="toolbar"
+                            aria-label="批量管理"
                         >
-                            <ActionMotionIcon
-                                icon={CheckCheck}
-                                motion={EMPHASIS_MOTION}
-                                size={14}
-                                strokeWidth={2.2}
-                            />
-                            {allSelected ? '取消全选' : '全选'}
-                        </Button>
+                            <span className="select-none text-xs font-medium tabular-nums text-text-secondary">
+                                已选{' '}
+                                <Counter
+                                    value={selectedCount}
+                                    className="font-semibold text-text"
+                                />{' '}
+                                / {totalCount}
+                            </span>
 
-                        <Divider />
+                            <Divider />
 
-                        <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={onBatchStart}
-                            disabled={busy || !hasSelection}
-                        >
-                            <ActionMotionIcon
-                                icon={Play}
-                                motion={busy || !hasSelection ? 'none' : 'nudge'}
-                                size={14}
-                                strokeWidth={2.4}
-                            />
-                            启动
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={onBatchStop}
-                            disabled={busy || !hasSelection}
-                        >
-                            <ActionMotionIcon
-                                icon={Square}
-                                motion={busy || !hasSelection ? 'none' : 'nudge'}
-                                size={14}
-                                strokeWidth={2.4}
-                            />
-                            停止
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={onBatchDelete}
-                            disabled={busy || !hasSelection}
-                            className="text-danger hover:bg-danger-soft hover:text-danger"
-                        >
-                            <ActionMotionIcon
-                                icon={Trash2}
-                                motion="none"
-                                size={14}
-                                strokeWidth={2.2}
-                            />
-                            删除
-                        </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={allSelected ? onSelectNone : onSelectAll}
+                                disabled={busy || totalCount === 0}
+                            >
+                                <ActionMotionIcon
+                                    icon={CheckCheck}
+                                    motion={EMPHASIS_MOTION}
+                                    size={14}
+                                    strokeWidth={2.2}
+                                />
+                                {allSelected ? '取消全选' : '全选'}
+                            </Button>
 
-                        <Divider />
+                            <Divider />
 
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={onExitBatch}
-                            disabled={busy}
-                        >
-                            <ActionMotionIcon
-                                icon={X}
-                                motion="none"
-                                size={14}
-                                strokeWidth={2.2}
-                            />
-                            退出
-                        </Button>
-                    </div>
-                </BarBody>
-            </GsapPresence>
-        </div>
+                            <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={onBatchStart}
+                                disabled={busy || !hasSelection}
+                            >
+                                <ActionMotionIcon
+                                    icon={Play}
+                                    motion={busy || !hasSelection ? 'none' : 'nudge'}
+                                    size={14}
+                                    strokeWidth={2.4}
+                                />
+                                启动
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={onBatchStop}
+                                disabled={busy || !hasSelection}
+                            >
+                                <ActionMotionIcon
+                                    icon={Square}
+                                    motion={busy || !hasSelection ? 'none' : 'nudge'}
+                                    size={14}
+                                    strokeWidth={2.4}
+                                />
+                                停止
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={onBatchDelete}
+                                disabled={busy || !hasSelection}
+                                className="text-danger hover:bg-danger-soft hover:text-danger"
+                            >
+                                <ActionMotionIcon
+                                    icon={Trash2}
+                                    motion="none"
+                                    size={14}
+                                    strokeWidth={2.2}
+                                />
+                                删除
+                            </Button>
+
+                            <Divider />
+
+                            <Button size="sm" variant="ghost" onClick={onExitBatch} disabled={busy}>
+                                <ActionMotionIcon
+                                    icon={X}
+                                    motion="none"
+                                    size={14}
+                                    strokeWidth={2.2}
+                                />
+                                退出
+                            </Button>
+                        </div>
+                    </BarBody>
+                </GsapPresence>
+            </div>
         </BodyPortal>
     );
 }
 
-const BarBody = forwardRef<HTMLDivElement, { children: React.ReactNode }>(
-    ({ children }, ref) => (
-        <div
-            ref={ref}
-            // 内层只让 GSAP 自由动 transform / autoAlpha,不再写 fixed 定位 +
-            // -translate,免得跟 GSAP 的 transform 冲突。
-            style={{ visibility: 'hidden', opacity: 0 }}
-        >
-            {children}
-        </div>
-    ),
-);
+const BarBody = forwardRef<HTMLDivElement, { children: React.ReactNode }>(({ children }, ref) => (
+    <div
+        ref={ref}
+        // 内层只让 GSAP 自由动 transform / autoAlpha,不再写 fixed 定位 +
+        // -translate,免得跟 GSAP 的 transform 冲突。
+        style={{ visibility: 'hidden', opacity: 0 }}
+    >
+        {children}
+    </div>
+));
 BarBody.displayName = 'BarBody';
 
 function Divider() {

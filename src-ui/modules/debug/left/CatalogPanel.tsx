@@ -7,12 +7,24 @@
 // 键盘：`/` 聚焦搜索框；搜索框里 ↑↓ 移动高亮、回车打开高亮的那个（Ctrl / ⌘+回车另开标签）；
 // 没搜索词时 ↓ 进入列表。列表里 ↑↓ Home End 移动，→ ← 展开 / 收起分类，回车打开，直接打字回到搜索框。
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Info, ListTree, RefreshCw, SearchX } from 'lucide-react';
 import { Button, Spinner } from '../../../shared/ui';
 import { useDebugCatalog } from '../../../hooks/debug/useDebugCatalog';
-import { debugWorkspaceStore, useDebugWorkspaceSelector } from '../../../hooks/debug/debugWorkspaceStore';
+import {
+    debugWorkspaceStore,
+    useDebugWorkspaceSelector,
+} from '../../../hooks/debug/debugWorkspaceStore';
 import { useScrollMemory } from '../../../hooks/debug/debugScrollMemory';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
@@ -21,8 +33,19 @@ import { groupActions, searchActions } from '../../../core/domain/debug/catalogV
 import type { DebugActionSummary } from '../../../core/ipc/generated/debug/DebugActionSummary';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import { revealLeftSearch, setLeftSearchOpen, useLeftSearch } from '../leftPanels';
-import { CATALOG_HEADER_HEIGHT, CATALOG_ROW_HEIGHT, CatalogActionRow, CatalogHeaderRow } from './CatalogRow';
-import { PanelMessage, PanelSearch, PanelSearchRow, SkeletonRows, useSlashFocus } from './panelParts';
+import {
+    CATALOG_HEADER_HEIGHT,
+    CATALOG_ROW_HEIGHT,
+    CatalogActionRow,
+    CatalogHeaderRow,
+} from './CatalogRow';
+import {
+    PanelMessage,
+    PanelSearch,
+    PanelSearchRow,
+    SkeletonRows,
+    useSlashFocus,
+} from './panelParts';
 import { useFlip } from './useFlip';
 
 // 搜索词和哪些分类收起了：纯界面状态，不落盘；切到别的面板 / 路由再回来还在
@@ -31,8 +54,22 @@ const UNSUPPORTED_GROUP = 'unsupported';
 let savedClosed: ReadonlySet<string> = new Set([UNSUPPORTED_GROUP]);
 
 type CatalogItem =
-    | { kind: 'header'; key: string; groupId: string; label: string; count: number | null; open: boolean; muted: boolean }
-    | { kind: 'action'; key: string; action: DebugActionSummary; groupKey: string | null; nested: boolean };
+    | {
+          kind: 'header';
+          key: string;
+          groupId: string;
+          label: string;
+          count: number | null;
+          open: boolean;
+          muted: boolean;
+      }
+    | {
+          kind: 'action';
+          key: string;
+          action: DebugActionSummary;
+          groupKey: string | null;
+          nested: boolean;
+      };
 
 const actionKey = (name: string) => `a:${name}`;
 const headerKey = (groupId: string) => `h:${groupId}`;
@@ -54,18 +91,36 @@ function buildItems(
     }
     const { groups, unsupported } = groupActions(actions);
     const items: CatalogItem[] = [];
-    const pushGroup = (groupId: string, label: string, list: DebugActionSummary[], muted: boolean, count: number | null) => {
+    const pushGroup = (
+        groupId: string,
+        label: string,
+        list: DebugActionSummary[],
+        muted: boolean,
+        count: number | null,
+    ) => {
         const open = !closed.has(groupId);
         const key = headerKey(groupId);
         items.push({ kind: 'header', key, groupId, label, count, open, muted });
         if (!open) return;
         for (const action of list) {
-            items.push({ kind: 'action', key: actionKey(action.name), action, groupKey: key, nested: true });
+            items.push({
+                kind: 'action',
+                key: actionKey(action.name),
+                action,
+                groupKey: key,
+                nested: true,
+            });
         }
     };
     for (const g of groups) pushGroup(g.category, g.label, g.actions, false, g.actions.length);
     if (unsupported.length > 0) {
-        pushGroup(UNSUPPORTED_GROUP, `当前 Bot 不支持（${unsupported.length}）`, unsupported, true, null);
+        pushGroup(
+            UNSUPPORTED_GROUP,
+            `当前 Bot 不支持（${unsupported.length}）`,
+            unsupported,
+            true,
+            null,
+        );
     }
     return items;
 }
@@ -78,7 +133,13 @@ function openAction(name: string, newTab: boolean): void {
 async function copyName(name: string): Promise<void> {
     try {
         await navigator.clipboard.writeText(name);
-        pushInfoBar({ key: 'debug-copy', tone: 'info', title: '已复制接口名', content: name, autoDismissMs: 2000 });
+        pushInfoBar({
+            key: 'debug-copy',
+            tone: 'info',
+            title: '已复制接口名',
+            content: name,
+            autoDismissMs: 2000,
+        });
     } catch (err) {
         pushErrorBar({ key: 'debug-copy', title: '复制失败', raw: errorText(err) });
     }
@@ -117,7 +178,8 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
     const virtualizer = useVirtualizer({
         count: items.length,
         getScrollElement: () => listRef.current,
-        estimateSize: (i) => (items[i]?.kind === 'header' ? CATALOG_HEADER_HEIGHT : CATALOG_ROW_HEIGHT),
+        estimateSize: (i) =>
+            items[i]?.kind === 'header' ? CATALOG_HEADER_HEIGHT : CATALOG_ROW_HEIGHT,
         getItemKey: (i) => items[i]?.key ?? i,
         overscan: 10,
         paddingStart: 4,
@@ -287,11 +349,18 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
 
     const rowId = (key: string) => `${baseId}-${key}`;
     const showActive = (listFocused && keyboardNav) || (searchFocused && searching);
-    const activeDescendant = showActive && activeIndex >= 0 ? rowId(items[activeIndex].key) : undefined;
+    const activeDescendant =
+        showActive && activeIndex >= 0 ? rowId(items[activeIndex].key) : undefined;
 
     let message: React.ReactNode = null;
     if (!target) {
-        message = <PanelMessage icon={ListTree} title="还没选 Bot" hint="先在顶栏选一个 Bot，这里列出它能调的接口。" />;
+        message = (
+            <PanelMessage
+                icon={ListTree}
+                title="还没选 Bot"
+                hint="先在顶栏选一个 Bot，这里列出它能调的接口。"
+            />
+        );
     } else if (!catalog && catalogQuery.isError) {
         message = (
             <PanelMessage
@@ -300,7 +369,11 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
                 title="读不到接口目录"
                 hint={catalogQuery.error?.message}
                 action={
-                    <Button size="sm" variant="secondary" onClick={() => void catalogQuery.refetch()}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void catalogQuery.refetch()}
+                    >
                         <RefreshCw size={13} aria-hidden />
                         重试
                     </Button>
@@ -310,7 +383,13 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
     } else if (!catalog) {
         message = <SkeletonRows rows={12} rowHeight={CATALOG_ROW_HEIGHT} />;
     } else if (catalog.actions.length === 0) {
-        message = <PanelMessage icon={ListTree} title="目录是空的" hint="上游没有报告任何接口。可以直接在中栏输入接口名调用。" />;
+        message = (
+            <PanelMessage
+                icon={ListTree}
+                title="目录是空的"
+                hint="上游没有报告任何接口。可以直接在中栏输入接口名调用。"
+            />
+        );
     } else if (items.length === 0) {
         message = (
             <PanelMessage
@@ -337,7 +416,10 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
             className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40"
         >
             {showList && catalog ? (
-                <div className="relative w-full shrink-0" style={{ height: virtualizer.getTotalSize() }}>
+                <div
+                    className="relative w-full shrink-0"
+                    style={{ height: virtualizer.getTotalSize() }}
+                >
                     {virtualizer.getVirtualItems().map((v) => {
                         const item = items[v.index];
                         if (!item) return null;
@@ -401,7 +483,9 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
                         controls={showList ? `${baseId}-tree` : undefined}
                         activeDescendant={searchFocused ? activeDescendant : undefined}
                     />
-                    {catalog && catalogQuery.isFetching && <Spinner size="xs" label="正在刷新接口目录" />}
+                    {catalog && catalogQuery.isFetching && (
+                        <Spinner size="xs" label="正在刷新接口目录" />
+                    )}
                 </PanelSearchRow>
             )}
             {/* 搜索条收着时的刷新指示：不占一行，浮在列表角上 */}
@@ -412,7 +496,12 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
             )}
             {target && catalog?.source === 'snapshot' && (
                 <div className="flex shrink-0 items-start gap-1.5 border-b border-border-subtle/70 bg-warning-soft/40 px-2.5 py-1.5 text-2xs leading-snug text-text-secondary">
-                    <Info size={12} strokeWidth={2.2} aria-hidden className="mt-px shrink-0 text-warning" />
+                    <Info
+                        size={12}
+                        strokeWidth={2.2}
+                        aria-hidden
+                        className="mt-px shrink-0 text-warning"
+                    />
                     <span>按内置目录显示（{catalog.snapshot_version}），可能和你的版本不同</span>
                     <button
                         type="button"

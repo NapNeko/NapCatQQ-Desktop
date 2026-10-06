@@ -111,8 +111,9 @@ export function useAppInstances() {
             const pending = await appFrameworkService.pendingTerms(id);
             if (pending.length) {
                 const name =
-                    queryClient.getQueryData<AppInstance[]>(APP_INSTANCES_KEY)?.find((i) => i.id === id)
-                        ?.display_name ?? id;
+                    queryClient
+                        .getQueryData<AppInstance[]>(APP_INSTANCES_KEY)
+                        ?.find((i) => i.id === id)?.display_name ?? id;
                 if (!(await requestTermsConsent(name, pending))) return null;
                 await appFrameworkService.acceptTerms(id);
             }
@@ -182,45 +183,53 @@ export function useAppInstances() {
         onError: (err, id) => fail('解除对接失败', `app-unlink:${id}`)(err),
     });
 
-    const openWebUi = useCallback(async (id: string, path?: string) => {
-        try {
-            const { url, authKey, account } = await appFrameworkService.webui(id, path);
-            if (account) {
-                const name = queryClient
-                    .getQueryData<AppInstance[]>(APP_INSTANCES_KEY)
-                    ?.find((i) => i.id === id)?.display_name;
-                showWebUiAccountDialog({ instanceId: id, instanceName: name ?? id, url, account });
-            }
-            const key = authKey.trim();
-            if (key) {
-                try {
-                    await navigator.clipboard.writeText(key);
-                    pushInfoBar({
-                        key: `app-webui-copied:${id}`,
-                        tone: 'success',
-                        title: '密钥已复制',
-                        content: '粘贴到 WebUI 登录',
-                        autoDismissMs: 3000,
-                    });
-                } catch (e) {
-                    console.warn('WebUI 密钥写入剪贴板失败:', e);
-                    pushInfoBar({
-                        key: `app-webui-copy-fail:${id}`,
-                        tone: 'warning',
-                        title: '未能复制密钥',
-                        content: '到连接页查看 HTTP 鉴权密钥',
+    const openWebUi = useCallback(
+        async (id: string, path?: string) => {
+            try {
+                const { url, authKey, account } = await appFrameworkService.webui(id, path);
+                if (account) {
+                    const name = queryClient
+                        .getQueryData<AppInstance[]>(APP_INSTANCES_KEY)
+                        ?.find((i) => i.id === id)?.display_name;
+                    showWebUiAccountDialog({
+                        instanceId: id,
+                        instanceName: name ?? id,
+                        url,
+                        account,
                     });
                 }
+                const key = authKey.trim();
+                if (key) {
+                    try {
+                        await navigator.clipboard.writeText(key);
+                        pushInfoBar({
+                            key: `app-webui-copied:${id}`,
+                            tone: 'success',
+                            title: '密钥已复制',
+                            content: '粘贴到 WebUI 登录',
+                            autoDismissMs: 3000,
+                        });
+                    } catch (e) {
+                        console.warn('WebUI 密钥写入剪贴板失败:', e);
+                        pushInfoBar({
+                            key: `app-webui-copy-fail:${id}`,
+                            tone: 'warning',
+                            title: '未能复制密钥',
+                            content: '到连接页查看 HTTP 鉴权密钥',
+                        });
+                    }
+                }
+                await openExternalUrl(url);
+            } catch (err) {
+                pushErrorBar({
+                    key: `app-webui:${id}`,
+                    title: '打开 WebUI 失败',
+                    raw: errorText(err),
+                });
             }
-            await openExternalUrl(url);
-        } catch (err) {
-            pushErrorBar({
-                key: `app-webui:${id}`,
-                title: '打开 WebUI 失败',
-                raw: errorText(err),
-            });
-        }
-    }, [queryClient]);
+        },
+        [queryClient],
+    );
 
     return {
         instances: query.data ?? [],
@@ -245,17 +254,16 @@ export function useAppInstances() {
 
         /** 只有「重新探测」在跑的实例：刷新图标自己转，不再另挂一个转圈 */
         refreshingId: refreshMutation.isPending ? refreshMutation.variables : null,
-        pendingId:
-            startMutation.isPending
-                ? startMutation.variables
-                : stopMutation.isPending
-                  ? stopMutation.variables
-                  : refreshMutation.isPending
-                    ? refreshMutation.variables
-                    : installMutation.isPending
-                      ? installMutation.variables.id
-                      : unlinkMutation.isPending
-                        ? unlinkMutation.variables
-                        : null,
+        pendingId: startMutation.isPending
+            ? startMutation.variables
+            : stopMutation.isPending
+              ? stopMutation.variables
+              : refreshMutation.isPending
+                ? refreshMutation.variables
+                : installMutation.isPending
+                  ? installMutation.variables.id
+                  : unlinkMutation.isPending
+                    ? unlinkMutation.variables
+                    : null,
     };
 }

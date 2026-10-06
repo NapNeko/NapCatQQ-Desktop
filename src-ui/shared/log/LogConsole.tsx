@@ -24,7 +24,12 @@ import {
     type LogEntry,
 } from '../../core/domain/events/log-buffer';
 import type { AnsiSpan } from '../../core/domain/events/ansi';
-import { LOG_LEVEL_SHORT, levelBarColor, levelLabelColor, lineTextColor } from './log-level-display';
+import {
+    LOG_LEVEL_SHORT,
+    levelBarColor,
+    levelLabelColor,
+    lineTextColor,
+} from './log-level-display';
 import { ansiCss } from './ansi-style';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { cn } from '../utils/cn';
@@ -306,7 +311,13 @@ function Toolbar({
                 )}
                 <span className="ml-1 text-[11.5px]">{autoScroll ? '滚动中' : '已暂停'}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={onCopy} disabled={!hasVisible} title="复制当前可见日志">
+            <Button
+                variant="ghost"
+                size="sm"
+                onClick={onCopy}
+                disabled={!hasVisible}
+                title="复制当前可见日志"
+            >
                 <ActionMotionIcon icon={Copy} size={13} />
                 <span className="ml-1 text-[11.5px]">复制</span>
             </Button>

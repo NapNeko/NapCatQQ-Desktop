@@ -18,13 +18,7 @@ interface Props {
     patchDraft: (patch: Partial<SettingsDraft>) => void;
 }
 
-export function DataTab({
-    dataRoot,
-    onOpenDataDir,
-    isOpeningDir,
-    draft,
-    patchDraft,
-}: Props) {
+export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDraft }: Props) {
     const [revealPat, setRevealPat] = useState(false);
     const [migrateOpen, setMigrateOpen] = useState(false);
     const {
@@ -102,26 +96,48 @@ export function DataTab({
                     </Button>
                 </FieldRow>
 
-                <FieldRow label="导入配置" isLast={!canRetryPreferences && !pendingFrameworks.length && !frameworkPendingError}>
+                <FieldRow
+                    label="导入配置"
+                    isLast={
+                        !canRetryPreferences && !pendingFrameworks.length && !frameworkPendingError
+                    }
+                >
                     <Button variant="secondary" size="sm" onClick={openImportWizard}>
                         打开导入向导
                     </Button>
                 </FieldRow>
                 {canRetryPreferences && (
-                    <FieldRow label="界面偏好待恢复" description="配置文件已经导入，修复浏览器存储问题后可单独重试界面与终端偏好。" isLast={!pendingFrameworks.length && !frameworkPendingError}>
+                    <FieldRow
+                        label="界面偏好待恢复"
+                        description="配置文件已经导入，修复浏览器存储问题后可单独重试界面与终端偏好。"
+                        isLast={!pendingFrameworks.length && !frameworkPendingError}
+                    >
                         <Button variant="secondary" size="sm" onClick={retryPreferences}>
                             重试恢复界面偏好
                         </Button>
                     </FieldRow>
                 )}
                 {pendingFrameworks.length > 0 && (
-                    <FieldRow label="框架配置待恢复" description={`已保留恢复副本：${pendingFrameworks.join('；')}。完成框架安装、停止实例并连接远端后，可单独重试。`} isLast>
-                        <Button variant="secondary" size="sm" onClick={retryFrameworks} disabled={isRestoringFrameworks}>
+                    <FieldRow
+                        label="框架配置待恢复"
+                        description={`已保留恢复副本：${pendingFrameworks.join('；')}。完成框架安装、停止实例并连接远端后，可单独重试。`}
+                        isLast
+                    >
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={retryFrameworks}
+                            disabled={isRestoringFrameworks}
+                        >
                             {isRestoringFrameworks ? '恢复中…' : '重试恢复框架配置'}
                         </Button>
                     </FieldRow>
                 )}
-                {frameworkPendingError && <p className="text-[12px] text-warning">待恢复框架配置读取失败：{frameworkPendingError.message}</p>}
+                {frameworkPendingError && (
+                    <p className="text-[12px] text-warning">
+                        待恢复框架配置读取失败：{frameworkPendingError.message}
+                    </p>
+                )}
             </SettingsSection>
 
             <ConfigImportDialog
@@ -136,10 +152,7 @@ export function DataTab({
                 currentDataRoot={dataRoot}
             />
 
-            <SettingsSection
-                title="GitHub"
-                description="可选；填写后组件页检查更新走认证额度"
-            >
+            <SettingsSection title="GitHub" description="可选；填写后组件页检查更新走认证额度">
                 {!draft ? (
                     <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
                 ) : (

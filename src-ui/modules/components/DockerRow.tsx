@@ -82,7 +82,11 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                 <div className="min-w-0">
                     <ComponentManageCard
                         accent={isInstalling ? 'brand' : 'none'}
-                        statusBadge={dockerRowStatusBadge({ ready, probing, inFlight: isInstalling })}
+                        statusBadge={dockerRowStatusBadge({
+                            ready,
+                            probing,
+                            inFlight: isInstalling,
+                        })}
                         title="Docker"
                         titleAside={
                             <button
@@ -106,7 +110,9 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                         }
                         footer={footer}
                         progressOverlay={
-                            isInstalling && installProgress && shouldShowProgressBar(installProgress) ? (
+                            isInstalling &&
+                            installProgress &&
+                            shouldShowProgressBar(installProgress) ? (
                                 <ProgressBarOverlay progress={installProgress} determinate />
                             ) : undefined
                         }
@@ -121,11 +127,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                 <ContextMenuSeparator />
 
                 {!ready && autoInstallable && (
-                    <ContextMenuItem
-                        tone="brand"
-                        disabled={isInstalling}
-                        onClick={onInstall}
-                    >
+                    <ContextMenuItem tone="brand" disabled={isInstalling} onClick={onInstall}>
                         <Download size={13} className="text-brand" />
                         <span>自动安装 Docker</span>
                     </ContextMenuItem>
@@ -178,11 +180,7 @@ const DockerMeta: React.FC<{
         );
     }
     if (isInstalling) {
-        return (
-            <p className="truncate text-xs text-text-secondary">
-                {installHint ?? '正在安装…'}
-            </p>
-        );
+        return <p className="truncate text-xs text-text-secondary">{installHint ?? '正在安装…'}</p>;
     }
     if (probing) {
         return <p className="truncate text-xs text-text-tertiary">正在探测 Docker…</p>;
@@ -195,9 +193,7 @@ const DockerMeta: React.FC<{
         );
     }
     return (
-        <p className="truncate text-xs text-text-tertiary">
-            {summary?.label ?? '未检测到 Docker'}
-        </p>
+        <p className="truncate text-xs text-text-tertiary">{summary?.label ?? '未检测到 Docker'}</p>
     );
 };
 

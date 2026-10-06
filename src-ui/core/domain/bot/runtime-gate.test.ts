@@ -37,7 +37,13 @@ function botConfig(overrides: Partial<BotConfig['bot']> = {}): BotConfig {
             name: 'bot',
             QQID: 10001,
             musicSignUrl: '',
-            autoRestartSchedule: { enable: false, mode: 'interval', time_unit: 'd', duration: 1, cron: '' },
+            autoRestartSchedule: {
+                enable: false,
+                mode: 'interval',
+                time_unit: 'd',
+                duration: 1,
+                cron: '',
+            },
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',
@@ -230,7 +236,12 @@ describe('runtime gate matrix', () => {
             componentNames: NAMES,
             remoteTransport: { reachable: true, label: 'kunming' },
             remoteDirect: {
-                readiness: readiness('napcat', ok, [node('qq', { state: 'missing' })], 'remote:server-a'),
+                readiness: readiness(
+                    'napcat',
+                    ok,
+                    [node('qq', { state: 'missing' })],
+                    'remote:server-a',
+                ),
                 probing: false,
             },
         };

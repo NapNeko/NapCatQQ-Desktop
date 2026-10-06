@@ -36,7 +36,12 @@ import { isTauri } from '../transport';
 import { withMockDelay } from './bootstrap.mock';
 import { mockBots as pageBots } from './bot.mock';
 import { subscribeMockEvents } from './events.mock';
-import { buildMockCatalog, buildMockSpec, mockRequiredParams, type MockSpecOptions } from './onebot-debug-catalog.mock';
+import {
+    buildMockCatalog,
+    buildMockSpec,
+    mockRequiredParams,
+    type MockSpecOptions,
+} from './onebot-debug-catalog.mock';
 import {
     BIG_GROUP_MEMBER_COUNT,
     FRIEND_COUNT,
@@ -262,7 +267,8 @@ function channelDefs(bot: MockBot): ChannelDef[] {
     return defs;
 }
 
-const channelKey = (id: DebugChannelId): string => (id.kind === 'http' || id.kind === 'ws' ? `${id.kind}:${id.name}` : id.kind);
+const channelKey = (id: DebugChannelId): string =>
+    id.kind === 'http' || id.kind === 'ws' ? `${id.kind}:${id.name}` : id.kind;
 
 /** 测试连通 / 调用失败后记下的状态，覆盖初始状态 */
 const statusOverrides = new Map<string, DebugChannelStatus>();
@@ -274,7 +280,8 @@ function initialStatus(bot: MockBot, def: ChannelDef): DebugChannelStatus {
     if (def.unsupported) return { kind: 'unsupported', reason: def.unsupported };
     if (!bot.running) return { kind: 'bot_not_running' };
     if (def.id.kind === 'ws') return { kind: 'unknown' };
-    if (def.id.kind === 'http' && bot.host.kind !== 'local') return { kind: 'tunneled', local_port: bot.tunnelPort };
+    if (def.id.kind === 'http' && bot.host.kind !== 'local')
+        return { kind: 'tunneled', local_port: bot.tunnelPort };
     return { kind: 'available' };
 }
 
@@ -284,7 +291,9 @@ const currentStatus = (bot: MockBot, def: ChannelDef): DebugChannelStatus =>
 function endpointOf(bot: MockBot, def: ChannelDef): string | null {
     if (def.unsupported || def.port === null) return null;
     const tail = def.id.kind === 'internal' ? '/api' : '/';
-    return bot.host.kind === 'local' ? `127.0.0.1:${def.port}${tail}` : `隧道 → 远端 127.0.0.1:${def.port}`;
+    return bot.host.kind === 'local'
+        ? `127.0.0.1:${def.port}${tail}`
+        : `隧道 → 远端 127.0.0.1:${def.port}`;
 }
 
 function channelInfo(bot: MockBot, def: ChannelDef): DebugChannelInfo {
@@ -300,17 +309,22 @@ function channelInfo(bot: MockBot, def: ChannelDef): DebugChannelInfo {
     };
 }
 
-const usable = (s: DebugChannelStatus) => s.kind === 'available' || s.kind === 'tunneled' || s.kind === 'unknown';
+const usable = (s: DebugChannelStatus) =>
+    s.kind === 'available' || s.kind === 'tunneled' || s.kind === 'unknown';
 
 /** 「自动」落到哪条：先内部，再 WS，最后 HTTP；实测可用的排在没测过的前面 */
 function pickAuto(bot: MockBot, purpose: 'call' | 'events'): DebugChannelId | null {
     const order = purpose === 'call' ? ['internal', 'ws', 'http'] : ['internal', 'ws'];
     const infos = channelDefs(bot)
         .map((d) => ({ d, status: currentStatus(bot, d) }))
-        .filter(({ d, status }) => usable(status) && (purpose === 'call' ? d.canCall : d.canReceive));
+        .filter(
+            ({ d, status }) => usable(status) && (purpose === 'call' ? d.canCall : d.canReceive),
+        );
     for (const wantKnown of [true, false]) {
         for (const kind of order) {
-            const hit = infos.find(({ d, status }) => d.id.kind === kind && (status.kind !== 'unknown') === wantKnown);
+            const hit = infos.find(
+                ({ d, status }) => d.id.kind === kind && (status.kind !== 'unknown') === wantKnown,
+            );
             if (hit) return hit.d.id;
         }
     }
@@ -342,14 +356,25 @@ type Resolved = { ok: true; def: ChannelDef } | { ok: false; error: DebugError }
 function resolveChannel(bot: MockBot, id: DebugChannelId, purpose: 'call' | 'events'): Resolved {
     if (!bot.running) return { ok: false, error: { kind: 'bot_not_running' } };
     const target = id.kind === 'auto' ? pickAuto(bot, purpose) : id;
-    if (!target) return { ok: false, error: { kind: 'channel_unavailable', reason: '没有可用的通道' } };
+    if (!target)
+        return { ok: false, error: { kind: 'channel_unavailable', reason: '没有可用的通道' } };
     const def = channelDefs(bot).find((d) => channelKey(d.id) === channelKey(target));
-    if (!def) return { ok: false, error: { kind: 'channel_unavailable', reason: '这个 Bot 没有这条通道' } };
+    if (!def)
+        return {
+            ok: false,
+            error: { kind: 'channel_unavailable', reason: '这个 Bot 没有这条通道' },
+        };
     if (purpose === 'events' && !def.canReceive) {
-        return { ok: false, error: { kind: 'channel_unavailable', reason: '这条通道不能接收事件' } };
+        return {
+            ok: false,
+            error: { kind: 'channel_unavailable', reason: '这条通道不能接收事件' },
+        };
     }
     if (purpose === 'call' && !def.canCall) {
-        return { ok: false, error: { kind: 'channel_unavailable', reason: '这条通道不能发起调用' } };
+        return {
+            ok: false,
+            error: { kind: 'channel_unavailable', reason: '这条通道不能发起调用' },
+        };
     }
     let status = currentStatus(bot, def);
     // 令牌错的 HTTP 服务：隧道能通，真正调用时才被上游拒绝，记下来后面的状态就一直是「token 错误」
@@ -530,11 +555,13 @@ function pushBodyAt(st: BotState, body: DebugEventBody, atMs: number): void {
 const pushBody = (st: BotState, body: DebugEventBody) => pushBodyAt(st, body, Date.now());
 
 function pushOb11At(st: BotState, payload: Record<string, unknown>, atMs: number): void {
-    if (payload.post_type === 'message' || payload.post_type === 'message_sent') rememberMessage(st, payload);
+    if (payload.post_type === 'message' || payload.post_type === 'message_sent')
+        rememberMessage(st, payload);
     pushBodyAt(st, { kind: 'ob11', payload }, atMs);
 }
 
-const pushOb11 = (st: BotState, payload: Record<string, unknown>) => pushOb11At(st, payload, Date.now());
+const pushOb11 = (st: BotState, payload: Record<string, unknown>) =>
+    pushOb11At(st, payload, Date.now());
 
 // —— 接收器与定时器
 
@@ -560,11 +587,14 @@ const sendsHeartbeat = (st: BotState, rc: Receiver): boolean =>
     !(st.bot.backend === 'napcat' && rc.source.kind === 'internal');
 
 function scheduleNextEvent(st: BotState, rc: Receiver): void {
-    rc.eventTimer = setTimeout(() => {
-        rc.eventTimer = null;
-        pushOb11(st, makeRandomEvent(st.ctx, Date.now()));
-        scheduleNextEvent(st, rc);
-    }, randInt(st.rng, 1200, 3000));
+    rc.eventTimer = setTimeout(
+        () => {
+            rc.eventTimer = null;
+            pushOb11(st, makeRandomEvent(st.ctx, Date.now()));
+            scheduleNextEvent(st, rc);
+        },
+        randInt(st.rng, 1200, 3000),
+    );
 }
 
 function scheduleNextHeartbeat(st: BotState, rc: Receiver): void {
@@ -582,7 +612,8 @@ function scheduleNextHeartbeat(st: BotState, rc: Receiver): void {
 function scheduleProbe(st: BotState, rc: Receiver): void {
     rc.probeTimer = setTimeout(() => {
         rc.probeTimer = null;
-        for (const sub of [...rc.subs.values()]) sub.onBatch({ v: EVENT_VERSION, bot_id: st.bot.id, events: [] });
+        for (const sub of [...rc.subs.values()])
+            sub.onBatch({ v: EVENT_VERSION, bot_id: st.bot.id, events: [] });
         // 回调里可能已经退订到零或停了接收器，这时不能再挂下一轮
         if (st.receiver === rc && rc.subs.size > 0 && rc.probeTimer === null) scheduleProbe(st, rc);
     }, PROBE_EVERY_MS);
@@ -705,7 +736,12 @@ interface HandlerCtx {
 type Handler = (c: HandlerCtx) => Reply;
 
 const okReply = (data: unknown = null): Reply => ({ retcode: 0, data });
-const failReply = (retcode: number, wording: string): Reply => ({ retcode, data: null, message: wording, wording });
+const failReply = (retcode: number, wording: string): Reply => ({
+    retcode,
+    data: null,
+    message: wording,
+    wording,
+});
 
 const numParam = (params: Record<string, unknown>, key: string): number => {
     const v = params[key];
@@ -759,7 +795,14 @@ function membersOf(groupId: number): Array<Record<string, unknown>> {
 }
 
 function friendRow(p: MockPerson) {
-    return { user_id: p.id, nickname: p.nickname, remark: p.card, sex: 'unknown', age: 0, level: 0 };
+    return {
+        user_id: p.id,
+        nickname: p.nickname,
+        remark: p.card,
+        sex: 'unknown',
+        age: 0,
+        level: 0,
+    };
 }
 
 const knownGroup = (params: Record<string, unknown>): number | null => {
@@ -776,7 +819,10 @@ function sendMessage(
     if (segments.length === 0) return failReply(1400, 'message 不能为空');
     const messageId = nextMessageId();
     // 上游会把自己发的消息再报回来（message_sent），和调用回包分别到达，界面要按 message_id 合并
-    pushOb11(c.st, makeSelfMessage(c.st.ctx, Date.now(), { messageId, messageType, targetId, segments }));
+    pushOb11(
+        c.st,
+        makeSelfMessage(c.st.ctx, Date.now(), { messageId, messageType, targetId, segments }),
+    );
     return okReply({ message_id: messageId });
 }
 
@@ -797,7 +843,8 @@ const HANDLERS: Record<string, Handler> = {
 
     send_group_msg: (c) => {
         const groupId = knownGroup(c.params);
-        if (groupId === null) return failReply(1200, `群 ${String(c.params.group_id)} 不存在或没有加入`);
+        if (groupId === null)
+            return failReply(1200, `群 ${String(c.params.group_id)} 不存在或没有加入`);
         return sendMessage(c, 'group', groupId, messageToSegments(c.params.message));
     },
     send_private_msg: (c) => {
@@ -806,12 +853,14 @@ const HANDLERS: Record<string, Handler> = {
         return sendMessage(c, 'private', userId, messageToSegments(c.params.message));
     },
     send_msg: (c) => {
-        const type = c.params.message_type ?? (c.params.group_id !== undefined ? 'group' : 'private');
+        const type =
+            c.params.message_type ?? (c.params.group_id !== undefined ? 'group' : 'private');
         return type === 'group' ? HANDLERS.send_group_msg(c) : HANDLERS.send_private_msg(c);
     },
     send_group_forward_msg: (c) => {
         const groupId = knownGroup(c.params);
-        if (groupId === null) return failReply(1200, `群 ${String(c.params.group_id)} 不存在或没有加入`);
+        if (groupId === null)
+            return failReply(1200, `群 ${String(c.params.group_id)} 不存在或没有加入`);
         const resId = `res_${nextMessageId().toString(16)}`;
         const reply = sendMessage(c, 'group', groupId, [{ type: 'forward', data: { id: resId } }]);
         return reply.retcode === 0 ? okReply({ ...(reply.data as object), res_id: resId }) : reply;
@@ -857,7 +906,10 @@ const HANDLERS: Record<string, Handler> = {
             messages: people.map((p, i) => ({
                 sender: { user_id: p.id, nickname: p.nickname },
                 time: 1_759_190_400 + i * 60,
-                message: sample && i === 0 ? sample.message : [{ type: 'text', data: { text: `转发的第 ${i + 1} 条` } }],
+                message:
+                    sample && i === 0
+                        ? sample.message
+                        : [{ type: 'text', data: { text: `转发的第 ${i + 1} 条` } }],
             })),
         });
     },
@@ -906,14 +958,18 @@ const HANDLERS: Record<string, Handler> = {
         });
         return okReply();
     },
-    set_group_whole_ban: (c) => (knownGroup(c.params) === null ? failReply(1200, '群不存在') : okReply()),
-    set_group_card: (c) => (knownGroup(c.params) === null ? failReply(1200, '群不存在') : okReply()),
+    set_group_whole_ban: (c) =>
+        knownGroup(c.params) === null ? failReply(1200, '群不存在') : okReply(),
+    set_group_card: (c) =>
+        knownGroup(c.params) === null ? failReply(1200, '群不存在') : okReply(),
 
-    get_friend_list: () => okReply(Array.from({ length: FRIEND_COUNT }, (_, i) => friendRow(personAt(i + 1)))),
+    get_friend_list: () =>
+        okReply(Array.from({ length: FRIEND_COUNT }, (_, i) => friendRow(personAt(i + 1)))),
     get_stranger_info: (c) => {
         const userId = numParam(c.params, 'user_id');
         const n = userId - USER_ID_BASE;
-        const person = n >= 1 && n <= 500 ? personAt(n) : { id: userId, nickname: `陌生人 ${userId}` };
+        const person =
+            n >= 1 && n <= 500 ? personAt(n) : { id: userId, nickname: `陌生人 ${userId}` };
         return okReply({
             user_id: person.id,
             nickname: person.nickname,
@@ -927,7 +983,9 @@ const HANDLERS: Record<string, Handler> = {
     },
     send_like: (c) => {
         const times = numParam(c.params, 'times');
-        return Number.isFinite(times) && times > 20 ? failReply(1200, '今日点赞次数已达上限') : okReply();
+        return Number.isFinite(times) && times > 20
+            ? failReply(1200, '今日点赞次数已达上限')
+            : okReply();
     },
 
     get_group_file_url: () => okReply({ url: 'https://example.invalid/group-file/abcd-1234' }),
@@ -938,8 +996,18 @@ const HANDLERS: Record<string, Handler> = {
     },
     nc_get_rkey: () =>
         okReply([
-            { type: 'private', rkey: '&rkey=CAQSKAB6JWENi5LM', created_at: 1_759_190_400, ttl: 86_400 },
-            { type: 'group', rkey: '&rkey=CAESKAB6JWENi5LM', created_at: 1_759_190_400, ttl: 86_400 },
+            {
+                type: 'private',
+                rkey: '&rkey=CAQSKAB6JWENi5LM',
+                created_at: 1_759_190_400,
+                ttl: 86_400,
+            },
+            {
+                type: 'group',
+                rkey: '&rkey=CAESKAB6JWENi5LM',
+                created_at: 1_759_190_400,
+                ttl: 86_400,
+            },
         ]),
     get_group_album_list: (c) =>
         knownGroup(c.params) === null
@@ -992,7 +1060,8 @@ function scanUtf8(text: string, maxBytes: number): { end: number; bytes: number 
 const utf8Length = (text: string): number => scanUtf8(text, Number.POSITIVE_INFINITY).bytes;
 
 /** 前 maxBytes 个 UTF-8 字节，不切在字符中间，和后端截预览的做法一致 */
-const utf8Prefix = (text: string, maxBytes: number): string => text.slice(0, scanUtf8(text, maxBytes).end);
+const utf8Prefix = (text: string, maxBytes: number): string =>
+    text.slice(0, scanUtf8(text, maxBytes).end);
 
 /** 最近几次被截断的回包全文，「另存完整内容」用；没截断的回包界面手里本来就是全的，不留 */
 const largeResponses = new Map<string, string>();
@@ -1080,7 +1149,8 @@ function planCall(request: DebugCallRequest): CallPlan {
     const spec = buildMockSpec(bot.backend, request.action, { source: 'live' });
     const known = spec !== null && !bot.missingActions.has(spec.name);
     const st = stateOf(bot);
-    const delay = spec?.name === 'get_group_member_list' ? MEMBER_LIST_DELAY_MS : randInt(callRng, 60, 400);
+    const delay =
+        spec?.name === 'get_group_member_list' ? MEMBER_LIST_DELAY_MS : randInt(callRng, 60, 400);
 
     const outcome = (reply: Reply, elapsedMs: number): DebugCallResult => ({
         kind: 'ok',
@@ -1092,12 +1162,17 @@ function planCall(request: DebugCallRequest): CallPlan {
         channel,
         bot,
         run: (elapsedMs) => {
-            if (!known) return outcome(failReply(1404, `不支持的 API: ${request.action}`), elapsedMs);
+            if (!known)
+                return outcome(failReply(1404, `不支持的 API: ${request.action}`), elapsedMs);
             if (spec.stream) {
-                return { kind: 'err', error: { kind: 'invalid_params', message: '流式接口暂不支持调用，先看文档' } };
+                return {
+                    kind: 'err',
+                    error: { kind: 'invalid_params', message: '流式接口暂不支持调用，先看文档' },
+                };
             }
             const missing = (mockRequiredParams(bot.backend, spec.name) ?? []).filter(
-                (name) => params[name] === undefined || params[name] === null || params[name] === '',
+                (name) =>
+                    params[name] === undefined || params[name] === null || params[name] === '',
             );
             if (missing.length > 0) {
                 return outcome(failReply(1400, `缺少必需参数：${missing.join('、')}`), elapsedMs);
@@ -1126,7 +1201,10 @@ const isCredentialAction = (action: string): boolean =>
  * 序列化后超过 256 KiB 就整个不存、标成被截断，调用时已经截过的保持截断；
  * 凭据类动作一律不存，也不算截断
  */
-function historyResponse(action: string, outcome: DebugCallOutcome | null): { response: unknown; truncated: boolean } {
+function historyResponse(
+    action: string,
+    outcome: DebugCallOutcome | null,
+): { response: unknown; truncated: boolean } {
     if (!outcome || isCredentialAction(action)) return { response: null, truncated: false };
     const text = JSON.stringify(outcome.raw);
     if (utf8Length(text) > HISTORY_RESPONSE_LIMIT) return { response: null, truncated: true };
@@ -1242,7 +1320,8 @@ function recordCallEvent(
     if (!st?.receiver) return;
     const outcome = result.kind === 'ok' ? result.outcome : null;
     const data = outcome?.data;
-    const messageId = isRecord(data) && typeof data.message_id === 'number' ? data.message_id : null;
+    const messageId =
+        isRecord(data) && typeof data.message_id === 'number' ? data.message_id : null;
     pushBody(st, {
         kind: 'call',
         record: {
@@ -1263,7 +1342,8 @@ function recordCallEvent(
 function call(request: DebugCallRequest): Promise<DebugCallResponse> {
     const startedAt = Date.now();
     const plan = planCall(request);
-    const timeoutMs = request.timeout_ms && request.timeout_ms > 0 ? request.timeout_ms : DEFAULT_TIMEOUT_MS;
+    const timeoutMs =
+        request.timeout_ms && request.timeout_ms > 0 ? request.timeout_ms : DEFAULT_TIMEOUT_MS;
 
     return new Promise<DebugCallResponse>((resolve) => {
         let workTimer: Timer | null = null;
@@ -1284,7 +1364,9 @@ function call(request: DebugCallRequest): Promise<DebugCallResponse> {
             resolve({ request_id: request.request_id, result });
         };
 
-        pending.set(request.request_id, { cancel: () => finish({ kind: 'err', error: { kind: 'cancelled' } }) });
+        pending.set(request.request_id, {
+            cancel: () => finish({ kind: 'err', error: { kind: 'cancelled' } }),
+        });
         workTimer = setTimeout(() => {
             workTimer = null;
             finish(plan.run(Date.now() - startedAt));
@@ -1307,7 +1389,13 @@ const defaultWorkspace = (): DebugWorkspace => ({
     closed_tabs: [],
     selected_bot: null,
     channel_choice: {},
-    layout: { left_collapsed: false, right_collapsed: false, left_width: 240, right_width: 380, right_view: 'chat' },
+    layout: {
+        left_collapsed: false,
+        right_collapsed: false,
+        left_width: 240,
+        right_width: 380,
+        right_view: 'chat',
+    },
     recent_actions: [],
 });
 
@@ -1422,7 +1510,9 @@ export const onebotDebugMock = {
         const bot = findBot(botId);
         if (!bot) return rejectAfterDelay(errorText({ kind: 'bot_not_found' }));
         const target = channel.kind === 'auto' ? pickAuto(bot, 'call') : channel;
-        const def = target ? channelDefs(bot).find((d) => channelKey(d.id) === channelKey(target)) : undefined;
+        const def = target
+            ? channelDefs(bot).find((d) => channelKey(d.id) === channelKey(target))
+            : undefined;
         if (!def) return rejectAfterDelay('这个 Bot 没有这条通道');
         const generation = mockGeneration;
         // 和后端一样测完才记结果：探测进行中拉通道列表，看到的还是旧状态
@@ -1434,7 +1524,11 @@ export const onebotDebugMock = {
                     // 没测过的 WS 通道测一下就通了；令牌错的 HTTP 服务被上游拒绝
                     let after = before;
                     if (before.kind === 'unknown') after = { kind: 'available' };
-                    else if (before.kind === 'tunneled' && def.id.kind === 'http' && bot.httpRejectsToken) {
+                    else if (
+                        before.kind === 'tunneled' &&
+                        def.id.kind === 'http' &&
+                        bot.httpRejectsToken
+                    ) {
                         after = { kind: 'auth_failed', status: 401 };
                     }
                     if (after !== before) statusOverrides.set(overrideKey(bot.id, def.id), after);
@@ -1447,7 +1541,11 @@ export const onebotDebugMock = {
     catalog: (botId: string | null, backend: BackendType): Promise<DebugCatalog> =>
         respond(buildMockCatalog(backend, catalogFlavor(botId))),
 
-    describe: (botId: string | null, backend: BackendType, action: string): Promise<DebugActionSpec | null> =>
+    describe: (
+        botId: string | null,
+        backend: BackendType,
+        action: string,
+    ): Promise<DebugActionSpec | null> =>
         respond(buildMockSpec(backend, action, catalogFlavor(botId))),
 
     call,
@@ -1498,7 +1596,9 @@ export const onebotDebugMock = {
     saveResponse: (requestId: string, path: string): Promise<void> => {
         const text = largeResponses.get(requestId);
         if (text === undefined) {
-            return rejectAfterDelay(`没有这次调用的完整回包：只保留最近 ${LARGE_RESPONSES_KEPT} 次被截断的回包`);
+            return rejectAfterDelay(
+                `没有这次调用的完整回包：只保留最近 ${LARGE_RESPONSES_KEPT} 次被截断的回包`,
+            );
         }
         files.set(path, text);
         return respond(undefined);
@@ -1521,9 +1621,18 @@ export const onebotDebugMock = {
 
         // 先把缓冲里已有的按 500 条一批补给它，再登记进实时推送：中间不漏也不重
         for (let i = 0; i < st.ring.length; i += BACKLOG_CHUNK) {
-            onBatch({ v: EVENT_VERSION, bot_id: bot.id, events: st.ring.slice(i, i + BACKLOG_CHUNK) });
+            onBatch({
+                v: EVENT_VERSION,
+                bot_id: bot.id,
+                events: st.ring.slice(i, i + BACKLOG_CHUNK),
+            });
         }
-        const sub: Subscriber = { id: `mock-sub-${++subscriptionSeq}`, onBatch, queue: [], flushTimer: null };
+        const sub: Subscriber = {
+            id: `mock-sub-${++subscriptionSeq}`,
+            onBatch,
+            queue: [],
+            flushTimer: null,
+        };
         rc.subs.set(sub.id, sub);
         subscriptions.set(sub.id, bot.id);
         startTimers(st, rc);
@@ -1594,7 +1703,11 @@ export const onebotDebugMock = {
         } catch {
             return rejectAfterDelay('不是有效的收藏文件');
         }
-        if (!isRecord(parsed) || !Array.isArray(parsed.folders) || !Array.isArray(parsed.requests)) {
+        if (
+            !isRecord(parsed) ||
+            !Array.isArray(parsed.folders) ||
+            !Array.isArray(parsed.requests)
+        ) {
             return rejectAfterDelay('不是有效的收藏文件');
         }
         mergeCollections(parsed as unknown as DebugCollections);
@@ -1657,7 +1770,8 @@ export function resetOnebotDebugMock(): void {
     for (const st of states.values()) {
         const rc = st.receiver;
         if (!rc) continue;
-        for (const sub of rc.subs.values()) if (sub.flushTimer !== null) clearTimeout(sub.flushTimer);
+        for (const sub of rc.subs.values())
+            if (sub.flushTimer !== null) clearTimeout(sub.flushTimer);
         rc.subs.clear();
         stopTimers(rc);
     }
@@ -1683,11 +1797,12 @@ export function resetOnebotDebugMock(): void {
 // 只在没有 Tauri 的浏览器预览里挂（含 vite preview 出来的生产包，性能工具就是用它），真程序里不存在
 if (typeof window !== 'undefined' && !isTauri) {
     (window as unknown as { __ncdDebugFlood?: typeof flood }).__ncdDebugFlood = flood;
-    (window as unknown as { __ncdDebugStorageNotice?: () => void }).__ncdDebugStorageNotice = () => {
-        mockStorageNotices.push({
-            file: 'history.jsonl',
-            moved_to: 'history.jsonl.broken-2026-09-30',
-            reason: '第 3,812 行不是合法的 JSON',
-        });
-    };
+    (window as unknown as { __ncdDebugStorageNotice?: () => void }).__ncdDebugStorageNotice =
+        () => {
+            mockStorageNotices.push({
+                file: 'history.jsonl',
+                moved_to: 'history.jsonl.broken-2026-09-30',
+                reason: '第 3,812 行不是合法的 JSON',
+            });
+        };
 }

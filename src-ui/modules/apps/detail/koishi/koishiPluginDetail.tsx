@@ -80,7 +80,9 @@ function IconButton({
             onClick={onClick}
             className={cn(
                 'inline-flex h-8 w-8 items-center justify-center rounded-md text-text-tertiary transition-colors disabled:pointer-events-none disabled:opacity-40',
-                danger ? 'hover:bg-danger-soft hover:text-danger' : 'hover:bg-inset hover:text-text',
+                danger
+                    ? 'hover:bg-danger-soft hover:text-danger'
+                    : 'hover:bg-inset hover:text-text',
             )}
         >
             {children}
@@ -91,7 +93,10 @@ function IconButton({
 function MoveButton({ config, path, node, onChange, disabled }: DetailProps) {
     const groups = groupChoices(config).filter((g) => {
         if (!isGroup(node)) return true;
-        return g.ident !== node.ident && !walk(node.children).some((c) => isGroup(c) && c.ident === g.ident);
+        return (
+            g.ident !== node.ident &&
+            !walk(node.children).some((c) => isGroup(c) && c.ident === g.ident)
+        );
     });
     return (
         <Popover>
@@ -150,7 +155,9 @@ function DetailHeader(props: DetailProps & { subtitle: React.ReactNode }) {
                 <div className="min-w-0 flex-1">
                     <h3 className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-display text-[16px] font-semibold leading-snug text-text">
                         <span className="truncate">{group ? nodeLabel(node) : node.name}</span>
-                        <span className="font-mono text-2xs font-normal text-text-disabled">{nodeKey(node)}</span>
+                        <span className="font-mono text-2xs font-normal text-text-disabled">
+                            {nodeKey(node)}
+                        </span>
                         {KOISHI_CORE_PLUGINS.has(node.name) && <Badge tone="neutral">核心</Badge>}
                         {isLinkNode(node) && <Badge tone="brand">桌面端对接</Badge>}
                         {typeof node.meta.$if === 'string' && <Badge tone="info">按条件载入</Badge>}
@@ -173,7 +180,13 @@ function DetailHeader(props: DetailProps & { subtitle: React.ReactNode }) {
                     )}
                     <MoveButton {...props} />
                     <IconButton
-                        label={locked ? 'Koishi 和桌面端要用它，不能删' : group ? '删掉分组（连同里面的）' : '从插件树删掉'}
+                        label={
+                            locked
+                                ? 'Koishi 和桌面端要用它，不能删'
+                                : group
+                                  ? '删掉分组（连同里面的）'
+                                  : '从插件树删掉'
+                        }
                         danger
                         disabled={disabled || locked}
                         onClick={() => {
@@ -187,7 +200,9 @@ function DetailHeader(props: DetailProps & { subtitle: React.ReactNode }) {
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-border-subtle/70 pt-3.5">
                 <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-text">{group ? '启用这个分组' : '启用'}</p>
+                    <p className="text-[13px] font-medium text-text">
+                        {group ? '启用这个分组' : '启用'}
+                    </p>
                     <p className="mt-0.5 text-2xs text-text-tertiary">
                         {group
                             ? '停用后里面的插件一起停，各自的开关不变'
@@ -200,7 +215,9 @@ function DetailHeader(props: DetailProps & { subtitle: React.ReactNode }) {
                     aria-label={group ? '启用这个分组' : '启用'}
                     checked={node.enabled}
                     disabled={disabled || (locked && node.enabled)}
-                    onCheckedChange={(enabled) => onChange(replaceAt(config, path, (n) => ({ ...n, enabled })))}
+                    onCheckedChange={(enabled) =>
+                        onChange(replaceAt(config, path, (n) => ({ ...n, enabled })))
+                    }
                 />
             </div>
         </div>
@@ -211,7 +228,10 @@ function MetaSection({ node }: { node: KoishiPluginNode }) {
     const shown = Object.entries(node.meta).filter(([k]) => k === '$if' || k === '$filter');
     if (shown.length === 0) return null;
     return (
-        <FormSection title="载入条件" description="写在 koishi.yml 里的表达式，条件不满足时即使开着也不载入；要改去原始文件">
+        <FormSection
+            title="载入条件"
+            description="写在 koishi.yml 里的表达式，条件不满足时即使开着也不载入；要改去原始文件"
+        >
             <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-xs">
                 {shown.map(([k, v]) => (
                     <div key={k} className="contents">
@@ -267,7 +287,8 @@ function PluginDetail(props: DetailProps) {
     const hydrated = hydrateSchema(schema.data?.schema);
     const formOk = !!hydrated && renderable(hydrated);
     const missing = hydrated && node.enabled ? missingRequired(hydrated, node.config) : [];
-    const setConfig = (next: Record<string, unknown>) => onChange(replaceAt(config, path, (n) => ({ ...n, config: next })));
+    const setConfig = (next: Record<string, unknown>) =>
+        onChange(replaceAt(config, path, (n) => ({ ...n, config: next })));
     const subtitle = schema.data?.package
         ? `${schema.data.package}${schema.data.version ? ` · v${schema.data.version}` : ''}`
         : schema.isLoading
@@ -282,7 +303,8 @@ function PluginDetail(props: DetailProps) {
                 <div className="flex flex-col gap-2.5">
                     {isLinkNode(node) && (
                         <Notice title="这一条是桌面端对接时写的">
-                            selfId 要和 Bot 的 QQ 号一致、路径要和 Bot 侧连接地址一致；换 Bot 请在页头重新对接
+                            selfId 要和 Bot 的 QQ 号一致、路径要和 Bot 侧连接地址一致；换 Bot
+                            请在页头重新对接
                         </Notice>
                     )}
                     {missing.length > 0 && (
@@ -309,7 +331,10 @@ function PluginDetail(props: DetailProps) {
                     }
                 >
                     {showUsage ? (
-                        <SimpleMarkdown text={schema.data.usage} className="text-[13px] leading-relaxed" />
+                        <SimpleMarkdown
+                            text={schema.data.usage}
+                            className="text-[13px] leading-relaxed"
+                        />
                     ) : (
                         <p className="line-clamp-2 text-xs leading-relaxed text-text-tertiary">
                             {schema.data.usage.replace(/[#>*`_-]/g, '').trim()}
@@ -326,9 +351,19 @@ function PluginDetail(props: DetailProps) {
                         <ModeSwitch raw={rawOpen} onChange={setRawOpen} />
                     </div>
                     {rawOpen ? (
-                        <RawConfigEditor schema={hydrated} value={node.config} onChange={setConfig} disabled={disabled} />
+                        <RawConfigEditor
+                            schema={hydrated}
+                            value={node.config}
+                            onChange={setConfig}
+                            disabled={disabled}
+                        />
                     ) : (
-                        <SchemasteryForm schema={hydrated} value={node.config} onChange={setConfig} disabled={disabled} />
+                        <SchemasteryForm
+                            schema={hydrated}
+                            value={node.config}
+                            onChange={setConfig}
+                            disabled={disabled}
+                        />
                     )}
                 </div>
             ) : (
@@ -425,7 +460,12 @@ function RawConfigEditor({
     disabled?: boolean;
 }) {
     const [text, setText] = useState(() => {
-        const base = Object.keys(value).length > 0 ? value : schema ? materializeConfig(schema, value) : value;
+        const base =
+            Object.keys(value).length > 0
+                ? value
+                : schema
+                  ? materializeConfig(schema, value)
+                  : value;
         return JSON.stringify(base, null, 2);
     });
     const [error, setError] = useState<string | null>(null);
@@ -438,8 +478,13 @@ function RawConfigEditor({
     const commit = (raw: string) => {
         try {
             const parsed = raw.trim() ? JSON.parse(raw) : {};
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('要是一个对象');
-            onChange(schema ? simplifyConfig(schema, parsed as Record<string, unknown>) : (parsed as Record<string, unknown>));
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+                throw new Error('要是一个对象');
+            onChange(
+                schema
+                    ? simplifyConfig(schema, parsed as Record<string, unknown>)
+                    : (parsed as Record<string, unknown>),
+            );
             setError(null);
         } catch (e) {
             setError(`不是合法的 JSON 对象：${(e as Error).message}`);
@@ -450,7 +495,12 @@ function RawConfigEditor({
             title="配置原文"
             description="就是 koishi.yml 里这一项的内容；没写的键按默认值生效，写回时和默认值一样的键不落下"
             actions={
-                <Button size="sm" variant="secondary" disabled={disabled} onClick={() => commit(text)}>
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={disabled}
+                    onClick={() => commit(text)}
+                >
                     写回配置
                 </Button>
             }
@@ -478,5 +528,9 @@ function RawConfigEditor({
 }
 
 export function KoishiNodeDetail(props: DetailProps) {
-    return isGroup(props.node) ? <GroupDetail {...props} /> : <PluginDetail key={nodeKey(props.node)} {...props} />;
+    return isGroup(props.node) ? (
+        <GroupDetail {...props} />
+    ) : (
+        <PluginDetail key={nodeKey(props.node)} {...props} />
+    );
 }

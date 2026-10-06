@@ -2,7 +2,11 @@
 // 每次连上上游补最近 50 条；昵称按实例记在本机。
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { MaiBotChatEvent, MaiBotChatImage, MaiBotChatMessage } from '../../core/domain/apps/maibotChat';
+import type {
+    MaiBotChatEvent,
+    MaiBotChatImage,
+    MaiBotChatMessage,
+} from '../../core/domain/apps/maibotChat';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import {
     maibotChatService,
@@ -35,7 +39,13 @@ type Action =
     | { type: 'cleared' }
     | { type: 'reset' };
 
-const INITIAL: MaiBotChatState = { status: 'connecting', botName: '麦麦', items: [], typing: false, seq: 0 };
+const INITIAL: MaiBotChatState = {
+    status: 'connecting',
+    botName: '麦麦',
+    items: [],
+    typing: false,
+    seq: 0,
+};
 
 export function chatReducer(s: MaiBotChatState, a: Action): MaiBotChatState {
     switch (a.type) {
@@ -44,7 +54,12 @@ export function chatReducer(s: MaiBotChatState, a: Action): MaiBotChatState {
         case 'cleared':
             return { ...s, items: [] };
         case 'status':
-            return { ...s, status: a.status, reason: a.reason, typing: a.status === 'ready' && s.typing };
+            return {
+                ...s,
+                status: a.status,
+                reason: a.reason,
+                typing: a.status === 'ready' && s.typing,
+            };
         case 'event': {
             const e = a.event;
             switch (e.kind) {
@@ -53,20 +68,45 @@ export function chatReducer(s: MaiBotChatState, a: Action): MaiBotChatState {
                 case 'history': {
                     // 重连时上游整段重发，直接换掉；提示条跟着没了也无妨
                     let seq = s.seq;
-                    const items = e.messages.map((m): MaiBotChatItem => ({ kind: 'message', key: m.id || `h${++seq}`, message: m }));
+                    const items = e.messages.map((m): MaiBotChatItem => ({
+                        kind: 'message',
+                        key: m.id || `h${++seq}`,
+                        message: m,
+                    }));
                     return { ...s, items, seq };
                 }
                 case 'message': {
                     const id = e.message.id;
-                    if (id && s.items.some((i) => i.kind === 'message' && i.message.id === id)) return s;
+                    if (id && s.items.some((i) => i.kind === 'message' && i.message.id === id))
+                        return s;
                     const seq = s.seq + 1;
-                    return { ...s, seq, items: [...s.items, { kind: 'message', key: id || `m${seq}`, message: e.message }] };
+                    return {
+                        ...s,
+                        seq,
+                        items: [
+                            ...s.items,
+                            { kind: 'message', key: id || `m${seq}`, message: e.message },
+                        ],
+                    };
                 }
                 case 'typing':
                     return { ...s, typing: e.typing };
                 case 'notice': {
                     const seq = s.seq + 1;
-                    return { ...s, seq, items: [...s.items, { kind: 'notice', key: `n${seq}`, text: e.text, at: e.at, error: e.error }] };
+                    return {
+                        ...s,
+                        seq,
+                        items: [
+                            ...s.items,
+                            {
+                                kind: 'notice',
+                                key: `n${seq}`,
+                                text: e.text,
+                                at: e.at,
+                                error: e.error,
+                            },
+                        ],
+                    };
                 }
                 case 'nickname':
                     return s;
@@ -102,11 +142,15 @@ export function useMaiBotChat(instanceId: string, live: boolean) {
     const nameRef = useRef(userName);
     nameRef.current = userName;
 
-    useEffect(() => onFrontendPreferenceRestored(nameKey(instanceId), () => {
-        const name = readName(instanceId);
-        setUserName(name);
-        void conn.current?.rename(name).catch(() => undefined);
-    }), [instanceId]);
+    useEffect(
+        () =>
+            onFrontendPreferenceRestored(nameKey(instanceId), () => {
+                const name = readName(instanceId);
+                setUserName(name);
+                void conn.current?.rename(name).catch(() => undefined);
+            }),
+        [instanceId],
+    );
 
     useEffect(() => {
         if (!live) return;
@@ -143,9 +187,18 @@ export function useMaiBotChat(instanceId: string, live: boolean) {
         try {
             const done = await maibotChatService.clear(instanceId);
             dispatch({ type: 'cleared' });
-            pushInfoBar({ key: `maibotChat:${instanceId}`, tone: 'success', title: done.message, autoDismissMs: 2500 });
+            pushInfoBar({
+                key: `maibotChat:${instanceId}`,
+                tone: 'success',
+                title: done.message,
+                autoDismissMs: 2500,
+            });
         } catch (err) {
-            pushErrorBar({ key: `maibotChat-fail:${instanceId}`, title: '没清掉', raw: toAppConfigError(err).message });
+            pushErrorBar({
+                key: `maibotChat-fail:${instanceId}`,
+                title: '没清掉',
+                raw: toAppConfigError(err).message,
+            });
         } finally {
             setClearing(false);
         }
@@ -155,9 +208,14 @@ export function useMaiBotChat(instanceId: string, live: boolean) {
 }
 
 const chatImages = {
-    pick: () => localFilesOrNothing(maibotChatService.pickImages(), 'maibotChat-images', '图片没读出来'),
+    pick: () =>
+        localFilesOrNothing(maibotChatService.pickImages(), 'maibotChat-images', '图片没读出来'),
     read: (paths: string[]) =>
-        localFilesOrNothing(maibotChatService.localImages(paths), 'maibotChat-images', '图片没读出来'),
+        localFilesOrNothing(
+            maibotChatService.localImages(paths),
+            'maibotChat-images',
+            '图片没读出来',
+        ),
 };
 
 /** 输入框挑图、拖进窗口的图：读成能发的样子，预览就是要发出去的那份 */

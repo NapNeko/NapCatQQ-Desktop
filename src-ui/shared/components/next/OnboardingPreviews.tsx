@@ -100,12 +100,7 @@ function SidebarRail({
     className?: string;
 }) {
     return (
-        <div
-            className={cn(
-                'flex w-[10.25rem] shrink-0 flex-col bg-sidebar',
-                className,
-            )}
-        >
+        <div className={cn('flex w-[10.25rem] shrink-0 flex-col bg-sidebar', className)}>
             <div className="flex items-center gap-1.5 px-2.5 py-2.5">
                 <img
                     src={logoSidebar}
@@ -123,11 +118,7 @@ function SidebarRail({
             <div className="space-y-0.5 px-1.5 py-2">
                 <MiniNavRow icon={LayoutDashboard} label="概览" />
                 <MiniNavRow icon={Bot} label="机器人" active={highlight === 'bots'} />
-                <MiniNavRow
-                    icon={Package}
-                    label="组件"
-                    active={highlight === 'components'}
-                />
+                <MiniNavRow icon={Package} label="组件" active={highlight === 'components'} />
                 <MiniNavRow icon={Server} label="远端" />
                 <MiniNavRow icon={ListTodo} label="任务" />
                 <MiniNavRow icon={Settings} label="设置" />
@@ -180,9 +171,7 @@ function DemoBotCard({ variant }: { variant: 'running' | 'need-login' }) {
                 }
                 meta={
                     running ? null : (
-                        <span className="text-text-secondary">
-                            保存后点启动，手机 QQ 扫码
-                        </span>
+                        <span className="text-text-secondary">保存后点启动，手机 QQ 扫码</span>
                     )
                 }
                 chips={
@@ -221,15 +210,10 @@ export function WelcomePreview() {
     return (
         <PreviewChrome label="主界面 · 机器人" bodyClassName="p-0">
             <div className="flex overflow-hidden">
-                <SidebarRail
-                    highlight="bots"
-                    className="border-r border-border-subtle/80"
-                />
+                <SidebarRail highlight="bots" className="border-r border-border-subtle/80" />
                 <div className="flex min-w-0 flex-1 flex-col gap-2.5 bg-canvas p-3">
                     <div className="flex items-center justify-between gap-2">
-                        <span className="text-[12px] font-medium text-text">
-                            机器人
-                        </span>
+                        <span className="text-[12px] font-medium text-text">机器人</span>
                     </div>
                     <DemoBotCard variant="running" />
                 </div>
@@ -273,16 +257,11 @@ function MapHint({
                 active
                     ? 'border-brand/35 bg-brand/[0.08]'
                     : muted
-                        ? 'border-border-subtle/70 bg-inset/40'
-                        : 'border-border-subtle bg-surface/80',
+                      ? 'border-border-subtle/70 bg-inset/40'
+                      : 'border-border-subtle bg-surface/80',
             )}
         >
-            <p
-                className={cn(
-                    'text-[11px] font-semibold',
-                    active ? 'text-brand' : 'text-text',
-                )}
-            >
+            <p className={cn('text-[11px] font-semibold', active ? 'text-brand' : 'text-text')}>
                 {label}
             </p>
             <p className="mt-0.5 text-[11px] leading-snug text-text-tertiary">{text}</p>
@@ -300,9 +279,7 @@ export function PathStoryPreview() {
                         statusBadge={{ label: '未安装', tone: 'warning', dot: false }}
                         title="Node.js"
                         description="运行时依赖"
-                        meta={
-                            <span className="text-[11px] text-text-tertiary">本机</span>
-                        }
+                        meta={<span className="text-[11px] text-text-tertiary">本机</span>}
                         footer={
                             <Button variant="primary" size="sm" tabIndex={-1} aria-hidden>
                                 安装
@@ -353,9 +330,7 @@ export function TipsPreview() {
             <div className="grid sm:grid-cols-2 sm:divide-x sm:divide-border-subtle/70">
                 <div className="flex min-w-0 flex-col gap-2 border-b border-border-subtle/70 p-3 sm:border-b-0 sm:p-3.5">
                     <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-semibold text-warning">
-                            组件未就绪
-                        </span>
+                        <span className="text-[11px] font-semibold text-warning">组件未就绪</span>
                         <span className="text-[10px] text-text-tertiary">组件页</span>
                     </div>
                     <div className="pointer-events-none min-w-0 flex-1 select-none">
@@ -363,16 +338,9 @@ export function TipsPreview() {
                             statusBadge={{ label: '未安装', tone: 'warning', dot: false }}
                             title="NapCat"
                             description="协议端尚未安装"
-                            meta={
-                                <span className="text-[11px] text-text-tertiary">本机</span>
-                            }
+                            meta={<span className="text-[11px] text-text-tertiary">本机</span>}
                             footer={
-                                <Button
-                                    variant="primary"
-                                    size="sm"
-                                    tabIndex={-1}
-                                    aria-hidden
-                                >
+                                <Button variant="primary" size="sm" tabIndex={-1} aria-hidden>
                                     安装
                                 </Button>
                             }
@@ -405,9 +373,7 @@ export function GoPreview() {
                         statusBadge={{ label: '未安装', tone: 'warning', dot: false }}
                         title="NapCat"
                         description="Node / QQ / 框架装在这里"
-                        meta={
-                            <span className="text-[11px] text-text-tertiary">本机</span>
-                        }
+                        meta={<span className="text-[11px] text-text-tertiary">本机</span>}
                         footer={
                             <Button variant="primary" size="sm" tabIndex={-1} aria-hidden>
                                 安装
@@ -427,11 +393,7 @@ export function GoPreview() {
 }
 
 /** 兼容旧导出名（若有引用） */
-export function SidebarPreview({
-    highlight = 'bots',
-}: {
-    highlight?: 'bots' | 'components';
-}) {
+export function SidebarPreview({ highlight = 'bots' }: { highlight?: 'bots' | 'components' }) {
     return (
         <PreviewChrome label="侧栏" bodyClassName="p-0">
             <SidebarRail highlight={highlight} className="w-full max-w-[10.25rem]" />
@@ -439,11 +401,7 @@ export function SidebarPreview({
     );
 }
 
-export function BotCardPreview({
-    variant = 'running',
-}: {
-    variant?: 'running' | 'need-login';
-}) {
+export function BotCardPreview({ variant = 'running' }: { variant?: 'running' | 'need-login' }) {
     return (
         <PreviewChrome label="机器人 · 列表卡" bodyClassName="p-2.5">
             <DemoBotCard variant={variant} />
@@ -459,9 +417,7 @@ export function ComponentCardsPreview() {
                     statusBadge={{ label: '已安装', tone: 'success', dot: true }}
                     title="NapCat"
                     description="协议端核心"
-                    meta={
-                        <span className="text-[11px] text-text-tertiary">v4.x</span>
-                    }
+                    meta={<span className="text-[11px] text-text-tertiary">v4.x</span>}
                     footer={
                         <Badge tone="success" appearance="soft">
                             就绪
@@ -473,9 +429,7 @@ export function ComponentCardsPreview() {
                     statusBadge={{ label: '未安装', tone: 'warning', dot: false }}
                     title="Node.js"
                     description="运行时依赖"
-                    meta={
-                        <span className="text-[11px] text-text-tertiary">LTS</span>
-                    }
+                    meta={<span className="text-[11px] text-text-tertiary">LTS</span>}
                     footer={
                         <Button variant="primary" size="sm" tabIndex={-1} aria-hidden>
                             安装

@@ -6,11 +6,18 @@ export interface Segment {
     data: Record<string, unknown>;
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** CQ 码转义只有这四种；一次扫描替换，避免 `&amp;#91;` 被连环反转义成 `[` */
-const CQ_UNESCAPES: Record<string, string> = { '&amp;': '&', '&#91;': '[', '&#93;': ']', '&#44;': ',' };
-const unescapeCq = (s: string) => (s.includes('&') ? s.replace(/&(?:amp|#91|#93|#44);/g, (m) => CQ_UNESCAPES[m] ?? m) : s);
+const CQ_UNESCAPES: Record<string, string> = {
+    '&amp;': '&',
+    '&#91;': '[',
+    '&#93;': ']',
+    '&#44;': ',',
+};
+const unescapeCq = (s: string) =>
+    s.includes('&') ? s.replace(/&(?:amp|#91|#93|#44);/g, (m) => CQ_UNESCAPES[m] ?? m) : s;
 
 /** 类型名里不会有逗号和方括号；值里的逗号一定已被转义成 &#44;，所以按逗号切参数是安全的 */
 const CQ_CODE = /\[CQ:([^,[\]]+)((?:,[^[\]]*)?)\]/g;
@@ -60,7 +67,8 @@ export function normalizeMessage(message: unknown): Segment[] {
     return single ? [single] : [];
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+const str = (v: unknown): string =>
+    typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
 /** 文件名之类可能是整段 URL 或 base64，预览里截一下免得撑爆一行 */
 function clip(s: string, max = 40): string {

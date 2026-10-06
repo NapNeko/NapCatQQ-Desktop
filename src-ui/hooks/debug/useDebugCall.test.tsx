@@ -38,7 +38,11 @@ const req = (action = 'get_login_info', over: Partial<Req> = {}): Req => ({
     ...over,
 });
 
-const okResponse = (requestId: string, retcode = 0, text: { message?: string; wording?: string } = {}): DebugCallResponse => ({
+const okResponse = (
+    requestId: string,
+    retcode = 0,
+    text: { message?: string; wording?: string } = {},
+): DebugCallResponse => ({
     request_id: requestId,
     result: {
         kind: 'ok',
@@ -85,7 +89,8 @@ function mount() {
     return { ...hook, invalidate, renders: () => renders };
 }
 
-const requestIdOf = (call: number): string => (callMock.mock.calls[call][0] as DebugCallRequest).request_id;
+const requestIdOf = (call: number): string =>
+    (callMock.mock.calls[call][0] as DebugCallRequest).request_id;
 
 beforeEach(() => {
     callMock.mockReset();
@@ -117,7 +122,11 @@ describe('useDebugCall.send', () => {
         expect(result.current.isInflight('tab-1')).toBe(true);
         expect(result.current.isInflight('tab-2')).toBe(false);
         expect(debugWorkspaceStore.getRun('tab-1')?.inflight?.requestId).toBe(requestIdOf(0));
-        expect(callMock.mock.calls[0][0]).toMatchObject({ bot_id: 'bot-1', action: 'get_login_info', origin: 'editor' });
+        expect(callMock.mock.calls[0][0]).toMatchObject({
+            bot_id: 'bot-1',
+            action: 'get_login_info',
+            origin: 'editor',
+        });
 
         const response = okResponse(requestIdOf(0));
         await act(async () => {
@@ -225,7 +234,10 @@ describe('useDebugCall.send', () => {
 
         let response!: DebugCallResponse;
         await act(async () => {
-            response = await result.current.send(null, req('send_group_msg', { origin: 'composer' }));
+            response = await result.current.send(
+                null,
+                req('send_group_msg', { origin: 'composer' }),
+            );
         });
 
         expect(response.request_id).toBe(requestIdOf(0));
@@ -243,7 +255,10 @@ describe('useDebugCall.send', () => {
             response = await result.current.send('tab-1', req());
         });
 
-        expect(response.result).toEqual({ kind: 'err', error: { kind: 'internal', message: 'IPC 断了' } });
+        expect(response.result).toEqual({
+            kind: 'err',
+            error: { kind: 'internal', message: 'IPC 断了' },
+        });
         expect(debugWorkspaceStore.getRun('tab-1')?.last?.response).toEqual(response);
         expect(debugWorkspaceStore.getRun('tab-1')?.inflight).toBeUndefined();
     });
@@ -297,8 +312,12 @@ describe('useDebugCall · 失败说明交给聊天时间线', () => {
     it('拿到回包但 OB11 失败：把 wording（没有就 message）按 bot + request_id 交给事件 store', async () => {
         const note = vi.spyOn(debugEventStore, 'noteCallWording');
         callMock
-            .mockImplementationOnce(async (r: DebugCallRequest) => okResponse(r.request_id, 1200, { wording: '消息内容为空', message: 'EMPTY' }))
-            .mockImplementationOnce(async (r: DebugCallRequest) => okResponse(r.request_id, 1404, { message: ' group not found ' }));
+            .mockImplementationOnce(async (r: DebugCallRequest) =>
+                okResponse(r.request_id, 1200, { wording: '消息内容为空', message: 'EMPTY' }),
+            )
+            .mockImplementationOnce(async (r: DebugCallRequest) =>
+                okResponse(r.request_id, 1404, { message: ' group not found ' }),
+            );
         const { result } = mount();
 
         await act(async () => {
@@ -320,7 +339,9 @@ describe('useDebugCall · 失败说明交给聊天时间线', () => {
                 request_id: r.request_id,
                 result: { kind: 'err', error: { kind: 'timeout', ms: 30000 } },
             }))
-            .mockImplementationOnce(async (r: DebugCallRequest) => okResponse(r.request_id, 1200, { wording: '拉不到' }))
+            .mockImplementationOnce(async (r: DebugCallRequest) =>
+                okResponse(r.request_id, 1200, { wording: '拉不到' }),
+            )
             .mockImplementationOnce(async (r: DebugCallRequest) => okResponse(r.request_id, 1200));
         const { result } = mount();
 

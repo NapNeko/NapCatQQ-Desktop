@@ -11,11 +11,7 @@
 // HomeNoticeService 把通知分 reminder / runtime / update 三 section，
 // 这里合成单一 list，section 由 UI 层决定怎么分组展示。
 
-import type {
-    BootstrapSnapshot,
-    BotActorSnapshot,
-    DomainEvent,
-} from '../../ipc/types';
+import type { BootstrapSnapshot, BotActorSnapshot, DomainEvent } from '../../ipc/types';
 import {
     findUpdatesAvailable,
     type ReleaseSnapshotView,
@@ -94,9 +90,7 @@ function collectMigrationNotices(snap: BootstrapSnapshot | null | undefined): No
         });
     } else if (layout?.performed) {
         const detailParts = [
-            layout.backup_path
-                ? `已备份到桌面：${layout.backup_path}（含密钥，请自行保管）`
-                : null,
+            layout.backup_path ? `已备份到桌面：${layout.backup_path}（含密钥，请自行保管）` : null,
             layout.moved_count > 0 ? `整理 ${layout.moved_count} 项` : null,
             layout.warnings[0] ?? null,
         ].filter(Boolean);

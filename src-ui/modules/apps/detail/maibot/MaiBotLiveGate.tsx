@@ -23,7 +23,9 @@ export const MaiBotLiveGate: React.FC<{
             <PagePlaceholder>
                 <Spinner size="lg" tone="brand" label="正在连接麦麦" />
                 <p className="text-sm text-text-secondary">正在等麦麦的 WebUI 起来</p>
-                {status?.message && <p className="max-w-sm text-xs text-text-tertiary">{status.message}</p>}
+                {status?.message && (
+                    <p className="max-w-sm text-xs text-text-tertiary">{status.message}</p>
+                )}
             </PagePlaceholder>
         );
     }
@@ -42,7 +44,9 @@ export const MaiBotLiveGate: React.FC<{
                 <Icon size={20} strokeWidth={1.9} />
             </span>
             <div className="flex flex-col gap-1">
-                <p className="text-sm font-medium text-text">{auth ? '麦麦的 WebUI 不认这个 token' : '麦麦没在运行'}</p>
+                <p className="text-sm font-medium text-text">
+                    {auth ? '麦麦的 WebUI 不认这个 token' : '麦麦没在运行'}
+                </p>
                 <p className="max-w-sm text-xs leading-relaxed text-text-tertiary">
                     {auth ? status.message : `${what}在麦麦运行时才能看和改`}
                 </p>

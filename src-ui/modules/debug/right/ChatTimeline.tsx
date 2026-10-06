@@ -32,7 +32,13 @@ function baseEstimate(row: TimelineRow): number {
                 if (s.type === 'image') h += 132;
                 else if (s.type === 'mface') h += 100;
                 else if (s.type === 'reply') h += 20;
-                else if (s.type === 'file' || s.type === 'forward' || s.type === 'json' || s.type === 'xml') h += 56;
+                else if (
+                    s.type === 'file' ||
+                    s.type === 'forward' ||
+                    s.type === 'json' ||
+                    s.type === 'xml'
+                )
+                    h += 56;
             }
             if (row.call) h += 16;
             return h;
@@ -48,7 +54,11 @@ function baseEstimate(row: TimelineRow): number {
 }
 
 /** 上一行是不是同一个人紧接着发的 */
-function isContinuation(row: TimelineRow, prev: TimelineRow | undefined, showTime: boolean): boolean {
+function isContinuation(
+    row: TimelineRow,
+    prev: TimelineRow | undefined,
+    showTime: boolean,
+): boolean {
     if (showTime || row.kind !== 'message' || !prev || prev.kind !== 'message') return false;
     return (
         prev.senderId === row.senderId &&
@@ -106,7 +116,10 @@ export const ChatTimeline = memo(function ChatTimeline({
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const rows = useMemo<TimelineRow[]>(
-        () => (trimmed > 0 ? [{ kind: 'trimmed', key: 'trimmed-note', count: trimmed }, ...items] : (items as ChatItem[])),
+        () =>
+            trimmed > 0
+                ? [{ kind: 'trimmed', key: 'trimmed-note', count: trimmed }, ...items]
+                : (items as ChatItem[]),
         [items, trimmed],
     );
     const rowsRef = useRef(rows);
@@ -247,7 +260,11 @@ export const ChatTimeline = memo(function ChatTimeline({
             {paused ? (
                 pausedBar
             ) : (
-                <NewMessagesPill count={stick.unseen} away={stick.away} onClick={() => stick.jumpToLatest(m.enabled)} />
+                <NewMessagesPill
+                    count={stick.unseen}
+                    away={stick.away}
+                    onClick={() => stick.jumpToLatest(m.enabled)}
+                />
             )}
         </div>
     );

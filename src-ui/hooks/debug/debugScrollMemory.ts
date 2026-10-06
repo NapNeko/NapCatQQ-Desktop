@@ -34,7 +34,11 @@ interface ScrollMemoryOptions {
 }
 
 /** 挂上一个容器：先恢复位置，再开始记。返回撤掉的函数 */
-function attach(el: HTMLElement, key: string, shouldRemember: () => ScrollMemoryOptions['shouldRemember']): () => void {
+function attach(
+    el: HTMLElement,
+    key: string,
+    shouldRemember: () => ScrollMemoryOptions['shouldRemember'],
+): () => void {
     const saved = memory.get(key);
     let frame = 0;
     if (saved !== undefined) {

@@ -20,7 +20,9 @@ import { BotPicker } from './BotPicker';
 import { ChannelSelect } from './ChannelSelect';
 import { ReceivingIndicator } from './ReceivingIndicator';
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const IS_MAC =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const MOD_KEY_LABEL = IS_MAC ? '⌘' : 'Ctrl';
 
 export interface TopBarProps {
@@ -85,13 +87,21 @@ export const TopBar = memo(function TopBar({
         <header className="@container shrink-0 pt-3">
             <div className="flex min-w-0 items-center gap-3">
                 <div className="shrink-0">
-                    <p className="text-2xs uppercase leading-none tracking-widest text-text-tertiary">debug</p>
-                    <h1 className="mt-1 font-display text-xl font-semibold leading-none text-text">调试台</h1>
+                    <p className="text-2xs uppercase leading-none tracking-widest text-text-tertiary">
+                        debug
+                    </p>
+                    <h1 className="mt-1 font-display text-xl font-semibold leading-none text-text">
+                        调试台
+                    </h1>
                 </div>
 
                 <span aria-hidden className="h-8 w-px shrink-0 bg-border-subtle" />
 
-                <div role="group" aria-label="调试目标" className="flex min-w-0 flex-1 items-center gap-2">
+                <div
+                    role="group"
+                    aria-label="调试目标"
+                    className="flex min-w-0 flex-1 items-center gap-2"
+                >
                     <BotPicker
                         targets={targets}
                         selected={selected}
@@ -160,7 +170,11 @@ export const TopBar = memo(function TopBar({
                                         'text-text-tertiary hover:bg-inset hover:text-text',
                                     )}
                                 >
-                                    <ActionMotionIcon icon={PictureInPicture2} size={16} strokeWidth={2} />
+                                    <ActionMotionIcon
+                                        icon={PictureInPicture2}
+                                        size={16}
+                                        strokeWidth={2}
+                                    />
                                 </button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">弹出为独立窗口</TooltipContent>
@@ -171,7 +185,9 @@ export const TopBar = memo(function TopBar({
                             <button
                                 type="button"
                                 onClick={onToggleRight}
-                                aria-label={rightCollapsed ? '展开右栏（聊天）' : '收起右栏（聊天）'}
+                                aria-label={
+                                    rightCollapsed ? '展开右栏（聊天）' : '收起右栏（聊天）'
+                                }
                                 aria-pressed={!rightCollapsed}
                                 className={cn(
                                     'inline-flex h-8 w-8 items-center justify-center rounded-sm transition-colors',
@@ -181,10 +197,16 @@ export const TopBar = memo(function TopBar({
                                         : 'bg-inset text-text-secondary hover:text-text',
                                 )}
                             >
-                                <ActionMotionIcon icon={rightCollapsed ? PanelRightOpen : PanelRightClose} size={16} strokeWidth={2} />
+                                <ActionMotionIcon
+                                    icon={rightCollapsed ? PanelRightOpen : PanelRightClose}
+                                    size={16}
+                                    strokeWidth={2}
+                                />
                             </button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom">{rightCollapsed ? '展开右栏（聊天）' : '收起右栏'}</TooltipContent>
+                        <TooltipContent side="bottom">
+                            {rightCollapsed ? '展开右栏（聊天）' : '收起右栏'}
+                        </TooltipContent>
                     </Tooltip>
                 </div>
             </div>

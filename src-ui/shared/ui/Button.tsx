@@ -11,20 +11,17 @@ import { useMotion } from '../../hooks/preferences/useMotion';
 
 const buttonVariants = cva(
     'inline-flex items-center justify-center gap-2 rounded-sm font-medium ' +
-    'transition-colors duration-150 ease-out ' +
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ' +
-    'disabled:pointer-events-none disabled:opacity-50 select-none',
+        'transition-colors duration-150 ease-out ' +
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ' +
+        'disabled:pointer-events-none disabled:opacity-50 select-none',
     {
         variants: {
             variant: {
-                primary:
-                    'bg-brand text-white shadow-card hover:bg-brand-hover',
+                primary: 'bg-brand text-white shadow-card hover:bg-brand-hover',
                 secondary:
                     'bg-surface text-text border border-border-subtle hover:bg-inset hover:border-border',
-                ghost:
-                    'bg-transparent text-text-secondary hover:bg-inset hover:text-text',
-                danger:
-                    'bg-danger text-white shadow-card hover:opacity-90',
+                ghost: 'bg-transparent text-text-secondary hover:bg-inset hover:text-text',
+                danger: 'bg-danger text-white shadow-card hover:opacity-90',
             },
             size: {
                 sm: 'h-7 px-2.5 text-xs',
@@ -41,8 +38,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-    extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+    extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
     /// 关闭弹性动画。极少数场景可关。默认开。
     flat?: boolean;
 }

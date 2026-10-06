@@ -5,7 +5,11 @@ describe('conversation date labels', () => {
     const now = new Date(2026, 9, 3, 12, 30);
     it('shows local time today and retains a full timestamp for the title and time element', () => {
         const date = new Date(2026, 9, 3, 9, 5, 7);
-        expect(conversationDate(date.getTime(), now)).toEqual({ label: '09:05', title: '2026/10/3 09:05:07', dateTime: date.toISOString() });
+        expect(conversationDate(date.getTime(), now)).toEqual({
+            label: '09:05',
+            title: '2026/10/3 09:05:07',
+            dateTime: date.toISOString(),
+        });
     });
     it.each([
         [new Date(2026, 9, 2, 23, 59), '昨天'],
@@ -20,7 +24,7 @@ describe('conversation date labels', () => {
     ])('finds yesterday across year and leap-month boundaries', (today, yesterday) => {
         expect(conversationDate(yesterday.getTime(), today)?.label).toBe('昨天');
     });
-    it.each([0, NaN, Infinity])('omits missing or invalid timestamps', timestamp => {
+    it.each([0, NaN, Infinity])('omits missing or invalid timestamps', (timestamp) => {
         expect(conversationDate(timestamp, now)).toBeNull();
     });
 });

@@ -36,7 +36,10 @@ export const maibotMemoryService = {
         return invoke<MaiBotMemoryImportSetup>('maibot_memory_import_setup', { instanceId });
     },
 
-    importMemory: async (instanceId: string, req: MaiBotMemoryImport): Promise<MaiBotMemoryTask> => {
+    importMemory: async (
+        instanceId: string,
+        req: MaiBotMemoryImport,
+    ): Promise<MaiBotMemoryTask> => {
         if (!isTauri) return mock.importMemory(mockInst(instanceId), req);
         return invoke<MaiBotMemoryTask>('maibot_memory_import', { instanceId, req });
     },
@@ -51,19 +54,33 @@ export const maibotMemoryService = {
         return invoke<MaiBotMemoryTaskDetail>('maibot_memory_task', { instanceId, taskId });
     },
 
-    taskAction: async (instanceId: string, action: MaiBotMemoryTaskAction): Promise<MaiBotMemoryTask> => {
+    taskAction: async (
+        instanceId: string,
+        action: MaiBotMemoryTaskAction,
+    ): Promise<MaiBotMemoryTask> => {
         if (!isTauri) return mock.taskAction(mockInst(instanceId), action);
         return invoke<MaiBotMemoryTask>('maibot_memory_task_action', { instanceId, action });
     },
 
-    records: async (instanceId: string, query: MaiBotMemoryQuery): Promise<MaiBotMemoryRecordPage> => {
+    records: async (
+        instanceId: string,
+        query: MaiBotMemoryQuery,
+    ): Promise<MaiBotMemoryRecordPage> => {
         if (!isTauri) return mock.records(mockInst(instanceId), query);
         return invoke<MaiBotMemoryRecordPage>('maibot_memory_records', { instanceId, query });
     },
 
-    record: async (instanceId: string, kind: MaiBotMemoryRecordKind, recordId: string): Promise<MaiBotMemoryRecordDetail> => {
+    record: async (
+        instanceId: string,
+        kind: MaiBotMemoryRecordKind,
+        recordId: string,
+    ): Promise<MaiBotMemoryRecordDetail> => {
         if (!isTauri) return mock.record(mockInst(instanceId), kind, recordId);
-        return invoke<MaiBotMemoryRecordDetail>('maibot_memory_record', { instanceId, kind, recordId });
+        return invoke<MaiBotMemoryRecordDetail>('maibot_memory_record', {
+            instanceId,
+            kind,
+            recordId,
+        });
     },
 
     sources: async (instanceId: string): Promise<MaiBotMemorySource[]> => {
@@ -71,7 +88,10 @@ export const maibotMemoryService = {
         return invoke<MaiBotMemorySource[]>('maibot_memory_sources', { instanceId });
     },
 
-    deleteAction: async (instanceId: string, action: MaiBotMemoryDeleteAction): Promise<MaiBotMemoryDeleteResult> => {
+    deleteAction: async (
+        instanceId: string,
+        action: MaiBotMemoryDeleteAction,
+    ): Promise<MaiBotMemoryDeleteResult> => {
         if (!isTauri) return mock.deleteAction(mockInst(instanceId), action);
         return invoke<MaiBotMemoryDeleteResult>('maibot_memory_delete', { instanceId, action });
     },

@@ -18,7 +18,10 @@ import {
 } from '../../../hooks/debug/useDebugCollections';
 import { useDebugCatalog } from '../../../hooks/debug/useDebugCatalog';
 import { useDebugCall } from '../../../hooks/debug/useDebugCall';
-import { debugWorkspaceStore, useDebugChannelChoice } from '../../../hooks/debug/debugWorkspaceStore';
+import {
+    debugWorkspaceStore,
+    useDebugChannelChoice,
+} from '../../../hooks/debug/debugWorkspaceStore';
 import { useScrollMemory } from '../../../hooks/debug/debugScrollMemory';
 import { AUTO_CHANNEL } from '../../../core/domain/debug/channelPick';
 import { lookupSummary } from '../../../core/domain/debug/catalogView';
@@ -44,7 +47,13 @@ import {
     type RequestSlot,
 } from '../../../core/domain/debug/collectionsOps';
 import { paramsTextOf } from '../../../core/domain/debug/historyReplay';
-import { ConfirmDialog, IconAction, PanelMessage, SkeletonRows, type ConfirmRequest } from './panelParts';
+import {
+    ConfirmDialog,
+    IconAction,
+    PanelMessage,
+    SkeletonRows,
+    type ConfirmRequest,
+} from './panelParts';
 import { useFlip } from './useFlip';
 
 // 收起了哪些文件夹：界面状态，不落盘
@@ -79,20 +88,31 @@ function sameTarget(a: DropTarget | null, b: DropTarget | null): boolean {
     if (a === null || b === null) return a === b;
     if (a.kind !== b.kind) return false;
     if (a.kind === 'into' && b.kind === 'into') return a.folderId === b.folderId;
-    if (a.kind === 'slot' && b.kind === 'slot') return a.slot.folderId === b.slot.folderId && a.slot.index === b.slot.index && a.y === b.y;
-    if (a.kind === 'folder-slot' && b.kind === 'folder-slot') return a.index === b.index && a.y === b.y;
+    if (a.kind === 'slot' && b.kind === 'slot')
+        return a.slot.folderId === b.slot.folderId && a.slot.index === b.slot.index && a.y === b.y;
+    if (a.kind === 'folder-slot' && b.kind === 'folder-slot')
+        return a.index === b.index && a.y === b.y;
     return false;
 }
 
 /** 把落点换成新的整份收藏；落点等于原位时返回原对象 */
 function applyDrop(c: DebugCollections, source: DragSource, target: DropTarget): DebugCollections {
-    if (source.kind === 'folder') return target.kind === 'folder-slot' ? moveFolder(c, source.id, target.index) : c;
+    if (source.kind === 'folder')
+        return target.kind === 'folder-slot' ? moveFolder(c, source.id, target.index) : c;
     if (target.kind === 'slot') return moveRequest(c, source.id, target.slot);
-    if (target.kind === 'into') return moveRequest(c, source.id, { folderId: target.folderId, index: Number.MAX_SAFE_INTEGER });
+    if (target.kind === 'into')
+        return moveRequest(c, source.id, {
+            folderId: target.folderId,
+            index: Number.MAX_SAFE_INTEGER,
+        });
     return c;
 }
 
-export const CollectionsPanel = memo(function CollectionsPanel({ target }: { target: DebugTarget | null }) {
+export const CollectionsPanel = memo(function CollectionsPanel({
+    target,
+}: {
+    target: DebugTarget | null;
+}) {
     const listRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const ghostRef = useRef<HTMLDivElement>(null);
@@ -107,7 +127,10 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
     const choice = useDebugChannelChoice(target?.bot_id ?? null);
     const { send } = useDebugCall();
 
-    const view: CollectionsView | null = useMemo(() => (data ? collectionsView(data) : null), [data]);
+    const view: CollectionsView | null = useMemo(
+        () => (data ? collectionsView(data) : null),
+        [data],
+    );
 
     const [closed, setClosedState] = useState<ReadonlySet<string>>(savedClosedFolders);
     const [editing, setEditing] = useState<{ kind: 'request' | 'folder'; id: string } | null>(null);
@@ -150,11 +173,17 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
         },
         [flip],
     );
-    const toggleFolder = useCallback((id: string) => setFolderOpen(id, closed.has(id)), [closed, setFolderOpen]);
+    const toggleFolder = useCallback(
+        (id: string) => setFolderOpen(id, closed.has(id)),
+        [closed, setFolderOpen],
+    );
 
     // ---- 打开 / 发送
     const openSaved = useCallback((req: DebugSavedRequest, newTab: boolean): string => {
-        const tabId = debugWorkspaceStore.openAction(req.action, { newTab, paramsText: paramsTextOf(req.params) });
+        const tabId = debugWorkspaceStore.openAction(req.action, {
+            newTab,
+            paramsText: paramsTextOf(req.params),
+        });
         debugWorkspaceStore.setTabChannel(tabId, req.channel);
         return tabId;
     }, []);
@@ -191,7 +220,11 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
     );
 
     // 一键发送前的确认：和中栏发送用同一个确认框、同一份「本次不再询问」
-    const [sendConfirm, setSendConfirm] = useState<{ req: DebugSavedRequest; reason?: string; summaryFrom?: string | null } | null>(null);
+    const [sendConfirm, setSendConfirm] = useState<{
+        req: DebugSavedRequest;
+        reason?: string;
+        summaryFrom?: string | null;
+    } | null>(null);
     const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
 
     const onSend = useCallback(
@@ -200,7 +233,11 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
             // 分级查法和中栏同一套：名字、别名、还有 NapCat 的 _async / _rate_limited 变体，都按原接口认
             const { summary, summaryFrom } = lookupSummary(catalog?.actions, req.action);
             const safety = summary?.safety ?? null;
-            if (safety === 'read_only' || safety === 'side_effect' || dangerConfirmSkipped(target.bot_id, req.action)) {
+            if (
+                safety === 'read_only' ||
+                safety === 'side_effect' ||
+                dangerConfirmSkipped(target.bot_id, req.action)
+            ) {
                 doSend(req);
                 return;
             }
@@ -216,11 +253,15 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
     );
 
     // ---- 改名 / 删除 / 新建 / 移动
-    const navRows = () => Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-nav]') ?? []);
-    const navRow = (key: string) => listRef.current?.querySelector<HTMLElement>(`[data-nav="${key}"]`) ?? null;
+    const navRows = () =>
+        Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-nav]') ?? []);
+    const navRow = (key: string) =>
+        listRef.current?.querySelector<HTMLElement>(`[data-nav="${key}"]`) ?? null;
     /** 下一帧（行已经按新状态画好）把焦点放回某一行 */
     const focusRowSoon = useCallback((key: string) => {
-        requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-nav="${key}"]`)?.focus());
+        requestAnimationFrame(() =>
+            listRef.current?.querySelector<HTMLElement>(`[data-nav="${key}"]`)?.focus(),
+        );
     }, []);
 
     /**
@@ -230,13 +271,21 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
     const focusAfterDelete = (key: string): (() => HTMLElement | null) => {
         const rows = navRows();
         const idx = rows.findIndex((r) => r.dataset.nav === key);
-        const block = key.startsWith('f:') ? listRef.current?.querySelector(`[data-dnd-block="${key.slice(2)}"]`) : null;
+        const block = key.startsWith('f:')
+            ? listRef.current?.querySelector(`[data-dnd-block="${key.slice(2)}"]`)
+            : null;
         const outside = (r: HTMLElement) => r.dataset.nav !== key && !(block && block.contains(r));
-        const neighbor = (rows.slice(idx + 1).find(outside) ?? rows.slice(0, Math.max(0, idx)).reverse().find(outside))?.dataset.nav;
+        const neighbor = (
+            rows.slice(idx + 1).find(outside) ??
+            rows.slice(0, Math.max(0, idx)).reverse().find(outside)
+        )?.dataset.nav;
         return () => navRow(key) ?? (neighbor ? navRow(neighbor) : null) ?? navRows()[0] ?? null;
     };
 
-    const startRename = useCallback((kind: 'request' | 'folder', id: string) => setEditing({ kind, id }), []);
+    const startRename = useCallback(
+        (kind: 'request' | 'folder', id: string) => setEditing({ kind, id }),
+        [],
+    );
     const cancelRename = useCallback(
         (kind: 'request' | 'folder', id: string) => {
             setEditing(null);
@@ -248,7 +297,11 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
     const commitRename = useCallback(
         (kind: 'request' | 'folder', id: string, name: string, byKey: boolean) => {
             setEditing(null);
-            commit((c) => (kind === 'folder' ? renameFolder(c, id, name) : renameRequest(c, id, name, Date.now())));
+            commit((c) =>
+                kind === 'folder'
+                    ? renameFolder(c, id, name)
+                    : renameRequest(c, id, name, Date.now()),
+            );
             if (byKey) focusRowSoon(`${kind === 'folder' ? 'f' : 'r'}:${id}`);
         },
         [commit, focusRowSoon],
@@ -307,7 +360,10 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
 
     // ---- 拖动
     const drag = useRef<DragState | null>(null);
-    const [dragView, setDragView] = useState<{ source: DragSource; target: DropTarget | null } | null>(null);
+    const [dragView, setDragView] = useState<{
+        source: DragSource;
+        target: DropTarget | null;
+    } | null>(null);
     const ignoreClickUntil = useRef(0);
     const awaitingRelease = useRef(false);
     const shouldIgnoreClick = useCallback(
@@ -348,22 +404,34 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
         const px = Math.min(Math.max(x, listRect.left + 8), listRect.right - 8);
         const py = Math.min(Math.max(y, listRect.top + 2), listRect.bottom - 2);
         // 没有这个 API 的环境（jsdom）当作落在空白处：放到根目录末尾
-        const hit = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(px, py) : null;
+        const hit =
+            typeof document.elementFromPoint === 'function'
+                ? document.elementFromPoint(px, py)
+                : null;
         const el = hit instanceof Element ? hit.closest<HTMLElement>('[data-dnd-kind]') : null;
         const kind = el?.dataset.dndKind;
 
         let result: DropTarget | null = null;
         if (source.kind === 'folder') {
-            const block = hit instanceof Element ? hit.closest<HTMLElement>('[data-dnd-block]') : null;
+            const block =
+                hit instanceof Element ? hit.closest<HTMLElement>('[data-dnd-block]') : null;
             if (block) {
                 const r = block.getBoundingClientRect();
                 const idx = view.folders.findIndex((f) => f.id === block.dataset.dndBlock);
                 const before = py < r.top + r.height / 2;
-                result = { kind: 'folder-slot', index: idx + (before ? 0 : 1), y: (before ? r.top : r.bottom) - contentTop };
+                result = {
+                    kind: 'folder-slot',
+                    index: idx + (before ? 0 : 1),
+                    y: (before ? r.top : r.bottom) - contentTop,
+                };
             } else {
                 const blocks = content.querySelectorAll<HTMLElement>('[data-dnd-block]');
                 const last = blocks[blocks.length - 1];
-                result = { kind: 'folder-slot', index: view.folders.length, y: last ? last.getBoundingClientRect().bottom - contentTop : 0 };
+                result = {
+                    kind: 'folder-slot',
+                    index: view.folders.length,
+                    y: last ? last.getBoundingClientRect().bottom - contentTop : 0,
+                };
             }
         } else if (el && kind === 'request') {
             const r = el.getBoundingClientRect();
@@ -383,7 +451,9 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
             if (folderId) result = { kind: 'into', folderId };
         } else {
             // 列表空白处 / 最底下：放到根目录末尾
-            const rows = content.querySelectorAll<HTMLElement>('[data-dnd-kind="request"][data-dnd-folder=""]');
+            const rows = content.querySelectorAll<HTMLElement>(
+                '[data-dnd-kind="request"][data-dnd-folder=""]',
+            );
             const last = rows[rows.length - 1];
             const blocks = content.querySelectorAll<HTMLElement>('[data-dnd-block]');
             const lastBlock = blocks[blocks.length - 1];
@@ -417,16 +487,25 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
         const rect = list.getBoundingClientRect();
         const speed =
             d.y < rect.top + AUTO_SCROLL_EDGE_PX
-                ? -Math.ceil(((rect.top + AUTO_SCROLL_EDGE_PX - d.y) / AUTO_SCROLL_EDGE_PX) * AUTO_SCROLL_MAX_SPEED)
+                ? -Math.ceil(
+                      ((rect.top + AUTO_SCROLL_EDGE_PX - d.y) / AUTO_SCROLL_EDGE_PX) *
+                          AUTO_SCROLL_MAX_SPEED,
+                  )
                 : d.y > rect.bottom - AUTO_SCROLL_EDGE_PX
-                  ? Math.ceil(((d.y - (rect.bottom - AUTO_SCROLL_EDGE_PX)) / AUTO_SCROLL_EDGE_PX) * AUTO_SCROLL_MAX_SPEED)
+                  ? Math.ceil(
+                        ((d.y - (rect.bottom - AUTO_SCROLL_EDGE_PX)) / AUTO_SCROLL_EDGE_PX) *
+                            AUTO_SCROLL_MAX_SPEED,
+                    )
                   : 0;
         if (speed !== 0 && !d.scrollFrame) {
             d.scrollFrame = requestAnimationFrame(() => {
                 d.scrollFrame = 0;
                 if (drag.current !== d || !d.started) return;
                 const before = list.scrollTop;
-                list.scrollTop += Math.max(-AUTO_SCROLL_MAX_SPEED, Math.min(AUTO_SCROLL_MAX_SPEED, speed));
+                list.scrollTop += Math.max(
+                    -AUTO_SCROLL_MAX_SPEED,
+                    Math.min(AUTO_SCROLL_MAX_SPEED, speed),
+                );
                 if (list.scrollTop !== before) updateDrag(d);
             });
         }
@@ -535,7 +614,9 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
 
         if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
             e.preventDefault();
-            commit((c) => nudge(c, kind === 'f' ? 'folder' : 'request', id, e.key === 'ArrowUp' ? -1 : 1));
+            commit((c) =>
+                nudge(c, kind === 'f' ? 'folder' : 'request', id, e.key === 'ArrowUp' ? -1 : 1),
+            );
             return;
         }
         switch (e.key) {
@@ -567,7 +648,10 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                 if (kind === 'f') setFolderOpen(id, false);
                 else {
                     const folderId = row.dataset.dndFolder;
-                    if (folderId) listRef.current?.querySelector<HTMLElement>(`[data-nav="f:${folderId}"]`)?.focus();
+                    if (folderId)
+                        listRef.current
+                            ?.querySelector<HTMLElement>(`[data-nav="f:${folderId}"]`)
+                            ?.focus();
                 }
                 return;
             case 'Enter': {
@@ -598,7 +682,13 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
     const total = data?.requests.length ?? 0;
     const empty = !!view && view.folders.length === 0 && view.root.length === 0;
     // 焦点落在谁身上谁可 Tab 进来；还没落过时第一行可 Tab
-    const firstKey = view ? (view.folders[0] ? `f:${view.folders[0].id}` : view.root[0] ? `r:${view.root[0].id}` : null) : null;
+    const firstKey = view
+        ? view.folders[0]
+            ? `f:${view.folders[0].id}`
+            : view.root[0]
+              ? `r:${view.root[0].id}`
+              : null
+        : null;
     const focusValid =
         focusKey !== null &&
         !!view &&
@@ -607,7 +697,9 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
             : !!data?.requests.some((r) => `r:${r.id}` === focusKey));
     const tabFor = (key: string) => ((focusValid ? key === focusKey : key === firstKey) ? 0 : -1);
 
-    const draggingKey = dragView ? `${dragView.source.kind === 'folder' ? 'f' : 'r'}:${dragView.source.id}` : null;
+    const draggingKey = dragView
+        ? `${dragView.source.kind === 'folder' ? 'f' : 'r'}:${dragView.source.id}`
+        : null;
     const dropTarget = dragView?.target ?? null;
 
     const requestRow = (req: DebugSavedRequest, nested: boolean) => (
@@ -641,7 +733,11 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                 title="读不到收藏"
                 hint={collectionsQuery.error?.message}
                 action={
-                    <Button size="sm" variant="secondary" onClick={() => void collectionsQuery.refetch()}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void collectionsQuery.refetch()}
+                    >
                         <RefreshCw size={13} aria-hidden />
                         重试
                     </Button>
@@ -657,7 +753,12 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                 title="还没有收藏"
                 hint="在中栏的请求上点「收藏」，或在历史里收藏一条；也可以导入别人分享的收藏文件。"
                 action={
-                    <Button size="sm" variant="secondary" disabled={importFile.isPending} onClick={() => importFile.mutate()}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={importFile.isPending}
+                        onClick={() => importFile.mutate()}
+                    >
                         <FileInput size={13} aria-hidden />
                         导入收藏
                     </Button>
@@ -677,7 +778,9 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                                 count={children.length}
                                 open={open}
                                 editing={editing?.kind === 'folder' && editing.id === f.id}
-                                dropInto={dropTarget?.kind === 'into' && dropTarget.folderId === f.id}
+                                dropInto={
+                                    dropTarget?.kind === 'into' && dropTarget.folderId === f.id
+                                }
                                 dragging={draggingKey === `f:${f.id}`}
                                 tabIndex={tabFor(`f:${f.id}`)}
                                 onToggle={toggleFolder}
@@ -697,7 +800,9 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                                             data-flip={`e:${f.id}`}
                                             className={cn(
                                                 'flex h-7 items-center rounded-sm pl-7 text-[11px] text-text-tertiary',
-                                                dropTarget?.kind === 'into' && dropTarget.folderId === f.id && 'bg-brand-soft/60 text-brand',
+                                                dropTarget?.kind === 'into' &&
+                                                    dropTarget.folderId === f.id &&
+                                                    'bg-brand-soft/60 text-brand',
                                             )}
                                         >
                                             空文件夹，把请求拖进来
@@ -709,7 +814,11 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                     );
                 })}
                 {view.root.length > 0 && view.folders.length > 0 && (
-                    <div aria-hidden data-flip="root-divider" className="mx-2 my-1 h-px bg-border-subtle/70" />
+                    <div
+                        aria-hidden
+                        data-flip="root-divider"
+                        className="mx-2 my-1 h-px bg-border-subtle/70"
+                    />
                 )}
                 {view.root.map((r) => requestRow(r, false))}
                 {/* 拖动时底下留一块放到根目录末尾的地方 */}
@@ -739,15 +848,31 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                     {view ? (total > 0 ? `${total} 个请求` : '收藏') : '收藏'}
                     {view && view.folders.length > 0 ? ` · ${view.folders.length} 个文件夹` : ''}
                 </span>
-                <IconAction icon={FolderPlus} label="新建文件夹" size="md" tooltipSide="bottom" disabledReason={view ? null : '收藏还没读出来'} onClick={newFolder} />
-                <IconAction icon={FileInput} label="导入收藏" size="md" tooltipSide="bottom" busy={importFile.isPending} onClick={() => importFile.mutate()} />
+                <IconAction
+                    icon={FolderPlus}
+                    label="新建文件夹"
+                    size="md"
+                    tooltipSide="bottom"
+                    disabledReason={view ? null : '收藏还没读出来'}
+                    onClick={newFolder}
+                />
+                <IconAction
+                    icon={FileInput}
+                    label="导入收藏"
+                    size="md"
+                    tooltipSide="bottom"
+                    busy={importFile.isPending}
+                    onClick={() => importFile.mutate()}
+                />
                 <IconAction
                     icon={FileOutput}
                     label="导出收藏"
                     size="md"
                     tooltipSide="bottom"
                     busy={exportFile.isPending}
-                    disabledReason={total === 0 && (view?.folders.length ?? 0) === 0 ? '还没有收藏' : null}
+                    disabledReason={
+                        total === 0 && (view?.folders.length ?? 0) === 0 ? '还没有收藏' : null
+                    }
                     onClick={() => exportFile.mutate()}
                 />
             </div>
@@ -778,7 +903,11 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
                         aria-hidden
                         className="pointer-events-none fixed left-0 top-0 z-[60] flex max-w-[240px] items-center gap-1.5 rounded-sm border border-border-subtle bg-elevated px-2 py-1 text-[12px] text-text shadow-popover"
                     >
-                        <GripVertical size={12} aria-hidden className="shrink-0 text-text-tertiary" />
+                        <GripVertical
+                            size={12}
+                            aria-hidden
+                            className="shrink-0 text-text-tertiary"
+                        />
                         <span className="truncate">{dragView.source.label}</span>
                     </div>
                 </BodyPortal>
@@ -807,5 +936,7 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
 });
 
 function plainParams(params: unknown): Record<string, unknown> {
-    return params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
+    return params && typeof params === 'object' && !Array.isArray(params)
+        ? (params as Record<string, unknown>)
+        : {};
 }

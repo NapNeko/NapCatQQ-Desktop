@@ -3,25 +3,34 @@
 // PerformanceMonitorIntervalSlider(性能监控采样间隔滑块)+
 // SettingsTabSections / SettingsSection(分组；组间 divide-y，字段平铺)。
 
-import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type ComponentType,
+    type ReactNode,
+} from 'react';
 import { Popover, PopoverTrigger, PopoverContent } from '../../shared/ui';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import type { LucideProps } from 'lucide-react';
-import { Sparkles, Wand2, Feather, Square, Circle, RectangleHorizontal, ChevronDown } from 'lucide-react';
-import { SegmentMotionIcon } from '../../shared/ui/motion';
 import {
-    GsapPresence,
-    type EnterFn,
-    type ExitFn,
-} from '../../shared/ui/motion/GsapPresence';
+    Sparkles,
+    Wand2,
+    Feather,
+    Square,
+    Circle,
+    RectangleHorizontal,
+    ChevronDown,
+} from 'lucide-react';
+import { SegmentMotionIcon } from '../../shared/ui/motion';
+import { GsapPresence, type EnterFn, type ExitFn } from '../../shared/ui/motion/GsapPresence';
 import gsap from 'gsap';
 import type { ThemeMode } from '../../hooks/preferences/preferencesStore';
 import { THEME_GROUPS, findThemePreview } from '../../core/design/themes/registry';
 import type { MotionLevel } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';
-import {
-    RADIUS_LABELS,
-} from '../../core/design/radius';
+import { RADIUS_LABELS } from '../../core/design/radius';
 import {
     MOTION_SPEED_DEFAULT,
     MOTION_SPEED_MAX,
@@ -74,18 +83,13 @@ function SettingsSectionHeader({
     return (
         <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
-                <span
-                    className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45"
-                    aria-hidden
-                />
+                <span className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45" aria-hidden />
                 <h2 className="text-[13.5px] font-semibold leading-none tracking-tight text-text">
                     {title}
                 </h2>
             </div>
             {description && (
-                <p className="pl-3 text-[12px] leading-relaxed text-text-tertiary">
-                    {description}
-                </p>
+                <p className="pl-3 text-[12px] leading-relaxed text-text-tertiary">{description}</p>
             )}
         </div>
     );
@@ -111,9 +115,7 @@ export function SettingsSection({
                 <div className="min-w-0">{children}</div>
             ) : (
                 <div className="border-l border-border-subtle/80 pl-4 sm:pl-5">
-                    <div className="flex flex-col divide-y divide-border-subtle/70">
-                        {children}
-                    </div>
+                    <div className="flex flex-col divide-y divide-border-subtle/70">{children}</div>
                 </div>
             )}
         </section>
@@ -161,14 +163,10 @@ export function FieldRow({
                     {label}
                 </label>
                 {description && (
-                    <p className="text-[12px] leading-relaxed text-text-tertiary">
-                        {description}
-                    </p>
+                    <p className="text-[12px] leading-relaxed text-text-tertiary">{description}</p>
                 )}
             </div>
-            {children && (
-                <div className="flex shrink-0 items-center gap-2">{children}</div>
-            )}
+            {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
         </div>
     );
 }
@@ -239,11 +237,7 @@ export function ThemePicker({
             </PopoverTrigger>
 
             {/* 弹窗内容 — 用户通过点击外部 / Escape / 再点触发器关闭 */}
-            <PopoverContent
-                side="bottom"
-                align="start"
-                sideOffset={6}
-            >
+            <PopoverContent side="bottom" align="start" sideOffset={6}>
                 <div
                     className="-mr-1.5 grid grid-cols-[repeat(4,84px)] gap-x-1.5 gap-y-3 overflow-y-auto pr-1.5"
                     style={PICKER_SCROLL_STYLE}
@@ -275,13 +269,13 @@ export function ThemePicker({
                                             onClick={() => onChange(item.value)}
                                             className={
                                                 'relative flex flex-col items-stretch gap-1 rounded-md p-1 transition-colors ' +
-                                                (selected
-                                                    ? 'bg-surface'
-                                                    : 'hover:bg-muted/40')
+                                                (selected ? 'bg-surface' : 'hover:bg-muted/40')
                                             }
                                             style={
                                                 selected
-                                                    ? { boxShadow: `inset 0 0 0 1px ${item.brand}44` }
+                                                    ? {
+                                                          boxShadow: `inset 0 0 0 1px ${item.brand}44`,
+                                                      }
                                                     : undefined
                                             }
                                         >
@@ -290,7 +284,8 @@ export function ThemePicker({
                                                 className="relative h-9 w-full overflow-hidden rounded-[3px]"
                                                 style={{
                                                     background: item.canvas,
-                                                    boxShadow: 'inset 0 0 0 0.5px rgba(128,128,128,0.1)',
+                                                    boxShadow:
+                                                        'inset 0 0 0 0.5px rgba(128,128,128,0.1)',
                                                 }}
                                             >
                                                 <div
@@ -298,8 +293,20 @@ export function ThemePicker({
                                                     style={{ background: item.sidebar }}
                                                 />
                                                 <div className="absolute inset-y-0 right-0 left-[30%] flex flex-col justify-center gap-[3px] px-1.5">
-                                                    <div className="h-[2.5px] w-[60%] rounded-full" style={{ background: item.text, opacity: 0.5 }} />
-                                                    <div className="h-[2.5px] w-[40%] rounded-full" style={{ background: item.subtext, opacity: 0.4 }} />
+                                                    <div
+                                                        className="h-[2.5px] w-[60%] rounded-full"
+                                                        style={{
+                                                            background: item.text,
+                                                            opacity: 0.5,
+                                                        }}
+                                                    />
+                                                    <div
+                                                        className="h-[2.5px] w-[40%] rounded-full"
+                                                        style={{
+                                                            background: item.subtext,
+                                                            opacity: 0.4,
+                                                        }}
+                                                    />
                                                     <div
                                                         className="mt-[1px] h-[4px] w-[32%] rounded-full"
                                                         style={{ background: item.brand }}
@@ -350,10 +357,10 @@ export function MotionLevelSegment({
         label: string;
         icon: ComponentType<LucideProps>;
     }> = [
-            { value: 'elegant', label: '优雅', icon: Feather },
-            { value: 'standard', label: '标准', icon: Wand2 },
-            { value: 'rich', label: '丰富', icon: Sparkles },
-        ];
+        { value: 'elegant', label: '优雅', icon: Feather },
+        { value: 'standard', label: '标准', icon: Wand2 },
+        { value: 'rich', label: '丰富', icon: Sparkles },
+    ];
     return (
         <div
             className={
@@ -468,12 +475,8 @@ export function PerformanceMonitorIntervalSlider({
             </span>
             <button
                 type="button"
-                onClick={() =>
-                    onChange(PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT)
-                }
-                disabled={
-                    disabled || clamped === PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT
-                }
+                onClick={() => onChange(PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT)}
+                disabled={disabled || clamped === PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT}
                 className={
                     'rounded-sm px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors ' +
                     'hover:bg-inset hover:text-text disabled:pointer-events-none disabled:opacity-40'
@@ -507,9 +510,7 @@ export function BotRuntimeMetricsIntervalSlider({
                 step={500}
                 value={clamped}
                 disabled={disabled}
-                onChange={(e) =>
-                    onChange(clampBotRuntimeMetricsIntervalMs(Number(e.target.value)))
-                }
+                onChange={(e) => onChange(clampBotRuntimeMetricsIntervalMs(Number(e.target.value)))}
                 className={
                     'h-1.5 w-36 cursor-pointer appearance-none rounded-pill bg-inset outline-none ' +
                     'accent-brand focus-visible:ring-2 focus-visible:ring-brand/45 focus-visible:ring-offset-2 ' +
@@ -644,9 +645,7 @@ export function InfoBarDismissDurationSlider({
                 step={INFOBAR_DISMISS_SLIDER_STEP}
                 value={clamped}
                 disabled={disabled}
-                onChange={(e) =>
-                    onChange(clampInfoBarDismissSliderMs(Number(e.target.value)))
-                }
+                onChange={(e) => onChange(clampInfoBarDismissSliderMs(Number(e.target.value)))}
                 className={
                     'h-1.5 w-36 cursor-pointer appearance-none rounded-pill bg-inset outline-none ' +
                     'accent-brand ' +
@@ -705,9 +704,7 @@ export function TaskQueueCleanupDurationSlider({
                 step={TASK_QUEUE_CLEANUP_SLIDER_STEP}
                 value={clamped}
                 disabled={disabled}
-                onChange={(e) =>
-                    onChange(clampTaskQueueCleanupSliderMs(Number(e.target.value)))
-                }
+                onChange={(e) => onChange(clampTaskQueueCleanupSliderMs(Number(e.target.value)))}
                 className={
                     'h-1.5 w-36 cursor-pointer appearance-none rounded-pill bg-inset outline-none ' +
                     'accent-brand ' +
@@ -748,10 +745,10 @@ export function RadiusStyleSegment({
         label: string;
         icon: ComponentType<LucideProps>;
     }> = [
-            { value: 'square', label: RADIUS_LABELS.square, icon: Square },
-            { value: 'standard', label: RADIUS_LABELS.standard, icon: RectangleHorizontal },
-            { value: 'round', label: RADIUS_LABELS.round, icon: Circle },
-        ];
+        { value: 'square', label: RADIUS_LABELS.square, icon: Square },
+        { value: 'standard', label: RADIUS_LABELS.standard, icon: RectangleHorizontal },
+        { value: 'round', label: RADIUS_LABELS.round, icon: Circle },
+    ];
     return (
         <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
             {items.map((it) => {

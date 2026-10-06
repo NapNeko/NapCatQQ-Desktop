@@ -91,7 +91,8 @@ const loadBotPage = () =>
     import('../modules/bot/BotPage.next').then((m) => ({ default: m.BotPageNext }));
 const loadAppsPage = () =>
     import('../modules/apps/AppsPage.next').then((m) => ({ default: m.AppsPageNext }));
-const loadChatPage = () => import('../modules/chat/ChatPage').then(m => ({ default: m.ChatPage }));
+const loadChatPage = () =>
+    import('../modules/chat/ChatPage').then((m) => ({ default: m.ChatPage }));
 const loadDebugPage = () =>
     import('../modules/debug/DebugConsolePage').then((m) => ({ default: m.DebugConsolePage }));
 const loadComponentsPage = () =>
@@ -158,35 +159,76 @@ function RouteFallback() {
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const chatRouteRef = useRef(route);
-    useEffect(() => { chatRouteRef.current = route; }, [route]);
+    useEffect(() => {
+        chatRouteRef.current = route;
+    }, [route]);
     useEffect(() => {
         let disposed = false;
         let resumeChat = false;
-        const handoff = chatDesktopService.onRequest(request => {
+        const handoff = chatDesktopService.onRequest((request) => {
             if (disposed || request.v !== 1) return;
-            if (request.action === 'resume') { if (resumeChat) { setRoute('chat'); setDisplayedRoute('chat'); setPageVisible(true); } return; }
+            if (request.action === 'resume') {
+                if (resumeChat) {
+                    setRoute('chat');
+                    setDisplayedRoute('chat');
+                    setPageVisible(true);
+                }
+                return;
+            }
             void (async () => {
                 try {
-                    const { prepareChatHandoff, getChatSelectedBot } = await import('../hooks/chat/chatStore');
+                    const { prepareChatHandoff, getChatSelectedBot } =
+                        await import('../hooks/chat/chatStore');
                     const { flushSync } = await import('react-dom');
                     const wasChat = chatRouteRef.current === 'chat';
                     resumeChat = wasChat;
                     try {
-                        await prepareChatHandoff(getChatSelectedBot(), () => { if (wasChat) flushSync(() => { setRoute('overview'); setDisplayedRoute('overview'); setPageVisible(true); }); }, request.action === 'popout');
+                        await prepareChatHandoff(
+                            getChatSelectedBot(),
+                            () => {
+                                if (wasChat)
+                                    flushSync(() => {
+                                        setRoute('overview');
+                                        setDisplayedRoute('overview');
+                                        setPageVisible(true);
+                                    });
+                            },
+                            request.action === 'popout',
+                        );
                         await chatDesktopService.reply(request.requestId, null);
                     } catch (error) {
-                        if (wasChat) flushSync(() => { setRoute('chat'); setDisplayedRoute('chat'); setPageVisible(true); });
+                        if (wasChat)
+                            flushSync(() => {
+                                setRoute('chat');
+                                setDisplayedRoute('chat');
+                                setPageVisible(true);
+                            });
                         throw error;
                     }
-                } catch (error) { await chatDesktopService.reply(request.requestId, String(error)).catch(() => {}); }
+                } catch (error) {
+                    await chatDesktopService
+                        .reply(request.requestId, String(error))
+                        .catch(() => {});
+                }
             })();
         });
         const embedded = chatDesktopService.onEmbedRequested(() => {
             void queryClient.invalidateQueries({ queryKey: ['chat'] });
-            setRoute('chat'); setDisplayedRoute('chat'); setPageVisible(true);
+            setRoute('chat');
+            setDisplayedRoute('chat');
+            setPageVisible(true);
         });
-        void chatDesktopService.windowState().then(state => { if (!disposed && state.embedRequested) { setRoute('chat'); setDisplayedRoute('chat'); } });
-        return () => { disposed = true; void handoff.then(un => un()); void embedded.then(un => un()); };
+        void chatDesktopService.windowState().then((state) => {
+            if (!disposed && state.embedRequested) {
+                setRoute('chat');
+                setDisplayedRoute('chat');
+            }
+        });
+        return () => {
+            disposed = true;
+            void handoff.then((un) => un());
+            void embedded.then((un) => un());
+        };
     }, []);
     const [collapsed, setCollapsed] = useState(true);
     const debugEnabled = useDebugConsoleEnabled();
@@ -205,10 +247,7 @@ export const AppNext: React.FC = () => {
     useHostHealthAlerts();
 
     const { servers } = useServerManager();
-    const dockerHostIds = useMemo(
-        () => servers.map((p) => `remote:${p.id}`),
-        [servers],
-    );
+    const dockerHostIds = useMemo(() => servers.map((p) => `remote:${p.id}`), [servers]);
     const features = useFeatures();
     // 容器页关了就不去每台远端探 Docker，这份探测只为决定侧栏要不要显示容器页
     const dockerProbeHostIds = features.dockerPage ? dockerHostIds : NO_HOSTS;
@@ -263,28 +302,36 @@ export const AppNext: React.FC = () => {
         if (!features.terminal) void terminalStore.closeAll();
     }, [features.terminal]);
 
-    const navigate = useCallback((nextRoute: AppRoute) => {
-        const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
-        if (target === 'chat') {
-            void chatDesktopService.focusIfOpen().then(focused => { if (!focused) setRoute('chat'); });
-            return;
-        }
-        // 调试台弹出窗开着时主窗不进调试页（工作区 / 收藏落盘 JSON 是两窗同一份文件，
-        // 两边同时写会互相盖），入口一律把弹出窗叫到前面；没开着才正常切路由
-        if (target === 'debug') {
-            void debugWindowService.focusIfOpen().then((focused) => {
-                if (!focused) setRoute('debug');
-            });
-            return;
-        }
-        // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。
-        setRoute(target);
-    }, [hiddenRoutes]);
+    const navigate = useCallback(
+        (nextRoute: AppRoute) => {
+            const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
+            if (target === 'chat') {
+                void chatDesktopService.focusIfOpen().then((focused) => {
+                    if (!focused) setRoute('chat');
+                });
+                return;
+            }
+            // 调试台弹出窗开着时主窗不进调试页（工作区 / 收藏落盘 JSON 是两窗同一份文件，
+            // 两边同时写会互相盖），入口一律把弹出窗叫到前面；没开着才正常切路由
+            if (target === 'debug') {
+                void debugWindowService.focusIfOpen().then((focused) => {
+                    if (!focused) setRoute('debug');
+                });
+                return;
+            }
+            // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。
+            setRoute(target);
+        },
+        [hiddenRoutes],
+    );
 
-    const prefetchRoute = useCallback((nextRoute: AppRoute) => {
-        if (hiddenRoutes.has(nextRoute)) return;
-        preloadRoute(nextRoute);
-    }, [hiddenRoutes]);
+    const prefetchRoute = useCallback(
+        (nextRoute: AppRoute) => {
+            if (hiddenRoutes.has(nextRoute)) return;
+            preloadRoute(nextRoute);
+        },
+        [hiddenRoutes],
+    );
 
     // Bot 卡片「调试」按钮 / 右键「在调试台打开」经 debugNav 跳过来
     useEffect(() => registerDebugNavigator(() => navigate('debug')), [navigate]);
@@ -337,14 +384,14 @@ export const AppNext: React.FC = () => {
                     notice.kind === 'success'
                         ? 'success'
                         : notice.kind === 'failure'
-                            ? 'danger'
-                            : 'warning';
+                          ? 'danger'
+                          : 'warning';
                 const title =
                     notice.kind === 'success'
                         ? '更新完成'
                         : notice.kind === 'failure'
-                            ? '上次更新失败'
-                            : '更新可能未完成';
+                          ? '上次更新失败'
+                          : '更新可能未完成';
                 pushInfoBar({
                     key: 'desktop-update-startup',
                     tone,
@@ -455,7 +502,11 @@ export const AppNext: React.FC = () => {
         <TooltipProvider>
             <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
                 <div className="relative flex flex-1 overflow-hidden">
-                    <div className={motion.enabled ? 'ndf-shell-enter-sidebar flex h-full' : 'flex h-full'}>
+                    <div
+                        className={
+                            motion.enabled ? 'ndf-shell-enter-sidebar flex h-full' : 'flex h-full'
+                        }
+                    >
                         <Sidebar
                             active={route}
                             onChange={navigate}
@@ -472,8 +523,8 @@ export const AppNext: React.FC = () => {
                             className={
                                 'ndf-canvas-glow' +
                                 (motion.preset.feel.overshoot &&
-                                    motion.enabled &&
-                                    route === 'overview'
+                                motion.enabled &&
+                                route === 'overview'
                                     ? ' is-breathing'
                                     : '')
                             }
@@ -493,7 +544,9 @@ export const AppNext: React.FC = () => {
                             <div
                                 className={
                                     'flex min-w-0 w-full max-w-full flex-col xl:mx-auto' +
-                                    (FLUSH_ROUTES.has(displayedRoute) ? '' : ' px-4 pb-6 pt-2 sm:px-6 lg:px-8') +
+                                    (FLUSH_ROUTES.has(displayedRoute)
+                                        ? ''
+                                        : ' px-4 pb-6 pt-2 sm:px-6 lg:px-8') +
                                     (WIDE_ROUTES.has(displayedRoute) ? '' : ' xl:max-w-[1280px]')
                                 }
                             >
@@ -547,9 +600,7 @@ export const AppNext: React.FC = () => {
                     onFinish={() => void continueOnboardingFlow()}
                     onDismissToApp={() => {
                         void (async () => {
-                            await onboarding.finishGuide([
-                                ...ONBOARDING_GUIDE_STEP_IDS,
-                            ]);
+                            await onboarding.finishGuide([...ONBOARDING_GUIDE_STEP_IDS]);
                             navigate('overview');
                         })();
                     }}
@@ -619,7 +670,13 @@ const RouteContent = memo(function RouteContent({
             body = <RemoteHostPanelNext />;
             break;
         case 'tasks':
-            body = <TasksRoute hostLabels={hostLabels} onNavigate={onNavigate} showDocker={showDocker} />;
+            body = (
+                <TasksRoute
+                    hostLabels={hostLabels}
+                    onNavigate={onNavigate}
+                    showDocker={showDocker}
+                />
+            );
             break;
         case 'settings':
             body = <SettingsPageNext />;

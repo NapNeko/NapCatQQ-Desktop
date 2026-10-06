@@ -7,7 +7,10 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ProgressEvent } from '../../core/ipc/types';
-import { scheduleTaskQueueTerminalCleanup, trimTerminalTasksWhenAutoCleanupOff } from '../task-queue/taskQueueTerminalLinger';
+import {
+    scheduleTaskQueueTerminalCleanup,
+    trimTerminalTasksWhenAutoCleanupOff,
+} from '../task-queue/taskQueueTerminalLinger';
 
 export interface DockerInstallProgressStoreState {
     tasks: Record<string, ActionProgressView>;
@@ -29,9 +32,8 @@ function isTerminalStatus(status: ActionProgressView['status']): boolean {
 
 function applyTrimWhenAutoCleanupOff(): void {
     const snap = store.getSnapshot();
-    const { tasks: trimmed, removedIds } = trimTerminalTasksWhenAutoCleanupOff(
-        snap.tasks,
-        (t) => isTerminalStatus(t.status),
+    const { tasks: trimmed, removedIds } = trimTerminalTasksWhenAutoCleanupOff(snap.tasks, (t) =>
+        isTerminalStatus(t.status),
     );
     if (removedIds.length === 0) return;
     for (const id of removedIds) {

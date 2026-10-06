@@ -75,9 +75,12 @@ function WheelColumn({
         if (!list) return;
         suppressScrollRef.current = true;
         list.scrollTo({ top: index * ITEM_H, behavior });
-        window.setTimeout(() => {
-            suppressScrollRef.current = false;
-        }, behavior === 'smooth' ? 180 : 0);
+        window.setTimeout(
+            () => {
+                suppressScrollRef.current = false;
+            },
+            behavior === 'smooth' ? 180 : 0,
+        );
     }, []);
 
     useEffect(() => {
@@ -110,7 +113,9 @@ function WheelColumn({
 
     return (
         // 外层裁切：即使 WebView 仍画出滚动条，也挤到可视区外
-        <div className={cn('h-full w-[2.75rem] overflow-hidden', disabled && 'pointer-events-none')}>
+        <div
+            className={cn('h-full w-[2.75rem] overflow-hidden', disabled && 'pointer-events-none')}
+        >
             <div
                 ref={listRef}
                 role="listbox"
@@ -123,7 +128,10 @@ function WheelColumn({
                     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                         e.preventDefault();
                         const delta = e.key === 'ArrowUp' ? -1 : 1;
-                        const nextIdx = Math.max(0, Math.min(values.length - 1, valueIndex + delta));
+                        const nextIdx = Math.max(
+                            0,
+                            Math.min(values.length - 1, valueIndex + delta),
+                        );
                         const next = values[nextIdx];
                         if (next === undefined) return;
                         scrollToIndex(nextIdx, 'smooth');
@@ -185,13 +193,9 @@ export function TimePicker({
     const m = clampMinute(minutes, minuteStep);
     const step = Math.max(1, minuteStep);
 
-    const hourValues = useMemo(
-        () => Array.from({ length: 24 }, (_, i) => i),
-        [],
-    );
+    const hourValues = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
     const minuteValues = useMemo(
-        () =>
-            Array.from({ length: Math.floor(60 / step) }, (_, i) => i * step),
+        () => Array.from({ length: Math.floor(60 / step) }, (_, i) => i * step),
         [step],
     );
 

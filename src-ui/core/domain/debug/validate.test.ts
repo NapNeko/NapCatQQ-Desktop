@@ -49,12 +49,25 @@ describe('validateParams', () => {
     });
 
     it('类型错误：整数', () => {
-        expect(validateParams(SL_SCHEMA, { group_id: '123', user_id: 2 })).toEqual([{ path: 'group_id', message: '应为整数' }]);
-        expect(validateParams(SL_SCHEMA, { group_id: 1.5, user_id: 2 })).toEqual([{ path: 'group_id', message: '应为整数' }]);
+        expect(validateParams(SL_SCHEMA, { group_id: '123', user_id: 2 })).toEqual([
+            { path: 'group_id', message: '应为整数' },
+        ]);
+        expect(validateParams(SL_SCHEMA, { group_id: 1.5, user_id: 2 })).toEqual([
+            { path: 'group_id', message: '应为整数' },
+        ]);
     });
 
     it('其它类型的说法', () => {
-        const schema = { type: 'object', properties: { a: { type: 'string' }, b: { type: 'boolean' }, c: { type: 'array' }, d: { type: 'object' }, e: { type: 'number' } } };
+        const schema = {
+            type: 'object',
+            properties: {
+                a: { type: 'string' },
+                b: { type: 'boolean' },
+                c: { type: 'array' },
+                d: { type: 'object' },
+                e: { type: 'number' },
+            },
+        };
         expect(validateParams(schema, { a: 1, b: 'x', c: {}, d: [], e: 'n' })).toEqual([
             { path: 'a', message: '应为字符串' },
             { path: 'b', message: '应为布尔值' },
@@ -65,15 +78,24 @@ describe('validateParams', () => {
     });
 
     it('number 接受整数；type 数组里任一命中即可', () => {
-        const schema = { type: 'object', properties: { n: { type: 'number' }, s: { type: ['string', 'integer'] } } };
+        const schema = {
+            type: 'object',
+            properties: { n: { type: 'number' }, s: { type: ['string', 'integer'] } },
+        };
         expect(validateParams(schema, { n: 3, s: 4 })).toEqual([]);
         expect(validateParams(schema, { n: 3, s: 'x' })).toEqual([]);
-        expect(validateParams(schema, { s: true })).toEqual([{ path: 's', message: '应为 字符串 / 整数 之一' }]);
+        expect(validateParams(schema, { s: true })).toEqual([
+            { path: 's', message: '应为 字符串 / 整数 之一' },
+        ]);
     });
 
     it('anyOf：任一分支通过就行（NapCat 的布尔既可以是 boolean 也可以是字符串）', () => {
-        expect(validateParams(NC_SCHEMA, { group_id: '1', message: 'x', auto_escape: true })).toEqual([]);
-        expect(validateParams(NC_SCHEMA, { group_id: '1', message: 'x', auto_escape: 'false' })).toEqual([]);
+        expect(
+            validateParams(NC_SCHEMA, { group_id: '1', message: 'x', auto_escape: true }),
+        ).toEqual([]);
+        expect(
+            validateParams(NC_SCHEMA, { group_id: '1', message: 'x', auto_escape: 'false' }),
+        ).toEqual([]);
         expect(validateParams(NC_SCHEMA, { group_id: '1', message: [] })).toEqual([]);
     });
 
@@ -93,16 +115,23 @@ describe('validateParams', () => {
     });
 
     it('anyOf of const：报可选值', () => {
-        const schema = { type: 'object', properties: { t: { anyOf: [{ const: 'a' }, { const: 'b' }] } } };
+        const schema = {
+            type: 'object',
+            properties: { t: { anyOf: [{ const: 'a' }, { const: 'b' }] } },
+        };
         expect(validateParams(schema, { t: 'a' })).toEqual([]);
-        expect(validateParams(schema, { t: 'c' })).toEqual([{ path: 't', message: '应为 a / b 之一' }]);
+        expect(validateParams(schema, { t: 'c' })).toEqual([
+            { path: 't', message: '应为 a / b 之一' },
+        ]);
     });
 
     it('enum', () => {
-        expect(validateParams(SL_SCHEMA, { group_id: 1, user_id: 2, message_type: 'group' })).toEqual([]);
-        expect(validateParams(SL_SCHEMA, { group_id: 1, user_id: 2, message_type: 'guild' })).toEqual([
-            { path: 'message_type', message: '应为 private / group 之一' },
-        ]);
+        expect(
+            validateParams(SL_SCHEMA, { group_id: 1, user_id: 2, message_type: 'group' }),
+        ).toEqual([]);
+        expect(
+            validateParams(SL_SCHEMA, { group_id: 1, user_id: 2, message_type: 'guild' }),
+        ).toEqual([{ path: 'message_type', message: '应为 private / group 之一' }]);
     });
 
     it('const', () => {
@@ -119,7 +148,9 @@ describe('validateParams', () => {
     });
 
     it('minimum / maximum', () => {
-        expect(validateParams(SL_SCHEMA, { group_id: 0, user_id: 2 })).toEqual([{ path: 'group_id', message: '不能小于 1' }]);
+        expect(validateParams(SL_SCHEMA, { group_id: 0, user_id: 2 })).toEqual([
+            { path: 'group_id', message: '不能小于 1' },
+        ]);
         expect(validateParams(SL_SCHEMA, { group_id: 1, user_id: 2, duration: 99999999 })).toEqual([
             { path: 'duration', message: '不能大于 2592000' },
         ]);
@@ -134,20 +165,31 @@ describe('validateParams', () => {
     });
 
     it('additionalProperties:false 时，原型上的名字（constructor 等）也当作未声明的多余键', () => {
-        const value = JSON.parse('{"group_id":1,"user_id":2,"constructor":1,"toString":2,"__proto__":3}') as Record<string, unknown>;
+        const value = JSON.parse(
+            '{"group_id":1,"user_id":2,"constructor":1,"toString":2,"__proto__":3}',
+        ) as Record<string, unknown>;
         expect(validateParams(SL_SCHEMA, value)).toEqual([
             { path: 'constructor', message: '不支持这个参数' },
             { path: 'toString', message: '不支持这个参数' },
             { path: '__proto__', message: '不支持这个参数' },
         ]);
         // schema 真的声明了同名参数时照常校验
-        const declared = { type: 'object', properties: { constructor: { type: 'integer' } }, additionalProperties: false };
+        const declared = {
+            type: 'object',
+            properties: { constructor: { type: 'integer' } },
+            additionalProperties: false,
+        };
         expect(validateParams(declared, { constructor: 1 })).toEqual([]);
-        expect(validateParams(declared, { constructor: 'x' })).toEqual([{ path: 'constructor', message: '应为整数' }]);
+        expect(validateParams(declared, { constructor: 'x' })).toEqual([
+            { path: 'constructor', message: '应为整数' },
+        ]);
     });
 
     it('负数整数通过没有下限的整数 schema，违反 minimum 时才报错', () => {
-        const schema = { type: 'object', properties: { message_id: { type: 'integer' }, n: { type: 'integer', minimum: 0 } } };
+        const schema = {
+            type: 'object',
+            properties: { message_id: { type: 'integer' }, n: { type: 'integer', minimum: 0 } },
+        };
         expect(validateParams(schema, { message_id: -5 })).toEqual([]);
         expect(validateParams(schema, { n: -1 })).toEqual([{ path: 'n', message: '不能小于 0' }]);
     });
@@ -157,24 +199,41 @@ describe('validateParams', () => {
             type: 'object',
             properties: {
                 ids: { type: 'array', items: { type: 'integer' } },
-                news: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } },
+                news: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: { text: { type: 'string' } },
+                        required: ['text'],
+                    },
+                },
                 grid: { type: 'array', items: { type: 'array', items: { type: 'integer' } } },
             },
         };
-        expect(validateParams(schema, { ids: [1, 'x', 3] })).toEqual([{ path: 'ids[1]', message: '应为整数' }]);
-        expect(validateParams(schema, { news: [{ text: 'a' }, {}] })).toEqual([{ path: 'news[1].text', message: '必填' }]);
+        expect(validateParams(schema, { ids: [1, 'x', 3] })).toEqual([
+            { path: 'ids[1]', message: '应为整数' },
+        ]);
+        expect(validateParams(schema, { news: [{ text: 'a' }, {}] })).toEqual([
+            { path: 'news[1].text', message: '必填' },
+        ]);
         // 元素本身是数组时，只检查它是不是数组，不再往里查
         expect(validateParams(schema, { grid: [[1, 'x']] })).toEqual([]);
-        expect(validateParams(schema, { grid: [5] })).toEqual([{ path: 'grid[0]', message: '应为数组' }]);
+        expect(validateParams(schema, { grid: [5] })).toEqual([
+            { path: 'grid[0]', message: '应为数组' },
+        ]);
     });
 
     it('嵌套对象里的必填也查', () => {
         const schema = {
             type: 'object',
-            properties: { opt: { type: 'object', properties: { k: { type: 'integer' } }, required: ['k'] } },
+            properties: {
+                opt: { type: 'object', properties: { k: { type: 'integer' } }, required: ['k'] },
+            },
         };
         expect(validateParams(schema, { opt: {} })).toEqual([{ path: 'opt.k', message: '必填' }]);
-        expect(validateParams(schema, { opt: { k: 'x' } })).toEqual([{ path: 'opt.k', message: '应为整数' }]);
+        expect(validateParams(schema, { opt: { k: 'x' } })).toEqual([
+            { path: 'opt.k', message: '应为整数' },
+        ]);
     });
 
     it('可选字段没填不报错', () => {
@@ -182,7 +241,12 @@ describe('validateParams', () => {
     });
 
     it('schema 里的未知关键字被忽略', () => {
-        const schema = { type: 'object', properties: { a: { type: 'string', pattern: '^x', 'x-ncd-role': 'file', format: 'uri' } } };
+        const schema = {
+            type: 'object',
+            properties: {
+                a: { type: 'string', pattern: '^x', 'x-ncd-role': 'file', format: 'uri' },
+            },
+        };
         expect(validateParams(schema, { a: 'no' })).toEqual([]);
     });
 });

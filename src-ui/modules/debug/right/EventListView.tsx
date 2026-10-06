@@ -7,7 +7,12 @@ import { cn } from '../../../shared/utils/cn';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import type { ChatItem } from '../../../core/domain/debug/chat';
 import { useChatView } from './chatContext';
-import { clockTimeMs, countFormat, listRowOf, type RowTone } from '../../../core/domain/debug/chatFormat';
+import {
+    clockTimeMs,
+    countFormat,
+    listRowOf,
+    type RowTone,
+} from '../../../core/domain/debug/chatFormat';
 import { NewMessagesPill } from './NewMessagesPill';
 import { useStickToBottom } from './useStickToBottom';
 
@@ -108,7 +113,11 @@ export const EventListView = memo(function EventListView({
             {paused ? (
                 pausedBar
             ) : (
-                <NewMessagesPill count={stick.unseen} away={stick.away} onClick={() => stick.jumpToLatest(m.enabled)} />
+                <NewMessagesPill
+                    count={stick.unseen}
+                    away={stick.away}
+                    onClick={() => stick.jumpToLatest(m.enabled)}
+                />
             )}
         </div>
     );
@@ -143,9 +152,15 @@ const ListRowView = memo(function ListRowView({
             )}
             style={{ height: ROW_PX, transform: `translateY(${start}px)` }}
         >
-            <span className="w-[86px] shrink-0 tabular-nums text-text-tertiary">{clockTimeMs(item.at)}</span>
-            <span className={cn('w-[128px] shrink-0 truncate', TONE_CLASS[row.tone])}>{row.type}</span>
-            <span className="min-w-0 flex-1 truncate font-sans text-[12px] text-text-secondary">{row.summary}</span>
+            <span className="w-[86px] shrink-0 tabular-nums text-text-tertiary">
+                {clockTimeMs(item.at)}
+            </span>
+            <span className={cn('w-[128px] shrink-0 truncate', TONE_CLASS[row.tone])}>
+                {row.type}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-sans text-[12px] text-text-secondary">
+                {row.summary}
+            </span>
         </button>
     );
 });

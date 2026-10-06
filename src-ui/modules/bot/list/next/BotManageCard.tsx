@@ -78,16 +78,10 @@ export function BotManageCard({
             )}
         >
             {accent === 'brand' ? (
-                <span
-                    aria-hidden
-                    className="absolute inset-y-0 left-0 w-0.5 bg-brand"
-                />
+                <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-brand" />
             ) : null}
             {accent === 'danger' ? (
-                <span
-                    aria-hidden
-                    className="absolute inset-y-0 left-0 w-0.5 bg-danger"
-                />
+                <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-danger" />
             ) : null}
 
             <div
@@ -98,9 +92,7 @@ export function BotManageCard({
             >
                 <div className="flex items-start gap-3">{header}</div>
 
-                {showMeta ? (
-                    <div className="min-w-0 text-xs leading-snug">{meta}</div>
-                ) : null}
+                {showMeta ? <div className="min-w-0 text-xs leading-snug">{meta}</div> : null}
 
                 {hasChips ? (
                     <div className="min-h-[1.5rem] min-w-0">

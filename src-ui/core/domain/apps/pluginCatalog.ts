@@ -22,9 +22,9 @@ export function isPluginTaskOf(
     resource: AppStoreResource,
 ): task is AppPluginTask {
     return (
-        task.kind.kind === 'app_plugin'
-        && task.kind.instance_id === instanceId
-        && (task.kind.resource ?? 'plugin') === resource
+        task.kind.kind === 'app_plugin' &&
+        task.kind.instance_id === instanceId &&
+        (task.kind.resource ?? 'plugin') === resource
     );
 }
 
@@ -127,9 +127,15 @@ export function matchesCatalogQuery(query: string, fields: readonly string[]): b
  * 目录拉不下来时的短文案。连不上和对方出错分开说，其余一律指去日志：原文进日志，不在条上堆。
  * catalog 是标题里的叫法，Karin 叫「插件目录」，商店插件、适配器共用一个「目录」。
  */
-export function pluginCatalogErrorCopy(raw: string, catalog = '目录'): { title: string; content: string } {
+export function pluginCatalogErrorCopy(
+    raw: string,
+    catalog = '目录',
+): { title: string; content: string } {
     if (/error sending request|timed out|connection refused|dns|network|proxy/i.test(raw)) {
-        return { title: `无法连接官方${catalog}`, content: `检查网络或代理后重试。${SEE_LOGS_HINT}` };
+        return {
+            title: `无法连接官方${catalog}`,
+            content: `检查网络或代理后重试。${SEE_LOGS_HINT}`,
+        };
     }
     if (/HTTP\s+[45]\d\d/.test(raw)) {
         return { title: `官方${catalog}暂时不可用`, content: `稍后重试。${SEE_LOGS_HINT}` };

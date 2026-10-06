@@ -14,10 +14,7 @@ import {
 } from '../../../../shared/ui';
 import type { SettingsDraft } from '../../settings-draft';
 import { OneBotMessageEditor } from './OneBotMessageEditor';
-import {
-    OneBotMessengerPicker,
-    type OneBotCandidate,
-} from './OneBotMessengerPicker';
+import { OneBotMessengerPicker, type OneBotCandidate } from './OneBotMessengerPicker';
 import { TargetIdChipsInput } from './TargetIdChipsInput';
 
 const ONEBOT_TARGET_ITEMS = [
@@ -27,10 +24,7 @@ const ONEBOT_TARGET_ITEMS = [
 
 export type OneBotEditorDraft = Pick<
     SettingsDraft,
-    | 'onebotMessengerBotIds'
-    | 'onebotTargetType'
-    | 'onebotTargetIds'
-    | 'onebotMessageTemplate'
+    'onebotMessengerBotIds' | 'onebotTargetType' | 'onebotTargetIds' | 'onebotMessageTemplate'
 >;
 
 export function oneBotIsReady(oneBot: OneBotEditorDraft): boolean {
@@ -46,13 +40,9 @@ export function oneBotSummary(oneBot: OneBotEditorDraft): string {
     if (messengers.length === 0) return '尚未选择发送方 Bot';
     if (targets.length === 0) return '待填写接收目标';
     const messengerLabel =
-        messengers.length === 1
-            ? messengers[0]
-            : `${messengers[0]} 等 ${messengers.length} 个`;
+        messengers.length === 1 ? messengers[0] : `${messengers[0]} 等 ${messengers.length} 个`;
     const targetLabel =
-        targets.length === 1
-            ? String(targets[0])
-            : `${targets[0]} 等 ${targets.length} 个`;
+        targets.length === 1 ? String(targets[0]) : `${targets[0]} 等 ${targets.length} 个`;
     return `${messengerLabel} → ${oneBot.onebotTargetType === 'group' ? '群' : '私聊'} ${targetLabel}`;
 }
 
@@ -107,9 +97,7 @@ export function OneBotEditorDialog({
                     <div className="flex min-h-0 min-w-0 flex-col gap-3 lg:h-full lg:overflow-hidden">
                         <section className="shrink-0 space-y-2.5 rounded-sm border border-border-subtle bg-field p-3">
                             <div className="flex items-center justify-between gap-2">
-                                <p className="text-[13px] font-medium text-text">
-                                    接收目标
-                                </p>
+                                <p className="text-[13px] font-medium text-text">接收目标</p>
                                 {draft.onebotTargetIds.length > 0 ? (
                                     <Badge tone="neutral" appearance="soft">
                                         {draft.onebotTargetIds.length} 个
@@ -149,8 +137,7 @@ export function OneBotEditorDialog({
                                 }
                                 onReset={() =>
                                     onDraftChange({
-                                        onebotMessageTemplate:
-                                            DEFAULT_ONEBOT_MESSAGE,
+                                        onebotMessageTemplate: DEFAULT_ONEBOT_MESSAGE,
                                     })
                                 }
                             />

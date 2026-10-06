@@ -50,7 +50,8 @@ export type PluginOpsOptions = {
 };
 
 export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
-    const { resource, barKey, runningHint, failNoun, submitFailTitle, errorCopy, reloadInstalled } = options;
+    const { resource, barKey, runningHint, failNoun, submitFailTitle, errorCopy, reloadInstalled } =
+        options;
     const kind = resource ?? 'plugin';
     const taskState = useSyncExternalStore(
         deploymentTaskStore.subscribe,
@@ -79,7 +80,10 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
         return names;
     }, [localBusy, pluginTasks]);
 
-    const taskHints = useMemo<PluginTaskHint[]>(() => pluginTasks.map(pluginTaskHint), [pluginTasks]);
+    const taskHints = useMemo<PluginTaskHint[]>(
+        () => pluginTasks.map(pluginTaskHint),
+        [pluginTasks],
+    );
 
     useEffect(() => {
         seenTerminal.current.clear();
@@ -119,7 +123,16 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
                 });
             }
         }
-    }, [barKey, errorCopy, failNoun, instance.state, pluginTasks, reloadInstalled, runningHint, taskState.loaded]);
+    }, [
+        barKey,
+        errorCopy,
+        failNoun,
+        instance.state,
+        pluginTasks,
+        reloadInstalled,
+        runningHint,
+        taskState.loaded,
+    ]);
 
     const runOp = useCallback(
         async (name: string, action: AppPluginAction) => {
@@ -128,7 +141,8 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
                 await appFrameworkService.submitPluginOp(instance.id, name, action, resource);
                 // 已经进了队列就等终态再刷；没进队列的自己刷一次
                 const queued = Object.values(deploymentTaskStore.getSnapshot().tasks).some(
-                    (task) => isPluginTaskOf(task, instance.id, kind) && task.kind.plugin_name === name,
+                    (task) =>
+                        isPluginTaskOf(task, instance.id, kind) && task.kind.plugin_name === name,
                 );
                 if (!queued) await reloadInstalled();
             } catch (e) {
@@ -152,7 +166,13 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
     const applyEnabled = useCallback(
         async (name: string, enabled: boolean, overwrite = false) => {
             try {
-                await appFrameworkService.setPluginEnabled(instance.id, name, enabled, overwrite, resource);
+                await appFrameworkService.setPluginEnabled(
+                    instance.id,
+                    name,
+                    enabled,
+                    overwrite,
+                    resource,
+                );
                 setConflict(null);
                 await reloadInstalled();
             } catch (e) {

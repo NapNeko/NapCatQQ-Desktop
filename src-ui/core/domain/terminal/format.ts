@@ -46,7 +46,9 @@ export function formatModified(unixSecs: number | undefined, now = new Date()): 
     const d = new Date(unixSecs * 1000);
     const pad = (n: number) => String(n).padStart(2, '0');
     const sameDay =
-        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
     if (sameDay) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
     if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}-${pad(d.getDate())}`;
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

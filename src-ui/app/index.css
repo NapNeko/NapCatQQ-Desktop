@@ -78,7 +78,8 @@
 
     /* progress bar indeterminate：1.4s 一轮，从 -100% 到 100%，
        配合 width:35% 的 thumb 和 overflow:hidden 容器形成滑条效果。 */
-    --animate-progress-indeterminate: progress-indeterminate 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+    --animate-progress-indeterminate: progress-indeterminate 1.4s cubic-bezier(0.65, 0.05, 0.36, 1)
+        infinite;
 }
 
 @keyframes progress-indeterminate {
@@ -100,7 +101,7 @@
 }
 
 .ndf-infobar::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 0;
     top: 0;
@@ -141,7 +142,6 @@
    纯 transform / opacity 的循环用 CSS 写，浏览器直接扔给合成线程。
    时长和幅度由 MotionIcon 按动效档位算好，通过 --ndf-icon-* 传进来。 */
 @keyframes ndf-icon-pulse {
-
     from,
     to {
         transform: scale(1);
@@ -153,7 +153,6 @@
 }
 
 @keyframes ndf-icon-breathe {
-
     from,
     to {
         opacity: 1;
@@ -165,7 +164,6 @@
 }
 
 @keyframes ndf-icon-swell {
-
     from,
     to {
         transform: scale(1);
@@ -183,7 +181,6 @@
 }
 
 @keyframes ndf-icon-bob {
-
     from,
     to {
         transform: translateY(0);
@@ -301,7 +298,8 @@
 
 .ndf-status-breathe,
 .ndf-status-breathe-rich {
-    animation: ndf-status-breathe var(--ndf-status-dur, 0.9s) cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+    animation: ndf-status-breathe var(--ndf-status-dur, 0.9s) cubic-bezier(0.37, 0, 0.63, 1)
+        infinite alternate;
 }
 
 .ndf-status-breathe-rich {
@@ -332,7 +330,8 @@
 
 .ndf-mascot-breathe {
     will-change: transform;
-    animation: ndf-mascot-breathe var(--ndf-breath-dur, 2.6s) cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+    animation: ndf-mascot-breathe var(--ndf-breath-dur, 2.6s) cubic-bezier(0.37, 0, 0.63, 1)
+        infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -384,7 +383,6 @@
 /* 角落柔光呼吸:rich 档启用,通过 .ndf-canvas-glow.is-breathing 类启用。
    只在 BootstrapPanel mount 时附加这个类,避免全 App 常驻渲染。 */
 @keyframes glow-breath {
-
     0%,
     100% {
         opacity: 0.85;
@@ -505,17 +503,41 @@ samp,
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) .ndf-canvas-glow {
         background:
-            radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 62%),
-            radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-500) 6%, transparent), transparent 58%),
-            radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-500) 4%, transparent), transparent 65%);
+            radial-gradient(
+                65% 45% at -8% -8%,
+                color-mix(in srgb, var(--accent-500) 8%, transparent),
+                transparent 62%
+            ),
+            radial-gradient(
+                55% 40% at 108% -5%,
+                color-mix(in srgb, var(--brand-500) 6%, transparent),
+                transparent 58%
+            ),
+            radial-gradient(
+                75% 55% at 50% 108%,
+                color-mix(in srgb, var(--brand-500) 4%, transparent),
+                transparent 65%
+            );
     }
 }
 
 :root[data-theme-scheme="dark"] .ndf-canvas-glow {
     background:
-        radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 62%),
-        radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-500) 6%, transparent), transparent 58%),
-        radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-500) 4%, transparent), transparent 65%);
+        radial-gradient(
+            65% 45% at -8% -8%,
+            color-mix(in srgb, var(--accent-500) 8%, transparent),
+            transparent 62%
+        ),
+        radial-gradient(
+            55% 40% at 108% -5%,
+            color-mix(in srgb, var(--brand-500) 6%, transparent),
+            transparent 58%
+        ),
+        radial-gradient(
+            75% 55% at 50% 108%,
+            color-mix(in srgb, var(--brand-500) 4%, transparent),
+            transparent 65%
+        );
 }
 
 /* 第三方调色板（Catppuccin / 社区主题）：纯色平面背景，禁用角落柔光渐变。 */
@@ -571,14 +593,17 @@ samp,
 
 .ndf-hero-sky__gradient {
     opacity: var(--sky-strength);
-    background:
-        linear-gradient(178deg, var(--sky-top) 0%, var(--sky-mid) 52%, var(--sky-low) 100%);
+    background: linear-gradient(178deg, var(--sky-top) 0%, var(--sky-mid) 52%, var(--sky-low) 100%);
 }
 
 /* 左侧文字区的雾：从卡片左缘往右淡出，标题正文都落在接近本色的底上。 */
 .ndf-hero-sky__haze {
-    background:
-        radial-gradient(64% 150% at 4% 72%, var(--surface-hero) 20%, color-mix(in srgb, var(--surface-hero) 65%, transparent) 44%, transparent 70%);
+    background: radial-gradient(
+        64% 150% at 4% 72%,
+        var(--surface-hero) 20%,
+        color-mix(in srgb, var(--surface-hero) 65%, transparent) 44%,
+        transparent 70%
+    );
 }
 
 /* 云：两个叠着的胶囊，边缘微糊、底下一点暖影，在浅色天上也立得住。
@@ -602,7 +627,7 @@ samp,
 }
 
 .ndf-hero-cloud::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 20%;
     top: -58%;
@@ -613,7 +638,7 @@ samp,
 }
 
 .ndf-hero-cloud::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 52%;
     top: -30%;
@@ -669,7 +694,6 @@ samp,
 }
 
 @keyframes hero-shooting-star {
-
     0%,
     96% {
         opacity: 0;
@@ -695,13 +719,18 @@ samp,
     width: 280px;
     height: 280px;
     border-radius: 50%;
-    background:
-        radial-gradient(closest-side, rgba(255, 236, 170, 0.75) 0%, rgba(255, 208, 120, 0.42) 18%, rgba(255, 176, 90, 0.14) 40%, transparent 64%);
+    background: radial-gradient(
+        closest-side,
+        rgba(255, 236, 170, 0.75) 0%,
+        rgba(255, 208, 120, 0.42) 18%,
+        rgba(255, 176, 90, 0.14) 40%,
+        transparent 64%
+    );
     opacity: var(--sky-strength);
 }
 
 .ndf-hero-sun::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 50%;
     top: 50%;
@@ -716,13 +745,23 @@ samp,
 }
 
 .ndf-hero-sky--noon .ndf-hero-sun {
-    background:
-        radial-gradient(closest-side, rgba(255, 250, 225, 0.85) 0%, rgba(255, 232, 160, 0.42) 16%, rgba(255, 210, 120, 0.12) 38%, transparent 62%);
+    background: radial-gradient(
+        closest-side,
+        rgba(255, 250, 225, 0.85) 0%,
+        rgba(255, 232, 160, 0.42) 16%,
+        rgba(255, 210, 120, 0.12) 38%,
+        transparent 62%
+    );
 }
 
 .ndf-hero-sky--afternoon .ndf-hero-sun {
-    background:
-        radial-gradient(closest-side, rgba(255, 226, 170, 0.8) 0%, rgba(255, 186, 100, 0.48) 18%, rgba(255, 150, 70, 0.16) 42%, transparent 66%);
+    background: radial-gradient(
+        closest-side,
+        rgba(255, 226, 170, 0.8) 0%,
+        rgba(255, 186, 100, 0.48) 18%,
+        rgba(255, 150, 70, 0.16) 42%,
+        transparent 66%
+    );
 }
 
 .ndf-hero-sky--afternoon .ndf-hero-sun::after {
@@ -754,7 +793,6 @@ samp,
 }
 
 @keyframes hero-star-twinkle {
-
     0%,
     100% {
         opacity: 0.25;
@@ -786,7 +824,6 @@ samp,
 }
 
 @media (prefers-reduced-motion: reduce) {
-
     .ndf-hero-sky.is-live .ndf-hero-star,
     .ndf-hero-sky.is-live .ndf-hero-cloud,
     .ndf-hero-sky.is-live .ndf-hero-shooting-star {
@@ -863,7 +900,7 @@ samp,
 
 /* 吉祥物气泡的小尾巴，指向右侧的她。 */
 .ndf-mascot-bubble::after {
-    content: '';
+    content: "";
     position: absolute;
     right: -5px;
     top: 50%;
@@ -938,7 +975,6 @@ samp,
 }
 
 @keyframes splash-pulse-dot {
-
     0%,
     100% {
         opacity: 0.4;
@@ -973,12 +1009,16 @@ samp,
     margin-left: -3px;
     border-radius: 9999px;
     background: var(--brand-400);
-    box-shadow: 0 0 10px var(--brand-400), 0 0 2px var(--neutral-0);
+    box-shadow:
+        0 0 10px var(--brand-400),
+        0 0 2px var(--neutral-0);
 }
 
 .ndf-splash-orbit-dot--accent {
     background: var(--accent-400);
-    box-shadow: 0 0 10px var(--accent-400), 0 0 2px var(--neutral-0);
+    box-shadow:
+        0 0 10px var(--accent-400),
+        0 0 2px var(--neutral-0);
 }
 
 .ndf-splash-shockwave {
@@ -1031,7 +1071,6 @@ samp,
 /* 极光底色：三团大模糊色斑缓慢游走，只动 transform，独占合成层。
    Catppuccin 主题按规范保持纯色画布，直接关掉。 */
 @keyframes splash-aurora-a {
-
     0%,
     100% {
         transform: translate(-8%, -6%) scale(1);
@@ -1043,7 +1082,6 @@ samp,
 }
 
 @keyframes splash-aurora-b {
-
     0%,
     100% {
         transform: translate(6%, 4%) scale(1.05);
@@ -1055,7 +1093,6 @@ samp,
 }
 
 @keyframes splash-aurora-c {
-
     0%,
     100% {
         transform: translate(0, 10%) scale(0.98);
@@ -1087,7 +1124,11 @@ samp,
     left: -12%;
     width: 58vw;
     height: 58vw;
-    background: radial-gradient(circle, color-mix(in srgb, var(--brand-400) 34%, transparent) 0%, transparent 68%);
+    background: radial-gradient(
+        circle,
+        color-mix(in srgb, var(--brand-400) 34%, transparent) 0%,
+        transparent 68%
+    );
 }
 
 .ndf-splash-aurora--b {
@@ -1095,7 +1136,11 @@ samp,
     right: -18%;
     width: 52vw;
     height: 52vw;
-    background: radial-gradient(circle, color-mix(in srgb, var(--accent-400) 30%, transparent) 0%, transparent 68%);
+    background: radial-gradient(
+        circle,
+        color-mix(in srgb, var(--accent-400) 30%, transparent) 0%,
+        transparent 68%
+    );
 }
 
 .ndf-splash-aurora--c {
@@ -1103,7 +1148,11 @@ samp,
     left: 22%;
     width: 60vw;
     height: 60vw;
-    background: radial-gradient(circle, color-mix(in srgb, var(--brand-300) 22%, transparent) 0%, transparent 70%);
+    background: radial-gradient(
+        circle,
+        color-mix(in srgb, var(--brand-300) 22%, transparent) 0%,
+        transparent 70%
+    );
 }
 
 .ndf-splash-aurora.is-live.ndf-splash-aurora--a {
@@ -1125,7 +1174,6 @@ samp,
 }
 
 @media (prefers-color-scheme: dark) {
-
     :root:not([data-theme]) .ndf-splash-aurora--a,
     :root:not([data-theme]) .ndf-splash-aurora--b,
     :root:not([data-theme]) .ndf-splash-aurora--c {
@@ -1144,7 +1192,13 @@ samp,
 }
 
 .ndf-splash-laser-bar {
-    background: linear-gradient(90deg, var(--brand-600), var(--accent-400), var(--brand-300), var(--brand-600));
+    background: linear-gradient(
+        90deg,
+        var(--brand-600),
+        var(--accent-400),
+        var(--brand-300),
+        var(--brand-600)
+    );
     background-size: 200% 100%;
     animation: splash-laser-flow 2.2s linear infinite;
 }
@@ -1190,19 +1244,18 @@ samp,
     width: 50%;
     height: 200%;
     transform: skewX(-20deg);
-    background: linear-gradient(90deg,
-            transparent,
-            rgba(255, 255, 255, 0.45),
-            transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
     opacity: 0;
     pointer-events: none;
 }
 
 .ndf-splash-bar-shine {
-    background: linear-gradient(90deg,
-            transparent,
-            color-mix(in srgb, var(--text-primary) 35%, transparent),
-            transparent);
+    background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--text-primary) 35%, transparent),
+        transparent
+    );
 }
 
 /* 主界面就绪入场律动展开动效。

@@ -3,7 +3,12 @@
 // 命令字面量只在此文件出现，后端改命令名只用改这一处；浏览器预览走 mock。
 
 import { APP_VERSION } from '../domain/app-meta';
-import { chatFrames, parseChatFrame, type MaiBotChatEvent, type MaiBotChatImage } from '../domain/apps/maibotChat';
+import {
+    chatFrames,
+    parseChatFrame,
+    type MaiBotChatEvent,
+    type MaiBotChatImage,
+} from '../domain/apps/maibotChat';
 import { errorText } from '../domain/errors';
 import { invoke, isTauri, pickImageFiles } from '../ipc/transport';
 import type { MaiBotChatTicket, MaiBotLocalImage, MaiBotResourceDone } from '../ipc/types';
@@ -35,7 +40,11 @@ const DEAD_MS = 75_000;
 const CALL_TIMEOUT_MS = 10_000;
 const RETRY_MAX_MS = 15_000;
 
-type Pending = { resolve: () => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = {
+    resolve: () => void;
+    reject: (e: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+};
 
 class LiveChat implements MaiBotChatConnection {
     private ws: WebSocket | null = null;
@@ -63,7 +72,9 @@ class LiveChat implements MaiBotChatConnection {
     private async connect() {
         let ticket: MaiBotChatTicket;
         try {
-            ticket = await invoke<MaiBotChatTicket>('maibot_chat_ticket', { instanceId: this.instanceId });
+            ticket = await invoke<MaiBotChatTicket>('maibot_chat_ticket', {
+                instanceId: this.instanceId,
+            });
         } catch (e) {
             this.retry(errorText(e));
             return;
@@ -78,7 +89,8 @@ class LiveChat implements MaiBotChatConnection {
         };
         ws.onclose = (ev) => {
             // 4001 是上游握手时票不认（过期或用过了）
-            if (this.ws === ws) this.drop(ev.code === 4001 ? '麦麦不认这次连接' : ev.reason || '连接断了');
+            if (this.ws === ws)
+                this.drop(ev.code === 4001 ? '麦麦不认这次连接' : ev.reason || '连接断了');
         };
     }
 
@@ -88,7 +100,16 @@ class LiveChat implements MaiBotChatConnection {
         if (!f) return;
         switch (f.op) {
             case 'ready':
-                this.request((id) => chatFrames.open(id, SESSION, this.userId, this.userName, this.opened, APP_VERSION))
+                this.request((id) =>
+                    chatFrames.open(
+                        id,
+                        SESSION,
+                        this.userId,
+                        this.userName,
+                        this.opened,
+                        APP_VERSION,
+                    ),
+                )
                     .then(() => {
                         this.opened = true;
                         this.ready = true;
@@ -117,7 +138,8 @@ class LiveChat implements MaiBotChatConnection {
 
     private request(build: (id: string) => string): Promise<void> {
         const ws = this.ws;
-        if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('还没连上麦麦'));
+        if (!ws || ws.readyState !== WebSocket.OPEN)
+            return Promise.reject(new Error('还没连上麦麦'));
         const id = `c${++this.seq}`;
         return new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -176,15 +198,21 @@ class LiveChat implements MaiBotChatConnection {
         this.closed = true;
         clearTimeout(this.retryTimer);
         // 先告诉上游关会话；发不出去也无所谓，连接一断上游自己会收拾
-        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(chatFrames.close(`c${++this.seq}`, SESSION));
+        if (this.ws?.readyState === WebSocket.OPEN)
+            this.ws.send(chatFrames.close(`c${++this.seq}`, SESSION));
         this.drop('');
         this.h.onStatus('closed');
     }
 }
 
 export const maibotChatService = {
-    connect(instanceId: string, userName: string, handlers: MaiBotChatHandlers): MaiBotChatConnection {
-        if (!isTauri) return mockMaiBotChat.connect(peekMockAppInstance(instanceId), userName, handlers);
+    connect(
+        instanceId: string,
+        userName: string,
+        handlers: MaiBotChatHandlers,
+    ): MaiBotChatConnection {
+        if (!isTauri)
+            return mockMaiBotChat.connect(peekMockAppInstance(instanceId), userName, handlers);
         return new LiveChat(instanceId, userName, handlers);
     },
 
@@ -202,5 +230,6 @@ export const maibotChatService = {
     },
 
     /** 拖进窗口的本机图片 */
-    localImages: (paths: string[]): Promise<MaiBotLocalImage[]> => maibotResourcesService.localImages(paths),
+    localImages: (paths: string[]): Promise<MaiBotLocalImage[]> =>
+        maibotResourcesService.localImages(paths),
 };

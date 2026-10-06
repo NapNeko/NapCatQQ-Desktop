@@ -7,7 +7,13 @@ import { Check, Copy, Reply, Undo2, UserRoundSearch, X } from 'lucide-react';
 import { JsonTree, Popover, PopoverAnchor, PopoverContent } from '../../../shared/ui';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import type { ChatItem } from '../../../core/domain/debug/chat';
-import { callLine, clockTimeMs, dayLabel, listRowOf, safeJson } from '../../../core/domain/debug/chatFormat';
+import {
+    callLine,
+    clockTimeMs,
+    dayLabel,
+    listRowOf,
+    safeJson,
+} from '../../../core/domain/debug/chatFormat';
 import { messageLinkages, type EventLinkageId } from '../../../core/domain/debug/eventActions';
 import { formatParams } from '../../../core/domain/debug/paramsText';
 import { useCopy } from './rightParts';
@@ -40,7 +46,13 @@ function payloadOf(item: ChatItem): unknown {
     return 'raw' in item ? item.raw : item;
 }
 
-export function EventDetailPopover({ target, onClose }: { target: DetailTarget | null; onClose: () => void }) {
+export function EventDetailPopover({
+    target,
+    onClose,
+}: {
+    target: DetailTarget | null;
+    onClose: () => void;
+}) {
     const { copied, copy } = useCopy();
     const lastRect = useRef<DOMRect | null>(null);
     const anchorRef = useRef<HTMLElement | null>(null);
@@ -58,7 +70,10 @@ export function EventDetailPopover({ target, onClose }: { target: DetailTarget |
     const head = item ? listRowOf(item) : null;
     // 自己发的气泡被 message_sent 合并后，载荷是事件；调用结果单独写一行
     const call = item && item.kind === 'message' && item.call ? callLine(item.call) : null;
-    const links = useMemo(() => (item && item.kind === 'message' ? messageLinkages(item) : []), [item]);
+    const links = useMemo(
+        () => (item && item.kind === 'message' ? messageLinkages(item) : []),
+        [item],
+    );
 
     /** 在中栏开一个预填好的标签；安全分级照旧，点开不等于发出 */
     const openLinkage = (action: string, params: Record<string, unknown>) => {
@@ -79,12 +94,17 @@ export function EventDetailPopover({ target, onClose }: { target: DetailTarget |
                     <>
                         <div className="flex shrink-0 items-start gap-2 border-b border-border-subtle/70 px-3 py-2">
                             <div className="min-w-0 flex-1">
-                                <p className="truncate font-mono text-[12px] font-semibold text-text">{head.type}</p>
+                                <p className="truncate font-mono text-[12px] font-semibold text-text">
+                                    {head.type}
+                                </p>
                                 <p className="mt-0.5 truncate text-2xs tabular-nums text-text-tertiary">
-                                    {dayLabel(item.at).replace(/ \d\d:\d\d$/, '')} {clockTimeMs(item.at)} · seq {item.seq}
+                                    {dayLabel(item.at).replace(/ \d\d:\d\d$/, '')}{' '}
+                                    {clockTimeMs(item.at)} · seq {item.seq}
                                 </p>
                                 {call && (
-                                    <p className={`mt-0.5 truncate font-mono text-[10.5px] ${call.ok ? 'text-success' : 'text-danger'}`}>
+                                    <p
+                                        className={`mt-0.5 truncate font-mono text-[10.5px] ${call.ok ? 'text-success' : 'text-danger'}`}
+                                    >
                                         调用 {call.text}
                                     </p>
                                 )}
@@ -94,7 +114,11 @@ export function EventDetailPopover({ target, onClose }: { target: DetailTarget |
                                 onClick={() => copy(safeJson(value))}
                                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-xs px-2 text-2xs font-medium text-text-secondary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                             >
-                                {copied ? <Check size={12} aria-hidden className="text-success" /> : <Copy size={12} aria-hidden />}
+                                {copied ? (
+                                    <Check size={12} aria-hidden className="text-success" />
+                                ) : (
+                                    <Copy size={12} aria-hidden />
+                                )}
                                 {copied ? '已复制' : '复制 JSON'}
                             </button>
                             <button
@@ -125,7 +149,12 @@ export function EventDetailPopover({ target, onClose }: { target: DetailTarget |
                                 })}
                             </div>
                         )}
-                        <JsonTree key={item.key} value={value} defaultExpandDepth={2} className="min-h-0 flex-1 px-1 py-1" />
+                        <JsonTree
+                            key={item.key}
+                            value={value}
+                            defaultExpandDepth={2}
+                            className="min-h-0 flex-1 px-1 py-1"
+                        />
                     </>
                 )}
             </PopoverContent>

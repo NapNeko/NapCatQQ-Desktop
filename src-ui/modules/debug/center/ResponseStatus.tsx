@@ -11,7 +11,11 @@ function elapsed(ms: number): string {
     return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
 }
 
-export const ResponseStatus = memo(function ResponseStatus({ outcome }: { outcome: DebugCallOutcome }) {
+export const ResponseStatus = memo(function ResponseStatus({
+    outcome,
+}: {
+    outcome: DebugCallOutcome;
+}) {
     const hint = retcodeHint(outcome.retcode);
     return (
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
@@ -21,7 +25,10 @@ export const ResponseStatus = memo(function ResponseStatus({ outcome }: { outcom
             {hint ? (
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <span tabIndex={0} className="cursor-help font-mono tabular-nums text-text-secondary underline decoration-dotted underline-offset-2">
+                        <span
+                            tabIndex={0}
+                            className="cursor-help font-mono tabular-nums text-text-secondary underline decoration-dotted underline-offset-2"
+                        >
                             retcode {outcome.retcode}
                         </span>
                     </TooltipTrigger>
@@ -30,7 +37,9 @@ export const ResponseStatus = memo(function ResponseStatus({ outcome }: { outcom
                     </TooltipContent>
                 </Tooltip>
             ) : (
-                <span className="font-mono tabular-nums text-text-secondary">retcode {outcome.retcode}</span>
+                <span className="font-mono tabular-nums text-text-secondary">
+                    retcode {outcome.retcode}
+                </span>
             )}
             <span className="tabular-nums text-text-tertiary" title="从发出到收到回包">
                 {elapsed(outcome.elapsed_ms)}

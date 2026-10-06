@@ -15,7 +15,11 @@ import {
     overlayKarinInstalled,
     type KarinPluginKindFilter,
 } from '../../core/domain/apps/karinPlugins';
-import type { AppInstance, KarinPluginInstalled, KarinPluginMarketEntry } from '../../core/ipc/types';
+import type {
+    AppInstance,
+    KarinPluginInstalled,
+    KarinPluginMarketEntry,
+} from '../../core/ipc/types';
 
 export function useKarinPlugins(instance: AppInstance) {
     const queryClient = useQueryClient();
@@ -75,7 +79,13 @@ export function useKarinPlugins(instance: AppInstance) {
     });
 
     const rows = useMemo(
-        () => filterKarinPlugins(market, overlayKarinInstalled(installed, taskHints), query, kindFilter),
+        () =>
+            filterKarinPlugins(
+                market,
+                overlayKarinInstalled(installed, taskHints),
+                query,
+                kindFilter,
+            ),
         [installed, kindFilter, market, query, taskHints],
     );
 

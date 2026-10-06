@@ -3,7 +3,15 @@
 // 输入框里永远可以直接填（候选拉不到、Bot 没在跑都不挡填写）；敲字同时按名字或号码筛候选。
 // 焦点始终留在输入框里：列表只用鼠标点或 ↑↓ + 回车挑，Esc 先收起列表（这时不会误触「取消调用」）。
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type ReactNode,
+} from 'react';
 import { ChevronDown, RefreshCw } from 'lucide-react';
 import { coerceInput } from '../../../../core/domain/debug/schemaForm';
 import { cn } from '../../../../shared/utils/cn';
@@ -76,20 +84,30 @@ export function PickerCombo({
         );
     }, [options, q]);
     const shown = matches.length > MAX_SHOWN ? matches.slice(0, MAX_SHOWN) : matches;
-    const selected = useMemo(() => options.find((o) => String(o.id) === text.trim()) ?? null, [options, text]);
+    const selected = useMemo(
+        () => options.find((o) => String(o.id) === text.trim()) ?? null,
+        [options, text],
+    );
     const hl = Math.min(highlight, Math.max(0, shown.length - 1));
     const listOpen = open && canList;
 
     useEffect(() => {
         if (!listOpen) return;
-        listRef.current?.querySelector<HTMLElement>(`[data-index="${hl}"]`)?.scrollIntoView({ block: 'nearest' });
+        listRef.current
+            ?.querySelector<HTMLElement>(`[data-index="${hl}"]`)
+            ?.scrollIntoView({ block: 'nearest' });
     }, [hl, listOpen]);
 
     const openList = () => {
         if (!canList) return;
         setTyped(false);
         setArmed(false);
-        setHighlight(Math.max(0, options.findIndex((o) => String(o.id) === text.trim())));
+        setHighlight(
+            Math.max(
+                0,
+                options.findIndex((o) => String(o.id) === text.trim()),
+            ),
+        );
         setOpen(true);
     };
 
@@ -177,7 +195,9 @@ export function PickerCombo({
                 )}
             >
                 <span className="min-w-0 flex-1 truncate text-[13px] text-text">{o.label}</span>
-                <span className="shrink-0 truncate font-mono text-[11px] text-text-tertiary">{o.hint ?? String(o.id)}</span>
+                <span className="shrink-0 truncate font-mono text-[11px] text-text-tertiary">
+                    {o.hint ?? String(o.id)}
+                </span>
             </div>
         ));
     }
@@ -197,13 +217,18 @@ export function PickerCombo({
                             role="combobox"
                             aria-expanded={listOpen}
                             aria-controls={listOpen ? listId : undefined}
-                            aria-activedescendant={listOpen && shown[hl] ? `${listId}-${hl}` : undefined}
+                            aria-activedescendant={
+                                listOpen && shown[hl] ? `${listId}-${hl}` : undefined
+                            }
                             aria-autocomplete="list"
                             aria-invalid={invalid || undefined}
                             aria-describedby={describedBy}
                             value={text}
                             disabled={disabled}
-                            placeholder={placeholder ?? (canList ? `填号，或敲名字从${noun}里挑` : '直接填号')}
+                            placeholder={
+                                placeholder ??
+                                (canList ? `填号，或敲名字从${noun}里挑` : '直接填号')
+                            }
                             onChange={(e) => {
                                 setText(e.target.value);
                                 setTyped(true);
@@ -216,11 +241,17 @@ export function PickerCombo({
                             onBlur={() => setOpen(false)}
                             spellCheck={false}
                             autoComplete="off"
-                            className={cn(FIELD_INPUT_CLASS, fieldBorder(invalid), 'pr-[4.5rem] font-mono text-[13px]')}
+                            className={cn(
+                                FIELD_INPUT_CLASS,
+                                fieldBorder(invalid),
+                                'pr-[4.5rem] font-mono text-[13px]',
+                            )}
                         />
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 pr-1">
                             {selected && (
-                                <span className="max-w-[9rem] truncate pr-1 text-xs text-text-tertiary">{selected.label}</span>
+                                <span className="max-w-[9rem] truncate pr-1 text-xs text-text-tertiary">
+                                    {selected.label}
+                                </span>
                             )}
                             <span className="pointer-events-auto flex items-center gap-0.5">
                                 {loading ? (

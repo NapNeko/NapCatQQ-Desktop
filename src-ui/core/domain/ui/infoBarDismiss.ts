@@ -43,12 +43,8 @@ export function clampInfoBarDismissSliderMs(raw: unknown): number {
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
         return DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED.infoBarDismissInfoMs;
     }
-    const stepped =
-        Math.round(raw / INFOBAR_DISMISS_SLIDER_STEP) * INFOBAR_DISMISS_SLIDER_STEP;
-    return Math.max(
-        INFOBAR_DISMISS_SLIDER_MIN,
-        Math.min(INFOBAR_DISMISS_SLIDER_MAX, stepped),
-    );
+    const stepped = Math.round(raw / INFOBAR_DISMISS_SLIDER_STEP) * INFOBAR_DISMISS_SLIDER_STEP;
+    return Math.max(INFOBAR_DISMISS_SLIDER_MIN, Math.min(INFOBAR_DISMISS_SLIDER_MAX, stepped));
 }
 
 /** 落盘 / push 解析：0 合法表示不自动关。 */
@@ -59,9 +55,7 @@ export function clampInfoBarDismissStoredMs(raw: unknown): number {
     return clampInfoBarDismissSliderMs(n);
 }
 
-export function infoBarDismissFromUiPreferences(
-    ui: AppUiPreferences,
-): InfoBarDismissPrefs {
+export function infoBarDismissFromUiPreferences(ui: AppUiPreferences): InfoBarDismissPrefs {
     const toMs = (v: bigint | number | undefined): number => {
         if (typeof v === 'bigint') return clampInfoBarDismissStoredMs(Number(v));
         return clampInfoBarDismissStoredMs(v);
@@ -76,10 +70,7 @@ export function infoBarDismissFromUiPreferences(
 export function infoBarDismissDraftFromStored(
     prefs: InfoBarDismissPrefs,
 ): InfoBarDismissDraftSlice {
-    const msOrDefault = (
-        stored: number,
-        fallback: number,
-    ): number =>
+    const msOrDefault = (stored: number, fallback: number): number =>
         stored > 0 ? clampInfoBarDismissSliderMs(stored) : fallback;
 
     return {
@@ -101,9 +92,7 @@ export function infoBarDismissDraftFromStored(
     };
 }
 
-export function infoBarDismissPrefsFromDraft(
-    draft: InfoBarDismissDraftSlice,
-): InfoBarDismissPrefs {
+export function infoBarDismissPrefsFromDraft(draft: InfoBarDismissDraftSlice): InfoBarDismissPrefs {
     return {
         infoBarDismissInfoMs: draft.infoBarDismissInfoEnabled
             ? clampInfoBarDismissSliderMs(draft.infoBarDismissInfoMs)

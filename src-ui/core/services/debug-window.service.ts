@@ -23,5 +23,6 @@ export const debugWindowService = {
     reveal: (): Promise<void> => (isTauri ? invoke('reveal_debug_window') : Promise.resolve()),
 
     /** 弹出窗开着就聚焦并回 true；主窗的调试台入口据此让位给它 */
-    focusIfOpen: (): Promise<boolean> => (isTauri ? invoke<boolean>('focus_debug_window') : Promise.resolve(false)),
+    focusIfOpen: (): Promise<boolean> =>
+        isTauri ? invoke<boolean>('focus_debug_window') : Promise.resolve(false),
 };

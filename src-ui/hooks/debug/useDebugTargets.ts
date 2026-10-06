@@ -55,7 +55,10 @@ const bridges = new WeakMap<QueryClient, { refs: number; off: () => void }>();
 function acquireBridge(client: QueryClient): () => void {
     let bridge = bridges.get(client);
     if (!bridge) {
-        bridge = { refs: 0, off: subscribeDomainEvents((event) => invalidateForEvent(client, event)) };
+        bridge = {
+            refs: 0,
+            off: subscribeDomainEvents((event) => invalidateForEvent(client, event)),
+        };
         bridges.set(client, bridge);
     }
     bridge.refs += 1;
@@ -79,7 +82,11 @@ export function useDebugTargets() {
             try {
                 return await onebotDebugService.targets();
             } catch (err) {
-                pushErrorBar({ key: 'debug-targets', title: '读取 Bot 列表失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: 'debug-targets',
+                    title: '读取 Bot 列表失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },

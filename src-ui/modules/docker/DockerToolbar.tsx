@@ -11,11 +11,7 @@
 import React from 'react';
 import * as RadixSelect from '@radix-ui/react-select';
 import { CheckCircle2, AlertTriangle, ChevronDown, RefreshCw, Server } from 'lucide-react';
-import {
-    ActionMotionIcon,
-    RESOURCE_MOTION,
-    refreshMotion,
-} from '../../shared/ui/motion';
+import { ActionMotionIcon, RESOURCE_MOTION, refreshMotion } from '../../shared/ui/motion';
 import { cn } from '../../shared/utils/cn';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
@@ -87,11 +83,7 @@ const HostSelect: React.FC<{
             />
             <RadixSelect.Value />
             <RadixSelect.Icon asChild>
-                <ActionMotionIcon
-                    icon={ChevronDown}
-                    size={14}
-                    className="text-text-tertiary"
-                />
+                <ActionMotionIcon icon={ChevronDown} size={14} className="text-text-tertiary" />
             </RadixSelect.Icon>
         </RadixSelect.Trigger>
         <RadixSelect.Portal>
@@ -131,11 +123,7 @@ const StatusPill: React.FC<{
     if (isProbing && !label) {
         return (
             <span className="inline-flex items-center gap-1.5 rounded-md bg-inset/60 px-2.5 py-1.5 text-xs text-text-tertiary">
-                <ActionMotionIcon
-                    icon={RefreshCw}
-                    size={13}
-                    motion={refreshMotion(isProbing)}
-                />
+                <ActionMotionIcon icon={RefreshCw} size={13} motion={refreshMotion(isProbing)} />
                 探测 Docker…
             </span>
         );

@@ -25,6 +25,8 @@ export function receiverStateCopy(state: DebugReceiverState): { text: string; to
 }
 
 /** 还在收（没停）的接收器；顶栏「正在接收 N 个 Bot」的 N 就是它的个数 */
-export function activeReceivers(list: readonly DebugReceiverInfo[] | undefined): DebugReceiverInfo[] {
+export function activeReceivers(
+    list: readonly DebugReceiverInfo[] | undefined,
+): DebugReceiverInfo[] {
     return (list ?? []).filter((r) => r.state.state !== 'stopped');
 }

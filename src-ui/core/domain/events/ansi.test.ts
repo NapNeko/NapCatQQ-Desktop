@@ -39,11 +39,30 @@ describe('parseAnsi', () => {
     });
 
     it('亮色 90–97、256 色、真彩和冒号写法', () => {
-        expect(pieces(parseAnsi('\x1b[90m[Karin]\x1b[39m x'))[0].style.fg).toEqual({ kind: 'palette', index: 8 });
-        expect(pieces(parseAnsi('\x1b[38;5;208mdebug'))[0].style.fg).toEqual({ kind: 'palette', index: 208 });
-        expect(pieces(parseAnsi('\x1b[38;2;1;2;3mx'))[0].style.fg).toEqual({ kind: 'rgb', r: 1, g: 2, b: 3 });
-        expect(pieces(parseAnsi('\x1b[38:2::10:20:30mx'))[0].style.fg).toEqual({ kind: 'rgb', r: 10, g: 20, b: 30 });
-        expect(pieces(parseAnsi('\x1b[38:5:117mx'))[0].style.fg).toEqual({ kind: 'palette', index: 117 });
+        expect(pieces(parseAnsi('\x1b[90m[Karin]\x1b[39m x'))[0].style.fg).toEqual({
+            kind: 'palette',
+            index: 8,
+        });
+        expect(pieces(parseAnsi('\x1b[38;5;208mdebug'))[0].style.fg).toEqual({
+            kind: 'palette',
+            index: 208,
+        });
+        expect(pieces(parseAnsi('\x1b[38;2;1;2;3mx'))[0].style.fg).toEqual({
+            kind: 'rgb',
+            r: 1,
+            g: 2,
+            b: 3,
+        });
+        expect(pieces(parseAnsi('\x1b[38:2::10:20:30mx'))[0].style.fg).toEqual({
+            kind: 'rgb',
+            r: 10,
+            g: 20,
+            b: 30,
+        });
+        expect(pieces(parseAnsi('\x1b[38:5:117mx'))[0].style.fg).toEqual({
+            kind: 'palette',
+            index: 117,
+        });
     });
 
     it('背景色不画，但它的参数要跳过，后面的前景色照常认', () => {
@@ -67,16 +86,22 @@ describe('parseAnsi', () => {
         expect(parseAnsi(' 10%|#   |\r 50%|##  |\r100%|####|').text).toBe('100%|####|');
         expect(parseAnsi('done\r').text).toBe('done');
         const styled = parseAnsi('\x1b[32mold\rnew');
-        expect(pieces(styled)).toEqual([{ text: 'new', style: { fg: { kind: 'palette', index: 2 } } }]);
+        expect(pieces(styled)).toEqual([
+            { text: 'new', style: { fg: { kind: 'palette', index: 2 } } },
+        ]);
     });
 });
 
 describe('cutAnsi', () => {
     it('挖掉时间前缀，后面的样式段往前挪', () => {
-        const parsed = parseAnsi('\x1b[33m09-26 16:29:02\x1b[0m \x1b[38;2;162;255;0m[配置]\x1b[0m 缺配置');
+        const parsed = parseAnsi(
+            '\x1b[33m09-26 16:29:02\x1b[0m \x1b[38;2;162;255;0m[配置]\x1b[0m 缺配置',
+        );
         const body = cutAnsi(parsed, [[0, 15]]);
         expect(body.text).toBe('[配置] 缺配置');
-        expect(pieces(body)).toEqual([{ text: '[配置]', style: { fg: { kind: 'rgb', r: 162, g: 255, b: 0 } } }]);
+        expect(pieces(body)).toEqual([
+            { text: '[配置]', style: { fg: { kind: 'rgb', r: 162, g: 255, b: 0 } } },
+        ]);
     });
 
     it('中间挖掉一段（AstrBot 的等级标签），两边的段各自对齐', () => {
@@ -88,7 +113,13 @@ describe('cutAnsi', () => {
 
     it('区间乱序、重叠、越界都能处理；没东西可挖时原样返回', () => {
         const parsed = parseAnsi('abcdef');
-        expect(cutAnsi(parsed, [[4, 99], [0, 2], [1, 3]]).text).toBe('d');
+        expect(
+            cutAnsi(parsed, [
+                [4, 99],
+                [0, 2],
+                [1, 3],
+            ]).text,
+        ).toBe('d');
         expect(cutAnsi(parsed, [])).toBe(parsed);
     });
 });

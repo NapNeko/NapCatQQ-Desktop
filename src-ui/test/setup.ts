@@ -2,46 +2,46 @@ import '@testing-library/jest-dom/vitest';
 import { afterAll, vi } from 'vitest';
 
 class ResizeObserverMock {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
 }
 
 class IntersectionObserverMock {
-  readonly root = null;
-  readonly rootMargin = '';
-  readonly thresholds: ReadonlyArray<number> = [];
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds: ReadonlyArray<number> = [];
 
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+        return [];
+    }
 }
 
 Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    })),
 });
 
 Object.defineProperty(window, 'ResizeObserver', {
-  writable: true,
-  value: ResizeObserverMock,
+    writable: true,
+    value: ResizeObserverMock,
 });
 
 Object.defineProperty(window, 'IntersectionObserver', {
-  writable: true,
-  value: IntersectionObserverMock,
+    writable: true,
+    value: IntersectionObserverMock,
 });
 
 globalThis.ResizeObserver = ResizeObserverMock;
@@ -55,48 +55,48 @@ const pendingFrames = new Set<number>();
 let windowClosed = false;
 
 const raf = vi.fn((callback: FrameRequestCallback) => {
-  if (windowClosed) return 0;
-  const handle = window.setTimeout(() => {
-    pendingFrames.delete(handle);
-    callback(performance.now());
-  }, 0);
-  pendingFrames.add(handle);
-  return handle;
+    if (windowClosed) return 0;
+    const handle = window.setTimeout(() => {
+        pendingFrames.delete(handle);
+        callback(performance.now());
+    }, 0);
+    pendingFrames.add(handle);
+    return handle;
 });
 const caf = vi.fn((handle: number) => {
-  if (!pendingFrames.delete(handle)) return;
-  window.clearTimeout(handle);
+    if (!pendingFrames.delete(handle)) return;
+    window.clearTimeout(handle);
 });
 
 afterAll(() => {
-  windowClosed = true;
-  pendingFrames.forEach((handle) => window.clearTimeout(handle));
-  pendingFrames.clear();
+    windowClosed = true;
+    pendingFrames.forEach((handle) => window.clearTimeout(handle));
+    pendingFrames.clear();
 });
 
 Object.defineProperty(window, 'requestAnimationFrame', {
-  writable: true,
-  value: raf,
+    writable: true,
+    value: raf,
 });
 
 Object.defineProperty(window, 'cancelAnimationFrame', {
-  writable: true,
-  value: caf,
+    writable: true,
+    value: caf,
 });
 
 globalThis.requestAnimationFrame = raf;
 globalThis.cancelAnimationFrame = caf;
 
 Object.defineProperty(window, '__TAURI__', {
-  writable: true,
-  value: {
-    core: {
-      invoke: vi.fn(),
+    writable: true,
+    value: {
+        core: {
+            invoke: vi.fn(),
+        },
+        event: {
+            listen: vi.fn(),
+            emit: vi.fn(),
+        },
+        path: {},
     },
-    event: {
-      listen: vi.fn(),
-      emit: vi.fn(),
-    },
-    path: {},
-  },
 });

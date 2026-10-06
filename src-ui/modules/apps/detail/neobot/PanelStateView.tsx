@@ -22,10 +22,7 @@ interface BlockedHint {
  * `notFoundHint` 由调用方给：它最清楚这个接口是哪个能力、要求哪版，
  * 说出来比「面板返回 404」有用得多。
  */
-export function blockedHint(
-    state: PanelState<unknown>,
-    notFoundHint?: string,
-): BlockedHint | null {
+export function blockedHint(state: PanelState<unknown>, notFoundHint?: string): BlockedHint | null {
     switch (state.kind) {
         case 'unsupported':
             return {

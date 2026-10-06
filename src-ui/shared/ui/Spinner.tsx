@@ -27,8 +27,7 @@ const spinnerVariants = cva(
 );
 
 export interface SpinnerProps
-    extends HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof spinnerVariants> {
+    extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof spinnerVariants> {
     /** 屏幕阅读器友好。提供时会渲染 sr-only 文本。 */
     label?: string;
 }

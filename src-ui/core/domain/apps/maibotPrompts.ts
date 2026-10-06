@@ -41,7 +41,8 @@ export function promptFields(text: string): PromptFields {
                     if (depth === 0) break;
                 }
             }
-            if (j >= text.length) return { ok: false, error: '有一个 { 没有配对的 }，字面的花括号要写成 {{' };
+            if (j >= text.length)
+                return { ok: false, error: '有一个 { 没有配对的 }，字面的花括号要写成 {{' };
             const field = text.slice(i + 1, j);
             const base = fieldBase(field);
             if (base === null) return { ok: false, error: `参数名里不能再有 {：{${field}}` };
@@ -75,7 +76,11 @@ export function checkPrompt(content: string, defaultContent: string): PromptChec
     const parsed = promptFields(content);
     if (!parsed.ok) return { error: parsed.error, missing: [], extra: [] };
     if (parsed.fields.some((f) => !f)) {
-        return { error: '不能有空的 {}：要写参数名，字面的花括号写成 {{ }}', missing: [], extra: [] };
+        return {
+            error: '不能有空的 {}：要写参数名，字面的花括号写成 {{ }}',
+            missing: [],
+            extra: [],
+        };
     }
     const want = new Set(promptParams(defaultContent));
     const got = new Set(parsed.fields);
@@ -83,7 +88,8 @@ export function checkPrompt(content: string, defaultContent: string): PromptChec
     const extra = [...got].filter((f) => !want.has(f)).sort();
     const parts: string[] = [];
     if (missing.length) parts.push(`少了 ${missing.map((f) => `{${f}}`).join('、')}`);
-    if (extra.length) parts.push(`多了 ${extra.map((f) => `{${f}}`).join('、')}（麦麦给不出这些参数）`);
+    if (extra.length)
+        parts.push(`多了 ${extra.map((f) => `{${f}}`).join('、')}（麦麦给不出这些参数）`);
     return { error: parts.length ? parts.join('；') : null, missing, extra };
 }
 

@@ -52,10 +52,7 @@ import {
     type DayPhase,
 } from '../../core/domain/overview/dayPhase';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
-import {
-    OverviewCommandColumn,
-    PerformanceChartsSection,
-} from './widgets/OverviewSideColumn';
+import { OverviewCommandColumn, PerformanceChartsSection } from './widgets/OverviewSideColumn';
 import { HeroSky } from './widgets/HeroSky';
 import { HeroTitle } from './widgets/HeroTitle';
 import { HeroMascot, type MascotReaction } from './widgets/HeroMascot';
@@ -79,7 +76,7 @@ export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNaviga
     );
     const motionEnabled = usePreferences().motionEnabled;
 
-    const navigate = onNavigate ?? (() => { });
+    const navigate = onNavigate ?? (() => {});
 
     const notices = useMemo(
         () =>
@@ -208,9 +205,7 @@ const HelloCard: React.FC<HelloCardProps> = ({
                     title={title}
                     className="font-display text-[36px] font-extrabold leading-none tracking-tight text-[var(--text-hero-title)]"
                 />
-                <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
-                    {hint}
-                </p>
+                <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">{hint}</p>
 
                 {/* 状态与导航内联行：纯文字排版与细致微标 */}
                 <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-text-secondary">
@@ -220,10 +215,11 @@ const HelloCard: React.FC<HelloCardProps> = ({
                         className="inline-flex items-center gap-1.5 transition-colors hover:text-text cursor-pointer select-none"
                     >
                         <span
-                            className={`h-1.5 w-1.5 rounded-full ${runningCount > 0
-                                ? 'bg-success shadow-glow-success'
-                                : 'bg-text-disabled'
-                                }`}
+                            className={`h-1.5 w-1.5 rounded-full ${
+                                runningCount > 0
+                                    ? 'bg-success shadow-glow-success'
+                                    : 'bg-text-disabled'
+                            }`}
                         />
                         <span>
                             <strong className="font-mono font-semibold text-text tabular-nums">
@@ -427,15 +423,11 @@ function mascotQuips(fleet: BotFleetStats, actionableCount: number): string[] {
         actionableCount > 0
             ? `${actionableCount} 个实例不对劲，去看看？`
             : fleet.total === 0
-                ? '一个实例都没有，空得慌。'
-                : fleet.running > 0
-                    ? `${fleet.running} 个都在跑，我闲着。`
-                    : '全停着呢，今天不干活？';
-    return [
-        status,
-        ...FLAVOR_QUIPS.slice(FLAVOR_START),
-        ...FLAVOR_QUIPS.slice(0, FLAVOR_START),
-    ];
+              ? '一个实例都没有，空得慌。'
+              : fleet.running > 0
+                ? `${fleet.running} 个都在跑，我闲着。`
+                : '全停着呢，今天不干活？';
+    return [status, ...FLAVOR_QUIPS.slice(FLAVOR_START), ...FLAVOR_QUIPS.slice(0, FLAVOR_START)];
 }
 
 // ─── RemoteSummary 卡 ────────────────────────────────────────────────────
@@ -487,7 +479,9 @@ const RemoteSummaryCard: React.FC<{
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                         <div className="flex items-center gap-2">
-                            <p className="font-display text-[14.5px] font-semibold text-text">远端主机</p>
+                            <p className="font-display text-[14.5px] font-semibold text-text">
+                                远端主机
+                            </p>
                             {countBadge}
                         </div>
                         <span className="text-2xs font-medium text-brand inline-flex items-center gap-0.5">
@@ -495,7 +489,9 @@ const RemoteSummaryCard: React.FC<{
                             <ChevronRight size={12} />
                         </span>
                     </div>
-                    <p className="mt-1 truncate text-[12px] leading-snug text-text-tertiary">{description}</p>
+                    <p className="mt-1 truncate text-[12px] leading-snug text-text-tertiary">
+                        {description}
+                    </p>
                 </div>
             </div>
         </Card>
@@ -504,7 +500,10 @@ const RemoteSummaryCard: React.FC<{
 
 // ─── NoticeTimeline 卡 ───────────────────────────────────────────────────
 
-const TONE_VISUAL: Record<NoticeTone, { icon: LucideIcon; iconBg: string; iconColor: string; dot: string }> = {
+const TONE_VISUAL: Record<
+    NoticeTone,
+    { icon: LucideIcon; iconBg: string; iconColor: string; dot: string }
+> = {
     info: {
         icon: BellRing,
         iconBg: 'bg-info/10',
@@ -563,9 +562,7 @@ const NoticeTimelineCard: React.FC<NoticeTimelineCardProps> = ({
     return (
         <Card padding="md" className={`flex flex-col ${className ?? ''}`.trim()}>
             <div className="mb-3 flex shrink-0 items-center justify-between">
-                <h3 className="font-display text-[14.5px] font-semibold text-text">
-                    最近通知
-                </h3>
+                <h3 className="font-display text-[14.5px] font-semibold text-text">最近通知</h3>
                 <span className="text-[12px] text-text-tertiary">
                     {notices.length === 0 ? '一切正常' : `最近 ${notices.length} 条`}
                 </span>
@@ -599,9 +596,7 @@ const NoticeRow: React.FC<{
     const openExternal = useOpenExternal();
     const visual = TONE_VISUAL[notice.tone];
     const Icon = visual.icon;
-    const timeInfo = notice.timestamp
-        ? formatRelativeNoticeTime(notice.timestamp)
-        : null;
+    const timeInfo = notice.timestamp ? formatRelativeNoticeTime(notice.timestamp) : null;
 
     return (
         <li className="relative">
@@ -624,10 +619,11 @@ const NoticeRow: React.FC<{
                             </p>
                             {timeInfo && (
                                 <span
-                                    className={`shrink-0 font-mono text-[10px] tabular-nums ${timeInfo.isRecent
-                                        ? 'text-success font-semibold flex items-center gap-1'
-                                        : 'text-text-tertiary'
-                                        }`}
+                                    className={`shrink-0 font-mono text-[10px] tabular-nums ${
+                                        timeInfo.isRecent
+                                            ? 'text-success font-semibold flex items-center gap-1'
+                                            : 'text-text-tertiary'
+                                    }`}
                                 >
                                     {timeInfo.isRecent && (
                                         <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
@@ -816,12 +812,22 @@ const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version, update, onNav
             className="flex items-center gap-3.5 transition-all cursor-pointer hover:shadow-popover"
         >
             <div
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border-subtle/40 ${kind === 'napcat' ? 'bg-brand-soft/80' : 'bg-info-soft/80'
-                    }`}
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border-subtle/40 ${
+                    kind === 'napcat' ? 'bg-brand-soft/80' : 'bg-info-soft/80'
+                }`}
             >
-                <div ref={iconRef} className="grid place-items-center" style={{ transformOrigin: '50% 60%' }}>
+                <div
+                    ref={iconRef}
+                    className="grid place-items-center"
+                    style={{ transformOrigin: '50% 60%' }}
+                >
                     {kind === 'napcat' ? (
-                        <img src={napcatPng} alt="" className="h-6 w-6 select-none" draggable={false} />
+                        <img
+                            src={napcatPng}
+                            alt=""
+                            className="h-6 w-6 select-none"
+                            draggable={false}
+                        />
                     ) : (
                         <button
                             type="button"
@@ -847,14 +853,19 @@ const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version, update, onNav
                         </p>
                     </div>
                     {hasUpdate && (
-                        <Badge tone="warning" appearance="soft" className="text-[10px] px-1 py-0 font-normal">
+                        <Badge
+                            tone="warning"
+                            appearance="soft"
+                            className="text-[10px] px-1 py-0 font-normal"
+                        >
                             可更新
                         </Badge>
                     )}
                 </div>
                 <p
-                    className={`mt-1.5 truncate text-[11.5px] tabular-nums ${installed ? 'font-mono text-text-secondary' : 'text-text-tertiary'
-                        }`}
+                    className={`mt-1.5 truncate text-[11.5px] tabular-nums ${
+                        installed ? 'font-mono text-text-secondary' : 'text-text-tertiary'
+                    }`}
                 >
                     {installed ? formatVersion(version) : '未安装'}
                 </p>

@@ -189,9 +189,29 @@ describe('filterAppStore', () => {
     });
 
     const yunzai: AppStoreMarketEntry[] = [
-        { ...plugins[0], id: 'miao-plugin', name: '喵喵', supported_adapters: [], tags: ['推荐', '游戏'], is_official: true },
-        { ...plugins[0], id: 'xiuxian-plugin', name: '修仙', supported_adapters: [], tags: ['文游'] },
-        { ...plugins[0], id: 'link:网盘', name: '网盘', supported_adapters: [], tags: ['功能'], valid: false },
+        {
+            ...plugins[0],
+            id: 'miao-plugin',
+            name: '喵喵',
+            supported_adapters: [],
+            tags: ['推荐', '游戏'],
+            is_official: true,
+        },
+        {
+            ...plugins[0],
+            id: 'xiuxian-plugin',
+            name: '修仙',
+            supported_adapters: [],
+            tags: ['文游'],
+        },
+        {
+            ...plugins[0],
+            id: 'link:网盘',
+            name: '网盘',
+            supported_adapters: [],
+            tags: ['功能'],
+            valid: false,
+        },
     ];
 
     it('tag filter keeps only that category and drops installed-only rows', () => {
@@ -199,7 +219,15 @@ describe('filterAppStore', () => {
             resource: 'plugin',
             entries: yunzai,
             installed: [
-                { id: 'chuo.js', name: 'chuo.js', resource: 'plugin', flavor: 'app', enabled: true, package: '', locked: false },
+                {
+                    id: 'chuo.js',
+                    name: 'chuo.js',
+                    resource: 'plugin',
+                    flavor: 'app',
+                    enabled: true,
+                    package: '',
+                    locked: false,
+                },
             ],
             query: '',
             kindFilter: 'tag:游戏',

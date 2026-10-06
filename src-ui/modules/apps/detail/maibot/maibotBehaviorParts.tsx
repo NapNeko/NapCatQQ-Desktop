@@ -15,7 +15,15 @@ import {
     User,
     Users,
 } from 'lucide-react';
-import { Badge, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Spinner } from '../../../../shared/ui';
+import {
+    Badge,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    Spinner,
+} from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import type {
     MaiBotBehavior,
@@ -88,9 +96,13 @@ const ActorIcon: React.FC<{ b: MaiBotBehavior }> = ({ b }) => {
 };
 
 /** 情境标签：圆点颜色分话题 / 需求 / 态度，悬停看占多少 */
-export const SceneTags: React.FC<{ tags: readonly MaiBotBehaviorTag[]; max?: number }> = ({ tags, max }) => {
+export const SceneTags: React.FC<{ tags: readonly MaiBotBehaviorTag[]; max?: number }> = ({
+    tags,
+    max,
+}) => {
     const shown = max ? tags.slice(0, max) : tags;
-    if (shown.length === 0) return <span className="text-2xs text-text-tertiary">情境没有归出名字</span>;
+    if (shown.length === 0)
+        return <span className="text-2xs text-text-tertiary">情境没有归出名字</span>;
     return (
         <span className="flex min-w-0 flex-wrap items-center gap-1">
             {shown.map((t) => (
@@ -103,7 +115,9 @@ export const SceneTags: React.FC<{ tags: readonly MaiBotBehaviorTag[]; max?: num
                     <span className="truncate">{t.label}</span>
                 </span>
             ))}
-            {max !== undefined && tags.length > max && <span className="text-2xs text-text-tertiary">+{tags.length - max}</span>}
+            {max !== undefined && tags.length > max && (
+                <span className="text-2xs text-text-tertiary">+{tags.length - max}</span>
+            )}
         </span>
     );
 };
@@ -119,13 +133,30 @@ export const ScoreMeter: React.FC<{ score: number; wide?: boolean }> = ({ score,
     const good = score >= 1;
     const bad = score <= -1;
     return (
-        <span className={cn('flex items-center gap-1.5', wide && 'w-full')} title={`分数 ${signed(score)}，范围 -6 到 8`}>
-            <span className={cn('relative h-1.5 overflow-hidden rounded-full bg-inset', wide ? 'min-w-0 flex-1' : 'w-12')}>
+        <span
+            className={cn('flex items-center gap-1.5', wide && 'w-full')}
+            title={`分数 ${signed(score)}，范围 -6 到 8`}
+        >
+            <span
+                className={cn(
+                    'relative h-1.5 overflow-hidden rounded-full bg-inset',
+                    wide ? 'min-w-0 flex-1' : 'w-12',
+                )}
+            >
                 <span
-                    className={cn('absolute inset-y-0', good ? 'bg-success' : bad ? 'bg-danger' : 'bg-text-disabled')}
-                    style={{ left: `${Math.min(ZERO, v) * 100}%`, width: `${Math.max(Math.abs(v - ZERO) * 100, 3)}%` }}
+                    className={cn(
+                        'absolute inset-y-0',
+                        good ? 'bg-success' : bad ? 'bg-danger' : 'bg-text-disabled',
+                    )}
+                    style={{
+                        left: `${Math.min(ZERO, v) * 100}%`,
+                        width: `${Math.max(Math.abs(v - ZERO) * 100, 3)}%`,
+                    }}
                 />
-                <span className="absolute inset-y-0 w-px bg-text-tertiary/50" style={{ left: `${ZERO * 100}%` }} />
+                <span
+                    className="absolute inset-y-0 w-px bg-text-tertiary/50"
+                    style={{ left: `${ZERO * 100}%` }}
+                />
             </span>
             <span
                 className={cn(
@@ -139,11 +170,11 @@ export const ScoreMeter: React.FC<{ score: number; wide?: boolean }> = ({ score,
     );
 };
 
-export const BehaviorRow: React.FC<{ item: MaiBotBehavior; showChat: boolean; onOpen: () => void }> = ({
-    item: b,
-    showChat,
-    onOpen,
-}) => (
+export const BehaviorRow: React.FC<{
+    item: MaiBotBehavior;
+    showChat: boolean;
+    onOpen: () => void;
+}> = ({ item: b, showChat, onOpen }) => (
     <button
         type="button"
         onClick={onOpen}
@@ -152,7 +183,12 @@ export const BehaviorRow: React.FC<{ item: MaiBotBehavior; showChat: boolean; on
         <ActorIcon b={b} />
         <span className="min-w-0 flex-1">
             <SceneTags tags={b.scene} max={3} />
-            <span className={cn('mt-1.5 block truncate text-[13.5px]', b.enabled ? 'text-text' : 'text-text-tertiary')}>
+            <span
+                className={cn(
+                    'mt-1.5 block truncate text-[13.5px]',
+                    b.enabled ? 'text-text' : 'text-text-tertiary',
+                )}
+            >
                 {b.action}
             </span>
             <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-text-secondary">
@@ -164,7 +200,8 @@ export const BehaviorRow: React.FC<{ item: MaiBotBehavior; showChat: boolean; on
                 <span>见过 {b.seen} 次</span>
                 {b.used > 0 && (
                     <span>
-                        用过 {b.used} 次{b.succeeded + b.failed > 0 && `，成 ${b.succeeded} 败 ${b.failed}`}
+                        用过 {b.used} 次
+                        {b.succeeded + b.failed > 0 && `，成 ${b.succeeded} 败 ${b.failed}`}
                     </span>
                 )}
                 {b.active_at !== undefined && <span>{relativeTime(b.active_at)}</span>}
@@ -178,7 +215,10 @@ export const BehaviorRow: React.FC<{ item: MaiBotBehavior; showChat: boolean; on
 );
 
 const FEEDBACK: Readonly<
-    Record<MaiBotBehaviorFeedbackKind, { label: string; icon: ComponentType<LucideProps>; className: string }>
+    Record<
+        MaiBotBehaviorFeedbackKind,
+        { label: string; icon: ComponentType<LucideProps>; className: string }
+    >
 > = {
     success: { label: '成了', icon: CircleCheck, className: 'text-success' },
     partial: { label: '成了一半', icon: CircleMinus, className: 'text-warning' },
@@ -188,11 +228,17 @@ const FEEDBACK: Readonly<
     disabled: { label: '自动停用', icon: Ban, className: 'text-danger' },
 };
 
-const Section: React.FC<{ title: string; count?: number; children: ReactNode }> = ({ title, count, children }) => (
+const Section: React.FC<{ title: string; count?: number; children: ReactNode }> = ({
+    title,
+    count,
+    children,
+}) => (
     <section className="flex flex-col gap-2">
         <h4 className="text-xs font-medium text-text-secondary">
             {title}
-            {count !== undefined && <span className="ml-1.5 font-mono text-2xs text-text-tertiary">{count}</span>}
+            {count !== undefined && (
+                <span className="ml-1.5 font-mono text-2xs text-text-tertiary">{count}</span>
+            )}
         </h4>
         {children}
     </section>
@@ -208,7 +254,9 @@ const Block: React.FC<{ title: string; text: string }> = ({ title, text }) => (
 const Stat: React.FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
     <div className="flex min-w-0 flex-col gap-1 rounded-md bg-inset/60 px-3 py-2">
         <span className="text-2xs text-text-tertiary">{label}</span>
-        <span className="flex h-5 items-center text-sm font-medium tabular-nums text-text">{children}</span>
+        <span className="flex h-5 items-center text-sm font-medium tabular-nums text-text">
+            {children}
+        </span>
     </div>
 );
 
@@ -218,17 +266,30 @@ const SceneBreakdown: React.FC<{ tags: readonly MaiBotBehaviorTag[] }> = ({ tags
     ) : (
         <ul className="flex flex-col gap-1.5">
             {tags.map((t) => (
-                <li key={`${t.kind}:${t.label}`} className="grid grid-cols-[3rem_minmax(0,1fr)_8rem] items-center gap-2 text-xs">
+                <li
+                    key={`${t.kind}:${t.label}`}
+                    className="grid grid-cols-[3rem_minmax(0,1fr)_8rem] items-center gap-2 text-xs"
+                >
                     <span className="flex items-center gap-1.5 text-text-tertiary">
-                        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KIND_DOT[t.kind])} />
+                        <span
+                            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KIND_DOT[t.kind])}
+                        />
                         {KIND_LABEL[t.kind]}
                     </span>
                     <span className="truncate text-text">{t.label}</span>
                     <span className="flex items-center gap-1.5">
                         <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-inset">
-                            <span className={cn('absolute inset-y-0 left-0 rounded-full', KIND_DOT[t.kind])} style={{ width: pct(t.weight) }} />
+                            <span
+                                className={cn(
+                                    'absolute inset-y-0 left-0 rounded-full',
+                                    KIND_DOT[t.kind],
+                                )}
+                                style={{ width: pct(t.weight) }}
+                            />
                         </span>
-                        <span className="w-8 text-right font-mono text-2xs tabular-nums text-text-tertiary">{pct(t.weight)}</span>
+                        <span className="w-8 text-right font-mono text-2xs tabular-nums text-text-tertiary">
+                            {pct(t.weight)}
+                        </span>
                     </span>
                 </li>
             ))}
@@ -239,23 +300,39 @@ const join = (parts: readonly (string | false | undefined)[]) => parts.filter(Bo
 
 const FeedbackList: React.FC<{ items: readonly MaiBotBehaviorFeedback[] }> = ({ items }) =>
     items.length === 0 ? (
-        <p className="text-xs text-text-tertiary">还没有反馈。麦麦照着做过以后，会按对方的反应记一笔。</p>
+        <p className="text-xs text-text-tertiary">
+            还没有反馈。麦麦照着做过以后，会按对方的反应记一笔。
+        </p>
     ) : (
         <ul className="flex flex-col">
             {items.map((f, i) => {
                 const meta = FEEDBACK[f.kind];
                 const Icon = meta.icon;
                 return (
-                    <li key={i} className="flex items-start gap-2 rounded-sm px-2 py-1.5 hover:bg-inset/60">
+                    <li
+                        key={i}
+                        className="flex items-start gap-2 rounded-sm px-2 py-1.5 hover:bg-inset/60"
+                    >
                         <Icon size={14} className={cn('mt-0.5 shrink-0', meta.className)} />
                         <span className="min-w-0 flex-1">
-                            <span className="block text-xs leading-relaxed text-text">{f.reason || meta.label}</span>
+                            <span className="block text-xs leading-relaxed text-text">
+                                {f.reason || meta.label}
+                            </span>
                             <span className="mt-0.5 block text-2xs text-text-tertiary">
-                                {join([!!f.reason && meta.label, !!f.outcome && `结果：${f.outcome}`, f.at !== undefined && relativeTime(f.at)])}
+                                {join([
+                                    !!f.reason && meta.label,
+                                    !!f.outcome && `结果：${f.outcome}`,
+                                    f.at !== undefined && relativeTime(f.at),
+                                ])}
                             </span>
                         </span>
                         {f.delta !== 0 && (
-                            <span className={cn('shrink-0 font-mono text-2xs tabular-nums', f.delta > 0 ? 'text-success' : 'text-danger')}>
+                            <span
+                                className={cn(
+                                    'shrink-0 font-mono text-2xs tabular-nums',
+                                    f.delta > 0 ? 'text-success' : 'text-danger',
+                                )}
+                            >
                                 {signed(f.delta)}
                             </span>
                         )}
@@ -265,23 +342,36 @@ const FeedbackList: React.FC<{ items: readonly MaiBotBehaviorFeedback[] }> = ({ 
         </ul>
     );
 
-const EvidenceList: React.FC<{ items: readonly MaiBotBehaviorEvidence[]; item: MaiBotBehavior }> = ({ items, item }) =>
+const EvidenceList: React.FC<{
+    items: readonly MaiBotBehaviorEvidence[];
+    item: MaiBotBehavior;
+}> = ({ items, item }) =>
     items.length === 0 ? (
         <p className="text-xs text-text-tertiary">没留下观察记录</p>
     ) : (
         <ul className="flex flex-col">
             {items.map((e, i) => (
-                <li key={i} className="flex items-start gap-2 rounded-sm px-2 py-1.5 hover:bg-inset/60">
+                <li
+                    key={i}
+                    className="flex items-start gap-2 rounded-sm px-2 py-1.5 hover:bg-inset/60"
+                >
                     <Eye size={14} className="mt-0.5 shrink-0 text-text-tertiary" />
                     <span className="min-w-0 flex-1">
-                        <span className="block text-xs text-text">{e.actor === 'maibot' ? '麦麦自己这么做了' : `看到${WHO[e.actor]}这么做`}</span>
+                        <span className="block text-xs text-text">
+                            {e.actor === 'maibot'
+                                ? '麦麦自己这么做了'
+                                : `看到${WHO[e.actor]}这么做`}
+                        </span>
                         {(e.action !== item.action || e.outcome !== item.outcome) && (
                             <span className="mt-0.5 block text-2xs leading-relaxed text-text-secondary">
                                 {e.action} → {e.outcome}
                             </span>
                         )}
                         <span className="mt-0.5 block text-2xs text-text-tertiary">
-                            {join([e.messages > 0 && `依据 ${e.messages} 条消息`, e.at !== undefined && relativeTime(e.at)])}
+                            {join([
+                                e.messages > 0 && `依据 ${e.messages} 条消息`,
+                                e.at !== undefined && relativeTime(e.at),
+                            ])}
                         </span>
                     </span>
                 </li>
@@ -314,7 +404,11 @@ export const BehaviorDetailDialog: React.FC<{
             <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle className="leading-snug">{b?.action ?? '经验'}</DialogTitle>
-                    {b && <DialogDescription>{join([behaviorOrigin(b), b.chat_name])}</DialogDescription>}
+                    {b && (
+                        <DialogDescription>
+                            {join([behaviorOrigin(b), b.chat_name])}
+                        </DialogDescription>
+                    )}
                 </DialogHeader>
                 {b && (
                     <div className="flex max-h-[62vh] flex-col gap-5 overflow-y-auto pr-1">
@@ -340,10 +434,14 @@ export const BehaviorDetailDialog: React.FC<{
                             </p>
                         </div>
                         <Section title="反馈" count={detail?.feedback.length}>
-                            {records((d) => <FeedbackList items={d.feedback} />)}
+                            {records((d) => (
+                                <FeedbackList items={d.feedback} />
+                            ))}
                         </Section>
                         <Section title="观察" count={detail?.evidence.length}>
-                            {records((d) => <EvidenceList items={d.evidence} item={b} />)}
+                            {records((d) => (
+                                <EvidenceList items={d.evidence} item={b} />
+                            ))}
                         </Section>
                     </div>
                 )}

@@ -17,7 +17,11 @@ export function useAppInstallDirPreview(hostId: string | null, frameworkId: stri
 
 /** 检查结果只给发起的对话框用，不进缓存；失败的提示由对话框自己弹，它要跟着改路径一起收掉 */
 export function useProbeAppProject() {
-    return useMutation<AppProjectProbe, unknown, { hostId: string; frameworkId: string; path: string }>({
+    return useMutation<
+        AppProjectProbe,
+        unknown,
+        { hostId: string; frameworkId: string; path: string }
+    >({
         mutationFn: ({ hostId, frameworkId, path }) =>
             appFrameworkService.probeProject(hostId, frameworkId, path),
     });

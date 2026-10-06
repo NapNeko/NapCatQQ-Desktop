@@ -23,7 +23,9 @@ export function Notice({
             <t.Icon size={15} className={cn('mt-0.5 shrink-0', t.icon)} />
             <div className="min-w-0 flex-1">
                 <p className="text-[13px] leading-relaxed text-text">{title}</p>
-                {children && <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{children}</p>}
+                {children && (
+                    <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{children}</p>
+                )}
             </div>
         </div>
     );

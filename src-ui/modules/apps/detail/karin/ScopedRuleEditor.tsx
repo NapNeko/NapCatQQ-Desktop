@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { Badge, Button, NumberField, Select, StringListField, Switch, TextField } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    NumberField,
+    Select,
+    StringListField,
+    Switch,
+    TextField,
+} from '../../../../shared/ui';
 import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { KARIN_RULE_MODES } from '../../../../core/domain/apps/karinConfig';
 import { CONFIG_PAIR } from './configLayout';
@@ -37,7 +45,9 @@ export const ScopedRuleEditor: React.FC<ScopedRuleEditorProps> = ({
     const [open, setOpen] = useState(false);
     const set = (patch: Partial<KarinScopeRule>) => onChange({ ...rule, ...patch });
     const modeMeta = KARIN_RULE_MODES.find((m) => m.value === rule.mode);
-    const templateValue = (keyTemplates as readonly string[]).includes(rule.key) ? rule.key : '__custom__';
+    const templateValue = (keyTemplates as readonly string[]).includes(rule.key)
+        ? rule.key
+        : '__custom__';
     const keyError = errors[`${root}/${index}/key`];
 
     return (
@@ -50,13 +60,17 @@ export const ScopedRuleEditor: React.FC<ScopedRuleEditorProps> = ({
                     onClick={() => setOpen((v) => !v)}
                 >
                     <ExpandChevron open={open} />
-                    <span className="truncate font-mono text-sm text-text">{rule.key || '（未命名）'}</span>
+                    <span className="truncate font-mono text-sm text-text">
+                        {rule.key || '（未命名）'}
+                    </span>
                     {reserved && (
                         <Badge tone="neutral" appearance="outline">
                             兜底
                         </Badge>
                     )}
-                    <span className="truncate text-2xs text-text-tertiary">{modeMeta?.label ?? `mode ${rule.mode}`}</span>
+                    <span className="truncate text-2xs text-text-tertiary">
+                        {modeMeta?.label ?? `mode ${rule.mode}`}
+                    </span>
                     {keyError && <span className="text-2xs text-danger">{keyError}</span>}
                 </button>
                 <Button

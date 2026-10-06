@@ -8,7 +8,11 @@ describe('featureTogglesStore', () => {
         const listener = vi.fn();
         const unsub = featureTogglesStore.subscribe(listener);
         featureTogglesStore.apply({ apps: false });
-        expect(featureTogglesStore.getSnapshot()).toMatchObject({ apps: false, dockerPage: true, terminal: true });
+        expect(featureTogglesStore.getSnapshot()).toMatchObject({
+            apps: false,
+            dockerPage: true,
+            terminal: true,
+        });
         expect(listener).toHaveBeenCalledTimes(1);
         unsub();
     });

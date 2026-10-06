@@ -8,13 +8,7 @@
 // 所以这里显式 opt-out scale/brightness,只保留 lift + shadow,符合 IBM/Material
 // "卡片悬停应抬起,不应放大"的设计共识。
 
-import {
-    forwardRef,
-    useEffect,
-    useImperativeHandle,
-    useRef,
-    type HTMLAttributes,
-} from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, type HTMLAttributes } from 'react';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 
 interface ListItemProps extends HTMLAttributes<HTMLDivElement> {
@@ -22,20 +16,18 @@ interface ListItemProps extends HTMLAttributes<HTMLDivElement> {
     hoverable?: boolean;
 }
 
-export const ListItem = forwardRef<HTMLDivElement, ListItemProps>(
-    ({ hoverable, ...rest }, ref) => {
-        const m = useMotion();
-        const localRef = useRef<HTMLDivElement | null>(null);
-        useImperativeHandle(ref, () => localRef.current!, []);
+export const ListItem = forwardRef<HTMLDivElement, ListItemProps>(({ hoverable, ...rest }, ref) => {
+    const m = useMotion();
+    const localRef = useRef<HTMLDivElement | null>(null);
+    useImperativeHandle(ref, () => localRef.current!, []);
 
-        useEffect(() => {
-            const el = localRef.current;
-            if (!el || !hoverable || !m.enabled || m.preset.feel.cardLift === 0) return;
-            // 行式大卡:不 scale、不 brightness、保留 lift + shadow,避免大尺寸放大裁切。
-            return m.bindHover(el, { scale: 1, brightness: false });
-        }, [hoverable, m.enabled, m.level, m.speed, m.bindHover, m.preset.feel.cardLift]);
+    useEffect(() => {
+        const el = localRef.current;
+        if (!el || !hoverable || !m.enabled || m.preset.feel.cardLift === 0) return;
+        // 行式大卡:不 scale、不 brightness、保留 lift + shadow,避免大尺寸放大裁切。
+        return m.bindHover(el, { scale: 1, brightness: false });
+    }, [hoverable, m.enabled, m.level, m.speed, m.bindHover, m.preset.feel.cardLift]);
 
-        return <div ref={localRef} {...rest} />;
-    },
-);
+    return <div ref={localRef} {...rest} />;
+});
 ListItem.displayName = 'ListItem';

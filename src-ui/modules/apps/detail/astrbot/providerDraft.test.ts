@@ -5,7 +5,12 @@ import {
     newOpenAiModel,
     newSourceFromPreset,
 } from '../../../../core/domain/apps/astrbotConfig';
-import { commitProviderDraft, draftForCreate, draftForEdit, removeProviderSource } from './providerDraft';
+import {
+    commitProviderDraft,
+    draftForCreate,
+    draftForEdit,
+    removeProviderSource,
+} from './providerDraft';
 import type { AstrBotInstanceConfig } from '../../../../core/ipc/types';
 
 const deepseek = ASTRBOT_SOURCE_PRESETS.find((p) => p.id === 'deepseek')!;
@@ -58,7 +63,10 @@ describe('providerDraft', () => {
     it('drops the default when its model was removed in the draft', () => {
         const cfg = twoSources();
         const d = draftForEdit(cfg, 0);
-        const next = commitProviderDraft(cfg, { ...d, kids: d.kids.filter((m) => m.model !== 'm2') });
+        const next = commitProviderDraft(cfg, {
+            ...d,
+            kids: d.kids.filter((m) => m.model !== 'm2'),
+        });
         expect(next.ai.default_provider_id).toBe('');
     });
 

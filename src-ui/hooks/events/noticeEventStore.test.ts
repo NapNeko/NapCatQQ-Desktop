@@ -44,7 +44,7 @@ afterEach(() => {
 describe('noticeEventStore', () => {
     it('只收通知相关事件，日志行不进缓冲', async () => {
         const sub = installSubscribeMock();
-        const unsub = noticeEventStore.subscribe(() => { });
+        const unsub = noticeEventStore.subscribe(() => {});
         await flush();
 
         const handler = sub.getHandler();
@@ -65,7 +65,7 @@ describe('noticeEventStore', () => {
 
     it('React 订阅者全部卸载后仍在攒事件（跨路由保留）', async () => {
         const sub = installSubscribeMock();
-        const unsub = noticeEventStore.subscribe(() => { });
+        const unsub = noticeEventStore.subscribe(() => {});
         await flush();
         unsub();
 
@@ -90,7 +90,7 @@ describe('noticeEventStore', () => {
 
     it('最新在前，超出上限时丢最旧的', async () => {
         const sub = installSubscribeMock();
-        const unsub = noticeEventStore.subscribe(() => { });
+        const unsub = noticeEventStore.subscribe(() => {});
         await flush();
 
         for (let i = 0; i < 60; i += 1) {

@@ -73,9 +73,7 @@ export function useServerManager() {
         // delete 返回 void，但要在删除前抓一下显示名（onError 时还能用），所以从
         // 当前列表反查。删成功后列表会失效重拉，这里只为提示文案。
         onSuccess: (_void, id) => {
-            const label = serverLabel(
-                serversQuery.data?.find((s) => s.id === id) ?? { id },
-            );
+            const label = serverLabel(serversQuery.data?.find((s) => s.id === id) ?? { id });
             invalidateServerLists(queryClient);
             pushInfoBar({
                 key: `server-delete:${id}`,

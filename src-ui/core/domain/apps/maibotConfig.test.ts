@@ -19,19 +19,31 @@ describe('maibotChatDropsEverything', () => {
     });
 
     it('clears once a group is allowed, the filter is off, or a side is a blacklist', () => {
-        expect(maibotChatDropsEverything({ ...maibotDefaultChat(), group_list: ['123'] })).toBe(false);
-        expect(maibotChatDropsEverything({ ...maibotDefaultChat(), enable_chat_list_filter: false })).toBe(false);
-        expect(maibotChatDropsEverything({ ...maibotDefaultChat(), private_list_type: 'blacklist' })).toBe(false);
+        expect(maibotChatDropsEverything({ ...maibotDefaultChat(), group_list: ['123'] })).toBe(
+            false,
+        );
+        expect(
+            maibotChatDropsEverything({ ...maibotDefaultChat(), enable_chat_list_filter: false }),
+        ).toBe(false);
+        expect(
+            maibotChatDropsEverything({ ...maibotDefaultChat(), private_list_type: 'blacklist' }),
+        ).toBe(false);
     });
 });
 
 describe('maibotChatScope', () => {
     it('describes both sides in plain words', () => {
         expect(maibotChatScope(maibotDefaultChat())).toBe('不回群，不回私聊');
-        expect(maibotChatScope({ ...maibotDefaultChat(), group_list: ['1', '2'], private_list_type: 'blacklist' })).toBe(
-            '2 个群，所有私聊',
+        expect(
+            maibotChatScope({
+                ...maibotDefaultChat(),
+                group_list: ['1', '2'],
+                private_list_type: 'blacklist',
+            }),
+        ).toBe('2 个群，所有私聊');
+        expect(maibotChatScope({ ...maibotDefaultChat(), enable_chat_list_filter: false })).toBe(
+            '所有群聊和私聊',
         );
-        expect(maibotChatScope({ ...maibotDefaultChat(), enable_chat_list_filter: false })).toBe('所有群聊和私聊');
     });
 });
 
@@ -94,7 +106,11 @@ describe('maibotModelSetupIssue', () => {
     it('ignores a placeholder on a provider no required task uses', () => {
         const models = maibotDefaultConfig(23001).models;
         models.api_providers[0]!.api_key = 'sk-real';
-        models.api_providers.push({ ...models.api_providers[0]!, name: 'Spare', api_key: MAIBOT_PLACEHOLDER_API_KEY });
+        models.api_providers.push({
+            ...models.api_providers[0]!,
+            name: 'Spare',
+            api_key: MAIBOT_PLACEHOLDER_API_KEY,
+        });
         expect(maibotModelSetupIssue(models)).toBeNull();
     });
 });

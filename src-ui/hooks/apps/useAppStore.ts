@@ -73,11 +73,12 @@ export function useAppStore(instance: AppInstance, resource: AppStoreResource) {
     const market = marketQ.data ?? [];
     const installed = installedQ.data ?? [];
     const adapters = adaptersQ.data ?? [];
-    const catalogError = marketQ.error ?? installedQ.error ?? (resource === 'plugin' ? adaptersQ.error : null);
+    const catalogError =
+        marketQ.error ?? installedQ.error ?? (resource === 'plugin' ? adaptersQ.error : null);
     const loading =
-        marketQ.isFetching
-        || installedQ.isFetching
-        || (resource === 'plugin' && adaptersQ.isFetching);
+        marketQ.isFetching ||
+        installedQ.isFetching ||
+        (resource === 'plugin' && adaptersQ.isFetching);
 
     const [query, setQuery] = useState('');
     const [kindFilter, setKindFilter] = useState<StoreKindFilter>('all');
@@ -128,7 +129,16 @@ export function useAppStore(instance: AppInstance, resource: AppStoreResource) {
                 enabledAdapterModules,
                 linked: !!instance.link,
             }),
-        [enabledAdapterModules, installed, instance.link, kindFilter, market, query, resource, taskHints],
+        [
+            enabledAdapterModules,
+            installed,
+            instance.link,
+            kindFilter,
+            market,
+            query,
+            resource,
+            taskHints,
+        ],
     );
 
     return {

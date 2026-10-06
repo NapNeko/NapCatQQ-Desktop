@@ -66,11 +66,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
     const displayHost = revealIp ? server.host : maskHost(server.host);
     const serverLabel = server.name || server.host;
     const displayName =
-        server.name.trim().length > 0
-            ? server.name.trim()
-            : revealIp
-                ? server.host
-                : '远端服务器';
+        server.name.trim().length > 0 ? server.name.trim() : revealIp ? server.host : '远端服务器';
 
     const accent = cardAccent(server.state);
     const terminalEnabled = useFeatureEnabled('terminal');
@@ -170,7 +166,11 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                         header={
                             <>
                                 <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-soft text-brand">
-                                    <ActionMotionIcon icon={Server} size={18} motion={RESOURCE_MOTION} />
+                                    <ActionMotionIcon
+                                        icon={Server}
+                                        size={18}
+                                        motion={RESOURCE_MOTION}
+                                    />
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <h3
@@ -210,7 +210,9 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                         <p
                                             className={cn(
                                                 'truncate text-[10px] leading-tight',
-                                                server.state === 'failed' ? 'text-danger' : 'text-warning',
+                                                server.state === 'failed'
+                                                    ? 'text-danger'
+                                                    : 'text-warning',
                                             )}
                                             title={healthLine}
                                         >
@@ -245,8 +247,8 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                             isTesting
                                                 ? refreshMotion(true)
                                                 : server.state === 'connected'
-                                                    ? LIVE_MOTION
-                                                    : 'none'
+                                                  ? LIVE_MOTION
+                                                  : 'none'
                                         }
                                     />
                                 </ServerIconButton>
@@ -255,7 +257,11 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                         tooltip="配置免密登录"
                                         onClick={stop(onSetupKey)}
                                     >
-                                        <ActionMotionIcon icon={KeyRound} size={16} strokeWidth={2} />
+                                        <ActionMotionIcon
+                                            icon={KeyRound}
+                                            size={16}
+                                            strokeWidth={2}
+                                        />
                                     </ServerIconButton>
                                 ) : null}
                                 {onInventory ? (
@@ -263,15 +269,29 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                         tooltip={inventorySummary(server.inventory)}
                                         onClick={stop(onInventory)}
                                     >
-                                        <ActionMotionIcon icon={FolderSearch} size={16} strokeWidth={2} />
+                                        <ActionMotionIcon
+                                            icon={FolderSearch}
+                                            size={16}
+                                            strokeWidth={2}
+                                        />
                                     </ServerIconButton>
                                 ) : null}
                                 {terminalEnabled ? (
                                     <ServerIconButton
                                         tooltip="终端"
-                                        onClick={stop(() => void openTerminal({ kind: 'server', server_id: server.id }))}
+                                        onClick={stop(
+                                            () =>
+                                                void openTerminal({
+                                                    kind: 'server',
+                                                    server_id: server.id,
+                                                }),
+                                        )}
                                     >
-                                        <ActionMotionIcon icon={SquareTerminal} size={16} strokeWidth={2} />
+                                        <ActionMotionIcon
+                                            icon={SquareTerminal}
+                                            size={16}
+                                            strokeWidth={2}
+                                        />
                                     </ServerIconButton>
                                 ) : null}
                                 <ServerIconButton tooltip="编辑" onClick={stop(onEdit)}>
@@ -296,17 +316,15 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                 </ContextMenuLabel>
                 <ContextMenuSeparator />
 
-                <ContextMenuItem
-                    tone="brand"
-                    disabled={isTesting}
-                    onClick={() => onTest()}
-                >
+                <ContextMenuItem tone="brand" disabled={isTesting} onClick={() => onTest()}>
                     <Wifi size={13} className="text-brand" />
                     <span>测试连接</span>
                 </ContextMenuItem>
 
                 {terminalEnabled && (
-                    <ContextMenuItem onClick={() => void openTerminal({ kind: 'server', server_id: server.id })}>
+                    <ContextMenuItem
+                        onClick={() => void openTerminal({ kind: 'server', server_id: server.id })}
+                    >
                         <SquareTerminal size={13} />
                         <span>打开终端</span>
                     </ContextMenuItem>
@@ -391,7 +409,11 @@ function ServerDetailStrip({
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <span className="inline-flex min-w-0 max-w-full cursor-default items-center gap-1">
-                            <Globe size={11} strokeWidth={2.4} className="shrink-0 text-text-tertiary" />
+                            <Globe
+                                size={11}
+                                strokeWidth={2.4}
+                                className="shrink-0 text-text-tertiary"
+                            />
                             <span className="truncate font-mono">{webuiLine}</span>
                         </span>
                     </TooltipTrigger>
@@ -428,8 +450,7 @@ function ServerIconButton({
                         'inline-flex h-9 w-9 items-center justify-center rounded-sm transition-colors duration-100',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                         'disabled:cursor-not-allowed disabled:opacity-40',
-                        tone === 'neutral' &&
-                        'text-text-secondary hover:bg-inset hover:text-text',
+                        tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
                         tone === 'success' && 'text-success hover:bg-success-soft',
                         tone === 'danger' && 'text-danger hover:bg-danger-soft',
                     )}

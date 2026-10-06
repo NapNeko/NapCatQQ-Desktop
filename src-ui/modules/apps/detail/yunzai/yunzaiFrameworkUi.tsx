@@ -15,7 +15,12 @@ import { AppStoreTab } from '../AppStoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useSyncNavBadges } from '../useSyncNavBadges';
-import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule, NavBadgeTone } from '../frameworkUi';
+import type {
+    FrameworkDetailProps,
+    FrameworkNavGroup,
+    FrameworkUiModule,
+    NavBadgeTone,
+} from '../frameworkUi';
 import { YunzaiBasicTab } from './YunzaiBasicTab';
 import { YunzaiConnectionTab } from './YunzaiConnectionTab';
 import { YunzaiGroupsTab } from './YunzaiGroupsTab';
@@ -63,7 +68,13 @@ function tabForIssue(path: string): string {
     }
 }
 
-function YunzaiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
+function YunzaiFrameworkDetail({
+    instance,
+    onSaveHandle,
+    onGoTab,
+    onOpenLink,
+    onNavBadges,
+}: FrameworkDetailProps) {
     const form = useAppConfigForm(YUNZAI_CONFIG_FORM, instance.id, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
@@ -96,7 +107,10 @@ function YunzaiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
 
     return (
         <>
-            <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="plugins"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <AppStoreTab
                     instance={instance}
                     resource="plugin"
@@ -116,11 +130,21 @@ function YunzaiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     starting={apps.pendingId === instance.id}
                 />
             ))}
-            {pane('basic', (cfg) => <YunzaiBasicTab config={cfg} {...common} />)}
-            {pane('permissions', (cfg) => <YunzaiPermissionsTab config={cfg} {...common} />)}
-            {pane('groups', (cfg) => <YunzaiGroupsTab config={cfg} {...common} />)}
-            {pane('render', (cfg) => <YunzaiRenderTab config={cfg} {...common} />)}
-            {pane('connection', (cfg) => <YunzaiConnectionTab instance={instance} config={cfg} {...common} />)}
+            {pane('basic', (cfg) => (
+                <YunzaiBasicTab config={cfg} {...common} />
+            ))}
+            {pane('permissions', (cfg) => (
+                <YunzaiPermissionsTab config={cfg} {...common} />
+            ))}
+            {pane('groups', (cfg) => (
+                <YunzaiGroupsTab config={cfg} {...common} />
+            ))}
+            {pane('render', (cfg) => (
+                <YunzaiRenderTab config={cfg} {...common} />
+            ))}
+            {pane('connection', (cfg) => (
+                <YunzaiConnectionTab instance={instance} config={cfg} {...common} />
+            ))}
         </>
     );
 }

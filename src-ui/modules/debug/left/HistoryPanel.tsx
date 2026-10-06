@@ -5,12 +5,25 @@
 // 当时的回包直接显示在响应面板里，不重新发。收藏、复制参数需要完整记录，先取回来再做；
 // 收藏弹的是和中栏 ☆ 同一个起名框。键盘上高亮一行后：回车打开、S 收藏、C 复制参数。
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { GitCompareArrows, History, RefreshCw, SearchX, Trash2, UserRound } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
-import { useClearHistory, useDebugHistory, useHistoryEntry } from '../../../hooks/debug/useDebugHistory';
+import {
+    useClearHistory,
+    useDebugHistory,
+    useHistoryEntry,
+} from '../../../hooks/debug/useDebugHistory';
 import { useDebugCatalog } from '../../../hooks/debug/useDebugCatalog';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { useScrollMemory } from '../../../hooks/debug/debugScrollMemory';
@@ -29,7 +42,17 @@ import { suggestedRequestName } from '../../../core/domain/debug/collectionsOps'
 import { paramsTextOf, replayResponse } from '../../../core/domain/debug/historyReplay';
 import { HistoryDiffDialog } from './HistoryDiffDialog';
 import { HISTORY_ROW_HEIGHT, HistoryRow, type HistoryRowIntent } from './HistoryRow';
-import { ConfirmDialog, IconAction, PanelMessage, PanelSearch, PanelSearchRow, Segmented, SkeletonRows, useSlashFocus, type ConfirmRequest } from './panelParts';
+import {
+    ConfirmDialog,
+    IconAction,
+    PanelMessage,
+    PanelSearch,
+    PanelSearchRow,
+    Segmented,
+    SkeletonRows,
+    useSlashFocus,
+    type ConfirmRequest,
+} from './panelParts';
 
 export const HISTORY_PAGE_SIZE = 100;
 /** 列表的名字里写上键盘用法：行上的悬停按钮不进 Tab 顺序，读屏用户靠这句知道还有 S / C */
@@ -57,9 +80,17 @@ async function copyText(text: string, title: string): Promise<void> {
 }
 
 function openInNewTab(entry: DebugHistoryEntry): void {
-    const tabId = debugWorkspaceStore.openAction(entry.action, { newTab: true, paramsText: paramsTextOf(entry.params) });
+    const tabId = debugWorkspaceStore.openAction(entry.action, {
+        newTab: true,
+        paramsText: paramsTextOf(entry.params),
+    });
     debugWorkspaceStore.setRun(tabId, {
-        last: { response: replayResponse(entry), at: entry.at_ms, botId: entry.bot_id, action: entry.action },
+        last: {
+            response: replayResponse(entry),
+            at: entry.at_ms,
+            botId: entry.bot_id,
+            action: entry.action,
+        },
     });
 }
 
@@ -144,7 +175,10 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
     const [keyboardNav, setKeyboardNav] = useState(false);
 
     // 对话框比的两条：开框那一刻按时间定好左右（左旧右新）；null 是关着
-    const [pair, setPair] = useState<{ left: DebugHistorySummary; right: DebugHistorySummary } | null>(null);
+    const [pair, setPair] = useState<{
+        left: DebugHistorySummary;
+        right: DebugHistorySummary;
+    } | null>(null);
 
     const toggleCompare = useCallback(() => {
         setComparing((c) => !c);
@@ -209,7 +243,13 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
         const entry = entryQuery.data;
         setIntent(null);
         if (!entry) {
-            pushInfoBar({ key: 'debug-history-gone', tone: 'warning', title: '这条记录已经不在了', content: '历史可能刚被清空或压缩过', autoDismissMs: 3000 });
+            pushInfoBar({
+                key: 'debug-history-gone',
+                tone: 'warning',
+                title: '这条记录已经不在了',
+                content: '历史可能刚被清空或压缩过',
+                autoDismissMs: 3000,
+            });
             void historyQuery.refetch();
             return;
         }
@@ -353,7 +393,11 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 title="读不到调用历史"
                 hint={historyQuery.error?.message}
                 action={
-                    <Button size="sm" variant="secondary" onClick={() => void historyQuery.refetch()}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void historyQuery.refetch()}
+                    >
                         <RefreshCw size={13} aria-hidden />
                         重试
                     </Button>
@@ -409,7 +453,12 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 </PanelSearchRow>
             )}
             <div className="flex shrink-0 items-center gap-1.5 border-b border-border-subtle/70 px-2 py-1.5">
-                <Segmented value={ok} options={OK_FILTERS} onChange={setOk} ariaLabel="按成败筛选" />
+                <Segmented
+                    value={ok}
+                    options={OK_FILTERS}
+                    onChange={setOk}
+                    ariaLabel="按成败筛选"
+                />
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <button
@@ -420,13 +469,17 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                             className={cn(
                                 'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm transition-colors',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                                comparing ? 'bg-brand-soft text-brand' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                                comparing
+                                    ? 'bg-brand-soft text-brand'
+                                    : 'text-text-tertiary hover:bg-inset hover:text-text',
                             )}
                         >
                             <GitCompareArrows size={13} strokeWidth={2.2} aria-hidden />
                         </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom">{comparing ? '退出对比' : '勾选同一个接口的两条记录，对比它们的回包'}</TooltipContent>
+                    <TooltipContent side="bottom">
+                        {comparing ? '退出对比' : '勾选同一个接口的两条记录，对比它们的回包'}
+                    </TooltipContent>
                 </Tooltip>
                 {target && (
                     <Tooltip>
@@ -439,7 +492,9 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                                 className={cn(
                                     'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm transition-colors',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                                    onlyBot ? 'bg-brand-soft text-brand' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                                    onlyBot
+                                        ? 'bg-brand-soft text-brand'
+                                        : 'text-text-tertiary hover:bg-inset hover:text-text',
                                 )}
                             >
                                 <UserRound size={13} strokeWidth={2.2} aria-hidden />
@@ -453,7 +508,9 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 {/* 总条数写在列表底部（「已显示全部 N 条」/「加载更多（还有 N 条）」），这一行窄栏里放不下；
                     清空挪到这行右端：搜索条收起来以后，它不用再独占一行 */}
                 <span className="ml-auto flex shrink-0 items-center gap-1">
-                    {historyQuery.isFetching && page && <Spinner size="xs" label="正在刷新调用历史" />}
+                    {historyQuery.isFetching && page && (
+                        <Spinner size="xs" label="正在刷新调用历史" />
+                    )}
                     <IconAction
                         icon={Trash2}
                         label="清空历史"
@@ -473,7 +530,11 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 aria-label={showList ? HISTORY_LIST_LABEL : undefined}
                 aria-multiselectable={showList && comparing ? true : undefined}
                 tabIndex={showList ? 0 : -1}
-                aria-activedescendant={showList && showActive && activeIndex >= 0 ? rowId(entries[activeIndex].id) : undefined}
+                aria-activedescendant={
+                    showList && showActive && activeIndex >= 0
+                        ? rowId(entries[activeIndex].id)
+                        : undefined
+                }
                 onKeyDown={showList ? onListKeyDown : undefined}
                 onFocus={() => setListFocused(true)}
                 onBlur={() => setListFocused(false)}
@@ -484,14 +545,20 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 )}
             >
                 {showList ? (
-                    <div className="relative w-full shrink-0" style={{ height: virtualizer.getTotalSize() }}>
+                    <div
+                        className="relative w-full shrink-0"
+                        style={{ height: virtualizer.getTotalSize() }}
+                    >
                         {virtualizer.getVirtualItems().map((v) => {
                             const entry = entries[v.index];
                             return (
                                 <div
                                     key={entry?.id ?? '__footer'}
                                     className="absolute left-0 top-0 w-full"
-                                    style={{ height: v.size, transform: `translateY(${v.start}px)` }}
+                                    style={{
+                                        height: v.size,
+                                        transform: `translateY(${v.start}px)`,
+                                    }}
                                 >
                                     {entry ? (
                                         <HistoryRow
@@ -502,7 +569,12 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                                             busy={intent?.id === entry.id}
                                             compare={
                                                 comparing
-                                                    ? { selected: picked.some((e) => e.id === entry.id), onToggle: () => togglePick(entry) }
+                                                    ? {
+                                                          selected: picked.some(
+                                                              (e) => e.id === entry.id,
+                                                          ),
+                                                          onToggle: () => togglePick(entry),
+                                                      }
                                                     : null
                                             }
                                             onIntent={onIntent}
@@ -517,11 +589,15 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                                                     disabled={historyQuery.isFetching}
                                                     onClick={() => setPages((p) => p + 1)}
                                                 >
-                                                    {historyQuery.isFetching && <Spinner size="xs" label="正在加载" />}
+                                                    {historyQuery.isFetching && (
+                                                        <Spinner size="xs" label="正在加载" />
+                                                    )}
                                                     加载更多（还有 {total - entries.length} 条）
                                                 </Button>
                                             ) : (
-                                                <span className="text-[11px] text-text-tertiary">已显示全部 {total} 条</span>
+                                                <span className="text-[11px] text-text-tertiary">
+                                                    已显示全部 {total} 条
+                                                </span>
                                             )}
                                         </div>
                                     )}
@@ -536,10 +612,22 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
             {comparing && (
                 <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle/70 px-2.5 py-1.5">
-                    <span role="status" className="min-w-0 flex-1 truncate text-2xs text-text-tertiary">
-                        {picked.length === 0 ? '勾选同一个接口的两条记录' : picked.length === 1 ? '再勾一条同接口的' : '已选 2 条，可以对比了'}
+                    <span
+                        role="status"
+                        className="min-w-0 flex-1 truncate text-2xs text-text-tertiary"
+                    >
+                        {picked.length === 0
+                            ? '勾选同一个接口的两条记录'
+                            : picked.length === 1
+                              ? '再勾一条同接口的'
+                              : '已选 2 条，可以对比了'}
                     </span>
-                    <Button size="sm" variant="secondary" disabled={picked.length !== 2} onClick={openDiff}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={picked.length !== 2}
+                        onClick={openDiff}
+                    >
                         对比响应
                     </Button>
                     <Button size="sm" variant="ghost" onClick={toggleCompare}>
@@ -568,7 +656,9 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                     channelFrom="history"
                     suggestedName={suggestedRequestName(
                         saving.action,
-                        catalog?.actions.find((a) => a.name === saving.action || a.aliases.includes(saving.action))?.summary,
+                        catalog?.actions.find(
+                            (a) => a.name === saving.action || a.aliases.includes(saving.action),
+                        )?.summary,
                     )}
                 />
             )}
@@ -579,5 +669,7 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
 /** 收藏只收对象参数；历史里记的万一不是对象（旧数据、手改过），交给收藏框按「参数有错」拦下 */
 function plainParams(params: unknown): Record<string, unknown> | null {
     if (params === null || params === undefined) return {};
-    return typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : null;
+    return typeof params === 'object' && !Array.isArray(params)
+        ? (params as Record<string, unknown>)
+        : null;
 }

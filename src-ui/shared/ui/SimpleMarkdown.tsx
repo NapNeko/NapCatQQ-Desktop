@@ -30,9 +30,7 @@ export function SimpleMarkdown({
 }: SimpleMarkdownProps) {
     const blocks = parseMarkdownBlocks(text);
     if (blocks.length === 0) {
-        return (
-            <p className={cn('text-sm text-text-tertiary', className)}>{emptyFallback}</p>
-        );
+        return <p className={cn('text-sm text-text-tertiary', className)}>{emptyFallback}</p>;
     }
 
     return (
@@ -43,23 +41,18 @@ export function SimpleMarkdown({
                         block.level === 1
                             ? 'mt-4 text-lg font-semibold text-text first:mt-0'
                             : block.level === 2
-                                ? 'mt-4 text-base font-semibold text-text first:mt-0'
-                                : block.level === 3
-                                    ? 'mt-3 text-sm font-semibold text-text first:mt-0'
-                                    : 'mt-2 text-sm font-medium text-text first:mt-0';
+                              ? 'mt-4 text-base font-semibold text-text first:mt-0'
+                              : block.level === 3
+                                ? 'mt-3 text-sm font-semibold text-text first:mt-0'
+                                : 'mt-2 text-sm font-medium text-text first:mt-0';
                     return (
                         <h4 key={index} className={classNameByLevel}>
-                            {renderInlineTokens(
-                                tokenizeInlineMarkdown(block.text),
-                                onOpenLink,
-                            )}
+                            {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
                         </h4>
                     );
                 }
                 if (block.kind === 'list_item') {
-                    const marker = block.ordered
-                        ? `${block.index ?? 1}.`
-                        : null;
+                    const marker = block.ordered ? `${block.index ?? 1}.` : null;
                     return (
                         <div key={index} className="flex gap-2">
                             {marker ? (
@@ -70,10 +63,7 @@ export function SimpleMarkdown({
                                 <span className="mt-[0.7em] h-1 w-1 shrink-0 rounded-full bg-text-tertiary" />
                             )}
                             <p className="min-w-0 whitespace-pre-wrap break-words">
-                                {renderInlineTokens(
-                                    tokenizeInlineMarkdown(block.text),
-                                    onOpenLink,
-                                )}
+                                {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
                             </p>
                         </div>
                     );
@@ -84,10 +74,7 @@ export function SimpleMarkdown({
                             key={index}
                             className="border-l-2 border-border pl-3 text-text-tertiary"
                         >
-                            {renderInlineTokens(
-                                tokenizeInlineMarkdown(block.text),
-                                onOpenLink,
-                            )}
+                            {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
                         </blockquote>
                     );
                 }
@@ -139,10 +126,7 @@ export function SimpleMarkdown({
                 }
                 return (
                     <p key={index} className="whitespace-pre-wrap break-words">
-                        {renderInlineTokens(
-                            tokenizeInlineMarkdown(block.text),
-                            onOpenLink,
-                        )}
+                        {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
                     </p>
                 );
             })}

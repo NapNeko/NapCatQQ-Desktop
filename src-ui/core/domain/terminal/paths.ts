@@ -106,7 +106,9 @@ export function navDirection(from: string, to: string): 'in' | 'out' {
     if (from === DRIVES_PATH) return 'in';
     if (to === DRIVES_PATH) return 'out';
     const base = from.replace(/[\\/]+$/, '');
-    return to.length > base.length && to.startsWith(base) && /[\\/]/.test(to.charAt(base.length)) ? 'in' : 'out';
+    return to.length > base.length && to.startsWith(base) && /[\\/]/.test(to.charAt(base.length))
+        ? 'in'
+        : 'out';
 }
 
 /** 文件名里不能出现的字符（两边取并集，远端 Linux 其实只禁 `/`，但留着 `\` 会让人看不懂） */
@@ -116,15 +118,53 @@ export function invalidFileName(name: string): boolean {
 }
 
 const TEXT_EXTENSIONS = new Set([
-    'txt', 'md', 'log', 'json', 'jsonc', 'json5', 'toml', 'yaml', 'yml', 'ini', 'cfg', 'conf', 'env',
-    'py', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd', 'xml',
-    'html', 'css', 'service', 'properties', 'lock', 'csv', 'sql', 'gitignore', 'dockerignore',
+    'txt',
+    'md',
+    'log',
+    'json',
+    'jsonc',
+    'json5',
+    'toml',
+    'yaml',
+    'yml',
+    'ini',
+    'cfg',
+    'conf',
+    'env',
+    'py',
+    'js',
+    'mjs',
+    'cjs',
+    'ts',
+    'tsx',
+    'jsx',
+    'sh',
+    'bash',
+    'zsh',
+    'ps1',
+    'bat',
+    'cmd',
+    'xml',
+    'html',
+    'css',
+    'service',
+    'properties',
+    'lock',
+    'csv',
+    'sql',
+    'gitignore',
+    'dockerignore',
 ]);
 
 /** 看着像文本：按扩展名，外加 `.env` / `Dockerfile` 这类没扩展名的常见文件 */
 export function looksLikeText(name: string): boolean {
     const lower = name.toLowerCase();
-    if (['dockerfile', 'makefile', 'license', 'readme', '.env', '.bashrc', '.profile'].includes(lower)) return true;
+    if (
+        ['dockerfile', 'makefile', 'license', 'readme', '.env', '.bashrc', '.profile'].includes(
+            lower,
+        )
+    )
+        return true;
     if (lower.startsWith('.env')) return true;
     const dot = lower.lastIndexOf('.');
     if (dot === -1) return false;
@@ -135,7 +175,8 @@ export type EditorSyntax = 'json' | 'toml' | 'dot_env' | 'plain';
 
 export function editorSyntaxOf(name: string): EditorSyntax {
     const lower = name.toLowerCase();
-    if (lower.endsWith('.json') || lower.endsWith('.jsonc') || lower.endsWith('.json5')) return 'json';
+    if (lower.endsWith('.json') || lower.endsWith('.jsonc') || lower.endsWith('.json5'))
+        return 'json';
     if (lower.endsWith('.toml')) return 'toml';
     if (lower.startsWith('.env') || lower.endsWith('.env')) return 'dot_env';
     return 'plain';

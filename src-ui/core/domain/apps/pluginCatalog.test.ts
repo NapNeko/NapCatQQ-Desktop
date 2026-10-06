@@ -12,11 +12,19 @@ import {
 import { KARIN_CATALOG } from './karinPlugins';
 import type { DeploymentTaskSnapshot } from '../../ipc/types';
 
-function pluginTask(over: Partial<DeploymentTaskSnapshot> & { resource?: 'plugin' | 'adapter' }): DeploymentTaskSnapshot {
+function pluginTask(
+    over: Partial<DeploymentTaskSnapshot> & { resource?: 'plugin' | 'adapter' },
+): DeploymentTaskSnapshot {
     const { resource = 'plugin', ...rest } = over;
     return {
         taskId: 't1',
-        kind: { kind: 'app_plugin', instance_id: 'i1', plugin_name: 'foo', action: 'install', resource },
+        kind: {
+            kind: 'app_plugin',
+            instance_id: 'i1',
+            plugin_name: 'foo',
+            action: 'install',
+            resource,
+        },
         status: 'running',
         hostId: 'local',
         title: '',
@@ -62,18 +70,28 @@ describe('overlayInstalledFromTasks', () => {
     const make = (name: string) => ({ name });
 
     it('lets the latest task per name win', () => {
-        const next = overlayInstalledFromTasks([], [
-            { pluginName: 'a', action: 'uninstall', status: 'success', atMs: 1 },
-            { pluginName: 'a', action: 'install', status: 'success', atMs: 2 },
-        ], byName, make);
+        const next = overlayInstalledFromTasks(
+            [],
+            [
+                { pluginName: 'a', action: 'uninstall', status: 'success', atMs: 1 },
+                { pluginName: 'a', action: 'install', status: 'success', atMs: 2 },
+            ],
+            byName,
+            make,
+        );
         expect(next).toEqual([{ name: 'a' }]);
     });
 
     it('ignores tasks that did not succeed', () => {
-        const next = overlayInstalledFromTasks([{ name: 'a' }], [
-            { pluginName: 'a', action: 'uninstall', status: 'failed', atMs: 1 },
-            { pluginName: 'b', action: 'install', status: 'running', atMs: 1 },
-        ], byName, make);
+        const next = overlayInstalledFromTasks(
+            [{ name: 'a' }],
+            [
+                { pluginName: 'a', action: 'uninstall', status: 'failed', atMs: 1 },
+                { pluginName: 'b', action: 'install', status: 'running', atMs: 1 },
+            ],
+            byName,
+            make,
+        );
         expect(next).toEqual([{ name: 'a' }]);
     });
 });
@@ -107,7 +125,9 @@ describe('pluginCatalogErrorCopy', () => {
     });
 
     it('uses the neutral name for the app store', () => {
-        expect(pluginCatalogErrorCopy('拉取插件目录失败: error sending request').title).toBe('无法连接官方目录');
+        expect(pluginCatalogErrorCopy('拉取插件目录失败: error sending request').title).toBe(
+            '无法连接官方目录',
+        );
         expect(pluginCatalogErrorCopy('HTTP 503').title).toBe('官方目录暂时不可用');
     });
 

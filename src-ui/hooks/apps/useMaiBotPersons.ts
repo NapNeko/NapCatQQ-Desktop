@@ -3,7 +3,12 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
 import { useResourceAction } from './maibotResourceAction';
-import type { MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery } from '../../core/ipc/types';
+import type {
+    MaiBotPersonAction,
+    MaiBotPersonOverview,
+    MaiBotPersonPage,
+    MaiBotPersonQuery,
+} from '../../core/ipc/types';
 
 const personKey = (id: string) => ['maibotPersons', id] as const;
 
@@ -29,5 +34,10 @@ export function useMaiBotPersonOverview(instanceId: string, enabled: boolean) {
 }
 
 export function useMaiBotPersonAction(instanceId: string) {
-    return useResourceAction<MaiBotPersonAction>(instanceId, personKey(instanceId), svc.personAction, '人物没改成');
+    return useResourceAction<MaiBotPersonAction>(
+        instanceId,
+        personKey(instanceId),
+        svc.personAction,
+        '人物没改成',
+    );
 }

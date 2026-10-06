@@ -103,14 +103,10 @@ function Panel({
                             aria-hidden
                             className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/55"
                         />
-                        <h2 className="truncate text-[13px] font-semibold text-text">
-                            {title}
-                        </h2>
+                        <h2 className="truncate text-[13px] font-semibold text-text">{title}</h2>
                     </div>
                     {description ? (
-                        <p className="mt-1 pl-2.5 text-2xs text-text-tertiary">
-                            {description}
-                        </p>
+                        <p className="mt-1 pl-2.5 text-2xs text-text-tertiary">{description}</p>
                     ) : null}
                 </div>
                 {aside ? <div className="shrink-0">{aside}</div> : null}
@@ -150,9 +146,7 @@ function KpiTile({
                         tone === 'neutral' && 'bg-text-disabled',
                     )}
                 />
-                <p className="text-[10.5px] font-medium leading-none text-text-tertiary">
-                    {label}
-                </p>
+                <p className="text-[10.5px] font-medium leading-none text-text-tertiary">{label}</p>
             </div>
             <p
                 className={cn(
@@ -187,9 +181,7 @@ function ResourceMeter({
     unavailable?: boolean;
 }) {
     const pct =
-        ratio != null && Number.isFinite(ratio)
-            ? Math.max(0, Math.min(100, ratio * 100))
-            : null;
+        ratio != null && Number.isFinite(ratio) ? Math.max(0, Math.min(100, ratio * 100)) : null;
 
     return (
         <div
@@ -210,9 +202,7 @@ function ResourceMeter({
                         </p>
                     </div>
                     {detail ? (
-                        <p className="mt-0.5 truncate text-2xs text-text-tertiary">
-                            {detail}
-                        </p>
+                        <p className="mt-0.5 truncate text-2xs text-text-tertiary">{detail}</p>
                     ) : null}
                 </div>
             </div>
@@ -292,8 +282,7 @@ function TrendConfigMenu({
     showDots: boolean;
     onShowDotsChange: (v: boolean) => void;
 }) {
-    const seriesLabel =
-        SERIES_OPTIONS.find((o) => o.id === series)?.label ?? '序列';
+    const seriesLabel = SERIES_OPTIONS.find((o) => o.id === series)?.label ?? '序列';
 
     return (
         <Popover>
@@ -376,9 +365,7 @@ function TrendRangePanel({
         window.mode === 'custom' ? window.followNow : true,
     );
     const [activeField, setActiveField] = useState<'from' | 'to'>('from');
-    const [monthCursor, setMonthCursor] = useState(
-        () => new Date(startOfLocalDay(bounds.fromMs)),
-    );
+    const [monthCursor, setMonthCursor] = useState(() => new Date(startOfLocalDay(bounds.fromMs)));
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -439,8 +426,7 @@ function TrendRangePanel({
     };
 
     const label = formatHistoryWindowLabel(window);
-    const presetActive =
-        window.mode === 'preset' ? window.range : null;
+    const presetActive = window.mode === 'preset' ? window.range : null;
 
     const renderField = (field: 'from' | 'to') => {
         const isEndLive = field === 'to' && draftFollowNow;
@@ -471,8 +457,8 @@ function TrendRangePanel({
                     isEndLive
                         ? 'cursor-not-allowed border-border-subtle/50 bg-inset/40 opacity-55'
                         : isActive
-                            ? 'cursor-pointer border-brand bg-brand-soft/20 ring-1 ring-brand/30'
-                            : 'cursor-pointer border-border-subtle bg-field hover:border-border',
+                          ? 'cursor-pointer border-brand bg-brand-soft/20 ring-1 ring-brand/30'
+                          : 'cursor-pointer border-border-subtle bg-field hover:border-border',
                 )}
             >
                 <p className="mb-1.5 text-[10px] font-medium tracking-wide text-text-tertiary">
@@ -489,9 +475,7 @@ function TrendRangePanel({
                         hours={t.hours}
                         minutes={t.minutes}
                         disabled={isEndLive}
-                        aria-label={
-                            field === 'from' ? '选择开始时刻' : '选择结束时刻'
-                        }
+                        aria-label={field === 'from' ? '选择开始时刻' : '选择结束时刻'}
                         onChange={(next) => {
                             if (isEndLive) return;
                             const nextMs = applyTimeToMs(ts, next);
@@ -511,8 +495,8 @@ function TrendRangePanel({
                     {isEndLive
                         ? '跟随当前时刻'
                         : isActive
-                            ? '在右侧月历改日期 · 点时钟改时刻'
-                            : '点此编辑'}
+                          ? '在右侧月历改日期 · 点时钟改时刻'
+                          : '点此编辑'}
                 </p>
             </div>
         );
@@ -560,10 +544,7 @@ function TrendRangePanel({
                     aria-label="快捷时间范围"
                 >
                     {METRICS_HISTORY_RANGE_OPTIONS.map((opt) => {
-                        const ok = isMetricsHistoryRangeAvailable(
-                            opt.id,
-                            retentionDays,
-                        );
+                        const ok = isMetricsHistoryRangeAvailable(opt.id, retentionDays);
                         const selected = presetActive === opt.id;
                         return (
                             <button
@@ -580,9 +561,7 @@ function TrendRangePanel({
                                     !ok && 'cursor-not-allowed opacity-40',
                                 )}
                                 title={
-                                    ok
-                                        ? opt.label
-                                        : `保留 ${retentionDays} 天，无法选 ${opt.label}`
+                                    ok ? opt.label : `保留 ${retentionDays} 天，无法选 ${opt.label}`
                                 }
                             >
                                 {opt.shortLabel}
@@ -616,9 +595,7 @@ function TrendRangePanel({
                             label="结束时间跟随当前时刻"
                         />
 
-                        {error ? (
-                            <p className="text-[11px] text-danger">{error}</p>
-                        ) : null}
+                        {error ? <p className="text-[11px] text-danger">{error}</p> : null}
 
                         <div className="mt-auto flex gap-1.5 pt-1">
                             <Button
@@ -630,12 +607,7 @@ function TrendRangePanel({
                             >
                                 取消
                             </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                className="flex-1"
-                                onClick={apply}
-                            >
+                            <Button type="button" size="sm" className="flex-1" onClick={apply}>
                                 确定
                             </Button>
                         </div>
@@ -735,24 +707,19 @@ function NodeRows({ nodes }: { nodes: NetworkNodeMetrics[] }) {
     );
 }
 
-export function BotRuntimeMetricsPageNext({
-    botId,
-    onBack,
-}: BotRuntimeMetricsPageNextProps) {
+export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPageNextProps) {
     const { data: bots = [] } = useBotSnapshots();
     const configByBot = useBotConfigsMap(bots);
     const config = configByBot[botId] ?? null;
     const displayName =
-        config?.bot.name && config.bot.name.trim().length > 0
-            ? config.bot.name.trim()
-            : botId;
+        config?.bot.name && config.bot.name.trim().length > 0 ? config.bot.name.trim() : botId;
     const flavor = config?.bot.backend_type ?? null;
     const isRemote =
-        config?.bot.runtime_target != null &&
-        !isRuntimeTargetLocal(config.bot.runtime_target);
+        config?.bot.runtime_target != null && !isRuntimeTargetLocal(config.bot.runtime_target);
 
-    const { enabled, metrics, loading, retentionDays, refresh } =
-        useBotRuntimeMetrics(botId, { liveDetail: true });
+    const { enabled, metrics, loading, retentionDays, refresh } = useBotRuntimeMetrics(botId, {
+        liveDetail: true,
+    });
 
     const [historyWindow, setHistoryWindow] = useState<MetricsHistoryWindow>({
         mode: 'preset',
@@ -762,12 +729,7 @@ export function BotRuntimeMetricsPageNext({
     /** false = 从 0 起（默认）；true = 贴合数据区间看小波动 */
     const [fitData, setFitData] = useState(false);
     const [showDots, setShowDots] = useState(false);
-    const history = useBotRuntimeMetricsHistory(
-        botId,
-        historyWindow,
-        retentionDays,
-        true,
-    );
+    const history = useBotRuntimeMetricsHistory(botId, historyWindow, retentionDays, true);
 
     useEffect(() => {
         if (historyWindow.mode !== 'preset') return;
@@ -783,37 +745,34 @@ export function BotRuntimeMetricsPageNext({
     const hostTotal = metrics?.memory?.host_total_bytes;
     const hostRatio =
         hostUsed != null &&
-            hostTotal != null &&
-            Number(hostTotal) > 0 &&
-            Number.isFinite(Number(hostUsed))
+        hostTotal != null &&
+        Number(hostTotal) > 0 &&
+        Number.isFinite(Number(hostUsed))
             ? Number(hostUsed) / Number(hostTotal)
             : null;
     // 主机 CPU/磁盘：本机 system_metrics / 远端 ncd-watch host-stats，不是进程探针
     const hostCpu =
         metrics?.memory?.host_cpu_percent != null &&
-            Number.isFinite(Number(metrics.memory.host_cpu_percent))
+        Number.isFinite(Number(metrics.memory.host_cpu_percent))
             ? Math.max(0, Math.min(100, Number(metrics.memory.host_cpu_percent)))
             : null;
     const hostDiskUsed = metrics?.memory?.host_disk_used_bytes;
     const hostDiskTotal = metrics?.memory?.host_disk_total_bytes;
     const hostDiskRatio =
         hostDiskUsed != null &&
-            hostDiskTotal != null &&
-            Number(hostDiskTotal) > 0 &&
-            Number.isFinite(Number(hostDiskUsed))
+        hostDiskTotal != null &&
+        Number(hostDiskTotal) > 0 &&
+        Number.isFinite(Number(hostDiskUsed))
             ? Number(hostDiskUsed) / Number(hostDiskTotal)
             : null;
-    const hostResourceHint = isRemote
-        ? '远端主机（ncd-watch host-stats）'
-        : '本机主机采样';
+    const hostResourceHint = isRemote ? '远端主机（ncd-watch host-stats）' : '本机主机采样';
 
     const probe = metrics?.probe ?? 'not_injected';
     const showInjectHint = probe === 'not_injected' || probe === 'error';
     const activeNodes = useMemo(
         () =>
-            (metrics?.nodes ?? []).filter(
-                (node) => Number(node.last_activity_at_ms ?? 0) > 0,
-            ).length,
+            (metrics?.nodes ?? []).filter((node) => Number(node.last_activity_at_ms ?? 0) > 0)
+                .length,
         [metrics?.nodes],
     );
 
@@ -822,48 +781,45 @@ export function BotRuntimeMetricsPageNext({
         history.refresh();
     };
 
-    const statusBanner =
-        !enabled ? (
-            <div className="rounded-sm bg-inset/50 px-3 py-2 text-2xs leading-relaxed text-text-secondary ring-1 ring-border-subtle">
-                实例指标未启用。请到「设置 · 监控」打开并保存，然后重启该 Bot。
-            </div>
-        ) : showInjectHint ? (
-            <div
-                className={cn(
-                    'rounded-sm px-3 py-2 text-2xs leading-relaxed ring-1',
-                    probe === 'error'
-                        ? 'bg-danger-soft/35 text-text-secondary ring-danger/20'
-                        : 'bg-warning-soft/35 text-text-secondary ring-warning/20',
-                )}
-            >
-                <div className="flex gap-2">
-                    <AlertTriangle
-                        aria-hidden
-                        size={14}
-                        className={cn(
-                            'mt-0.5 shrink-0',
-                            probe === 'error' ? 'text-danger' : 'text-warning',
-                        )}
-                    />
-                    <div className="min-w-0">
-                        <p className="font-medium text-text">
-                            {probe === 'error'
-                                ? '暂时无法读取运行时指标'
-                                : '探针尚未载入此 Bot'}
-                        </p>
-                        <p className="mt-0.5 text-text-tertiary">
-                            {probe === 'error'
-                                ? isRemote
-                                    ? '检查远端连接、ncd-watch 同步与探针注入。'
-                                    : '可尝试重启实例；持续失败请查 Desktop 日志。'
-                                : isRemote
-                                    ? '开启指标并同步 ncd-watch 后，在该机重启 Bot。'
-                                    : '设置 · 监控启用并保存后，重启该实例。'}
-                        </p>
-                    </div>
+    const statusBanner = !enabled ? (
+        <div className="rounded-sm bg-inset/50 px-3 py-2 text-2xs leading-relaxed text-text-secondary ring-1 ring-border-subtle">
+            实例指标未启用。请到「设置 · 监控」打开并保存，然后重启该 Bot。
+        </div>
+    ) : showInjectHint ? (
+        <div
+            className={cn(
+                'rounded-sm px-3 py-2 text-2xs leading-relaxed ring-1',
+                probe === 'error'
+                    ? 'bg-danger-soft/35 text-text-secondary ring-danger/20'
+                    : 'bg-warning-soft/35 text-text-secondary ring-warning/20',
+            )}
+        >
+            <div className="flex gap-2">
+                <AlertTriangle
+                    aria-hidden
+                    size={14}
+                    className={cn(
+                        'mt-0.5 shrink-0',
+                        probe === 'error' ? 'text-danger' : 'text-warning',
+                    )}
+                />
+                <div className="min-w-0">
+                    <p className="font-medium text-text">
+                        {probe === 'error' ? '暂时无法读取运行时指标' : '探针尚未载入此 Bot'}
+                    </p>
+                    <p className="mt-0.5 text-text-tertiary">
+                        {probe === 'error'
+                            ? isRemote
+                                ? '检查远端连接、ncd-watch 同步与探针注入。'
+                                : '可尝试重启实例；持续失败请查 Desktop 日志。'
+                            : isRemote
+                              ? '开启指标并同步 ncd-watch 后，在该机重启 Bot。'
+                              : '设置 · 监控启用并保存后，重启该实例。'}
+                    </p>
                 </div>
             </div>
-        ) : null;
+        </div>
+    ) : null;
 
     const overviewHelpText = isRemote
         ? '远端历史由同机 ncd-watch 续写，Desktop 退出后不会中断。'
@@ -897,12 +853,7 @@ export function BotRuntimeMetricsPageNext({
         <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
             <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle py-2.5">
                 <div className="flex min-w-0 items-center gap-2.5">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onBack}
-                        aria-label="返回列表"
-                    >
+                    <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回列表">
                         <ActionMotionIcon icon={ArrowLeft} size={16} />
                     </Button>
                     <div className="min-w-0">
@@ -915,10 +866,10 @@ export function BotRuntimeMetricsPageNext({
                                     probe === 'active'
                                         ? 'success'
                                         : probe === 'error'
-                                            ? 'danger'
-                                            : probe === 'stale'
-                                                ? 'warning'
-                                                : 'neutral'
+                                          ? 'danger'
+                                          : probe === 'stale'
+                                            ? 'warning'
+                                            : 'neutral'
                                 }
                                 appearance="soft"
                             >
@@ -992,11 +943,7 @@ export function BotRuntimeMetricsPageNext({
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden pt-2.5 lg:grid-cols-12 lg:grid-rows-2">
                 <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:col-span-7 lg:row-span-2 lg:grid-rows-2">
                     <div className="grid min-h-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
-                        <Panel
-                            title="总览"
-                            className="min-h-0"
-                            aside={overviewAside}
-                        >
+                        <Panel title="总览" className="min-h-0" aside={overviewAside}>
                             <div className="flex h-full min-h-0 flex-col gap-2">
                                 {statusBanner}
                                 <div className="@container min-h-0 flex-1">
@@ -1018,8 +965,8 @@ export function BotRuntimeMetricsPageNext({
                                                 (metrics?.nodes.length ?? 0) === 0
                                                     ? '暂无节点'
                                                     : activeNodes > 0
-                                                        ? undefined
-                                                        : '暂无活动'
+                                                      ? undefined
+                                                      : '暂无活动'
                                             }
                                         />
                                         <KpiTile
@@ -1044,8 +991,8 @@ export function BotRuntimeMetricsPageNext({
                                 hostCpu != null || hostDiskRatio != null || hostRatio != null
                                     ? `进程内存 + ${hostResourceHint}`
                                     : isRemote
-                                        ? '进程内存可用；主机 CPU/磁盘需 ncd-watch 写 host-stats'
-                                        : '进程内存可用；主机资源来自本机采样'
+                                      ? '进程内存可用；主机 CPU/磁盘需 ncd-watch 写 host-stats'
+                                      : '进程内存可用；主机资源来自本机采样'
                             }
                             className="min-h-0"
                         >
@@ -1055,14 +1002,10 @@ export function BotRuntimeMetricsPageNext({
                                     label="进程 RSS"
                                     value={formatBytes(rss)}
                                     detail={
-                                        heap != null
-                                            ? `堆 ${formatBytes(Number(heap))}`
-                                            : undefined
+                                        heap != null ? `堆 ${formatBytes(Number(heap))}` : undefined
                                     }
                                     ratio={
-                                        rss != null &&
-                                            hostTotal != null &&
-                                            Number(hostTotal) > 0
+                                        rss != null && hostTotal != null && Number(hostTotal) > 0
                                             ? Number(rss) / Number(hostTotal)
                                             : null
                                     }
@@ -1079,8 +1022,8 @@ export function BotRuntimeMetricsPageNext({
                                         hostRatio != null
                                             ? `占用 ${(hostRatio * 100).toFixed(1)}% · ${hostResourceHint}`
                                             : isRemote
-                                                ? '未读到 host-stats 内存（检查 ncd-watch）'
-                                                : '本机主机内存暂不可用'
+                                              ? '未读到 host-stats 内存（检查 ncd-watch）'
+                                              : '本机主机内存暂不可用'
                                     }
                                     ratio={hostRatio}
                                     unavailable={hostRatio == null}
@@ -1088,17 +1031,13 @@ export function BotRuntimeMetricsPageNext({
                                 <ResourceMeter
                                     icon={Cpu}
                                     label="CPU"
-                                    value={
-                                        hostCpu != null
-                                            ? `${hostCpu.toFixed(1)}%`
-                                            : '—'
-                                    }
+                                    value={hostCpu != null ? `${hostCpu.toFixed(1)}%` : '—'}
                                     detail={
                                         hostCpu != null
                                             ? `整机占用 · ${hostResourceHint}`
                                             : isRemote
-                                                ? '未读到 host-stats CPU（检查 ncd-watch）'
-                                                : '本机 CPU 暂不可用'
+                                              ? '未读到 host-stats CPU（检查 ncd-watch）'
+                                              : '本机 CPU 暂不可用'
                                     }
                                     ratio={hostCpu != null ? hostCpu / 100 : null}
                                     unavailable={hostCpu == null}
@@ -1115,8 +1054,8 @@ export function BotRuntimeMetricsPageNext({
                                         hostDiskRatio != null
                                             ? `占用 ${(hostDiskRatio * 100).toFixed(1)}% · ${hostResourceHint}`
                                             : isRemote
-                                                ? '未读到 host-stats 磁盘（检查 ncd-watch）'
-                                                : '本机磁盘暂不可用'
+                                              ? '未读到 host-stats 磁盘（检查 ncd-watch）'
+                                              : '本机磁盘暂不可用'
                                     }
                                     ratio={hostDiskRatio}
                                     unavailable={hostDiskRatio == null}
@@ -1130,8 +1069,7 @@ export function BotRuntimeMetricsPageNext({
                         className="min-h-0"
                         aside={
                             <span className="font-mono text-[10px] tabular-nums text-text-tertiary">
-                                出 {formatBytes(totals.bytesOut)} · 入{' '}
-                                {formatBytes(totals.bytesIn)}
+                                出 {formatBytes(totals.bytesOut)} · 入 {formatBytes(totals.bytesIn)}
                             </span>
                         }
                     >
@@ -1178,8 +1116,7 @@ export function BotRuntimeMetricsPageNext({
                             <div className="rounded-sm bg-inset/45 px-2 py-1.5 text-center">
                                 <p className="text-[10px] text-text-tertiary">字节 出/入</p>
                                 <p className="mt-0.5 truncate font-mono text-[11px] font-semibold tabular-nums text-text">
-                                    {formatBytes(totals.bytesOut)} /{' '}
-                                    {formatBytes(totals.bytesIn)}
+                                    {formatBytes(totals.bytesOut)} / {formatBytes(totals.bytesIn)}
                                 </p>
                             </div>
                         </div>
@@ -1191,9 +1128,7 @@ export function BotRuntimeMetricsPageNext({
                                 </div>
                             ) : history.error ? (
                                 <div className="flex h-full flex-col items-center justify-center gap-1.5 rounded-sm bg-danger-soft/25 px-3 text-center">
-                                    <p className="text-2xs font-medium text-danger">
-                                        历史读取失败
-                                    </p>
+                                    <p className="text-2xs font-medium text-danger">历史读取失败</p>
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -1210,9 +1145,7 @@ export function BotRuntimeMetricsPageNext({
                                         size={16}
                                         className="mb-1 text-text-disabled"
                                     />
-                                    <p className="text-2xs text-text-tertiary">
-                                        尚无历史采样点
-                                    </p>
+                                    <p className="text-2xs text-text-tertiary">尚无历史采样点</p>
                                 </div>
                             ) : (
                                 <BotRuntimeMetricsHistoryChart
@@ -1222,8 +1155,8 @@ export function BotRuntimeMetricsPageNext({
                                         series === 'rss'
                                             ? '内存 RSS'
                                             : series === 'eventsOut'
-                                                ? '出站事件'
-                                                : '入站 action'
+                                              ? '出站事件'
+                                              : '入站 action'
                                     }
                                     accentColor="var(--color-brand)"
                                     scaleMode={fitData ? 'fit' : 'zero'}

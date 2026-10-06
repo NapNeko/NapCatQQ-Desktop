@@ -80,10 +80,10 @@ function useKnownHosts(): { hosts: HostInfo[]; servers: ServerProfile[] } {
             state: p.state,
             health: p.health
                 ? {
-                    consecutiveFailures: p.health.consecutiveFailures,
-                    lastFailureReason: p.health.lastFailureReason ?? null,
-                    lastFailureAt: p.health.lastFailureAt ?? null,
-                }
+                      consecutiveFailures: p.health.consecutiveFailures,
+                      lastFailureReason: p.health.lastFailureReason ?? null,
+                      lastFailureAt: p.health.lastFailureAt ?? null,
+                  }
                 : undefined,
         }));
         return [local, ...remotes];
@@ -180,10 +180,7 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
                     }
                 })
                 .catch(() => {
-                    autoConnectCooldownUntil.set(
-                        profile.id,
-                        Date.now() + AUTO_CONNECT_COOLDOWN_MS,
-                    );
+                    autoConnectCooldownUntil.set(profile.id, Date.now() + AUTO_CONNECT_COOLDOWN_MS);
                 })
                 .finally(() => {
                     autoConnectInFlight.delete(profile.id);
@@ -214,8 +211,7 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
             hosts.map((h) => ({
                 queryKey: ['componentDetect', c.id, h.host_id],
                 queryFn: () => componentService.detectComponent(c.id, h.host_id),
-                enabled:
-                    detectEnabled && (hostReachability[h.host_id] ?? true),
+                enabled: detectEnabled && (hostReachability[h.host_id] ?? true),
                 staleTime: 30 * 1000,
             })),
         ),
@@ -257,10 +253,7 @@ export function useComponentsWarmup(): void {
         };
 
         const w = window as Window & {
-            requestIdleCallback?: (
-                cb: () => void,
-                opts?: { timeout: number },
-            ) => number;
+            requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
             cancelIdleCallback?: (id: number) => void;
         };
 
@@ -338,9 +331,7 @@ export function useComponents(): UseComponentsResult {
     // 让顶部 banner（读 error.message）能显示真因。
     const error = catalogError ? new Error(errorText(catalogError, '加载组件清单失败')) : null;
 
-    const isLoading =
-        catalogLoading ||
-        detectQueries.some((q) => q.isLoading);
+    const isLoading = catalogLoading || detectQueries.some((q) => q.isLoading);
 
     return {
         view,

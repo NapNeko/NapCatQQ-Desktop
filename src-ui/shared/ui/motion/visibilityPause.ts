@@ -6,10 +6,8 @@ type PausableAnim = {
     resume: () => void;
 };
 
-export function bindVisibilityPause(
-    anim: PausableAnim | null | undefined,
-): () => void {
-    if (!anim) return () => { };
+export function bindVisibilityPause(anim: PausableAnim | null | undefined): () => void {
+    if (!anim) return () => {};
 
     const onVis = () => {
         if (document.hidden) {

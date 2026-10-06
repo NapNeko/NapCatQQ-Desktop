@@ -10,7 +10,15 @@ import { retcodeHint } from '../../../core/domain/debug/errorCopy';
 import type { DebugActionSpec } from '../../../core/ipc/generated/debug/DebugActionSpec';
 import type { DebugParamDiffKind } from '../../../core/ipc/generated/debug/DebugParamDiffKind';
 import type { BackendType } from '../../../core/ipc/generated/domain/BackendType';
-import { ROLE_LABEL, countTreeRows, prettyJson, schemaRole, schemaTypeText, simplifySchema, valueText } from './viewHelpers';
+import {
+    ROLE_LABEL,
+    countTreeRows,
+    prettyJson,
+    schemaRole,
+    schemaTypeText,
+    simplifySchema,
+    valueText,
+} from './viewHelpers';
 
 const BACKEND_NAME: Record<BackendType, string> = { napcat: 'NapCat', snowluma: 'SnowLuma' };
 
@@ -27,7 +35,15 @@ function diffText(d: DebugParamDiffKind, here: string, other: string): string {
     }
 }
 
-function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
+function Section({
+    title,
+    children,
+    aside,
+}: {
+    title: string;
+    children: ReactNode;
+    aside?: ReactNode;
+}) {
     return (
         <section className="space-y-1.5">
             <div className="flex items-baseline gap-2">
@@ -57,18 +73,31 @@ export interface DocsPaneProps {
     onUseExample: (text: string) => void;
 }
 
-export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExample }: DocsPaneProps) {
+export const DocsPane = memo(function DocsPane({
+    spec,
+    backend,
+    dirty,
+    onUseExample,
+}: DocsPaneProps) {
     const model = useMemo(() => buildFormModel(spec.params_schema), [spec.params_schema]);
     const properties = (spec.params_schema.properties ?? {}) as Record<string, unknown>;
-    const returns = useMemo(() => (spec.returns_schema ? simplifySchema(spec.returns_schema) : null), [spec.returns_schema]);
-    const examples = spec.examples.filter((e): e is Record<string, unknown> => typeof e === 'object' && e !== null && !Array.isArray(e));
+    const returns = useMemo(
+        () => (spec.returns_schema ? simplifySchema(spec.returns_schema) : null),
+        [spec.returns_schema],
+    );
+    const examples = spec.examples.filter(
+        (e): e is Record<string, unknown> =>
+            typeof e === 'object' && e !== null && !Array.isArray(e),
+    );
     const here = backend ? BACKEND_NAME[backend] : '这边';
     const other = spec.other_backend ? BACKEND_NAME[spec.other_backend.backend] : '另一边';
 
     return (
         <div className="space-y-5 px-3 py-3 text-xs">
             <section className="space-y-1.5">
-                <p className="text-[13px] leading-relaxed text-text">{spec.summary || '（上游没有写简介）'}</p>
+                <p className="text-[13px] leading-relaxed text-text">
+                    {spec.summary || '（上游没有写简介）'}
+                </p>
                 {spec.description && spec.description.trim() !== spec.summary.trim() && (
                     <SimpleMarkdown text={spec.description} className="text-xs leading-relaxed" />
                 )}
@@ -79,15 +108,33 @@ export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExam
                 )}
             </section>
 
-            <Section title="参数" aside={<span className="text-2xs text-text-tertiary">{model.fields.length} 个</span>}>
+            <Section
+                title="参数"
+                aside={
+                    <span className="text-2xs text-text-tertiary">{model.fields.length} 个</span>
+                }
+            >
                 {model.fields.length === 0 ? (
                     <p className="text-text-tertiary">不需要参数。</p>
                 ) : (
-                    <div role="table" aria-label="参数表" className="overflow-hidden rounded-sm border border-border-subtle">
-                        <div role="row" className="grid grid-cols-[minmax(88px,30%)_minmax(64px,20%)_1fr] bg-inset text-2xs font-medium text-text-secondary">
-                            <span role="columnheader" className="px-2 py-1.5">参数</span>
-                            <span role="columnheader" className="px-2 py-1.5">类型</span>
-                            <span role="columnheader" className="px-2 py-1.5">说明</span>
+                    <div
+                        role="table"
+                        aria-label="参数表"
+                        className="overflow-hidden rounded-sm border border-border-subtle"
+                    >
+                        <div
+                            role="row"
+                            className="grid grid-cols-[minmax(88px,30%)_minmax(64px,20%)_1fr] bg-inset text-2xs font-medium text-text-secondary"
+                        >
+                            <span role="columnheader" className="px-2 py-1.5">
+                                参数
+                            </span>
+                            <span role="columnheader" className="px-2 py-1.5">
+                                类型
+                            </span>
+                            <span role="columnheader" className="px-2 py-1.5">
+                                说明
+                            </span>
                         </div>
                         {model.fields.map((f) => {
                             const raw = properties[f.name];
@@ -99,39 +146,68 @@ export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExam
                                     className="grid grid-cols-[minmax(88px,30%)_minmax(64px,20%)_1fr] border-t border-border-subtle/70"
                                 >
                                     <span role="cell" className="min-w-0 space-y-0.5 px-2 py-1.5">
-                                        <span className="block break-all font-mono text-[12px] text-text">{f.name}</span>
+                                        <span className="block break-all font-mono text-[12px] text-text">
+                                            {f.name}
+                                        </span>
                                         <span className="flex flex-wrap gap-1">
-                                            <span className={cn('text-[10px]', f.required ? 'text-danger' : 'text-text-tertiary')}>
+                                            <span
+                                                className={cn(
+                                                    'text-[10px]',
+                                                    f.required
+                                                        ? 'text-danger'
+                                                        : 'text-text-tertiary',
+                                                )}
+                                            >
                                                 {f.required ? '必填' : '选填'}
                                             </span>
                                             {role && ROLE_LABEL[role] && (
-                                                <span className="rounded-xs bg-brand-soft px-1 text-[10px] text-brand">{ROLE_LABEL[role]}</span>
+                                                <span className="rounded-xs bg-brand-soft px-1 text-[10px] text-brand">
+                                                    {ROLE_LABEL[role]}
+                                                </span>
                                             )}
                                         </span>
                                     </span>
-                                    <span role="cell" className="min-w-0 break-all px-2 py-1.5 font-mono text-[11px] text-text-secondary">
+                                    <span
+                                        role="cell"
+                                        className="min-w-0 break-all px-2 py-1.5 font-mono text-[11px] text-text-secondary"
+                                    >
                                         {schemaTypeText(raw)}
                                     </span>
-                                    <span role="cell" className="min-w-0 space-y-0.5 px-2 py-1.5 text-text-secondary">
-                                        {f.description && <span className="block leading-relaxed">{f.description}</span>}
+                                    <span
+                                        role="cell"
+                                        className="min-w-0 space-y-0.5 px-2 py-1.5 text-text-secondary"
+                                    >
+                                        {f.description && (
+                                            <span className="block leading-relaxed">
+                                                {f.description}
+                                            </span>
+                                        )}
                                         {f.defaultValue !== undefined && (
                                             <span className="block text-2xs text-text-tertiary">
-                                                默认 <code className="font-mono text-text-secondary">{valueText(f.defaultValue) || '""'}</code>
+                                                默认{' '}
+                                                <code className="font-mono text-text-secondary">
+                                                    {valueText(f.defaultValue) || '""'}
+                                                </code>
                                             </span>
                                         )}
                                         {f.enumValues && f.enumValues.length > 0 && (
                                             <span className="block text-2xs text-text-tertiary">
                                                 可选{' '}
                                                 {f.enumValues.map((e, i) => (
-                                                    <code key={i} className="mr-1 font-mono text-text-secondary">
+                                                    <code
+                                                        key={i}
+                                                        className="mr-1 font-mono text-text-secondary"
+                                                    >
                                                         {JSON.stringify(e.value)}
                                                     </code>
                                                 ))}
                                             </span>
                                         )}
-                                        {!f.description && f.defaultValue === undefined && !f.enumValues && (
-                                            <span className="text-text-disabled">—</span>
-                                        )}
+                                        {!f.description &&
+                                            f.defaultValue === undefined &&
+                                            !f.enumValues && (
+                                                <span className="text-text-disabled">—</span>
+                                            )}
                                     </span>
                                 </div>
                             );
@@ -143,7 +219,9 @@ export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExam
             <Section title="返回">
                 {typeof returns === 'string' ? (
                     // 返回值本身是个标量（null、boolean……）：一行字比一棵只有根的树好读
-                    <code className="block rounded-sm bg-inset px-2.5 py-1.5 font-mono text-[12px] text-text-secondary">{returns}</code>
+                    <code className="block rounded-sm bg-inset px-2.5 py-1.5 font-mono text-[12px] text-text-secondary">
+                        {returns}
+                    </code>
                 ) : returns !== null ? (
                     <SizedTree value={returns} />
                 ) : spec.returns_text ? (
@@ -153,7 +231,9 @@ export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExam
                 )}
                 {spec.return_example !== null && spec.return_example !== undefined && (
                     <details className="group">
-                        <summary className="cursor-pointer select-none text-2xs text-text-secondary hover:text-text">返回示例</summary>
+                        <summary className="cursor-pointer select-none text-2xs text-text-secondary hover:text-text">
+                            返回示例
+                        </summary>
                         <div className="mt-1.5">
                             <SizedTree value={spec.return_example} depth={2} />
                         </div>
@@ -176,11 +256,15 @@ export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExam
                     <ul className="space-y-1">
                         {spec.error_examples.map((e, i) => (
                             <li key={i} className="flex gap-2">
-                                <code className="shrink-0 rounded-xs bg-danger-soft px-1 font-mono text-[11px] text-danger">{e.retcode}</code>
+                                <code className="shrink-0 rounded-xs bg-danger-soft px-1 font-mono text-[11px] text-danger">
+                                    {e.retcode}
+                                </code>
                                 <span className="min-w-0 text-text-secondary">
                                     {e.message}
                                     {retcodeHint(e.retcode) && (
-                                        <span className="block text-2xs text-text-tertiary">{retcodeHint(e.retcode)}</span>
+                                        <span className="block text-2xs text-text-tertiary">
+                                            {retcodeHint(e.retcode)}
+                                        </span>
                                     )}
                                 </span>
                             </li>
@@ -208,9 +292,19 @@ export const DocsPane = memo(function DocsPane({ spec, backend, dirty, onUseExam
                     ) : (
                         <div className="overflow-hidden rounded-sm border border-border-subtle">
                             {spec.other_backend.diffs.map((d, i) => (
-                                <div key={i} className={cn('flex gap-3 px-2 py-1.5', i > 0 && 'border-t border-border-subtle/70')}>
-                                    <span className="w-[30%] shrink-0 break-all font-mono text-[12px] text-text">{d.name}</span>
-                                    <span className="min-w-0 text-text-secondary">{diffText(d.diff, here, other)}</span>
+                                <div
+                                    key={i}
+                                    className={cn(
+                                        'flex gap-3 px-2 py-1.5',
+                                        i > 0 && 'border-t border-border-subtle/70',
+                                    )}
+                                >
+                                    <span className="w-[30%] shrink-0 break-all font-mono text-[12px] text-text">
+                                        {d.name}
+                                    </span>
+                                    <span className="min-w-0 text-text-secondary">
+                                        {diffText(d.diff, here, other)}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -241,11 +335,15 @@ function ExampleCard({
     const text = formatParams(example);
     return (
         <div className="overflow-hidden rounded-sm border border-border-subtle">
-            <pre className="max-h-48 overflow-auto bg-inset px-2.5 py-2 font-mono text-[11.5px] leading-relaxed text-text">{prettyJson(example)}</pre>
+            <pre className="max-h-48 overflow-auto bg-inset px-2.5 py-2 font-mono text-[11.5px] leading-relaxed text-text">
+                {prettyJson(example)}
+            </pre>
             <div className="flex items-center justify-end gap-2 border-t border-border-subtle/70 px-2 py-1.5">
                 {confirming ? (
                     <>
-                        <span className="mr-auto text-2xs text-warning">会覆盖你改过的参数，确定？</span>
+                        <span className="mr-auto text-2xs text-warning">
+                            会覆盖你改过的参数，确定？
+                        </span>
                         <button
                             type="button"
                             onClick={() => setConfirming(false)}

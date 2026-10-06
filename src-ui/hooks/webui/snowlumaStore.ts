@@ -36,20 +36,13 @@ function ensureSubscribed(): void {
 
 function isDaemonState(v: unknown): v is DaemonState {
     return (
-        v === 'stopped' ||
-        v === 'starting' ||
-        v === 'ready' ||
-        v === 'stopping' ||
-        v === 'crashed'
+        v === 'stopped' || v === 'starting' || v === 'ready' || v === 'stopping' || v === 'crashed'
     );
 }
 
 function isLoginState(v: unknown): v is SnowLumaLoginState {
     return (
-        v === 'starting' ||
-        v === 'waiting_for_qr_scan' ||
-        v === 'logged_in' ||
-        v === 'disconnected'
+        v === 'starting' || v === 'waiting_for_qr_scan' || v === 'logged_in' || v === 'disconnected'
     );
 }
 
@@ -89,9 +82,7 @@ async function hydrateFromBackend(): Promise<void> {
 
         const hasAny =
             Object.keys(daemonStates).length > 0 ||
-            snap.bots.some(
-                (b) => b.injected || b.endpoints_ready || b.login_state || b.uin,
-            );
+            snap.bots.some((b) => b.injected || b.endpoints_ready || b.login_state || b.uin);
         // reconcile 可能仍在写表:空时退避再试,有数据后停
         if (!hasAny && hydrateAttempts < MAX_EMPTY_HYDRATE_RETRIES) {
             hydrateAttempts += 1;

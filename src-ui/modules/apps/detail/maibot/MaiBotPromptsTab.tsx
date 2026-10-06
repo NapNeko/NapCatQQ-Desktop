@@ -5,8 +5,16 @@ import { useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { Select } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { promptDisplayName, promptLanguageLabel, sortPrompts } from '../../../../core/domain/apps/maibotPrompts';
-import type { AppInstance, MaiBotPromptInfo, MaiBotRuntimeStatus } from '../../../../core/ipc/types';
+import {
+    promptDisplayName,
+    promptLanguageLabel,
+    sortPrompts,
+} from '../../../../core/domain/apps/maibotPrompts';
+import type {
+    AppInstance,
+    MaiBotPromptInfo,
+    MaiBotRuntimeStatus,
+} from '../../../../core/ipc/types';
 import { useMaiBotPromptCatalog, type PromptMode } from '../../../../hooks/apps/useMaiBotPrompts';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { MaiBotLiveGate, maibotLive } from './MaiBotLiveGate';
@@ -33,7 +41,9 @@ const PromptRow: React.FC<{
             <span className={cn('block truncate text-[13px] text-text', selected && 'font-medium')}>
                 {promptDisplayName(info)}
             </span>
-            <span className="block truncate font-mono text-2xs text-text-tertiary">{info.name.replace(/\.prompt$/, '')}</span>
+            <span className="block truncate font-mono text-2xs text-text-tertiary">
+                {info.name.replace(/\.prompt$/, '')}
+            </span>
         </span>
         {dirty ? (
             <span title="有没保存的改动" className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
@@ -58,21 +68,28 @@ export const MaiBotPromptsTab: React.FC<{
     const [query, setQuery] = useState('');
     const [advancedOpen, setAdvancedOpen] = useState(false);
 
-    if (mode === 'waiting') return <MaiBotLiveGate status={status} what="提示词" onStart={onStart} starting={starting} />;
+    if (mode === 'waiting')
+        return (
+            <MaiBotLiveGate status={status} what="提示词" onStart={onStart} starting={starting} />
+        );
     if (catalog.isLoading) return <PaneLoading text="正在读取提示词…" />;
-    if (!catalog.data) return <PaneLoadError message="读取提示词失败" onRetry={() => void catalog.refetch()} />;
+    if (!catalog.data)
+        return <PaneLoadError message="读取提示词失败" onRetry={() => void catalog.refetch()} />;
 
     const data = catalog.data;
     const languages = data.languages.map((l) => l.language);
-    const lang = language && languages.includes(language)
-        ? language
-        : languages.includes(data.active_language)
-          ? data.active_language
-          : languages[0];
+    const lang =
+        language && languages.includes(language)
+            ? language
+            : languages.includes(data.active_language)
+              ? data.active_language
+              : languages[0];
     const prompts = sortPrompts(data.languages.find((l) => l.language === lang)?.prompts ?? []);
     const q = query.trim().toLowerCase();
     const shown = q
-        ? prompts.filter((p) => [p.display_name, p.name, p.description].some((s) => s.toLowerCase().includes(q)))
+        ? prompts.filter((p) =>
+              [p.display_name, p.name, p.description].some((s) => s.toLowerCase().includes(q)),
+          )
         : prompts;
     const basic = shown.filter((p) => !p.advanced);
     const advanced = shown.filter((p) => p.advanced);
@@ -99,7 +116,10 @@ export const MaiBotPromptsTab: React.FC<{
                             className="[&_button]:h-8 [&_button]:min-h-8 [&_button]:text-[12.5px]"
                             items={languages.map((l) => ({
                                 value: l,
-                                label: l === data.active_language ? `${promptLanguageLabel(l)} · 麦麦在用` : promptLanguageLabel(l),
+                                label:
+                                    l === data.active_language
+                                        ? `${promptLanguageLabel(l)} · 麦麦在用`
+                                        : promptLanguageLabel(l),
                             }))}
                             value={lang}
                             onValueChange={(l) => {
@@ -125,11 +145,15 @@ export const MaiBotPromptsTab: React.FC<{
                 </div>
                 <nav className="min-h-0 flex-1 overflow-y-auto p-1.5" aria-label="提示词模板">
                     {shown.length === 0 ? (
-                        <p className="px-2.5 py-6 text-center text-xs text-text-tertiary">没有对得上的模板</p>
+                        <p className="px-2.5 py-6 text-center text-xs text-text-tertiary">
+                            没有对得上的模板
+                        </p>
                     ) : (
                         <>
                             {basic.length > 0 && (
-                                <p className="px-2.5 pb-1 pt-1.5 text-2xs font-medium text-text-tertiary">常用</p>
+                                <p className="px-2.5 pb-1 pt-1.5 text-2xs font-medium text-text-tertiary">
+                                    常用
+                                </p>
                             )}
                             {basic.map(row)}
                             {advanced.length > 0 && (
@@ -142,7 +166,10 @@ export const MaiBotPromptsTab: React.FC<{
                                     高级 · {advanced.length}
                                     <ChevronDown
                                         size={12}
-                                        className={cn('ml-auto transition-transform duration-200', showAdvanced && 'rotate-180')}
+                                        className={cn(
+                                            'ml-auto transition-transform duration-200',
+                                            showAdvanced && 'rotate-180',
+                                        )}
                                     />
                                 </button>
                             )}

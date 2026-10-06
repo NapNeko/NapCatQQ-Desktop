@@ -114,9 +114,7 @@ export const componentService = {
     },
 
     // QQ 系统依赖检测（仅 Linux 远端）。
-    detectQqDependencies: async (
-        hostId: string,
-    ): Promise<QqDependencyReport> => {
+    detectQqDependencies: async (hostId: string): Promise<QqDependencyReport> => {
         if (isTauri) return invoke<QqDependencyReport>('detect_qq_dependencies', { hostId });
         return withMockDelay(
             {
@@ -145,10 +143,7 @@ export const componentService = {
     },
 
     // 记住远端服务器的 sudo 密码（用于提权操作）。
-    rememberSudoPassword: async (
-        serverId: string,
-        password: string,
-    ): Promise<void> => {
+    rememberSudoPassword: async (serverId: string, password: string): Promise<void> => {
         return invoke<void>('remember_sudo_password', {
             serverId,
             password,

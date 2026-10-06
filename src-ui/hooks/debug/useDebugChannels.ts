@@ -17,7 +17,11 @@ export function useDebugChannels(botId: string | null) {
             try {
                 return await onebotDebugService.channels(botId);
             } catch (err) {
-                pushErrorBar({ key: `debug-channels:${botId}`, title: '读取通道列表失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: `debug-channels:${botId}`,
+                    title: '读取通道列表失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },
@@ -36,7 +40,12 @@ export function useTestChannel() {
             const key = channelIdKey(channel);
             client.setQueryData<DebugChannels>(debugChannelsKey(botId), (old) =>
                 old
-                    ? { ...old, channels: old.channels.map((c) => (channelIdKey(c.id) === key ? info : c)) }
+                    ? {
+                          ...old,
+                          channels: old.channels.map((c) =>
+                              channelIdKey(c.id) === key ? info : c,
+                          ),
+                      }
                     : old,
             );
         },

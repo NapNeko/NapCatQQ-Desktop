@@ -5,14 +5,26 @@ import { activeReceivers, receiverStateCopy } from './receiverCopy';
 
 describe('receiverStateCopy', () => {
     it('四种状态', () => {
-        expect(receiverStateCopy({ state: 'connecting' })).toEqual({ text: '连接中', tone: 'neutral' });
-        expect(receiverStateCopy({ state: 'connected' })).toEqual({ text: '已连接', tone: 'success' });
-        expect(receiverStateCopy({ state: 'reconnecting', attempt: 3, retry_in_ms: 3500 })).toEqual({
-            text: '重连中（第 3 次，4 秒后）',
-            tone: 'warning',
+        expect(receiverStateCopy({ state: 'connecting' })).toEqual({
+            text: '连接中',
+            tone: 'neutral',
         });
-        expect(receiverStateCopy({ state: 'reconnecting', attempt: 1, retry_in_ms: 0 }).text).toBe('重连中（第 1 次，1 秒后）');
-        expect(receiverStateCopy({ state: 'stopped', reason: 'Bot 已停止' }).text).toBe('已停止：Bot 已停止');
+        expect(receiverStateCopy({ state: 'connected' })).toEqual({
+            text: '已连接',
+            tone: 'success',
+        });
+        expect(receiverStateCopy({ state: 'reconnecting', attempt: 3, retry_in_ms: 3500 })).toEqual(
+            {
+                text: '重连中（第 3 次，4 秒后）',
+                tone: 'warning',
+            },
+        );
+        expect(receiverStateCopy({ state: 'reconnecting', attempt: 1, retry_in_ms: 0 }).text).toBe(
+            '重连中（第 1 次，1 秒后）',
+        );
+        expect(receiverStateCopy({ state: 'stopped', reason: 'Bot 已停止' }).text).toBe(
+            '已停止：Bot 已停止',
+        );
         expect(receiverStateCopy({ state: 'stopped', reason: '' }).text).toBe('已停止');
     });
 });
@@ -29,7 +41,11 @@ describe('activeReceivers', () => {
     });
 
     it('去掉已停止的', () => {
-        const list = [r('a', { state: 'connected' }), r('b', { state: 'stopped', reason: 'x' }), r('c', { state: 'connecting' })];
+        const list = [
+            r('a', { state: 'connected' }),
+            r('b', { state: 'stopped', reason: 'x' }),
+            r('c', { state: 'connecting' }),
+        ];
         expect(activeReceivers(list).map((x) => x.bot_id)).toEqual(['a', 'c']);
         expect(activeReceivers(undefined)).toEqual([]);
     });

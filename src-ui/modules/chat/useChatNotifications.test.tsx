@@ -9,16 +9,44 @@ import { useChatNotifications } from './useChatNotifications';
 
 describe('chat notification hydration', () => {
     it('keeps the chat usable when the frontend reloads before the native process is rebuilt', async () => {
-        const target: DebugTarget = { bot_id: '99', qq_id: 99, name: '测试', backend: 'snowluma', host: { kind: 'local' }, running: false, online: false };
-        const old = { v: 1, accounts: [{ target, preference: { botId: '99', selfId: '99', enabled: false, background: false, tray: false }, unread: 2, connection: { state: 'stopped', reason: '预览' }, error: null }] };
+        const target: DebugTarget = {
+            bot_id: '99',
+            qq_id: 99,
+            name: '测试',
+            backend: 'snowluma',
+            host: { kind: 'local' },
+            running: false,
+            online: false,
+        };
+        const old = {
+            v: 1,
+            accounts: [
+                {
+                    target,
+                    preference: {
+                        botId: '99',
+                        selfId: '99',
+                        enabled: false,
+                        background: false,
+                        tray: false,
+                    },
+                    unread: 2,
+                    connection: { state: 'stopped', reason: '预览' },
+                    error: null,
+                },
+            ],
+        };
         vi.spyOn(chatDesktopService, 'status').mockResolvedValue(old as ChatDesktopStatus);
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+        const wrapper = ({ children }: { children: ReactNode }) => (
+            <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
         const hook = renderHook(() => useChatNotifications(target, []), { wrapper });
         await waitFor(() => expect(client.getQueryData(['chat', 'desktop'])).toEqual(old));
         expect(hook.result.current.hidden.size).toBe(0);
         expect(hook.result.current.ignored.size).toBe(0);
         expect(hook.result.current.qqMuted.size).toBe(0);
-        hook.unmount(); client.clear();
+        hook.unmount();
+        client.clear();
     });
 });

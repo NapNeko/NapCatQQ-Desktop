@@ -25,7 +25,13 @@ afterEach(() => {
 function renderBuilder(entry: ComposerEntry, onApply = vi.fn(), replyId: number | null = null) {
     render(
         <TooltipProvider>
-            <MessageBuilderDialog open onOpenChange={() => {}} entry={entry} replyId={replyId} onApply={onApply} />
+            <MessageBuilderDialog
+                open
+                onOpenChange={() => {}}
+                entry={entry}
+                replyId={replyId}
+                onApply={onApply}
+            />
         </TooltipProvider>,
     );
     return onApply;
@@ -61,13 +67,17 @@ describe('MessageBuilder', () => {
         expect(textboxes().map((t) => t.value)).toEqual(['甲', '乙', '丙']);
 
         // 第一行下移 → 乙 甲 丙；顶上的行没有上移、最底的行没有下移（按钮置灰）
-        await userEvent.setup().click(screen.getAllByRole('button', { name: '下移' })[0] as HTMLElement);
+        await userEvent
+            .setup()
+            .click(screen.getAllByRole('button', { name: '下移' })[0] as HTMLElement);
         expect(textboxes().map((t) => t.value)).toEqual(['乙', '甲', '丙']);
         expect(screen.getAllByRole('button', { name: '上移' })[0]).toBeDisabled();
         expect(screen.getAllByRole('button', { name: '下移' })[2]).toBeDisabled();
 
         // 删掉「甲」那一行（现在排第二）
-        await userEvent.setup().click(screen.getAllByRole('button', { name: '删掉这段' })[1] as HTMLElement);
+        await userEvent
+            .setup()
+            .click(screen.getAllByRole('button', { name: '删掉这段' })[1] as HTMLElement);
         expect(textboxes().map((t) => t.value)).toEqual(['乙', '丙']);
     });
 
@@ -82,7 +92,11 @@ describe('MessageBuilder', () => {
 
     it('@ 段折叠回输入框时复用旧名字', async () => {
         const user = userEvent.setup();
-        const onApply = renderBuilder({ text: '@阿强 你好', mentions: [{ qq: '10003', label: '@阿强' }], rich: [] });
+        const onApply = renderBuilder({
+            text: '@阿强 你好',
+            mentions: [{ qq: '10003', label: '@阿强' }],
+            rich: [],
+        });
         await screen.findByRole('dialog', { name: '消息构建器' });
         await user.click(screen.getByRole('button', { name: '使用这些段' }));
         expect(onApply).toHaveBeenCalledWith({
@@ -99,7 +113,9 @@ describe('MessageBuilder', () => {
 
         await user.click(screen.getByRole('combobox'));
         await user.click(within(await screen.findByRole('listbox')).getByText('图片'));
-        fireEvent.change(screen.getByLabelText('图片地址'), { target: { value: 'http://a/1.png' } });
+        fireEvent.change(screen.getByLabelText('图片地址'), {
+            target: { value: 'http://a/1.png' },
+        });
 
         // 预览和消息段 JSON 跟着变
         expect(screen.getByText('看看这个[图片]')).toBeInTheDocument();

@@ -5,7 +5,12 @@
 // 打开构建器 = `[...rich, ...文字换成的段]` 整个给到段列表；写回时整份只有 text / at
 // 才折叠回输入框，否则全留在 rich、输入框清空 —— 任何顺序组合都只用一份数据表达，不复读。
 
-import { buildMessageSegments, mentionLabel, type ComposerDraft, type Mention } from './composerModel';
+import {
+    buildMessageSegments,
+    mentionLabel,
+    type ComposerDraft,
+    type Mention,
+} from './composerModel';
 import type { Segment } from './segments';
 
 export interface ComposerEntry extends ComposerDraft {
@@ -15,7 +20,8 @@ export interface ComposerEntry extends ComposerDraft {
 
 export const EMPTY_ENTRY: ComposerEntry = { text: '', mentions: [], rich: [] };
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+const str = (v: unknown): string =>
+    typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
 /** 草稿 → 段列表：rich 在前，手打文字按 @ 名单切成末尾的 text / at */
 export function parseEntryToSegments(entry: ComposerEntry): Segment[] {
@@ -27,13 +33,19 @@ export function parseEntryToSegments(entry: ComposerEntry): Segment[] {
  * 没有的话段里已有的第一个 reply 提到最前，多余 reply 段丢掉（OneBot 只认开头的回复），
  * 和 SegmentView「回复段不管排在哪都画在最上面」同一个口径。
  */
-export function normalizeReplies(segments: readonly Segment[], chipReplyId?: number | null): Segment[] {
+export function normalizeReplies(
+    segments: readonly Segment[],
+    chipReplyId?: number | null,
+): Segment[] {
     const own = segments.find((s) => s.type === 'reply') ?? null;
     if (chipReplyId === undefined || chipReplyId === null) {
         if (!own) return segments as Segment[];
         return [own, ...segments.filter((s) => s.type !== 'reply')];
     }
-    return [{ type: 'reply', data: { id: String(chipReplyId) } }, ...segments.filter((s) => s.type !== 'reply')];
+    return [
+        { type: 'reply', data: { id: String(chipReplyId) } },
+        ...segments.filter((s) => s.type !== 'reply'),
+    ];
 }
 
 /** 发送时用的最终消息段 */
@@ -55,7 +67,10 @@ export function hasMessageContent(segments: readonly Segment[]): boolean {
  * at 段的显示名优先用段里的 name，其次在 avoid（输入框现有 @ 名单）里找同 QQ 的旧名字复用，
  * 来回编辑不会把「@阿强」退化成「@10003」；都没有就显示 QQ 号，重名撞车按 mentionLabel 带 (QQ 号)。
  */
-export function segmentsToDraft(segments: readonly Segment[], avoid: readonly Mention[] = []): ComposerDraft | null {
+export function segmentsToDraft(
+    segments: readonly Segment[],
+    avoid: readonly Mention[] = [],
+): ComposerDraft | null {
     if (segments.some((s) => s.type !== 'text' && s.type !== 'at')) return null;
     const displayName = (seg: Segment): string => {
         const qq = str(seg.data.qq);
@@ -72,7 +87,12 @@ export function segmentsToDraft(segments: readonly Segment[], avoid: readonly Me
     const mentions: Mention[] = [];
     const usedFromAvoid = new Set<number>();
     const append = (piece: string, isAt: boolean) => {
-        text = text === '' ? piece : /\s$/.test(text) || /^\s/.test(piece) ? text + piece : `${text} ${piece}`;
+        text =
+            text === ''
+                ? piece
+                : /\s$/.test(text) || /^\s/.test(piece)
+                  ? text + piece
+                  : `${text} ${piece}`;
         lastWasAt = isAt;
     };
     for (const seg of segments) {
@@ -184,7 +204,9 @@ export function segmentIssue(seg: Segment): string | null {
         case 'reply':
             return /^-?\d+$/.test(str(d.id)) ? null : '回复的消息 id 是数字';
         case 'poke':
-            return /^\d+$/.test(str(d.type)) && /^\d+$/.test(str(d.id)) ? null : '类型和 id 都是数字';
+            return /^\d+$/.test(str(d.type)) && /^\d+$/.test(str(d.id))
+                ? null
+                : '类型和 id 都是数字';
         case 'markdown':
             return str(d.content).trim() === '' ? '内容是空的' : null;
         case 'json': {

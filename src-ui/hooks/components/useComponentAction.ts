@@ -10,10 +10,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { componentService } from '../../core/services/component.service';
 import { desktopUpdateService } from '../../core/services/desktop-update.service';
-import {
-    componentActionStore,
-    targetKey,
-} from './componentActionStore';
+import { componentActionStore, targetKey } from './componentActionStore';
 import { deploymentTaskStore } from '../task-queue/deploymentTaskStore';
 import { canCancelDeploymentTask } from '../../core/domain/task-queue/display';
 import type { ActionProgressView } from '../../core/domain/components/progress';
@@ -37,10 +34,7 @@ export interface UseComponentActionResult {
     /** 取消进行中的 task。 */
     cancelAction: (taskId: string) => Promise<void>;
     /** 拿某 (component, host) 当前活跃 task 的进度（无活跃返回 null）。 */
-    getProgressFor: (
-        componentId: ComponentId,
-        hostId: string,
-    ) => ComponentActionProgress | null;
+    getProgressFor: (componentId: ComponentId, hostId: string) => ComponentActionProgress | null;
     /** 检查某 (component, host) 是否有进行中的任务。 */
     isInstalling: (componentId: ComponentId, hostId: string) => boolean;
     /**
@@ -141,27 +135,16 @@ export function useComponentAction(): UseComponentActionResult {
     );
 
     const onTaskTerminal = useCallback(
-        (
-            taskId: string,
-            cb: (status: 'success' | 'failed' | 'cancelled') => void,
-        ) => {
+        (taskId: string, cb: (status: 'success' | 'failed' | 'cancelled') => void) => {
             // 已经在终态：下一帧 fire，让调用方有机会先 store ref/state
             const initial = componentActionStore.getSnapshot().tasks[taskId]?.status;
-            if (
-                initial === 'success' ||
-                initial === 'failed' ||
-                initial === 'cancelled'
-            ) {
+            if (initial === 'success' || initial === 'failed' || initial === 'cancelled') {
                 queueMicrotask(() => cb(initial));
-                return () => { };
+                return () => {};
             }
             const unsub = componentActionStore.subscribe(() => {
                 const status = componentActionStore.getSnapshot().tasks[taskId]?.status;
-                if (
-                    status === 'success' ||
-                    status === 'failed' ||
-                    status === 'cancelled'
-                ) {
+                if (status === 'success' || status === 'failed' || status === 'cancelled') {
                     cb(status);
                     unsub();
                 }

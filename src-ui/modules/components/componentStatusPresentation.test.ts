@@ -55,7 +55,10 @@ describe('Node.js component actions', () => {
         expect(
             shouldOfferManagedNodeInstall({
                 state: 'installed',
-                detected: { version: '24.18.0', source: 'C:/ProgramData/NapCatQQ Desktop/NodeJs/node.exe' },
+                detected: {
+                    version: '24.18.0',
+                    source: 'C:/ProgramData/NapCatQQ Desktop/NodeJs/node.exe',
+                },
             }),
         ).toBe(true);
     });

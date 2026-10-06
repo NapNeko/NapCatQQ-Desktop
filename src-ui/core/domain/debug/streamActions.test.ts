@@ -49,10 +49,14 @@ describe('要不要走流式命令', () => {
     });
 
     it('通道上前端就能确定的只有点名的 HTTP / WS', () => {
-        expect(streamChannelBlocker('download_file_stream', 0, { kind: 'http', name: 'h' })).toBe(STREAM_CHANNEL_REASON);
+        expect(streamChannelBlocker('download_file_stream', 0, { kind: 'http', name: 'h' })).toBe(
+            STREAM_CHANNEL_REASON,
+        );
         expect(streamChannelBlocker('download_file_stream', 0, { kind: 'internal' })).toBeNull();
         expect(streamChannelBlocker('download_file_stream', 0, { kind: 'auto' })).toBeNull();
-        expect(streamChannelBlocker('upload_file_stream', 1, { kind: 'ws', name: 'w' })).toBe(STREAM_CHANNEL_REASON);
+        expect(streamChannelBlocker('upload_file_stream', 1, { kind: 'ws', name: 'w' })).toBe(
+            STREAM_CHANNEL_REASON,
+        );
         expect(streamChannelBlocker('upload_file_stream', 0, { kind: 'ws', name: 'w' })).toBeNull();
         expect(streamChannelBlocker('send_msg', 1, { kind: 'http', name: 'h' })).toBeNull();
     });
@@ -80,8 +84,12 @@ describe('进度文案', () => {
     });
 
     it('总量已知带百分比，未知只写已传量和块数', () => {
-        expect(progressText(beat({ done_bytes: 12 * 1024, total_bytes: 48 * 1024 }))).toBe('上传中 12.0 KiB / 48.0 KiB（25%）');
-        expect(progressText(beat({ stage: 'downloading', done_bytes: 1024, done_chunks: 3 }))).toBe('下载中 1.0 KiB，3 块');
+        expect(progressText(beat({ done_bytes: 12 * 1024, total_bytes: 48 * 1024 }))).toBe(
+            '上传中 12.0 KiB / 48.0 KiB（25%）',
+        );
+        expect(progressText(beat({ stage: 'downloading', done_bytes: 1024, done_chunks: 3 }))).toBe(
+            '下载中 1.0 KiB，3 块',
+        );
         expect(progressText(beat({ stage: 'downloading' }))).toBe('下载中 0 B');
         expect(progressText(beat({ stage: 'reading' }))).toBe('读本机文件 a.png…');
         expect(progressText(beat({ stage: 'calling' }))).toBe('正在调用…');

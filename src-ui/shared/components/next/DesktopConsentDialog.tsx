@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ArrowDown,
-    Check,
-    CheckCircle2,
-    ChevronRight,
-    FileText,
-} from 'lucide-react';
+import { ArrowDown, Check, CheckCircle2, ChevronRight, FileText } from 'lucide-react';
 import {
     Button,
     Checkbox,
@@ -51,9 +45,7 @@ export function DesktopConsentDialog({
     const docs = payload?.documents ?? [];
     const active = docs.find((d) => d.id === activeId) ?? docs[0];
     const isGate = mode === 'gate';
-    const payloadKey = payload
-        ? `${payload.version}:${docs.map((d) => d.id).join('|')}`
-        : 'empty';
+    const payloadKey = payload ? `${payload.version}:${docs.map((d) => d.id).join('|')}` : 'empty';
 
     const allRead = useMemo(() => {
         if (!isGate) return true;
@@ -69,23 +61,15 @@ export function DesktopConsentDialog({
         const maxScroll = el.scrollHeight - el.clientHeight;
         if (maxScroll <= SCROLL_THRESHOLD_PX) {
             setScrollProgress(100);
-            setReadById((prev) =>
-                prev[active.id] ? prev : { ...prev, [active.id]: true },
-            );
+            setReadById((prev) => (prev[active.id] ? prev : { ...prev, [active.id]: true }));
             return;
         }
-        const current = Math.min(
-            100,
-            Math.max(0, Math.round((el.scrollTop / maxScroll) * 100)),
-        );
+        const current = Math.min(100, Math.max(0, Math.round((el.scrollTop / maxScroll) * 100)));
         setScrollProgress(current);
 
-        const atBottom =
-            el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD_PX;
+        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_THRESHOLD_PX;
         if (atBottom) {
-            setReadById((prev) =>
-                prev[active.id] ? prev : { ...prev, [active.id]: true },
-            );
+            setReadById((prev) => (prev[active.id] ? prev : { ...prev, [active.id]: true }));
         }
     }, [active]);
 
@@ -144,8 +128,8 @@ export function DesktopConsentDialog({
                         {isGate
                             ? '首次启动或条款更新时须阅读并确认。'
                             : payload?.accepted_at
-                                ? `当前已同意（${formatAcceptedAt(payload.accepted_at)}）。`
-                                : '本机还没有同意记录。'}
+                              ? `当前已同意（${formatAcceptedAt(payload.accepted_at)}）。`
+                              : '本机还没有同意记录。'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -332,10 +316,10 @@ export function DesktopConsentDialog({
                             {submitting
                                 ? '提交中…'
                                 : allRead
-                                    ? agreed
-                                        ? '同意并进入'
-                                        : '请勾选同意'
-                                    : '请读完全部条款'}
+                                  ? agreed
+                                      ? '同意并进入'
+                                      : '请勾选同意'
+                                  : '请读完全部条款'}
                         </Button>
                     ) : null}
                 </DialogFooter>

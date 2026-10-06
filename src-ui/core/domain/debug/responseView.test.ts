@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { copyAllResponseCopy, formatBytes, isClickableId, responseFileName, tableView } from './responseView';
+import {
+    copyAllResponseCopy,
+    formatBytes,
+    isClickableId,
+    responseFileName,
+    tableView,
+} from './responseView';
 
 describe('tableView', () => {
     it('对象数组：列是键的并集，按第一次出现的先后', () => {
@@ -81,14 +87,19 @@ describe('copyAllResponseCopy', () => {
     });
 
     it('没截断保持「完整回包」', () => {
-        expect(copyAllResponseCopy(false)).toEqual({ label: '复制完整回包', toast: '已复制完整回包' });
+        expect(copyAllResponseCopy(false)).toEqual({
+            label: '复制完整回包',
+            toast: '已复制完整回包',
+        });
     });
 });
 
 describe('responseFileName', () => {
     it('接口名 + 本地时间；奇怪的字符换掉，空名字用 response', () => {
         const at = new Date(2026, 8, 30, 7, 5, 9).getTime();
-        expect(responseFileName('get_group_member_list', at)).toBe('get_group_member_list-20260930-070509.json');
+        expect(responseFileName('get_group_member_list', at)).toBe(
+            'get_group_member_list-20260930-070509.json',
+        );
         expect(responseFileName('a/b c', at)).toBe('a_b_c-20260930-070509.json');
         expect(responseFileName('  ', at)).toBe('response-20260930-070509.json');
     });

@@ -18,8 +18,7 @@ import {
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { cn } from '../../../shared/utils/cn';
 
-const LOG_SURFACE =
-    'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
+const LOG_SURFACE = 'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
 
 /** 列表里只显示时分秒，完整时间在 title；避免宽时间列留白造成「和 INFO 隔很远」。 */
 function displayTime(timestamp: string): string {
@@ -184,7 +183,11 @@ export function DesktopLogTab({ emptyKind, entries, fontSize, viewportRef, error
                                 <span>复制当前行</span>
                             </ContextMenuItem>
                         )}
-                        <ContextMenuItem onClick={onCopyAll} disabled={entries.length === 0} className="flex items-center gap-2">
+                        <ContextMenuItem
+                            onClick={onCopyAll}
+                            disabled={entries.length === 0}
+                            className="flex items-center gap-2"
+                        >
                             <Copy size={13} className="text-text-tertiary" />
                             <span>复制全部日志</span>
                             <span className="ml-auto text-2xs text-text-tertiary">
@@ -227,7 +230,9 @@ function DesktopLogLine({
             onContextMenu={onContextMenu}
             className={cn(
                 'group grid items-center gap-x-1.5 px-1 cursor-pointer select-none transition-colors',
-                selected ? 'bg-brand-soft/40 ring-1 ring-inset ring-brand/30' : 'hover:bg-elevated/80',
+                selected
+                    ? 'bg-brand-soft/40 ring-1 ring-inset ring-brand/30'
+                    : 'hover:bg-elevated/80',
             )}
             style={{
                 height: rowPx,
@@ -256,10 +261,7 @@ function DesktopLogLine({
             >
                 {label}
             </span>
-            <span
-                className="truncate"
-                style={{ color: lineTextColor(level) }}
-            >
+            <span className="truncate" style={{ color: lineTextColor(level) }}>
                 {entry.text || ' '}
             </span>
         </div>
@@ -268,7 +270,10 @@ function DesktopLogLine({
 
 function desktopLevelLabel(entry: LogEntry): string {
     if (entry.levelTag) {
-        const inner = entry.levelTag.replace(/^\[|\]$/g, '').trim().toUpperCase();
+        const inner = entry.levelTag
+            .replace(/^\[|\]$/g, '')
+            .trim()
+            .toUpperCase();
         if (inner === 'INFO') return 'INF';
         if (inner.length <= 3) return inner;
         return inner.slice(0, 3);
@@ -287,10 +292,10 @@ function LogEmptyState({
         kind === 'loading'
             ? { title: '正在加载', body: '读取当前会话日志文件…' }
             : kind === 'error'
-                ? { title: '加载失败', body: message ?? '无法读取日志文件' }
-                : kind === 'empty-file'
-                    ? { title: '暂无内容', body: '当前日志文件为空' }
-                    : { title: '没有匹配的行', body: '试试改下搜索关键字或切换等级' };
+              ? { title: '加载失败', body: message ?? '无法读取日志文件' }
+              : kind === 'empty-file'
+                ? { title: '暂无内容', body: '当前日志文件为空' }
+                : { title: '没有匹配的行', body: '试试改下搜索关键字或切换等级' };
 
     return (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 py-20 text-center">

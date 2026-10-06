@@ -54,7 +54,12 @@ export function FloatingActions({
                 className="float-above-terminal pointer-events-none fixed bottom-6 right-6 z-30 flex flex-col items-center gap-3"
                 aria-label="应用端列表快捷操作"
             >
-                <CircleButton tooltip="刷新列表" onClick={onRefresh} disabled={busy} variant="ghost">
+                <CircleButton
+                    tooltip="刷新列表"
+                    onClick={onRefresh}
+                    disabled={busy}
+                    variant="ghost"
+                >
                     <MotionIcon
                         icon={RefreshCw}
                         motion={refreshMotion(busy)}
@@ -80,7 +85,12 @@ export function FloatingActions({
                     />
                 </CircleButton>
                 {showInstall ? (
-                    <CircleButton tooltip="去组件页安装" onClick={onInstall} disabled={busy} variant="primary">
+                    <CircleButton
+                        tooltip="去组件页安装"
+                        onClick={onInstall}
+                        disabled={busy}
+                        variant="primary"
+                    >
                         <MotionIcon
                             icon={Boxes}
                             motion={FAB_PRIMARY_MOTION}

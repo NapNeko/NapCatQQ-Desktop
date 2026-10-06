@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { buildSmoothPath, clipDisplayPoints, EDGE_EASE, pickHover, scrollPoints, steadyPoints } from './occupancyChartGeometry';
+import {
+    buildSmoothPath,
+    clipDisplayPoints,
+    EDGE_EASE,
+    pickHover,
+    scrollPoints,
+    steadyPoints,
+} from './occupancyChartGeometry';
 
 describe('occupancyChartGeometry', () => {
     // 端点圆点用 EDGE_EASE 做纵向动画，前提是它和曲线每一段的形状一致
     it('EDGE_EASE matches one normalized segment of the smooth path', () => {
         const a = { x: 10, y: 80 };
         const b = { x: 30, y: 20 };
-        const nums = buildSmoothPath([a, b]).match(/-?\d+(\.\d+)?/g)!.map(Number);
+        const nums = buildSmoothPath([a, b])
+            .match(/-?\d+(\.\d+)?/g)!
+            .map(Number);
         // M ax ay C c1x c1y, c2x c2y, bx by
         const [, , c1x, c1y, c2x, c2y] = nums;
         const nx = (x: number) => (x - a.x) / (b.x - a.x);

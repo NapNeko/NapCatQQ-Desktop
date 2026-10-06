@@ -19,19 +19,14 @@ interface Props {
 
 export function AppearanceTab({ draft, patchDraft }: Props) {
     if (!draft) {
-        return (
-            <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
-        );
+        return <p className="text-[13px] text-text-tertiary">正在加载设置…</p>;
     }
 
     return (
         <SettingsTabSections>
             <SettingsSection title="界面" description="保存后生效，编辑时不预览主题切换">
                 <FieldRow label="主题">
-                    <ThemePicker
-                        value={draft.theme}
-                        onChange={(v) => patchDraft({ theme: v })}
-                    />
+                    <ThemePicker value={draft.theme} onChange={(v) => patchDraft({ theme: v })} />
                 </FieldRow>
 
                 <FieldRow label="圆角风格">
@@ -68,11 +63,7 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
 
-                <FieldRow
-                    label="动画速度"
-                    description="默认 1.00×，最快 3.00×"
-                    isLast
-                >
+                <FieldRow label="动画速度" description="默认 1.00×，最快 3.00×" isLast>
                     <MotionSpeedSlider
                         value={draft.motionSpeed}
                         onChange={(v) => patchDraft({ motionSpeed: v })}

@@ -9,7 +9,9 @@ const MARKER = /^<已省略 \d+ 字节>$/;
 
 /** 整份被收成摘要的对象：只有一个 `_omitted` 键 */
 export function isFullyOmitted(value: unknown): boolean {
-    return typeof value === 'object' && value !== null && !Array.isArray(value) && '_omitted' in value;
+    return (
+        typeof value === 'object' && value !== null && !Array.isArray(value) && '_omitted' in value
+    );
 }
 
 /** 占位文字（含整体摘要里留着的那几条短标量也算不进去，只数真正被换掉的叶子） */

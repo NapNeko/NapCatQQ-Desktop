@@ -20,11 +20,7 @@ export function shouldShowDockerPullLayersInTaskDetail(
     if (!isDockerDeployTaskKind(kind)) return false;
     if (isDockerPullLayerProgress(progress)) return true;
     // 拉取步骤进行中、尚未解析出层时，仅在任务详情给一句占位
-    return (
-        progress.status === 'running' &&
-        progress.currentStep === 2 &&
-        progress.totalSteps === 2
-    );
+    return progress.status === 'running' && progress.currentStep === 2 && progress.totalSteps === 2;
 }
 
 /** docker 拉镜像以进度条 + 镜像层为主，不展示步骤日志区 */

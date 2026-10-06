@@ -3,7 +3,15 @@
 
 import { useState } from 'react';
 import { Bot, Plus, Route, Trash2 } from 'lucide-react';
-import { Badge, Button, FormSection, Select, Switch, SyntaxTextEditor, TextField } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    FormSection,
+    Select,
+    Switch,
+    SyntaxTextEditor,
+    TextField,
+} from '../../../../shared/ui';
 import { ConfigForm } from '../karin/configLayout';
 import { EmptyHint, EntityRow, FormDialog, JumpLink, Pill } from './parts';
 import { enabledChatModels } from '../../../../core/domain/apps/astrbotConfig';
@@ -17,7 +25,10 @@ import type {
 } from '../../../../core/ipc/types';
 
 type AgentDraft = { index: number | null; agent: AstrBotSubagentRow };
-type RouterDraft = Pick<AstrBotInstanceConfig['subagent'], 'router_system_prompt' | 'remove_main_duplicate_tools'>;
+type RouterDraft = Pick<
+    AstrBotInstanceConfig['subagent'],
+    'router_system_prompt' | 'remove_main_duplicate_tools'
+>;
 
 export const AstrBotSubagentTab: React.FC<{
     instanceId: string;
@@ -35,7 +46,8 @@ export const AstrBotSubagentTab: React.FC<{
     const personaItems = personas.map((p) => ({ value: p.persona_id, label: p.persona_id }));
     const sub = config.subagent;
     const agents = sub.agents;
-    const set = (patch: Partial<AstrBotInstanceConfig['subagent']>) => onChange({ ...config, subagent: { ...sub, ...patch } });
+    const set = (patch: Partial<AstrBotInstanceConfig['subagent']>) =>
+        onChange({ ...config, subagent: { ...sub, ...patch } });
 
     const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
     const [routerDraft, setRouterDraft] = useState<RouterDraft | null>(null);
@@ -46,7 +58,12 @@ export const AstrBotSubagentTab: React.FC<{
 
     const commitAgent = (d: AgentDraft) => {
         const agent = { provider_id: d.agent.provider_id, persona_id: d.agent.persona_id.trim() };
-        set({ agents: d.index === null ? [...agents, agent] : agents.map((a, i) => (i === d.index ? agent : a)) });
+        set({
+            agents:
+                d.index === null
+                    ? [...agents, agent]
+                    : agents.map((a, i) => (i === d.index ? agent : a)),
+        });
         setAgentDraft(null);
     };
 
@@ -56,7 +73,12 @@ export const AstrBotSubagentTab: React.FC<{
             variant="secondary"
             disabled={disabled || noModels}
             title={noModels ? '先要有对话模型' : undefined}
-            onClick={() => setAgentDraft({ index: null, agent: { provider_id: modelItems[0]?.value ?? '', persona_id: '' } })}
+            onClick={() =>
+                setAgentDraft({
+                    index: null,
+                    agent: { provider_id: modelItems[0]?.value ?? '', persona_id: '' },
+                })
+            }
         >
             <Plus size={13} /> 添加子代理
         </Button>
@@ -107,8 +129,16 @@ export const AstrBotSubagentTab: React.FC<{
                             <EntityRow
                                 key={i}
                                 icon={Bot}
-                                title={<span className="font-mono">{a.provider_id ? modelLabel(a.provider_id) : '没选模型'}</span>}
-                                tags={!a.provider_id || !a.persona_id ? <Badge tone="warning">没配全</Badge> : undefined}
+                                title={
+                                    <span className="font-mono">
+                                        {a.provider_id ? modelLabel(a.provider_id) : '没选模型'}
+                                    </span>
+                                }
+                                tags={
+                                    !a.provider_id || !a.persona_id ? (
+                                        <Badge tone="warning">没配全</Badge>
+                                    ) : undefined
+                                }
                                 subtitle={a.persona_id ? `人格 ${a.persona_id}` : '没选人格'}
                                 actions={
                                     <Button
@@ -117,7 +147,9 @@ export const AstrBotSubagentTab: React.FC<{
                                         className="h-7 w-7 text-danger hover:text-danger"
                                         aria-label="删除子代理"
                                         disabled={disabled}
-                                        onClick={() => set({ agents: agents.filter((_, idx) => idx !== i) })}
+                                        onClick={() =>
+                                            set({ agents: agents.filter((_, idx) => idx !== i) })
+                                        }
                                     >
                                         <Trash2 size={14} />
                                     </Button>
@@ -133,7 +165,11 @@ export const AstrBotSubagentTab: React.FC<{
                 <EntityRow
                     icon={Route}
                     title="路由提示词"
-                    tags={sub.remove_main_duplicate_tools ? <Badge tone="neutral">主会话去重工具</Badge> : undefined}
+                    tags={
+                        sub.remove_main_duplicate_tools ? (
+                            <Badge tone="neutral">主会话去重工具</Badge>
+                        ) : undefined
+                    }
                     subtitle={sub.router_system_prompt || '没写，主模型自己判断什么时候转交'}
                     onOpen={() =>
                         setRouterDraft({
@@ -147,7 +183,9 @@ export const AstrBotSubagentTab: React.FC<{
             {(tools.data ?? []).length > 0 && (
                 <FormSection title="可用工具" layout="none">
                     <div className="flex flex-wrap gap-1.5">
-                        {tools.data?.map((name) => <Pill key={name}>{name}</Pill>)}
+                        {tools.data?.map((name) => (
+                            <Pill key={name}>{name}</Pill>
+                        ))}
                     </div>
                 </FormSection>
             )}
@@ -187,21 +225,27 @@ export const AstrBotSubagentTab: React.FC<{
                     }}
                 >
                     <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-text-secondary">路由提示词</label>
+                        <label className="text-xs font-medium text-text-secondary">
+                            路由提示词
+                        </label>
                         <div className="flex h-40 flex-col">
                             <SyntaxTextEditor
                                 mode="plain"
                                 wrap
                                 value={routerDraft.router_system_prompt}
                                 aria-label="路由提示词"
-                                onChange={(router_system_prompt) => setRouterDraft({ ...routerDraft, router_system_prompt })}
+                                onChange={(router_system_prompt) =>
+                                    setRouterDraft({ ...routerDraft, router_system_prompt })
+                                }
                             />
                         </div>
                     </div>
                     <Switch
                         label="主会话不再重复挂载子代理的工具"
                         checked={routerDraft.remove_main_duplicate_tools}
-                        onCheckedChange={(remove_main_duplicate_tools) => setRouterDraft({ ...routerDraft, remove_main_duplicate_tools })}
+                        onCheckedChange={(remove_main_duplicate_tools) =>
+                            setRouterDraft({ ...routerDraft, remove_main_duplicate_tools })
+                        }
                     />
                 </FormDialog>
             )}
@@ -225,7 +269,11 @@ const AgentFields: React.FC<{
             <Select
                 label="模型"
                 value={agent.provider_id || undefined}
-                items={modelKnown || !agent.provider_id ? modelItems : [{ value: agent.provider_id, label: agent.provider_id }, ...modelItems]}
+                items={
+                    modelKnown || !agent.provider_id
+                        ? modelItems
+                        : [{ value: agent.provider_id, label: agent.provider_id }, ...modelItems]
+                }
                 placeholder="选择模型"
                 onValueChange={(provider_id) => onChange({ ...agent, provider_id })}
             />
@@ -233,10 +281,23 @@ const AgentFields: React.FC<{
                 <Select
                     label="人格"
                     value={agent.persona_id || undefined}
-                    items={personaKnown || !agent.persona_id ? personaItems : [{ value: agent.persona_id, label: agent.persona_id }, ...personaItems]}
+                    items={
+                        personaKnown || !agent.persona_id
+                            ? personaItems
+                            : [
+                                  { value: agent.persona_id, label: agent.persona_id },
+                                  ...personaItems,
+                              ]
+                    }
                     placeholder={noPersonas ? '还没有人格' : '选择人格'}
                     disabled={noPersonas && !agent.persona_id}
-                    hint={noPersonas ? <JumpLink tab="persona" onGo={onGoTab}>去「人格」页新建</JumpLink> : undefined}
+                    hint={
+                        noPersonas ? (
+                            <JumpLink tab="persona" onGo={onGoTab}>
+                                去「人格」页新建
+                            </JumpLink>
+                        ) : undefined
+                    }
                     onValueChange={(persona_id) => onChange({ ...agent, persona_id })}
                 />
             ) : (

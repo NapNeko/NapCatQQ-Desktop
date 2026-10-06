@@ -2,19 +2,29 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, Pencil, Star, Trash2 } from 'lucide-react';
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Select, Spinner, TextAreaField, TextField } from '../../../../shared/ui';
+import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    Select,
+    Spinner,
+    TextAreaField,
+    TextField,
+} from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import type { MaiBotExpression, MaiBotLearningChat } from '../../../../core/ipc/types';
 import { FormDialog } from '../entityParts';
 import { RowCheck } from '../resourceParts';
 import { relativeTime } from './maibotPromptParts';
 
-export const CurateStar: React.FC<{ curated: boolean; disabled?: boolean; onToggle: () => void; className?: string }> = ({
-    curated,
-    disabled,
-    onToggle,
-    className,
-}) => (
+export const CurateStar: React.FC<{
+    curated: boolean;
+    disabled?: boolean;
+    onToggle: () => void;
+    className?: string;
+}> = ({ curated, disabled, onToggle, className }) => (
     <button
         type="button"
         aria-pressed={curated}
@@ -25,7 +35,9 @@ export const CurateStar: React.FC<{ curated: boolean; disabled?: boolean; onTogg
         className={cn(
             'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors disabled:opacity-40',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
-            curated ? 'text-warning hover:bg-warning-soft' : 'text-text-disabled hover:bg-inset hover:text-text-secondary',
+            curated
+                ? 'text-warning hover:bg-warning-soft'
+                : 'text-text-disabled hover:bg-inset hover:text-text-secondary',
             className,
         )}
     >
@@ -46,12 +58,18 @@ export const ExpressionRow: React.FC<{
     <div
         className={cn(
             'group flex items-center gap-2.5 rounded-md border px-3 py-2.5 transition-colors',
-            selected ? 'border-brand/40 bg-brand-soft/30' : 'border-border-subtle bg-surface hover:border-border',
+            selected
+                ? 'border-brand/40 bg-brand-soft/30'
+                : 'border-border-subtle bg-surface hover:border-border',
         )}
     >
         <RowCheck checked={selected} onPick={onPick} />
         <CurateStar curated={item.curated} disabled={busy} onToggle={onToggleCurated} />
-        <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
+        <button
+            type="button"
+            onClick={onEdit}
+            className="min-w-0 flex-1 text-left focus-visible:outline-none"
+        >
             <span className="block truncate text-xs text-text-tertiary">
                 当 <span className="text-text-secondary">{item.situation}</span>
             </span>
@@ -62,7 +80,13 @@ export const ExpressionRow: React.FC<{
             <span className="block">{relativeTime(item.last_active)}</span>
         </span>
         <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="编辑" onClick={onEdit}>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label="编辑"
+                onClick={onEdit}
+            >
                 <Pencil size={13} />
             </Button>
             <Button
@@ -183,7 +207,8 @@ export const ExpressionReview: React.FC<{
     // 头一回打开还在读，按钮没出来，焦点先落在关闭上；读到了再挪过来
     const hasCurrent = !!current;
     useEffect(() => {
-        if (open && hasCurrent && document.activeElement !== curateBtn.current) curateBtn.current?.focus();
+        if (open && hasCurrent && document.activeElement !== curateBtn.current)
+            curateBtn.current?.focus();
     }, [open, hasCurrent]);
 
     return (
@@ -214,13 +239,19 @@ export const ExpressionReview: React.FC<{
                             <p className="text-xs text-text-tertiary">
                                 当 <span className="text-text-secondary">{current.situation}</span>
                             </p>
-                            <p className="mt-2 font-display text-lg leading-snug text-text">{current.style}</p>
+                            <p className="mt-2 font-display text-lg leading-snug text-text">
+                                {current.style}
+                            </p>
                             <p className="mt-3 text-2xs text-text-tertiary">
                                 {current.chat_name} · {relativeTime(current.last_active)}
                             </p>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
-                            <Button variant="secondary" onClick={() => handlers.current.remove()} className="text-danger">
+                            <Button
+                                variant="secondary"
+                                onClick={() => handlers.current.remove()}
+                                className="text-danger"
+                            >
                                 <ArrowLeft size={14} />
                                 删掉
                             </Button>
@@ -228,17 +259,25 @@ export const ExpressionReview: React.FC<{
                                 <ArrowDown size={14} />
                                 跳过
                             </Button>
-                            <Button ref={curateBtn} variant="primary" onClick={() => handlers.current.curate()}>
+                            <Button
+                                ref={curateBtn}
+                                variant="primary"
+                                onClick={() => handlers.current.curate()}
+                            >
                                 精选
                                 <ArrowRight size={14} />
                             </Button>
                         </div>
-                        <p className="text-center text-2xs text-text-tertiary">也可以用方向键：← 删掉 · ↓ 跳过 · → 精选</p>
+                        <p className="text-center text-2xs text-text-tertiary">
+                            也可以用方向键：← 删掉 · ↓ 跳过 · → 精选
+                        </p>
                     </div>
                 ) : (
                     <div className="flex h-40 flex-col items-center justify-center gap-2 text-center">
                         <p className="text-sm text-text">都看完了</p>
-                        <p className="text-xs text-text-tertiary">新学到的表达方式会出现在「未精选」里。</p>
+                        <p className="text-xs text-text-tertiary">
+                            新学到的表达方式会出现在「未精选」里。
+                        </p>
                         <Button size="sm" variant="secondary" className="mt-2" onClick={onClose}>
                             关掉
                         </Button>

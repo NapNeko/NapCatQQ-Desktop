@@ -40,11 +40,21 @@ export function useMaiBotEmojiOverview(instanceId: string, enabled: boolean) {
 }
 
 export function useMaiBotEmojiAction(instanceId: string) {
-    return useResourceAction<MaiBotEmojiAction>(instanceId, emojiKey(instanceId), svc.emojiAction, '表情包没改成');
+    return useResourceAction<MaiBotEmojiAction>(
+        instanceId,
+        emojiKey(instanceId),
+        svc.emojiAction,
+        '表情包没改成',
+    );
 }
 
 /** 一张图。缩略图第一次要时上游现生成，后端已经等过几轮，这里再重试两次兜底 */
-export function useMaiBotEmojiImage(instanceId: string, emojiId: number, original: boolean, enabled = true) {
+export function useMaiBotEmojiImage(
+    instanceId: string,
+    emojiId: number,
+    original: boolean,
+    enabled = true,
+) {
     return useQuery<MaiBotEmojiImage, Error>({
         queryKey: ['maibotEmojiImage', instanceId, emojiId, original],
         queryFn: () => svc.emojiImage(instanceId, emojiId, original),
@@ -58,7 +68,8 @@ export function useMaiBotEmojiImage(instanceId: string, emojiId: number, origina
 
 const emojiFiles = {
     pick: () => localFilesOrNothing(svc.pickEmojiFiles(), 'maibotEmoji-pick', '打不开选图框'),
-    read: (paths: string[]) => localFilesOrNothing(svc.localImages(paths), 'maibotEmoji-read', '读不出这些图'),
+    read: (paths: string[]) =>
+        localFilesOrNothing(svc.localImages(paths), 'maibotEmoji-read', '读不出这些图'),
 };
 
 /** 上传前从系统对话框挑图、看拖进窗口的图 */
@@ -72,7 +83,11 @@ export function useMaiBotEmojiUpload(instanceId: string) {
         mutationFn: (up) => svc.emojiUpload(instanceId, up),
         onSuccess: () => void qc.invalidateQueries({ queryKey: emojiKey(instanceId) }),
         onError: (err) => {
-            pushErrorBar({ key: `maibotEmojiUpload-fail:${instanceId}`, title: '表情包没传上去', raw: toAppConfigError(err).message });
+            pushErrorBar({
+                key: `maibotEmojiUpload-fail:${instanceId}`,
+                title: '表情包没传上去',
+                raw: toAppConfigError(err).message,
+            });
         },
     });
 }

@@ -24,12 +24,21 @@ import { Button } from '../../../shared/ui';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import { cn } from '../../../shared/utils/cn';
 import { useMotion } from '../../../hooks/preferences/useMotion';
-import { debugWorkspaceStore, useActiveDebugTab, useDebugTabs, useTabRun } from '../../../hooks/debug/debugWorkspaceStore';
+import {
+    debugWorkspaceStore,
+    useActiveDebugTab,
+    useDebugTabs,
+    useTabRun,
+} from '../../../hooks/debug/debugWorkspaceStore';
 import { useDebugActionSpec, useDebugCatalog } from '../../../hooks/debug/useDebugCatalog';
 import { useDebugCall } from '../../../hooks/debug/useDebugCall';
 import { useDebugChannels } from '../../../hooks/debug/useDebugChannels';
 import { cssEase } from '../../../core/design/cssEase';
-import { initialParamsText, parseParamsText, setParam } from '../../../core/domain/debug/paramsText';
+import {
+    initialParamsText,
+    parseParamsText,
+    setParam,
+} from '../../../core/domain/debug/paramsText';
 import { countOmittedParams, omittedBlocker } from '../../../core/domain/debug/omittedParams';
 import { buildFormModel, coerceInput } from '../../../core/domain/debug/schemaForm';
 import { localFilesInParams } from '../../../core/domain/debug/streamActions';
@@ -74,7 +83,6 @@ let splitRatio = DEFAULT_SPLIT;
 const MIN_REQUEST_PX = 150;
 const MIN_RESPONSE_PX = 110;
 
-
 const NO_ISSUES: ParamIssue[] = [];
 const NO_ACTIONS: DebugActionSummary[] = [];
 
@@ -101,7 +109,8 @@ export const CenterColumn = memo(function CenterColumn({
     const newTab = useCallback(() => {
         const { ws } = debugWorkspaceStore.getSnapshot();
         const active = ws.tabs.find((t) => t.id === ws.active_tab);
-        if (!active || active.action.trim() !== '' || !isBlankParams(active.params_text)) debugWorkspaceStore.newTab();
+        if (!active || active.action.trim() !== '' || !isBlankParams(active.params_text))
+            debugWorkspaceStore.newTab();
         onOpenPalette();
     }, [onOpenPalette]);
 
@@ -124,13 +133,19 @@ export const CenterColumn = memo(function CenterColumn({
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand">
                         <Search size={18} strokeWidth={1.9} aria-hidden />
                     </span>
-                    <p className="text-[13px] text-text-secondary">从左边选一个接口，或按 {MOD_KEY_LABEL}+K 搜索</p>
+                    <p className="text-[13px] text-text-secondary">
+                        从左边选一个接口，或按 {MOD_KEY_LABEL}+K 搜索
+                    </p>
                     <div className="flex flex-wrap justify-center gap-2">
                         <Button size="sm" variant="secondary" onClick={onOpenPalette}>
                             <Search size={12} aria-hidden />
                             搜索接口
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => debugWorkspaceStore.newTab()}>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => debugWorkspaceStore.newTab()}
+                        >
                             <FilePlus2 size={12} aria-hidden />
                             空白请求
                         </Button>
@@ -167,7 +182,15 @@ interface TabWorkspaceProps {
     onNavigate?: (route: AppRoute) => void;
 }
 
-function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealCallChannel, onNavigate }: TabWorkspaceProps) {
+function TabWorkspace({
+    tab,
+    target,
+    callChannel,
+    scopeRef,
+    animateIn,
+    onRevealCallChannel,
+    onNavigate,
+}: TabWorkspaceProps) {
     const m = useMotion();
     const bodyRef = useRef<HTMLDivElement>(null);
     const action = tab.action.trim();
@@ -177,7 +200,10 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
     const spec = specQuery.data ?? null;
     const specLoading = specQuery.isLoading;
     const catalog = useDebugCatalog(target).data;
-    const { summary, summaryFrom } = useMemo(() => lookupSummary(catalog?.actions, action), [catalog, action]);
+    const { summary, summaryFrom } = useMemo(
+        () => lookupSummary(catalog?.actions, action),
+        [catalog, action],
+    );
 
     useEffect(() => {
         if (!spec) return;
@@ -187,10 +213,13 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
         const initial = initialParamsText(spec);
         rememberInitialText(tab.id, initial);
         markSeeded(tab.id, tab.action);
-        const current = debugWorkspaceStore.getSnapshot().ws.tabs.find((t) => t.id === tab.id)?.params_text;
+        const current = debugWorkspaceStore
+            .getSnapshot()
+            .ws.tabs.find((t) => t.id === tab.id)?.params_text;
         if (current === undefined) return;
         if (isBlankParams(current)) {
-            if (current !== initial) debugWorkspaceStore.setParamsText(tab.id, initial, { initial: true });
+            if (current !== initial)
+                debugWorkspaceStore.setParamsText(tab.id, initial, { initial: true });
         } else if (current === initial) {
             // 重启后恢复的标签：文本还是初始那份，告诉 store 它没被动过，从目录点别的接口时可以直接顶替
             debugWorkspaceStore.setParamsText(tab.id, current, { initial: true });
@@ -210,8 +239,14 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
         () => resolveInitialText(tab.id, specQuery.data, specLoading),
         [tab.id, specQuery.data, specLoading],
     );
-    const dirty = initialText === null ? !isBlankParams(tab.params_text) : paramsDirty(tab.params_text, initialText);
-    const fillKeys = useMemo(() => (model ? new Set(model.fields.map((f) => f.name)) : null), [model]);
+    const dirty =
+        initialText === null
+            ? !isBlankParams(tab.params_text)
+            : paramsDirty(tab.params_text, initialText);
+    const fillKeys = useMemo(
+        () => (model ? new Set(model.fields.map((f) => f.name)) : null),
+        [model],
+    );
     const modelRef = useRef(model);
     modelRef.current = model;
 
@@ -227,18 +262,19 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
         () => (parsed.ok ? countOmittedParams(tab.params_text) : 0),
         [parsed.ok, tab.params_text],
     );
-    const blocker = sendBlocker({
-        hasTarget: !!target,
-        running: !!target?.running,
-        action,
-        stream: spec?.stream ?? summary?.stream ?? false,
-        localFileCount: parsed.ok ? localFilesInParams(parsed.value).length : 0,
-        parseOk: parsed.ok,
-        // 目录里有这一行时分级已知，不必等说明
-        specLoading: specLoading && !summary,
-        channels,
-        channel,
-    }) ?? omittedBlocker(omittedCount);
+    const blocker =
+        sendBlocker({
+            hasTarget: !!target,
+            running: !!target?.running,
+            action,
+            stream: spec?.stream ?? summary?.stream ?? false,
+            localFileCount: parsed.ok ? localFilesInParams(parsed.value).length : 0,
+            parseOk: parsed.ok,
+            // 目录里有这一行时分级已知，不必等说明
+            specLoading: specLoading && !summary,
+            channels,
+            channel,
+        }) ?? omittedBlocker(omittedCount);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [blockedNonce, setBlockedNonce] = useState(0);
 
@@ -324,7 +360,10 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
     );
 
     const [saveOpen, setSaveOpen] = useState(false);
-    const onTabChannelChange = useCallback((c: DebugChannelId | null) => debugWorkspaceStore.setTabChannel(tab.id, c), [tab.id]);
+    const onTabChannelChange = useCallback(
+        (c: DebugChannelId | null) => debugWorkspaceStore.setTabChannel(tab.id, c),
+        [tab.id],
+    );
     const cancelRef = useRef(cancel);
     cancelRef.current = cancel;
     const onCancel = useCallback(() => void cancelRef.current(), []);
@@ -365,8 +404,16 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
             />
             {omittedCount > 0 && (
                 <div className="flex shrink-0 items-start gap-1.5 border-b border-border-subtle/70 bg-warning-soft/40 px-2.5 py-1.5 text-2xs leading-snug text-text-secondary">
-                    <Info size={12} strokeWidth={2.2} aria-hidden className="mt-px shrink-0 text-warning" />
-                    <span>参数里有 {omittedCount} 处超长在存盘时被省略，发出去的只是占位文字；补上原文再发。</span>
+                    <Info
+                        size={12}
+                        strokeWidth={2.2}
+                        aria-hidden
+                        className="mt-px shrink-0 text-warning"
+                    />
+                    <span>
+                        参数里有 {omittedCount}{' '}
+                        处超长在存盘时被省略，发出去的只是占位文字；补上原文再发。
+                    </span>
                 </div>
             )}
             <div ref={splitHostRef} className="flex min-h-0 flex-1 flex-col">
@@ -472,7 +519,13 @@ function SplitHandle({
 }) {
     const [, rerender] = useState(0);
     const [dragging, setDragging] = useState(false);
-    const drag = useRef<{ pointerId: number; top: number; height: number; ratio: number; frame: number } | null>(null);
+    const drag = useRef<{
+        pointerId: number;
+        top: number;
+        height: number;
+        ratio: number;
+        frame: number;
+    } | null>(null);
 
     const clampRatio = (r: number, height: number) => {
         if (height <= 0) return r;
@@ -498,7 +551,13 @@ function SplitHandle({
         e.preventDefault();
         e.currentTarget.setPointerCapture?.(e.pointerId);
         const rect = host.getBoundingClientRect();
-        drag.current = { pointerId: e.pointerId, top: rect.top, height: rect.height, ratio: splitRatio, frame: 0 };
+        drag.current = {
+            pointerId: e.pointerId,
+            top: rect.top,
+            height: rect.height,
+            ratio: splitRatio,
+            frame: 0,
+        };
         setDragging(true);
     };
     const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {

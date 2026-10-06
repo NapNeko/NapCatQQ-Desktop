@@ -11,13 +11,7 @@ import type { DaemonState } from '../../ipc/generated/DaemonState';
 import type { Flavor } from './flavor';
 import { botStateBadge } from './status';
 
-export type StatusTone =
-    | 'neutral'
-    | 'brand'
-    | 'success'
-    | 'warning'
-    | 'danger'
-    | 'info';
+export type StatusTone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
 
 export type StatusBadgeSpec = {
     tone: StatusTone;
@@ -31,9 +25,7 @@ export type BotListCardStatus = {
     alert: StatusBadgeSpec | null;
 };
 
-function mapLegacyBotColor(
-    color: ReturnType<typeof botStateBadge>['color'],
-): StatusTone {
+function mapLegacyBotColor(color: ReturnType<typeof botStateBadge>['color']): StatusTone {
     switch (color) {
         case 'success':
             return 'success';

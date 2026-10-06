@@ -16,7 +16,9 @@ describe('chat archive preview storage', () => {
 
     it('reports unsupported archives without overwriting the file', async () => {
         await chatArchiveMock.save('bot-1', '10001', archive());
-        await expect(chatArchiveMock.save('bot-1', '10001', { ...archive(), v: 2 })).rejects.toThrow();
+        await expect(
+            chatArchiveMock.save('bot-1', '10001', { ...archive(), v: 2 }),
+        ).rejects.toThrow();
         expect(await chatArchiveMock.load('bot-1', '10001')).toEqual(archive());
     });
 
@@ -31,10 +33,27 @@ describe('chat archive preview storage', () => {
 
     it('does not persist inline attachment data or protocol credentials', async () => {
         const value = archive();
-        value.messages.push({ key: 'private:20001/1', session: 'private:20001', senderId: '20001', senderName: '朋友', at: 1, mine: false, status: 'sent', segments: [
-            { type: 'text', data: { text: '/help' } },
-            { type: 'image', data: { file: 'base64://c2VjcmV0', token: 'secret', nested: { path: 'file://C:/private.png' }, summary: '图片' } },
-        ] });
+        value.messages.push({
+            key: 'private:20001/1',
+            session: 'private:20001',
+            senderId: '20001',
+            senderName: '朋友',
+            at: 1,
+            mine: false,
+            status: 'sent',
+            segments: [
+                { type: 'text', data: { text: '/help' } },
+                {
+                    type: 'image',
+                    data: {
+                        file: 'base64://c2VjcmV0',
+                        token: 'secret',
+                        nested: { path: 'file://C:/private.png' },
+                        summary: '图片',
+                    },
+                },
+            ],
+        });
         await chatArchiveMock.save('bot-1', '10001', value);
         const loaded = await chatArchiveMock.load('bot-1', '10001');
         expect(loaded?.messages[0].segments).toEqual([

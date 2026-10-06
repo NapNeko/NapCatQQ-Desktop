@@ -6,14 +6,7 @@
 import type { BotActorState } from '../../ipc/generated/BotActorState';
 
 export type BadgeColor =
-    | 'brand'
-    | 'danger'
-    | 'important'
-    | 'informative'
-    | 'severe'
-    | 'subtle'
-    | 'success'
-    | 'warning';
+    'brand' | 'danger' | 'important' | 'informative' | 'severe' | 'subtle' | 'success' | 'warning';
 
 export interface BotStateBadge {
     /// Fluent UI Badge 的 `color` prop。`tiny` / `neutral` 不是合法值，但

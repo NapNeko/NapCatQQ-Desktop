@@ -36,6 +36,8 @@ describe('DangerConfirmDialog', () => {
         rerender(<TestDialog open={false} />);
         // 刚关的那一刻内容还在：退场播的是完整内容。老写法 open && 在这一步就卸空了。
         expect(screen.getByText(BODY_MARK)).toBeInTheDocument();
-        await waitFor(() => expect(screen.queryByText(BODY_MARK)).not.toBeInTheDocument(), { timeout: 3000 });
+        await waitFor(() => expect(screen.queryByText(BODY_MARK)).not.toBeInTheDocument(), {
+            timeout: 3000,
+        });
     });
 });

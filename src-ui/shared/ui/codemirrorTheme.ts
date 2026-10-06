@@ -61,8 +61,14 @@ export const editorPopupTheme = EditorView.theme({
         color: 'var(--color-text-tertiary)',
         border: 'none',
     },
-    '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--color-danger)' },
-    '.cm-lintRange-warning': { backgroundImage: 'none', textDecoration: 'underline wavy var(--color-warning)' },
+    '.cm-lintRange-error': {
+        backgroundImage: 'none',
+        textDecoration: 'underline wavy var(--color-danger)',
+    },
+    '.cm-lintRange-warning': {
+        backgroundImage: 'none',
+        textDecoration: 'underline wavy var(--color-warning)',
+    },
     '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
         backgroundColor: 'color-mix(in srgb, var(--color-brand) 22%, transparent)',
         outline: 'none',
@@ -93,7 +99,11 @@ export const editorPopupTheme = EditorView.theme({
         color: 'var(--color-text)',
     },
     '.cm-completionDetail': { color: 'var(--color-text-tertiary)', fontStyle: 'normal' },
-    '.cm-completionMatchedText': { color: 'var(--color-brand)', textDecoration: 'none', fontWeight: '600' },
+    '.cm-completionMatchedText': {
+        color: 'var(--color-brand)',
+        textDecoration: 'none',
+        fontWeight: '600',
+    },
     '.cm-tooltip.cm-completionInfo': {
         padding: '6px 8px',
         maxWidth: '22em',

@@ -77,8 +77,8 @@ describe('domain-event-hub 单次底层订阅', () => {
 
         expect(sub.callCount()).toBe(1);
 
-        const unsubNapcat = napcatLoginStore.subscribe(() => { });
-        const unsubSnow = snowlumaStore.subscribe(() => { });
+        const unsubNapcat = napcatLoginStore.subscribe(() => {});
+        const unsubSnow = snowlumaStore.subscribe(() => {});
         await Promise.resolve();
         await Promise.resolve();
 
@@ -107,7 +107,7 @@ describe('domain-event-hub 单次底层订阅', () => {
     it('_reset 后可再次订阅且不叠两套底层 listen', async () => {
         const sub = installSubscribeMock();
 
-        const unsub1 = napcatLoginStore.subscribe(() => { });
+        const unsub1 = napcatLoginStore.subscribe(() => {});
         await Promise.resolve();
         await Promise.resolve();
         expect(sub.callCount()).toBe(1);
@@ -117,7 +117,7 @@ describe('domain-event-hub 单次底层订阅', () => {
         // store _reset 已从 hub 卸 handler；若无其它 handler，底层会 teardown
         _resetDomainEventHubForTests();
 
-        const unsub2 = napcatLoginStore.subscribe(() => { });
+        const unsub2 = napcatLoginStore.subscribe(() => {});
         await Promise.resolve();
         await Promise.resolve();
         // 重新 ensureStarted，仍是单次 subscribe（本轮）

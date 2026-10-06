@@ -19,11 +19,13 @@ vi.mock('../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) => {
-                const fn = service[key];
-                if (!fn) throw new Error(`没有模拟 service.${key}`);
-                return fn(...args);
-            },
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) => {
+                    const fn = service[key];
+                    if (!fn) throw new Error(`没有模拟 service.${key}`);
+                    return fn(...args);
+                },
         },
     ),
 }));
@@ -45,7 +47,10 @@ beforeAll(() => {
             return (this as HTMLElement).classList.contains('overflow-y-auto') ? 420 : 34;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 640 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 640,
+    });
 });
 afterAll(() => {
     if (offsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeight);
@@ -62,7 +67,11 @@ const SL: DebugTarget = {
     online: true,
 };
 
-const action = (name: string, summary: string, patch: Partial<DebugActionSummary> = {}): DebugActionSummary => ({
+const action = (
+    name: string,
+    summary: string,
+    patch: Partial<DebugActionSummary> = {},
+): DebugActionSummary => ({
     name,
     aliases: [],
     summary,
@@ -132,7 +141,11 @@ function Harness({
 }
 
 function renderPalette(
-    props: { target?: DebugTarget | null; onChange?: (open: boolean) => void; outside?: ReactNode } = {},
+    props: {
+        target?: DebugTarget | null;
+        onChange?: (open: boolean) => void;
+        outside?: ReactNode;
+    } = {},
 ) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = ({ children }: { children: ReactNode }) => (
@@ -145,7 +158,8 @@ function renderPalette(
 
 const input = () => screen.getByRole('combobox', { name: '搜索接口' });
 const option = (name: RegExp | string) => screen.getByRole('option', { name });
-const selected = () => screen.getAllByRole('option').find((o) => o.getAttribute('aria-selected') === 'true');
+const selected = () =>
+    screen.getAllByRole('option').find((o) => o.getAttribute('aria-selected') === 'true');
 
 beforeEach(async () => {
     for (const fn of Object.values(service)) fn.mockReset();
@@ -153,9 +167,17 @@ beforeEach(async () => {
     debugWorkspaceStore._reset();
     _resetDebugCatalogForTests();
     _resetCommandPaletteForTests();
-    service.catalog.mockResolvedValue({ backend: 'snowluma', source: 'live', snapshot_version: 't', actions: ACTIONS });
+    service.catalog.mockResolvedValue({
+        backend: 'snowluma',
+        source: 'live',
+        snapshot_version: 't',
+        actions: ACTIONS,
+    });
     service.collections.mockResolvedValue(COLLECTIONS);
-    service.workspace.mockResolvedValue({ ...defaultWorkspace(), recent_actions: ['get_login_info'] });
+    service.workspace.mockResolvedValue({
+        ...defaultWorkspace(),
+        recent_actions: ['get_login_info'],
+    });
     service.saveWorkspace.mockResolvedValue(undefined);
     await debugWorkspaceStore.load();
 });
@@ -270,7 +292,9 @@ describe('命令面板', () => {
         expect(await screen.findByText('没有找到「没有这个」')).toBeInTheDocument();
         await user.keyboard('{Escape}');
         expect(onChange).toHaveBeenCalledWith(false);
-        await waitFor(() => expect(screen.queryByRole('combobox', { name: '搜索接口' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('combobox', { name: '搜索接口' })).not.toBeInTheDocument(),
+        );
 
         fireEvent.click(screen.getByRole('button', { name: '打开面板' }));
         await waitFor(() => expect(input()).toHaveFocus());
@@ -337,7 +361,11 @@ describe('命令面板', () => {
     it('另开标签后关掉面板，焦点落在新标签的接口名输入框上', async () => {
         const user = userEvent.setup();
         // 中栏一次只挂当前标签；这个假输入框代表换过去的那个标签的请求头
-        renderPalette({ outside: <input role="combobox" aria-label="接口名" data-testid="action-input" readOnly /> });
+        renderPalette({
+            outside: (
+                <input role="combobox" aria-label="接口名" data-testid="action-input" readOnly />
+            ),
+        });
         const actionInput = screen.getByTestId('action-input');
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         await screen.findByRole('option', { name: /^get_login_info/ });
@@ -351,7 +379,11 @@ describe('命令面板', () => {
         const user = userEvent.setup();
         // 已有一个空白没动过的标签：回车会原地顶替它，不换标签，也不接管焦点
         debugWorkspaceStore.newTab();
-        renderPalette({ outside: <input role="combobox" aria-label="接口名" data-testid="action-input" readOnly /> });
+        renderPalette({
+            outside: (
+                <input role="combobox" aria-label="接口名" data-testid="action-input" readOnly />
+            ),
+        });
         const actionInput = screen.getByTestId('action-input');
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         await screen.findByRole('option', { name: /^get_login_info/ });

@@ -3,12 +3,7 @@
 import type { ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
 import { ArrowRight, Bot, SkipForward } from 'lucide-react';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogTitle,
-} from '../../ui';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../ui';
 import { MotionIcon } from '../../ui/motion';
 import { cn } from '../../utils/cn';
 
@@ -89,8 +84,6 @@ export function OnboardingContinueDialog({
     );
 }
 
-
-
 function ChoiceCard({
     title,
     description,
@@ -153,4 +146,3 @@ function ChoiceCard({
         </button>
     );
 }
-

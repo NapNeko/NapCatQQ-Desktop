@@ -15,10 +15,16 @@ export function briefError(raw: string, maxLen = 72): string {
         text = text.replace(re, '');
     }
     text = text.trim();
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
     let summary = lines[0] ?? text;
     for (let i = lines.length - 1; i >= 0; i--) {
-        if (/^[A-Z]\w*(Error|Exception|Failure):/i.test(lines[i]) || lines[i].startsWith('OSError:')) {
+        if (
+            /^[A-Z]\w*(Error|Exception|Failure):/i.test(lines[i]) ||
+            lines[i].startsWith('OSError:')
+        ) {
             summary = lines[i];
             break;
         }

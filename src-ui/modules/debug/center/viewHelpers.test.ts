@@ -85,7 +85,9 @@ describe('schema 展示', () => {
     it('类型写法', () => {
         expect(schemaTypeText({ type: 'string' })).toBe('string');
         expect(schemaTypeText({ type: 'array', items: { type: 'integer' } })).toBe('integer[]');
-        expect(schemaTypeText({ anyOf: [{ type: 'boolean' }, { type: 'string' }] })).toBe('boolean | string');
+        expect(schemaTypeText({ anyOf: [{ type: 'boolean' }, { type: 'string' }] })).toBe(
+            'boolean | string',
+        );
         expect(schemaTypeText({ anyOf: [{ const: 'a' }, { const: 'b' }] })).toBe('enum');
         expect(schemaTypeText(undefined)).toBe('any');
     });
@@ -95,8 +97,16 @@ describe('schema 展示', () => {
             type: 'object',
             properties: {
                 user_id: { type: 'integer', description: 'QQ 号' },
-                tags: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' } } } },
-                extra: { anyOf: [{ type: 'object', properties: { x: { type: 'number' } } }, { type: 'null' }] },
+                tags: {
+                    type: 'array',
+                    items: { type: 'object', properties: { name: { type: 'string' } } },
+                },
+                extra: {
+                    anyOf: [
+                        { type: 'object', properties: { x: { type: 'number' } } },
+                        { type: 'null' },
+                    ],
+                },
             },
         };
         expect(simplifySchema(schema)).toEqual({
@@ -112,7 +122,12 @@ describe('消息段', () => {
     it('文本 ⇄ 消息段；有非文本段时换不回文本', () => {
         expect(textToSegments('hi')).toEqual([{ type: 'text', data: { text: 'hi' } }]);
         expect(textToSegments('')).toEqual([]);
-        expect(segmentsToText([{ type: 'text', data: { text: 'a' } }, { type: 'text', data: { text: 'b' } }])).toBe('ab');
+        expect(
+            segmentsToText([
+                { type: 'text', data: { text: 'a' } },
+                { type: 'text', data: { text: 'b' } },
+            ]),
+        ).toBe('ab');
         expect(segmentsToText([{ type: 'face', data: { id: '1' } }])).toBeNull();
         expect(segmentsToText('x')).toBeNull();
     });
@@ -165,10 +180,14 @@ describe('发送按钮', () => {
         expect(sendBlocker({ ...ok, running: false, parseOk: false })).toBe('Bot 没在运行');
         expect(sendBlocker({ ...ok, parseOk: false })).toBe('JSON 有错，改好再发');
         expect(sendBlocker({ ...ok, specLoading: true })).toBe('正在读取接口说明…');
-        expect(sendBlocker({ ...ok, channels: { ...channels, auto_call: null } })).toBe('没有能用的调用通道');
+        expect(sendBlocker({ ...ok, channels: { ...channels, auto_call: null } })).toBe(
+            '没有能用的调用通道',
+        );
         expect(sendBlocker({ ...ok, channel: { kind: 'http', name: 'gone' } })).toMatch(/不在了/);
         // 通道列表还没读到时不挡：让后端去解析
-        expect(sendBlocker({ ...ok, channels: undefined, channel: { kind: 'http', name: 'gone' } })).toBeNull();
+        expect(
+            sendBlocker({ ...ok, channels: undefined, channel: { kind: 'http', name: 'gone' } }),
+        ).toBeNull();
     });
 
     it('流式接口现在能发：分块下载在点名的 HTTP / WS 通道上才挡，内部通道和「自动」放行', () => {
@@ -188,20 +207,31 @@ describe('发送按钮', () => {
             ],
         };
         const http = { kind: 'http', name: 'h' } as const;
-        const download = { ...ok, stream: true, action: 'download_file_stream', channels: withHttp };
+        const download = {
+            ...ok,
+            stream: true,
+            action: 'download_file_stream',
+            channels: withHttp,
+        };
         expect(sendBlocker(download)).toBeNull();
         expect(sendBlocker({ ...download, channel: { kind: 'internal' } })).toBeNull();
         expect(sendBlocker({ ...download, channel: http })).toMatch(/不支持流式/);
-        expect(sendBlocker({ ...download, channel: { kind: 'ws', name: 'w' } })).toMatch(/不支持流式/);
+        expect(sendBlocker({ ...download, channel: { kind: 'ws', name: 'w' } })).toMatch(
+            /不支持流式/,
+        );
 
         const upload = { ...download, action: 'upload_file_stream' };
         // 手填块调用在哪条通道都行；带本机文件才需要内部通道
         expect(sendBlocker({ ...upload, channel: http })).toBeNull();
         expect(sendBlocker({ ...upload, localFileCount: 1, channel: http })).toMatch(/不支持流式/);
         // clean_stream_temp_file 是普通的单帧调用，任何通道都能发
-        expect(sendBlocker({ ...download, action: 'clean_stream_temp_file', channel: http })).toBeNull();
+        expect(
+            sendBlocker({ ...download, action: 'clean_stream_temp_file', channel: http }),
+        ).toBeNull();
         // 别的动作带本机文件：传输走内部通道，调用照样走所选通道，不挡
-        expect(sendBlocker({ ...ok, localFileCount: 1, channel: http, channels: withHttp })).toBeNull();
+        expect(
+            sendBlocker({ ...ok, localFileCount: 1, channel: http, channels: withHttp }),
+        ).toBeNull();
     });
 
     it('等待时间的写法', () => {

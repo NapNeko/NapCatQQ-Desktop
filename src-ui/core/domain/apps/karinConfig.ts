@@ -194,7 +194,8 @@ function validateRules(rules: KarinScopeRule[], root: string, out: AppConfigIssu
     rules.forEach((r, i) => {
         const key = r.key.trim();
         if (!key) out.push({ path: `${root}/${i}/key`, message: '规则键不能为空' });
-        else if (seen.has(key)) out.push({ path: `${root}/${i}/key`, message: `规则键 ${key} 重复` });
+        else if (seen.has(key))
+            out.push({ path: `${root}/${i}/key`, message: `规则键 ${key} 重复` });
         else seen.add(key);
         if (!Number.isInteger(r.mode) || r.mode < 0 || r.mode > 6) {
             out.push({ path: `${root}/${i}/mode`, message: 'mode 须在 0–6' });
@@ -210,13 +211,19 @@ export function validateKarinConfig(cfg: KarinInstanceConfig): AppConfigIssue[] 
         out.push({ path: 'env/http_port', message: '端口需在 1–65535' });
     }
     if (!(KARIN_LOG_LEVELS as readonly string[]).includes(env.log_level)) {
-        out.push({ path: 'env/log_level', message: `日志等级须是 ${KARIN_LOG_LEVELS.join(' / ')} 之一` });
+        out.push({
+            path: 'env/log_level',
+            message: `日志等级须是 ${KARIN_LOG_LEVELS.join(' / ')} 之一`,
+        });
     }
     if (!(KARIN_RUNTIMES as readonly string[]).includes(env.runtime)) {
         out.push({ path: 'env/runtime', message: `运行器须是 ${KARIN_RUNTIMES.join(' / ')} 之一` });
     }
     if (!(KARIN_NODE_ENVS as readonly string[]).includes(env.node_env)) {
-        out.push({ path: 'env/node_env', message: `NODE_ENV 须是 ${KARIN_NODE_ENVS.join(' / ')} 之一` });
+        out.push({
+            path: 'env/node_env',
+            message: `NODE_ENV 须是 ${KARIN_NODE_ENVS.join(' / ')} 之一`,
+        });
     }
     const seen = new Set<string>();
     env.custom.forEach((e, i) => {
@@ -238,21 +245,38 @@ export function validateKarinConfig(cfg: KarinInstanceConfig): AppConfigIssue[] 
         out.push({ path: 'adapter/onebot/ws_server/timeout', message: '超时须大于 0 秒' });
     }
     cfg.adapter.onebot.ws_client.forEach((c, i) => {
-        if (!isWs(c.url)) out.push({ path: `adapter/onebot/ws_client/${i}/url`, message: '须以 ws:// 或 wss:// 开头' });
+        if (!isWs(c.url))
+            out.push({
+                path: `adapter/onebot/ws_client/${i}/url`,
+                message: '须以 ws:// 或 wss:// 开头',
+            });
     });
     cfg.adapter.onebot.http_server.forEach((s, i) => {
-        if (!isHttp(s.url)) out.push({ path: `adapter/onebot/http_server/${i}/url`, message: '须以 http:// 或 https:// 开头' });
-        if (!s.self_id.trim()) out.push({ path: `adapter/onebot/http_server/${i}/self_id`, message: 'self_id 不能为空' });
+        if (!isHttp(s.url))
+            out.push({
+                path: `adapter/onebot/http_server/${i}/url`,
+                message: '须以 http:// 或 https:// 开头',
+            });
+        if (!s.self_id.trim())
+            out.push({
+                path: `adapter/onebot/http_server/${i}/self_id`,
+                message: 'self_id 不能为空',
+            });
     });
 
     validateRules(cfg.groups, 'groups', out);
     validateRules(cfg.privates, 'privates', out);
 
     cfg.render.ws_client.forEach((c, i) => {
-        if (!isWs(c.url)) out.push({ path: `render/ws_client/${i}/url`, message: '须以 ws:// 或 wss:// 开头' });
+        if (!isWs(c.url))
+            out.push({ path: `render/ws_client/${i}/url`, message: '须以 ws:// 或 wss:// 开头' });
     });
     cfg.render.http_server.forEach((s, i) => {
-        if (!isHttp(s.url)) out.push({ path: `render/http_server/${i}/url`, message: '须以 http:// 或 https:// 开头' });
+        if (!isHttp(s.url))
+            out.push({
+                path: `render/http_server/${i}/url`,
+                message: '须以 http:// 或 https:// 开头',
+            });
     });
 
     const redis = cfg.redis.url.trim();
@@ -265,7 +289,8 @@ export function validateKarinConfig(cfg: KarinInstanceConfig): AppConfigIssue[] 
 export const KARIN_CONFIG_FORM: ConfigFormSpec<'karin'> = {
     framework: 'karin',
     validate: validateKarinConfig,
-    saveHint: (r) => (r.restart_required ? '有改动需重启实例后生效' : 'Karin 会自动热加载，无需重启'),
+    saveHint: (r) =>
+        r.restart_required ? '有改动需重启实例后生效' : 'Karin 会自动热加载，无需重启',
 };
 
 /** 对接依赖的两把钥匙是否变了（保存前提示「会重新对接」） */

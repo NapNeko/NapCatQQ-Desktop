@@ -38,7 +38,12 @@ export const NEOBOT_CONSOLE_FEATURES: readonly ConsoleFeatureGroup[] = [
                 name: '概览与统计',
                 desc: '消息数与延迟曲线、API 调用量、活跃用户、用量与计费。',
                 state: 'consoleOnly',
-                endpoints: ['/api/overview', '/api/stats/*', '/api/series/*', '/api/config/billing'],
+                endpoints: [
+                    '/api/overview',
+                    '/api/stats/*',
+                    '/api/series/*',
+                    '/api/config/billing',
+                ],
             },
             {
                 name: '服务与任务',
@@ -74,7 +79,11 @@ export const NEOBOT_CONSOLE_FEATURES: readonly ConsoleFeatureGroup[] = [
                 name: '模型库',
                 desc: '模型清单、按用途指派、连通性测试、从供应商拉取模型列表。',
                 state: 'consoleOnly',
-                endpoints: ['/api/config/models', '/api/config/models/assignments', '/api/config/models/test'],
+                endpoints: [
+                    '/api/config/models',
+                    '/api/config/models/assignments',
+                    '/api/config/models/test',
+                ],
             },
             {
                 name: '提示词',

@@ -90,8 +90,7 @@ export const dockerService = {
     },
 
     imageReadyForFlavor: async (hostId: string, flavor: DockerFlavor): Promise<boolean> => {
-        if (isTauri)
-            return invoke<boolean>('docker_image_ready_for_flavor', { hostId, flavor });
+        if (isTauri) return invoke<boolean>('docker_image_ready_for_flavor', { hostId, flavor });
         return withMockDelay(true, 100);
     },
 
@@ -110,11 +109,7 @@ export const dockerService = {
         return withMockDelay(mockDeployed(flavor), 2000);
     },
 
-    composeDown: async (
-        hostId: string,
-        name: string,
-        removeVolumes: boolean,
-    ): Promise<void> => {
+    composeDown: async (hostId: string, name: string, removeVolumes: boolean): Promise<void> => {
         if (isTauri) return invoke<void>('docker_compose_down', { hostId, name, removeVolumes });
         return withMockDelay(undefined, 200);
     },

@@ -22,7 +22,11 @@ export interface CollectionsView {
 export const MAX_NAME_LENGTH = 80;
 
 function compareRequests(a: DebugSavedRequest, b: DebugSavedRequest): number {
-    return a.order - b.order || a.created_at_ms - b.created_at_ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    return (
+        a.order - b.order ||
+        a.created_at_ms - b.created_at_ms ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    );
 }
 
 function compareFolders(a: DebugSavedFolder, b: DebugSavedFolder): number {
@@ -35,7 +39,8 @@ export function collectionsView(c: DebugCollections): CollectionsView {
     const children = new Map<string, DebugSavedRequest[]>(folders.map((f) => [f.id, []]));
     const root: DebugSavedRequest[] = [];
     for (const r of c.requests) {
-        const bucket = r.folder_id !== null && known.has(r.folder_id) ? children.get(r.folder_id) : undefined;
+        const bucket =
+            r.folder_id !== null && known.has(r.folder_id) ? children.get(r.folder_id) : undefined;
         if (bucket) bucket.push(r);
         else root.push(r);
     }
@@ -45,7 +50,10 @@ export function collectionsView(c: DebugCollections): CollectionsView {
 }
 
 /** 请求所在的容器：文件夹 id，或 null 表示根目录（含孤儿） */
-function containerOf(view: CollectionsView, id: string): { folderId: string | null; list: DebugSavedRequest[] } | null {
+function containerOf(
+    view: CollectionsView,
+    id: string,
+): { folderId: string | null; list: DebugSavedRequest[] } | null {
     const inRoot = view.root.findIndex((r) => r.id === id);
     if (inRoot >= 0) return { folderId: null, list: view.root };
     for (const [folderId, list] of view.children) {
@@ -72,7 +80,9 @@ export function moveRequest(c: DebugCollections, id: string, to: RequestSlot): D
 
     const fromIndex = from.list.indexOf(moving);
     const sameContainer = from.folderId === to.folderId;
-    const targetList = sameContainer ? from.list : (to.folderId === null ? view.root : view.children.get(to.folderId)) ?? [];
+    const targetList = sameContainer
+        ? from.list
+        : ((to.folderId === null ? view.root : view.children.get(to.folderId)) ?? []);
     let index = Math.max(0, Math.min(to.index, targetList.length));
     if (sameContainer) {
         // 原位上下各一格都是「没动」
@@ -106,11 +116,21 @@ export function moveFolder(c: DebugCollections, id: string, index: number): Debu
     const next = folders.filter((f) => f.id !== id);
     next.splice(to, 0, folders[fromIndex]);
     const order = new Map(next.map((f, i) => [f.id, i]));
-    return { ...c, folders: c.folders.map((f) => (order.get(f.id) === f.order ? f : { ...f, order: order.get(f.id) ?? f.order })) };
+    return {
+        ...c,
+        folders: c.folders.map((f) =>
+            order.get(f.id) === f.order ? f : { ...f, order: order.get(f.id) ?? f.order },
+        ),
+    };
 }
 
 /** 键盘上移 / 下移一格：请求只在自己的容器里挪，文件夹在文件夹之间挪 */
-export function nudge(c: DebugCollections, kind: 'request' | 'folder', id: string, dir: -1 | 1): DebugCollections {
+export function nudge(
+    c: DebugCollections,
+    kind: 'request' | 'folder',
+    id: string,
+    dir: -1 | 1,
+): DebugCollections {
     const view = collectionsView(c);
     if (kind === 'folder') {
         const idx = view.folders.findIndex((f) => f.id === id);
@@ -129,7 +149,12 @@ function cleanName(name: string): string {
 }
 
 /** 空名字不改（保持原名）；同名不算改动 */
-export function renameRequest(c: DebugCollections, id: string, name: string, nowMs: number): DebugCollections {
+export function renameRequest(
+    c: DebugCollections,
+    id: string,
+    name: string,
+    nowMs: number,
+): DebugCollections {
     const clean = cleanName(name);
     if (!clean) return c;
     let changed = false;
@@ -154,7 +179,9 @@ export function renameFolder(c: DebugCollections, id: string, name: string): Deb
 }
 
 export function deleteRequest(c: DebugCollections, id: string): DebugCollections {
-    return c.requests.some((r) => r.id === id) ? { ...c, requests: c.requests.filter((r) => r.id !== id) } : c;
+    return c.requests.some((r) => r.id === id)
+        ? { ...c, requests: c.requests.filter((r) => r.id !== id) }
+        : c;
 }
 
 /** 删文件夹连同里面的请求一起删（确认框里写明了数量） */
@@ -178,10 +205,18 @@ export function uniqueName(existing: readonly string[], base: string): string {
 }
 
 /** 新文件夹放在所有文件夹的最后 */
-export function addFolder(c: DebugCollections, name?: string): { next: DebugCollections; id: string } {
+export function addFolder(
+    c: DebugCollections,
+    name?: string,
+): { next: DebugCollections; id: string } {
     const id = newRequestId();
     const order = c.folders.reduce((max, f) => Math.max(max, f.order + 1), 0);
-    const folderName = cleanName(name ?? '') || uniqueName(c.folders.map((f) => f.name), '新建文件夹');
+    const folderName =
+        cleanName(name ?? '') ||
+        uniqueName(
+            c.folders.map((f) => f.name),
+            '新建文件夹',
+        );
     return { next: { ...c, folders: [...c.folders, { id, name: folderName, order }] }, id };
 }
 
@@ -195,9 +230,14 @@ export interface NewSavedRequest {
 }
 
 /** 新收藏放在目标容器的末尾 */
-export function addRequest(c: DebugCollections, draft: NewSavedRequest, nowMs: number): { next: DebugCollections; id: string } {
+export function addRequest(
+    c: DebugCollections,
+    draft: NewSavedRequest,
+    nowMs: number,
+): { next: DebugCollections; id: string } {
     const id = newRequestId();
-    const folderId = draft.folderId && c.folders.some((f) => f.id === draft.folderId) ? draft.folderId : null;
+    const folderId =
+        draft.folderId && c.folders.some((f) => f.id === draft.folderId) ? draft.folderId : null;
     const view = collectionsView(c);
     const siblings = folderId === null ? view.root : (view.children.get(folderId) ?? []);
     const order = siblings.reduce((max, r) => Math.max(max, r.order + 1), 0);
@@ -230,9 +270,15 @@ function stableJson(v: unknown): string {
 }
 
 /** 同一个动作、同样的参数已经收藏过了就返回那一条，避免从历史里点两下存出两份 */
-export function findSameRequest(c: DebugCollections, action: string, params: unknown): DebugSavedRequest | null {
+export function findSameRequest(
+    c: DebugCollections,
+    action: string,
+    params: unknown,
+): DebugSavedRequest | null {
     const key = stableJson(params ?? {});
-    return c.requests.find((r) => r.action === action && stableJson(r.params ?? {}) === key) ?? null;
+    return (
+        c.requests.find((r) => r.action === action && stableJson(r.params ?? {}) === key) ?? null
+    );
 }
 
 /** 收藏时名字框里的默认值：简介够短就「简介（接口名）」，一眼认得出是干什么的；否则就是接口名 */

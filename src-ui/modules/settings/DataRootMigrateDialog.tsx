@@ -55,9 +55,7 @@ function kindLabel(kind: string): string {
 
 function TreePreview({ entries }: { entries: DataRootTreeEntry[] }) {
     if (entries.length === 0) {
-        return (
-            <p className="text-[12px] text-text-tertiary">源目录为空或无法列出结构。</p>
-        );
+        return <p className="text-[12px] text-text-tertiary">源目录为空或无法列出结构。</p>;
     }
     return (
         <div className="scrollbar-hide max-h-48 overflow-auto rounded-md border border-border-subtle bg-inset/30">
@@ -136,9 +134,11 @@ export function DataRootMigrateDialog({
     useEffect(() => {
         if (!open || phase !== 'running') return;
         let unlisten: (() => void) | undefined;
-        void dataRootMigrateService.listenProgress((p) => setProgress(p)).then((u) => {
-            unlisten = u;
-        });
+        void dataRootMigrateService
+            .listenProgress((p) => setProgress(p))
+            .then((u) => {
+                unlisten = u;
+            });
         return () => {
             unlisten?.();
         };
@@ -236,7 +236,9 @@ export function DataRootMigrateDialog({
                 <div className="space-y-3 text-[13px] text-text">
                     <div className="rounded-md border border-border-subtle bg-inset/40 px-3 py-2">
                         <div className="text-[11px] text-text-tertiary">当前数据根</div>
-                        <div className="mt-0.5 break-all font-mono text-[12px]">{currentDataRoot}</div>
+                        <div className="mt-0.5 break-all font-mono text-[12px]">
+                            {currentDataRoot}
+                        </div>
                     </div>
 
                     {phase === 'guide' ? (

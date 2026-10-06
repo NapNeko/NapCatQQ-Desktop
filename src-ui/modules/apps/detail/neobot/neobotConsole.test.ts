@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    CONSOLE_STATE_LABEL,
-    NEOBOT_CONSOLE_FEATURES,
-    consoleFeatureStats,
-} from './neobotConsole';
+import { CONSOLE_STATE_LABEL, NEOBOT_CONSOLE_FEATURES, consoleFeatureStats } from './neobotConsole';
 
 describe('NeoBot 控制台能力地图', () => {
     it('每一项都有名字、说明、状态与端点', () => {
@@ -51,7 +47,11 @@ describe('NeoBot 控制台能力地图', () => {
 
     it('汇总允许传入自定义分组（页面按默认值渲染，测试要能换数据）', () => {
         const stats = consoleFeatureStats([
-            { id: 'x', title: 'X', items: [{ name: 'a', desc: 'd', state: 'partial', endpoints: ['/api/a'] }] },
+            {
+                id: 'x',
+                title: 'X',
+                items: [{ name: 'a', desc: 'd', state: 'partial', endpoints: ['/api/a'] }],
+            },
         ]);
         expect(stats.total).toBe(1);
         expect(stats.byState.partial).toBe(1);

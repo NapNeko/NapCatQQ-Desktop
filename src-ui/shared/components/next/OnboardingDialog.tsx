@@ -14,13 +14,7 @@ import {
     SkipForward,
     TriangleAlert,
 } from 'lucide-react';
-import {
-    Button,
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogTitle,
-} from '../../ui';
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '../../ui';
 import { DialogStepTransition, MotionIcon } from '../../ui/motion';
 import { cn } from '../../utils/cn';
 import type { OnboardingDialogMode } from '../../../hooks/desktop/useOnboardingGate';
@@ -32,13 +26,7 @@ import {
     WelcomePreview,
 } from './OnboardingPreviews';
 
-export const ONBOARDING_GUIDE_STEP_IDS = [
-    'welcome',
-    'map',
-    'path',
-    'tips',
-    'go',
-] as const;
+export const ONBOARDING_GUIDE_STEP_IDS = ['welcome', 'map', 'path', 'tips', 'go'] as const;
 
 export type OnboardingGuideStepId = (typeof ONBOARDING_GUIDE_STEP_IDS)[number];
 
@@ -234,11 +222,7 @@ export function OnboardingDialog({
                 onEscapeKeyDown={(e) => e.preventDefault()}
             >
                 {isChoice ? (
-                    <ChoiceBody
-                        submitting={submitting}
-                        onExplore={onExplore}
-                        onSkip={onSkip}
-                    />
+                    <ChoiceBody submitting={submitting} onExplore={onExplore} onSkip={onSkip} />
                 ) : (
                     <GuideBody
                         stepIndex={step}
@@ -443,8 +427,8 @@ function GuideBody({
                             step.facts.length === 3
                                 ? 'sm:grid-cols-3'
                                 : step.facts.length >= 2
-                                    ? 'sm:grid-cols-2'
-                                    : '';
+                                  ? 'sm:grid-cols-2'
+                                  : '';
                         return (
                             <div
                                 className={cn(
@@ -452,7 +436,7 @@ function GuideBody({
                                     stackVisual
                                         ? 'grid grid-cols-1'
                                         : // flex + items-center 比 grid 更稳：预览块按内容高度，贴左栏中线
-                                        'flex flex-col lg:flex-row lg:items-center lg:gap-6',
+                                          'flex flex-col lg:flex-row lg:items-center lg:gap-6',
                                 )}
                             >
                                 <div
@@ -473,8 +457,8 @@ function GuideBody({
                                             'mt-3.5 rounded-md border border-border-subtle/80 bg-inset/35',
                                             'divide-y divide-border-subtle/70',
                                             stackVisual &&
-                                            factCols &&
-                                            `sm:grid ${factCols} sm:divide-x sm:divide-y-0`,
+                                                factCols &&
+                                                `sm:grid ${factCols} sm:divide-x sm:divide-y-0`,
                                         )}
                                     >
                                         {step.facts.map((f) => (
@@ -519,7 +503,7 @@ function GuideBody({
                                     className={cn(
                                         'min-w-0',
                                         !stackVisual &&
-                                        'w-full shrink-0 lg:w-[min(100%,22.5rem)] lg:flex-none xl:w-[24rem]',
+                                            'w-full shrink-0 lg:w-[min(100%,22.5rem)] lg:flex-none xl:w-[24rem]',
                                     )}
                                 >
                                     <GuideVisualBlock kind={step.visual} />
@@ -560,12 +544,7 @@ function GuideBody({
                         </Button>
                     </div>
                 ) : (
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={submitting}
-                        onClick={onNext}
-                    >
+                    <Button variant="primary" size="sm" disabled={submitting} onClick={onNext}>
                         下一步
                         <ArrowRight size={14} strokeWidth={2} />
                     </Button>

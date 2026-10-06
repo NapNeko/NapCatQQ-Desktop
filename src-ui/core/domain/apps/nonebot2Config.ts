@@ -3,7 +3,14 @@
 import type { ConfigFormSpec } from './appConfigForm';
 import type { AppConfigIssue, NoneBot2InstanceConfig } from '../../ipc/types';
 
-export const NONEBOT2_LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] as const;
+export const NONEBOT2_LOG_LEVELS = [
+    'TRACE',
+    'DEBUG',
+    'INFO',
+    'WARNING',
+    'ERROR',
+    'CRITICAL',
+] as const;
 
 export function nonebot2DefaultConfig(port: number): NoneBot2InstanceConfig {
     return {

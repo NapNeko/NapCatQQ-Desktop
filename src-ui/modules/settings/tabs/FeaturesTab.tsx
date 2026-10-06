@@ -43,7 +43,13 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
             <FieldRow
                 key={def.key}
                 label={def.label}
-                description={<Description text={def.description} saves={def.saves} note={blocked ?? warning} />}
+                description={
+                    <Description
+                        text={def.description}
+                        saves={def.saves}
+                        note={blocked ?? warning}
+                    />
+                }
             >
                 <Switch
                     checked={on}
@@ -79,7 +85,9 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
                                         checked={visible}
                                         disabled={!!blocked}
                                         onCheckedChange={(v) =>
-                                            patchDraft({ features: setAppFrameworkVisible(features, m.id, v) })
+                                            patchDraft({
+                                                features: setAppFrameworkVisible(features, m.id, v),
+                                            })
                                         }
                                     />
                                 </FieldRow>
@@ -91,10 +99,28 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
     );
 }
 
-function Description({ text, saves, note }: { text: string; saves?: string; note?: string | null }) {
+function Description({
+    text,
+    saves,
+    note,
+}: {
+    text: string;
+    saves?: string;
+    note?: string | null;
+}) {
     const extra: ReactNode[] = [];
-    if (saves) extra.push(<span key="saves" className="mt-0.5 block text-text-secondary">关掉后：{saves}</span>);
-    if (note) extra.push(<span key="note" className="mt-1 block text-warning">{note}</span>);
+    if (saves)
+        extra.push(
+            <span key="saves" className="mt-0.5 block text-text-secondary">
+                关掉后：{saves}
+            </span>,
+        );
+    if (note)
+        extra.push(
+            <span key="note" className="mt-1 block text-warning">
+                {note}
+            </span>,
+        );
     if (extra.length === 0) return <>{text}</>;
     return (
         <>

@@ -17,7 +17,10 @@ function targetAt(x: number, y: number): TerminalDropTarget | null {
     return { sessionId: el.dataset.terminalDrop, dir: el.dataset.terminalDropDir || null };
 }
 
-export function useTerminalFileDrop(active: boolean, onDrop: (target: TerminalDropTarget, paths: string[]) => void) {
+export function useTerminalFileDrop(
+    active: boolean,
+    onDrop: (target: TerminalDropTarget, paths: string[]) => void,
+) {
     const [hover, setHover] = useState<TerminalDropTarget | null>(null);
 
     useEffect(() => {

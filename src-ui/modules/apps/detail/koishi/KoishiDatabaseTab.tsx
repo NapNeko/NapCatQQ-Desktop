@@ -5,7 +5,10 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Database, RotateCw, Table2 } from 'lucide-react';
 import { Button } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { useKoishiDatabaseRows, useKoishiDatabaseTables } from '../../../../hooks/apps/useKoishiConsole';
+import {
+    useKoishiDatabaseRows,
+    useKoishiDatabaseTables,
+} from '../../../../hooks/apps/useKoishiConsole';
 import { PaneLoading } from '../PaneStatus';
 import type { AppInstance } from '../../../../core/ipc/types';
 
@@ -35,7 +38,9 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
         <div className="flex min-h-0 flex-1 gap-4 pb-3">
             <aside className="flex w-[220px] shrink-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 <div className="flex items-center justify-between border-b border-border-subtle/70 px-3 py-2.5">
-                    <span className="text-2xs text-text-tertiary">{tables.data?.length ?? 0} 张表</span>
+                    <span className="text-2xs text-text-tertiary">
+                        {tables.data?.length ?? 0} 张表
+                    </span>
                     <Button
                         size="sm"
                         variant="ghost"
@@ -48,7 +53,9 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                 </div>
                 <ul className="min-h-0 flex-1 overflow-y-auto p-1.5">
                     {!running ? (
-                        <li className="px-3 py-6 text-center text-xs text-text-tertiary">启动实例后可读</li>
+                        <li className="px-3 py-6 text-center text-xs text-text-tertiary">
+                            启动实例后可读
+                        </li>
                     ) : (
                         (tables.data ?? []).map((t) => (
                             <li key={t.name}>
@@ -57,13 +64,19 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                                     onClick={() => pick(t.name)}
                                     className={cn(
                                         'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors',
-                                        table === t.name ? 'bg-brand-soft text-text' : 'text-text-secondary hover:bg-inset',
+                                        table === t.name
+                                            ? 'bg-brand-soft text-text'
+                                            : 'text-text-secondary hover:bg-inset',
                                     )}
                                 >
                                     <Table2 size={13} className="shrink-0 text-text-tertiary" />
-                                    <span className="min-w-0 flex-1 truncate font-mono">{t.name}</span>
+                                    <span className="min-w-0 flex-1 truncate font-mono">
+                                        {t.name}
+                                    </span>
                                     {t.count !== null && (
-                                        <span className="shrink-0 text-2xs tabular-nums text-text-disabled">{t.count}</span>
+                                        <span className="shrink-0 text-2xs tabular-nums text-text-disabled">
+                                            {t.count}
+                                        </span>
                                     )}
                                 </button>
                             </li>
@@ -82,9 +95,13 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                 ) : (
                     <>
                         <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle/70 px-3.5 py-2">
-                            <span className="font-mono text-[13px] font-medium text-text">{table}</span>
+                            <span className="font-mono text-[13px] font-medium text-text">
+                                {table}
+                            </span>
                             {current && current.primary.length > 0 && (
-                                <span className="text-2xs text-text-tertiary">主键 {current.primary.join(' + ')}</span>
+                                <span className="text-2xs text-text-tertiary">
+                                    主键 {current.primary.join(' + ')}
+                                </span>
                             )}
                             <div className="ml-auto flex items-center gap-1">
                                 <Button
@@ -96,11 +113,15 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                                     <ChevronLeft size={13} />
                                     上一页
                                 </Button>
-                                <span className="px-1 text-2xs tabular-nums text-text-tertiary">{page + 1}</span>
+                                <span className="px-1 text-2xs tabular-nums text-text-tertiary">
+                                    {page + 1}
+                                </span>
                                 <Button
                                     size="sm"
                                     variant="ghost"
-                                    disabled={rows.isFetching || (rows.data?.length ?? 0) < PAGE_SIZE}
+                                    disabled={
+                                        rows.isFetching || (rows.data?.length ?? 0) < PAGE_SIZE
+                                    }
                                     onClick={() => setPage((p) => p + 1)}
                                 >
                                     下一页
@@ -127,7 +148,10 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                                     </thead>
                                     <tbody>
                                         {(rows.data ?? []).map((r, i) => (
-                                            <tr key={i} className="transition-colors hover:bg-inset/50">
+                                            <tr
+                                                key={i}
+                                                className="transition-colors hover:bg-inset/50"
+                                            >
                                                 {columns.map((c) => (
                                                     <td
                                                         key={c}
@@ -165,7 +189,14 @@ function Empty({ text, error }: { text: string; error?: boolean }) {
                     <Database size={20} />
                 </span>
             )}
-            <p className={cn('max-w-md text-xs leading-relaxed', error ? 'text-danger' : 'text-text-tertiary')}>{text}</p>
+            <p
+                className={cn(
+                    'max-w-md text-xs leading-relaxed',
+                    error ? 'text-danger' : 'text-text-tertiary',
+                )}
+            >
+                {text}
+            </p>
         </div>
     );
 }

@@ -91,7 +91,11 @@ export const ColumnFrame = forwardRef<HTMLElement, ColumnFrameProps>(function Co
         >
             {header}
             {notice}
-            <div ref={bodyRef} data-column-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div
+                ref={bodyRef}
+                data-column-body=""
+                className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
                 <RouteErrorBoundary title={errorTitle}>{children}</RouteErrorBoundary>
             </div>
         </section>
@@ -107,10 +111,16 @@ export const ColumnFrame = forwardRef<HTMLElement, ColumnFrameProps>(function Co
 // querySelector('[data-column-body] > *')：桌面端两者相同，但部分 jsdom/nwsapi 版本
 // 对「属性选择器 + > + *」的匹配有 bug（> div 正常、> * 落空），测试环境会查不到。
 function columnBodyChild(section: HTMLElement): HTMLElement | null {
-    return (section.querySelector('[data-column-body]')?.firstElementChild as HTMLElement | null) ?? null;
+    return (
+        (section.querySelector('[data-column-body]')?.firstElementChild as HTMLElement | null) ??
+        null
+    );
 }
 
-export function useSlideAfterShift(sectionRef: RefObject<HTMLElement | null>, shiftKey: unknown): () => void {
+export function useSlideAfterShift(
+    sectionRef: RefObject<HTMLElement | null>,
+    shiftKey: unknown,
+): () => void {
     const m = useMotion();
     // 记的是内容节点带 transform 的视觉左缘，不是 section 的位置：
     // section 本身不动，滑动放在内容上。收起滑到一半立刻展开时，量 section 会丢掉正在跑的
@@ -129,10 +139,13 @@ export function useSlideAfterShift(sectionRef: RefObject<HTMLElement | null>, sh
         if (!content || typeof content.animate !== 'function') return;
         const dx = Math.round(start - content.getBoundingClientRect().left);
         if (Math.abs(dx) < 1) return;
-        const anim = content.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], {
-            duration: m.duration('base') * 1000,
-            easing: cssEase(m.ease.enter),
-        });
+        const anim = content.animate(
+            [{ transform: `translateX(${dx}px)` }, { transform: 'none' }],
+            {
+                duration: m.duration('base') * 1000,
+                easing: cssEase(m.ease.enter),
+            },
+        );
         animRef.current = anim;
         return () => {
             anim.cancel();
@@ -148,7 +161,8 @@ export function useSlideAfterShift(sectionRef: RefObject<HTMLElement | null>, sh
 }
 
 /** 栏顶标题行的统一样式：三栏各自的标题行都用这个高度和底边，横着看是一条线 */
-export const COLUMN_HEADER_CLASS = 'flex h-10 shrink-0 items-center gap-1.5 border-b border-border-subtle/70 px-2';
+export const COLUMN_HEADER_CLASS =
+    'flex h-10 shrink-0 items-center gap-1.5 border-b border-border-subtle/70 px-2';
 
 // ---------------------------------------------------------------------------
 // 分隔条
@@ -170,7 +184,15 @@ export interface ColumnSplitterProps {
     onReset: () => void;
 }
 
-export function ColumnSplitter({ side, label, value, getBounds, onPreview, onCommit, onReset }: ColumnSplitterProps) {
+export function ColumnSplitter({
+    side,
+    label,
+    value,
+    getBounds,
+    onPreview,
+    onCommit,
+    onReset,
+}: ColumnSplitterProps) {
     const [dragging, setDragging] = useState(false);
     const drag = useRef<{
         pointerId: number;
@@ -348,7 +370,12 @@ export function ColumnRail({ active, onPick, onExpand, width, appear = false }: 
             </RailButton>
             <span aria-hidden className="my-1 h-px w-5 bg-border-subtle" />
             {LEFT_PANELS.map((p) => (
-                <RailButton key={p.id} label={p.label} active={p.id === active} onClick={() => onPick(p.id)}>
+                <RailButton
+                    key={p.id}
+                    label={p.label}
+                    active={p.id === active}
+                    onClick={() => onPick(p.id)}
+                >
                     <ActionMotionIcon icon={p.icon} size={15} strokeWidth={2} />
                 </RailButton>
             ))}

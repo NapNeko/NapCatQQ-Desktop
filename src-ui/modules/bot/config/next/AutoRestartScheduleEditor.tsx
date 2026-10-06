@@ -81,8 +81,8 @@ export function AutoRestartScheduleEditor({ schedule, onChange }: AutoRestartSch
             next === 'daily'
                 ? { kind: next, ...clock }
                 : next === 'weekly'
-                    ? { kind: next, weekday: from.kind === 'weekly' ? from.weekday : 1, ...clock }
-                    : { kind: next, day: from.kind === 'monthly' ? from.day : 1, ...clock };
+                  ? { kind: next, weekday: from.kind === 'weekly' ? from.weekday : 1, ...clock }
+                  : { kind: next, day: from.kind === 'monthly' ? from.day : 1, ...clock };
         onChange({ mode: 'cron', cron: cronFromRecipe(nextRecipe) });
     };
 
@@ -91,7 +91,8 @@ export function AutoRestartScheduleEditor({ schedule, onChange }: AutoRestartSch
     const status: ReactNode = (() => {
         if (!isCron) return null;
         if (preview.status === 'ok' && preview.text) return `下次 ${preview.text}`;
-        if (recipe.kind === 'custom' && preview.status !== 'error') return '分 时 日 月 周 · 本地时区';
+        if (recipe.kind === 'custom' && preview.status !== 'error')
+            return '分 时 日 月 周 · 本地时区';
         if (structured?.kind === 'monthly' && structured.day > 28) return '短月份没有这一天时跳过';
         return null;
     })();
@@ -99,7 +100,12 @@ export function AutoRestartScheduleEditor({ schedule, onChange }: AutoRestartSch
     return (
         <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-start gap-2">
-                <Select className="w-32" items={SHAPE_ITEMS} value={shape} onValueChange={setShape} />
+                <Select
+                    className="w-32"
+                    items={SHAPE_ITEMS}
+                    value={shape}
+                    onValueChange={setShape}
+                />
 
                 {shape === 'interval' && (
                     <>

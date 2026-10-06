@@ -75,7 +75,17 @@ interface Props {
 
 type NameDialog = { kind: 'mkdir' } | { kind: 'rename'; entry: TerminalFileEntry };
 
-export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, onCd, onInsertPath, onWidthChange, slideIn }: Props) {
+export function TerminalFilesPanel({
+    sessionId,
+    hostOs,
+    cwd,
+    width,
+    dropping,
+    onCd,
+    onInsertPath,
+    onWidthChange,
+    slideIn,
+}: Props) {
     const files = useTerminalFiles(sessionId, hostOs, cwd);
     const asideRef = useRef<HTMLElement>(null);
     const [liveWidth, setLiveWidth] = useState<number | null>(null);
@@ -106,7 +116,9 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
     const submitName = async () => {
         if (!naming || invalidFileName(name)) return;
         const ok =
-            naming.kind === 'mkdir' ? await files.makeDir(name.trim()) : await files.rename(naming.entry, name.trim());
+            naming.kind === 'mkdir'
+                ? await files.makeDir(name.trim())
+                : await files.rename(naming.entry, name.trim());
         if (ok) setNaming(null);
     };
 
@@ -115,11 +127,17 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
     const crumbs = files.listing ? breadcrumbs(hostOs, files.listing.path) : [];
 
     // 换目录时列表从哪边滑进来：进子目录从右边，回上级 / 跳到别处从左边。第一次列出来不滑
-    const nav = useRef<{ path: string | null; dir: 'in' | 'out' | null }>({ path: null, dir: null });
+    const nav = useRef<{ path: string | null; dir: 'in' | 'out' | null }>({
+        path: null,
+        dir: null,
+    });
     const shownPath = files.listing?.path ?? null;
     if (shownPath !== nav.current.path) {
         const prev = nav.current.path;
-        nav.current = { path: shownPath, dir: prev === null || shownPath === null ? null : navDirection(prev, shownPath) };
+        nav.current = {
+            path: shownPath,
+            dir: prev === null || shownPath === null ? null : navDirection(prev, shownPath),
+        };
     }
 
     // 路径栏太长时滚到最后一段，看得见自己在哪
@@ -136,7 +154,10 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
         if (!aside || !row) return;
         e.preventDefault();
         const right = aside.getBoundingClientRect().right;
-        const max = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, row.getBoundingClientRect().width - TERMINAL_KEEP));
+        const max = Math.max(
+            WIDTH_MIN,
+            Math.min(WIDTH_MAX, row.getBoundingClientRect().width - TERMINAL_KEEP),
+        );
         let next = width;
         const move = (ev: PointerEvent) => {
             next = Math.round(Math.min(max, Math.max(WIDTH_MIN, right - ev.clientX)));
@@ -183,17 +204,27 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                     <RefreshCw size={13} className={cn(files.loading && 'animate-spin')} />
                 </IconButton>
                 <IconButton
-                    title={files.follow ? '跟着终端的目录走（点一下停）' : '回到终端当前目录，并跟着走'}
+                    title={
+                        files.follow ? '跟着终端的目录走（点一下停）' : '回到终端当前目录，并跟着走'
+                    }
                     active={files.follow}
                     onClick={() => files.setFollow(!files.follow)}
                 >
                     {files.follow ? <Link2 size={13} /> : <Link2Off size={13} />}
                 </IconButton>
                 <span className="flex-1" />
-                <IconButton title="新建文件夹" disabled={drives} onClick={() => startNaming({ kind: 'mkdir' })}>
+                <IconButton
+                    title="新建文件夹"
+                    disabled={drives}
+                    onClick={() => startNaming({ kind: 'mkdir' })}
+                >
                     <FolderPlus size={13} />
                 </IconButton>
-                <IconButton title="上传文件（也可以直接拖进来）" disabled={drives} onClick={() => void files.pickAndUpload()}>
+                <IconButton
+                    title="上传文件（也可以直接拖进来）"
+                    disabled={drives}
+                    onClick={() => void files.pickAndUpload()}
+                >
                     <Upload size={13} />
                 </IconButton>
             </div>
@@ -208,7 +239,10 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                     return (
                         <span key={c.path || 'drives'} className="flex shrink-0 items-center">
                             {i > 0 && !(hostOs === 'linux' && i === 1) && (
-                                <ChevronRight size={10} className="mx-px shrink-0 text-text-tertiary/70" />
+                                <ChevronRight
+                                    size={10}
+                                    className="mx-px shrink-0 text-text-tertiary/70"
+                                />
                             )}
                             <button
                                 type="button"
@@ -217,7 +251,9 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                                 className={cn(
                                     'rounded-xs px-1 py-0.5 transition-colors',
                                     c.path === DRIVES_PATH ? '' : 'font-mono',
-                                    last ? 'text-text' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                                    last
+                                        ? 'text-text'
+                                        : 'text-text-tertiary hover:bg-inset hover:text-text',
                                 )}
                             >
                                 {c.label}
@@ -234,14 +270,20 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                     nav.current.dir === 'in' && 'ncd-term-nav-in',
                     nav.current.dir === 'out' && 'ncd-term-nav-out',
                     // 慢的目录（远端大目录）先把旧列表压暗，快的不闪
-                    files.loading ? 'opacity-50 transition-opacity delay-150 duration-150' : 'transition-opacity duration-100',
+                    files.loading
+                        ? 'opacity-50 transition-opacity delay-150 duration-150'
+                        : 'transition-opacity duration-100',
                 )}
             >
                 {files.error && (
-                    <p className="px-3 py-2 text-[12px] leading-relaxed text-danger">{files.error}</p>
+                    <p className="px-3 py-2 text-[12px] leading-relaxed text-danger">
+                        {files.error}
+                    </p>
                 )}
                 {!files.error && files.listing?.entries.length === 0 && (
-                    <p className="px-3 py-2 text-[12px] text-text-tertiary">{drives ? '没找到磁盘' : '空目录'}</p>
+                    <p className="px-3 py-2 text-[12px] text-text-tertiary">
+                        {drives ? '没找到磁盘' : '空目录'}
+                    </p>
                 )}
                 {files.listing?.entries.map((entry) => (
                     <ContextMenu key={entry.path}>
@@ -261,14 +303,19 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                                 ) : entry.is_dir ? (
                                     <Folder size={13} className="shrink-0 text-accent" />
                                 ) : entry.is_symlink ? (
-                                    <FileSymlink size={13} className="shrink-0 text-text-tertiary" />
+                                    <FileSymlink
+                                        size={13}
+                                        className="shrink-0 text-text-tertiary"
+                                    />
                                 ) : (
                                     <File size={13} className="shrink-0 text-text-tertiary" />
                                 )}
                                 <span className="min-w-0 flex-1 truncate">{entry.name}</span>
                                 {!drives && (
                                     <span className="shrink-0 text-[10px] tabular-nums text-text-tertiary">
-                                        {entry.is_dir ? formatModified(entry.modified) : formatBytes(entry.size)}
+                                        {entry.is_dir
+                                            ? formatModified(entry.modified)
+                                            : formatBytes(entry.size)}
                                     </span>
                                 )}
                             </button>
@@ -283,7 +330,9 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                                 <>
                                     <ContextMenuItem onClick={() => void open(entry)}>
                                         <Pencil size={13} />
-                                        <span>{looksLikeText(entry.name) ? '打开编辑' : '下载'}</span>
+                                        <span>
+                                            {looksLikeText(entry.name) ? '打开编辑' : '下载'}
+                                        </span>
                                     </ContextMenuItem>
                                     <ContextMenuItem onClick={() => void files.download(entry)}>
                                         <Download size={13} />
@@ -295,18 +344,25 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                                 <SquareTerminal size={13} />
                                 <span>把路径填进终端</span>
                             </ContextMenuItem>
-                            <ContextMenuItem onClick={() => void navigator.clipboard.writeText(entry.path)}>
+                            <ContextMenuItem
+                                onClick={() => void navigator.clipboard.writeText(entry.path)}
+                            >
                                 <Copy size={13} />
                                 <span>复制路径</span>
                             </ContextMenuItem>
                             {!drives && (
                                 <>
                                     <ContextMenuSeparator />
-                                    <ContextMenuItem onClick={() => startNaming({ kind: 'rename', entry })}>
+                                    <ContextMenuItem
+                                        onClick={() => startNaming({ kind: 'rename', entry })}
+                                    >
                                         <Pencil size={13} />
                                         <span>改名</span>
                                     </ContextMenuItem>
-                                    <ContextMenuItem tone="danger" onClick={() => setDeleting(entry)}>
+                                    <ContextMenuItem
+                                        tone="danger"
+                                        onClick={() => setDeleting(entry)}
+                                    >
                                         <Trash2 size={13} />
                                         <span>删除</span>
                                     </ContextMenuItem>
@@ -325,12 +381,18 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
             )}
             {dropping && <div className="ncd-term-drop">松手传到 {listingDir}</div>}
 
-            <TerminalFileEditor file={editing} onSave={files.writeText} onClose={() => setEditing(null)} />
+            <TerminalFileEditor
+                file={editing}
+                onSave={files.writeText}
+                onClose={() => setEditing(null)}
+            />
 
             <Dialog open={naming !== null} onOpenChange={(o) => !o && setNaming(null)}>
                 <DialogContent size="sm">
                     <DialogHeader>
-                        <DialogTitle>{naming?.kind === 'rename' ? '改名' : '新建文件夹'}</DialogTitle>
+                        <DialogTitle>
+                            {naming?.kind === 'rename' ? '改名' : '新建文件夹'}
+                        </DialogTitle>
                     </DialogHeader>
                     <form
                         onSubmit={(e) => {
@@ -349,7 +411,11 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                             <Button variant="ghost" onClick={() => setNaming(null)}>
                                 取消
                             </Button>
-                            <Button type="submit" variant="primary" disabled={invalidFileName(name)}>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                disabled={invalidFileName(name)}
+                            >
                                 确定
                             </Button>
                         </DialogFooter>
@@ -362,7 +428,8 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
                     <DialogHeader>
                         <DialogTitle>删除 {deleting?.name}？</DialogTitle>
                         <DialogDescription>
-                            {deleting?.is_dir ? '整个文件夹连里面的东西一起删掉，' : ''}删了找不回来。
+                            {deleting?.is_dir ? '整个文件夹连里面的东西一起删掉，' : ''}
+                            删了找不回来。
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -406,7 +473,9 @@ function IconButton({
             onClick={onClick}
             className={cn(
                 'flex h-6 w-6 items-center justify-center rounded-xs transition-colors disabled:opacity-40',
-                active ? 'bg-accent-soft text-text' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                active
+                    ? 'bg-accent-soft text-text'
+                    : 'text-text-tertiary hover:bg-inset hover:text-text',
             )}
         >
             {children}

@@ -38,7 +38,7 @@ export function useBotRuntimeMetrics(
         getBotRuntimeMetricsCatalogSnapshot,
     );
 
-    const fromCatalog = botId ? catalog.byId[botId] ?? null : null;
+    const fromCatalog = botId ? (catalog.byId[botId] ?? null) : null;
     const [detailOverride, setDetailOverride] = useState<BotRuntimeMetrics | null>(null);
     const [gapFill, setGapFill] = useState<BotRuntimeMetrics | null>(null);
     /** 仅「还没有任何 metrics」时的首拉；静默轮询不碰它 */
@@ -63,14 +63,7 @@ export function useBotRuntimeMetrics(
         return () => {
             cancelled = true;
         };
-    }, [
-        catalog.enabled,
-        catalog.fetching,
-        catalog.lastFetchAt,
-        botId,
-        fromCatalog,
-        liveDetail,
-    ]);
+    }, [catalog.enabled, catalog.fetching, catalog.lastFetchAt, botId, fromCatalog, liveDetail]);
 
     useEffect(() => {
         if (!liveDetail || !catalog.enabled || !botId) {
@@ -96,10 +89,7 @@ export function useBotRuntimeMetrics(
             }
         };
         void tick();
-        const t = window.setInterval(
-            () => void tick(),
-            Math.max(1000, catalog.intervalMs || 3000),
-        );
+        const t = window.setInterval(() => void tick(), Math.max(1000, catalog.intervalMs || 3000));
         return () => {
             cancelled = true;
             window.clearInterval(t);

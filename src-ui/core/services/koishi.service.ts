@@ -60,8 +60,14 @@ export const koishiService = {
         return invoke<KoishiFileContent>('koishi_explorer_read', { instanceId, path });
     },
 
-    explorerWrite: async (instanceId: string, path: string, content: string, binary = false): Promise<void> => {
-        if (!isTauri) return mockAppFrameworkApi.koishiExplorerWrite(instanceId, path, content, binary);
+    explorerWrite: async (
+        instanceId: string,
+        path: string,
+        content: string,
+        binary = false,
+    ): Promise<void> => {
+        if (!isTauri)
+            return mockAppFrameworkApi.koishiExplorerWrite(instanceId, path, content, binary);
         return invoke<void>('koishi_explorer_write', { instanceId, path, content, binary });
     },
 
@@ -91,8 +97,14 @@ export const koishiService = {
         offset: number,
         limit: number,
     ): Promise<Record<string, unknown>[]> => {
-        if (!isTauri) return mockAppFrameworkApi.koishiDatabaseRows(instanceId, table, offset, limit);
-        return invoke<Record<string, unknown>[]>('koishi_database_rows', { instanceId, table, offset, limit });
+        if (!isTauri)
+            return mockAppFrameworkApi.koishiDatabaseRows(instanceId, table, offset, limit);
+        return invoke<Record<string, unknown>[]>('koishi_database_rows', {
+            instanceId,
+            table,
+            offset,
+            limit,
+        });
     },
 
     commands: async (instanceId: string): Promise<KoishiCommandRow[]> => {
@@ -100,7 +112,11 @@ export const koishiService = {
         return invoke<KoishiCommandRow[]>('koishi_commands', { instanceId });
     },
 
-    commandUpdate: async (instanceId: string, name: string, config: Record<string, unknown>): Promise<void> => {
+    commandUpdate: async (
+        instanceId: string,
+        name: string,
+        config: Record<string, unknown>,
+    ): Promise<void> => {
         if (!isTauri) return mockAppFrameworkApi.koishiCommandUpdate(instanceId, name, config);
         return invoke<void>('koishi_command_update', { instanceId, name, config });
     },

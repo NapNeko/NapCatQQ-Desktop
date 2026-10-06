@@ -10,7 +10,14 @@ import { timelineMarks } from '../../../../core/domain/apps/maibotChat';
 import { useMaiBotChat, type MaiBotChatState } from '../../../../hooks/apps/useMaiBotChat';
 import { ConfirmDelete } from '../entityParts';
 import { MaiBotLiveGate, maibotLive } from './MaiBotLiveGate';
-import { ChatAvatar, ImagePreview, MessageRow, NoticeRow, TimeRow, TypingRow } from './maibotChatParts';
+import {
+    ChatAvatar,
+    ImagePreview,
+    MessageRow,
+    NoticeRow,
+    TimeRow,
+    TypingRow,
+} from './maibotChatParts';
 import { ChatComposer } from './maibotChatComposer';
 
 // 离底部这么近算「在看最新的」：来新消息跟着滚，否则只亮「回到最新」
@@ -26,10 +33,19 @@ const StatusLine: React.FC<{ state: MaiBotChatState }> = ({ state }) => {
             </span>
         );
     }
-    const text = status === 'reconnecting' ? '断了，正在重连' : status === 'closed' ? '已断开' : '正在连';
+    const text =
+        status === 'reconnecting' ? '断了，正在重连' : status === 'closed' ? '已断开' : '正在连';
     return (
-        <span className="flex min-w-0 items-center gap-1.5 text-2xs text-text-tertiary" title={reason}>
-            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', status === 'reconnecting' ? 'bg-warning' : 'bg-text-disabled')} />
+        <span
+            className="flex min-w-0 items-center gap-1.5 text-2xs text-text-tertiary"
+            title={reason}
+        >
+            <span
+                className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                    status === 'reconnecting' ? 'bg-warning' : 'bg-text-disabled',
+                )}
+            />
             <span className="truncate">
                 {text}
                 {reason ? `：${reason}` : '…'}
@@ -38,7 +54,10 @@ const StatusLine: React.FC<{ state: MaiBotChatState }> = ({ state }) => {
     );
 };
 
-const NameEditor: React.FC<{ value: string; onChange: (next: string) => void }> = ({ value, onChange }) => {
+const NameEditor: React.FC<{ value: string; onChange: (next: string) => void }> = ({
+    value,
+    onChange,
+}) => {
     const [draft, setDraft] = useState<string | null>(null);
     if (draft === null) {
         return (
@@ -96,14 +115,18 @@ export const MaiBotTryChatTab: React.FC<{
         if (!el) return;
         if (stick.current) {
             // 头一次铺历史直接到底，之后的新消息平滑滚过去
-            el.scrollTo({ top: el.scrollHeight, behavior: everScrolled.current ? 'smooth' : 'auto' });
+            el.scrollTo({
+                top: el.scrollHeight,
+                behavior: everScrolled.current ? 'smooth' : 'auto',
+            });
             everScrolled.current = items.length > 0;
         } else {
             setBehind(true);
         }
     }, [items, typing]);
 
-    if (!live) return <MaiBotLiveGate status={status} what="试聊" onStart={onStart} starting={starting} />;
+    if (!live)
+        return <MaiBotLiveGate status={status} what="试聊" onStart={onStart} starting={starting} />;
 
     const ready = state.status === 'ready';
     const messages = items.flatMap((i) => (i.kind === 'message' ? [i.message] : []));
@@ -157,7 +180,14 @@ export const MaiBotTryChatTab: React.FC<{
                     ) : (
                         <div className="pt-1">
                             {items.map((item) => {
-                                if (item.kind === 'notice') return <NoticeRow key={item.key} text={item.text} error={item.error} />;
+                                if (item.kind === 'notice')
+                                    return (
+                                        <NoticeRow
+                                            key={item.key}
+                                            text={item.text}
+                                            error={item.error}
+                                        />
+                                    );
                                 const mark = marks[mi++];
                                 return (
                                     <div key={item.key}>
@@ -181,7 +211,10 @@ export const MaiBotTryChatTab: React.FC<{
                         onClick={() => {
                             stick.current = true;
                             setBehind(false);
-                            list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' });
+                            list.current?.scrollTo({
+                                top: list.current.scrollHeight,
+                                behavior: 'smooth',
+                            });
                         }}
                         className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-pill bg-elevated px-3 py-1 text-2xs text-text-secondary shadow-popover ring-1 ring-border-subtle hover:text-text"
                     >
@@ -194,7 +227,11 @@ export const MaiBotTryChatTab: React.FC<{
             <div className="pt-3">
                 <ChatComposer
                     ready={ready}
-                    placeholder={ready ? `和${botName}说点什么，Enter 发送，Shift + Enter 换行` : '还没连上麦麦…'}
+                    placeholder={
+                        ready
+                            ? `和${botName}说点什么，Enter 发送，Shift + Enter 换行`
+                            : '还没连上麦麦…'
+                    }
                     onSend={(text, images) => {
                         stick.current = true;
                         return send(text, images);

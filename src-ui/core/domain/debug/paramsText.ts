@@ -66,7 +66,8 @@ function findSyntaxError(text: string): SyntaxIssue | null {
                 const next = text[i + 1];
                 if (next === undefined) return incomplete();
                 if (next === 'u') {
-                    if (!/^[0-9a-fA-F]{4}$/.test(text.slice(i + 2, i + 6))) fail(i, '\\u 后面要跟 4 位十六进制数');
+                    if (!/^[0-9a-fA-F]{4}$/.test(text.slice(i + 2, i + 6)))
+                        fail(i, '\\u 后面要跟 4 位十六进制数');
                     i += 6;
                 } else if ('"\\/bfnrt'.includes(next)) {
                     i += 2;
@@ -163,7 +164,8 @@ function findSyntaxError(text: string): SyntaxIssue | null {
         if (i < text.length) fail(i, 'JSON 后面有多余内容');
         return null;
     } catch (err) {
-        if (typeof err === 'object' && err !== null && 'offset' in err && 'message' in err) return err as SyntaxIssue;
+        if (typeof err === 'object' && err !== null && 'offset' in err && 'message' in err)
+            return err as SyntaxIssue;
         throw err;
     }
 }
@@ -200,7 +202,12 @@ export function formatParams(value: Record<string, unknown>): string {
 
 /** `__proto__` 这类键名走赋值会改原型，用 defineProperty 保证永远是自有属性 */
 function put(target: Record<string, unknown>, key: string, value: unknown): void {
-    Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
+    Object.defineProperty(target, key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+    });
 }
 
 /**

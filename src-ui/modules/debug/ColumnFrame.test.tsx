@@ -52,11 +52,16 @@ beforeEach(() => {
     preferencesStore.setMotionEnabled(true);
     contentLeft = 48;
     anims.length = 0;
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: HTMLElement,
+    ) {
         return rect(this.classList.contains('content') ? contentLeft : SECTION_LEFT);
     });
     // jsdom 的 Element.animate 由测试替换成只管 cancel 记录的假动画
-    (Element.prototype as { animate?: unknown }).animate = function (this: Element, keyframes: Keyframe[]) {
+    (Element.prototype as { animate?: unknown }).animate = function (
+        this: Element,
+        keyframes: Keyframe[],
+    ) {
         const a: FakeAnimation = { cancel: vi.fn(), keyframes };
         anims.push(a);
         return a;

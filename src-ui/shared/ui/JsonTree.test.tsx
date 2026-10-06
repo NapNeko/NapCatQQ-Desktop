@@ -16,7 +16,10 @@ beforeAll(() => {
             return (this as HTMLElement).getAttribute('role') === 'tree' ? 440 : 22;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 600 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 600,
+    });
 });
 
 afterAll(() => {
@@ -92,7 +95,11 @@ describe('JsonTree 点击值', () => {
         render(<JsonTree value={SAMPLE} defaultExpandDepth={3} onValueClick={onValueClick} />);
 
         await user.click(screen.getByText('"napcat"'));
-        expect(onValueClick).toHaveBeenLastCalledWith({ path: ['name'], key: 'name', value: 'napcat' });
+        expect(onValueClick).toHaveBeenLastCalledWith({
+            path: ['name'],
+            key: 'name',
+            value: 'napcat',
+        });
 
         // 数组下标在路径里是数字
         await user.click(screen.getByText('20'));
@@ -133,7 +140,11 @@ describe('JsonTree 键盘', () => {
 
         // ↓ 落到 name，回车等价于点它的值
         await user.keyboard('{ArrowDown}{Enter}');
-        expect(onValueClick).toHaveBeenLastCalledWith({ path: ['name'], key: 'name', value: 'napcat' });
+        expect(onValueClick).toHaveBeenLastCalledWith({
+            path: ['name'],
+            key: 'name',
+            value: 'napcat',
+        });
         expect(rowStartingWith('name')).toHaveAttribute('aria-selected', 'true');
 
         // 往下走到 items，回车切换展开
@@ -154,7 +165,10 @@ describe('JsonTree 键盘：Tab 顺序、复制、选中项', () => {
                 <button type="button">树外按钮</button>
             </>,
         );
-        for (const b of [...screen.getAllByRole('button', { name: /复制/ }), screen.getByRole('button', { name: '展开' })]) {
+        for (const b of [
+            ...screen.getAllByRole('button', { name: /复制/ }),
+            screen.getByRole('button', { name: '展开' }),
+        ]) {
             expect(b).toHaveAttribute('tabindex', '-1');
         }
 
@@ -173,7 +187,9 @@ describe('JsonTree 键盘：Tab 顺序、复制、选中项', () => {
         await user.keyboard('{ArrowDown}{ArrowDown}c');
         expect(await navigator.clipboard.readText()).toBe(JSON.stringify(SAMPLE.items, null, 2));
         // 复制后行内按钮变成「已复制」
-        expect(within(rowStartingWith('items')).getByRole('button', { name: '已复制' })).toBeInTheDocument();
+        expect(
+            within(rowStartingWith('items')).getByRole('button', { name: '已复制' }),
+        ).toBeInTheDocument();
 
         await user.keyboard('{ArrowUp}{Control>}c{/Control}');
         expect(await navigator.clipboard.readText()).toBe(JSON.stringify(SAMPLE.items, null, 2));

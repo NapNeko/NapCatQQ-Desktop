@@ -1,6 +1,12 @@
 // 云崽「主人与权限」：other.yaml。主人在这里填和群里发 #设置主人 是一回事，省掉看日志抄验证码那一步。
 
-import { FormSection, NumberField, StringListField, Switch, TextAreaField } from '../../../../shared/ui';
+import {
+    FormSection,
+    NumberField,
+    StringListField,
+    Switch,
+    TextAreaField,
+} from '../../../../shared/ui';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import type { YunzaiOtherConfig } from '../../../../core/ipc/types';
 import type { YunzaiTabProps } from './YunzaiBasicTab';
@@ -11,9 +17,15 @@ function listError(errors: Record<string, string>, path: string): string | undef
     return hit?.[1];
 }
 
-export const YunzaiPermissionsTab: React.FC<YunzaiTabProps> = ({ config, onChange, errors, disabled }) => {
+export const YunzaiPermissionsTab: React.FC<YunzaiTabProps> = ({
+    config,
+    onChange,
+    errors,
+    disabled,
+}) => {
     const other = config.other;
-    const set = (patch: Partial<YunzaiOtherConfig>) => onChange({ ...config, other: { ...other, ...patch } });
+    const set = (patch: Partial<YunzaiOtherConfig>) =>
+        onChange({ ...config, other: { ...other, ...patch } });
 
     return (
         <ConfigForm>

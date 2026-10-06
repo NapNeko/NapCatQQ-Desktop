@@ -3,201 +3,206 @@
    切主题（暗色 / 高对比 / 不同品牌色）时只改这个文件，组件零改动。 */
 
 :root {
-   /* primitive: brand 暖橙桃 9 阶（参考图 hello!! 的暖色基调） */
-   --brand-50: #fff5ec;
-   --brand-100: #ffe9cf;
-   --brand-200: #ffcfa8;
-   --brand-300: #ffb586;
-   --brand-400: #ff9a6b;
-   --brand-500: #ff6b3d;
-   --brand-600: #e85220;
-   --brand-700: #c33f15;
-   --brand-800: #9b3214;
-   --brand-900: #7a2912;
+    /* primitive: brand 暖橙桃 9 阶（参考图 hello!! 的暖色基调） */
+    --brand-50: #fff5ec;
+    --brand-100: #ffe9cf;
+    --brand-200: #ffcfa8;
+    --brand-300: #ffb586;
+    --brand-400: #ff9a6b;
+    --brand-500: #ff6b3d;
+    --brand-600: #e85220;
+    --brand-700: #c33f15;
+    --brand-800: #9b3214;
+    --brand-900: #7a2912;
 
-   /* primitive: accent 桃粉 9 阶（左导航 / 时间轴节点 / 强调点缀） */
-   --accent-50: #fff5f9;
-   --accent-100: #ffe3ee;
-   --accent-200: #fdc9dd;
-   --accent-300: #fbc4dc;
-   --accent-400: #f9a3c5;
-   --accent-500: #f58fb6;
-   --accent-600: #e070a0;
-   --accent-700: #c76a8e;
-   --accent-800: #9c4f6e;
-   --accent-900: #6f3b51;
+    /* primitive: accent 桃粉 9 阶（左导航 / 时间轴节点 / 强调点缀） */
+    --accent-50: #fff5f9;
+    --accent-100: #ffe3ee;
+    --accent-200: #fdc9dd;
+    --accent-300: #fbc4dc;
+    --accent-400: #f9a3c5;
+    --accent-500: #f58fb6;
+    --accent-600: #e070a0;
+    --accent-700: #c76a8e;
+    --accent-800: #9c4f6e;
+    --accent-900: #6f3b51;
 
-   /* primitive: neutral 暖灰 12 阶（暖色画布友好的中性） */
-   --neutral-0: #ffffff;
-   --neutral-50: #faf7f2;
-   --neutral-100: #f4efe7;
-   --neutral-200: #e9e2d5;
-   --neutral-300: #d6cdbe;
-   --neutral-400: #b8ad9b;
-   --neutral-500: #9a8e84;
-   --neutral-600: #7a6e64;
-   --neutral-700: #5c534b;
-   --neutral-800: #3d3631;
-   --neutral-900: #2c1f18;
-   --neutral-950: #1a120d;
+    /* primitive: neutral 暖灰 12 阶（暖色画布友好的中性） */
+    --neutral-0: #ffffff;
+    --neutral-50: #faf7f2;
+    --neutral-100: #f4efe7;
+    --neutral-200: #e9e2d5;
+    --neutral-300: #d6cdbe;
+    --neutral-400: #b8ad9b;
+    --neutral-500: #9a8e84;
+    --neutral-600: #7a6e64;
+    --neutral-700: #5c534b;
+    --neutral-800: #3d3631;
+    --neutral-900: #2c1f18;
+    --neutral-950: #1a120d;
 
-   /* primitive: 状态色（保留 NapCat 业务语义，参考图同色系微调） */
-   --green-500: #4fb477;
-   --green-600: #3a9961;
-   --amber-500: #f2b43a;
-   --amber-600: #d99526;
-   --rose-500: #e85b57;
-   --rose-600: #c94340;
-   --blue-500: #5eb1ff;
-   --blue-600: #3d96ed;
-   --purple-500: #a280e8;
+    /* primitive: 状态色（保留 NapCat 业务语义，参考图同色系微调） */
+    --green-500: #4fb477;
+    --green-600: #3a9961;
+    --amber-500: #f2b43a;
+    --amber-600: #d99526;
+    --rose-500: #e85b57;
+    --rose-600: #c94340;
+    --blue-500: #5eb1ff;
+    --blue-600: #3d96ed;
+    --purple-500: #a280e8;
 
-   /* semantic: 表面层 */
-   --surface-canvas: var(--neutral-50);
-   /* 整窗画布 */
-   --surface-card: var(--neutral-0);
-   /* 默认卡片 */
-   --surface-elevated: #fff8f0;
-   /* 弹层 / 命令面板 */
-   --surface-inset: var(--neutral-100);
-   /* 卡内嵌区 / 输入框 */
-   --surface-muted: var(--neutral-100);
-   /* 副表面 */
-   --surface-field: color-mix(in srgb, var(--neutral-0) 70%, var(--surface-canvas));
-   /* 输入框：纯白 70% + 画布 30%，暖白介于纯白和画布之间，不刺眼但仍清楚 */
-   --surface-sidebar: color-mix(in srgb, var(--accent-100) 28%, var(--surface-canvas));
-   /* 侧栏：极淡桃粉融入画布，不抢戏 */
-   /* 主页 Hello 大卡底：比纯 brand-100 更贴画布，避免整块 #FFE5C1 感 */
-   --surface-hero: color-mix(in srgb, var(--brand-50) 62%, var(--surface-card));
-   --text-hero-title: var(--brand-600);
-   --text-hero-accent: var(--brand-500);
+    /* semantic: 表面层 */
+    --surface-canvas: var(--neutral-50);
+    /* 整窗画布 */
+    --surface-card: var(--neutral-0);
+    /* 默认卡片 */
+    --surface-elevated: #fff8f0;
+    /* 弹层 / 命令面板 */
+    --surface-inset: var(--neutral-100);
+    /* 卡内嵌区 / 输入框 */
+    --surface-muted: var(--neutral-100);
+    /* 副表面 */
+    --surface-field: color-mix(in srgb, var(--neutral-0) 70%, var(--surface-canvas));
+    /* 输入框：纯白 70% + 画布 30%，暖白介于纯白和画布之间，不刺眼但仍清楚 */
+    --surface-sidebar: color-mix(in srgb, var(--accent-100) 28%, var(--surface-canvas));
+    /* 侧栏：极淡桃粉融入画布，不抢戏 */
+    /* 主页 Hello 大卡底：比纯 brand-100 更贴画布，避免整块 #FFE5C1 感 */
+    --surface-hero: color-mix(in srgb, var(--brand-50) 62%, var(--surface-card));
+    --text-hero-title: var(--brand-600);
+    --text-hero-accent: var(--brand-500);
 
-   /* semantic: 文字 */
-   --text-primary: var(--neutral-900);
-   --text-secondary: var(--neutral-700);
-   --text-tertiary: var(--neutral-500);
-   --text-disabled: var(--neutral-400);
-   --text-on-brand: var(--neutral-0);
-   --text-on-accent: var(--neutral-0);
-   /* 日志里上游终端颜色的 OKLCH 亮度区间：上游照黑底配色，浅底要压暗才读得清 */
-   --log-ansi-l-min: 0.36;
-   --log-ansi-l-max: 0.52;
+    /* semantic: 文字 */
+    --text-primary: var(--neutral-900);
+    --text-secondary: var(--neutral-700);
+    --text-tertiary: var(--neutral-500);
+    --text-disabled: var(--neutral-400);
+    --text-on-brand: var(--neutral-0);
+    --text-on-accent: var(--neutral-0);
+    /* 日志里上游终端颜色的 OKLCH 亮度区间：上游照黑底配色，浅底要压暗才读得清 */
+    --log-ansi-l-min: 0.36;
+    --log-ansi-l-max: 0.52;
 
-   /* semantic: 边框 */
-   --border-subtle: color-mix(in srgb, var(--neutral-900) 6%, transparent);
-   --border-default: color-mix(in srgb, var(--neutral-900) 12%, transparent);
-   --border-strong: color-mix(in srgb, var(--neutral-900) 22%, transparent);
-   --border-focus: var(--brand-500);
+    /* semantic: 边框 */
+    --border-subtle: color-mix(in srgb, var(--neutral-900) 6%, transparent);
+    --border-default: color-mix(in srgb, var(--neutral-900) 12%, transparent);
+    --border-strong: color-mix(in srgb, var(--neutral-900) 22%, transparent);
+    --border-focus: var(--brand-500);
 
-   /* semantic: 状态语义（业务色绑定 NapCat 真实状态） */
-   --state-success: var(--green-500);
-   /* Bot online / running */
-   --state-success-bg: color-mix(in srgb, var(--green-500) 12%, transparent);
-   --state-warning: var(--amber-500);
-   /* 等待扫码 / pending_restart */
-   --state-warning-bg: color-mix(in srgb, var(--amber-500) 14%, transparent);
-   --state-danger: var(--rose-500);
-   /* daemon crashed / bot_error */
-   --state-danger-bg: color-mix(in srgb, var(--rose-500) 12%, transparent);
-   --state-info: var(--blue-500);
-   --state-info-bg: color-mix(in srgb, var(--blue-500) 12%, transparent);
-   --state-neutral: var(--neutral-500);
+    /* semantic: 状态语义（业务色绑定 NapCat 真实状态） */
+    --state-success: var(--green-500);
+    /* Bot online / running */
+    --state-success-bg: color-mix(in srgb, var(--green-500) 12%, transparent);
+    --state-warning: var(--amber-500);
+    /* 等待扫码 / pending_restart */
+    --state-warning-bg: color-mix(in srgb, var(--amber-500) 14%, transparent);
+    --state-danger: var(--rose-500);
+    /* daemon crashed / bot_error */
+    --state-danger-bg: color-mix(in srgb, var(--rose-500) 12%, transparent);
+    --state-info: var(--blue-500);
+    --state-info-bg: color-mix(in srgb, var(--blue-500) 12%, transparent);
+    --state-neutral: var(--neutral-500);
 
-   /* component: InfoBar 不透明面板（对齐 Fluent info_bar.qss，不用毛玻璃） */
-   --infobar-info-bg: var(--neutral-100);
-   --infobar-success-bg: color-mix(in srgb, var(--green-500) 16%, var(--neutral-0));
-   --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 22%, var(--neutral-50));
-   --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 14%, var(--neutral-0));
-   --infobar-info-border: var(--border-default);
-   --infobar-success-border: color-mix(in srgb, var(--green-600) 28%, var(--border-default));
-   --infobar-warning-border: color-mix(in srgb, var(--amber-600) 32%, var(--border-default));
-   --infobar-danger-border: color-mix(in srgb, var(--rose-600) 30%, var(--border-default));
-   --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 18%, var(--neutral-100));
-   --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 22%, var(--neutral-0));
-   --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 26%, var(--neutral-0));
-   --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 20%, var(--neutral-0));
+    /* component: InfoBar 不透明面板（对齐 Fluent info_bar.qss，不用毛玻璃） */
+    --infobar-info-bg: var(--neutral-100);
+    --infobar-success-bg: color-mix(in srgb, var(--green-500) 16%, var(--neutral-0));
+    --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 22%, var(--neutral-50));
+    --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 14%, var(--neutral-0));
+    --infobar-info-border: var(--border-default);
+    --infobar-success-border: color-mix(in srgb, var(--green-600) 28%, var(--border-default));
+    --infobar-warning-border: color-mix(in srgb, var(--amber-600) 32%, var(--border-default));
+    --infobar-danger-border: color-mix(in srgb, var(--rose-600) 30%, var(--border-default));
+    --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 18%, var(--neutral-100));
+    --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 22%, var(--neutral-0));
+    --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 26%, var(--neutral-0));
+    --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 20%, var(--neutral-0));
 
-   /* semantic: 主交互色 */
-   --action-primary: var(--brand-500);
-   --action-primary-hover: var(--brand-600);
-   --action-primary-active: var(--brand-700);
-   --action-secondary: var(--accent-500);
-   --action-secondary-hover: var(--accent-600);
+    /* semantic: 主交互色 */
+    --action-primary: var(--brand-500);
+    --action-primary-hover: var(--brand-600);
+    --action-primary-active: var(--brand-700);
+    --action-secondary: var(--accent-500);
+    --action-secondary-hover: var(--accent-600);
 
-   /* semantic: 柔和品牌/点缀背景（高亮卡片、badge、选中项等） */
-   --brand-soft: var(--brand-100);
-   --brand-tint: var(--brand-50);
-   --accent-soft: var(--accent-100);
-   --accent-tint: var(--accent-50);
+    /* semantic: 柔和品牌/点缀背景（高亮卡片、badge、选中项等） */
+    --brand-soft: var(--brand-100);
+    --brand-tint: var(--brand-50);
+    --accent-soft: var(--accent-100);
+    --accent-tint: var(--accent-50);
 
-   /* semantic: 圆角 */
-   --radius-xs: 4px;
-   --radius-sm: 8px;
-   --radius-md: 12px;
-   /* 默认卡片 */
-   --radius-lg: 20px;
-   /* hero / hello 卡 */
-   --radius-xl: 28px;
-   --radius-pill: 9999px;
+    /* semantic: 圆角 */
+    --radius-xs: 4px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    /* 默认卡片 */
+    --radius-lg: 20px;
+    /* hero / hello 卡 */
+    --radius-xl: 28px;
+    --radius-pill: 9999px;
 
-   /* semantic: 滚动条（全局 index.css；各主题块覆写 thumb 三档） */
-   --scrollbar-size: 5px;
-   --scrollbar-thumb-rest: color-mix(in srgb, var(--neutral-900) 7%, transparent);
-   --scrollbar-thumb-hover: color-mix(in srgb, var(--neutral-900) 14%, transparent);
-   --scrollbar-thumb-active: color-mix(in srgb, var(--neutral-900) 22%, transparent);
+    /* semantic: 滚动条（全局 index.css；各主题块覆写 thumb 三档） */
+    --scrollbar-size: 5px;
+    --scrollbar-thumb-rest: color-mix(in srgb, var(--neutral-900) 7%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--neutral-900) 14%, transparent);
+    --scrollbar-thumb-active: color-mix(in srgb, var(--neutral-900) 22%, transparent);
 
-   /* semantic: 阴影（暖色低饱和柔光，不用纯黑投影） */
-   --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.04);
-   --shadow-md: 0 4px 12px rgba(60, 40, 20, 0.06), 0 1px 2px rgba(60, 40, 20, 0.04);
-   --shadow-lg: 0 12px 32px rgba(60, 40, 20, 0.08), 0 2px 6px rgba(60, 40, 20, 0.04);
-   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 35%, transparent);
-   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
+    /* semantic: 阴影（暖色低饱和柔光，不用纯黑投影） */
+    --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.04);
+    --shadow-md: 0 4px 12px rgba(60, 40, 20, 0.06), 0 1px 2px rgba(60, 40, 20, 0.04);
+    --shadow-lg: 0 12px 32px rgba(60, 40, 20, 0.08), 0 2px 6px rgba(60, 40, 20, 0.04);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 35%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
 
-   /* component: titlebar 高度（CustomTitleBar 仍走 Tauri drag region，无原生菜单栏） */
-   --titlebar-height: 36px;
+    /* component: titlebar 高度（CustomTitleBar 仍走 Tauri drag region，无原生菜单栏） */
+    --titlebar-height: 36px;
 
-   /* component: sidebar */
-   --sidebar-width: 220px;
-   --sidebar-width-collapsed: 64px;
+    /* component: sidebar */
+    --sidebar-width: 220px;
+    --sidebar-width-collapsed: 64px;
 
-   /* component: status bar */
-   --statusbar-height: 28px;
+    /* component: status bar */
+    --statusbar-height: 28px;
 
-   /* component: bot card 网格基线 */
-   --botcard-min-width: 320px;
+    /* component: bot card 网格基线 */
+    --botcard-min-width: 320px;
 
-   /* component: 二维码（Bot 登录、配对码等）。
+    /* component: 二维码（Bot 登录、配对码等）。
        一律浅底深码，码和底的对比度至少 3.5:1（themes.test.ts 卡着）。暗色主题取「最深底色的码 +
        正文色的底」，不画成深底上的深码：实测 1.4:1 那档在屏幕反光、轻微失焦时 WeChat 引擎只扫出一半；
        也不画反色码，OpenCV 默认检测器完全不认。弹窗里码外那圈内边距也铺 --qr-background 当静区。 */
-   --qr-foreground: var(--neutral-900);
-   --qr-background: var(--surface-elevated);
+    --qr-foreground: var(--neutral-900);
+    --qr-background: var(--surface-elevated);
 
-   /* typography — 银弹约定（未发布可一次定死，勿再单页 font-sans 补丁）：
+    /* typography — 银弹约定（未发布可一次定死，勿再单页 font-sans 补丁）：
       1) 西文自托管（fonts.css）不含 CJK，unicode-range 仅 Latin 等。
       2) 所有缺字回退只走 --font-cjk-sans，禁止落到泛族 monospace（Win 会宋体/点阵黑体）。
       3) --font-mono 给 UI/日志/混排；--font-mono-strict 仅纯 ASCII 代码块。 */
-   --font-cjk-sans: "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei";
+    --font-cjk-sans:
+        "HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei";
 
-   --font-display: "Plus Jakarta Sans Variable", var(--font-cjk-sans), system-ui, sans-serif;
-   --font-body: "Inter Variable", var(--font-cjk-sans), system-ui, sans-serif;
+    --font-display: "Plus Jakarta Sans Variable", var(--font-cjk-sans), system-ui, sans-serif;
+    --font-body: "Inter Variable", var(--font-cjk-sans), system-ui, sans-serif;
 
-   --font-mono: "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", var(--font-cjk-sans), system-ui, sans-serif;
-   --font-mono-strict: "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    --font-mono:
+        "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
+        var(--font-cjk-sans), system-ui, sans-serif;
+    --font-mono-strict:
+        "JetBrains Mono Variable", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
+        monospace;
 
-   --text-2xs: 11px;
-   --text-xs: 12px;
-   --text-sm: 13px;
-   --text-base: 14px;
-   --text-md: 16px;
-   --text-lg: 20px;
-   --text-xl: 24px;
-   --text-2xl: 32px;
+    --text-2xs: 11px;
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-md: 16px;
+    --text-lg: 20px;
+    --text-xl: 24px;
+    --text-2xl: 32px;
 
-   --leading-tight: 1.2;
-   --leading-snug: 1.4;
-   --leading-normal: 1.5;
-   --leading-relaxed: 1.7;
+    --leading-tight: 1.2;
+    --leading-snug: 1.4;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.7;
 }
 
 /* Dark theme tokens：
@@ -207,137 +212,137 @@
    两份独立 token 块，不复用，避免选择器优先级耦合。 */
 
 @media (prefers-color-scheme: dark) {
-   :root:not([data-theme]) {
-      /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
-      --surface-canvas: #211f1d;
-      --surface-card: #2e2b28;
-      --surface-elevated: #3a3734;
-      --surface-inset: #1a1817;
-      --surface-muted: #33302d;
-      --surface-field: #1a1817;
-      --surface-sidebar: #292725;
-      --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
-      --text-hero-title: #f5d8b5;
-      --text-hero-accent: #ffad75;
+    :root:not([data-theme]) {
+        /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
+        --surface-canvas: #211f1d;
+        --surface-card: #2e2b28;
+        --surface-elevated: #3a3734;
+        --surface-inset: #1a1817;
+        --surface-muted: #33302d;
+        --surface-field: #1a1817;
+        --surface-sidebar: #292725;
+        --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
+        --text-hero-title: #f5d8b5;
+        --text-hero-accent: #ffad75;
 
-      /* text: 高对比度，主 > 7:1 */
-      --text-primary: #f5f1ed;
-      --text-secondary: #c4bdb5;
-      --text-tertiary: #968e86;
-      --text-disabled: #5e5852;
-      --log-ansi-l-min: 0.72;
-      --log-ansi-l-max: 0.9;
+        /* text: 高对比度，主 > 7:1 */
+        --text-primary: #f5f1ed;
+        --text-secondary: #c4bdb5;
+        --text-tertiary: #968e86;
+        --text-disabled: #5e5852;
+        --log-ansi-l-min: 0.72;
+        --log-ansi-l-max: 0.9;
 
-      /* border: 暗色下更明显，帮助区分层级 */
-      --border-subtle: rgba(255, 245, 235, 0.08);
-      --border-default: rgba(255, 245, 235, 0.15);
-      --border-strong: rgba(255, 245, 235, 0.25);
+        /* border: 暗色下更明显，帮助区分层级 */
+        --border-subtle: rgba(255, 245, 235, 0.08);
+        --border-default: rgba(255, 245, 235, 0.15);
+        --border-strong: rgba(255, 245, 235, 0.25);
 
-      /* shadow: 深底投影 + 极细亮边 */
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 245, 235, 0.05);
-      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 245, 235, 0.07);
-      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 245, 235, 0.09);
-      --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 25%, transparent);
-      --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+        /* shadow: 深底投影 + 极细亮边 */
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 245, 235, 0.05);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 245, 235, 0.07);
+        --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 245, 235, 0.09);
+        --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 25%, transparent);
+        --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
-      /* brand 柔化：提亮 + 降饱和 */
-      --brand-400: #ff9a6b;
-      --brand-500: #ff8a57;
-      --brand-600: #e87040;
+        /* brand 柔化：提亮 + 降饱和 */
+        --brand-400: #ff9a6b;
+        --brand-500: #ff8a57;
+        --brand-600: #e87040;
 
-      /* semantic: 柔和品牌/点缀背景（深底微透/调和，保证浅色文字可读性） */
-      --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
-      --brand-tint: color-mix(in srgb, var(--brand-500) 8%, transparent);
-      --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
-      --accent-tint: color-mix(in srgb, var(--accent-500) 8%, transparent);
+        /* semantic: 柔和品牌/点缀背景（深底微透/调和，保证浅色文字可读性） */
+        --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+        --brand-tint: color-mix(in srgb, var(--brand-500) 8%, transparent);
+        --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+        --accent-tint: color-mix(in srgb, var(--accent-500) 8%, transparent);
 
-      /* scrollbar */
-      --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
-      --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
-      --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
+        /* scrollbar */
+        --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
+        --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
+        --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
 
-      --qr-foreground: var(--surface-inset);
-      --qr-background: var(--text-primary);
+        --qr-foreground: var(--surface-inset);
+        --qr-background: var(--text-primary);
 
-      --infobar-info-bg: var(--surface-elevated);
-      --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
-      --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 26%, var(--surface-card));
-      --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 22%, var(--surface-card));
-      --infobar-info-border: var(--border-default);
-      --infobar-success-border: color-mix(in srgb, var(--green-500) 35%, var(--border-subtle));
-      --infobar-warning-border: color-mix(in srgb, var(--amber-500) 38%, var(--border-subtle));
-      --infobar-danger-border: color-mix(in srgb, var(--rose-500) 36%, var(--border-subtle));
-      --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 28%, var(--surface-inset));
-      --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 32%, var(--surface-inset));
-      --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 34%, var(--surface-inset));
-      --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 30%, var(--surface-inset));
-   }
+        --infobar-info-bg: var(--surface-elevated);
+        --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
+        --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 26%, var(--surface-card));
+        --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 22%, var(--surface-card));
+        --infobar-info-border: var(--border-default);
+        --infobar-success-border: color-mix(in srgb, var(--green-500) 35%, var(--border-subtle));
+        --infobar-warning-border: color-mix(in srgb, var(--amber-500) 38%, var(--border-subtle));
+        --infobar-danger-border: color-mix(in srgb, var(--rose-500) 36%, var(--border-subtle));
+        --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 28%, var(--surface-inset));
+        --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 32%, var(--surface-inset));
+        --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 34%, var(--surface-inset));
+        --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 30%, var(--surface-inset));
+    }
 }
 
 :root[data-theme="dark"] {
-   /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
-   --surface-canvas: #211f1d;
-   --surface-card: #2e2b28;
-   --surface-elevated: #3a3734;
-   --surface-inset: #1a1817;
-   --surface-muted: #33302d;
-   --surface-field: #1a1817;
-   --surface-sidebar: #292725;
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
-   --text-hero-title: #f5d8b5;
-   --text-hero-accent: #ffad75;
+    /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
+    --surface-canvas: #211f1d;
+    --surface-card: #2e2b28;
+    --surface-elevated: #3a3734;
+    --surface-inset: #1a1817;
+    --surface-muted: #33302d;
+    --surface-field: #1a1817;
+    --surface-sidebar: #292725;
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
+    --text-hero-title: #f5d8b5;
+    --text-hero-accent: #ffad75;
 
-   /* text: 高对比度，主 > 7:1 */
-   --text-primary: #f5f1ed;
-   --text-secondary: #c4bdb5;
-   --text-tertiary: #968e86;
-   --text-disabled: #5e5852;
-   --log-ansi-l-min: 0.72;
-   --log-ansi-l-max: 0.9;
+    /* text: 高对比度，主 > 7:1 */
+    --text-primary: #f5f1ed;
+    --text-secondary: #c4bdb5;
+    --text-tertiary: #968e86;
+    --text-disabled: #5e5852;
+    --log-ansi-l-min: 0.72;
+    --log-ansi-l-max: 0.9;
 
-   /* border: 暗色下更明显，帮助区分层级 */
-   --border-subtle: rgba(255, 245, 235, 0.08);
-   --border-default: rgba(255, 245, 235, 0.15);
-   --border-strong: rgba(255, 245, 235, 0.25);
+    /* border: 暗色下更明显，帮助区分层级 */
+    --border-subtle: rgba(255, 245, 235, 0.08);
+    --border-default: rgba(255, 245, 235, 0.15);
+    --border-strong: rgba(255, 245, 235, 0.25);
 
-   /* shadow: 深底投影 + 极细亮边 */
-   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 245, 235, 0.05);
-   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 245, 235, 0.07);
-   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 245, 235, 0.09);
-   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 25%, transparent);
-   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+    /* shadow: 深底投影 + 极细亮边 */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 245, 235, 0.05);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 245, 235, 0.07);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 245, 235, 0.09);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--green-500) 25%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
-   /* brand 柔化：提亮 + 降饱和 */
-   --brand-400: #ff9a6b;
-   --brand-500: #ff8a57;
-   --brand-600: #e87040;
+    /* brand 柔化：提亮 + 降饱和 */
+    --brand-400: #ff9a6b;
+    --brand-500: #ff8a57;
+    --brand-600: #e87040;
 
-   /* semantic: 柔和品牌/点缀背景（深底微透/调和，保证浅色文字可读性） */
-   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
-   --brand-tint: color-mix(in srgb, var(--brand-500) 8%, transparent);
-   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
-   --accent-tint: color-mix(in srgb, var(--accent-500) 8%, transparent);
+    /* semantic: 柔和品牌/点缀背景（深底微透/调和，保证浅色文字可读性） */
+    --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+    --brand-tint: color-mix(in srgb, var(--brand-500) 8%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+    --accent-tint: color-mix(in srgb, var(--accent-500) 8%, transparent);
 
-   /* scrollbar */
-   --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
-   --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
-   --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
+    /* scrollbar */
+    --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
+    --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
+    --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
 
-   --qr-foreground: var(--surface-inset);
-   --qr-background: var(--text-primary);
+    --qr-foreground: var(--surface-inset);
+    --qr-background: var(--text-primary);
 
-   --infobar-info-bg: var(--surface-elevated);
-   --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
-   --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 26%, var(--surface-card));
-   --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 22%, var(--surface-card));
-   --infobar-info-border: var(--border-default);
-   --infobar-success-border: color-mix(in srgb, var(--green-500) 35%, var(--border-subtle));
-   --infobar-warning-border: color-mix(in srgb, var(--amber-500) 38%, var(--border-subtle));
-   --infobar-danger-border: color-mix(in srgb, var(--rose-500) 36%, var(--border-subtle));
-   --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 28%, var(--surface-inset));
-   --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 32%, var(--surface-inset));
-   --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 34%, var(--surface-inset));
-   --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 30%, var(--surface-inset));
+    --infobar-info-bg: var(--surface-elevated);
+    --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
+    --infobar-warning-bg: color-mix(in srgb, var(--amber-500) 26%, var(--surface-card));
+    --infobar-danger-bg: color-mix(in srgb, var(--rose-500) 22%, var(--surface-card));
+    --infobar-info-border: var(--border-default);
+    --infobar-success-border: color-mix(in srgb, var(--green-500) 35%, var(--border-subtle));
+    --infobar-warning-border: color-mix(in srgb, var(--amber-500) 38%, var(--border-subtle));
+    --infobar-danger-border: color-mix(in srgb, var(--rose-500) 36%, var(--border-subtle));
+    --infobar-icon-well-info: color-mix(in srgb, var(--blue-500) 28%, var(--surface-inset));
+    --infobar-icon-well-success: color-mix(in srgb, var(--green-500) 32%, var(--surface-inset));
+    --infobar-icon-well-warning: color-mix(in srgb, var(--amber-500) 34%, var(--surface-inset));
+    --infobar-icon-well-danger: color-mix(in srgb, var(--rose-500) 30%, var(--surface-inset));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -349,418 +354,418 @@
 
 /* ── Latte（浅色 flavor）────────────────────────────────────────────────────── */
 :root[data-theme="latte"] {
-   /* surface */
-   --surface-canvas: #eff1f5;
-   /* base   */
-   --surface-card: #ffffff;
-   /* pure white card */
-   --surface-elevated: #ffffff;
-   /* surface0 */
-   --surface-inset: #e6e9ef;
-   /* mantle */
-   --surface-muted: #ccd0da;
-   /* surface0 */
-   --surface-field: #e6e9ef;
-   /* mantle */
-   --surface-sidebar: #e6e9ef;
-   /* mantle */
-   --surface-hero: #ccd0da;
-   /* surface0 */
+    /* surface */
+    --surface-canvas: #eff1f5;
+    /* base   */
+    --surface-card: #ffffff;
+    /* pure white card */
+    --surface-elevated: #ffffff;
+    /* surface0 */
+    --surface-inset: #e6e9ef;
+    /* mantle */
+    --surface-muted: #ccd0da;
+    /* surface0 */
+    --surface-field: #e6e9ef;
+    /* mantle */
+    --surface-sidebar: #e6e9ef;
+    /* mantle */
+    --surface-hero: #ccd0da;
+    /* surface0 */
 
-   /* text */
-   --text-primary: #4c4f69;
-   /* text     */
-   --text-secondary: #5c5f77;
-   /* subtext1 */
-   --text-tertiary: #6c6f85;
-   /* subtext0 */
-   --text-disabled: #9ca0b0;
-   /* Latte 是浅色：系统偏深色时深色块也会命中这里，得自己写回浅色的区间 */
-   --log-ansi-l-min: 0.36;
-   --log-ansi-l-max: 0.52;
-   /* overlay0 */
-   --text-on-brand: #ffffff;
-   --text-on-accent: #ffffff;
-   --text-hero-title: #8839ef;
-   /* mauve */
-   --text-hero-accent: #ea76cb;
-   /* pink  */
+    /* text */
+    --text-primary: #4c4f69;
+    /* text     */
+    --text-secondary: #5c5f77;
+    /* subtext1 */
+    --text-tertiary: #6c6f85;
+    /* subtext0 */
+    --text-disabled: #9ca0b0;
+    /* Latte 是浅色：系统偏深色时深色块也会命中这里，得自己写回浅色的区间 */
+    --log-ansi-l-min: 0.36;
+    --log-ansi-l-max: 0.52;
+    /* overlay0 */
+    --text-on-brand: #ffffff;
+    --text-on-accent: #ffffff;
+    --text-hero-title: #8839ef;
+    /* mauve */
+    --text-hero-accent: #ea76cb;
+    /* pink  */
 
-   /* border */
-   --border-subtle: rgba(76, 79, 105, 0.06);
-   --border-default: rgba(76, 79, 105, 0.12);
-   --border-strong: rgba(76, 79, 105, 0.22);
+    /* border */
+    --border-subtle: rgba(76, 79, 105, 0.06);
+    --border-default: rgba(76, 79, 105, 0.12);
+    --border-strong: rgba(76, 79, 105, 0.22);
 
-   /* brand → mauve */
-   --brand-50: #f6f0ff;
-   --brand-100: #ede4ff;
-   --brand-200: #dcc8ff;
-   --brand-300: #b888f8;
-   --brand-400: #a060f5;
-   --brand-500: #8839ef;
-   --brand-600: #7020d0;
-   --brand-700: #5c18b0;
+    /* brand → mauve */
+    --brand-50: #f6f0ff;
+    --brand-100: #ede4ff;
+    --brand-200: #dcc8ff;
+    --brand-300: #b888f8;
+    --brand-400: #a060f5;
+    --brand-500: #8839ef;
+    --brand-600: #7020d0;
+    --brand-700: #5c18b0;
 
-   /* accent → pink */
-   --accent-50: #fef5fb;
-   --accent-100: #fce6f2;
-   --accent-200: #f9d0e8;
-   --accent-300: #f3b0db;
-   --accent-400: #ee93cf;
-   --accent-500: #ea76cb;
-   --accent-600: #d45eb5;
-   --accent-700: #b8489a;
+    /* accent → pink */
+    --accent-50: #fef5fb;
+    --accent-100: #fce6f2;
+    --accent-200: #f9d0e8;
+    --accent-300: #f3b0db;
+    --accent-400: #ee93cf;
+    --accent-500: #ea76cb;
+    --accent-600: #d45eb5;
+    --accent-700: #b8489a;
 
-   --action-primary: var(--brand-500);
-   --action-primary-hover: var(--brand-600);
-   --action-primary-active: var(--brand-700);
-   --action-secondary: var(--accent-500);
-   --action-secondary-hover: var(--accent-600);
-   --border-focus: var(--brand-500);
-   --brand-soft: var(--brand-100);
-   --brand-tint: var(--brand-50);
-   --accent-soft: var(--accent-100);
-   --accent-tint: var(--accent-50);
-   --surface-sidebar: color-mix(in srgb, var(--accent-100) 22%, var(--surface-canvas));
-   --surface-hero: color-mix(in srgb, var(--surface-canvas) 42%, var(--brand-50) 58%);
+    --action-primary: var(--brand-500);
+    --action-primary-hover: var(--brand-600);
+    --action-primary-active: var(--brand-700);
+    --action-secondary: var(--accent-500);
+    --action-secondary-hover: var(--accent-600);
+    --border-focus: var(--brand-500);
+    --brand-soft: var(--brand-100);
+    --brand-tint: var(--brand-50);
+    --accent-soft: var(--accent-100);
+    --accent-tint: var(--accent-50);
+    --surface-sidebar: color-mix(in srgb, var(--accent-100) 22%, var(--surface-canvas));
+    --surface-hero: color-mix(in srgb, var(--surface-canvas) 42%, var(--brand-50) 58%);
 
-   /* state */
-   --state-success: #40a02b;
-   --state-success-bg: color-mix(in srgb, #40a02b 12%, transparent);
-   --state-warning: #df8e1d;
-   --state-warning-bg: color-mix(in srgb, #df8e1d 14%, transparent);
-   --state-danger: #d20f39;
-   --state-danger-bg: color-mix(in srgb, #d20f39 12%, transparent);
-   --state-info: #1e66f5;
-   --state-info-bg: color-mix(in srgb, #1e66f5 12%, transparent);
+    /* state */
+    --state-success: #40a02b;
+    --state-success-bg: color-mix(in srgb, #40a02b 12%, transparent);
+    --state-warning: #df8e1d;
+    --state-warning-bg: color-mix(in srgb, #df8e1d 14%, transparent);
+    --state-danger: #d20f39;
+    --state-danger-bg: color-mix(in srgb, #d20f39 12%, transparent);
+    --state-info: #1e66f5;
+    --state-info-bg: color-mix(in srgb, #1e66f5 12%, transparent);
 
-   /* shadow */
-   --shadow-sm: 0 1px 2px rgba(76, 79, 105, 0.05);
-   --shadow-md: 0 4px 12px rgba(76, 79, 105, 0.07), 0 1px 2px rgba(76, 79, 105, 0.04);
-   --shadow-lg: 0 12px 32px rgba(76, 79, 105, 0.09), 0 2px 6px rgba(76, 79, 105, 0.05);
-   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 35%, transparent);
-   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
+    /* shadow */
+    --shadow-sm: 0 1px 2px rgba(76, 79, 105, 0.05);
+    --shadow-md: 0 4px 12px rgba(76, 79, 105, 0.07), 0 1px 2px rgba(76, 79, 105, 0.04);
+    --shadow-lg: 0 12px 32px rgba(76, 79, 105, 0.09), 0 2px 6px rgba(76, 79, 105, 0.05);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 35%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 30%, transparent);
 
-   /* scrollbar */
-   --scrollbar-thumb-rest: rgba(76, 79, 105, 0.12);
-   --scrollbar-thumb-hover: rgba(76, 79, 105, 0.24);
-   --scrollbar-thumb-active: rgba(76, 79, 105, 0.36);
+    /* scrollbar */
+    --scrollbar-thumb-rest: rgba(76, 79, 105, 0.12);
+    --scrollbar-thumb-hover: rgba(76, 79, 105, 0.24);
+    --scrollbar-thumb-active: rgba(76, 79, 105, 0.36);
 
-   --qr-foreground: #4c4f69;
-   --qr-background: #e6e9ef;
+    --qr-foreground: #4c4f69;
+    --qr-background: #e6e9ef;
 }
 
 /* ── Frappé（中暗 flavor）───────────────────────────────────────────────────── */
 :root[data-theme="frappe"] {
-   /* surface */
-   --surface-canvas: #303446;
-   /* base   */
-   --surface-card: #292c3c;
-   /* mantle */
-   --surface-elevated: #414559;
-   /* surface0 */
-   --surface-inset: #232634;
-   /* crust  */
-   --surface-muted: #414559;
-   /* surface0 */
-   --surface-field: #232634;
-   /* crust  */
-   --surface-sidebar: #292c3c;
-   /* mantle */
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
-   /* surface0 */
+    /* surface */
+    --surface-canvas: #303446;
+    /* base   */
+    --surface-card: #292c3c;
+    /* mantle */
+    --surface-elevated: #414559;
+    /* surface0 */
+    --surface-inset: #232634;
+    /* crust  */
+    --surface-muted: #414559;
+    /* surface0 */
+    --surface-field: #232634;
+    /* crust  */
+    --surface-sidebar: #292c3c;
+    /* mantle */
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+    /* surface0 */
 
-   /* text */
-   --text-primary: #c6d0f5;
-   /* text     */
-   --text-secondary: #b5bfe2;
-   /* subtext1 */
-   --text-tertiary: #a5adce;
-   /* subtext0 */
-   --text-disabled: #737994;
-   --log-ansi-l-min: 0.72;
-   --log-ansi-l-max: 0.9;
-   /* overlay0 */
-   --text-on-brand: #ffffff;
-   /* on brand */
-   --text-on-accent: #232634;
-   --text-hero-title: #ca9ee6;
-   /* mauve */
-   --text-hero-accent: #f4b8e4;
-   /* pink  */
+    /* text */
+    --text-primary: #c6d0f5;
+    /* text     */
+    --text-secondary: #b5bfe2;
+    /* subtext1 */
+    --text-tertiary: #a5adce;
+    /* subtext0 */
+    --text-disabled: #737994;
+    --log-ansi-l-min: 0.72;
+    --log-ansi-l-max: 0.9;
+    /* overlay0 */
+    --text-on-brand: #ffffff;
+    /* on brand */
+    --text-on-accent: #232634;
+    --text-hero-title: #ca9ee6;
+    /* mauve */
+    --text-hero-accent: #f4b8e4;
+    /* pink  */
 
-   /* border */
-   --border-subtle: rgba(198, 208, 245, 0.08);
-   --border-default: rgba(198, 208, 245, 0.14);
-   --border-strong: rgba(198, 208, 245, 0.24);
+    /* border */
+    --border-subtle: rgba(198, 208, 245, 0.08);
+    --border-default: rgba(198, 208, 245, 0.14);
+    --border-strong: rgba(198, 208, 245, 0.24);
 
-   /* brand → mauve */
-   --brand-50: #f8f2ff;
-   --brand-100: #f5eeff;
-   --brand-200: #e8dcfc;
-   --brand-300: #dcc8f8;
-   --brand-400: #d4b0ec;
-   --brand-500: #ca9ee6;
-   --brand-600: #b07fd4;
-   --brand-700: #9668bc;
+    /* brand → mauve */
+    --brand-50: #f8f2ff;
+    --brand-100: #f5eeff;
+    --brand-200: #e8dcfc;
+    --brand-300: #dcc8f8;
+    --brand-400: #d4b0ec;
+    --brand-500: #ca9ee6;
+    --brand-600: #b07fd4;
+    --brand-700: #9668bc;
 
-   /* accent → pink */
-   --accent-50: #fef7fc;
-   --accent-100: #fdf4fa;
-   --accent-200: #fae8f4;
-   --accent-300: #f6d4ec;
-   --accent-400: #f8c6e8;
-   --accent-500: #f4b8e4;
-   --accent-600: #e0a0d0;
-   --accent-700: #c888ba;
+    /* accent → pink */
+    --accent-50: #fef7fc;
+    --accent-100: #fdf4fa;
+    --accent-200: #fae8f4;
+    --accent-300: #f6d4ec;
+    --accent-400: #f8c6e8;
+    --accent-500: #f4b8e4;
+    --accent-600: #e0a0d0;
+    --accent-700: #c888ba;
 
-   --action-primary: var(--brand-500);
-   --action-primary-hover: var(--brand-600);
-   --action-primary-active: var(--brand-700);
-   --action-secondary: var(--accent-500);
-   --action-secondary-hover: var(--accent-600);
-   --border-focus: var(--brand-500);
-   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
-   --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
-   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
-   --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
-   --surface-sidebar: color-mix(in srgb, var(--accent-100) 16%, var(--surface-canvas));
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+    --action-primary: var(--brand-500);
+    --action-primary-hover: var(--brand-600);
+    --action-primary-active: var(--brand-700);
+    --action-secondary: var(--accent-500);
+    --action-secondary-hover: var(--accent-600);
+    --border-focus: var(--brand-500);
+    --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+    --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+    --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
+    --surface-sidebar: color-mix(in srgb, var(--accent-100) 16%, var(--surface-canvas));
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
-   /* state */
-   --state-success: #a6d189;
-   --state-success-bg: color-mix(in srgb, #a6d189 14%, transparent);
-   --state-warning: #e5c890;
-   --state-warning-bg: color-mix(in srgb, #e5c890 14%, transparent);
-   --state-danger: #e78284;
-   --state-danger-bg: color-mix(in srgb, #e78284 14%, transparent);
-   --state-info: #8caaee;
-   --state-info-bg: color-mix(in srgb, #8caaee 14%, transparent);
+    /* state */
+    --state-success: #a6d189;
+    --state-success-bg: color-mix(in srgb, #a6d189 14%, transparent);
+    --state-warning: #e5c890;
+    --state-warning-bg: color-mix(in srgb, #e5c890 14%, transparent);
+    --state-danger: #e78284;
+    --state-danger-bg: color-mix(in srgb, #e78284 14%, transparent);
+    --state-info: #8caaee;
+    --state-info-bg: color-mix(in srgb, #8caaee 14%, transparent);
 
-   /* shadow */
-   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(198, 208, 245, 0.05);
-   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(198, 208, 245, 0.07);
-   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(198, 208, 245, 0.09);
-   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
-   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+    /* shadow */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(198, 208, 245, 0.05);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(198, 208, 245, 0.07);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(198, 208, 245, 0.09);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
-   /* scrollbar */
-   --scrollbar-thumb-rest: rgba(198, 208, 245, 0.11);
-   --scrollbar-thumb-hover: rgba(198, 208, 245, 0.22);
-   --scrollbar-thumb-active: rgba(198, 208, 245, 0.34);
+    /* scrollbar */
+    --scrollbar-thumb-rest: rgba(198, 208, 245, 0.11);
+    --scrollbar-thumb-hover: rgba(198, 208, 245, 0.22);
+    --scrollbar-thumb-active: rgba(198, 208, 245, 0.34);
 
-   --qr-foreground: #232634;
-   /* crust */
-   --qr-background: #c6d0f5;
-   /* text */
+    --qr-foreground: #232634;
+    /* crust */
+    --qr-background: #c6d0f5;
+    /* text */
 }
 
 /* ── Macchiato（深暗 flavor）────────────────────────────────────────────────── */
 :root[data-theme="macchiato"] {
-   /* surface */
-   --surface-canvas: #24273a;
-   /* base   */
-   --surface-card: #1e2030;
-   /* mantle */
-   --surface-elevated: #363a4f;
-   /* surface0 */
-   --surface-inset: #181926;
-   /* crust  */
-   --surface-muted: #363a4f;
-   /* surface0 */
-   --surface-field: #181926;
-   /* crust  */
-   --surface-sidebar: #1e2030;
-   /* mantle */
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
-   /* surface0 */
+    /* surface */
+    --surface-canvas: #24273a;
+    /* base   */
+    --surface-card: #1e2030;
+    /* mantle */
+    --surface-elevated: #363a4f;
+    /* surface0 */
+    --surface-inset: #181926;
+    /* crust  */
+    --surface-muted: #363a4f;
+    /* surface0 */
+    --surface-field: #181926;
+    /* crust  */
+    --surface-sidebar: #1e2030;
+    /* mantle */
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+    /* surface0 */
 
-   /* text */
-   --text-primary: #cad3f5;
-   /* text     */
-   --text-secondary: #b8c0e0;
-   /* subtext1 */
-   --text-tertiary: #a5adcb;
-   /* subtext0 */
-   --text-disabled: #6e738d;
-   --log-ansi-l-min: 0.72;
-   --log-ansi-l-max: 0.9;
-   /* overlay0 */
-   --text-on-brand: #ffffff;
-   /* on brand */
-   --text-on-accent: #181926;
-   --text-hero-title: #c6a0f6;
-   /* mauve */
-   --text-hero-accent: #f5bde6;
-   /* pink  */
+    /* text */
+    --text-primary: #cad3f5;
+    /* text     */
+    --text-secondary: #b8c0e0;
+    /* subtext1 */
+    --text-tertiary: #a5adcb;
+    /* subtext0 */
+    --text-disabled: #6e738d;
+    --log-ansi-l-min: 0.72;
+    --log-ansi-l-max: 0.9;
+    /* overlay0 */
+    --text-on-brand: #ffffff;
+    /* on brand */
+    --text-on-accent: #181926;
+    --text-hero-title: #c6a0f6;
+    /* mauve */
+    --text-hero-accent: #f5bde6;
+    /* pink  */
 
-   /* border */
-   --border-subtle: rgba(202, 211, 245, 0.08);
-   --border-default: rgba(202, 211, 245, 0.14);
-   --border-strong: rgba(202, 211, 245, 0.24);
+    /* border */
+    --border-subtle: rgba(202, 211, 245, 0.08);
+    --border-default: rgba(202, 211, 245, 0.14);
+    --border-strong: rgba(202, 211, 245, 0.24);
 
-   /* brand → mauve */
-   --brand-50: #f5f0fe;
-   --brand-100: #f4edfe;
-   --brand-200: #e8dcfc;
-   --brand-300: #dcc4f8;
-   --brand-400: #d2aef8;
-   --brand-500: #c6a0f6;
-   --brand-600: #ab82e0;
-   --brand-700: #9368c8;
+    /* brand → mauve */
+    --brand-50: #f5f0fe;
+    --brand-100: #f4edfe;
+    --brand-200: #e8dcfc;
+    --brand-300: #dcc4f8;
+    --brand-400: #d2aef8;
+    --brand-500: #c6a0f6;
+    --brand-600: #ab82e0;
+    --brand-700: #9368c8;
 
-   /* accent → pink */
-   --accent-50: #fef6fb;
-   --accent-100: #fdf3f9;
-   --accent-200: #fae8f4;
-   --accent-300: #f6d4ec;
-   --accent-400: #f8c8e8;
-   --accent-500: #f5bde6;
-   --accent-600: #e0a5d0;
-   --accent-700: #c88eb8;
+    /* accent → pink */
+    --accent-50: #fef6fb;
+    --accent-100: #fdf3f9;
+    --accent-200: #fae8f4;
+    --accent-300: #f6d4ec;
+    --accent-400: #f8c8e8;
+    --accent-500: #f5bde6;
+    --accent-600: #e0a5d0;
+    --accent-700: #c88eb8;
 
-   --action-primary: var(--brand-500);
-   --action-primary-hover: var(--brand-600);
-   --action-primary-active: var(--brand-700);
-   --action-secondary: var(--accent-500);
-   --action-secondary-hover: var(--accent-600);
-   --border-focus: var(--brand-500);
-   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
-   --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
-   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
-   --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
-   --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+    --action-primary: var(--brand-500);
+    --action-primary-hover: var(--brand-600);
+    --action-primary-active: var(--brand-700);
+    --action-secondary: var(--accent-500);
+    --action-secondary-hover: var(--accent-600);
+    --border-focus: var(--brand-500);
+    --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+    --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+    --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
+    --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
-   /* state */
-   --state-success: #a6da95;
-   --state-success-bg: color-mix(in srgb, #a6da95 14%, transparent);
-   --state-warning: #eed49f;
-   --state-warning-bg: color-mix(in srgb, #eed49f 14%, transparent);
-   --state-danger: #ed8796;
-   --state-danger-bg: color-mix(in srgb, #ed8796 14%, transparent);
-   --state-info: #8aadf4;
-   --state-info-bg: color-mix(in srgb, #8aadf4 14%, transparent);
+    /* state */
+    --state-success: #a6da95;
+    --state-success-bg: color-mix(in srgb, #a6da95 14%, transparent);
+    --state-warning: #eed49f;
+    --state-warning-bg: color-mix(in srgb, #eed49f 14%, transparent);
+    --state-danger: #ed8796;
+    --state-danger-bg: color-mix(in srgb, #ed8796 14%, transparent);
+    --state-info: #8aadf4;
+    --state-info-bg: color-mix(in srgb, #8aadf4 14%, transparent);
 
-   /* shadow */
-   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(202, 211, 245, 0.05);
-   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(202, 211, 245, 0.07);
-   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(202, 211, 245, 0.09);
-   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
-   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+    /* shadow */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(202, 211, 245, 0.05);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(202, 211, 245, 0.07);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(202, 211, 245, 0.09);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
-   /* scrollbar */
-   --scrollbar-thumb-rest: rgba(202, 211, 245, 0.1);
-   --scrollbar-thumb-hover: rgba(202, 211, 245, 0.21);
-   --scrollbar-thumb-active: rgba(202, 211, 245, 0.33);
+    /* scrollbar */
+    --scrollbar-thumb-rest: rgba(202, 211, 245, 0.1);
+    --scrollbar-thumb-hover: rgba(202, 211, 245, 0.21);
+    --scrollbar-thumb-active: rgba(202, 211, 245, 0.33);
 
-   --qr-foreground: #181926;
-   /* crust */
-   --qr-background: #cad3f5;
-   /* text */
+    --qr-foreground: #181926;
+    /* crust */
+    --qr-background: #cad3f5;
+    /* text */
 }
 
 /* ── Mocha（最深 flavor，高对比）───────────────────────────────────────────── */
 :root[data-theme="mocha"] {
-   /* surface */
-   --surface-canvas: #1e1e2e;
-   /* base   */
-   --surface-card: #181825;
-   /* mantle */
-   --surface-elevated: #313244;
-   /* surface0 */
-   --surface-inset: #11111b;
-   /* crust  */
-   --surface-muted: #313244;
-   /* surface0 */
-   --surface-field: #11111b;
-   /* crust  */
-   --surface-sidebar: #181825;
-   /* mantle */
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
-   /* surface0 */
+    /* surface */
+    --surface-canvas: #1e1e2e;
+    /* base   */
+    --surface-card: #181825;
+    /* mantle */
+    --surface-elevated: #313244;
+    /* surface0 */
+    --surface-inset: #11111b;
+    /* crust  */
+    --surface-muted: #313244;
+    /* surface0 */
+    --surface-field: #11111b;
+    /* crust  */
+    --surface-sidebar: #181825;
+    /* mantle */
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+    /* surface0 */
 
-   /* text */
-   --text-primary: #cdd6f4;
-   /* text     */
-   --text-secondary: #bac2de;
-   /* subtext1 */
-   --text-tertiary: #a6adc8;
-   /* subtext0 */
-   --text-disabled: #6c7086;
-   --log-ansi-l-min: 0.72;
-   --log-ansi-l-max: 0.9;
-   /* overlay0 */
-   --text-on-brand: #ffffff;
-   /* on brand */
-   --text-on-accent: #11111b;
-   --text-hero-title: #cba6f7;
-   /* mauve */
-   --text-hero-accent: #f5c2e7;
-   /* pink  */
+    /* text */
+    --text-primary: #cdd6f4;
+    /* text     */
+    --text-secondary: #bac2de;
+    /* subtext1 */
+    --text-tertiary: #a6adc8;
+    /* subtext0 */
+    --text-disabled: #6c7086;
+    --log-ansi-l-min: 0.72;
+    --log-ansi-l-max: 0.9;
+    /* overlay0 */
+    --text-on-brand: #ffffff;
+    /* on brand */
+    --text-on-accent: #11111b;
+    --text-hero-title: #cba6f7;
+    /* mauve */
+    --text-hero-accent: #f5c2e7;
+    /* pink  */
 
-   /* border */
-   --border-subtle: rgba(205, 214, 244, 0.08);
-   --border-default: rgba(205, 214, 244, 0.14);
-   --border-strong: rgba(205, 214, 244, 0.24);
+    /* border */
+    --border-subtle: rgba(205, 214, 244, 0.08);
+    --border-default: rgba(205, 214, 244, 0.14);
+    --border-strong: rgba(205, 214, 244, 0.24);
 
-   /* brand → mauve */
-   --brand-50: #f8f2ff;
-   --brand-100: #f5edfe;
-   --brand-200: #e8dcfc;
-   --brand-300: #dcc8f8;
-   --brand-400: #d6b4f9;
-   --brand-500: #cba6f7;
-   --brand-600: #b085e0;
-   --brand-700: #9668c8;
+    /* brand → mauve */
+    --brand-50: #f8f2ff;
+    --brand-100: #f5edfe;
+    --brand-200: #e8dcfc;
+    --brand-300: #dcc8f8;
+    --brand-400: #d6b4f9;
+    --brand-500: #cba6f7;
+    --brand-600: #b085e0;
+    --brand-700: #9668c8;
 
-   /* accent → pink */
-   --accent-50: #fef7fc;
-   --accent-100: #fdf4f9;
-   --accent-200: #fae8f4;
-   --accent-300: #f6d4ec;
-   --accent-400: #f8c8e8;
-   --accent-500: #f5c2e7;
-   --accent-600: #e0a8d0;
-   --accent-700: #c890b8;
+    /* accent → pink */
+    --accent-50: #fef7fc;
+    --accent-100: #fdf4f9;
+    --accent-200: #fae8f4;
+    --accent-300: #f6d4ec;
+    --accent-400: #f8c8e8;
+    --accent-500: #f5c2e7;
+    --accent-600: #e0a8d0;
+    --accent-700: #c890b8;
 
-   --action-primary: var(--brand-500);
-   --action-primary-hover: var(--brand-600);
-   --action-primary-active: var(--brand-700);
-   --action-secondary: var(--accent-500);
-   --action-secondary-hover: var(--accent-600);
-   --border-focus: var(--brand-500);
-   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
-   --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
-   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
-   --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
-   --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
-   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+    --action-primary: var(--brand-500);
+    --action-primary-hover: var(--brand-600);
+    --action-primary-active: var(--brand-700);
+    --action-secondary: var(--accent-500);
+    --action-secondary-hover: var(--accent-600);
+    --border-focus: var(--brand-500);
+    --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+    --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+    --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
+    --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
+    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
-   /* state */
-   --state-success: #a6e3a1;
-   --state-success-bg: color-mix(in srgb, #a6e3a1 14%, transparent);
-   --state-warning: #f9e2af;
-   --state-warning-bg: color-mix(in srgb, #f9e2af 14%, transparent);
-   --state-danger: #f38ba8;
-   --state-danger-bg: color-mix(in srgb, #f38ba8 14%, transparent);
-   --state-info: #89b4fa;
-   --state-info-bg: color-mix(in srgb, #89b4fa 14%, transparent);
+    /* state */
+    --state-success: #a6e3a1;
+    --state-success-bg: color-mix(in srgb, #a6e3a1 14%, transparent);
+    --state-warning: #f9e2af;
+    --state-warning-bg: color-mix(in srgb, #f9e2af 14%, transparent);
+    --state-danger: #f38ba8;
+    --state-danger-bg: color-mix(in srgb, #f38ba8 14%, transparent);
+    --state-info: #89b4fa;
+    --state-info-bg: color-mix(in srgb, #89b4fa 14%, transparent);
 
-   /* shadow */
-   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(205, 214, 244, 0.05);
-   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(205, 214, 244, 0.07);
-   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(205, 214, 244, 0.09);
-   --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
-   --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
+    /* shadow */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(205, 214, 244, 0.05);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(205, 214, 244, 0.07);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(205, 214, 244, 0.09);
+    --shadow-glow-success: 0 0 12px color-mix(in srgb, var(--state-success) 25%, transparent);
+    --shadow-glow-brand: 0 0 16px color-mix(in srgb, var(--brand-500) 20%, transparent);
 
-   /* scrollbar */
-   --scrollbar-thumb-rest: rgba(205, 214, 244, 0.1);
-   --scrollbar-thumb-hover: rgba(205, 214, 244, 0.21);
-   --scrollbar-thumb-active: rgba(205, 214, 244, 0.33);
+    /* scrollbar */
+    --scrollbar-thumb-rest: rgba(205, 214, 244, 0.1);
+    --scrollbar-thumb-hover: rgba(205, 214, 244, 0.21);
+    --scrollbar-thumb-active: rgba(205, 214, 244, 0.33);
 
-   --qr-foreground: #11111b;
-   /* crust */
-   --qr-background: #cdd6f4;
-   /* text */
+    --qr-foreground: #11111b;
+    /* crust */
+    --qr-background: #cdd6f4;
+    /* text */
 }

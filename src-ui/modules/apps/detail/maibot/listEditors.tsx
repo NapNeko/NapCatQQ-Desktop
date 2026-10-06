@@ -9,7 +9,10 @@ import { Button, TextField } from '../../../../shared/ui';
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 
-const RemoveButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({ onClick, disabled }) => (
+const RemoveButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({
+    onClick,
+    disabled,
+}) => (
     <button
         type="button"
         aria-label="删掉这一条"
@@ -21,18 +24,25 @@ const RemoveButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({ o
     </button>
 );
 
-const FieldHead: React.FC<{ label?: ReactNode; hint?: ReactNode; error?: ReactNode; onAdd: () => void; disabled?: boolean }> = ({
-    label,
-    hint,
-    error,
-    onAdd,
-    disabled,
-}) => (
+const FieldHead: React.FC<{
+    label?: ReactNode;
+    hint?: ReactNode;
+    error?: ReactNode;
+    onAdd: () => void;
+    disabled?: boolean;
+}> = ({ label, hint, error, onAdd, disabled }) => (
     <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
             {label && <span className="text-xs font-medium text-text-secondary">{label}</span>}
             {(error || hint) && (
-                <p className={cn('text-2xs leading-snug', error ? 'text-danger' : 'text-text-tertiary')}>{error ?? hint}</p>
+                <p
+                    className={cn(
+                        'text-2xs leading-snug',
+                        error ? 'text-danger' : 'text-text-tertiary',
+                    )}
+                >
+                    {error ?? hint}
+                </p>
             )}
         </div>
         <Button size="sm" variant="ghost" disabled={disabled} onClick={onAdd}>
@@ -54,9 +64,26 @@ export const LineListField: React.FC<{
     mono?: boolean;
     disabled?: boolean;
     className?: string;
-}> = ({ label, hint, error, itemErrors, value, onChange, placeholder, mono, disabled, className }) => (
+}> = ({
+    label,
+    hint,
+    error,
+    itemErrors,
+    value,
+    onChange,
+    placeholder,
+    mono,
+    disabled,
+    className,
+}) => (
     <div className={cn('flex flex-col gap-1.5', className)}>
-        <FieldHead label={label} hint={hint} error={error} disabled={disabled} onAdd={() => onChange([...value, ''])} />
+        <FieldHead
+            label={label}
+            hint={hint}
+            error={error}
+            disabled={disabled}
+            onAdd={() => onChange([...value, ''])}
+        />
         {value.length === 0 ? (
             <p className="text-2xs text-text-tertiary">还没有</p>
         ) : (
@@ -71,7 +98,10 @@ export const LineListField: React.FC<{
                         disabled={disabled}
                         onValueChange={(v) => onChange(value.map((s, j) => (j === i ? v : s)))}
                     />
-                    <RemoveButton disabled={disabled} onClick={() => onChange(value.filter((_, j) => j !== i))} />
+                    <RemoveButton
+                        disabled={disabled}
+                        onClick={() => onChange(value.filter((_, j) => j !== i))}
+                    />
                 </div>
             ))
         )}
@@ -80,7 +110,8 @@ export const LineListField: React.FC<{
 
 type Row = { key: string; value: string };
 
-const toRows = (map: Record<string, string>): Row[] => Object.entries(map).map(([key, value]) => ({ key, value }));
+const toRows = (map: Record<string, string>): Row[] =>
+    Object.entries(map).map(([key, value]) => ({ key, value }));
 
 const fromRows = (rows: Row[]): Record<string, string> =>
     Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
@@ -100,7 +131,17 @@ export const StringMapEditor: React.FC<{
     valuePlaceholder?: string;
     disabled?: boolean;
     className?: string;
-}> = ({ label, hint, error, value, onChange, keyPlaceholder = '名字', valuePlaceholder = '值', disabled, className }) => {
+}> = ({
+    label,
+    hint,
+    error,
+    value,
+    onChange,
+    keyPlaceholder = '名字',
+    valuePlaceholder = '值',
+    disabled,
+    className,
+}) => {
     // 行放在本地：刚加的空行、还没填键的行不进配置，但也不能因为值没变就被下一次渲染吃掉。
     // 外面的值变了（重置、重新读取）且和本地行对不上时才重铺
     const [rows, setRows] = useState(() => toRows(value));
@@ -124,14 +165,19 @@ export const StringMapEditor: React.FC<{
                 <p className="text-2xs text-text-tertiary">还没有</p>
             ) : (
                 rows.map((row, i) => (
-                    <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-2">
+                    <div
+                        key={i}
+                        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-2"
+                    >
                         <TextField
                             aria-label="名字"
                             className="font-mono"
                             value={row.key}
                             placeholder={keyPlaceholder}
                             disabled={disabled}
-                            onValueChange={(v) => change(rows.map((r, j) => (j === i ? { ...r, key: v } : r)))}
+                            onValueChange={(v) =>
+                                change(rows.map((r, j) => (j === i ? { ...r, key: v } : r)))
+                            }
                         />
                         <TextField
                             aria-label="值"
@@ -139,9 +185,14 @@ export const StringMapEditor: React.FC<{
                             value={row.value}
                             placeholder={valuePlaceholder}
                             disabled={disabled}
-                            onValueChange={(v) => change(rows.map((r, j) => (j === i ? { ...r, value: v } : r)))}
+                            onValueChange={(v) =>
+                                change(rows.map((r, j) => (j === i ? { ...r, value: v } : r)))
+                            }
                         />
-                        <RemoveButton disabled={disabled} onClick={() => change(rows.filter((_, j) => j !== i))} />
+                        <RemoveButton
+                            disabled={disabled}
+                            onClick={() => change(rows.filter((_, j) => j !== i))}
+                        />
                     </div>
                 ))
             )}

@@ -1,6 +1,12 @@
 // 中栏里反复出现的小零件：分段切换、带提示的图标按钮、输入框样式、复制到剪贴板。
 
-import { forwardRef, useRef, type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+    forwardRef,
+    useRef,
+    type ButtonHTMLAttributes,
+    type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
+} from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
@@ -55,7 +61,8 @@ export function Segmented<V extends string>({
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
         const enabled = options.map((o, i) => (o.disabled ? -1 : i)).filter((i) => i >= 0);
         const at = enabled.indexOf(options.findIndex((o) => o.value === value));
-        const next = enabled[(at + (e.key === 'ArrowRight' ? 1 : -1) + enabled.length) % enabled.length];
+        const next =
+            enabled[(at + (e.key === 'ArrowRight' ? 1 : -1) + enabled.length) % enabled.length];
         if (next === undefined) return;
         e.preventDefault();
         onChange(options[next]!.value);
@@ -66,7 +73,10 @@ export function Segmented<V extends string>({
             role="radiogroup"
             aria-label={label}
             onKeyDown={onKeyDown}
-            className={cn('inline-flex shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5', className)}
+            className={cn(
+                'inline-flex shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5',
+                className,
+            )}
         >
             {options.map((o, i) => {
                 const on = o.value === value;
@@ -119,7 +129,18 @@ export interface IconTipProps extends Omit<ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export const IconTip = forwardRef<HTMLButtonElement, IconTipProps>(function IconTip(
-    { icon, label, hint, size = 'md', active, tone = 'default', side = 'bottom', className, children, ...rest },
+    {
+        icon,
+        label,
+        hint,
+        size = 'md',
+        active,
+        tone = 'default',
+        side = 'bottom',
+        className,
+        children,
+        ...rest
+    },
     ref,
 ) {
     return (
@@ -137,8 +158,8 @@ export const IconTip = forwardRef<HTMLButtonElement, IconTipProps>(function Icon
                         active
                             ? 'bg-brand-soft text-brand'
                             : tone === 'danger'
-                                ? 'text-text-tertiary hover:bg-danger-soft hover:text-danger'
-                                : 'text-text-tertiary hover:bg-inset hover:text-text',
+                              ? 'text-text-tertiary hover:bg-danger-soft hover:text-danger'
+                              : 'text-text-tertiary hover:bg-inset hover:text-text',
                         className,
                     )}
                     {...rest}
@@ -165,7 +186,11 @@ export async function copyWithToast(text: string, title: string): Promise<void> 
         await navigator.clipboard.writeText(text);
         pushInfoBar({ key: 'debug-copy', tone: 'info', title, autoDismissMs: 2000 });
     } catch (err) {
-        pushErrorBar({ key: 'debug-copy', title: '复制失败', raw: err instanceof Error ? err.message : String(err) });
+        pushErrorBar({
+            key: 'debug-copy',
+            title: '复制失败',
+            raw: err instanceof Error ? err.message : String(err),
+        });
     }
 }
 

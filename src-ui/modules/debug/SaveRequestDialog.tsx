@@ -3,11 +3,28 @@
 // 收藏是整份替换保存的：没读到现有收藏时绝不能保存，否则会把磁盘上已有的全盖掉。
 
 import { useState } from 'react';
-import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Select, Spinner, TextField } from '../../shared/ui';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    Select,
+    Spinner,
+    TextField,
+} from '../../shared/ui';
 import { useDebugCollections, useSaveCollections } from '../../hooks/debug/useDebugCollections';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { channelShortLabel } from '../../core/domain/debug/channelCopy';
-import { MAX_NAME_LENGTH, addRequest, collectionsView, findSameRequest } from '../../core/domain/debug/collectionsOps';
+import {
+    MAX_NAME_LENGTH,
+    addRequest,
+    collectionsView,
+    findSameRequest,
+} from '../../core/domain/debug/collectionsOps';
 import { countOmittedInValue } from '../../core/domain/debug/omittedParams';
 import type { DebugChannelId } from '../../core/ipc/generated/debug/DebugChannelId';
 
@@ -35,14 +52,25 @@ export function SaveRequestDialog(props: SaveRequestDialogProps) {
     if (props.open && !mounted) setMounted(true);
     return (
         <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-            <DialogContent size="sm" dismissOnOutsideClick={false} onExited={() => setMounted(false)}>
+            <DialogContent
+                size="sm"
+                dismissOnOutsideClick={false}
+                onExited={() => setMounted(false)}
+            >
                 {mounted && <SaveForm {...props} />}
             </DialogContent>
         </Dialog>
     );
 }
 
-function SaveForm({ onOpenChange, action, params, channel, channelFrom = 'tab', suggestedName }: SaveRequestDialogProps) {
+function SaveForm({
+    onOpenChange,
+    action,
+    params,
+    channel,
+    channelFrom = 'tab',
+    suggestedName,
+}: SaveRequestDialogProps) {
     const collections = useDebugCollections();
     const save = useSaveCollections();
     const [name, setName] = useState(suggestedName);
@@ -59,7 +87,9 @@ function SaveForm({ onOpenChange, action, params, channel, channelFrom = 'tab', 
         : omitted > 0
           ? `有 ${omitted} 处超长参数在存盘时被省略，补上原文再收藏`
           : !data
-            ? (collections.isError ? '读不到现有收藏，现在保存会把它们盖掉' : null)
+            ? collections.isError
+                ? '读不到现有收藏，现在保存会把它们盖掉'
+                : null
             : null;
 
     const submit = () => {
@@ -78,7 +108,13 @@ function SaveForm({ onOpenChange, action, params, channel, channelFrom = 'tab', 
         const label = name.trim() || action;
         save.mutate(next, {
             onSuccess: () =>
-                pushInfoBar({ key: 'debug-save-request', tone: 'success', title: '已收藏', content: label, autoDismissMs: 2500 }),
+                pushInfoBar({
+                    key: 'debug-save-request',
+                    tone: 'success',
+                    title: '已收藏',
+                    content: label,
+                    autoDismissMs: 2500,
+                }),
         });
         onOpenChange(false);
     };
@@ -93,7 +129,8 @@ function SaveForm({ onOpenChange, action, params, channel, channelFrom = 'tab', 
             <DialogHeader>
                 <DialogTitle>收藏请求</DialogTitle>
                 <DialogDescription>
-                    存下 <code className="font-mono text-text">{action}</code> 和这份参数，在左栏「收藏」里一键重发。
+                    存下 <code className="font-mono text-text">{action}</code>{' '}
+                    和这份参数，在左栏「收藏」里一键重发。
                 </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
@@ -115,7 +152,10 @@ function SaveForm({ onOpenChange, action, params, channel, channelFrom = 'tab', 
                         label="放进文件夹"
                         value={folder}
                         onValueChange={setFolder}
-                        items={[{ value: ROOT, label: '不放进文件夹' }, ...folders.map((f) => ({ value: f.id, label: f.name }))]}
+                        items={[
+                            { value: ROOT, label: '不放进文件夹' },
+                            ...folders.map((f) => ({ value: f.id, label: f.name })),
+                        ]}
                     />
                 )}
                 {channel && (
@@ -130,7 +170,11 @@ function SaveForm({ onOpenChange, action, params, channel, channelFrom = 'tab', 
                         hint="不记的话，重发时跟着顶栏选的通道走"
                     />
                 )}
-                {same && <p className="text-2xs text-warning">已经收藏过一份一样的请求：「{same.name}」。再存会多一份。</p>}
+                {same && (
+                    <p className="text-2xs text-warning">
+                        已经收藏过一份一样的请求：「{same.name}」。再存会多一份。
+                    </p>
+                )}
                 {blocker && <p className="text-2xs text-danger">{blocker}</p>}
             </div>
             <DialogFooter>

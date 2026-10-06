@@ -29,7 +29,9 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
     className,
 }) => {
     const row = (inner: React.ReactNode) => (
-        <div className={cn('mt-1 flex min-w-0 max-w-full items-center gap-2', className)}>{inner}</div>
+        <div className={cn('mt-1 flex min-w-0 max-w-full items-center gap-2', className)}>
+            {inner}
+        </div>
     );
 
     if (progress.status === 'failed' || progress.status === 'cancelled') {
@@ -101,11 +103,18 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
               : null;
 
     return (
-        <div className={cn('mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]', className)}>
+        <div
+            className={cn(
+                'mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]',
+                className,
+            )}
+        >
             <StageIcon stage={progress.downloadStage} />
             <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
             {bytesText && (
-                <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">{bytesText}</span>
+                <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">
+                    {bytesText}
+                </span>
             )}
             {trailingMetric && (
                 <span className="shrink-0 font-mono tabular-nums text-brand">{trailingMetric}</span>

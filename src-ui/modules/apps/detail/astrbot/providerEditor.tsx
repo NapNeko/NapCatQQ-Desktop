@@ -2,8 +2,16 @@
 
 import { useState, type ReactNode } from 'react';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '../../../../shared/ui';
-import { ASTRBOT_SOURCE_PRESETS, type AstrBotSourcePreset } from '../../../../core/domain/apps/astrbotConfig';
-import { commitProviderDraft, draftForCreate, draftForEdit, type ProviderDraft } from './providerDraft';
+import {
+    ASTRBOT_SOURCE_PRESETS,
+    type AstrBotSourcePreset,
+} from '../../../../core/domain/apps/astrbotConfig';
+import {
+    commitProviderDraft,
+    draftForCreate,
+    draftForEdit,
+    type ProviderDraft,
+} from './providerDraft';
 import type { AstrBotInstanceConfig } from '../../../../core/ipc/types';
 
 export const PROVIDER_TYPE_LABEL: Record<string, string> = {
@@ -23,7 +31,10 @@ export function hostOf(apiBase: string): string {
     }
 }
 
-export function useProviderEditor(config: AstrBotInstanceConfig, onChange: (next: AstrBotInstanceConfig) => void) {
+export function useProviderEditor(
+    config: AstrBotInstanceConfig,
+    onChange: (next: AstrBotInstanceConfig) => void,
+) {
     const [draft, setDraft] = useState<ProviderDraft | null>(null);
     return {
         draft,
@@ -51,12 +62,15 @@ export const ProviderPresetMenu: React.FC<{
             <div
                 className="overflow-y-auto overscroll-contain"
                 style={{
-                    maxHeight: 'min(24rem, calc(var(--radix-popover-content-available-height, 24rem) - 8px))',
+                    maxHeight:
+                        'min(24rem, calc(var(--radix-popover-content-available-height, 24rem) - 8px))',
                 }}
             >
                 <PresetGroup
                     title="对话"
-                    items={ASTRBOT_SOURCE_PRESETS.filter((p) => p.provider_type === 'chat_completion')}
+                    items={ASTRBOT_SOURCE_PRESETS.filter(
+                        (p) => p.provider_type === 'chat_completion',
+                    )}
                     onPick={onPick}
                 />
                 <div className="my-1 h-px bg-border-subtle" />
@@ -76,7 +90,9 @@ const PresetGroup: React.FC<{
     onPick: (p: AstrBotSourcePreset) => void;
 }> = ({ title, items, onPick }) => (
     <div>
-        <p className="px-2 pb-1 pt-1.5 text-2xs font-medium uppercase tracking-wider text-text-tertiary">{title}</p>
+        <p className="px-2 pb-1 pt-1.5 text-2xs font-medium uppercase tracking-wider text-text-tertiary">
+            {title}
+        </p>
         {items.map((p) => (
             <PopoverClose key={p.id} asChild>
                 <button
@@ -86,7 +102,9 @@ const PresetGroup: React.FC<{
                 >
                     <span className="shrink-0 whitespace-nowrap">{p.label}</span>
                     {p.api_base && (
-                        <span className="min-w-0 truncate font-mono text-2xs text-text-tertiary">{hostOf(p.api_base)}</span>
+                        <span className="min-w-0 truncate font-mono text-2xs text-text-tertiary">
+                            {hostOf(p.api_base)}
+                        </span>
                     )}
                 </button>
             </PopoverClose>

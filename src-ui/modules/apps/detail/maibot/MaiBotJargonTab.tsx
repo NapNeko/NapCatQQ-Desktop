@@ -3,10 +3,26 @@
 import { useState } from 'react';
 import { BookA, Check, Plus, Trash2, X } from 'lucide-react';
 import { Button, Select } from '../../../../shared/ui';
-import type { AppInstance, MaiBotJargonFilter, MaiBotRuntimeStatus } from '../../../../core/ipc/types';
-import { useMaiBotJargonAction, useMaiBotJargonOverview, useMaiBotJargons } from '../../../../hooks/apps/useMaiBotLearning';
+import type {
+    AppInstance,
+    MaiBotJargonFilter,
+    MaiBotRuntimeStatus,
+} from '../../../../core/ipc/types';
+import {
+    useMaiBotJargonAction,
+    useMaiBotJargonOverview,
+    useMaiBotJargons,
+} from '../../../../hooks/apps/useMaiBotLearning';
 import { ConfirmDelete, EmptyHint } from '../entityParts';
-import { Pager, ResourcePane, SearchBox, Segmented, SelectionBar, useDebounced, useSelection } from '../resourceParts';
+import {
+    Pager,
+    ResourcePane,
+    SearchBox,
+    Segmented,
+    SelectionBar,
+    useDebounced,
+    useSelection,
+} from '../resourceParts';
 import { MaiBotLiveGate, maibotLive } from './MaiBotLiveGate';
 import { JargonDialog, JargonRow, type JargonDraft } from './maibotJargonParts';
 
@@ -29,22 +45,38 @@ export const MaiBotJargonTab: React.FC<{
     const sel = useSelection<number>();
     const q = useDebounced(search.trim());
 
-    const query = { page, page_size: PAGE_SIZE, search: q, chat_id: chatId === ALL_CHATS ? '' : chatId, filter };
+    const query = {
+        page,
+        page_size: PAGE_SIZE,
+        search: q,
+        chat_id: chatId === ALL_CHATS ? '' : chatId,
+        filter,
+    };
     const list = useMaiBotJargons(instance.id, query, live);
     const overview = useMaiBotJargonOverview(instance.id, live);
     const act = useMaiBotJargonAction(instance.id);
 
-    if (!live) return <MaiBotLiveGate status={status} what="学到的黑话" onStart={onStart} starting={starting} />;
+    if (!live)
+        return (
+            <MaiBotLiveGate
+                status={status}
+                what="学到的黑话"
+                onStart={onStart}
+                starting={starting}
+            />
+        );
 
     const ov = overview.data;
     const chats = ov?.chats ?? [];
     const usedChats = chats.filter((c) => ov?.used_chat_ids.includes(c.chat_id));
     const items = list.data?.items ?? [];
-    const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
-        set(v);
-        setPage(1);
-        sel.clear();
-    };
+    const resetPage =
+        <T,>(set: (v: T) => void) =>
+        (v: T) => {
+            set(v);
+            setPage(1);
+            sel.clear();
+        };
     const pickedIds = [...sel.picked];
     const pageIds = items.map((j) => j.id);
     const pageAllPicked = pageIds.every((id) => sel.has(id));
@@ -55,16 +87,28 @@ export const MaiBotJargonTab: React.FC<{
         <>
             <Select
                 className="w-44 [&_button]:h-8 [&_button]:min-h-8 [&_button]:text-[12.5px]"
-                items={[{ value: ALL_CHATS, label: '全部聊天' }, ...usedChats.map((c) => ({ value: c.chat_id, label: c.chat_name }))]}
+                items={[
+                    { value: ALL_CHATS, label: '全部聊天' },
+                    ...usedChats.map((c) => ({ value: c.chat_id, label: c.chat_name })),
+                ]}
                 value={chatId}
                 onValueChange={resetPage(setChatId)}
             />
-            <SearchBox className="w-48" placeholder="搜黑话" value={search} onChange={resetPage(setSearch)} />
+            <SearchBox
+                className="w-48"
+                placeholder="搜黑话"
+                value={search}
+                onChange={resetPage(setSearch)}
+            />
             <Segmented
                 items={[
                     { value: 'all', label: '全部', count: ov?.total },
                     { value: 'confirmed', label: '已确认', count: ov?.confirmed },
-                    { value: 'not_jargon', label: '不算', count: ov ? ov.total - ov.confirmed : undefined },
+                    {
+                        value: 'not_jargon',
+                        label: '不算',
+                        count: ov ? ov.total - ov.confirmed : undefined,
+                    },
                     { value: 'pinned', label: '固定', count: ov?.pinned },
                     { value: 'global', label: '全局', count: ov?.global },
                 ]}
@@ -114,11 +158,21 @@ export const MaiBotJargonTab: React.FC<{
                     onClear={sel.clear}
                     onSelectAll={pageAllPicked ? undefined : () => sel.setAll(pageIds, true)}
                 >
-                    <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => setJargon(true)}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={act.isPending}
+                        onClick={() => setJargon(true)}
+                    >
                         <Check size={13} />
                         算黑话
                     </Button>
-                    <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => setJargon(false)}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={act.isPending}
+                        onClick={() => setJargon(false)}
+                    >
                         <X size={13} />
                         不算
                     </Button>
@@ -209,7 +263,11 @@ export const MaiBotJargonTab: React.FC<{
 
             <ConfirmDelete
                 open={pendingDelete !== null}
-                title={pendingDelete && pendingDelete.length > 1 ? `删掉这 ${pendingDelete.length} 条黑话？` : '删掉这条黑话？'}
+                title={
+                    pendingDelete && pendingDelete.length > 1
+                        ? `删掉这 ${pendingDelete.length} 条黑话？`
+                        : '删掉这条黑话？'
+                }
                 description="删掉就找不回来了。这个词要是还常出现，麦麦可能又记回来。"
                 busy={act.isPending}
                 onCancel={() => setPendingDelete(null)}

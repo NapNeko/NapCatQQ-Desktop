@@ -10,10 +10,7 @@ import {
     type ConnectionKind,
 } from './connections';
 
-export function applyImportedNetwork(
-    cfg: BotConfig,
-    imported: ImportedNetworkConfig,
-): void {
+export function applyImportedNetwork(cfg: BotConfig, imported: ImportedNetworkConfig): void {
     cfg.connect = imported.connect;
     if (imported.musicSignUrl) {
         cfg.bot = { ...cfg.bot, musicSignUrl: imported.musicSignUrl };
@@ -21,18 +18,13 @@ export function applyImportedNetwork(
     if (imported.statusCommand) {
         cfg.statusCommand = imported.statusCommand;
     }
-    if (
-        imported.enableLocalFile2Url != null ||
-        imported.parseMultMsg != null
-    ) {
+    if (imported.enableLocalFile2Url != null || imported.parseMultMsg != null) {
         cfg.advanced = {
             ...cfg.advanced,
             ...(imported.enableLocalFile2Url != null
                 ? { enableLocalFile2Url: imported.enableLocalFile2Url }
                 : {}),
-            ...(imported.parseMultMsg != null
-                ? { parseMultMsg: imported.parseMultMsg }
-                : {}),
+            ...(imported.parseMultMsg != null ? { parseMultMsg: imported.parseMultMsg } : {}),
         };
     }
 }
@@ -85,10 +77,7 @@ export function previewImportedNetwork(
 
 export function isPreviewEmpty(p: ImportedNetworkPreview): boolean {
     return (
-        p.added.length === 0 &&
-        p.removed.length === 0 &&
-        p.changed.length === 0 &&
-        !p.otherChanged
+        p.added.length === 0 && p.removed.length === 0 && p.changed.length === 0 && !p.otherChanged
     );
 }
 

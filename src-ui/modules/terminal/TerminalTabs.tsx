@@ -2,7 +2,17 @@
 // 标签上的小点：后台来了输出是灰点，后台跑完命令成功绿点、失败红点；程序退出 / 断线时标签名变淡。
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, Columns2, Copy, FileDown, Pencil, Plus, Rows2, SquareArrowOutUpRight, X } from 'lucide-react';
+import {
+    ChevronDown,
+    Columns2,
+    Copy,
+    FileDown,
+    Pencil,
+    Plus,
+    Rows2,
+    SquareArrowOutUpRight,
+    X,
+} from 'lucide-react';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -39,7 +49,15 @@ function groupActivity(state: TerminalState, group: TerminalGroup): TerminalActi
     return best;
 }
 
-function Tab({ state, group, active }: { state: TerminalState; group: TerminalGroup; active: boolean }) {
+function Tab({
+    state,
+    group,
+    active,
+}: {
+    state: TerminalState;
+    group: TerminalGroup;
+    active: boolean;
+}) {
     const [renaming, setRenaming] = useState(false);
     const [draft, setDraft] = useState('');
     const openExternal = useTerminalExternal();
@@ -76,7 +94,9 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     className={cn(
                         'ncd-term-tab group relative z-[1] flex h-7 max-w-[220px] shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-sm pl-2.5 pr-1 text-[12px] transition-colors',
                         // 当前标签的底色是标签条里那块会滑的指示块
-                        active ? 'text-text' : 'text-text-secondary hover:bg-inset/60 hover:text-text',
+                        active
+                            ? 'text-text'
+                            : 'text-text-secondary hover:bg-inset/60 hover:text-text',
                         !live && 'italic opacity-70',
                     )}
                     title={`${title}${view.cwd ? `\n${view.cwd}` : ''}`}
@@ -98,13 +118,19 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     ) : (
                         <span className="min-w-0 truncate">{title}</span>
                     )}
-                    {group.panes.length > 1 && <span className="shrink-0 text-[10px] text-text-tertiary">+1</span>}
+                    {group.panes.length > 1 && (
+                        <span className="shrink-0 text-[10px] text-text-tertiary">+1</span>
+                    )}
                     {activity !== 'none' && !active && (
                         <span
                             key={activity}
                             className={cn(
                                 'ncd-term-dot h-1.5 w-1.5 shrink-0 rounded-full',
-                                activity === 'fail' ? 'bg-danger' : activity === 'ok' ? 'bg-success' : 'bg-text-tertiary',
+                                activity === 'fail'
+                                    ? 'bg-danger'
+                                    : activity === 'ok'
+                                      ? 'bg-success'
+                                      : 'bg-text-tertiary',
                             )}
                         />
                     )}
@@ -135,7 +161,14 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     <Pencil size={13} />
                     <span>改名</span>
                 </ContextMenuItem>
-                <ContextMenuItem onClick={() => void terminalStore.open(view.info.target, { shell: view.info.shell, forceNew: true })}>
+                <ContextMenuItem
+                    onClick={() =>
+                        void terminalStore.open(view.info.target, {
+                            shell: view.info.shell,
+                            forceNew: true,
+                        })
+                    }
+                >
                     <Copy size={13} />
                     <span>再开一个同样的</span>
                 </ContextMenuItem>
@@ -143,7 +176,11 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     <>
                         <ContextMenuItem
                             onClick={() =>
-                                void terminalStore.open(view.info.target, { shell: view.info.shell, splitFrom: focusedId, split: 'row' })
+                                void terminalStore.open(view.info.target, {
+                                    shell: view.info.shell,
+                                    splitFrom: focusedId,
+                                    split: 'row',
+                                })
                             }
                         >
                             <Columns2 size={13} />
@@ -151,7 +188,11 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                         </ContextMenuItem>
                         <ContextMenuItem
                             onClick={() =>
-                                void terminalStore.open(view.info.target, { shell: view.info.shell, splitFrom: focusedId, split: 'column' })
+                                void terminalStore.open(view.info.target, {
+                                    shell: view.info.shell,
+                                    splitFrom: focusedId,
+                                    split: 'column',
+                                })
                             }
                         >
                             <Rows2 size={13} />
@@ -160,13 +201,22 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     </>
                 )}
                 {group.panes.length > 1 && (
-                    <ContextMenuItem onClick={() => terminalStore.setSplit(group.id, group.split === 'row' ? 'column' : 'row')}>
+                    <ContextMenuItem
+                        onClick={() =>
+                            terminalStore.setSplit(
+                                group.id,
+                                group.split === 'row' ? 'column' : 'row',
+                            )
+                        }
+                    >
                         {group.split === 'row' ? <Rows2 size={13} /> : <Columns2 size={13} />}
                         <span>{group.split === 'row' ? '改成上下' : '改成左右'}</span>
                     </ContextMenuItem>
                 )}
                 {view.info.features.external && (
-                    <ContextMenuItem onClick={() => openExternal(view.info.target, view.info.shell)}>
+                    <ContextMenuItem
+                        onClick={() => openExternal(view.info.target, view.info.shell)}
+                    >
                         <SquareArrowOutUpRight size={13} />
                         <span>在系统终端里打开</span>
                     </ContextMenuItem>
@@ -174,7 +224,11 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                 <ContextMenuItem
                     onClick={() => {
                         const runtime = getRuntime(focusedId);
-                        if (runtime) void terminalIo.exportText(`${title.replace(/[\\/:*?"<>|\s·]+/g, '-')}.log`, runtime.bufferText());
+                        if (runtime)
+                            void terminalIo.exportText(
+                                `${title.replace(/[\\/:*?"<>|\s·]+/g, '-')}.log`,
+                                runtime.bufferText(),
+                            );
                     }}
                 >
                     <FileDown size={13} />
@@ -185,7 +239,10 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     <X size={13} />
                     <span>关掉其它标签</span>
                 </ContextMenuItem>
-                <ContextMenuItem tone="danger" onClick={() => void terminalStore.closeGroup(group.id)}>
+                <ContextMenuItem
+                    tone="danger"
+                    onClick={() => void terminalStore.closeGroup(group.id)}
+                >
                     <X size={13} />
                     <span>关掉</span>
                 </ContextMenuItem>
@@ -238,9 +295,18 @@ export function TerminalTabs({ state }: { state: TerminalState }) {
             role="tablist"
             className="scrollbar-hide relative flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
         >
-            <div ref={barRef} aria-hidden className="ncd-term-tab-indicator pointer-events-none absolute left-0 top-0 h-7 rounded-sm bg-inset" />
+            <div
+                ref={barRef}
+                aria-hidden
+                className="ncd-term-tab-indicator pointer-events-none absolute left-0 top-0 h-7 rounded-sm bg-inset"
+            />
             {state.groups.map((group) => (
-                <Tab key={group.id} state={state} group={group} active={group.id === state.activeGroup} />
+                <Tab
+                    key={group.id}
+                    state={state}
+                    group={group}
+                    active={group.id === state.activeGroup}
+                />
             ))}
         </div>
     );
@@ -293,14 +359,22 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
                     {shells.map((shell) =>
                         item(
                             shell.kind,
-                            () => void terminalStore.open({ kind: 'local' }, { shell: shell.kind, forceNew: true }),
+                            () =>
+                                void terminalStore.open(
+                                    { kind: 'local' },
+                                    { shell: shell.kind, forceNew: true },
+                                ),
                             <>
                                 <TargetIcon target={{ kind: 'local' }} />
                                 {shell.label}
                             </>,
                         ),
                     )}
-                    {shells.length === 0 && <p className="px-2 py-1 text-[11px] text-text-tertiary">正在找本机的 shell…</p>}
+                    {shells.length === 0 && (
+                        <p className="px-2 py-1 text-[11px] text-text-tertiary">
+                            正在找本机的 shell…
+                        </p>
+                    )}
                     {item(
                         'external',
                         () => openExternal({ kind: 'local' }),
@@ -313,7 +387,11 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
                     {servers.map((server) =>
                         item(
                             server.id,
-                            () => void terminalStore.open({ kind: 'server', server_id: server.id }, { forceNew: true }),
+                            () =>
+                                void terminalStore.open(
+                                    { kind: 'server', server_id: server.id },
+                                    { forceNew: true },
+                                ),
                             <>
                                 <TargetIcon target={{ kind: 'server', server_id: server.id }} />
                                 <span className="truncate">{server.label}</span>
@@ -321,7 +399,9 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
                         ),
                     )}
                     {servers.length === 0 && (
-                        <p className="px-2 py-1 text-[11px] text-text-tertiary">还没添加远端主机，到「远端」页加一台</p>
+                        <p className="px-2 py-1 text-[11px] text-text-tertiary">
+                            还没添加远端主机，到「远端」页加一台
+                        </p>
                     )}
                 </PopoverContent>
             </Popover>

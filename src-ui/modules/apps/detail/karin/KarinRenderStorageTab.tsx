@@ -5,10 +5,20 @@ import { Button, FormSection, NumberField, Switch, TextField } from '../../../..
 import { RestartBadge } from '../FieldHints';
 import { newRenderHttpServer, newRenderWsClient } from '../../../../core/domain/apps/karinConfig';
 import { CONFIG_PAIR, ConfigForm } from './configLayout';
-import type { KarinRedisConfig, KarinRenderConfig, KarinRenderHttpServer, KarinRenderWsClient } from '../../../../core/ipc/types';
+import type {
+    KarinRedisConfig,
+    KarinRenderConfig,
+    KarinRenderHttpServer,
+    KarinRenderWsClient,
+} from '../../../../core/ipc/types';
 import type { KarinTabProps } from './KarinBasicTab';
 
-export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({ config, onChange, errors, disabled }) => {
+export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({
+    config,
+    onChange,
+    errors,
+    disabled,
+}) => {
     const render = config.render;
     const redis = config.redis;
     const setRender = (patch: Partial<KarinRenderConfig>) =>
@@ -22,7 +32,9 @@ export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({ config, onChang
         });
     const patchHttp = (idx: number, patch: Partial<KarinRenderHttpServer>) =>
         setRender({
-            http_server: render.http_server.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
+            http_server: render.http_server.map((row, i) =>
+                i === idx ? { ...row, ...patch } : row,
+            ),
         });
 
     return (
@@ -94,14 +106,18 @@ export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({ config, onChang
                                     value={row.reconnectTime ?? null}
                                     min={0}
                                     disabled={disabled}
-                                    onValueChange={(v) => patchWs(idx, { reconnectTime: v ?? undefined })}
+                                    onValueChange={(v) =>
+                                        patchWs(idx, { reconnectTime: v ?? undefined })
+                                    }
                                 />
                                 <NumberField
                                     label="心跳（ms）"
                                     value={row.heartbeatTime ?? null}
                                     min={0}
                                     disabled={disabled}
-                                    onValueChange={(v) => patchWs(idx, { heartbeatTime: v ?? undefined })}
+                                    onValueChange={(v) =>
+                                        patchWs(idx, { heartbeatTime: v ?? undefined })
+                                    }
                                 />
                             </div>
                         </div>
@@ -112,7 +128,9 @@ export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({ config, onChang
                         variant="secondary"
                         size="sm"
                         disabled={disabled}
-                        onClick={() => setRender({ ws_client: [...render.ws_client, newRenderWsClient()] })}
+                        onClick={() =>
+                            setRender({ ws_client: [...render.ws_client, newRenderWsClient()] })
+                        }
                     >
                         <Plus size={13} /> 添加
                     </Button>
@@ -144,7 +162,9 @@ export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({ config, onChang
                                     disabled={disabled}
                                     onClick={() =>
                                         setRender({
-                                            http_server: render.http_server.filter((_, i) => i !== idx),
+                                            http_server: render.http_server.filter(
+                                                (_, i) => i !== idx,
+                                            ),
                                         })
                                     }
                                 >
@@ -177,7 +197,11 @@ export const KarinRenderStorageTab: React.FC<KarinTabProps> = ({ config, onChang
                         variant="secondary"
                         size="sm"
                         disabled={disabled}
-                        onClick={() => setRender({ http_server: [...render.http_server, newRenderHttpServer()] })}
+                        onClick={() =>
+                            setRender({
+                                http_server: [...render.http_server, newRenderHttpServer()],
+                            })
+                        }
                     >
                         <Plus size={13} /> 添加
                     </Button>

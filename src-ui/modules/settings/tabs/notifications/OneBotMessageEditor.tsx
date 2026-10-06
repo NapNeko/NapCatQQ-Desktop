@@ -1,16 +1,13 @@
 // OneBot 掉线消息模板编辑 + 预览
 
 import { useRef } from 'react';
-import {
-    TEMPLATE_VARS,
-} from '../../../../core/domain/settings/webhook-message-visual';
+import { TEMPLATE_VARS } from '../../../../core/domain/settings/webhook-message-visual';
 import { Button } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 
 function renderTemplatePreview(template: string): string {
     return TEMPLATE_VARS.reduce(
-        (text, variable) =>
-            text.replaceAll(`{${variable.key}}`, variable.sample),
+        (text, variable) => text.replaceAll(`{${variable.key}}`, variable.sample),
         template,
     );
 }
@@ -56,9 +53,7 @@ export function OneBotMessageEditor({
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border-subtle bg-inset/30 px-3 py-1.5">
-                <span className="mr-0.5 text-[11px] text-text-tertiary">
-                    变量
-                </span>
+                <span className="mr-0.5 text-[11px] text-text-tertiary">变量</span>
                 {TEMPLATE_VARS.map((variable) => (
                     <button
                         key={variable.key}
@@ -94,17 +89,11 @@ export function OneBotMessageEditor({
 
             <div className="shrink-0 border-t border-border-subtle bg-inset/25 px-3 py-2">
                 <div className="mb-1 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-medium text-text-secondary">
-                        预览
-                    </p>
-                    <span className="text-[10.5px] text-text-tertiary">
-                        示例数据
-                    </span>
+                    <p className="text-[11px] font-medium text-text-secondary">预览</p>
+                    <span className="text-[10.5px] text-text-tertiary">示例数据</span>
                 </div>
                 <div className="max-h-20 overflow-y-auto whitespace-pre-wrap text-[12px] leading-relaxed text-text-secondary">
-                    {preview || (
-                        <span className="text-text-tertiary">消息内容为空</span>
-                    )}
+                    {preview || <span className="text-text-tertiary">消息内容为空</span>}
                 </div>
             </div>
         </section>

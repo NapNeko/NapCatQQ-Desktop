@@ -161,7 +161,11 @@ export const catppuccinFlavors = { latte, frappe, macchiato, mocha } as const;
 /** 暗色 flavor 名称（排除 Latte）。 */
 export type DarkFlavorName = 'frappe' | 'macchiato' | 'mocha';
 
-export const DARK_FLAVOR_NAMES: readonly DarkFlavorName[] = ['frappe', 'macchiato', 'mocha'] as const;
+export const DARK_FLAVOR_NAMES: readonly DarkFlavorName[] = [
+    'frappe',
+    'macchiato',
+    'mocha',
+] as const;
 
 /** 暗色 flavor 显示标签。 */
 export const DARK_FLAVOR_LABELS: Record<DarkFlavorName, string> = {

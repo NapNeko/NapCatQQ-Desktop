@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { boundsOf, fitView, forceLayout } from './graphLayout';
 
-const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
 
 describe('forceLayout', () => {
     const nodes = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id }));
@@ -33,7 +34,10 @@ describe('forceLayout', () => {
 
     it('handles empty, single and unknown-edge input', () => {
         expect(forceLayout([], []).size).toBe(0);
-        expect(forceLayout([{ id: 'x' }], [{ source: 'x', target: 'nope' }]).get('x')).toEqual({ x: 0, y: 0 });
+        expect(forceLayout([{ id: 'x' }], [{ source: 'x', target: 'nope' }]).get('x')).toEqual({
+            x: 0,
+            y: 0,
+        });
     });
 });
 

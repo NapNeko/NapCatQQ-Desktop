@@ -5,9 +5,7 @@ import {
 } from './layout-consolidate-alert';
 import type { DataLayoutConsolidateSnapshot } from '../../ipc/types';
 
-function snap(
-    partial: Partial<DataLayoutConsolidateSnapshot>,
-): DataLayoutConsolidateSnapshot {
+function snap(partial: Partial<DataLayoutConsolidateSnapshot>): DataLayoutConsolidateSnapshot {
     return {
         performed: false,
         moved_count: 0,

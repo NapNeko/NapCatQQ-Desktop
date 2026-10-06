@@ -13,13 +13,7 @@ export function PaneLoading({ text }: { text: string }) {
     );
 }
 
-export function PaneLoadError({
-    message,
-    onRetry,
-}: {
-    message: string;
-    onRetry: () => void;
-}) {
+export function PaneLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
     return (
         <PagePlaceholder className="gap-2 py-16">
             <p className="text-sm text-text-secondary">{message}</p>

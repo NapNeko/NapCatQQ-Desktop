@@ -43,16 +43,12 @@ function ensureBot(state: NapcatLoginState, botId: string): NapcatBotLogin {
     return state.byBot[botId] ?? emptyBotLogin;
 }
 
-export function reduceNapcatLogin(
-    state: NapcatLoginState,
-    event: DomainEvent,
-): NapcatLoginState {
+export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): NapcatLoginState {
     switch (event.kind) {
         case 'napcat_webui_available': {
             const previous = ensureBot(state, event.bot_id);
             const sameBinding =
-                previous.webui?.port === event.port &&
-                previous.webui.token === event.token;
+                previous.webui?.port === event.port && previous.webui.token === event.token;
             return {
                 ...state,
                 byBot: {
@@ -62,9 +58,7 @@ export function reduceNapcatLogin(
                         webui: { port: event.port, token: event.token },
                         online: sameBinding ? previous.online : null,
                         qrcodeUrl: sameBinding ? previous.qrcodeUrl : null,
-                        invalidationReason: sameBinding
-                            ? previous.invalidationReason
-                            : null,
+                        invalidationReason: sameBinding ? previous.invalidationReason : null,
                     },
                 },
             };
@@ -189,10 +183,7 @@ export function reduceNapcatLogin(
 }
 
 /// 清掉 invalidationReason（3s 定时器到期后调用）。
-export function clearInvalidation(
-    state: NapcatLoginState,
-    botId: string,
-): NapcatLoginState {
+export function clearInvalidation(state: NapcatLoginState, botId: string): NapcatLoginState {
     const prev = state.byBot[botId];
     if (!prev || prev.invalidationReason === null) return state;
     return {

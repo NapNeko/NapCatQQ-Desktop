@@ -25,7 +25,11 @@ export function JsonField({
         setState(current);
     }
 
-    useFieldHint(current.broken ? { text: '这里的 JSON 还没写完整，参数里仍是上一次的合法值', tone: 'warning' } : null);
+    useFieldHint(
+        current.broken
+            ? { text: '这里的 JSON 还没写完整，参数里仍是上一次的合法值', tone: 'warning' }
+            : null,
+    );
 
     const onText = (text: string) => {
         if (text.trim() === '') {
@@ -49,7 +53,11 @@ export function JsonField({
                 onChange={onText}
                 onSubmit={onSubmit}
                 ariaLabel={ariaLabel}
-                className={cn(heightClass, 'flex-none', (invalid || current.broken) && 'border-danger')}
+                className={cn(
+                    heightClass,
+                    'flex-none',
+                    (invalid || current.broken) && 'border-danger',
+                )}
             />
         </div>
     );

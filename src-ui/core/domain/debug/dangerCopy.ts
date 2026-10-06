@@ -10,8 +10,11 @@ const ID_KEYS: ReadonlySet<string> = new Set(['group_id', 'user_id', 'message_id
 function show(params: Record<string, unknown>, key: string): string {
     const v = params[key];
     if (v === undefined || v === null || v === '') return `（未填 ${key}）`;
-    if (ID_KEYS.has(key) && (v === 0 || (typeof v === 'string' && v.trim() === '0'))) return `（未填 ${key}）`;
-    return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v);
+    if (ID_KEYS.has(key) && (v === 0 || (typeof v === 'string' && v.trim() === '0')))
+        return `（未填 ${key}）`;
+    return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+        ? String(v)
+        : JSON.stringify(v);
 }
 
 /** NapCat 的布尔参数可能是字符串 "true" / "false"，缺省时用 fallback */
@@ -24,7 +27,11 @@ function flag(params: Record<string, unknown>, key: string, fallback: boolean): 
     return fallback;
 }
 
-export function dangerConsequence(action: string, params: Record<string, unknown>, botName: string): string {
+export function dangerConsequence(
+    action: string,
+    params: Record<string, unknown>,
+    botName: string,
+): string {
     switch (action) {
         case 'bot_exit':
             return `${botName} 会退出登录，需要重新登录`;
@@ -41,9 +48,13 @@ export function dangerConsequence(action: string, params: Record<string, unknown
         }
         case 'set_group_ban': {
             const duration = params.duration;
-            const unset = duration === undefined || duration === null || (typeof duration === 'string' && duration.trim() === '');
+            const unset =
+                duration === undefined ||
+                duration === null ||
+                (typeof duration === 'string' && duration.trim() === '');
             // 没填时上游会按默认的 30 分钟禁言，绝不是解除；只有明确写了 0 才是解除禁言
-            if (unset) return `会禁言 ${show(params, 'user_id')} （未填 duration，上游默认 1800 秒）`;
+            if (unset)
+                return `会禁言 ${show(params, 'user_id')} （未填 duration，上游默认 1800 秒）`;
             if (Number(duration) === 0) {
                 return `会解除 ${show(params, 'user_id')} 在群 ${show(params, 'group_id')} 的禁言`;
             }

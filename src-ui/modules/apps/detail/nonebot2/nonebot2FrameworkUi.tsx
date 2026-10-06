@@ -28,10 +28,16 @@ function NoneBot2FrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProp
 
     return (
         <>
-            <TabsContent value="adapters" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="adapters"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <AppStoreTab instance={instance} resource="adapter" />
             </TabsContent>
-            <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="plugins"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <AppStoreTab instance={instance} resource="plugin" />
             </TabsContent>
             {form.isLoading && !form.form ? (

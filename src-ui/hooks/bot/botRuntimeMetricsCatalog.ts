@@ -57,11 +57,11 @@ async function ensureSettings(): Promise<void> {
                 enabled: !!s.botRuntimeMetricsEnabled,
                 intervalMs: clampBotRuntimeMetricsIntervalMs(
                     Number(s.botRuntimeMetricsIntervalMs) ||
-                    BOT_RUNTIME_METRICS_INTERVAL_MS_DEFAULT,
+                        BOT_RUNTIME_METRICS_INTERVAL_MS_DEFAULT,
                 ),
                 retentionDays: clampBotRuntimeMetricsRetentionDays(
                     Number(s.botRuntimeMetricsRetentionDays) ||
-                    BOT_RUNTIME_METRICS_RETENTION_DAYS_DEFAULT,
+                        BOT_RUNTIME_METRICS_RETENTION_DAYS_DEFAULT,
                 ),
             });
             settingsLoaded = true;

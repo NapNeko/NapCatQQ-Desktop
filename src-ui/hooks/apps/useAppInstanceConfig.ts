@@ -35,7 +35,10 @@ export function useAppInstanceConfig(instanceId: string | null, enabled = true) 
 
     const query = useQuery<AppInstanceConfigEnvelope, AppConfigError>({
         queryKey: key,
-        queryFn: () => appFrameworkService.readConfig(instanceId!).catch((e) => Promise.reject(toAppConfigError(e))),
+        queryFn: () =>
+            appFrameworkService
+                .readConfig(instanceId!)
+                .catch((e) => Promise.reject(toAppConfigError(e))),
         enabled: enabled && !!instanceId,
         retry: false,
         staleTime: 15_000,

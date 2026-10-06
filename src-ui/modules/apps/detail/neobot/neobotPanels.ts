@@ -12,9 +12,7 @@ function listOf(raw: unknown, key: string): Record<string, unknown>[] | null {
     if (!r) return null;
     const arr = r[key];
     if (!Array.isArray(arr)) return null;
-    return arr
-        .map((x) => asRecord(x))
-        .filter((x): x is Record<string, unknown> => x !== null);
+    return arr.map((x) => asRecord(x)).filter((x): x is Record<string, unknown> => x !== null);
 }
 
 function asStringArray(v: unknown): string[] {

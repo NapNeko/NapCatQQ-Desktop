@@ -21,7 +21,10 @@ beforeAll(() => {
             return (this as HTMLElement).classList.contains('overflow-y-auto') ? 600 : 30;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 280 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 280,
+    });
     Element.prototype.hasPointerCapture ??= () => false;
     Element.prototype.releasePointerCapture ??= () => {};
     Element.prototype.setPointerCapture ??= () => {};
@@ -42,11 +45,13 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) => {
-                const fn = service[key];
-                if (!fn) throw new Error(`没有模拟 service.${key}`);
-                return fn(...args);
-            },
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) => {
+                    const fn = service[key];
+                    if (!fn) throw new Error(`没有模拟 service.${key}`);
+                    return fn(...args);
+                },
         },
     ),
 }));
@@ -108,8 +113,15 @@ function summary(e: DebugHistoryEntry): DebugHistorySummary {
 
 /** p1 较旧、p2 较新（响应里 group_id 是 2）、q1 是另一个接口 */
 const OLD = full('p1', { at_ms: 1_700_000_000_000 });
-const NEW = full('p2', { at_ms: 1_700_000_060_000, response: { status: 'ok', retcode: 0, data: { group_id: 2 }, message: '', wording: '' } });
-const OTHER_ACTION = full('q1', { action: 'send_group_msg', at_ms: 1_700_000_030_000, params: { group_id: 1, message: 'hi' } });
+const NEW = full('p2', {
+    at_ms: 1_700_000_060_000,
+    response: { status: 'ok', retcode: 0, data: { group_id: 2 }, message: '', wording: '' },
+});
+const OTHER_ACTION = full('q1', {
+    action: 'send_group_msg',
+    at_ms: 1_700_000_030_000,
+    params: { group_id: 1, message: 'hi' },
+});
 const COMPARE_ENTRIES = [OLD, NEW, OTHER_ACTION];
 
 function renderHistory() {
@@ -122,7 +134,8 @@ function renderHistory() {
     return render(<LeftColumn target={SL} panel="history" />, { wrapper });
 }
 
-const compareToggle = () => screen.getByRole('button', { name: '对比响应（勾选同一个接口的两条记录）' });
+const compareToggle = () =>
+    screen.getByRole('button', { name: '对比响应（勾选同一个接口的两条记录）' });
 /** 行序固定：p1、p2、q1 */
 const optionAt = (i: number) => screen.getAllByRole('option')[i]!;
 
@@ -135,9 +148,20 @@ beforeEach(() => {
         entries: COMPARE_ENTRIES.slice(q.offset, q.offset + q.limit).map(summary),
         total: COMPARE_ENTRIES.length,
     }));
-    service.historyEntry.mockImplementation(async (id: string) => COMPARE_ENTRIES.find((e) => e.id === id) ?? null);
-    service.collections.mockResolvedValue({ version: 1, folders: [], requests: [] } satisfies DebugCollections);
-    service.catalog.mockResolvedValue({ backend: 'snowluma', source: 'live', snapshot_version: '0.9.0', actions: [] });
+    service.historyEntry.mockImplementation(
+        async (id: string) => COMPARE_ENTRIES.find((e) => e.id === id) ?? null,
+    );
+    service.collections.mockResolvedValue({
+        version: 1,
+        folders: [],
+        requests: [],
+    } satisfies DebugCollections);
+    service.catalog.mockResolvedValue({
+        backend: 'snowluma',
+        source: 'live',
+        snapshot_version: '0.9.0',
+        actions: [],
+    });
 });
 
 describe('调用历史的「对比响应」', () => {
@@ -178,7 +202,9 @@ describe('调用历史的「对比响应」', () => {
         expect(screen.getByText('已选 2 条，可以对比了')).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: '对比响应' }));
-        expect(await screen.findByRole('heading', { name: /对比响应 · get_group_list/ })).toBeInTheDocument();
+        expect(
+            await screen.findByRole('heading', { name: /对比响应 · get_group_list/ }),
+        ).toBeInTheDocument();
 
         // group_id 1 的那行只有旧的有（红），group_id 2 的只有新的有（绿）
         expect(await screen.findByText(/"group_id": 1/)).toHaveClass('bg-danger-soft/70');
@@ -193,7 +219,9 @@ describe('调用历史的「对比响应」', () => {
     it('两条记录回包一致：提示一份不用翻了', async () => {
         // p2 与 p1 回包一模一样（只是时间不同）
         service.historyEntry.mockImplementation(async (id: string) =>
-            id === 'p2' ? full('p2', { at_ms: 1_700_000_060_000 }) : (COMPARE_ENTRIES.find((e) => e.id === id) ?? null),
+            id === 'p2'
+                ? full('p2', { at_ms: 1_700_000_060_000 })
+                : (COMPARE_ENTRIES.find((e) => e.id === id) ?? null),
         );
         const user = userEvent.setup();
         renderHistory();

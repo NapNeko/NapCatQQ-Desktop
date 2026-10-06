@@ -70,8 +70,7 @@ export function WebhookChannelEditorDialog({
         if (!preset) return;
         // 切换服务时尽量保留用户已填的标题/正文，只换外壳 JSON 结构。
         const existing =
-            parseVisualFields(working.draft.bodyTemplate) ??
-            fieldsFromPresetBody(presetId);
+            parseVisualFields(working.draft.bodyTemplate) ?? fieldsFromPresetBody(presetId);
         onPatchDraft({
             bodyTemplate: serializeVisualFields(presetId, existing),
             name: working.draft.name.trim() || preset.label,
@@ -101,13 +100,9 @@ export function WebhookChannelEditorDialog({
                     <>
                         <DialogHeader className="shrink-0">
                             <DialogTitle>
-                                {working.mode === 'create'
-                                    ? '添加推送通道'
-                                    : '编辑推送通道'}
+                                {working.mode === 'create' ? '添加推送通道' : '编辑推送通道'}
                             </DialogTitle>
-                            <DialogDescription>
-                                确认后需保存设置才生效。
-                            </DialogDescription>
+                            <DialogDescription>确认后需保存设置才生效。</DialogDescription>
                         </DialogHeader>
 
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -122,18 +117,13 @@ export function WebhookChannelEditorDialog({
                                             {WEBHOOK_PRESETS.map((preset) => {
                                                 const active =
                                                     detectWebhookService(
-                                                        working.draft
-                                                            .bodyTemplate,
+                                                        working.draft.bodyTemplate,
                                                     ) === preset.id;
                                                 return (
                                                     <button
                                                         key={preset.id}
                                                         type="button"
-                                                        onClick={() =>
-                                                            applyPreset(
-                                                                preset.id,
-                                                            )
-                                                        }
+                                                        onClick={() => applyPreset(preset.id)}
                                                         className={cn(
                                                             'rounded-sm border px-2 py-1.5 text-left transition-colors',
                                                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
@@ -146,11 +136,7 @@ export function WebhookChannelEditorDialog({
                                                             {preset.label}
                                                         </span>
                                                         <span className="mt-0.5 block truncate text-[10.5px] leading-snug text-text-tertiary">
-                                                            {
-                                                                PRESET_HINTS[
-                                                                preset.id
-                                                                ]
-                                                            }
+                                                            {PRESET_HINTS[preset.id]}
                                                         </span>
                                                     </button>
                                                 );
@@ -187,9 +173,7 @@ export function WebhookChannelEditorDialog({
                                                 autoComplete="off"
                                                 value={working.draft.name}
                                                 placeholder="如 Server酱"
-                                                onValueChange={(v) =>
-                                                    onPatchDraft({ name: v })
-                                                }
+                                                onValueChange={(v) => onPatchDraft({ name: v })}
                                             />
                                         </DialogField>
                                         <DialogField label="地址">
@@ -200,18 +184,13 @@ export function WebhookChannelEditorDialog({
                                                 spellCheck={false}
                                                 value={working.draft.url}
                                                 placeholder="https://…"
-                                                onValueChange={(v) =>
-                                                    onPatchDraft({ url: v })
-                                                }
+                                                onValueChange={(v) => onPatchDraft({ url: v })}
                                             />
                                         </DialogField>
                                         <DialogField label="请求方法">
                                             <Select
                                                 value={
-                                                    working.draft.method ===
-                                                        'GET'
-                                                        ? 'GET'
-                                                        : 'POST'
+                                                    working.draft.method === 'GET' ? 'GET' : 'POST'
                                                 }
                                                 onValueChange={(v) =>
                                                     onPatchDraft({
@@ -247,9 +226,7 @@ export function WebhookChannelEditorDialog({
                                 {/* 中+右：字段表单 + 原始 JSON（组件内两栏） */}
                                 <div className="flex min-h-[14rem] min-w-0 flex-col lg:h-full lg:min-h-0">
                                     <WebhookMessageBuilder
-                                        bodyTemplate={
-                                            working.draft.bodyTemplate
-                                        }
+                                        bodyTemplate={working.draft.bodyTemplate}
                                         serviceHint={(() => {
                                             const k = detectWebhookService(
                                                 working.draft.bodyTemplate,
@@ -280,8 +257,7 @@ export function WebhookChannelEditorDialog({
                                 variant="secondary"
                                 size="sm"
                                 disabled={
-                                    testingKey ===
-                                    `webhook:${working.draft.id}` ||
+                                    testingKey === `webhook:${working.draft.id}` ||
                                     !working.draft.url.trim()
                                 }
                                 onClick={() => onTest(working.draft)}

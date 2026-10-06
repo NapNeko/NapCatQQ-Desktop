@@ -38,7 +38,8 @@ export function SystemQqWarningDialog({
                 <DialogHeader>
                     <DialogTitle>这个 Bot 会用你自己装的 QQ</DialogTitle>
                     <DialogDescription>
-                        Bot 和你平时用的 QQ 共用同一份程序。QQ 自动更新后可能和框架版本对不上，Bot 会起不来；你重装或卸载 QQ 也会连带影响 Bot。
+                        Bot 和你平时用的 QQ 共用同一份程序。QQ 自动更新后可能和框架版本对不上，Bot
+                        会起不来；你重装或卸载 QQ 也会连带影响 Bot。
                     </DialogDescription>
                 </DialogHeader>
 

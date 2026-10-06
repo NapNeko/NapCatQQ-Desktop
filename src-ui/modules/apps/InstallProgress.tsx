@@ -6,7 +6,11 @@ import { Progress } from '../../shared/ui';
 import { useAppInstallProgress } from '../../hooks/apps/useAppInstallProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { isIndeterminate } from '../../core/domain/components/progress';
-import { ProgressBarOverlay, ProgressLine, shouldShowProgressBar } from '../../shared/components/progressView';
+import {
+    ProgressBarOverlay,
+    ProgressLine,
+    shouldShowProgressBar,
+} from '../../shared/components/progressView';
 import type { AppInstance } from '../../core/ipc/types';
 
 /** 还在排队时进度里没有步骤文案，给一句人话 */
@@ -42,7 +46,9 @@ export const DetailInstallProgress: React.FC<{ instance: AppInstance }> = ({ ins
                             size="sm"
                             tone="brand"
                             value={progress.overallPercent}
-                            indeterminate={isIndeterminate(progress) || progress.overallPercent <= 0}
+                            indeterminate={
+                                isIndeterminate(progress) || progress.overallPercent <= 0
+                            }
                         />
                     )}
                 </>

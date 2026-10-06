@@ -34,7 +34,11 @@ export type CronRecipe =
 export type CronRecipeKind = CronRecipe['kind'];
 
 /** 切到「固定时间点」时的起手值：每天 04:00（低峰）。 */
-export const DEFAULT_CRON_RECIPE = { kind: 'daily', hour: 4, minute: 0 } as const satisfies CronRecipe;
+export const DEFAULT_CRON_RECIPE = {
+    kind: 'daily',
+    hour: 4,
+    minute: 0,
+} as const satisfies CronRecipe;
 
 export function cronFromRecipe(recipe: CronRecipe): string {
     switch (recipe.kind) {

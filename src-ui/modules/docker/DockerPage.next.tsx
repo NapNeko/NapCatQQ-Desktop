@@ -7,12 +7,7 @@ import { Container, Disc3, RefreshCw } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button } from '../../shared/ui';
-import {
-    ActionMotionIcon,
-    ListItem,
-    RESOURCE_MOTION,
-    refreshMotion,
-} from '../../shared/ui/motion';
+import { ActionMotionIcon, ListItem, RESOURCE_MOTION, refreshMotion } from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useDocker } from '../../hooks/docker/useDocker';
 import { useServerManager } from '../../hooks/remote/useServerManager';
@@ -56,7 +51,13 @@ export const DockerPageNext: React.FC = () => {
     const pendingRemoveRef = imagePendingRemove ? imageRemoveRef(imagePendingRemove) : null;
 
     const resourceCount =
-        tab === 'containers' ? (ready ? docker.containers.length : null) : ready ? docker.images.length : null;
+        tab === 'containers'
+            ? ready
+                ? docker.containers.length
+                : null
+            : ready
+              ? docker.images.length
+              : null;
     const resourceLabel = tab === 'containers' ? '容器' : '镜像';
 
     return (
@@ -66,8 +67,17 @@ export const DockerPageNext: React.FC = () => {
                     <p className="text-2xs uppercase tracking-widest text-text-tertiary">docker</p>
                     <h1 className="font-display text-xl font-semibold text-text">Docker 管理</h1>
                 </div>
-                <Button size="sm" variant="secondary" onClick={docker.refetch} disabled={docker.isProbing}>
-                    <ActionMotionIcon icon={RefreshCw} size={14} motion={refreshMotion(docker.isProbing)} />
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={docker.refetch}
+                    disabled={docker.isProbing}
+                >
+                    <ActionMotionIcon
+                        icon={RefreshCw}
+                        size={14}
+                        motion={refreshMotion(docker.isProbing)}
+                    />
                     刷新
                 </Button>
             </header>
@@ -104,7 +114,9 @@ export const DockerPageNext: React.FC = () => {
 
             <ImageRemoveDialog
                 image={imagePendingRemove}
-                isRemoving={pendingRemoveRef != null && docker.removingImageRef === pendingRemoveRef}
+                isRemoving={
+                    pendingRemoveRef != null && docker.removingImageRef === pendingRemoveRef
+                }
                 onDismiss={() => setImagePendingRemove(null)}
                 onConfirm={(req) => docker.removeImageAsync(req)}
             />
@@ -166,9 +178,16 @@ const ContainerList: React.FC<{
     if (docker.containers.length === 0) {
         return (
             <PagePlaceholder className="gap-2">
-                <ActionMotionIcon icon={Container} size={28} motion={RESOURCE_MOTION} className="text-text-tertiary" />
+                <ActionMotionIcon
+                    icon={Container}
+                    size={28}
+                    motion={RESOURCE_MOTION}
+                    className="text-text-tertiary"
+                />
                 <p className="text-sm text-text-secondary">这台主机上还没有容器</p>
-                <p className="text-xs text-text-tertiary">去组件页的「Docker 部署」起一个 NapCat / SnowLuma</p>
+                <p className="text-xs text-text-tertiary">
+                    去组件页的「Docker 部署」起一个 NapCat / SnowLuma
+                </p>
             </PagePlaceholder>
         );
     }
@@ -190,7 +209,12 @@ const ImageList: React.FC<{
     if (docker.images.length === 0) {
         return (
             <PagePlaceholder className="gap-2">
-                <ActionMotionIcon icon={Disc3} size={28} motion={RESOURCE_MOTION} className="text-text-tertiary" />
+                <ActionMotionIcon
+                    icon={Disc3}
+                    size={28}
+                    motion={RESOURCE_MOTION}
+                    className="text-text-tertiary"
+                />
                 <p className="text-sm text-text-secondary">这台主机上还没有本地镜像</p>
                 <p className="text-xs text-text-tertiary">在组件页拉取框架镜像后会出现在这里</p>
             </PagePlaceholder>

@@ -21,20 +21,13 @@ describe('SnowLuma daemon scope', () => {
         const states = { local: 'ready', 'server-a': 'crashed' } as const;
 
         expect(snowlumaDaemonScope(config('local', 'native'))).toBe('local');
-        expect(
-            snowlumaDaemonStateForConfig(config('local', 'native'), states),
-        ).toBe('ready');
-        expect(
-            snowlumaDaemonStateForConfig(config('server-a', 'native'), states),
-        ).toBe('crashed');
+        expect(snowlumaDaemonStateForConfig(config('local', 'native'), states)).toBe('ready');
+        expect(snowlumaDaemonStateForConfig(config('server-a', 'native'), states)).toBe('crashed');
     });
 
     it('Docker 不读取共享 daemon 状态', () => {
         expect(
-            snowlumaDaemonStateForConfig(
-                config('server-a', 'docker'),
-                { 'server-a': 'crashed' },
-            ),
+            snowlumaDaemonStateForConfig(config('server-a', 'docker'), { 'server-a': 'crashed' }),
         ).toBeNull();
     });
 

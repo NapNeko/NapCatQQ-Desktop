@@ -17,7 +17,12 @@ import {
 } from '../../../shared/ui';
 import { useDebugChannels } from '../../../hooks/debug/useDebugChannels';
 import { effectiveChannelId, findChannel } from '../../../core/domain/debug/channelPick';
-import { exportChannelOf, SNIPPET_LANGS, snippetCode, type SnippetLang } from '../../../core/domain/debug/codeExport';
+import {
+    exportChannelOf,
+    SNIPPET_LANGS,
+    snippetCode,
+    type SnippetLang,
+} from '../../../core/domain/debug/codeExport';
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugRequestDraft } from '../../../core/ipc/generated/debug/DebugRequestDraft';
 import { copyWithToast } from './centerParts';
@@ -33,7 +38,14 @@ export interface ExportSnippetDialogProps {
     callChannel: DebugChannelId;
 }
 
-export function ExportSnippetDialog({ open, onOpenChange, tab, params, botId, callChannel }: ExportSnippetDialogProps) {
+export function ExportSnippetDialog({
+    open,
+    onOpenChange,
+    tab,
+    params,
+    botId,
+    callChannel,
+}: ExportSnippetDialogProps) {
     const channels = useDebugChannels(botId).data;
     const [lang, setLang] = useState<SnippetLang>('curl');
     const [copied, setCopied] = useState(false);
@@ -41,7 +53,10 @@ export function ExportSnippetDialog({ open, onOpenChange, tab, params, botId, ca
     const action = tab.action.trim();
     const resolved = effectiveChannelId(channels, tab.channel ?? callChannel, 'call');
     const channel = exportChannelOf(resolved, findChannel(channels, resolved));
-    const code = useMemo(() => snippetCode(lang, { action, params, channel }), [lang, action, params, channel]);
+    const code = useMemo(
+        () => snippetCode(lang, { action, params, channel }),
+        [lang, action, params, channel],
+    );
     const langLabel = SNIPPET_LANGS.find((l) => l.id === lang)?.label ?? lang;
 
     const copy = () => {
@@ -56,18 +71,28 @@ export function ExportSnippetDialog({ open, onOpenChange, tab, params, botId, ca
                 <DialogHeader>
                     <DialogTitle>导出调用代码</DialogTitle>
                     <DialogDescription>
-                        按通道 {channel.label} 生成 <code className="font-mono text-text">{action}</code> 的调用片段
+                        按通道 {channel.label} 生成{' '}
+                        <code className="font-mono text-text">{action}</code> 的调用片段
                     </DialogDescription>
                 </DialogHeader>
                 {(channel.placeholderReason || channel.tokenHint) && (
                     <div className="space-y-1 text-2xs leading-relaxed">
-                        {channel.placeholderReason && <p className="text-warning">{channel.placeholderReason}</p>}
+                        {channel.placeholderReason && (
+                            <p className="text-warning">{channel.placeholderReason}</p>
+                        )}
                         {channel.tokenHint && (
-                            <p className="text-text-secondary">token 打码显示（{channel.tokenHint}）：片段里写的就是打码值，用之前换成真实 token。</p>
+                            <p className="text-text-secondary">
+                                token 打码显示（{channel.tokenHint}
+                                ）：片段里写的就是打码值，用之前换成真实 token。
+                            </p>
                         )}
                     </div>
                 )}
-                <Tabs value={lang} onValueChange={(v) => setLang(v as SnippetLang)} className="flex min-h-0 flex-1 flex-col">
+                <Tabs
+                    value={lang}
+                    onValueChange={(v) => setLang(v as SnippetLang)}
+                    className="flex min-h-0 flex-1 flex-col"
+                >
                     <div className="flex items-center gap-2">
                         <TabsList className="h-8 border-b-0">
                             {SNIPPET_LANGS.map((l) => (
@@ -77,12 +102,21 @@ export function ExportSnippetDialog({ open, onOpenChange, tab, params, botId, ca
                             ))}
                         </TabsList>
                         <Button size="sm" variant="secondary" className="ml-auto" onClick={copy}>
-                            {copied ? <Check size={12} aria-hidden className="text-success" /> : <Copy size={12} aria-hidden />}
+                            {copied ? (
+                                <Check size={12} aria-hidden className="text-success" />
+                            ) : (
+                                <Copy size={12} aria-hidden />
+                            )}
                             {copied ? '已复制' : '复制片段'}
                         </Button>
                     </div>
-                    <TabsContent value={lang} className="mt-2 min-h-0 flex-1 overflow-auto rounded-sm border border-border-subtle bg-inset">
-                        <pre className="px-3 py-2 font-mono text-[11.5px] leading-relaxed text-text">{code}</pre>
+                    <TabsContent
+                        value={lang}
+                        className="mt-2 min-h-0 flex-1 overflow-auto rounded-sm border border-border-subtle bg-inset"
+                    >
+                        <pre className="px-3 py-2 font-mono text-[11.5px] leading-relaxed text-text">
+                            {code}
+                        </pre>
                     </TabsContent>
                 </Tabs>
             </DialogContent>

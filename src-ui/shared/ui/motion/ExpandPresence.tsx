@@ -88,13 +88,7 @@ const expandExit: ExitFn = (el, env) => {
     return tl;
 };
 
-export function ExpandPresence({
-    visible,
-    children,
-}: {
-    visible: boolean;
-    children: ReactNode;
-}) {
+export function ExpandPresence({ visible, children }: { visible: boolean; children: ReactNode }) {
     return (
         <GsapPresence visible={visible} onEnter={expandEnter} onExit={expandExit}>
             {/* 不用 h-0 防闪：inline height 一被清掉会瞬间塌成 0，收起没行程。 */}

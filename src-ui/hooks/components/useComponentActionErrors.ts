@@ -36,11 +36,7 @@ function pickErrorMessage(progress: ActionProgressView): string {
 
 /// 在 ComponentRow 列表里反查 (componentId, hostId) → "NapCat · 本机" 标题。
 /// 找不到时退化成裸 id。
-function resolveDisplay(
-    rows: ComponentRow[],
-    componentId: ComponentId,
-    hostId: string,
-): string {
+function resolveDisplay(rows: ComponentRow[], componentId: ComponentId, hostId: string): string {
     const row = rows.find((r) => r.info.id === componentId);
     if (!row) return `${componentId} · ${hostId}`;
     const hostRow = row.rows.find((h) => h.host.host_id === hostId);

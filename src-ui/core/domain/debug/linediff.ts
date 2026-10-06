@@ -33,7 +33,10 @@ function lcsDiff(a: string[], b: string[]): DiffRow[] {
     const at = (i: number, j: number) => i * (m + 1) + j;
     for (let i = n - 1; i >= 0; i -= 1) {
         for (let j = m - 1; j >= 0; j -= 1) {
-            dp[at(i, j)] = a[i] === b[j] ? dp[at(i + 1, j + 1)]! + 1 : Math.max(dp[at(i + 1, j)]!, dp[at(i, j + 1)]!);
+            dp[at(i, j)] =
+                a[i] === b[j]
+                    ? dp[at(i + 1, j + 1)]! + 1
+                    : Math.max(dp[at(i + 1, j)]!, dp[at(i, j + 1)]!);
         }
     }
 
@@ -64,13 +67,21 @@ function headTailDiff(a: string[], b: string[]): DiffRow[] {
     let head = 0;
     while (head < a.length && head < b.length && a[head] === b[head]) head += 1;
     let tail = 0;
-    while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail += 1;
+    while (
+        tail < a.length - head &&
+        tail < b.length - head &&
+        a[a.length - 1 - tail] === b[b.length - 1 - tail]
+    )
+        tail += 1;
 
     const rows: DiffRow[] = [];
     for (let k = 0; k < head; k += 1) rows.push({ kind: 'same', left: a[k]!, right: b[k]! });
-    for (let k = head; k < a.length - tail; k += 1) rows.push({ kind: 'remove', left: a[k]!, right: null });
-    for (let k = head; k < b.length - tail; k += 1) rows.push({ kind: 'add', left: null, right: b[k]! });
-    for (let k = 0; k < tail; k += 1) rows.push({ kind: 'same', left: a[a.length - tail + k]!, right: b[b.length - tail + k]! });
+    for (let k = head; k < a.length - tail; k += 1)
+        rows.push({ kind: 'remove', left: a[k]!, right: null });
+    for (let k = head; k < b.length - tail; k += 1)
+        rows.push({ kind: 'add', left: null, right: b[k]! });
+    for (let k = 0; k < tail; k += 1)
+        rows.push({ kind: 'same', left: a[a.length - tail + k]!, right: b[b.length - tail + k]! });
     return rows;
 }
 

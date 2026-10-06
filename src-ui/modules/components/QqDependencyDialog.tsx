@@ -127,7 +127,12 @@ export function QqDependencyDialog({
 
     return (
         <>
-            <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) handleClose(); }}>
+            <Dialog
+                open={open}
+                onOpenChange={(o: boolean) => {
+                    if (!o) handleClose();
+                }}
+            >
                 <DialogContent size="sheet">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
@@ -200,9 +205,7 @@ function QqDependencyBody({
         return (
             <div className="flex flex-col items-center justify-center gap-4 py-12">
                 <Loader2 size={32} className="animate-spin text-accent" />
-                <p className="text-sm text-text-secondary">
-                    正在安装 {missing.length} 个依赖包
-                </p>
+                <p className="text-sm text-text-secondary">正在安装 {missing.length} 个依赖包</p>
             </div>
         );
     }
@@ -266,10 +269,10 @@ function QqDependencyBody({
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
                         <PackagePlus size={16} className="text-warning" />
-                        <span className="text-sm font-medium">
-                            缺失 {missing.length} 个依赖
-                        </span>
-                        <Badge tone="warning" appearance="soft">{missing.length}</Badge>
+                        <span className="text-sm font-medium">缺失 {missing.length} 个依赖</span>
+                        <Badge tone="warning" appearance="soft">
+                            {missing.length}
+                        </Badge>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {missing.map((p) => (
@@ -294,9 +297,7 @@ function QqDependencyBody({
 
             {installCommand && missing.length > 0 && (
                 <div className="space-y-2 p-3 rounded-lg bg-surface-secondary">
-                    <p className="text-xs text-text-secondary">
-                        也可手动执行安装命令：
-                    </p>
+                    <p className="text-xs text-text-secondary">也可手动执行安装命令：</p>
                     <div className="flex items-center gap-2">
                         <code className="flex-1 text-xs bg-surface-tertiary p-2 rounded font-mono overflow-x-auto">
                             {installCommand}

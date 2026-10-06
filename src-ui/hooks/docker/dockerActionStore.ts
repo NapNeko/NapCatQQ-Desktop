@@ -71,7 +71,12 @@ export const dockerActionStore = {
         return !!store.getSnapshot().pullingByTarget[dockerPullTargetKey(hostId, flavor)];
     },
 
-    markPulling(hostId: string, flavor: DockerFlavor, taskId: string, hint: string = PULL_HINT): void {
+    markPulling(
+        hostId: string,
+        flavor: DockerFlavor,
+        taskId: string,
+        hint: string = PULL_HINT,
+    ): void {
         const key = dockerPullTargetKey(hostId, flavor);
         const current = store.getSnapshot();
         store.setState({

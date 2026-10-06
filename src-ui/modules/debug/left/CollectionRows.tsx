@@ -169,28 +169,50 @@ export const FolderRow = memo(function FolderRow({
                     className={cn(
                         ROW_BASE,
                         'cursor-pointer pl-1',
-                        dropInto ? 'bg-brand-soft ring-1 ring-inset ring-brand' : 'hover:bg-elevated/35',
+                        dropInto
+                            ? 'bg-brand-soft ring-1 ring-inset ring-brand'
+                            : 'hover:bg-elevated/35',
                         dragging && 'opacity-40',
                     )}
                 >
                     <ExpandChevron open={open} size={13} />
-                    <Icon size={14} strokeWidth={2} aria-hidden className={cn('shrink-0', dropInto ? 'text-brand' : 'text-text-tertiary')} />
+                    <Icon
+                        size={14}
+                        strokeWidth={2}
+                        aria-hidden
+                        className={cn('shrink-0', dropInto ? 'text-brand' : 'text-text-tertiary')}
+                    />
                     {editing ? (
                         <RenameInput
                             value={folder.name}
                             label="文件夹名"
-                            onCommit={(name, byKey) => onCommitRename('folder', folder.id, name, byKey)}
+                            onCommit={(name, byKey) =>
+                                onCommitRename('folder', folder.id, name, byKey)
+                            }
                             onCancel={() => onCancelRename('folder', folder.id)}
                         />
                     ) : (
                         <>
-                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-secondary">{folder.name}</span>
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-secondary">
+                                {folder.name}
+                            </span>
                             <span className="shrink-0 pr-1 text-[10px] tabular-nums text-text-tertiary transition-opacity group-focus-within:opacity-0 group-hover:opacity-0">
                                 {count}
                             </span>
                             <span className="pointer-events-none absolute right-1 flex items-center gap-0.5 rounded-sm bg-surface/90 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-                                <IconAction icon={Pencil} label="重命名" focusable={false} onClick={() => onStartRename('folder', folder.id)} />
-                                <IconAction icon={Trash2} label="删除文件夹" tone="danger" focusable={false} onClick={() => onDelete(folder.id)} />
+                                <IconAction
+                                    icon={Pencil}
+                                    label="重命名"
+                                    focusable={false}
+                                    onClick={() => onStartRename('folder', folder.id)}
+                                />
+                                <IconAction
+                                    icon={Trash2}
+                                    label="删除文件夹"
+                                    tone="danger"
+                                    focusable={false}
+                                    onClick={() => onDelete(folder.id)}
+                                />
                             </span>
                         </>
                     )}
@@ -301,18 +323,25 @@ export const RequestRow = memo(function RequestRow({
                 >
                     <span
                         aria-hidden
-                        className={cn('h-[7px] w-[7px] shrink-0 rounded-full', safety ? SAFETY_DOT_CLASS[safety] : 'bg-text-tertiary/40')}
+                        className={cn(
+                            'h-[7px] w-[7px] shrink-0 rounded-full',
+                            safety ? SAFETY_DOT_CLASS[safety] : 'bg-text-tertiary/40',
+                        )}
                     />
                     {editing ? (
                         <RenameInput
                             value={request.name}
                             label="收藏名"
-                            onCommit={(name, byKey) => onCommitRename('request', request.id, name, byKey)}
+                            onCommit={(name, byKey) =>
+                                onCommitRename('request', request.id, name, byKey)
+                            }
                             onCancel={() => onCancelRename('request', request.id)}
                         />
                     ) : (
                         <>
-                            <span className="min-w-0 flex-1 truncate text-[12px] text-text">{request.name}</span>
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-text">
+                                {request.name}
+                            </span>
                             <span className="min-w-0 max-w-[45%] shrink truncate font-mono text-[11px] text-text-tertiary transition-opacity group-focus-within:opacity-0 group-hover:opacity-0">
                                 {request.action}
                             </span>
@@ -338,8 +367,19 @@ export const RequestRow = memo(function RequestRow({
                                     focusable={false}
                                     onClick={(e) => onOpen(request, e.ctrlKey || e.metaKey)}
                                 />
-                                <IconAction icon={Pencil} label="重命名" focusable={false} onClick={() => onStartRename('request', request.id)} />
-                                <IconAction icon={Trash2} label="删除" tone="danger" focusable={false} onClick={() => onDelete(request)} />
+                                <IconAction
+                                    icon={Pencil}
+                                    label="重命名"
+                                    focusable={false}
+                                    onClick={() => onStartRename('request', request.id)}
+                                />
+                                <IconAction
+                                    icon={Trash2}
+                                    label="删除"
+                                    tone="danger"
+                                    focusable={false}
+                                    onClick={() => onDelete(request)}
+                                />
                             </span>
                         </>
                     )}
@@ -358,7 +398,9 @@ export const RequestRow = memo(function RequestRow({
                 </ContextMenuItem>
                 <ContextMenuItem disabled={!!sendDisabledReason} onClick={() => onSend(request)}>
                     <Play size={13} />
-                    <span>{sendDisabledReason ? `发送（${sendDisabledReason}）` : '在当前 Bot 上发送'}</span>
+                    <span>
+                        {sendDisabledReason ? `发送（${sendDisabledReason}）` : '在当前 Bot 上发送'}
+                    </span>
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={menuRename.pick}>
@@ -371,12 +413,19 @@ export const RequestRow = memo(function RequestRow({
                         <span>移到</span>
                     </ContextMenuSubTrigger>
                     <ContextMenuSubContent className="w-44">
-                        <ContextMenuItem disabled={request.folder_id === null} onClick={() => onMoveTo(request.id, null)}>
+                        <ContextMenuItem
+                            disabled={request.folder_id === null}
+                            onClick={() => onMoveTo(request.id, null)}
+                        >
                             <CornerDownRight size={13} />
                             <span>根目录</span>
                         </ContextMenuItem>
                         {folders.map((f) => (
-                            <ContextMenuItem key={f.id} disabled={request.folder_id === f.id} onClick={() => onMoveTo(request.id, f.id)}>
+                            <ContextMenuItem
+                                key={f.id}
+                                disabled={request.folder_id === f.id}
+                                onClick={() => onMoveTo(request.id, f.id)}
+                            >
                                 <Folder size={13} />
                                 <span className="truncate">{f.name}</span>
                             </ContextMenuItem>

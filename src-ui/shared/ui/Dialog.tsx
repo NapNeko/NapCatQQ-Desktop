@@ -205,8 +205,10 @@ function applyOutsideDismissGuard(
     }
 }
 
-interface DialogContentProps
-    extends Omit<ComponentPropsWithoutRef<typeof RadixDialog.Content>, 'forceMount'> {
+interface DialogContentProps extends Omit<
+    ComponentPropsWithoutRef<typeof RadixDialog.Content>,
+    'forceMount'
+> {
     hideClose?: boolean;
     layer?: number;
     /// 预设宽度；高度在打开期间随内容变化由 GSAP 过渡。
@@ -217,10 +219,7 @@ interface DialogContentProps
     onExited?: () => void;
 }
 
-export const DialogContent = forwardRef<
-    ElementRef<typeof RadixDialog.Content>,
-    DialogContentProps
->(
+export const DialogContent = forwardRef<ElementRef<typeof RadixDialog.Content>, DialogContentProps>(
     (
         {
             className,
@@ -309,10 +308,7 @@ const OverlayBody = forwardRef<HTMLDivElement, { className?: string; layer?: num
             ref={ref}
             {...{ [OVERLAY_ATTR]: '' }}
             style={{ visibility: 'hidden', opacity: 0, zIndex: 40 + layer * 20 }}
-            className={cn(
-                'fixed inset-0 z-40 bg-black/40',
-                className,
-            )}
+            className={cn('fixed inset-0 z-40 bg-black/40', className)}
         />
     ),
 );
@@ -328,11 +324,7 @@ function contentHeightCap(size: DialogSize): number {
     return Math.floor(window.innerHeight - 48);
 }
 
-function useDialogContentHeight(
-    open: boolean,
-    size: DialogSize,
-    contentReady: boolean,
-) {
+function useDialogContentHeight(open: boolean, size: DialogSize, contentReady: boolean) {
     const m = useMotion();
     const tweenRef = useRef<gsap.core.Tween | null>(null);
     const primedRef = useRef(false);
@@ -501,84 +493,93 @@ type ContentBodyProps = Omit<HTMLAttributes<HTMLDivElement>, 'children'> & {
     children?: ReactNode;
 };
 
-const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(({ className, size = 'md', hideClose, children, style, ...radixProps }, ref) => {
-    const open = useContext(DialogOpenContext);
-    // GsapPresence 用 useState 控制渲染,内容可能在二次渲染后才出现。
-    // contentReady 在 mount 后设为 true,触发 useDialogContentHeight 重新测量。
-    const [contentReady, setContentReady] = useState(false);
-    useEffect(() => {
-        if (open) setContentReady(true);
-        else setContentReady(false);
-    }, [open]);
-    const { setClipRef, setInnerRef } = useDialogContentHeight(open, size, contentReady);
+const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(
+    ({ className, size = 'md', hideClose, children, style, ...radixProps }, ref) => {
+        const open = useContext(DialogOpenContext);
+        // GsapPresence 用 useState 控制渲染,内容可能在二次渲染后才出现。
+        // contentReady 在 mount 后设为 true,触发 useDialogContentHeight 重新测量。
+        const [contentReady, setContentReady] = useState(false);
+        useEffect(() => {
+            if (open) setContentReady(true);
+            else setContentReady(false);
+        }, [open]);
+        const { setClipRef, setInnerRef } = useDialogContentHeight(open, size, contentReady);
 
-    const setOuterRef = (node: HTMLDivElement | null) => {
-        if (typeof ref === 'function') ref(node);
-        else if (ref) (ref as MutableRefObject<HTMLDivElement | null>).current = node;
-    };
+        const setOuterRef = (node: HTMLDivElement | null) => {
+            if (typeof ref === 'function') ref(node);
+            else if (ref) (ref as MutableRefObject<HTMLDivElement | null>).current = node;
+        };
 
-    return (
-        <div
-            {...radixProps}
-            ref={setOuterRef}
-            // 起始态交给 GSAP 接管；Radix 给的样式（多层对话框时的 pointer-events）照样带上
-            style={{ ...style, visibility: 'hidden', opacity: 0 }}
-            className={cn(
-                'pointer-events-auto relative w-full',
-                'rounded-md bg-elevated p-6 shadow-popover',
-                'transition-[max-width] duration-300 ease-out',
-                className,
-                // 放在 className 之后，避免业务再叠 max-h-[85vh] 把 footer 裁掉。
-                size === 'sheet' && 'flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden',
-                size === 'sheetWide' && 'flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden',
-                size === 'onboarding' &&
-                'flex max-h-[calc(100dvh-2.5rem)] flex-col overflow-hidden p-0',
-                size === 'taskQueue' && 'flex h-[min(92dvh,900px)] min-h-[min(52dvh,480px)] max-h-[min(92dvh,900px)] flex-col p-0',
-            )}
-        >
+        return (
             <div
-                ref={setClipRef}
+                {...radixProps}
+                ref={setOuterRef}
+                // 起始态交给 GSAP 接管；Radix 给的样式（多层对话框时的 pointer-events）照样带上
+                style={{ ...style, visibility: 'hidden', opacity: 0 }}
                 className={cn(
-                    'overflow-x-clip overflow-y-hidden',
-                    size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
-                    size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col',
-                    size === 'onboarding' && 'min-h-0 flex-1',
-                    size === 'taskQueue' && 'min-h-0 flex-1',
+                    'pointer-events-auto relative w-full',
+                    'rounded-md bg-elevated p-6 shadow-popover',
+                    'transition-[max-width] duration-300 ease-out',
+                    className,
+                    // 放在 className 之后，避免业务再叠 max-h-[85vh] 把 footer 裁掉。
+                    size === 'sheet' &&
+                        'flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden',
+                    size === 'sheetWide' &&
+                        'flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden',
+                    size === 'onboarding' &&
+                        'flex max-h-[calc(100dvh-2.5rem)] flex-col overflow-hidden p-0',
+                    size === 'taskQueue' &&
+                        'flex h-[min(92dvh,900px)] min-h-[min(52dvh,480px)] max-h-[min(92dvh,900px)] flex-col p-0',
                 )}
             >
-                <div ref={setInnerRef} className={cn(
-                    size === 'onboarding' || size === 'taskQueue' ? 'px-0' : 'px-1',
-                    size === 'sheet' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
-                    size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
-                    size === 'onboarding' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
-                    size === 'taskQueue' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
-                )}>
-                    {children}
-                </div>
-            </div>
-            {!hideClose && (
-                <RadixDialog.Close
-                    aria-label="关闭"
-                    className="absolute right-3 top-3 z-10 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                <div
+                    ref={setClipRef}
+                    className={cn(
+                        'overflow-x-clip overflow-y-hidden',
+                        size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
+                        size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col',
+                        size === 'onboarding' && 'min-h-0 flex-1',
+                        size === 'taskQueue' && 'min-h-0 flex-1',
+                    )}
                 >
-                    <MotionIcon
-                        icon={CloseIcon}
-                        motion="none"
-                        hoverAccent
-                        playEnter={false}
-                        size={16}
-                    />
-                </RadixDialog.Close>
-            )}
-        </div>
-    );
-});
+                    <div
+                        ref={setInnerRef}
+                        className={cn(
+                            size === 'onboarding' || size === 'taskQueue' ? 'px-0' : 'px-1',
+                            size === 'sheet' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
+                            size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
+                            size === 'onboarding' &&
+                                'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+                            size === 'taskQueue' &&
+                                'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+                        )}
+                    >
+                        {children}
+                    </div>
+                </div>
+                {!hideClose && (
+                    <RadixDialog.Close
+                        aria-label="关闭"
+                        className="absolute right-3 top-3 z-10 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    >
+                        <MotionIcon
+                            icon={CloseIcon}
+                            motion="none"
+                            hoverAccent
+                            playEnter={false}
+                            size={16}
+                        />
+                    </RadixDialog.Close>
+                )}
+            </div>
+        );
+    },
+);
 ContentBody.displayName = 'ContentBody';
 
-export const DialogHeader: React.FC<HTMLAttributes<HTMLDivElement>> = ({
-    className,
-    ...props
-}) => <div className={cn('mb-3 flex shrink-0 flex-col gap-1', className)} {...props} />;
+export const DialogHeader: React.FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+    <div className={cn('mb-3 flex shrink-0 flex-col gap-1', className)} {...props} />
+);
 
 export const DialogTitle = forwardRef<
     ElementRef<typeof RadixDialog.Title>,

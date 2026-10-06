@@ -147,7 +147,7 @@ function collectDockerInstallItems(
         const hint = snap.installHintByHost[hostId] ?? null;
         const startedAt = meta.dockerInstallByHostId[hostId]?.startedAt ?? 0;
         const taskId = snap.installTaskIdByHost[hostId];
-        const progress = taskId ? installProgress.tasks[taskId] ?? null : null;
+        const progress = taskId ? (installProgress.tasks[taskId] ?? null) : null;
         const status: TaskQueueStatus = progress
             ? progressStatusToQueue(progress.status)
             : 'installing';
@@ -164,7 +164,9 @@ function collectDockerInstallItems(
         });
     }
     for (const [taskId, progress] of Object.entries(installProgress.tasks)) {
-        const hostId = Object.entries(snap.installTaskIdByHost).find(([, tid]) => tid === taskId)?.[0];
+        const hostId = Object.entries(snap.installTaskIdByHost).find(
+            ([, tid]) => tid === taskId,
+        )?.[0];
         if (!hostId) continue;
         if (snap.installingByHost[hostId]) continue;
         const hostLabel = hostLabelFor(hostId, hostLabels);

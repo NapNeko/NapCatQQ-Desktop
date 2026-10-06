@@ -39,35 +39,33 @@ const TabsCtx = createContext<TabsCtxValue>({
     listRef: { current: null },
 });
 
-interface TabsProps
-    extends React.ComponentPropsWithoutRef<typeof RadixTabs.Root> {}
+interface TabsProps extends React.ComponentPropsWithoutRef<typeof RadixTabs.Root> {}
 
-export const Tabs = forwardRef<
-    React.ElementRef<typeof RadixTabs.Root>,
-    TabsProps
->(({ value, defaultValue, onValueChange, children, ...props }, ref) => {
-    const isControlled = value !== undefined;
-    const [internal, setInternal] = useState<string | undefined>(defaultValue);
-    const actualValue = isControlled ? value : internal;
-    const handleChange = (next: string) => {
-        if (!isControlled) setInternal(next);
-        onValueChange?.(next);
-    };
-    const prevActiveRef = useRef<string | undefined>(actualValue);
-    const listRef = useRef<HTMLElement | null>(null);
-    return (
-        <TabsCtx.Provider value={{ activeValue: actualValue, prevActiveRef, listRef }}>
-            <RadixTabs.Root
-                ref={ref}
-                value={actualValue}
-                onValueChange={handleChange}
-                {...props}
-            >
-                {children}
-            </RadixTabs.Root>
-        </TabsCtx.Provider>
-    );
-});
+export const Tabs = forwardRef<React.ElementRef<typeof RadixTabs.Root>, TabsProps>(
+    ({ value, defaultValue, onValueChange, children, ...props }, ref) => {
+        const isControlled = value !== undefined;
+        const [internal, setInternal] = useState<string | undefined>(defaultValue);
+        const actualValue = isControlled ? value : internal;
+        const handleChange = (next: string) => {
+            if (!isControlled) setInternal(next);
+            onValueChange?.(next);
+        };
+        const prevActiveRef = useRef<string | undefined>(actualValue);
+        const listRef = useRef<HTMLElement | null>(null);
+        return (
+            <TabsCtx.Provider value={{ activeValue: actualValue, prevActiveRef, listRef }}>
+                <RadixTabs.Root
+                    ref={ref}
+                    value={actualValue}
+                    onValueChange={handleChange}
+                    {...props}
+                >
+                    {children}
+                </RadixTabs.Root>
+            </TabsCtx.Provider>
+        );
+    },
+);
 Tabs.displayName = 'Tabs';
 
 /// TabsList:在 Radix List 上叠加 FLIP indicator 层。
@@ -93,9 +91,7 @@ export const TabsList = forwardRef<
         const list = listRef.current;
         const indicator = indicatorRef.current;
         if (!list || !indicator) return;
-        const active = list.querySelector<HTMLElement>(
-            'button[role="tab"][data-state="active"]',
-        );
+        const active = list.querySelector<HTMLElement>('button[role="tab"][data-state="active"]');
         if (!active) {
             gsap.set(indicator, { autoAlpha: 0 });
             return;
@@ -204,7 +200,11 @@ export const TabsSideList = forwardRef<
     }, [ctx.activeValue, m.enabled, m.level, m.speed, m]);
 
     return (
-        <RadixTabs.List ref={setListRef} className={cn('relative flex flex-col gap-0.5', className)} {...props}>
+        <RadixTabs.List
+            ref={setListRef}
+            className={cn('relative flex flex-col gap-0.5', className)}
+            {...props}
+        >
             {children}
             <span
                 ref={indicatorRef}
@@ -261,11 +261,10 @@ export const TabsSideTrigger = forwardRef<
 ));
 TabsSideTrigger.displayName = 'TabsSideTrigger';
 
-interface TabsContentProps
-    extends Omit<
-        React.ComponentPropsWithoutRef<typeof RadixTabs.Content>,
-        'forceMount'
-    > {
+interface TabsContentProps extends Omit<
+    React.ComponentPropsWithoutRef<typeof RadixTabs.Content>,
+    'forceMount'
+> {
     children?: ReactNode;
 }
 
@@ -280,29 +279,28 @@ interface TabsContentProps
 /// fade-in。视觉上是干脆的"消失 → 淡入",没有横向 slide / 方向感(方向感留给
 /// PageTransition;在 Tab 这种密集切换上方向感反而干扰阅读)。
 
-export const TabsContent = forwardRef<
-    React.ElementRef<typeof RadixTabs.Content>,
-    TabsContentProps
->(({ className, value, children, ...props }, _ref) => {
-    const ctx = useContext(TabsCtx);
-    const isActive = ctx.activeValue === value;
-    const m = useMotion();
+export const TabsContent = forwardRef<React.ElementRef<typeof RadixTabs.Content>, TabsContentProps>(
+    ({ className, value, children, ...props }, _ref) => {
+        const ctx = useContext(TabsCtx);
+        const isActive = ctx.activeValue === value;
+        const m = useMotion();
 
-    // 写 prev 给 TabsList indicator 用(它读 prevActiveRef 算方向时也会用到)。
-    if (isActive && ctx.prevActiveRef.current !== ctx.activeValue) {
-        ctx.prevActiveRef.current = ctx.activeValue;
-    }
+        // 写 prev 给 TabsList indicator 用(它读 prevActiveRef 算方向时也会用到)。
+        if (isActive && ctx.prevActiveRef.current !== ctx.activeValue) {
+            ctx.prevActiveRef.current = ctx.activeValue;
+        }
 
-    if (!isActive) return null;
+        if (!isActive) return null;
 
-    return (
-        <RadixTabs.Content value={value} {...props} asChild>
-            <ContentBody contentKey={value} m={m} className={className}>
-                {children}
-            </ContentBody>
-        </RadixTabs.Content>
-    );
-});
+        return (
+            <RadixTabs.Content value={value} {...props} asChild>
+                <ContentBody contentKey={value} m={m} className={className}>
+                    {children}
+                </ContentBody>
+            </RadixTabs.Content>
+        );
+    },
+);
 TabsContent.displayName = 'TabsContent';
 
 const ContentBody = forwardRef<

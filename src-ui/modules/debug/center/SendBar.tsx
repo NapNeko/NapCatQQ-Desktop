@@ -7,13 +7,28 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, ChevronDown, Send, Square } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
-import { Button, Popover, PopoverContent, PopoverTrigger, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
+import {
+    Button,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+    Spinner,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '../../../shared/ui';
 import { StatusDot, type StatusDotTone } from '../../../shared/ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useNowMs } from '../../../hooks/ui/useNowMs';
 import { channelIdKey } from '../../../hooks/debug/keys';
 import { channelShortLabel, channelStatusCopy } from '../../../core/domain/debug/channelCopy';
-import { channelSelectable, channelTriggerLabel, effectiveChannelId, findChannel, sameChannel } from '../../../core/domain/debug/channelPick';
+import {
+    channelSelectable,
+    channelTriggerLabel,
+    effectiveChannelId,
+    findChannel,
+    sameChannel,
+} from '../../../core/domain/debug/channelPick';
 import { progressText } from '../../../core/domain/debug/streamActions';
 import type { ParamIssue } from '../../../core/domain/debug/validate';
 import type { DebugActionSafety } from '../../../core/ipc/generated/debug/DebugActionSafety';
@@ -83,7 +98,8 @@ export const SendBar = memo(function SendBar({
     const [blockedSay, setBlockedSay] = useState('');
     useEffect(() => {
         if (blockedNonce > 0 && reasonRef.current) m.shake(reasonRef.current);
-        if (blockedNonce > 0 && blocker) setBlockedSay(`发不了：${blocker}${blockedNonce % 2 === 0 ? NBSP : ''}`);
+        if (blockedNonce > 0 && blocker)
+            setBlockedSay(`发不了：${blocker}${blockedNonce % 2 === 0 ? NBSP : ''}`);
         // 只在按键那一下抖、那一下读
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [blockedNonce]);
@@ -112,11 +128,17 @@ export const SendBar = memo(function SendBar({
                                     className="shrink-0 truncate rounded-xs px-1 font-mono underline decoration-danger/40 underline-offset-2 hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                                 >
                                     {name}
-                                    <span className="font-sans no-underline">：{first?.message}</span>
+                                    <span className="font-sans no-underline">
+                                        ：{first?.message}
+                                    </span>
                                 </button>
                             );
                         })}
-                        {roots.length > 4 && <span className="shrink-0 text-text-tertiary">等 {roots.length} 个</span>}
+                        {roots.length > 4 && (
+                            <span className="shrink-0 text-text-tertiary">
+                                等 {roots.length} 个
+                            </span>
+                        )}
                     </span>
                 </div>
             )}
@@ -133,7 +155,9 @@ export const SendBar = memo(function SendBar({
                 />
                 <span ref={reasonRef} className="min-w-0 flex-1 truncate text-2xs">
                     {inflight ? (
-                        <span className="text-text-tertiary">取消只是不再等回包，上游可能已经执行了</span>
+                        <span className="text-text-tertiary">
+                            取消只是不再等回包，上游可能已经执行了
+                        </span>
                     ) : blocker ? (
                         <span className="text-warning">{blocker}</span>
                     ) : danger ? (
@@ -146,7 +170,13 @@ export const SendBar = memo(function SendBar({
                             有进度时进度比计时更有用，收在右边：字数随节拍变但不刷屏 */}
                         <span className="inline-flex items-center gap-1.5 text-xs tabular-nums text-text-secondary">
                             <Spinner size="xs" tone="brand" label="正在等回包" />
-                            {progress ? <span className="max-w-[16rem] truncate">{progressText(progress)}</span> : elapsedText(now - inflightSince)}
+                            {progress ? (
+                                <span className="max-w-[16rem] truncate">
+                                    {progressText(progress)}
+                                </span>
+                            ) : (
+                                elapsedText(now - inflightSince)
+                            )}
                         </span>
                         <Button size="sm" variant="secondary" onClick={onCancel}>
                             <Square size={11} strokeWidth={2.6} aria-hidden />
@@ -163,7 +193,11 @@ export const SendBar = memo(function SendBar({
                         className="shrink-0"
                         aria-keyshortcuts="Control+Enter Meta+Enter"
                     >
-                        {danger ? <AlertTriangle size={12} strokeWidth={2.4} aria-hidden /> : <Send size={12} strokeWidth={2.4} aria-hidden />}
+                        {danger ? (
+                            <AlertTriangle size={12} strokeWidth={2.4} aria-hidden />
+                        ) : (
+                            <Send size={12} strokeWidth={2.4} aria-hidden />
+                        )}
                         {hasIssues ? '仍然发送' : '发送'}
                         {hasIssues && (
                             <span className="rounded-pill bg-danger-soft px-1.5 py-px text-[10px] font-semibold tabular-nums text-danger">
@@ -198,7 +232,11 @@ function ChannelChip({
     const label = channelTriggerLabel(channels, choice, 'call');
     const effective = findChannel(channels, effectiveChannelId(channels, choice, 'call'));
     const tone: StatusDotTone =
-        label.none || label.missing ? 'danger' : effective ? TONE_DOT[channelStatusCopy(effective.status).tone] : 'idle';
+        label.none || label.missing
+            ? 'danger'
+            : effective
+              ? TONE_DOT[channelStatusCopy(effective.status).tone]
+              : 'idle';
     const topLabel = channelTriggerLabel(channels, callChannel, 'call').text;
     const own = tabChannel !== null;
 
@@ -224,23 +262,38 @@ function ChannelChip({
                             )}
                         >
                             <StatusDot tone={tone} size={6} className="shrink-0" />
-                            <span className={cn('min-w-0 truncate', (label.none || label.missing) && 'text-danger')}>
+                            <span
+                                className={cn(
+                                    'min-w-0 truncate',
+                                    (label.none || label.missing) && 'text-danger',
+                                )}
+                            >
                                 {label.text}
                                 {label.missing && '（已不存在）'}
                             </span>
-                            <ChevronDown size={12} aria-hidden className="shrink-0 text-text-tertiary" />
+                            <ChevronDown
+                                size={12}
+                                aria-hidden
+                                className="shrink-0 text-text-tertiary"
+                            />
                         </button>
                     </PopoverTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="top">{own ? '这个标签单独指定了通道' : '跟着顶栏选的调用通道'}</TooltipContent>
+                <TooltipContent side="top">
+                    {own ? '这个标签单独指定了通道' : '跟着顶栏选的调用通道'}
+                </TooltipContent>
             </Tooltip>
             <PopoverContent side="top" align="start" className="w-[300px] p-1">
-                <p className="px-2 pb-1.5 pt-1 text-2xs text-text-tertiary">这个标签发请求走哪条通道</p>
+                <p className="px-2 pb-1.5 pt-1 text-2xs text-text-tertiary">
+                    这个标签发请求走哪条通道
+                </p>
                 <ChannelOption selected={!own} onChoose={() => choose(null)}>
                     <span className="block text-[13px] text-text">跟顶栏</span>
                     <span className="block text-2xs text-text-tertiary">眼下是 {topLabel}</span>
                 </ChannelOption>
-                {channels && channels.channels.length > 0 && <div aria-hidden className="mx-2 my-1 h-px bg-border-subtle/70" />}
+                {channels && channels.channels.length > 0 && (
+                    <div aria-hidden className="mx-2 my-1 h-px bg-border-subtle/70" />
+                )}
                 {channels?.channels.map((c) => {
                     const ok = channelSelectable(c, 'call');
                     const status = channelStatusCopy(c.status);
@@ -252,7 +305,9 @@ function ChannelChip({
                             title={ok.reason}
                             onChoose={() => choose(c.id)}
                         >
-                            <span className="block truncate text-[13px] text-text">{channelShortLabel(c.id)}</span>
+                            <span className="block truncate text-[13px] text-text">
+                                {channelShortLabel(c.id)}
+                            </span>
                             <span className="flex items-center gap-1 text-2xs text-text-tertiary">
                                 <StatusDot tone={TONE_DOT[status.tone]} size={5} />
                                 <span className="truncate">{ok.ok ? status.text : ok.reason}</span>
@@ -260,7 +315,9 @@ function ChannelChip({
                         </ChannelOption>
                     );
                 })}
-                {!channels && <p className="px-2 py-2 text-2xs text-text-tertiary">通道列表还没读到</p>}
+                {!channels && (
+                    <p className="px-2 py-2 text-2xs text-text-tertiary">通道列表还没读到</p>
+                )}
             </PopoverContent>
         </Popover>
     );

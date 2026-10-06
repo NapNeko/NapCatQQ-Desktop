@@ -50,7 +50,9 @@ export const ParamChips: React.FC<{
                 <button
                     key={p}
                     type="button"
-                    title={missing.has(p) ? '模板里少了这个参数，点一下插到光标处' : '点一下插到光标处'}
+                    title={
+                        missing.has(p) ? '模板里少了这个参数，点一下插到光标处' : '点一下插到光标处'
+                    }
                     onClick={() => onInsert(`{${p}}`)}
                     className={cn(
                         'inline-flex h-5 items-center rounded-pill border px-1.5 font-mono text-[10.5px] transition-colors',
@@ -88,17 +90,29 @@ export const DiffView: React.FC<{ before: string; after: string }> = ({ before, 
     return (
         <div className="relative h-0 min-h-0 w-full flex-1 overflow-auto rounded-sm border border-border-subtle bg-field py-3">
             {diff.map((d, i) => (
-                <div key={i} className={cn('flex text-[13px] leading-[1.8]', DIFF_LOOK[d.kind].line)}>
+                <div
+                    key={i}
+                    className={cn('flex text-[13px] leading-[1.8]', DIFF_LOOK[d.kind].line)}
+                >
                     <span
                         aria-hidden
                         className={cn(
                             'w-7 shrink-0 select-none text-center font-mono',
-                            d.kind === 'add' ? 'text-success' : d.kind === 'del' ? 'text-danger' : 'text-transparent',
+                            d.kind === 'add'
+                                ? 'text-success'
+                                : d.kind === 'del'
+                                  ? 'text-danger'
+                                  : 'text-transparent',
                         )}
                     >
                         {DIFF_LOOK[d.kind].mark || '·'}
                     </span>
-                    <span className={cn('min-w-0 flex-1 whitespace-pre-wrap break-words pr-4', d.kind === 'del' && 'line-through decoration-danger/40')}>
+                    <span
+                        className={cn(
+                            'min-w-0 flex-1 whitespace-pre-wrap break-words pr-4',
+                            d.kind === 'del' && 'line-through decoration-danger/40',
+                        )}
+                    >
                         {d.text}
                     </span>
                 </div>
@@ -122,18 +136,27 @@ export const VersionMenu: React.FC<{
                 <History size={13} />
                 版本
                 {versions.length > 0 && (
-                    <span className="rounded-pill bg-inset px-1.5 font-mono text-2xs text-text-tertiary">{versions.length}</span>
+                    <span className="rounded-pill bg-inset px-1.5 font-mono text-2xs text-text-tertiary">
+                        {versions.length}
+                    </span>
                 )}
             </Button>
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-80 p-0">
-            <div className="border-b border-border-subtle px-3 py-2 text-xs font-medium text-text-secondary">版本记录</div>
+            <div className="border-b border-border-subtle px-3 py-2 text-xs font-medium text-text-secondary">
+                版本记录
+            </div>
             {versions.length === 0 ? (
-                <p className="px-3 py-4 text-xs leading-relaxed text-text-tertiary">还没有版本。每次保存都会记一版，改坏了能换回来。</p>
+                <p className="px-3 py-4 text-xs leading-relaxed text-text-tertiary">
+                    还没有版本。每次保存都会记一版，改坏了能换回来。
+                </p>
             ) : (
                 <ul className="max-h-72 overflow-y-auto p-1">
                     {versions.map((v) => (
-                        <li key={v.id} className="group flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-inset">
+                        <li
+                            key={v.id}
+                            className="group flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-inset"
+                        >
                             {/* 选了哪个动作都先收起菜单，不然会挂在预览 / 确认框后面 */}
                             <PopoverClose asChild>
                                 <button
@@ -142,7 +165,9 @@ export const VersionMenu: React.FC<{
                                     onClick={() => onPreview(v)}
                                 >
                                     <span className="flex min-w-0 items-center gap-1.5">
-                                        <span className="truncate text-[13px] text-text">{v.label}</span>
+                                        <span className="truncate text-[13px] text-text">
+                                            {v.label}
+                                        </span>
                                         {v.active && (
                                             <Badge tone="brand" className="shrink-0">
                                                 在用
@@ -212,7 +237,9 @@ export const VersionPreview: React.FC<{
             <DialogHeader>
                 <DialogTitle>{version?.label}</DialogTitle>
                 <p className="text-xs text-text-tertiary">
-                    {[version && relativeTime(version.modified_at), version?.active ? '在用' : null].filter(Boolean).join(' · ')}
+                    {[version && relativeTime(version.modified_at), version?.active ? '在用' : null]
+                        .filter(Boolean)
+                        .join(' · ')}
                 </p>
             </DialogHeader>
             <div className="flex h-[52vh] min-h-0 flex-col">
@@ -238,7 +265,12 @@ export const VersionPreview: React.FC<{
                     关闭
                 </Button>
                 {version && !version.active && (
-                    <Button size="sm" variant="primary" disabled={busy || content === undefined} onClick={() => onActivate(version)}>
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={busy || content === undefined}
+                        onClick={() => onActivate(version)}
+                    >
                         用这个版本
                     </Button>
                 )}

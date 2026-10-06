@@ -16,11 +16,12 @@ import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ComponentActionProgress } from '../../hooks/components/useComponentAction';
+import { compareSemver, type ReleaseInfoView } from '../../core/domain/release/normalize';
 import {
-    compareSemver,
-    type ReleaseInfoView,
-} from '../../core/domain/release/normalize';
-import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from '../../shared/components/progressView';
+    ProgressLine,
+    ProgressBarOverlay,
+    shouldShowProgressBar,
+} from '../../shared/components/progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
 import { componentLogoIcon } from './componentLogos';
 import {
@@ -104,8 +105,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
         if (stepKind) onAction({ stepKind });
     };
 
-    const showProgressBar =
-        activeProgress && shouldShowProgressBar(activeProgress.progress);
+    const showProgressBar = activeProgress && shouldShowProgressBar(activeProgress.progress);
 
     const inFlight =
         activeProgress != null &&
@@ -127,12 +127,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     ) : (
         <>
             {canShowNotes ? (
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    title="查看更新日志"
-                    onClick={onShowReleaseNotes}
-                >
+                <Button size="sm" variant="ghost" title="查看更新日志" onClick={onShowReleaseNotes}>
                     <ScrollText size={13} strokeWidth={2} aria-hidden />
                     日志
                 </Button>
@@ -297,9 +292,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
 
                 {status.state === 'installed' && (
                     <ContextMenuItem
-                        onClick={() =>
-                            handleCopyVersion(status.detected.version, '当前版本号')
-                        }
+                        onClick={() => handleCopyVersion(status.detected.version, '当前版本号')}
                     >
                         <Copy size={13} />
                         <span>复制当前版本 (v{status.detected.version})</span>
@@ -340,13 +333,10 @@ function isTerminalStatus(status: ActionProgressView['status']): boolean {
  * 用 taskId + status 做 key：换任务或同一任务从进行中切到终态时重置计时器，
  * 确保终态反馈恰好显示固定时长。
  */
-function useTerminalDismiss(
-    activeProgress: ComponentActionProgress | null,
-): boolean {
+function useTerminalDismiss(activeProgress: ComponentActionProgress | null): boolean {
     const [dismissed, setDismissed] = useState(false);
 
-    const terminal =
-        activeProgress != null && isTerminalStatus(activeProgress.progress.status);
+    const terminal = activeProgress != null && isTerminalStatus(activeProgress.progress.status);
     // 终态的稳定性 key：task + status 都不变才视为「同一个终态」，重置会触发计时器重启。
     const terminalKey =
         activeProgress != null && terminal
@@ -372,7 +362,7 @@ const StatusMeta: React.FC<{
     status: MachineComponentRow['status'];
     latestRemoteVersion: string | null;
     activeProgress: ComponentActionProgress | null;
-}> =({ status, latestRemoteVersion, activeProgress }) => {
+}> = ({ status, latestRemoteVersion, activeProgress }) => {
     const dismissProgress = useTerminalDismiss(activeProgress);
     if (activeProgress && !dismissProgress) {
         return <ProgressLine progress={activeProgress.progress} className="mt-0" />;
@@ -414,16 +404,12 @@ const StatusMeta: React.FC<{
             );
         }
         case 'unsupported':
-            return (
-                <p className="truncate text-xs text-text-disabled">当前系统不支持此组件</p>
-            );
+            return <p className="truncate text-xs text-text-disabled">当前系统不支持此组件</p>;
         case 'unknown': {
             if (status.reason === '正在探测') {
                 return <p className="truncate text-xs text-text-tertiary">正在探测安装状态…</p>;
             }
-            return (
-                <p className="truncate text-xs text-text-tertiary">探测未成功，详见顶部提示</p>
-            );
+            return <p className="truncate text-xs text-text-tertiary">探测未成功，详见顶部提示</p>;
         }
     }
 };

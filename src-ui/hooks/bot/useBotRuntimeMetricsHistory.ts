@@ -26,42 +26,38 @@ export function useBotRuntimeMetricsHistory(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const load = useCallback(async (opts?: { silent?: boolean }) => {
-        if (!botId || !enabled) {
-            setPoints([]);
-            return;
-        }
-        const silent = opts?.silent === true;
-        if (!silent) setLoading(true);
-        setError(null);
-        try {
-            const { fromMs, toMs } = resolveHistoryWindowBounds(
-                window,
-                retentionDays,
-            );
-            const list = await botService.getRuntimeMetricsHistory(
-                botId,
-                fromMs,
-                toMs,
-            );
-            setPoints(Array.isArray(list) ? list : []);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-            setPoints([]);
-        } finally {
-            if (!silent) setLoading(false);
-        }
-    }, [
-        botId,
-        enabled,
-        retentionDays,
-        // 拆字段避免对象引用抖动导致无意义重拉
-        window.mode,
-        window.mode === 'preset' ? window.range : '',
-        window.mode === 'custom' ? window.fromMs : 0,
-        window.mode === 'custom' ? window.toMs : 0,
-        window.mode === 'custom' ? window.followNow : false,
-    ]);
+    const load = useCallback(
+        async (opts?: { silent?: boolean }) => {
+            if (!botId || !enabled) {
+                setPoints([]);
+                return;
+            }
+            const silent = opts?.silent === true;
+            if (!silent) setLoading(true);
+            setError(null);
+            try {
+                const { fromMs, toMs } = resolveHistoryWindowBounds(window, retentionDays);
+                const list = await botService.getRuntimeMetricsHistory(botId, fromMs, toMs);
+                setPoints(Array.isArray(list) ? list : []);
+            } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+                setPoints([]);
+            } finally {
+                if (!silent) setLoading(false);
+            }
+        },
+        [
+            botId,
+            enabled,
+            retentionDays,
+            // 拆字段避免对象引用抖动导致无意义重拉
+            window.mode,
+            window.mode === 'preset' ? window.range : '',
+            window.mode === 'custom' ? window.fromMs : 0,
+            window.mode === 'custom' ? window.toMs : 0,
+            window.mode === 'custom' ? window.followNow : false,
+        ],
+    );
 
     useEffect(() => {
         void load();

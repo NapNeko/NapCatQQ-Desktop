@@ -88,7 +88,8 @@ export type SchemaPageDef = {
 };
 
 /** tab 跳桌面端那一页，view 是那页里的哪一块（知识库的导入 / 图谱）；path 开麦麦 WebUI */
-export type MaiBotPageLink = { label: string; tab: string; view?: string } | { label: string; path: string };
+export type MaiBotPageLink =
+    { label: string; tab: string; view?: string } | { label: string; path: string };
 
 // 分时段频率和按聊天的提示词是「按会话」的规则，归会话规则页；回复设置页只放全局的
 const RULE_FIELDS = [
@@ -130,7 +131,11 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
                 title: '分时段发言频率',
                 fields: ['enable_talk_value_rules', 'talk_value_rules'],
             },
-            { path: ['chat', 'reply_style'], title: '按聊天追加的提示词', fields: ['chat_prompts'] },
+            {
+                path: ['chat', 'reply_style'],
+                title: '按聊天追加的提示词',
+                fields: ['chat_prompts'],
+            },
             { path: ['keyword_reaction'], title: '关键词反应' },
             { path: ['message_receive'], title: '消息过滤' },
         ],
@@ -182,7 +187,9 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
 const PREFIXES: readonly (readonly [string, string])[] = Object.entries(MAIBOT_SCHEMA_PAGES)
     .flatMap(([tab, page]) =>
         page.sections.flatMap((s) =>
-            (s.fields ?? ['']).map((f) => [['bot', ...s.path, f].filter(Boolean).join('/'), tab] as const),
+            (s.fields ?? ['']).map(
+                (f) => [['bot', ...s.path, f].filter(Boolean).join('/'), tab] as const,
+            ),
         ),
     )
     .sort((a, b) => b[0].length - a[0].length);
@@ -192,7 +199,8 @@ export function maibotTabForIssue(path: string): string {
     if (path.startsWith('adapter/chat/')) return 'chat';
     if (path.startsWith('adapter/')) return 'connection';
     if (path.startsWith('models/')) return 'models';
-    if (path === 'bot/webui/port' || path === 'bot/maim_message/ws_server_port') return 'connection';
+    if (path === 'bot/webui/port' || path === 'bot/maim_message/ws_server_port')
+        return 'connection';
     const hit = PREFIXES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
     return hit?.[1] ?? 'advanced';
 }

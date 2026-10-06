@@ -19,7 +19,12 @@ import { buildPalette, isDarkColor, withAlpha } from './palette';
 
 describe('sudo prompt', () => {
     it('recognises sudo prompts on the last line only', () => {
-        expect(isSudoPrompt(lastLine('\x1b[1m$ sudo apt update\r\n[sudo] password for napcat: '), null)).toBe(true);
+        expect(
+            isSudoPrompt(
+                lastLine('\x1b[1m$ sudo apt update\r\n[sudo] password for napcat: '),
+                null,
+            ),
+        ).toBe(true);
         expect(isSudoPrompt(lastLine('[sudo] napcat 的密码： '), null)).toBe(true);
         expect(isSudoPrompt(lastLine('[sudo] password for u: \r\nok\r\n$ '), null)).toBe(false);
     });
@@ -149,10 +154,16 @@ describe('format', () => {
 
 describe('palette', () => {
     it('follows the theme background and can be forced dark', () => {
-        const light = buildPalette({ background: '#f4efe7', foreground: '#2c1f18', accent: '#f58fb6' }, 'auto');
+        const light = buildPalette(
+            { background: '#f4efe7', foreground: '#2c1f18', accent: '#f58fb6' },
+            'auto',
+        );
         expect(light.background).toBe('#f4efe7');
         expect(light.red).toBe('#c8373a');
-        const forced = buildPalette({ background: '#f4efe7', foreground: '#2c1f18', accent: '#f58fb6' }, 'dark');
+        const forced = buildPalette(
+            { background: '#f4efe7', foreground: '#2c1f18', accent: '#f58fb6' },
+            'dark',
+        );
         expect(isDarkColor(forced.background)).toBe(true);
         expect(forced.red).toBe('#f0716b');
         expect(withAlpha('#ff0000', 0.5)).toBe('#ff000080');

@@ -28,7 +28,10 @@ export interface ReceivingIndicatorProps {
     watchBotId: string | null;
 }
 
-export const ReceivingIndicator = memo(function ReceivingIndicator({ targets, watchBotId }: ReceivingIndicatorProps) {
+export const ReceivingIndicator = memo(function ReceivingIndicator({
+    targets,
+    watchBotId,
+}: ReceivingIndicatorProps) {
     const [open, setOpen] = useState(false);
     const receivers = useDebugReceivers();
     const { refetch } = receivers;
@@ -44,7 +47,10 @@ export const ReceivingIndicator = memo(function ReceivingIndicator({ targets, wa
     }, [watchedKey, refetch]);
 
     const active = useMemo(() => activeReceivers(receivers.data), [receivers.data]);
-    const names = useMemo(() => new Map(targets.map((t) => [t.bot_id, targetDisplayName(t)])), [targets]);
+    const names = useMemo(
+        () => new Map(targets.map((t) => [t.bot_id, targetDisplayName(t)])),
+        [targets],
+    );
 
     // 全停了就把弹出层也收起来，不然下一次冒出来时它会直接是打开的
     useEffect(() => {
@@ -67,7 +73,9 @@ export const ReceivingIndicator = memo(function ReceivingIndicator({ targets, wa
                 >
                     <StatusDot tone="running" size={7} />
                     <span aria-hidden className="whitespace-nowrap tabular-nums">
-                        <span className="hidden @min-[760px]:inline">正在接收 {active.length} 个 Bot</span>
+                        <span className="hidden @min-[760px]:inline">
+                            正在接收 {active.length} 个 Bot
+                        </span>
                         <span className="@min-[760px]:hidden">接收 {active.length}</span>
                     </span>
                 </button>
@@ -76,12 +84,17 @@ export const ReceivingIndicator = memo(function ReceivingIndicator({ targets, wa
                 <div className="border-b border-border-subtle/70 px-3 py-2.5">
                     <p className="font-display text-[13px] font-semibold text-text">正在接收事件</p>
                     <p className="mt-0.5 text-2xs leading-relaxed text-text-tertiary">
-                        离开调试台后照样在后台收。Bot 停止、在这里停止、或者 30 分钟没人看也没人调用时会自己停。
+                        离开调试台后照样在后台收。Bot 停止、在这里停止、或者 30
+                        分钟没人看也没人调用时会自己停。
                     </p>
                 </div>
                 <ul className="max-h-[min(360px,55vh)] overflow-y-auto p-1">
                     {active.map((r) => (
-                        <ReceiverRow key={r.bot_id} info={r} name={names.get(r.bot_id) ?? r.bot_id} />
+                        <ReceiverRow
+                            key={r.bot_id}
+                            info={r}
+                            name={names.get(r.bot_id) ?? r.bot_id}
+                        />
                     ))}
                 </ul>
             </PopoverContent>
@@ -96,27 +109,39 @@ function ReceiverRow({ info, name }: { info: DebugReceiverInfo; name: string }) 
     return (
         <li className="flex items-center gap-2.5 rounded-sm px-2 py-2 transition-colors hover:bg-inset/60">
             <StatusDot
-                tone={info.state.state === 'connected' ? 'success' : info.state.state === 'reconnecting' ? 'warning' : 'idle'}
+                tone={
+                    info.state.state === 'connected'
+                        ? 'success'
+                        : info.state.state === 'reconnecting'
+                          ? 'warning'
+                          : 'idle'
+                }
                 size={7}
                 className="shrink-0"
             />
             <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-baseline gap-1.5">
                     <span className="truncate text-[13px] font-medium text-text">{name}</span>
-                    <span className="shrink-0 text-2xs text-text-tertiary">{channelShortLabel(info.source)}</span>
+                    <span className="shrink-0 text-2xs text-text-tertiary">
+                        {channelShortLabel(info.source)}
+                    </span>
                 </div>
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-2xs">
                     <span className={TONE_TEXT[state.tone]}>{state.text}</span>
                     <span aria-hidden className="text-border">
                         ·
                     </span>
-                    <span className="tabular-nums text-text-tertiary">缓冲 {count.format(info.buffered)} 条</span>
+                    <span className="tabular-nums text-text-tertiary">
+                        缓冲 {count.format(info.buffered)} 条
+                    </span>
                     {info.dropped_total > 0 && (
                         <>
                             <span aria-hidden className="text-border">
                                 ·
                             </span>
-                            <span className="tabular-nums text-warning">丢了 {count.format(info.dropped_total)} 条</span>
+                            <span className="tabular-nums text-warning">
+                                丢了 {count.format(info.dropped_total)} 条
+                            </span>
                         </>
                     )}
                 </div>
@@ -132,7 +157,11 @@ function ReceiverRow({ info, name }: { info: DebugReceiverInfo; name: string }) 
                     'disabled:cursor-not-allowed disabled:opacity-60',
                 )}
             >
-                {stop.isPending ? <Spinner size="xs" label="正在停止" /> : <Square size={10} strokeWidth={3} aria-hidden />}
+                {stop.isPending ? (
+                    <Spinner size="xs" label="正在停止" />
+                ) : (
+                    <Square size={10} strokeWidth={3} aria-hidden />
+                )}
                 停止
             </button>
         </li>

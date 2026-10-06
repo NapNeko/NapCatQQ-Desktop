@@ -24,19 +24,32 @@ import type { FrameworkDetailProps, FrameworkUiModule, NavBadgeTone } from '../f
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useSyncNavBadges } from '../useSyncNavBadges';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
-import { useAstrBotDashboardStatus, useAstrBotPersonas } from '../../../../hooks/apps/useAstrBotDashboard';
+import {
+    useAstrBotDashboardStatus,
+    useAstrBotPersonas,
+} from '../../../../hooks/apps/useAstrBotDashboard';
 import { dashboardReady } from './AstrBotRuntimeGate';
 import { ASTRBOT_NAV } from './astrbotNav';
 
 // 概览能就地改配置（选默认模型、打开大模型、加提供商），人格 / 知识库页也能（设默认、挂载），
 // 保存条都得在；只有插件页是纯外部资源
-const TYPED_TABS = new Set(['overview', 'connections', 'models', 'talk', 'persona', 'kb', 'subagent', 'rules']);
+const TYPED_TABS = new Set([
+    'overview',
+    'connections',
+    'models',
+    'talk',
+    'persona',
+    'kb',
+    'subagent',
+    'rules',
+]);
 const FILL_PANE = new Set(['plugins']);
 
 /** 校验路径跳到能改它的那一页：默认模型在模型页、默认人格在人格页、知识库参数在知识库页 */
 function tabForIssue(path: string): string {
     if (path.startsWith('sources/') || path.startsWith('models/')) return 'models';
-    if (path === 'ai/default_provider_id' || path.startsWith('ai/fallback_chat_models')) return 'models';
+    if (path === 'ai/default_provider_id' || path.startsWith('ai/fallback_chat_models'))
+        return 'models';
     if (path === 'ai/default_personality') return 'persona';
     if (path.startsWith('kb/')) return 'kb';
     if (
@@ -52,7 +65,13 @@ function tabForIssue(path: string): string {
     return 'connections';
 }
 
-function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
+function AstrBotFrameworkDetail({
+    instance,
+    onSaveHandle,
+    onGoTab,
+    onOpenLink,
+    onNavBadges,
+}: FrameworkDetailProps) {
     const running = instance.state === 'running';
     const form = useAppConfigForm(ASTRBOT_CONFIG_FORM, instance.id, instance.display_name, running);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
@@ -93,7 +112,10 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, o
 
     return (
         <>
-            <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent
+                value="plugins"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+            >
                 <AppStoreTab instance={instance} resource="plugin" />
             </TabsContent>
             {pane('overview', (cfg) => (
@@ -134,7 +156,12 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, o
                 />
             ))}
             {pane('talk', (cfg) => (
-                <AstrBotTalkTab config={cfg} onChange={form.setForm} disabled={form.saving} onGoTab={onGoTab} />
+                <AstrBotTalkTab
+                    config={cfg}
+                    onChange={form.setForm}
+                    disabled={form.saving}
+                    onGoTab={onGoTab}
+                />
             ))}
             {pane('persona', (cfg) => (
                 <AstrBotPersonaTab
@@ -142,7 +169,9 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, o
                     status={dash.data}
                     statusLoading={dash.isLoading}
                     defaultPersona={cfg.ai.default_personality}
-                    onSetDefault={(id) => form.setForm({ ...cfg, ai: { ...cfg.ai, default_personality: id } })}
+                    onSetDefault={(id) =>
+                        form.setForm({ ...cfg, ai: { ...cfg.ai, default_personality: id } })
+                    }
                     formDisabled={form.saving}
                     onGoTab={onGoTab}
                     onStart={start}

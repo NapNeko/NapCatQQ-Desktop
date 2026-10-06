@@ -24,7 +24,15 @@ import {
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { useTauriFileDrop } from '../../../../hooks/ui/useTauriFileDrop';
 import { ConfirmDelete, EmptyHint } from '../entityParts';
-import { Pager, ResourcePane, SearchBox, Segmented, SelectionBar, useDebounced, useSelection } from '../resourceParts';
+import {
+    Pager,
+    ResourcePane,
+    SearchBox,
+    Segmented,
+    SelectionBar,
+    useDebounced,
+    useSelection,
+} from '../resourceParts';
 import { MaiBotLiveGate, maibotLive } from './MaiBotLiveGate';
 import { EmojiDetail, EmojiTile } from './maibotEmojiParts';
 import { EmojiDropOverlay, EmojiUploadDialog, UploadButton } from './maibotEmojiUpload';
@@ -37,7 +45,10 @@ const SORTS: { value: MaiBotEmojiSort; label: string }[] = [
 ];
 
 /** 同一张拖进来两次只留一张 */
-function mergeFiles(prev: readonly MaiBotLocalImage[] | null, next: readonly MaiBotLocalImage[]): MaiBotLocalImage[] {
+function mergeFiles(
+    prev: readonly MaiBotLocalImage[] | null,
+    next: readonly MaiBotLocalImage[],
+): MaiBotLocalImage[] {
     const out = [...(prev ?? [])];
     for (const f of next) if (!out.some((x) => x.path === f.path)) out.push(f);
     return out;
@@ -65,7 +76,11 @@ export const MaiBotEmojisTab: React.FC<{
     const sel = useSelection<number>();
     const q = useDebounced(search.trim());
 
-    const list = useMaiBotEmojis(instance.id, { page, page_size: PAGE_SIZE, search: q, filter, sort }, live);
+    const list = useMaiBotEmojis(
+        instance.id,
+        { page, page_size: PAGE_SIZE, search: q, filter, sort },
+        live,
+    );
     const overview = useMaiBotEmojiOverview(instance.id, live);
     const act = useMaiBotEmojiAction(instance.id);
     const upload = useMaiBotEmojiUpload(instance.id);
@@ -80,38 +95,56 @@ export const MaiBotEmojisTab: React.FC<{
     const pickFiles = async () => addFiles(await emojiFiles.pick());
     const { dragging } = useTauriFileDrop(live, (paths) => void addFiles(paths));
 
-    if (!live) return <MaiBotLiveGate status={status} what="表情包" onStart={onStart} starting={starting} />;
+    if (!live)
+        return (
+            <MaiBotLiveGate status={status} what="表情包" onStart={onStart} starting={starting} />
+        );
 
     const ov = overview.data;
     const items = list.data?.items ?? [];
     const pageIds = items.map((e) => e.id);
     const pageAllPicked = pageIds.every((id) => sel.has(id));
     const pickedIds = [...sel.picked];
-    const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
-        set(v);
-        setPage(1);
-        sel.clear();
-    };
+    const resetPage =
+        <T,>(set: (v: T) => void) =>
+        (v: T) => {
+            set(v);
+            setPage(1);
+            sel.clear();
+        };
     // 收下的不会马上发：上游等下一轮表情包维护才把它放进发送池
-    const poolNote = config ? `约 ${config.check_interval} 分钟内开始发（下一轮表情包维护）` : '下一轮表情包维护后开始发';
+    const poolNote = config
+        ? `约 ${config.check_interval} 分钟内开始发（下一轮表情包维护）`
+        : '下一轮表情包维护后开始发';
     const move = (ids: number[], m: EmojiMove) =>
         act.mutateAsync({ op: m, ids, toast: true, note: m === 'adopt' ? poolNote : undefined });
 
     // 详情翻页：当前这张改了状态被筛掉时，补到原位置上的那张就是「下一张」
     const openIndex = openId === null ? -1 : items.findIndex((e) => e.id === openId);
     if (openIndex >= 0) lastOpen.current = { emoji: items[openIndex], index: openIndex };
-    const shown = openId === null ? null : openIndex >= 0 ? items[openIndex] : (lastOpen.current?.emoji ?? null);
+    const shown =
+        openId === null
+            ? null
+            : openIndex >= 0
+              ? items[openIndex]
+              : (lastOpen.current?.emoji ?? null);
     const base = openIndex >= 0 ? openIndex : (lastOpen.current?.index ?? 0);
     const nextIdx = openIndex >= 0 ? openIndex + 1 : base;
-    const onNext = openId !== null && nextIdx < items.length ? () => setOpenId(items[nextIdx].id) : undefined;
+    const onNext =
+        openId !== null && nextIdx < items.length ? () => setOpenId(items[nextIdx].id) : undefined;
     const onPrev = openId !== null && base > 0 ? () => setOpenId(items[base - 1].id) : undefined;
 
     const full = !!config && !!ov && config.max_reg_num > 0 && ov.adopted >= config.max_reg_num;
     const notice = full && (
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-tertiary">
             <Info size={13} className="shrink-0 text-warning" />
-            收下的到上限了（{config.max_reg_num} 张）：{config.do_replace ? '再收新的会顶掉旧的。' : '麦麦不会再收新的。'}
-            <button type="button" className="text-brand hover:underline" onClick={() => onGoTab('talk')}>
+            收下的到上限了（{config.max_reg_num} 张）：
+            {config.do_replace ? '再收新的会顶掉旧的。' : '麦麦不会再收新的。'}
+            <button
+                type="button"
+                className="text-brand hover:underline"
+                onClick={() => onGoTab('talk')}
+            >
                 去改上限
             </button>
         </p>
@@ -119,7 +152,12 @@ export const MaiBotEmojisTab: React.FC<{
 
     const toolbar = (
         <>
-            <SearchBox className="w-44" placeholder="搜标签" value={search} onChange={resetPage(setSearch)} />
+            <SearchBox
+                className="w-44"
+                placeholder="搜标签"
+                value={search}
+                onChange={resetPage(setSearch)}
+            />
             <Segmented
                 items={[
                     { value: 'all', label: '全部', count: ov?.total },
@@ -167,23 +205,43 @@ export const MaiBotEmojisTab: React.FC<{
                         onSelectAll={pageAllPicked ? undefined : () => sel.setAll(pageIds, true)}
                     >
                         {filter === 'discarded' ? (
-                            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={bulk('restore')}>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={act.isPending}
+                                onClick={bulk('restore')}
+                            >
                                 <ArchiveRestore size={13} />
                                 捡回来
                             </Button>
                         ) : filter === 'adopted' ? (
-                            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={bulk('unadopt')}>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={act.isPending}
+                                onClick={bulk('unadopt')}
+                            >
                                 <X size={13} />
                                 不再发
                             </Button>
                         ) : (
-                            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={bulk('adopt')}>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={act.isPending}
+                                onClick={bulk('adopt')}
+                            >
                                 <Check size={13} />
                                 收下
                             </Button>
                         )}
                         {filter !== 'discarded' && (
-                            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={bulk('discard')}>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={act.isPending}
+                                onClick={bulk('discard')}
+                            >
                                 <X size={13} />
                                 丢弃
                             </Button>
@@ -249,7 +307,9 @@ export const MaiBotEmojisTab: React.FC<{
                 tags={uploadTags}
                 busy={upload.isPending}
                 onTags={setUploadTags}
-                onRemove={(path) => setFiles((prev) => prev?.filter((f) => f.path !== path) ?? null)}
+                onRemove={(path) =>
+                    setFiles((prev) => prev?.filter((f) => f.path !== path) ?? null)
+                }
                 onAddMore={() => void pickFiles()}
                 onCancel={() => setFiles(null)}
                 onConfirm={() => {
@@ -282,7 +342,11 @@ export const MaiBotEmojisTab: React.FC<{
 
             <ConfirmDelete
                 open={pendingDelete !== null}
-                title={pendingDelete && pendingDelete.length > 1 ? `删掉这 ${pendingDelete.length} 张表情包？` : '删掉这张表情包？'}
+                title={
+                    pendingDelete && pendingDelete.length > 1
+                        ? `删掉这 ${pendingDelete.length} 张表情包？`
+                        : '删掉这张表情包？'
+                }
                 description="图也会一起删掉，找不回来。只是不想让麦麦发的话，丢弃就行。"
                 busy={act.isPending}
                 onCancel={() => setPendingDelete(null)}

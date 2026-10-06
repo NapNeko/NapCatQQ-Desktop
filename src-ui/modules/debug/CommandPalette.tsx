@@ -11,7 +11,10 @@ import { CornerDownLeft, FileQuestion, RefreshCw, Search, Star } from 'lucide-re
 import { cn } from '../../shared/utils/cn';
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '../../shared/ui';
 import { Shimmer } from '../../shared/ui/motion';
-import { debugWorkspaceStore, useDebugWorkspaceSelector } from '../../hooks/debug/debugWorkspaceStore';
+import {
+    debugWorkspaceStore,
+    useDebugWorkspaceSelector,
+} from '../../hooks/debug/debugWorkspaceStore';
 import { useDebugCatalog } from '../../hooks/debug/useDebugCatalog';
 import { useDebugCollections } from '../../hooks/debug/useDebugCollections';
 import { paramsTextOf } from '../../core/domain/debug/historyReplay';
@@ -74,13 +77,16 @@ export function CommandPalette({ open, onOpenChange, target }: CommandPalettePro
                     // 中栏一次只挂当前标签，「接口名」输入框此刻就是新标签的那个；等它挂上再聚焦。
                     // 选择器与 RequestHeader 的 focusActionInput 是同一个，改了要一起改
                     requestAnimationFrame(() => {
-                        document.querySelector<HTMLElement>('[role="combobox"][aria-label="接口名"]')?.focus();
+                        document
+                            .querySelector<HTMLElement>('[role="combobox"][aria-label="接口名"]')
+                            ?.focus();
                     });
                 }}
             >
                 <DialogTitle className="sr-only">搜索接口</DialogTitle>
                 <DialogDescription className="sr-only">
-                    输入接口名、中文简介或别名；回车在当前标签打开，{MOD_KEY_LABEL}+回车在新标签打开，只打开不发送。
+                    输入接口名、中文简介或别名；回车在当前标签打开，{MOD_KEY_LABEL}
+                    +回车在新标签打开，只打开不发送。
                 </DialogDescription>
                 {mounted && (
                     <PaletteBody
@@ -127,7 +133,8 @@ function PaletteBody({
     // 高亮按行的 key 记：数据后到（收藏晚一步读出来）时还指着同一行；指的行没了就回到第一条
     const [activeKey, setActiveKey] = useState<string | null>(null);
     const keyIndex = activeKey === null ? -1 : rows.findIndex((r) => r.key === activeKey);
-    const activeIndex = keyIndex >= 0 && isSelectable(rows[keyIndex]) ? keyIndex : firstSelectable(rows);
+    const activeIndex =
+        keyIndex >= 0 && isSelectable(rows[keyIndex]) ? keyIndex : firstSelectable(rows);
     const active = activeIndex >= 0 ? rows[activeIndex] : undefined;
 
     const virtualizer = useVirtualizer({
@@ -170,7 +177,10 @@ function PaletteBody({
         let tabId: string;
         if (row.kind === 'saved') {
             const req = row.request;
-            tabId = debugWorkspaceStore.openAction(req.action, { newTab, paramsText: paramsTextOf(req.params) });
+            tabId = debugWorkspaceStore.openAction(req.action, {
+                newTab,
+                paramsText: paramsTextOf(req.params),
+            });
             debugWorkspaceStore.setTabChannel(tabId, req.channel);
         } else {
             const name = row.kind === 'action' ? row.action.name : row.name;
@@ -221,7 +231,13 @@ function PaletteBody({
 
     let body: React.ReactNode;
     if (!target) {
-        body = <PaletteMessage icon={Search} title="先在顶栏选一个 Bot" hint="命令面板搜的是这个 Bot 的接口目录。" />;
+        body = (
+            <PaletteMessage
+                icon={Search}
+                title="先在顶栏选一个 Bot"
+                hint="命令面板搜的是这个 Bot 的接口目录。"
+            />
+        );
     } else if (!catalog && catalogQuery.isError) {
         body = (
             <PaletteMessage
@@ -229,7 +245,11 @@ function PaletteBody({
                 title="读不到接口目录"
                 hint={catalogQuery.error?.message}
                 action={
-                    <Button size="sm" variant="secondary" onClick={() => void catalogQuery.refetch()}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void catalogQuery.refetch()}
+                    >
                         <RefreshCw size={13} aria-hidden />
                         重试
                     </Button>
@@ -263,7 +283,11 @@ function PaletteBody({
                                 id={rowId(row.key)}
                                 active={v.index === activeIndex}
                                 backend={backend}
-                                onHover={() => v.index !== activeIndex && isSelectable(row) && setActiveKey(row.key)}
+                                onHover={() =>
+                                    v.index !== activeIndex &&
+                                    isSelectable(row) &&
+                                    setActiveKey(row.key)
+                                }
                                 onChoose={choose}
                             />
                         </div>
@@ -276,7 +300,12 @@ function PaletteBody({
     return (
         <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b border-border-subtle px-4">
-                <Search size={15} strokeWidth={2} aria-hidden className="shrink-0 text-text-tertiary" />
+                <Search
+                    size={15}
+                    strokeWidth={2}
+                    aria-hidden
+                    className="shrink-0 text-text-tertiary"
+                />
                 <input
                     ref={inputRef}
                     type="text"
@@ -295,9 +324,7 @@ function PaletteBody({
                     className="h-12 min-w-0 flex-1 bg-transparent text-[14px] text-text outline-none placeholder:text-text-tertiary"
                 />
                 {catalogQuery.isFetching && catalog && (
-                    <span className="shrink-0 text-2xs text-text-tertiary">
-                        刷新中…
-                    </span>
+                    <span className="shrink-0 text-2xs text-text-tertiary">刷新中…</span>
                 )}
             </div>
             <div
@@ -357,14 +384,20 @@ function PaletteRowView({
 }) {
     if (row.kind === 'header') {
         return (
-            <div aria-hidden className="flex h-full items-end px-2 pb-1 text-[11px] font-medium text-text-tertiary">
+            <div
+                aria-hidden
+                className="flex h-full items-end px-2 pb-1 text-[11px] font-medium text-text-tertiary"
+            >
                 {row.label}
             </div>
         );
     }
     if (row.kind === 'more') {
         return (
-            <div aria-hidden className="flex h-full items-center px-2 text-[11px] text-text-tertiary">
+            <div
+                aria-hidden
+                className="flex h-full items-center px-2 text-[11px] text-text-tertiary"
+            >
                 {row.text}
             </div>
         );
@@ -392,11 +425,16 @@ function PaletteRowView({
     if (row.kind === 'free') {
         return (
             <div {...optionProps} aria-label={`打开目录外的接口 ${row.name}`}>
-                <span aria-hidden className="h-[7px] w-[7px] shrink-0 rounded-full border border-text-tertiary" />
+                <span
+                    aria-hidden
+                    className="h-[7px] w-[7px] shrink-0 rounded-full border border-text-tertiary"
+                />
                 <span className="min-w-0 truncate text-[12.5px] text-text-secondary">
                     打开目录外的接口 <code className="font-mono text-text">{row.name}</code>
                 </span>
-                <span className="ml-auto shrink-0 text-[11px] text-text-tertiary">没有分级，按有副作用处理</span>
+                <span className="ml-auto shrink-0 text-[11px] text-text-tertiary">
+                    没有分级，按有副作用处理
+                </span>
             </div>
         );
     }
@@ -410,15 +448,24 @@ function PaletteRowView({
             >
                 <span
                     aria-hidden
-                    className={cn('h-[7px] w-[7px] shrink-0 rounded-full', row.safety ? SAFETY_DOT_CLASS[row.safety] : 'bg-text-disabled')}
+                    className={cn(
+                        'h-[7px] w-[7px] shrink-0 rounded-full',
+                        row.safety ? SAFETY_DOT_CLASS[row.safety] : 'bg-text-disabled',
+                    )}
                 />
                 <Star size={12} strokeWidth={2.2} aria-hidden className="shrink-0 text-brand" />
                 <span className="min-w-0 truncate text-[13px] text-text">
                     <span className="text-text-tertiary">打开收藏：</span>
                     {req.name}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary">{req.action}</span>
-                {row.folderName && <span className={cn(CHIP, 'bg-inset text-text-secondary')}>{row.folderName}</span>}
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary">
+                    {req.action}
+                </span>
+                {row.folderName && (
+                    <span className={cn(CHIP, 'bg-inset text-text-secondary')}>
+                        {row.folderName}
+                    </span>
+                )}
             </div>
         );
     }
@@ -431,13 +478,22 @@ function PaletteRowView({
             aria-label={`${a.name}${a.summary ? `，${a.summary}` : ''}，${SAFETY_LABEL[a.safety]}${a.supported ? '' : '，当前 Bot 不支持'}`}
             className={cn(optionProps.className, !a.supported && 'opacity-60')}
         >
-            <span aria-hidden className={cn('h-[7px] w-[7px] shrink-0 rounded-full', SAFETY_DOT_CLASS[a.safety])} />
-            <span className="min-w-0 shrink-0 truncate font-mono text-[12.5px] text-text">{a.name}</span>
+            <span
+                aria-hidden
+                className={cn('h-[7px] w-[7px] shrink-0 rounded-full', SAFETY_DOT_CLASS[a.safety])}
+            />
+            <span className="min-w-0 shrink-0 truncate font-mono text-[12.5px] text-text">
+                {a.name}
+            </span>
             {/* 简介只吃剩下的地方，窄了先没它；徽章始终完整 */}
-            <span className="min-w-0 flex-1 truncate text-[12px] text-text-tertiary">{a.summary}</span>
+            <span className="min-w-0 flex-1 truncate text-[12px] text-text-tertiary">
+                {a.summary}
+            </span>
             {row.recent && <span className={cn(CHIP, 'bg-inset text-text-secondary')}>最近</span>}
             {only && <span className={cn(CHIP, 'bg-info-soft text-info')}>{only}</span>}
-            {a.param_diff && <span className={cn(CHIP, 'bg-warning-soft text-warning')}>参数不同</span>}
+            {a.param_diff && (
+                <span className={cn(CHIP, 'bg-warning-soft text-warning')}>参数不同</span>
+            )}
             {a.stream && <span className={cn(CHIP, 'bg-brand-soft text-brand')}>流式</span>}
             {!a.supported && <span className={cn(CHIP, 'bg-danger-soft text-danger')}>不支持</span>}
         </div>
@@ -474,7 +530,10 @@ function PaletteSkeleton() {
             {Array.from({ length: 9 }, (_, i) => (
                 <div key={i} className="flex items-center gap-2" style={{ height: ROW_HEIGHT }}>
                     <Shimmer height={7} className="w-[7px] shrink-0 !rounded-full" />
-                    <Shimmer height={11} className={i % 3 === 0 ? 'w-32' : i % 3 === 1 ? 'w-44' : 'w-36'} />
+                    <Shimmer
+                        height={11}
+                        className={i % 3 === 0 ? 'w-32' : i % 3 === 1 ? 'w-44' : 'w-36'}
+                    />
                     <Shimmer height={9} className="w-24 opacity-60" />
                 </div>
             ))}

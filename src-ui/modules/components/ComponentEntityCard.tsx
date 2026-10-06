@@ -37,21 +37,12 @@ export function ComponentManageCard({
     progressOverlay,
     accent = 'none',
 }: ComponentManageCardProps) {
-    const desc =
-        description != null && description.trim() !== '' ? description.trim() : null;
+    const desc = description != null && description.trim() !== '' ? description.trim() : null;
 
     return (
-        <article
-            className={cn(
-                SHELL,
-                accent === 'brand' && 'ring-1 ring-inset ring-brand/25',
-            )}
-        >
+        <article className={cn(SHELL, accent === 'brand' && 'ring-1 ring-inset ring-brand/25')}>
             {accent === 'brand' ? (
-                <span
-                    aria-hidden
-                    className="absolute inset-y-0 left-0 w-0.5 bg-brand"
-                />
+                <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-brand" />
             ) : null}
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pb-2 pt-3">
@@ -63,9 +54,7 @@ export function ComponentManageCard({
                             {title}
                         </h3>
                     </div>
-                    {titleAside ? (
-                        <div className="shrink-0">{titleAside}</div>
-                    ) : null}
+                    {titleAside ? <div className="shrink-0">{titleAside}</div> : null}
                 </div>
 
                 <div className="min-w-0 space-y-1">

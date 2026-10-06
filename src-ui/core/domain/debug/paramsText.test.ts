@@ -33,13 +33,21 @@ describe('parseParamsText', () => {
     });
 
     it('合法对象原样解析', () => {
-        expect(parseParamsText('{"group_id":"1","n":2}')).toEqual({ ok: true, value: { group_id: '1', n: 2 } });
+        expect(parseParamsText('{"group_id":"1","n":2}')).toEqual({
+            ok: true,
+            value: { group_id: '1', n: 2 },
+        });
     });
 
     it('不是对象的 JSON 报「参数必须是 JSON 对象」并指到第一个字符', () => {
         for (const text of ['[1,2]', '"x"', '42', 'null', 'true']) {
             const r = parseParamsText(text);
-            expect(r).toMatchObject({ ok: false, message: '参数必须是 JSON 对象', line: 1, column: 1 });
+            expect(r).toMatchObject({
+                ok: false,
+                message: '参数必须是 JSON 对象',
+                line: 1,
+                column: 1,
+            });
         }
         expect(parseParamsText('\n  [1]')).toMatchObject({ ok: false, line: 2, column: 3 });
     });
@@ -70,8 +78,16 @@ describe('parseParamsText', () => {
 
     it('没写完的 JSON 指到末尾并提示少了括号或引号', () => {
         const r = parseParamsText('{\n  "a": [1, 2');
-        expect(r).toMatchObject({ ok: false, message: 'JSON 不完整，可能少了括号或引号', line: 2, column: 13 });
-        expect(parseParamsText('{"a": "abc')).toMatchObject({ ok: false, message: 'JSON 不完整，可能少了括号或引号' });
+        expect(r).toMatchObject({
+            ok: false,
+            message: 'JSON 不完整，可能少了括号或引号',
+            line: 2,
+            column: 13,
+        });
+        expect(parseParamsText('{"a": "abc')).toMatchObject({
+            ok: false,
+            message: 'JSON 不完整，可能少了括号或引号',
+        });
     });
 
     it('字符串里直接换行也指到那一行', () => {
@@ -80,14 +96,20 @@ describe('parseParamsText', () => {
     });
 
     it('CRLF 换行的行号也对', () => {
-        expect(parseParamsText('{\r\n  "a": 1,\r\n}')).toMatchObject({ ok: false, line: 3, column: 1 });
+        expect(parseParamsText('{\r\n  "a": 1,\r\n}')).toMatchObject({
+            ok: false,
+            line: 3,
+            column: 1,
+        });
     });
 });
 
 describe('formatParams', () => {
     it('两空格缩进，空对象是 {}', () => {
         expect(formatParams({})).toBe('{}');
-        expect(formatParams({ a: 1, b: { c: [1] } })).toBe('{\n  "a": 1,\n  "b": {\n    "c": [\n      1\n    ]\n  }\n}');
+        expect(formatParams({ a: 1, b: { c: [1] } })).toBe(
+            '{\n  "a": 1,\n  "b": {\n    "c": [\n      1\n    ]\n  }\n}',
+        );
     });
 });
 
@@ -149,8 +171,18 @@ describe('表单 ⇄ JSON 往返', () => {
         let text = '{\n  "user_id": 5,\n  "vendor_flag": {"deep": [1, 2]},\n  "group_id": 100\n}';
         text = setParam(text, 'group_id', coerceInput(fieldOf('group_id'), '200'));
         text = setParam(text, 'duration', coerceInput(fieldOf('duration'), '60'));
-        expect(JSON.parse(text)).toEqual({ user_id: 5, vendor_flag: { deep: [1, 2] }, group_id: 200, duration: 60 });
-        expect(Object.keys(JSON.parse(text))).toEqual(['user_id', 'vendor_flag', 'group_id', 'duration']);
+        expect(JSON.parse(text)).toEqual({
+            user_id: 5,
+            vendor_flag: { deep: [1, 2] },
+            group_id: 200,
+            duration: 60,
+        });
+        expect(Object.keys(JSON.parse(text))).toEqual([
+            'user_id',
+            'vendor_flag',
+            'group_id',
+            'duration',
+        ]);
     });
 
     it('表单清空字段（空串）就是删键，其它键不受影响', () => {
@@ -180,12 +212,18 @@ describe('initialParamsText', () => {
     });
 
     it('有示例就用第一个示例', () => {
-        const text = initialParamsText({ examples: [{ group_id: '123456', message: 'hello' }, { group_id: '2' }], params_schema: NC_SCHEMA });
+        const text = initialParamsText({
+            examples: [{ group_id: '123456', message: 'hello' }, { group_id: '2' }],
+            params_schema: NC_SCHEMA,
+        });
         expect(JSON.parse(text)).toEqual({ group_id: '123456', message: 'hello' });
     });
 
     it('示例不是对象时跳过，用后面的对象示例', () => {
-        const text = initialParamsText({ examples: ['oops', { group_id: '9' }], params_schema: NC_SCHEMA });
+        const text = initialParamsText({
+            examples: ['oops', { group_id: '9' }],
+            params_schema: NC_SCHEMA,
+        });
         expect(JSON.parse(text)).toEqual({ group_id: '9' });
     });
 
@@ -209,7 +247,12 @@ describe('initialParamsText', () => {
     });
 
     it('没有必填项就是 {}', () => {
-        expect(initialParamsText({ examples: [], params_schema: { type: 'object', properties: { a: { type: 'string' } } } })).toBe('{}');
+        expect(
+            initialParamsText({
+                examples: [],
+                params_schema: { type: 'object', properties: { a: { type: 'string' } } },
+            }),
+        ).toBe('{}');
         expect(initialParamsText({ examples: [], params_schema: {} })).toBe('{}');
     });
 });

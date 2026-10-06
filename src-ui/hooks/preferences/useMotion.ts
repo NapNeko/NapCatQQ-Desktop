@@ -34,14 +34,7 @@ import {
 
 export type DurationKind = 'fast' | 'base' | 'slow';
 export type EaseKind =
-    | 'enter'
-    | 'exit'
-    | 'enterMicro'
-    | 'hover'
-    | 'press'
-    | 'release'
-    | 'pop'
-    | 'damped';
+    'enter' | 'exit' | 'enterMicro' | 'hover' | 'press' | 'release' | 'pop' | 'damped';
 
 /// 业务可传入的 tween 选项,所有字段都是可选,缺什么就用 preset 默认值。
 export interface TweenOptions {
@@ -182,17 +175,16 @@ export function useMotion(): MotionEnv {
                 opts?.duration !== undefined
                     ? opts.duration / Math.max(0.5, env.speed)
                     : (() => {
-                        const k = opts?.kind ?? 'base';
-                        const base =
-                            k === 'fast'
-                                ? t.durationFast
-                                : k === 'slow'
+                          const k = opts?.kind ?? 'base';
+                          const base =
+                              k === 'fast'
+                                  ? t.durationFast
+                                  : k === 'slow'
                                     ? t.durationSlow
                                     : t.durationBase;
-                        return scaleDuration(base, env.speed);
-                    })();
-            const easeStr =
-                opts?.easeStr ?? t.ease[opts?.ease ?? defaultEase];
+                          return scaleDuration(base, env.speed);
+                      })();
+            const easeStr = opts?.easeStr ?? t.ease[opts?.ease ?? defaultEase];
             return {
                 ...vars,
                 duration: dur,
@@ -269,11 +261,11 @@ export function useMotion(): MotionEnv {
                     overwrite: 'auto',
                 };
                 if (opts?.shadow === true) vars.boxShadow = '';
-                if ((opts?.brightness ?? true)) vars.filter = '';
+                if (opts?.brightness ?? true) vars.filter = '';
                 gsap.to(el, vars);
             };
             const env = envRef.current;
-            if (!env.enabled) return () => { };
+            if (!env.enabled) return () => {};
             el.addEventListener('mouseenter', onEnter);
             el.addEventListener('mouseleave', onLeave);
             return () => {
@@ -329,7 +321,7 @@ export function useMotion(): MotionEnv {
                 releaseTo(1);
             };
             const env = envRef.current;
-            if (!env.enabled) return () => { };
+            if (!env.enabled) return () => {};
             el.addEventListener('mouseenter', onEnter);
             el.addEventListener('mouseleave', onLeave);
             el.addEventListener('mousedown', onDown);
@@ -390,7 +382,11 @@ export function useMotion(): MotionEnv {
             if (!enabled) return 0;
             const t = preset.timing;
             const base =
-                kind === 'fast' ? t.durationFast : kind === 'slow' ? t.durationSlow : t.durationBase;
+                kind === 'fast'
+                    ? t.durationFast
+                    : kind === 'slow'
+                      ? t.durationSlow
+                      : t.durationBase;
             return scaleDuration(base, speed);
         };
         const stagger = (): number => {

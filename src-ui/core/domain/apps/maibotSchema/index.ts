@@ -5,7 +5,8 @@
 import botSchema from './bot.json';
 import modelSchema from './model.json';
 
-export type UiFieldType = 'string' | 'integer' | 'number' | 'boolean' | 'select' | 'array' | 'object';
+export type UiFieldType =
+    'string' | 'integer' | 'number' | 'boolean' | 'select' | 'array' | 'object';
 
 export interface UiField {
     name: string;
@@ -97,7 +98,11 @@ const fmt = (v: number) => (Number.isInteger(v) ? v.toFixed(0) : String(v));
  * 照 schema 查范围和可选值，措辞和路径同后端 IssueSink 的 range / one_of（后端那份也是从同一批
  * pydantic 约束生成的），保存前就能在字段上标红，不用等后端退回来。
  */
-export function schemaIssues(node: UiNode, value: unknown, prefix: string): { path: string; message: string }[] {
+export function schemaIssues(
+    node: UiNode,
+    value: unknown,
+    prefix: string,
+): { path: string; message: string }[] {
     const out: { path: string; message: string }[] = [];
     const walk = (n: UiNode, v: unknown, path: string) => {
         if (v === null || typeof v !== 'object') return;
@@ -122,10 +127,10 @@ export function schemaIssues(node: UiNode, value: unknown, prefix: string): { pa
                 }
             } else if (
                 // 只认 Literal 出来的 select；普通字符串挂的 options 只是建议值，后端和上游都不拦
-                f.type === 'select'
-                && typeof val === 'string'
-                && f.options?.length
-                && !f.options.includes(val)
+                f.type === 'select' &&
+                typeof val === 'string' &&
+                f.options?.length &&
+                !f.options.includes(val)
             ) {
                 out.push({
                     path: here,

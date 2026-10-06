@@ -29,7 +29,10 @@ import {
 } from '../../../core/domain/apps/appStore';
 import type { AppInstance, AppStoreResource } from '../../../core/ipc/types';
 
-function filterItems(officialLabel: string, categories: readonly string[]): SelectItem<StoreKindFilter>[] {
+function filterItems(
+    officialLabel: string,
+    categories: readonly string[],
+): SelectItem<StoreKindFilter>[] {
     return [
         { value: 'all', label: '全部' },
         { value: 'official', label: officialLabel },
@@ -51,8 +54,19 @@ export const AppStoreTab: React.FC<{
     toggleBlockedReason?: string;
     /** 插件配置不在单独文件里的框架（Koishi 在插件树里）：齿轮跳过去，不开配置框 */
     onConfigure?: (id: string, name: string) => void;
-}> = ({ instance, resource, officialLabel = '官方', categories, toggleable, toggleBlockedReason, onConfigure }) => {
-    const filters = useMemo(() => filterItems(officialLabel, categories ?? []), [officialLabel, categories]);
+}> = ({
+    instance,
+    resource,
+    officialLabel = '官方',
+    categories,
+    toggleable,
+    toggleBlockedReason,
+    onConfigure,
+}) => {
+    const filters = useMemo(
+        () => filterItems(officialLabel, categories ?? []),
+        [officialLabel, categories],
+    );
     const p = useAppStore(instance, resource);
     const [uninstall, setUninstall] = useState<string | null>(null);
     const [configName, setConfigName] = useState<string | null>(null);
@@ -132,14 +146,20 @@ export const AppStoreTab: React.FC<{
                             }
                         >
                             {visible.map((row) => (
-                                <ListItem key={row.id} hoverable className="flex h-full min-h-0 min-w-0 w-full">
+                                <ListItem
+                                    key={row.id}
+                                    hoverable
+                                    className="flex h-full min-h-0 min-w-0 w-full"
+                                >
                                     <StoreCard
                                         row={row}
                                         resource={resource}
                                         officialLabel={officialLabel}
                                         showTags={!!categories?.length}
                                         toggleBlocked={
-                                            toggleable && !toggleable(row.id) ? (toggleBlockedReason ?? '不能单独启停') : null
+                                            toggleable && !toggleable(row.id)
+                                                ? (toggleBlockedReason ?? '不能单独启停')
+                                                : null
                                         }
                                         busy={p.busyNames.has(row.id) || p.busyNames.has(row.name)}
                                         onInstall={() => void p.runOp(row.id, 'install')}
@@ -174,7 +194,10 @@ export const AppStoreTab: React.FC<{
                         </button>
                         {pages.map((item, i) =>
                             item === 'gap' ? (
-                                <span key={`gap-${i}`} className="w-6 text-center text-2xs text-text-tertiary">
+                                <span
+                                    key={`gap-${i}`}
+                                    className="w-6 text-center text-2xs text-text-tertiary"
+                                >
                                     …
                                 </span>
                             ) : (
@@ -183,7 +206,10 @@ export const AppStoreTab: React.FC<{
                                     type="button"
                                     aria-current={item === safePage ? 'page' : undefined}
                                     onClick={() => setPage(item)}
-                                    className={cn(pagerBtn, item === safePage && 'bg-inset font-medium text-text')}
+                                    className={cn(
+                                        pagerBtn,
+                                        item === safePage && 'bg-inset font-medium text-text',
+                                    )}
                                 >
                                     {item + 1}
                                 </button>
@@ -273,7 +299,10 @@ const StoreCard: React.FC<{
             <div className="flex min-w-0 items-start gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
-                        <h3 className="min-w-0 truncate font-display text-[15px] font-semibold leading-6 text-text" title={row.name}>
+                        <h3
+                            className="min-w-0 truncate font-display text-[15px] font-semibold leading-6 text-text"
+                            title={row.name}
+                        >
                             {row.name}
                         </h3>
                         {home ? (
@@ -287,7 +316,9 @@ const StoreCard: React.FC<{
                             </button>
                         ) : null}
                     </div>
-                    <p className="mt-0.5 truncate text-2xs leading-4 text-text-tertiary">{meta || '\u00a0'}</p>
+                    <p className="mt-0.5 truncate text-2xs leading-4 text-text-tertiary">
+                        {meta || '\u00a0'}
+                    </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1 pt-0.5">
                     {busy && <Spinner size="sm" />}
@@ -316,7 +347,9 @@ const StoreCard: React.FC<{
                                         </button>
                                     </PopoverClose>
                                 ) : (
-                                    <p className="px-2 py-1.5 text-2xs leading-4 text-text-tertiary">{toggleBlocked}</p>
+                                    <p className="px-2 py-1.5 text-2xs leading-4 text-text-tertiary">
+                                        {toggleBlocked}
+                                    </p>
                                 )}
                                 <PopoverClose asChild>
                                     <button
@@ -340,7 +373,11 @@ const StoreCard: React.FC<{
                                 </PopoverClose>
                                 {onConfig && (
                                     <PopoverClose asChild>
-                                        <button type="button" className={menuItem} onClick={onConfig}>
+                                        <button
+                                            type="button"
+                                            className={menuItem}
+                                            onClick={onConfig}
+                                        >
                                             配置
                                         </button>
                                     </PopoverClose>
@@ -348,7 +385,12 @@ const StoreCard: React.FC<{
                             </PopoverContent>
                         </Popover>
                     ) : row.installable ? (
-                        <button type="button" disabled={busy} onClick={onInstall} className={installBtn}>
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={onInstall}
+                            className={installBtn}
+                        >
                             安装
                         </button>
                     ) : (
@@ -386,7 +428,9 @@ const StoreCard: React.FC<{
                     </Badge>
                 ) : null}
                 {row.locked ? (
-                    <span className="text-2xs text-text-tertiary">{row.lockReason ?? '已对接不能关'}</span>
+                    <span className="text-2xs text-text-tertiary">
+                        {row.lockReason ?? '已对接不能关'}
+                    </span>
                 ) : null}
             </div>
         </article>

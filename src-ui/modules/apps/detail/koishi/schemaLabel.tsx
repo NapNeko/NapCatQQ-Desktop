@@ -18,10 +18,16 @@ export function splitDescription(text: string): { title: string; rest: string } 
     return { title: head, rest: tail };
 }
 
-export function fieldText(name: string, node: SNode): { title: string; hint?: string; showKey: boolean } {
+export function fieldText(
+    name: string,
+    node: SNode,
+): { title: string; hint?: string; showKey: boolean } {
     const { title, rest } = splitDescription(describe(node));
     const unit = node.meta.role ? ROLE_UNIT[node.meta.role] : undefined;
-    const hintParts = [rest, unit && !`${title}${rest}`.includes('毫秒') ? `单位：${unit}` : ''].filter(Boolean);
+    const hintParts = [
+        rest,
+        unit && !`${title}${rest}`.includes('毫秒') ? `单位：${unit}` : '',
+    ].filter(Boolean);
     return {
         title: title || name,
         hint: hintParts.length ? hintParts.join(' ') : undefined,
@@ -46,7 +52,11 @@ export function FieldLabel({
         <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate">{title}</span>
             {node.meta.required && <span className="text-danger">*</span>}
-            {showKey && <span className="truncate font-mono text-2xs font-normal text-text-disabled">{name}</span>}
+            {showKey && (
+                <span className="truncate font-mono text-2xs font-normal text-text-disabled">
+                    {name}
+                </span>
+            )}
             {onReset && (
                 <button
                     type="button"

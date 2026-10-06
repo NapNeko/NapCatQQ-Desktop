@@ -50,7 +50,9 @@ export function useTauriDropTarget(
                 setDragHover(true);
                 return;
             }
-            setDragHover(pointInRect(el.getBoundingClientRect(), event.position.x, event.position.y));
+            setDragHover(
+                pointInRect(el.getBoundingClientRect(), event.position.x, event.position.y),
+            );
             return;
         }
         setDragHover(false);

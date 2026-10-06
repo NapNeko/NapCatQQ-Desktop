@@ -14,8 +14,10 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) =>
-                (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
         },
     ),
 }));
@@ -52,7 +54,14 @@ const CHANNELS: DebugChannels = {
 };
 
 function tab(patch: Partial<DebugRequestDraft> = {}): DebugRequestDraft {
-    return { id: 't1', action: 'send_group_msg', params_text: '', timeout_ms: null, channel: null, ...patch };
+    return {
+        id: 't1',
+        action: 'send_group_msg',
+        params_text: '',
+        timeout_ms: null,
+        channel: null,
+        ...patch,
+    };
 }
 
 function renderDialog(tabDraft = tab(), params: Record<string, unknown> = { group_id: 100001 }) {
@@ -63,7 +72,14 @@ function renderDialog(tabDraft = tab(), params: Record<string, unknown> = { grou
         </QueryClientProvider>
     );
     return render(
-        <ExportSnippetDialog open onOpenChange={() => {}} tab={tabDraft} params={params} botId="bot-nc" callChannel={{ kind: 'auto' }} />,
+        <ExportSnippetDialog
+            open
+            onOpenChange={() => {}}
+            tab={tabDraft}
+            params={params}
+            botId="bot-nc"
+            callChannel={{ kind: 'auto' }}
+        />,
         { wrapper },
     );
 }
@@ -109,7 +125,9 @@ describe('ExportSnippetDialog', () => {
 
         await screen.findByRole('tab', { name: 'Python' });
         await user.click(screen.getByRole('button', { name: '复制片段' }));
-        await waitFor(async () => expect(await navigator.clipboard.readText()).toContain('curl -X POST'));
+        await waitFor(async () =>
+            expect(await navigator.clipboard.readText()).toContain('curl -X POST'),
+        );
         expect(screen.getByRole('button', { name: '已复制' })).toBeInTheDocument();
     });
 });

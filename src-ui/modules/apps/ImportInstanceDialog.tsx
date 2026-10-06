@@ -84,8 +84,7 @@ export const ImportInstanceDialog: React.FC<{
         clearProbeBars();
     }, [target, frameworks, resetProbe]);
 
-    const manifest =
-        mounted?.manifest ?? frameworks.find((m) => m.id === frameworkId) ?? null;
+    const manifest = mounted?.manifest ?? frameworks.find((m) => m.id === frameworkId) ?? null;
     const lockedHost = mounted?.lockedHostId ?? null;
     const lockedFramework = mounted?.manifest != null;
     const isRemote = hostId.startsWith('remote:');
@@ -162,142 +161,160 @@ export const ImportInstanceDialog: React.FC<{
 
     return (
         <>
-        <Dialog open={target !== null} onOpenChange={(o) => !o && !isImporting && !pickerOpen && onClose()}>
-            <DialogContent size="md" dismissOnOutsideClick={!isImporting && !pickerOpen} onExited={() => setMounted(null)}>
-                {mounted && (
-                    <>
-                        <DialogHeader>
-                            <DialogTitle>
-                                导入{manifest ? ` ${manifest.display_name}` : ''} 项目
-                            </DialogTitle>
-                            <DialogDescription>目录还在原地，不会复制，也不会改入口。</DialogDescription>
-                        </DialogHeader>
-                        <div className="flex flex-col gap-3">
-                            <div className="grid grid-cols-2 gap-3">
-                                <Select
-                                    label="框架"
-                                    items={frameworkItems}
-                                    value={frameworkId}
-                                    onValueChange={(v) => {
-                                        setFrameworkId(v);
-                                        dropProbe();
-                                    }}
-                                    disabled={lockedFramework}
-                                />
-                                <Select
-                                    label="主机"
-                                    items={hostItems}
-                                    value={hostId}
-                                    onValueChange={(v) => {
-                                        setHostId(v);
-                                        setPath('');
-                                        dropProbe();
-                                    }}
-                                    disabled={lockedHost !== null}
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <span className="text-xs font-medium text-text-secondary">项目目录</span>
-                                <div className="flex items-center gap-1.5">
-                                    <TextField
-                                        className="min-w-0 flex-1"
-                                        aria-label="项目目录"
-                                        placeholder={isRemote ? '/root/my-bot' : undefined}
-                                        value={path}
-                                        onValueChange={markPathDirty}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                runProbe();
-                                            }
+            <Dialog
+                open={target !== null}
+                onOpenChange={(o) => !o && !isImporting && !pickerOpen && onClose()}
+            >
+                <DialogContent
+                    size="md"
+                    dismissOnOutsideClick={!isImporting && !pickerOpen}
+                    onExited={() => setMounted(null)}
+                >
+                    {mounted && (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle>
+                                    导入{manifest ? ` ${manifest.display_name}` : ''} 项目
+                                </DialogTitle>
+                                <DialogDescription>
+                                    目录还在原地，不会复制，也不会改入口。
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="flex flex-col gap-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Select
+                                        label="框架"
+                                        items={frameworkItems}
+                                        value={frameworkId}
+                                        onValueChange={(v) => {
+                                            setFrameworkId(v);
+                                            dropProbe();
                                         }}
+                                        disabled={lockedFramework}
                                     />
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="md"
-                                        className="shrink-0"
-                                        disabled={isImporting || (isRemote && !remoteId)}
-                                        onClick={() => {
-                                            if (isRemote) {
-                                                setPickerOpen(true);
-                                                return;
-                                            }
-                                            void pickDirectory('选择已有项目目录').then((dir) => {
-                                                if (!dir) return;
-                                                markPathDirty(dir);
-                                            });
+                                    <Select
+                                        label="主机"
+                                        items={hostItems}
+                                        value={hostId}
+                                        onValueChange={(v) => {
+                                            setHostId(v);
+                                            setPath('');
+                                            dropProbe();
                                         }}
-                                    >
-                                        <FolderOpen size={14} strokeWidth={2.2} />
-                                        选择
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="md"
-                                        className="shrink-0"
-                                        disabled={!canProbe}
-                                        onClick={runProbe}
-                                    >
-                                        {probing && <Spinner size="sm" />}
-                                        检查
-                                    </Button>
+                                        disabled={lockedHost !== null}
+                                    />
                                 </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        项目目录
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                        <TextField
+                                            className="min-w-0 flex-1"
+                                            aria-label="项目目录"
+                                            placeholder={isRemote ? '/root/my-bot' : undefined}
+                                            value={path}
+                                            onValueChange={markPathDirty}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    runProbe();
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="md"
+                                            className="shrink-0"
+                                            disabled={isImporting || (isRemote && !remoteId)}
+                                            onClick={() => {
+                                                if (isRemote) {
+                                                    setPickerOpen(true);
+                                                    return;
+                                                }
+                                                void pickDirectory('选择已有项目目录').then(
+                                                    (dir) => {
+                                                        if (!dir) return;
+                                                        markPathDirty(dir);
+                                                    },
+                                                );
+                                            }}
+                                        >
+                                            <FolderOpen size={14} strokeWidth={2.2} />
+                                            选择
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="md"
+                                            className="shrink-0"
+                                            disabled={!canProbe}
+                                            onClick={runProbe}
+                                        >
+                                            {probing && <Spinner size="sm" />}
+                                            检查
+                                        </Button>
+                                    </div>
+                                </div>
+                                <TextField
+                                    label="实例名"
+                                    placeholder={probe?.display_name || '留空则用项目名'}
+                                    value={displayName}
+                                    onValueChange={setDisplayName}
+                                />
+                                {probe && <ProbePreview probe={probe} />}
                             </div>
-                            <TextField
-                                label="实例名"
-                                placeholder={probe?.display_name || '留空则用项目名'}
-                                value={displayName}
-                                onValueChange={setDisplayName}
-                            />
-                            {probe && <ProbePreview probe={probe} />}
-                        </div>
-                        <DialogFooter>
-                            <Button variant="ghost" size="sm" onClick={onClose} disabled={isImporting}>
-                                取消
-                            </Button>
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                disabled={isImporting || !probe || probing}
-                                onClick={() =>
-                                    void onSubmit({
-                                        frameworkId,
-                                        hostId,
-                                        path: probe?.path || path.trim(),
-                                        displayName,
-                                    }).catch(() => undefined)
-                                }
-                            >
-                                {isImporting ? (
-                                    <Spinner size="sm" className="text-white" />
-                                ) : (
-                                    <ActionMotionIcon
-                                        icon={Import}
-                                        size={14}
-                                        strokeWidth={2.4}
-                                        motion={EMPHASIS_MOTION}
-                                    />
-                                )}
-                                导入
-                            </Button>
-                        </DialogFooter>
-                    </>
-                )}
-            </DialogContent>
-        </Dialog>
-        <RemoteDirectoryPicker
-            open={pickerOpen && !!remoteId}
-            remoteId={remoteId}
-            initialPath={path}
-            initialRoot={remoteHome ?? '/'}
-            onClose={() => setPickerOpen(false)}
-            onSelect={(next) => {
-                markPathDirty(next);
-                setPickerOpen(false);
-            }}
-        />
+                            <DialogFooter>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={onClose}
+                                    disabled={isImporting}
+                                >
+                                    取消
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={isImporting || !probe || probing}
+                                    onClick={() =>
+                                        void onSubmit({
+                                            frameworkId,
+                                            hostId,
+                                            path: probe?.path || path.trim(),
+                                            displayName,
+                                        }).catch(() => undefined)
+                                    }
+                                >
+                                    {isImporting ? (
+                                        <Spinner size="sm" className="text-white" />
+                                    ) : (
+                                        <ActionMotionIcon
+                                            icon={Import}
+                                            size={14}
+                                            strokeWidth={2.4}
+                                            motion={EMPHASIS_MOTION}
+                                        />
+                                    )}
+                                    导入
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
+            <RemoteDirectoryPicker
+                open={pickerOpen && !!remoteId}
+                remoteId={remoteId}
+                initialPath={path}
+                initialRoot={remoteHome ?? '/'}
+                onClose={() => setPickerOpen(false)}
+                onSelect={(next) => {
+                    markPathDirty(next);
+                    setPickerOpen(false);
+                }}
+            />
         </>
     );
 };

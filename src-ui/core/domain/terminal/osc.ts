@@ -99,7 +99,8 @@ export function parseOsc7(data: string): ShellMark | null {
 export function parseOsc9(data: string): ShellMark | null {
     if (data.startsWith('9;')) {
         let path = data.slice(2).trim();
-        if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
+        if (path.length >= 2 && path.startsWith('"') && path.endsWith('"'))
+            path = path.slice(1, -1);
         return path ? { kind: 'cwd', path } : null;
     }
     if (data.startsWith('4;')) {

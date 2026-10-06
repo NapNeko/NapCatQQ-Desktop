@@ -5,15 +5,13 @@ import type { DataLayoutConsolidateSnapshot } from '../../ipc/types';
 export type LayoutConsolidateAlert =
     | { kind: 'none' }
     | {
-        kind: 'success' | 'warning';
-        title: string;
-        content: string;
-        autoDismissMs: number;
-    };
+          kind: 'success' | 'warning';
+          title: string;
+          content: string;
+          autoDismissMs: number;
+      };
 
-export function buildLayoutConsolidateContent(
-    snap: DataLayoutConsolidateSnapshot,
-): string {
+export function buildLayoutConsolidateContent(snap: DataLayoutConsolidateSnapshot): string {
     const parts: string[] = [];
     if (snap.backup_path) {
         parts.push(`备份：${snap.backup_path}（含密钥）`);

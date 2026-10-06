@@ -9,7 +9,8 @@ export interface ParamIssue {
 
 type Json = Record<string, unknown>;
 
-const isRecord = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Json =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const TYPE_LABEL: Record<string, string> = {
     string: '字符串',
@@ -50,7 +51,9 @@ function typeMessage(types: string[]): string {
 }
 
 function listValues(values: unknown[]): string {
-    const shown = values.slice(0, MAX_LISTED).map((v) => (typeof v === 'string' ? v : JSON.stringify(v)));
+    const shown = values
+        .slice(0, MAX_LISTED)
+        .map((v) => (typeof v === 'string' ? v : JSON.stringify(v)));
     return values.length > MAX_LISTED ? `${shown.join(' / ')} …` : shown.join(' / ');
 }
 
@@ -115,7 +118,11 @@ function validateNode(schema: Json, value: unknown, path: string, ctx: Ctx): voi
         ctx.issues.push({ path, message: `应为 ${listValues([schema.const])}` });
         return;
     }
-    if (Array.isArray(schema.enum) && schema.enum.length > 0 && !schema.enum.some((e) => sameValue(e, value))) {
+    if (
+        Array.isArray(schema.enum) &&
+        schema.enum.length > 0 &&
+        !schema.enum.some((e) => sameValue(e, value))
+    ) {
         ctx.issues.push({ path, message: `应为 ${listValues(schema.enum)} 之一` });
         return;
     }
@@ -175,7 +182,8 @@ function validateObject(schema: Json, value: Json, path: string, ctx: Ctx): void
         const prop = declared ? properties[key] : undefined;
         if (isRecord(prop)) {
             // 必填的空值上面已经报过「必填」，不再叠一条类型错误
-            if (isMissing(v) && Array.isArray(schema.required) && schema.required.includes(key)) continue;
+            if (isMissing(v) && Array.isArray(schema.required) && schema.required.includes(key))
+                continue;
             validateNode(prop, v, joinKey(path, key), ctx);
         } else if (schema.additionalProperties === false && !declared) {
             ctx.issues.push({ path: joinKey(path, key), message: '不支持这个参数' });

@@ -86,8 +86,8 @@ export function useQqDependencyAlerts(
 
 export function isQqSystemDependencyError(message: string): boolean {
     return (
-        message.includes('缺少系统依赖库')
-        || message.toLowerCase().includes('error while loading shared libraries')
-        || message.includes('cannot open shared object file')
+        message.includes('缺少系统依赖库') ||
+        message.toLowerCase().includes('error while loading shared libraries') ||
+        message.includes('cannot open shared object file')
     );
 }

@@ -3,10 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { remoteService } from '../../core/services/remote.service';
-import type {
-    ConnectRemoteHostRequest,
-    RemoteHostConnectionInfo,
-} from '../../core/ipc/types';
+import type { ConnectRemoteHostRequest, RemoteHostConnectionInfo } from '../../core/ipc/types';
 
 export function useRemoteSession(selectedBotId: string) {
     const queryClient = useQueryClient();
@@ -17,9 +14,15 @@ export function useRemoteSession(selectedBotId: string) {
         mutationFn: (req: ConnectRemoteHostRequest) => remoteService.connect(req),
         onSuccess: (info) => {
             setConnected(info);
-            queryClient.invalidateQueries({ queryKey: ['remoteFiles', info.remote_id, currentPath] });
-            queryClient.invalidateQueries({ queryKey: ['remoteRuntime', info.remote_id, selectedBotId] });
-            queryClient.invalidateQueries({ queryKey: ['remoteWebui', info.remote_id, selectedBotId] });
+            queryClient.invalidateQueries({
+                queryKey: ['remoteFiles', info.remote_id, currentPath],
+            });
+            queryClient.invalidateQueries({
+                queryKey: ['remoteRuntime', info.remote_id, selectedBotId],
+            });
+            queryClient.invalidateQueries({
+                queryKey: ['remoteWebui', info.remote_id, selectedBotId],
+            });
         },
     });
 

@@ -71,13 +71,15 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
             {
                 key: 'dockerPage',
                 label: '容器页',
-                description: '管理远端主机上的 Docker 和容器。开着时也只在有远端主机 Docker 可用时出现',
+                description:
+                    '管理远端主机上的 Docker 和容器。开着时也只在有远端主机 Docker 可用时出现',
                 saves: '启动时不再到每台远端主机上探测 Docker',
             },
             {
                 key: 'ncdWatch',
                 label: '远端值守（ncd-watch）',
-                description: '桌面端退出后由远端主机继续盯 Bot 掉线。关掉后隐藏组件页的 ncd-watch 行和「设置 · 通知」里的远端值守',
+                description:
+                    '桌面端退出后由远端主机继续盯 Bot 掉线。关掉后隐藏组件页的 ncd-watch 行和「设置 · 通知」里的远端值守',
                 saves: '不再每 45 秒给远端主机写心跳，也不再探测 ncd-watch',
             },
         ],
@@ -103,7 +105,15 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
 
 export const FEATURE_DEFS: ReadonlyArray<FeatureDef> = FEATURE_GROUPS.flatMap((g) => g.items);
 
-const BOOL_KEYS: ReadonlyArray<FeatureKey> = ['napcat', 'snowluma', 'apps', 'dockerPage', 'ncdWatch', 'terminal', 'apiDebug'];
+const BOOL_KEYS: ReadonlyArray<FeatureKey> = [
+    'napcat',
+    'snowluma',
+    'apps',
+    'dockerPage',
+    'ncdWatch',
+    'terminal',
+    'apiDebug',
+];
 
 /** 磁盘上缺字段或不是布尔值的一律当开着；两个协议端都关了就开回 NapCat（和 Rust 端一致）。 */
 export function normalizeFeatures(
@@ -113,7 +123,9 @@ export function normalizeFeatures(
     for (const key of BOOL_KEYS) out[key] = raw?.[key] !== false;
     if (!out.napcat && !out.snowluma) out.napcat = true;
     const hidden = Array.isArray(raw?.hiddenAppFrameworks) ? raw.hiddenAppFrameworks : [];
-    out.hiddenAppFrameworks = [...new Set(hidden.filter((id): id is string => typeof id === 'string' && id !== ''))];
+    out.hiddenAppFrameworks = [
+        ...new Set(hidden.filter((id): id is string => typeof id === 'string' && id !== '')),
+    ];
     return out;
 }
 
@@ -139,7 +151,10 @@ export function setAppFrameworkVisible(
 }
 
 /** 组件目录里哪些组件跟着开关藏（组件页不列、启动时也不探测）。 */
-export function isComponentHiddenByFeatures(features: FeatureToggles, componentId: string): boolean {
+export function isComponentHiddenByFeatures(
+    features: FeatureToggles,
+    componentId: string,
+): boolean {
     switch (componentId) {
         case 'napcat':
             return !features.napcat;
@@ -173,7 +188,11 @@ export const EMPTY_FEATURE_USAGE: FeatureUsage = {
  * 现在关掉会让东西没处看、没处管的，返回拦住的原因；能关返回 null。
  * `draft` 是设置页当前草稿（判断「另一个协议端是不是也关了」）。
  */
-export function featureOffBlock(key: FeatureKey, draft: FeatureToggles, usage: FeatureUsage): string | null {
+export function featureOffBlock(
+    key: FeatureKey,
+    draft: FeatureToggles,
+    usage: FeatureUsage,
+): string | null {
     switch (key) {
         case 'napcat':
         case 'snowluma': {

@@ -117,9 +117,13 @@ export const ParamsForm = memo(function ParamsForm({
                 />
             ))}
             {extras.length > 0 && (
-                <section aria-label="其它参数" className="mt-1 border-t border-border-subtle/70 pt-3">
+                <section
+                    aria-label="其它参数"
+                    className="mt-1 border-t border-border-subtle/70 pt-3"
+                >
                     <p className="mb-1.5 text-2xs font-medium text-text-tertiary">
-                        其它参数<span className="ml-1 font-normal">（接口说明里没有，照样会发出去）</span>
+                        其它参数
+                        <span className="ml-1 font-normal">（接口说明里没有，照样会发出去）</span>
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                         {extras.map((key) => (
@@ -128,7 +132,10 @@ export const ParamsForm = memo(function ParamsForm({
                                 className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-border-subtle bg-inset py-0.5 pl-2 pr-1 text-xs"
                             >
                                 <span className="font-mono text-text">{key}</span>
-                                <span className="max-w-[12rem] truncate font-mono text-text-tertiary" title={valueText(values[key])}>
+                                <span
+                                    className="max-w-[12rem] truncate font-mono text-text-tertiary"
+                                    title={valueText(values[key])}
+                                >
                                     {valueText(values[key]) || '""'}
                                 </span>
                                 <button
@@ -136,10 +143,13 @@ export const ParamsForm = memo(function ParamsForm({
                                     onClick={() => onEditInJson(key)}
                                     className="inline-flex items-center gap-0.5 rounded-xs px-1 py-0.5 text-2xs text-brand hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                                 >
-                                    <Braces size={11} aria-hidden />
-                                    在 JSON 里编辑
+                                    <Braces size={11} aria-hidden />在 JSON 里编辑
                                 </button>
-                                {byField.get(key) && <span className="text-2xs text-danger">{byField.get(key)!.join('；')}</span>}
+                                {byField.get(key) && (
+                                    <span className="text-2xs text-danger">
+                                        {byField.get(key)!.join('；')}
+                                    </span>
+                                )}
                             </span>
                         ))}
                     </div>
@@ -225,24 +235,41 @@ const FieldRow = memo(
         const role = KIND_LABEL[field.kind];
         const chip = typeChip(field);
         // NapCat 的说明常常就是「群号」「消息 ID」，和旁边的类型标签一个字不差，再写一遍只是占地方
-        const description = field.description && field.description.trim() !== chip ? field.description : undefined;
+        const description =
+            field.description && field.description.trim() !== chip ? field.description : undefined;
         // 报错、控件的临时提示、说明并成一行：一个字段底下不再叠两三行小字
         const meta: ReactNode[] = [];
-        if (invalid) meta.push(<span key="issue" className="text-danger">{issues!.join('；')}</span>);
+        if (invalid)
+            meta.push(
+                <span key="issue" className="text-danger">
+                    {issues!.join('；')}
+                </span>,
+            );
         if (hint) {
             meta.push(
-                <span key="hint" className={hint.tone === 'warning' ? 'text-warning' : 'text-text-tertiary'}>
+                <span
+                    key="hint"
+                    className={hint.tone === 'warning' ? 'text-warning' : 'text-text-tertiary'}
+                >
                     {hint.text}
                 </span>,
             );
         }
-        if (description) meta.push(<span key="desc" className="text-text-tertiary">{description}</span>);
+        if (description)
+            meta.push(
+                <span key="desc" className="text-text-tertiary">
+                    {description}
+                </span>,
+            );
         return (
             <div
                 data-param={field.name}
                 className="grid gap-x-3 gap-y-1 @min-[460px]:grid-cols-[minmax(96px,28%)_minmax(0,1fr)]"
             >
-                <label htmlFor={inputId} className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 @min-[460px]:pt-2.5">
+                <label
+                    htmlFor={inputId}
+                    className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 @min-[460px]:pt-2.5"
+                >
                     <span className="break-all font-mono text-[12.5px] font-medium text-text">
                         {field.name}
                         {field.required && (
@@ -265,7 +292,11 @@ const FieldRow = memo(
                     <FieldHintContext.Provider value={setHint}>{control}</FieldHintContext.Provider>
                     {meta.length > 0 && (
                         // 不用 role="alert"：敲字时问题一会儿出现一会儿消失，每次都打断朗读；它在 aria-describedby 里，聚焦字段时会读到
-                        <p id={descId} className="mt-1.5 line-clamp-2 text-2xs leading-snug" title={description}>
+                        <p
+                            id={descId}
+                            className="mt-1.5 line-clamp-2 text-2xs leading-snug"
+                            title={description}
+                        >
                             {meta.map((part, i) => (
                                 <span key={i}>
                                     {i > 0 && (

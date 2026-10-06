@@ -18,7 +18,12 @@ vi.mock('../ui/pushErrorBar', () => ({
     pushErrorBar: (...args: unknown[]) => pushErrorBar(...args),
 }));
 
-import { debugWorkspaceStore as store, defaultWorkspace, flushWorkspace, markWorkspaceStale } from './debugWorkspaceStore';
+import {
+    debugWorkspaceStore as store,
+    defaultWorkspace,
+    flushWorkspace,
+    markWorkspaceStale,
+} from './debugWorkspaceStore';
 
 const tab = (id: string, action = 'get_login_info', text = '{}'): DebugRequestDraft => ({
     id,
@@ -47,24 +52,35 @@ describe('workspace replacement by configuration import', () => {
         await flushWorkspace();
         expect(saveWorkspaceMock).not.toHaveBeenCalled();
 
-        await loadWith(stored({ tabs: [tab('imported')], active_tab: 'imported', selected_bot: '10001' }));
+        await loadWith(
+            stored({ tabs: [tab('imported')], active_tab: 'imported', selected_bot: '10001' }),
+        );
         store.selectBot('10002');
         await flushWorkspace();
-        expect(saveWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({
-            tabs: [tab('imported')], selected_bot: '10002',
-        }));
+        expect(saveWorkspaceMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                tabs: [tab('imported')],
+                selected_bot: '10002',
+            }),
+        );
     });
 
     it('ignores a late response from the workspace that was replaced during loading', async () => {
         let finishOld!: (value: DebugWorkspace) => void;
-        workspaceMock.mockReturnValueOnce(new Promise<DebugWorkspace>(resolve => { finishOld = resolve; }));
+        workspaceMock.mockReturnValueOnce(
+            new Promise<DebugWorkspace>((resolve) => {
+                finishOld = resolve;
+            }),
+        );
         const oldLoad = store.load();
         markWorkspaceStale();
-        workspaceMock.mockResolvedValueOnce(stored({ tabs: [tab('imported')], active_tab: 'imported' }));
+        workspaceMock.mockResolvedValueOnce(
+            stored({ tabs: [tab('imported')], active_tab: 'imported' }),
+        );
         await store.load();
         finishOld(stored({ tabs: [tab('old')], active_tab: 'old' }));
         await oldLoad;
-        expect(ws().tabs.map(item => item.id)).toEqual(['imported']);
+        expect(ws().tabs.map((item) => item.id)).toEqual(['imported']);
     });
 });
 
@@ -100,7 +116,9 @@ describe('载入', () => {
 
         expect(store.getSnapshot().loaded).toBe(true);
         expect(ws()).toEqual(defaultWorkspace());
-        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-workspace-load' }));
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ key: 'debug-workspace-load' }),
+        );
     });
 
     it('读盘失败后不会拿默认值覆盖磁盘：保存前补读一次，仍读不到就不写，改动留在内存里', async () => {
@@ -121,7 +139,9 @@ describe('载入', () => {
         expect(saveWorkspaceMock).not.toHaveBeenCalled();
         // 只在第一次失败时弹一次条，补读失败不重复打扰
         expect(pushErrorBar).toHaveBeenCalledTimes(1);
-        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-workspace-load' }));
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ key: 'debug-workspace-load' }),
+        );
         expect(ws().selected_bot).toBe('bot-2');
     });
 
@@ -133,7 +153,12 @@ describe('载入', () => {
         store.pushRecent('get_login_info');
 
         workspaceMock.mockResolvedValue(
-            stored({ tabs: [tab('a', 'x', '{"k":1}')], active_tab: 'a', selected_bot: 'bot-1', recent_actions: ['old'] }),
+            stored({
+                tabs: [tab('a', 'x', '{"k":1}')],
+                active_tab: 'a',
+                selected_bot: 'bot-1',
+                recent_actions: ['old'],
+            }),
         );
         await vi.advanceTimersByTimeAsync(500);
 
@@ -192,7 +217,13 @@ describe('打开动作', () => {
         const id = store.openAction('get_group_list', { paramsText: '{"no_cache": false}' });
 
         expect(ws().tabs).toEqual([
-            { id, action: 'get_group_list', params_text: '{"no_cache": false}', timeout_ms: null, channel: null },
+            {
+                id,
+                action: 'get_group_list',
+                params_text: '{"no_cache": false}',
+                timeout_ms: null,
+                channel: null,
+            },
         ]);
         expect(ws().active_tab).toBe(id);
     });
@@ -265,7 +296,9 @@ describe('打开动作', () => {
     it('newTab 建空白标签并激活', async () => {
         await loadWith();
         const id = store.newTab();
-        expect(ws().tabs).toEqual([{ id, action: '', params_text: '{}', timeout_ms: null, channel: null }]);
+        expect(ws().tabs).toEqual([
+            { id, action: '', params_text: '{}', timeout_ms: null, channel: null },
+        ]);
         expect(ws().active_tab).toBe(id);
     });
 });
@@ -281,7 +314,13 @@ describe('原地换动作（setTabAction）', () => {
         store.setTabAction(id, 'get_group_member_list');
 
         expect(ws().tabs).toEqual([
-            { id, action: 'get_group_member_list', params_text: '{"group_id": 1}', timeout_ms: 5000, channel: { kind: 'internal' } },
+            {
+                id,
+                action: 'get_group_member_list',
+                params_text: '{"group_id": 1}',
+                timeout_ms: 5000,
+                channel: { kind: 'internal' },
+            },
         ]);
         expect(store.getRun(id)).toBeUndefined();
         const next = store.openAction('get_login_info');
@@ -307,7 +346,11 @@ describe('关闭与恢复', () => {
     it('关当前标签：进最近关闭，激活右邻，没有右邻就左邻', async () => {
         await loadWith(
             stored({
-                tabs: [tab('a', 'x', '{"k":1}'), tab('b', 'y', '{"k":2}'), tab('c', 'z', '{"k":3}')],
+                tabs: [
+                    tab('a', 'x', '{"k":1}'),
+                    tab('b', 'y', '{"k":2}'),
+                    tab('c', 'z', '{"k":3}'),
+                ],
                 active_tab: 'b',
             }),
         );
@@ -325,7 +368,9 @@ describe('关闭与恢复', () => {
     });
 
     it('关的不是当前标签时当前标签不变；空白标签不占最近关闭', async () => {
-        await loadWith(stored({ tabs: [tab('a', 'x', '{"k":1}'), tab('blank', '', '{}')], active_tab: 'a' }));
+        await loadWith(
+            stored({ tabs: [tab('a', 'x', '{"k":1}'), tab('blank', '', '{}')], active_tab: 'a' }),
+        );
 
         store.closeTab('blank');
 
@@ -400,9 +445,19 @@ describe('其它字段', () => {
         store.setTimeout('a', 5000);
         store.setTabChannel('a', { kind: 'http', name: 'main' });
 
-        expect(ws().channel_choice['bot-1']).toEqual({ call: { kind: 'internal' }, events: { kind: 'auto' } });
-        expect(ws().layout).toMatchObject({ left_width: 300, right_view: 'list', right_width: UNSET_COLUMN_WIDTH });
-        expect(ws().tabs[0]).toMatchObject({ timeout_ms: 5000, channel: { kind: 'http', name: 'main' } });
+        expect(ws().channel_choice['bot-1']).toEqual({
+            call: { kind: 'internal' },
+            events: { kind: 'auto' },
+        });
+        expect(ws().layout).toMatchObject({
+            left_width: 300,
+            right_view: 'list',
+            right_width: UNSET_COLUMN_WIDTH,
+        });
+        expect(ws().tabs[0]).toMatchObject({
+            timeout_ms: 5000,
+            channel: { kind: 'http', name: 'main' },
+        });
     });
 
     it('没有实际变化的写入不换引用、不触发保存', async () => {
@@ -508,7 +563,9 @@ describe('防抖写盘', () => {
         store.selectBot('bot-2');
         await flushWorkspace();
         expect(pushErrorBar).toHaveBeenCalledTimes(1);
-        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-workspace-save' }));
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ key: 'debug-workspace-save' }),
+        );
 
         saveWorkspaceMock.mockResolvedValueOnce(undefined);
         store.selectBot('bot-3');

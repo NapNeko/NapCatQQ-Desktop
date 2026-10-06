@@ -9,9 +9,7 @@ export const mockBootstrap: BootstrapSnapshot = {
     report: {
         stage: 'completed',
         outcome: 'updated',
-        warnings: [
-            { code: 'W001', message: '发现旧版配置文件残留，已自动进行合并。' },
-        ],
+        warnings: [{ code: 'W001', message: '发现旧版配置文件残留，已自动进行合并。' }],
         source: {
             path: 'C:\\Users\\QIAO\\AppData\\Roaming\\NapCatQQ-Legacy',
             detected_version: 'v2.1.0',
@@ -20,11 +18,7 @@ export const mockBootstrap: BootstrapSnapshot = {
             backup_dir: 'C:\\Users\\QIAO\\AppData\\Roaming\\NapCatQQ-Desktop\\backup_v2_v3',
             timestamp: Date.now() - 3600000,
         },
-        rules_applied: [
-            'MigrateLocalAccounts',
-            'NormalizePortBindings',
-            'CleanLegacyTempCache',
-        ],
+        rules_applied: ['MigrateLocalAccounts', 'NormalizePortBindings', 'CleanLegacyTempCache'],
         repair_actions: ['open_data_dir', 'export_migration_report'],
     },
     data_root: 'C:\\ProgramData\\NapCatQQ Desktop',

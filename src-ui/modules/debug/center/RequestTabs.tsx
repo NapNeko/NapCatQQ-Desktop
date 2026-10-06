@@ -1,7 +1,15 @@
 // 请求标签条：横向可滚，动作名等宽字体，参数改过的带一个点，× 或中键关闭，「+」新开并打开命令面板。
 // 键盘：←/→ 在标签间走，Delete 关当前聚焦的；Ctrl+W / Ctrl+Tab 由页面统一挂。
 
-import { memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type WheelEvent } from 'react';
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    type KeyboardEvent,
+    type WheelEvent,
+} from 'react';
 import { Plus, X } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
@@ -22,7 +30,12 @@ export interface RequestTabsProps {
     onNewTab: () => void;
 }
 
-export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, onNewTab }: RequestTabsProps) {
+export const RequestTabs = memo(function RequestTabs({
+    tabs,
+    activeId,
+    target,
+    onNewTab,
+}: RequestTabsProps) {
     const listRef = useRef<HTMLDivElement>(null);
     const newTabRef = useRef<HTMLButtonElement>(null);
     // 用键盘（Delete）关掉的：焦点要落到接替它的那个标签上，不能掉回 body
@@ -33,7 +46,8 @@ export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, o
     useEffect(() => {
         // 当前标签被关掉（Ctrl+W、点 ×）时，焦点原来多半在它里面（编辑器、表单、× 按钮），跟着一起没了、掉回 body；
         // 这种情况也把焦点交给接替它的标签。焦点还在别处（左栏、右栏）时不抢
-        const closedActive = prevActive.current !== null && !tabs.some((t) => t.id === prevActive.current);
+        const closedActive =
+            prevActive.current !== null && !tabs.some((t) => t.id === prevActive.current);
         prevActive.current = activeId;
         const lost = !document.activeElement || document.activeElement === document.body;
         const focus = focusAfterClose.current || (closedActive && lost);
@@ -42,7 +56,9 @@ export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, o
             if (focus) newTabRef.current?.focus();
             return;
         }
-        const el = listRef.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(activeId)}"]`);
+        const el = listRef.current?.querySelector<HTMLElement>(
+            `[data-tab-id="${CSS.escape(activeId)}"]`,
+        );
         el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
         if (focus) el?.querySelector<HTMLElement>('[role="tab"]')?.focus();
     }, [activeId, tabs.length]);
@@ -53,7 +69,8 @@ export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, o
     }, []);
 
     const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End')
+            return;
         const idx = tabs.findIndex((t) => t.id === activeId);
         let next = idx;
         if (e.key === 'ArrowLeft') next = Math.max(0, idx - 1);
@@ -64,7 +81,9 @@ export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, o
         if (!tab) return;
         e.preventDefault();
         debugWorkspaceStore.setActive(tab.id);
-        listRef.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(tab.id)}"] [role="tab"]`)?.focus();
+        listRef.current
+            ?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(tab.id)}"] [role="tab"]`)
+            ?.focus();
     };
 
     // 竖着滚滚轮时横着走：标签一多，鼠标用户没有别的办法看到后面的
@@ -84,7 +103,9 @@ export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, o
                 onWheel={onWheel}
                 className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-                {tabs.length === 0 && <span className="px-1 text-2xs text-text-tertiary">还没有打开的请求</span>}
+                {tabs.length === 0 && (
+                    <span className="px-1 text-2xs text-text-tertiary">还没有打开的请求</span>
+                )}
                 {tabs.map((tab) => (
                     <TabItem
                         key={tab.id}
@@ -95,7 +116,13 @@ export const RequestTabs = memo(function RequestTabs({ tabs, activeId, target, o
                     />
                 ))}
             </div>
-            <IconTip ref={newTabRef} icon={Plus} label="新请求" hint={`打开接口搜索 · ${MOD_KEY_LABEL}+K`} onClick={onNewTab} />
+            <IconTip
+                ref={newTabRef}
+                icon={Plus}
+                label="新请求"
+                hint={`打开接口搜索 · ${MOD_KEY_LABEL}+K`}
+                onClick={onNewTab}
+            />
         </div>
     );
 });
@@ -117,7 +144,10 @@ const TabItem = memo(function TabItem({
     const spec = specQuery.data;
     // 说明还在读时拿上次记下的初始参数比；一次都没读到过就先不标（拿 `{}` 比会把每个刚打开的标签都标成改过）
     const loading = specQuery.isLoading;
-    const initial = useMemo(() => resolveInitialText(tab.id, spec, loading), [spec, tab.id, loading]);
+    const initial = useMemo(
+        () => resolveInitialText(tab.id, spec, loading),
+        [spec, tab.id, loading],
+    );
     const dirty = initial !== null && paramsDirty(tab.params_text, initial);
     const close = () => debugWorkspaceStore.closeTab(tab.id);
 
@@ -148,7 +178,9 @@ const TabItem = memo(function TabItem({
                 className={cn(
                     'flex h-8 min-w-[76px] max-w-[190px] items-center gap-1.5 rounded-sm pl-2.5 pr-7 text-left transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand',
-                    active ? 'bg-inset text-text' : 'text-text-tertiary hover:bg-inset/60 hover:text-text-secondary',
+                    active
+                        ? 'bg-inset text-text'
+                        : 'text-text-tertiary hover:bg-inset/60 hover:text-text-secondary',
                 )}
             >
                 <span
@@ -160,7 +192,12 @@ const TabItem = memo(function TabItem({
                 >
                     {action || '新请求'}
                 </span>
-                {dirty && <span aria-label="参数改过" className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
+                {dirty && (
+                    <span
+                        aria-label="参数改过"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                    />
+                )}
             </button>
             <Tooltip>
                 <TooltipTrigger asChild>
@@ -178,9 +215,16 @@ const TabItem = memo(function TabItem({
                         <X size={12} strokeWidth={2.2} aria-hidden />
                     </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">关闭（{MOD_KEY_LABEL}+W，或中键点标签）</TooltipContent>
+                <TooltipContent side="bottom">
+                    关闭（{MOD_KEY_LABEL}+W，或中键点标签）
+                </TooltipContent>
             </Tooltip>
-            {active && <span aria-hidden className="pointer-events-none absolute inset-x-2 bottom-[-3px] h-0.5 rounded-pill bg-brand" />}
+            {active && (
+                <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-2 bottom-[-3px] h-0.5 rounded-pill bg-brand"
+                />
+            )}
         </div>
     );
 });

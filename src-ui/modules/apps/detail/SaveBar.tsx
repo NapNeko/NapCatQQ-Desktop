@@ -13,7 +13,8 @@ function useSaveShortcut(enabled: boolean, onSave: () => void) {
     useEffect(() => {
         if (!enabled) return;
         const onKey = (e: KeyboardEvent) => {
-            if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey) return;
+            if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey)
+                return;
             if (e.target instanceof Element && e.target.closest('[role="dialog"], .xterm')) return;
             e.preventDefault();
             onSaveRef.current();
@@ -50,7 +51,9 @@ export const SaveBar: React.FC<{
                                     motion={infoToneMotion('danger')}
                                     className="shrink-0 text-danger"
                                 />
-                                <span className="truncate text-danger">{issueCount} 处填写有误，改好才能保存</span>
+                                <span className="truncate text-danger">
+                                    {issueCount} 处填写有误，改好才能保存
+                                </span>
                                 {onLocate && (
                                     <button
                                         type="button"
@@ -77,7 +80,12 @@ export const SaveBar: React.FC<{
                         )}
                     </span>
                     <div className="flex shrink-0 items-center gap-1.5">
-                        <Button variant="ghost" size="sm" onClick={onCancel} disabled={!dirty || saving}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onCancel}
+                            disabled={!dirty || saving}
+                        >
                             撤销
                         </Button>
                         <Button

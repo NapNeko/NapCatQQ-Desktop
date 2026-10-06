@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    compareComponentVersion,
-    compareSemver,
-    normalizeComponentVersion,
-} from './normalize';
+import { compareComponentVersion, compareSemver, normalizeComponentVersion } from './normalize';
 
 describe('normalizeComponentVersion', () => {
     it('strips clap binary prefix and watch-/v prefix', () => {

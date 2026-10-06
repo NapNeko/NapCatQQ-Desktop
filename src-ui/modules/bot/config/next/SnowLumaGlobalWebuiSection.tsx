@@ -40,9 +40,7 @@ export function SnowLumaGlobalWebuiSection({
             <NumberField
                 label="WebUI 监听端口"
                 value={value.snowlumaWebuiPort}
-                onValueChange={(v) =>
-                    onChange({ ...value, snowlumaWebuiPort: v ?? 5099 })
-                }
+                onValueChange={(v) => onChange({ ...value, snowlumaWebuiPort: v ?? 5099 })}
                 min={1}
                 max={65535}
                 hint="被占用时改用附近端口，需重启守护进程"
@@ -50,9 +48,7 @@ export function SnowLumaGlobalWebuiSection({
             <TextField
                 label="WebUI 登录密码（可选覆盖）"
                 value={value.snowlumaWebuiPasswordOverride}
-                onValueChange={(v) =>
-                    onChange({ ...value, snowlumaWebuiPasswordOverride: v })
-                }
+                onValueChange={(v) => onChange({ ...value, snowlumaWebuiPasswordOverride: v })}
             />
         </FormSection>
     );

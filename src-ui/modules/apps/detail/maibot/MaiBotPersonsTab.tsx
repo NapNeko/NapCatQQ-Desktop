@@ -3,10 +3,26 @@
 import { useState } from 'react';
 import { Trash2, Users } from 'lucide-react';
 import { Button } from '../../../../shared/ui';
-import type { AppInstance, MaiBotPersonFilter, MaiBotRuntimeStatus } from '../../../../core/ipc/types';
-import { useMaiBotPersonAction, useMaiBotPersonOverview, useMaiBotPersons } from '../../../../hooks/apps/useMaiBotPersons';
+import type {
+    AppInstance,
+    MaiBotPersonFilter,
+    MaiBotRuntimeStatus,
+} from '../../../../core/ipc/types';
+import {
+    useMaiBotPersonAction,
+    useMaiBotPersonOverview,
+    useMaiBotPersons,
+} from '../../../../hooks/apps/useMaiBotPersons';
 import { ConfirmDelete, EmptyHint } from '../entityParts';
-import { Pager, ResourcePane, SearchBox, Segmented, SelectionBar, useDebounced, useSelection } from '../resourceParts';
+import {
+    Pager,
+    ResourcePane,
+    SearchBox,
+    Segmented,
+    SelectionBar,
+    useDebounced,
+    useSelection,
+} from '../resourceParts';
 import { MaiBotLiveGate, maibotLive } from './MaiBotLiveGate';
 import { PersonDialog, PersonRow, personLabel, type PersonDraft } from './maibotPersonParts';
 
@@ -23,29 +39,45 @@ export const MaiBotPersonsTab: React.FC<{
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [draft, setDraft] = useState<PersonDraft | null>(null);
-    const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; label: string } | null>(null);
+    const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; label: string } | null>(
+        null,
+    );
     const sel = useSelection<string>();
     const q = useDebounced(search.trim());
 
-    const list = useMaiBotPersons(instance.id, { page, page_size: PAGE_SIZE, search: q, filter }, live);
+    const list = useMaiBotPersons(
+        instance.id,
+        { page, page_size: PAGE_SIZE, search: q, filter },
+        live,
+    );
     const overview = useMaiBotPersonOverview(instance.id, live);
     const act = useMaiBotPersonAction(instance.id);
 
-    if (!live) return <MaiBotLiveGate status={status} what="认识的人" onStart={onStart} starting={starting} />;
+    if (!live)
+        return (
+            <MaiBotLiveGate status={status} what="认识的人" onStart={onStart} starting={starting} />
+        );
 
     const ov = overview.data;
     const items = list.data?.items ?? [];
     const pageIds = items.map((p) => p.person_id);
     const pageAllPicked = pageIds.every((id) => sel.has(id));
-    const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
-        set(v);
-        setPage(1);
-        sel.clear();
-    };
+    const resetPage =
+        <T,>(set: (v: T) => void) =>
+        (v: T) => {
+            set(v);
+            setPage(1);
+            sel.clear();
+        };
 
     const toolbar = (
         <>
-            <SearchBox className="w-64" placeholder="搜称呼、昵称、账号" value={search} onChange={resetPage(setSearch)} />
+            <SearchBox
+                className="w-64"
+                placeholder="搜称呼、昵称、账号"
+                value={search}
+                onChange={resetPage(setSearch)}
+            />
             <Segmented
                 items={[
                     { value: 'all', label: '全部', count: ov?.total },
@@ -83,7 +115,12 @@ export const MaiBotPersonsTab: React.FC<{
                         variant="ghost"
                         className="text-danger hover:bg-danger-soft hover:text-danger"
                         disabled={act.isPending}
-                        onClick={() => setPendingDelete({ ids: [...sel.picked], label: `这 ${sel.picked.size} 个人` })}
+                        onClick={() =>
+                            setPendingDelete({
+                                ids: [...sel.picked],
+                                label: `这 ${sel.picked.size} 个人`,
+                            })
+                        }
                     >
                         <Trash2 size={13} />
                         删除
@@ -94,7 +131,11 @@ export const MaiBotPersonsTab: React.FC<{
             {items.length === 0 && !list.isFetching ? (
                 <EmptyHint
                     icon={Users}
-                    title={q || filter !== 'all' ? '没有对得上的人' : '还没有人跟麦麦说过话。有人在群里或私聊里跟它聊过，这里就会有 TA。'}
+                    title={
+                        q || filter !== 'all'
+                            ? '没有对得上的人'
+                            : '还没有人跟麦麦说过话。有人在群里或私聊里跟它聊过，这里就会有 TA。'
+                    }
                 />
             ) : (
                 <div className="flex flex-col gap-1.5">
@@ -105,8 +146,17 @@ export const MaiBotPersonsTab: React.FC<{
                             selected={sel.has(p.person_id)}
                             busy={act.isPending}
                             onPick={(shift) => sel.pick(p.person_id, shift, pageIds)}
-                            onEdit={() => setDraft({ person: p, name: p.name, name_reason: p.name_reason, is_known: p.is_known })}
-                            onDelete={() => setPendingDelete({ ids: [p.person_id], label: personLabel(p) })}
+                            onEdit={() =>
+                                setDraft({
+                                    person: p,
+                                    name: p.name,
+                                    name_reason: p.name_reason,
+                                    is_known: p.is_known,
+                                })
+                            }
+                            onDelete={() =>
+                                setPendingDelete({ ids: [p.person_id], label: personLabel(p) })
+                            }
                         />
                     ))}
                 </div>
@@ -140,10 +190,12 @@ export const MaiBotPersonsTab: React.FC<{
                 onCancel={() => setPendingDelete(null)}
                 onConfirm={() => {
                     if (!pendingDelete) return;
-                    void act.mutateAsync({ op: 'delete', person_ids: pendingDelete.ids }).then(() => {
-                        setPendingDelete(null);
-                        sel.clear();
-                    });
+                    void act
+                        .mutateAsync({ op: 'delete', person_ids: pendingDelete.ids })
+                        .then(() => {
+                            setPendingDelete(null);
+                            sel.clear();
+                        });
                 }}
             />
         </ResourcePane>

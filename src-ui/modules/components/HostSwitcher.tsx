@@ -25,10 +25,14 @@ export const HostSwitcher: React.FC<HostSwitcherProps> = ({ machines, activeHost
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        const target = (e.target as HTMLElement).closest<HTMLButtonElement>('[role="tab"][data-host-id]');
+        const target = (e.target as HTMLElement).closest<HTMLButtonElement>(
+            '[role="tab"][data-host-id]',
+        );
         if (!target) return;
 
-        const currentIndex = machines.findIndex((machine) => machine.host.host_id === target.dataset.hostId);
+        const currentIndex = machines.findIndex(
+            (machine) => machine.host.host_id === target.dataset.hostId,
+        );
         if (currentIndex < 0) return;
 
         let nextIndex: number | null = null;
@@ -80,11 +84,14 @@ export const HostSwitcher: React.FC<HostSwitcherProps> = ({ machines, activeHost
     );
 };
 
-const HostTab = React.forwardRef<HTMLButtonElement, {
-    machine: MachineView;
-    active: boolean;
-    onSelect: () => void;
-}>(({ machine, active, onSelect }, ref) => {
+const HostTab = React.forwardRef<
+    HTMLButtonElement,
+    {
+        machine: MachineView;
+        active: boolean;
+        onSelect: () => void;
+    }
+>(({ machine, active, onSelect }, ref) => {
     const { host } = machine;
     const isRemote = host.locality === 'remote';
     const isFailed = host.state === 'failed';
@@ -103,9 +110,7 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
             role="tab"
             id={tabId}
             data-host-id={host.host_id}
-            data-tour-id={
-                host.host_id === 'tour:demo-remote' ? 'host-tab-demo-remote' : undefined
-            }
+            data-tour-id={host.host_id === 'tour:demo-remote' ? 'host-tab-demo-remote' : undefined}
             aria-selected={active}
             aria-label={`${host.display_name}，${host.os}，${isRemote ? '远端' : '本机'}${isFailed ? '，连接中断' : ''}，已安装 ${installed} / ${total}`}
             tabIndex={active ? 0 : -1}
@@ -116,8 +121,8 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
                 isFailed
                     ? 'border-danger/40 bg-danger/5'
                     : active
-                        ? 'border-brand/40 bg-brand/15'
-                        : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
+                      ? 'border-brand/40 bg-brand/15'
+                      : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
             )}
         >
             {/* 圆点和主标题放同一 items-center 行,圆点严格对齐名字中线 —— 不再
@@ -130,8 +135,8 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
                         isFailed
                             ? 'bg-danger'
                             : isRemote
-                                ? 'bg-success shadow-glow-success'
-                                : 'bg-brand',
+                              ? 'bg-success shadow-glow-success'
+                              : 'bg-brand',
                     )}
                 />
                 <span
@@ -140,8 +145,8 @@ const HostTab = React.forwardRef<HTMLButtonElement, {
                         isFailed
                             ? 'text-danger'
                             : active
-                                ? 'text-text'
-                                : 'text-text-secondary group-hover:text-text',
+                              ? 'text-text'
+                              : 'text-text-secondary group-hover:text-text',
                     )}
                     title={host.display_name}
                 >

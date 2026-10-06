@@ -101,7 +101,11 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
                     <Button variant="secondary" onClick={requestClose} disabled={isRemoving}>
                         取消
                     </Button>
-                    <Button variant="danger" onClick={() => void handleConfirm()} disabled={isRemoving}>
+                    <Button
+                        variant="danger"
+                        onClick={() => void handleConfirm()}
+                        disabled={isRemoving}
+                    >
                         删除镜像
                     </Button>
                 </DialogFooter>

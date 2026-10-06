@@ -45,12 +45,21 @@ const callItem = (action: string, summary = ''): ChatItem => ({
     summary,
     raw: {},
 });
-const meta = (heartbeat: boolean, text: string): ChatItem => ({ ...base(), kind: 'meta', text, heartbeat, raw: {} });
+const meta = (heartbeat: boolean, text: string): ChatItem => ({
+    ...base(),
+    kind: 'meta',
+    text,
+    heartbeat,
+    raw: {},
+});
 const gap = (): ChatItem => ({ ...base(), kind: 'gap', fromMs: 0, toMs: 1 });
 const dropped = (): ChatItem => ({ ...base(), kind: 'dropped', count: 3 });
 const receiver = (): ChatItem => ({ ...base(), kind: 'receiver', state: { state: 'connected' } });
 
-const filter = (over: Partial<ChatFilter> = {}): ChatFilter => ({ ...DEFAULT_CHAT_FILTER, ...over });
+const filter = (over: Partial<ChatFilter> = {}): ChatFilter => ({
+    ...DEFAULT_CHAT_FILTER,
+    ...over,
+});
 const kinds = (over: Partial<ChatFilter['kinds']>) => ({ ...DEFAULT_CHAT_FILTER.kinds, ...over });
 
 describe('DEFAULT_CHAT_FILTER', () => {
@@ -92,7 +101,20 @@ describe('filterItems', () => {
     it('按种类关掉', () => {
         const items = sample();
         const only = (k: keyof ChatFilter['kinds']) =>
-            filterItems(items, filter({ kinds: { message: false, notice: false, request: false, call: false, meta: false, [k]: true }, showHeartbeat: true }))
+            filterItems(
+                items,
+                filter({
+                    kinds: {
+                        message: false,
+                        notice: false,
+                        request: false,
+                        call: false,
+                        meta: false,
+                        [k]: true,
+                    },
+                    showHeartbeat: true,
+                }),
+            )
                 .filter((i) => !['gap', 'dropped', 'receiver'].includes(i.kind))
                 .map((i) => i.kind);
         expect(only('message')).toEqual(['message']);
@@ -106,7 +128,17 @@ describe('filterItems', () => {
         const items = sample();
         const out = filterItems(
             items,
-            filter({ kinds: kinds({ message: false, notice: false, request: false, call: false, meta: false }), session: 'group:9', text: '根本搜不到' }),
+            filter({
+                kinds: kinds({
+                    message: false,
+                    notice: false,
+                    request: false,
+                    call: false,
+                    meta: false,
+                }),
+                session: 'group:9',
+                text: '根本搜不到',
+            }),
         );
         expect(out.map((i) => i.kind)).toEqual(['gap', 'dropped', 'receiver']);
     });
@@ -132,13 +164,21 @@ describe('filterItems', () => {
     });
 
     it('文字搜索不区分大小写，能搜消息正文', () => {
-        const items = [message(), message({ segments: [{ type: 'text', data: { text: 'other' } }] })];
+        const items = [
+            message(),
+            message({ segments: [{ type: 'text', data: { text: 'other' } }] }),
+        ];
         expect(filterItems(items, filter({ text: 'hello' }))).toEqual([items[0]]);
         expect(filterItems(items, filter({ text: '  WORLD ' }))).toEqual([items[0]]);
     });
 
     it('搜消息预览：图片段搜「图片」、@ 搜名字', () => {
-        const withImage = message({ segments: [{ type: 'at', data: { qq: '1', name: 'Alice' } }, { type: 'image', data: {} }] });
+        const withImage = message({
+            segments: [
+                { type: 'at', data: { qq: '1', name: 'Alice' } },
+                { type: 'image', data: {} },
+            ],
+        });
         expect(filterItems([withImage], filter({ text: '图片' }))).toHaveLength(1);
         expect(filterItems([withImage], filter({ text: 'alice' }))).toHaveLength(1);
     });
@@ -152,7 +192,12 @@ describe('filterItems', () => {
     });
 
     it('能搜通知文字、请求验证信息、调用的接口名和参数摘要、元事件文字', () => {
-        const items = [notice('group:1', '10 加入了群'), request(), callItem('get_group_member_list', 'group_id=100001'), meta(false, '生命周期：连接建立')];
+        const items = [
+            notice('group:1', '10 加入了群'),
+            request(),
+            callItem('get_group_member_list', 'group_id=100001'),
+            meta(false, '生命周期：连接建立'),
+        ];
         expect(filterItems(items, filter({ text: '加入了群' }))).toEqual([items[0]]);
         expect(filterItems(items, filter({ text: '阿强' }))).toEqual([items[1]]);
         expect(filterItems(items, filter({ text: 'MEMBER_LIST' }))).toEqual([items[2]]);
@@ -166,7 +211,12 @@ describe('filterItems', () => {
             message({ session: 'group:2', segments: [{ type: 'text', data: { text: 'ping' } }] }),
             notice('group:1', 'ping notice'),
         ];
-        expect(filterItems(items, filter({ session: 'group:1', text: 'ping', kinds: kinds({ notice: false }) }))).toEqual([items[0]]);
+        expect(
+            filterItems(
+                items,
+                filter({ session: 'group:1', text: 'ping', kinds: kinds({ notice: false }) }),
+            ),
+        ).toEqual([items[0]]);
     });
 
     it('心跳在搜索命中时也遵守 showHeartbeat', () => {

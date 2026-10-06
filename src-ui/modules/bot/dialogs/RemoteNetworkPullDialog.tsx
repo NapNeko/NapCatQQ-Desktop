@@ -41,7 +41,11 @@ export function RemoteNetworkPullDialog({
                     <div className="flex flex-col gap-3 text-sm">
                         <ChangeGroup label="远端新增" tone="success" items={preview.added} />
                         <ChangeGroup label="远端有改动" tone="warning" items={preview.changed} />
-                        <ChangeGroup label="远端没有，将删除" tone="danger" items={preview.removed} />
+                        <ChangeGroup
+                            label="远端没有，将删除"
+                            tone="danger"
+                            items={preview.removed}
+                        />
                         {preview.otherChanged && (
                             <p className="text-xs text-text-secondary">
                                 音乐签名、状态命令等连接以外的设置也和远端不同，会一并替换。

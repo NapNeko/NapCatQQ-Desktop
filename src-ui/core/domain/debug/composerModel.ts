@@ -23,12 +23,19 @@ export const EMPTY_DRAFT: ComposerDraft = { text: '', mentions: [] };
  * 文本 + @ 名单 → 消息段。reply 放最前（OneBot 要求回复段在开头），
  * 然后按文字顺序交替 text / at。同一个位置能匹配多个 @ 时取最长的（「@张三丰」优先于「@张三」）。
  */
-export function buildMessageSegments(text: string, mentions: readonly Mention[], replyTo?: number | null): Segment[] {
+export function buildMessageSegments(
+    text: string,
+    mentions: readonly Mention[],
+    replyTo?: number | null,
+): Segment[] {
     const out: Segment[] = [];
-    if (replyTo !== undefined && replyTo !== null) out.push({ type: 'reply', data: { id: String(replyTo) } });
+    if (replyTo !== undefined && replyTo !== null)
+        out.push({ type: 'reply', data: { id: String(replyTo) } });
 
     const body = text.replace(/\s+$/, '');
-    const labels = [...new Map(mentions.map((m) => [m.label, m])).values()].sort((a, b) => b.label.length - a.label.length);
+    const labels = [...new Map(mentions.map((m) => [m.label, m])).values()].sort(
+        (a, b) => b.label.length - a.label.length,
+    );
     let pos = 0;
     let buffer = '';
     const flush = () => {
@@ -55,7 +62,12 @@ export function buildMessageSegments(text: string, mentions: readonly Mention[],
  * 插进文本框的「@名字」。同名的人会撞：群里有两个同名的，或者文本里已经 @ 过另一个同名的，
  * 就在后面带上 QQ 号，发送时每个 @ 都对得上人。@全体成员不会撞。
  */
-export function mentionLabel(name: string, qq: string, existing: readonly Mention[], sameNameInGroup: number): string {
+export function mentionLabel(
+    name: string,
+    qq: string,
+    existing: readonly Mention[],
+    sameNameInGroup: number,
+): string {
     const plain = `@${name}`;
     if (qq === 'all') return plain;
     const clash = sameNameInGroup > 1 || existing.some((m) => m.label === plain && m.qq !== qq);
@@ -65,7 +77,9 @@ export function mentionLabel(name: string, qq: string, existing: readonly Mentio
 /** 有没有能发的内容：光有一个回复段、或者只有空白不算 */
 export function hasContent(segments: readonly Segment[]): boolean {
     return segments.some(
-        (s) => s.type === 'at' || (s.type === 'text' && typeof s.data.text === 'string' && s.data.text.trim() !== ''),
+        (s) =>
+            s.type === 'at' ||
+            (s.type === 'text' && typeof s.data.text === 'string' && s.data.text.trim() !== ''),
     );
 }
 
@@ -76,7 +90,10 @@ export function pruneMentions(text: string, mentions: readonly Mention[]): Menti
 }
 
 /** 光标前面正在输入的「@xxx」：返回 @ 的位置和 @ 后面已经打了的字；不在输入 @ 时返回 null */
-export function mentionQueryAt(text: string, caret: number): { start: number; query: string } | null {
+export function mentionQueryAt(
+    text: string,
+    caret: number,
+): { start: number; query: string } | null {
     const before = text.slice(0, caret);
     const m = /(?:^|[^\w@])@([^\s@]{0,24})$/u.exec(before);
     if (!m) return null;

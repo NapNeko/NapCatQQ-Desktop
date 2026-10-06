@@ -8,34 +8,28 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
 
-const trackVariants = cva(
-    'relative w-full overflow-hidden rounded-pill bg-inset',
-    {
-        variants: {
-            size: {
-                sm: 'h-[3px]',
-                md: 'h-[5px]',
-                lg: 'h-2',
-            },
+const trackVariants = cva('relative w-full overflow-hidden rounded-pill bg-inset', {
+    variants: {
+        size: {
+            sm: 'h-[3px]',
+            md: 'h-[5px]',
+            lg: 'h-2',
         },
-        defaultVariants: { size: 'md' },
     },
-);
+    defaultVariants: { size: 'md' },
+});
 
-const thumbVariants = cva(
-    'absolute inset-y-0 left-0 rounded-pill',
-    {
-        variants: {
-            tone: {
-                brand: 'bg-brand',
-                success: 'bg-success',
-                warning: 'bg-warning',
-                danger: 'bg-danger',
-            },
+const thumbVariants = cva('absolute inset-y-0 left-0 rounded-pill', {
+    variants: {
+        tone: {
+            brand: 'bg-brand',
+            success: 'bg-success',
+            warning: 'bg-warning',
+            danger: 'bg-danger',
         },
-        defaultVariants: { tone: 'brand' },
     },
-);
+    defaultVariants: { tone: 'brand' },
+});
 
 const indeterminateThumbVariants = cva(
     'absolute inset-y-0 left-0 w-[35%] rounded-pill animate-progress-indeterminate',
@@ -53,8 +47,7 @@ const indeterminateThumbVariants = cva(
 );
 
 export interface ProgressProps
-    extends Omit<HTMLAttributes<HTMLDivElement>, 'role'>,
-    VariantProps<typeof trackVariants> {
+    extends Omit<HTMLAttributes<HTMLDivElement>, 'role'>, VariantProps<typeof trackVariants> {
     /** 0-100。indeterminate=true 时忽略。 */
     value?: number;
     /** 无确定进度。常用于 race / 切镜像阶段。 */

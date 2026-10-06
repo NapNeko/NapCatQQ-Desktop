@@ -18,7 +18,11 @@ export function useDebugReceivers() {
                 return await onebotDebugService.receivers();
             } catch (err) {
                 // 同 key 顶替：轮询反复失败也只留一条
-                pushErrorBar({ key: 'debug-receivers', title: '读取事件接收状态失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: 'debug-receivers',
+                    title: '读取事件接收状态失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },

@@ -67,7 +67,9 @@ export function SnowLumaConsentDialog({
                 <DialogHeader>
                     <DialogTitle>SnowLuma 用户协议与隐私政策</DialogTitle>
                     <DialogDescription>
-                        {botId ? `Bot ${botId} 启动前需要先确认 SnowLuma 协议。` : '启动前需要先确认 SnowLuma 协议。'}
+                        {botId
+                            ? `Bot ${botId} 启动前需要先确认 SnowLuma 协议。`
+                            : '启动前需要先确认 SnowLuma 协议。'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -95,7 +97,9 @@ export function SnowLumaConsentDialog({
                 </div>
 
                 <div className="flex h-9 items-center justify-between rounded-sm border border-border-subtle bg-inset px-3 text-xs">
-                    <span className={readComplete ? 'font-medium text-success' : 'text-text-tertiary'}>
+                    <span
+                        className={readComplete ? 'font-medium text-success' : 'text-text-tertiary'}
+                    >
                         {readComplete ? '已读完协议内容' : '还没读到文末'}
                     </span>
                 </div>
@@ -117,8 +121,8 @@ export function SnowLumaConsentDialog({
                         {submitting
                             ? '提交中…'
                             : readComplete
-                                ? '同意并继续启动'
-                                : '阅读完整内容后继续'}
+                              ? '同意并继续启动'
+                              : '阅读完整内容后继续'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

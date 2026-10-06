@@ -61,31 +61,57 @@ export const MaiBotBehaviorTab: React.FC<{
     const [opened, setOpened] = useState<{ item: MaiBotBehavior; open: boolean } | null>(null);
     const q = useDebounced(search.trim());
 
-    const query = { page, page_size: PAGE_SIZE, search: q, chat_id: chatId === ALL_CHATS ? '' : chatId, filter, origin, sort };
+    const query = {
+        page,
+        page_size: PAGE_SIZE,
+        search: q,
+        chat_id: chatId === ALL_CHATS ? '' : chatId,
+        filter,
+        origin,
+        sort,
+    };
     const list = useMaiBotBehaviors(instance.id, query, live);
     const overview = useMaiBotBehaviorOverview(instance.id, live);
     const detail = useMaiBotBehavior(instance.id, live && opened ? opened.item.id : null);
 
-    if (!live) return <MaiBotLiveGate status={status} what="学到的行为" onStart={onStart} starting={starting} />;
+    if (!live)
+        return (
+            <MaiBotLiveGate
+                status={status}
+                what="学到的行为"
+                onStart={onStart}
+                starting={starting}
+            />
+        );
 
     const ov = overview.data;
     const chats = ov?.chats ?? [];
     const items = list.data?.items ?? [];
     const narrowed = !!q || filter !== 'all' || origin !== 'all' || chatId !== ALL_CHATS;
-    const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
-        set(v);
-        setPage(1);
-    };
+    const resetPage =
+        <T,>(set: (v: T) => void) =>
+        (v: T) => {
+            set(v);
+            setPage(1);
+        };
 
     const toolbar = (
         <>
             <Select
                 className={`w-40 ${SELECT_SM}`}
-                items={[{ value: ALL_CHATS, label: '全部聊天' }, ...chats.map((c) => ({ value: c.chat_id, label: c.chat_name }))]}
+                items={[
+                    { value: ALL_CHATS, label: '全部聊天' },
+                    ...chats.map((c) => ({ value: c.chat_id, label: c.chat_name })),
+                ]}
                 value={chatId}
                 onValueChange={resetPage(setChatId)}
             />
-            <SearchBox className="w-52" placeholder="搜情境、做法或结果" value={search} onChange={resetPage(setSearch)} />
+            <SearchBox
+                className="w-52"
+                placeholder="搜情境、做法或结果"
+                value={search}
+                onChange={resetPage(setSearch)}
+            />
             <Segmented
                 items={[
                     { value: 'all', label: '全部', count: ov?.total },
@@ -95,8 +121,18 @@ export const MaiBotBehaviorTab: React.FC<{
                 value={filter}
                 onChange={resetPage(setFilter)}
             />
-            <Select className={`w-32 ${SELECT_SM}`} items={ORIGINS} value={origin} onValueChange={resetPage(setOrigin)} />
-            <Select className={`w-28 ${SELECT_SM}`} items={SORTS} value={sort} onValueChange={resetPage(setSort)} />
+            <Select
+                className={`w-32 ${SELECT_SM}`}
+                items={ORIGINS}
+                value={origin}
+                onValueChange={resetPage(setOrigin)}
+            />
+            <Select
+                className={`w-28 ${SELECT_SM}`}
+                items={SORTS}
+                value={sort}
+                onValueChange={resetPage(setSort)}
+            />
             <span className="flex-1" />
             <Button
                 size="sm"
@@ -114,7 +150,11 @@ export const MaiBotBehaviorTab: React.FC<{
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-tertiary">
             <Info size={13} className="shrink-0 text-info" />
             行为学习没开：麦麦不会再学新的，已经学到的照样会用。
-            <button type="button" className="text-brand hover:underline" onClick={() => onGoTab('advanced')}>
+            <button
+                type="button"
+                className="text-brand hover:underline"
+                onClick={() => onGoTab('advanced')}
+            >
                 去打开
             </button>
         </p>
@@ -124,7 +164,14 @@ export const MaiBotBehaviorTab: React.FC<{
         <ResourcePane
             toolbar={toolbar}
             notice={notice}
-            footer={<Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onPage={setPage} />}
+            footer={
+                <Pager
+                    page={page}
+                    pageSize={PAGE_SIZE}
+                    total={list.data?.total ?? 0}
+                    onPage={setPage}
+                />
+            }
         >
             {items.length === 0 && !list.isFetching ? (
                 <EmptyHint
@@ -138,7 +185,11 @@ export const MaiBotBehaviorTab: React.FC<{
                     }
                     action={
                         !narrowed && !learningOn ? (
-                            <Button size="sm" variant="secondary" onClick={() => onGoTab('advanced')}>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => onGoTab('advanced')}
+                            >
                                 去打开行为学习
                             </Button>
                         ) : undefined

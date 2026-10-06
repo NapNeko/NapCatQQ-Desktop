@@ -6,7 +6,12 @@ import { koishiService } from '../../core/services/koishi.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
-import type { KoishiCommandRow, KoishiDatabaseTable, KoishiFileEntry, KoishiSandboxMessage } from '../../core/ipc/types';
+import type {
+    KoishiCommandRow,
+    KoishiDatabaseTable,
+    KoishiFileEntry,
+    KoishiSandboxMessage,
+} from '../../core/ipc/types';
 
 const key = (id: string, ...rest: unknown[]) => ['koishiConsole', id, ...rest] as const;
 
@@ -28,7 +33,10 @@ export function useKoishiSandboxSend(instanceId: string) {
         onSuccess: () => {
             // Bot 多半要过一会才回：先刷一次，再补一次慢的
             void qc.invalidateQueries({ queryKey: key(instanceId, 'sandbox') });
-            setTimeout(() => void qc.invalidateQueries({ queryKey: key(instanceId, 'sandbox') }), 1200);
+            setTimeout(
+                () => void qc.invalidateQueries({ queryKey: key(instanceId, 'sandbox') }),
+                1200,
+            );
         },
         onError: (e) => pushErrorBar({ title: '发送失败', content: toAppConfigError(e).message }),
     });
@@ -87,7 +95,12 @@ export function useKoishiDatabaseTables(instanceId: string, running: boolean) {
     });
 }
 
-export function useKoishiDatabaseRows(instanceId: string, table: string | null, offset: number, limit: number) {
+export function useKoishiDatabaseRows(
+    instanceId: string,
+    table: string | null,
+    offset: number,
+    limit: number,
+) {
     return useQuery<Record<string, unknown>[], Error>({
         queryKey: key(instanceId, 'dbRows', table, offset, limit),
         queryFn: () => koishiService.databaseRows(instanceId, table!, offset, limit),
@@ -116,13 +129,15 @@ export function useKoishiCommandOps(instanceId: string) {
                 pushInfoBar({ tone: 'success', title: '指令配置已保存', autoDismissMs: 2000 });
                 setTimeout(refresh, 600);
             },
-            onError: (e) => pushErrorBar({ title: '保存失败', content: toAppConfigError(e).message }),
+            onError: (e) =>
+                pushErrorBar({ title: '保存失败', content: toAppConfigError(e).message }),
         }),
         aliases: useMutation({
             mutationFn: ({ name, aliases }: { name: string; aliases: string[] }) =>
                 koishiService.commandAliases(instanceId, name, aliases),
             onSuccess: () => setTimeout(refresh, 600),
-            onError: (e) => pushErrorBar({ title: '保存失败', content: toAppConfigError(e).message }),
+            onError: (e) =>
+                pushErrorBar({ title: '保存失败', content: toAppConfigError(e).message }),
         }),
     };
 }

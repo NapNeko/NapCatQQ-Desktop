@@ -42,7 +42,8 @@ async function callAndWait(request: DebugCallRequest, waitMs = 1000): Promise<De
 }
 
 function outcomeOf(response: DebugCallResponse): DebugCallOutcome {
-    if (response.result.kind !== 'ok') throw new Error(`期望拿到回包，实际是 ${response.result.error.kind}`);
+    if (response.result.kind !== 'ok')
+        throw new Error(`期望拿到回包，实际是 ${response.result.error.kind}`);
     return response.result.outcome;
 }
 
@@ -57,7 +58,8 @@ async function open(botId: string, source: DebugChannelId = { kind: 'auto' }) {
 const seqsOf = (events: DebugEvent[]) => events.map((e) => e.seq);
 /** 后端的体积都按 UTF-8 字节算 */
 const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
-const isHeartbeat = (e: DebugEvent) => e.body.kind === 'ob11' && e.body.payload.meta_event_type === 'heartbeat';
+const isHeartbeat = (e: DebugEvent) =>
+    e.body.kind === 'ob11' && e.body.payload.meta_event_type === 'heartbeat';
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -76,7 +78,13 @@ describe('targets 与通道', () => {
         const pending = mock.targets();
         await vi.advanceTimersByTimeAsync(400);
         const targets = await pending;
-        expect(targets.map((t) => t.name)).toEqual(['小雪', 'NapCat 测试号', '容器里的 NC', 'Bot-01', 'Bot-02']);
+        expect(targets.map((t) => t.name)).toEqual([
+            '小雪',
+            'NapCat 测试号',
+            '容器里的 NC',
+            'Bot-01',
+            'Bot-02',
+        ]);
         expect(targets[0]).toMatchObject({
             backend: 'snowluma',
             host: { kind: 'local' },
@@ -88,7 +96,11 @@ describe('targets 与通道', () => {
             host: { kind: 'remote', server_id: 'srv-1' },
             qq_id: 1919810,
         });
-        expect(targets[2]).toMatchObject({ backend: 'napcat', host: { kind: 'docker', server_id: 'srv-1' }, running: false });
+        expect(targets[2]).toMatchObject({
+            backend: 'napcat',
+            host: { kind: 'docker', server_id: 'srv-1' },
+            running: false,
+        });
         // Bot 卡片上的「调试」靠这两行跳进来：id 就是机器人页那些 Bot 的 id
         expect(targets[3]).toMatchObject({
             backend: 'napcat',
@@ -96,7 +108,12 @@ describe('targets 与通道', () => {
             bot_id: '10001',
             running: true,
         });
-        expect(targets[4]).toMatchObject({ backend: 'napcat', host: { kind: 'local' }, bot_id: '10002', running: false });
+        expect(targets[4]).toMatchObject({
+            backend: 'napcat',
+            host: { kind: 'local' },
+            bot_id: '10002',
+            running: false,
+        });
     });
 
     it('机器人页预览里的启停会同步到调试台的目标，停掉时接收器也一起收', async () => {
@@ -107,7 +124,9 @@ describe('targets 与通道', () => {
 
         // 先订着 10001 的接收器，再从机器人页把它停掉：往订阅推一条「Bot 已停止」
         const batches: DebugEvent[][] = [];
-        const sub = mock.subscribe('10001', { kind: 'auto' }, (batch) => batches.push(batch.events));
+        const sub = mock.subscribe('10001', { kind: 'auto' }, (batch) =>
+            batches.push(batch.events),
+        );
         await vi.advanceTimersByTimeAsync(400);
         const { receiver } = await sub;
         expect(receiver.state).toEqual({ state: 'connected' });
@@ -115,7 +134,13 @@ describe('targets 与通道', () => {
         emitMockEvent({
             kind: 'bot_state_changed',
             v: 1,
-            snapshot: { bot_id: '10001', state: 'stopped', revision: 2, token_generation: 1, pending_restart: false },
+            snapshot: {
+                bot_id: '10001',
+                state: 'stopped',
+                revision: 2,
+                token_generation: 1,
+                pending_restart: false,
+            },
         } as DomainEvent);
         await vi.advanceTimersByTimeAsync(400);
 
@@ -124,13 +149,26 @@ describe('targets 与通道', () => {
         const after = await afterPending;
         expect(after.find((t) => t.bot_id === '10001')?.running).toBe(false);
         expect(
-            batches.flat().some((e) => e.body.kind === 'receiver' && e.body.state.state === 'stopped' && e.body.state.reason === 'Bot 已停止'),
+            batches
+                .flat()
+                .some(
+                    (e) =>
+                        e.body.kind === 'receiver' &&
+                        e.body.state.state === 'stopped' &&
+                        e.body.state.reason === 'Bot 已停止',
+                ),
         ).toBe(true);
 
         emitMockEvent({
             kind: 'bot_state_changed',
             v: 1,
-            snapshot: { bot_id: '10001', state: 'running', revision: 3, token_generation: 1, pending_restart: false },
+            snapshot: {
+                bot_id: '10001',
+                state: 'running',
+                revision: 3,
+                token_generation: 1,
+                pending_restart: false,
+            },
         } as DomainEvent);
         await vi.advanceTimersByTimeAsync(400);
         const backPending = mock.targets();
@@ -171,7 +209,11 @@ describe('targets 与通道', () => {
             'HTTP · http-default :3000',
             'WS · ws-default :3001',
         ]);
-        expect(sl.channels.map((c) => c.status.kind)).toEqual(['available', 'available', 'unknown']);
+        expect(sl.channels.map((c) => c.status.kind)).toEqual([
+            'available',
+            'available',
+            'unknown',
+        ]);
         expect(nc.channels.map((c) => c.status.kind)).toEqual(['available', 'tunneled', 'unknown']);
         expect(nc.channels[1].status).toEqual({ kind: 'tunneled', local_port: 54711 });
         expect(nc.auto_call).toEqual({ kind: 'internal' });
@@ -266,9 +308,22 @@ describe('接口目录', () => {
 
         const categories = new Set(nc.actions.map((a) => a.category));
         expect([...categories].sort()).toEqual(
-            ['account', 'extension', 'face', 'file', 'friend', 'group_admin', 'group_info', 'message', 'request', 'stream'].sort(),
+            [
+                'account',
+                'extension',
+                'face',
+                'file',
+                'friend',
+                'group_admin',
+                'group_info',
+                'message',
+                'request',
+                'stream',
+            ].sort(),
         );
-        expect(new Set(nc.actions.map((a) => a.safety))).toEqual(new Set(['read_only', 'side_effect', 'dangerous']));
+        expect(new Set(nc.actions.map((a) => a.safety))).toEqual(
+            new Set(['read_only', 'side_effect', 'dangerous']),
+        );
         expect(nc.actions.find((a) => a.name === 'upload_file_stream')?.stream).toBe(true);
         expect(nc.actions.filter((a) => a.stream)).toHaveLength(1);
     });
@@ -278,9 +333,13 @@ describe('接口目录', () => {
         const sl = await catalog(null, 'snowluma');
         expect(nc.actions.find((a) => a.name === 'nc_get_rkey')?.other_backend_present).toBe(false);
         expect(nc.actions.find((a) => a.name === 'get_group_album_list')).toBeUndefined();
-        expect(sl.actions.find((a) => a.name === 'get_group_album_list')?.other_backend_present).toBe(false);
+        expect(
+            sl.actions.find((a) => a.name === 'get_group_album_list')?.other_backend_present,
+        ).toBe(false);
         expect(sl.actions.find((a) => a.name === 'nc_get_rkey')).toBeUndefined();
-        expect(nc.actions.find((a) => a.name === 'get_login_info')?.other_backend_present).toBe(true);
+        expect(nc.actions.find((a) => a.name === 'get_login_info')?.other_backend_present).toBe(
+            true,
+        );
     });
 
     it('id 类参数：NapCat 是字符串，SnowLuma 是整数，都带 x-ncd-role', async () => {
@@ -289,7 +348,9 @@ describe('接口目录', () => {
         await vi.advanceTimersByTimeAsync(400);
         const [nc, sl] = await Promise.all([ncSpec, slSpec]);
         const prop = (spec: typeof nc, name: string) =>
-            ((spec?.params_schema.properties ?? {}) as Record<string, Record<string, unknown>>)[name];
+            ((spec?.params_schema.properties ?? {}) as Record<string, Record<string, unknown>>)[
+                name
+            ];
 
         expect(prop(nc, 'group_id')).toMatchObject({ type: 'string', 'x-ncd-role': 'group_id' });
         expect(prop(sl, 'group_id')).toMatchObject({ type: 'integer', 'x-ncd-role': 'group_id' });
@@ -309,7 +370,9 @@ describe('接口目录', () => {
         // 徽章只看真不兼容：get_group_info 两边一样；get_group_member_list 只多一个仅 NC 的可选参数，
         // 照另一边的写法照样能调通，不带徽章（这条差异只在文档页的对照表里列）
         expect(list.actions.find((a) => a.name === 'get_group_info')?.param_diff).toBe(false);
-        expect(list.actions.find((a) => a.name === 'get_group_member_list')?.param_diff).toBe(false);
+        expect(list.actions.find((a) => a.name === 'get_group_member_list')?.param_diff).toBe(
+            false,
+        );
         // set_group_ban 的 duration 一边 number 一边 integer，integer 是 number 的子集，比较前归一，不算差异
         expect(list.actions.find((a) => a.name === 'set_group_ban')?.param_diff).toBe(false);
         // move_group_file 两边把「目标目录」写成不同的必填参数名，照一边写发到另一边必失败，带徽章
@@ -321,7 +384,9 @@ describe('接口目录', () => {
         const like = mock.describe(null, 'snowluma', 'send_like');
         const upload = mock.describe(null, 'napcat', 'upload_group_file');
         await vi.advanceTimersByTimeAsync(400);
-        expect((await members)?.other_backend?.diffs).toEqual([{ name: 'no_cache', diff: { kind: 'only_here' } }]);
+        expect((await members)?.other_backend?.diffs).toEqual([
+            { name: 'no_cache', diff: { kind: 'only_here' } },
+        ]);
         expect((await members)?.other_backend?.breaking).toBe(false);
         expect((await ban)?.other_backend?.diffs).toEqual([]);
         expect((await ban)?.other_backend?.breaking).toBe(false);
@@ -344,7 +409,9 @@ describe('接口目录', () => {
     it('运行中的 Bot 用在线目录，缺的动作进「不支持」；没选 Bot 或没在跑就是快照', async () => {
         const live = await catalog(NC, 'napcat');
         expect(live.source).toBe('live');
-        expect(live.actions.filter((a) => !a.supported).map((a) => a.name)).toEqual(['fetch_custom_face']);
+        expect(live.actions.filter((a) => !a.supported).map((a) => a.name)).toEqual([
+            'fetch_custom_face',
+        ]);
         expect((await catalog(null, 'napcat')).source).toBe('snapshot');
         expect((await catalog(DOCKER, 'napcat')).source).toBe('snapshot');
     });
@@ -389,7 +456,9 @@ describe('调用', () => {
         const friends = outcomeOf(await callAndWait(req(SL, 'get_friend_list')));
         expect(friends.data as unknown[]).toHaveLength(60);
 
-        const members = outcomeOf(await callAndWait(req(NC, 'get_group_member_list', { group_id: '100001' })));
+        const members = outcomeOf(
+            await callAndWait(req(NC, 'get_group_member_list', { group_id: '100001' })),
+        );
         expect(members.data as unknown[]).toHaveLength(500);
     });
 
@@ -418,8 +487,18 @@ describe('调用', () => {
     it('回包是完整的 OB11 回复；NapCat 多一个 stream 字段，回包带 echo', async () => {
         const request = req(NC, 'get_login_info');
         const outcome = outcomeOf(await callAndWait(request));
-        expect(outcome).toMatchObject({ ok: true, status: 'ok', retcode: 0, data: { user_id: 1919810, nickname: 'NapCat 测试号' } });
-        expect(outcome.raw).toMatchObject({ status: 'ok', retcode: 0, echo: request.request_id, stream: 'normal-action' });
+        expect(outcome).toMatchObject({
+            ok: true,
+            status: 'ok',
+            retcode: 0,
+            data: { user_id: 1919810, nickname: 'NapCat 测试号' },
+        });
+        expect(outcome.raw).toMatchObject({
+            status: 'ok',
+            retcode: 0,
+            echo: request.request_id,
+            stream: 'normal-action',
+        });
         expect(outcome.size_bytes).toBeGreaterThan(20);
         expect(outcome.truncated).toBe(false);
         const sl = outcomeOf(await callAndWait(req(SL, 'get_login_info')));
@@ -444,17 +523,29 @@ describe('调用', () => {
         const missing = outcomeOf(await callAndWait(req(NC, 'send_group_msg', { message: 'hi' })));
         expect(missing).toMatchObject({ ok: false, retcode: 1400 });
         expect(missing.wording).toContain('group_id');
-        const noGroup = outcomeOf(await callAndWait(req(NC, 'get_group_info', { group_id: '999' })));
+        const noGroup = outcomeOf(
+            await callAndWait(req(NC, 'get_group_info', { group_id: '999' })),
+        );
         expect(noGroup).toMatchObject({ ok: false, retcode: 1200 });
     });
 
     it('get_msg / get_group_member_info 的成败', async () => {
         const member = outcomeOf(
-            await callAndWait(req(SL, 'get_group_member_info', { group_id: 100001, user_id: 10002 })),
+            await callAndWait(
+                req(SL, 'get_group_member_info', { group_id: 100001, user_id: 10002 }),
+            ),
         );
         expect(member.data).toMatchObject({ user_id: 10002, group_id: 100001 });
-        expect(outcomeOf(await callAndWait(req(SL, 'get_msg', { message_id: 1 }))).retcode).toBe(1200);
-        expect(outcomeOf(await callAndWait(req(SL, 'set_group_ban', { group_id: 100001, user_id: 10002, duration: 60 }))).ok).toBe(true);
+        expect(outcomeOf(await callAndWait(req(SL, 'get_msg', { message_id: 1 }))).retcode).toBe(
+            1200,
+        );
+        expect(
+            outcomeOf(
+                await callAndWait(
+                    req(SL, 'set_group_ban', { group_id: 100001, user_id: 10002, duration: 60 }),
+                ),
+            ).ok,
+        ).toBe(true);
     });
 
     it('流式接口和坏参数是没拿到回包的错误', async () => {
@@ -469,7 +560,10 @@ describe('调用', () => {
         expect(stopped.result).toEqual({ kind: 'err', error: { kind: 'bot_not_running' } });
         const missing = await callAndWait(req('nope', 'get_status'), 200);
         expect(missing.result).toEqual({ kind: 'err', error: { kind: 'bot_not_found' } });
-        const http = await callAndWait(req(NC, 'get_status', {}, { channel: { kind: 'http', name: 'http-default' } }), 200);
+        const http = await callAndWait(
+            req(NC, 'get_status', {}, { channel: { kind: 'http', name: 'http-default' } }),
+            200,
+        );
         expect(http.result).toEqual({ kind: 'err', error: { kind: 'auth_failed', status: 401 } });
         const unsupported = await callAndWait(
             req(DOCKER, 'get_status', {}, { channel: { kind: 'ws', name: 'ws-8080' } }),
@@ -494,10 +588,15 @@ describe('调用', () => {
         const pending = mock.call(request);
         await vi.advanceTimersByTimeAsync(10);
         await mock.cancel(request.request_id);
-        expect(await pending).toEqual({ request_id: request.request_id, result: { kind: 'err', error: { kind: 'cancelled' } } });
+        expect(await pending).toEqual({
+            request_id: request.request_id,
+            result: { kind: 'err', error: { kind: 'cancelled' } },
+        });
 
         await vi.advanceTimersByTimeAsync(1000);
-        const sent = events.events().filter((e) => e.body.kind === 'ob11' && e.body.payload.post_type === 'message_sent');
+        const sent = events
+            .events()
+            .filter((e) => e.body.kind === 'ob11' && e.body.payload.post_type === 'message_sent');
         expect(sent).toHaveLength(0);
         // 取消也会在事件流里留一条失败的调用记录
         const record = events.events().find((e) => e.body.kind === 'call');
@@ -514,15 +613,21 @@ describe('调用', () => {
     });
 
     it('send_group_msg 的 message_id 递增', async () => {
-        const first = outcomeOf(await callAndWait(req(SL, 'send_group_msg', { group_id: 100001, message: 'a' })));
-        const second = outcomeOf(await callAndWait(req(SL, 'send_private_msg', { user_id: 10001, message: 'b' })));
+        const first = outcomeOf(
+            await callAndWait(req(SL, 'send_group_msg', { group_id: 100001, message: 'a' })),
+        );
+        const second = outcomeOf(
+            await callAndWait(req(SL, 'send_private_msg', { user_id: 10001, message: 'b' })),
+        );
         const a = (first.data as { message_id: number }).message_id;
         const b = (second.data as { message_id: number }).message_id;
         expect(b).toBe(a + 1);
     });
 
     it('五百人的群成员列表远不到 5 MiB：不截断，data 和 raw 都是完整的', async () => {
-        const outcome = outcomeOf(await callAndWait(req(NC, 'get_group_member_list', { group_id: '100001' })));
+        const outcome = outcomeOf(
+            await callAndWait(req(NC, 'get_group_member_list', { group_id: '100001' })),
+        );
         expect(outcome.size_bytes).toBeGreaterThan(100_000);
         expect(outcome.truncated).toBe(false);
         expect(outcome.data as unknown[]).toHaveLength(500);
@@ -533,7 +638,14 @@ describe('调用', () => {
         for (const botId of [SL, NC]) {
             const request = req(botId, 'debug_huge_response');
             const outcome = outcomeOf(await callAndWait(request));
-            expect(outcome).toMatchObject({ ok: true, status: 'ok', retcode: 0, message: '', wording: '', truncated: true });
+            expect(outcome).toMatchObject({
+                ok: true,
+                status: 'ok',
+                retcode: 0,
+                message: '',
+                wording: '',
+                truncated: true,
+            });
             expect(outcome.data).toBeNull();
             expect(outcome.size_bytes).toBeGreaterThan(5 * 1024 * 1024);
             expect(typeof outcome.raw).toBe('string');
@@ -559,7 +671,9 @@ describe('调用', () => {
             huge.push(request);
         }
         const reason = '没有这次调用的完整回包：只保留最近 3 次被截断的回包';
-        const saves = huge.map((r) => mock.saveResponse(r.request_id, `C:/tmp/${r.request_id}.json`));
+        const saves = huge.map((r) =>
+            mock.saveResponse(r.request_id, `C:/tmp/${r.request_id}.json`),
+        );
         const rejected = [
             expect(mock.saveResponse(normal.request_id, 'C:/tmp/out.json')).rejects.toBe(reason),
             expect(mock.saveResponse('unknown', 'C:/tmp/out.json')).rejects.toBe(reason),
@@ -586,7 +700,11 @@ describe('事件流', () => {
         const backlog = stream.events();
         expect(backlog.length).toBeGreaterThan(10);
         expect(backlog[0].body).toMatchObject({ kind: 'receiver', state: { state: 'connecting' } });
-        expect(backlog.some((e) => e.body.kind === 'ob11' && e.body.payload.meta_event_type === 'lifecycle')).toBe(true);
+        expect(
+            backlog.some(
+                (e) => e.body.kind === 'ob11' && e.body.payload.meta_event_type === 'lifecycle',
+            ),
+        ).toBe(true);
         // 补给它的时候不该有定时器在等（实时推送还没到点）
         const backlogCount = backlog.length;
 
@@ -625,9 +743,14 @@ describe('事件流', () => {
         const seqBefore = stream.events().length;
         await vi.advanceTimersByTimeAsync(30_100);
         const live = stream.events().slice(seqBefore);
-        const beats = live.filter((e) => e.body.kind === 'ob11' && e.body.payload.meta_event_type === 'heartbeat');
+        const beats = live.filter(
+            (e) => e.body.kind === 'ob11' && e.body.payload.meta_event_type === 'heartbeat',
+        );
         expect(beats).toHaveLength(1);
-        expect(beats[0].body).toMatchObject({ kind: 'ob11', payload: { self_id: 2854196310, interval: 30000 } });
+        expect(beats[0].body).toMatchObject({
+            kind: 'ob11',
+            payload: { self_id: 2854196310, interval: 30000 },
+        });
         await mock.unsubscribe(stream.response.subscription_id);
     });
 
@@ -703,9 +826,7 @@ describe('事件流', () => {
             const stream = await open(botId);
             await vi.advanceTimersByTimeAsync(60_000);
             await mock.unsubscribe(stream.response.subscription_id);
-            return stream
-                .events()
-                .flatMap((e) => (e.body.kind === 'ob11' ? [e.body.payload] : []));
+            return stream.events().flatMap((e) => (e.body.kind === 'ob11' ? [e.body.payload] : []));
         };
         const nc = await collect(NC);
         const sl = await collect(SL);
@@ -713,7 +834,9 @@ describe('事件流', () => {
         const slMessages = sl.filter((p) => p.post_type === 'message');
         expect(ncMessages.length).toBeGreaterThan(5);
         expect(slMessages.length).toBeGreaterThan(5);
-        expect(ncMessages.every((p) => typeof p.raw === 'object' && p.message_format === 'array')).toBe(true);
+        expect(
+            ncMessages.every((p) => typeof p.raw === 'object' && p.message_format === 'array'),
+        ).toBe(true);
         expect(slMessages.every((p) => !('raw' in p) && !('message_format' in p))).toBe(true);
         expect(ncMessages.every((p) => p.self_id === 1919810)).toBe(true);
         expect(slMessages.every((p) => p.self_id === 2854196310)).toBe(true);
@@ -723,24 +846,38 @@ describe('事件流', () => {
         const stream = await open(NC);
         await vi.advanceTimersByTimeAsync(300_000);
         await mock.unsubscribe(stream.response.subscription_id);
-        const payloads = stream.events().flatMap((e) => (e.body.kind === 'ob11' ? [e.body.payload] : []));
+        const payloads = stream
+            .events()
+            .flatMap((e) => (e.body.kind === 'ob11' ? [e.body.payload] : []));
 
-        const groupMessages = payloads.filter((p) => p.post_type === 'message' && p.message_type === 'group');
+        const groupMessages = payloads.filter(
+            (p) => p.post_type === 'message' && p.message_type === 'group',
+        );
         const segmentTypes = new Set(
             groupMessages.flatMap((p) => (p.message as Array<{ type: string }>).map((s) => s.type)),
         );
-        for (const type of ['text', 'at', 'reply', 'image', 'face']) expect(segmentTypes).toContain(type);
+        for (const type of ['text', 'at', 'reply', 'image', 'face'])
+            expect(segmentTypes).toContain(type);
         // 五个人、三个群
         expect(new Set(groupMessages.map((p) => p.user_id)).size).toBeLessThanOrEqual(5);
         expect(new Set(groupMessages.map((p) => p.group_id)).size).toBe(3);
-        expect(payloads.some((p) => p.post_type === 'message' && p.message_type === 'private')).toBe(true);
-        const noticeTypes = new Set(payloads.filter((p) => p.post_type === 'notice').map((p) => p.notice_type));
-        for (const type of ['group_increase', 'group_recall', 'notify']) expect(noticeTypes).toContain(type);
-        expect(payloads.some((p) => p.post_type === 'request' && p.request_type === 'friend')).toBe(true);
+        expect(
+            payloads.some((p) => p.post_type === 'message' && p.message_type === 'private'),
+        ).toBe(true);
+        const noticeTypes = new Set(
+            payloads.filter((p) => p.post_type === 'notice').map((p) => p.notice_type),
+        );
+        for (const type of ['group_increase', 'group_recall', 'notify'])
+            expect(noticeTypes).toContain(type);
+        expect(payloads.some((p) => p.post_type === 'request' && p.request_type === 'friend')).toBe(
+            true,
+        );
         // 回复引用的是真实存在过的群消息
         const ids = new Set(groupMessages.map((p) => String(p.message_id)));
         const replies = groupMessages.flatMap((p) =>
-            (p.message as Array<{ type: string; data: { id?: string } }>).filter((s) => s.type === 'reply'),
+            (p.message as Array<{ type: string; data: { id?: string } }>).filter(
+                (s) => s.type === 'reply',
+            ),
         );
         expect(replies.length).toBeGreaterThan(0);
         expect(replies.every((s) => ids.has(String(s.data.id)))).toBe(true);
@@ -806,9 +943,22 @@ describe('事件流', () => {
         const second = await open(NC, { kind: 'ws', name: 'ws-default' });
         expect(second.response.receiver.source).toEqual({ kind: 'ws', name: 'ws-default' });
         expect(seqsOf(second.events()).length).toBe(seqBefore + 2);
-        expect(second.events().slice(-2).map((e) => e.body)).toMatchObject([
-            { kind: 'receiver', state: { state: 'connecting' }, source: { kind: 'ws', name: 'ws-default' } },
-            { kind: 'receiver', state: { state: 'connected' }, source: { kind: 'ws', name: 'ws-default' } },
+        expect(
+            second
+                .events()
+                .slice(-2)
+                .map((e) => e.body),
+        ).toMatchObject([
+            {
+                kind: 'receiver',
+                state: { state: 'connecting' },
+                source: { kind: 'ws', name: 'ws-default' },
+            },
+            {
+                kind: 'receiver',
+                state: { state: 'connected' },
+                source: { kind: 'ws', name: 'ws-default' },
+            },
         ]);
         await mock.unsubscribe(first.response.subscription_id);
         await mock.unsubscribe(second.response.subscription_id);
@@ -856,7 +1006,9 @@ describe('事件流', () => {
         expect(total).toBeGreaterThan(15);
         expect(all).toEqual(Array.from({ length: total }, (_, i) => i + 1));
 
-        expect(seqsOf(await wait(mock.readEvents(SL, 5, 10)))).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        expect(seqsOf(await wait(mock.readEvents(SL, 5, 10)))).toEqual([
+            6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        ]);
         expect(seqsOf(await wait(mock.readEvents(SL, total - 2, 100)))).toEqual([total - 1, total]);
         expect(await wait(mock.readEvents(SL, total, 100))).toEqual([]);
     });
@@ -878,14 +1030,20 @@ describe('事件流', () => {
 describe('调用和事件流联动', () => {
     it('send_group_msg：回包里的 message_id 就是事件流里 message_sent 的 message_id，另有一条调用记录', async () => {
         const stream = await open(NC);
-        const request = req(NC, 'send_group_msg', { group_id: '100001', message: [{ type: 'text', data: { text: '你好，调试台' } }] });
+        const request = req(NC, 'send_group_msg', {
+            group_id: '100001',
+            message: [{ type: 'text', data: { text: '你好，调试台' } }],
+        });
         const response = await callAndWait(request);
         const messageId = (outcomeOf(response).data as { message_id: number }).message_id;
         await vi.advanceTimersByTimeAsync(100);
 
         const events = stream.events();
         const sent = events.find(
-            (e) => e.body.kind === 'ob11' && e.body.payload.post_type === 'message_sent' && e.body.payload.message_id === messageId,
+            (e) =>
+                e.body.kind === 'ob11' &&
+                e.body.payload.post_type === 'message_sent' &&
+                e.body.payload.message_id === messageId,
         );
         expect(sent).toBeDefined();
         expect(sent?.body).toMatchObject({
@@ -900,7 +1058,9 @@ describe('调用和事件流联动', () => {
                 raw_message: '你好，调试台',
             },
         });
-        const call = events.find((e) => e.body.kind === 'call' && e.body.record.request_id === request.request_id);
+        const call = events.find(
+            (e) => e.body.kind === 'call' && e.body.record.request_id === request.request_id,
+        );
         expect(call?.body).toMatchObject({
             kind: 'call',
             record: {
@@ -920,7 +1080,9 @@ describe('调用和事件流联动', () => {
 
     it('字符串消息里的 CQ 码会被拆成消息段；私聊 message_sent 带 target_id；SnowLuma 的 message_sent 没有 raw', async () => {
         const stream = await open(SL);
-        const response = await callAndWait(req(SL, 'send_private_msg', { user_id: 10001, message: '[CQ:at,qq=10002]收到' }));
+        const response = await callAndWait(
+            req(SL, 'send_private_msg', { user_id: 10001, message: '[CQ:at,qq=10002]收到' }),
+        );
         const messageId = (outcomeOf(response).data as { message_id: number }).message_id;
         await vi.advanceTimersByTimeAsync(100);
         const sent = stream
@@ -943,50 +1105,100 @@ describe('调用和事件流联动', () => {
 
     it('失败的调用也在事件流里留记录，带原因', async () => {
         const stream = await open(NC);
-        await callAndWait(req(NC, 'get_group_member_list', { group_id: '100001' }, { timeout_ms: 100 }), 150);
-        const failed = await callAndWait(req(NC, 'send_group_msg', { group_id: '999', message: 'x' }));
+        await callAndWait(
+            req(NC, 'get_group_member_list', { group_id: '100001' }, { timeout_ms: 100 }),
+            150,
+        );
+        const failed = await callAndWait(
+            req(NC, 'send_group_msg', { group_id: '999', message: 'x' }),
+        );
         expect(outcomeOf(failed).retcode).toBe(1200);
         await vi.advanceTimersByTimeAsync(100);
-        const records = stream.events().flatMap((e) => (e.body.kind === 'call' ? [e.body.record] : []));
+        const records = stream
+            .events()
+            .flatMap((e) => (e.body.kind === 'call' ? [e.body.record] : []));
         expect(records).toHaveLength(2);
         expect(records[0]).toMatchObject({ ok: false, retcode: null, error: '等待超过 100 毫秒' });
-        expect(records[1]).toMatchObject({ ok: false, retcode: 1200, message_id: null, error: null });
+        expect(records[1]).toMatchObject({
+            ok: false,
+            retcode: 1200,
+            message_id: null,
+            error: null,
+        });
         await mock.unsubscribe(stream.response.subscription_id);
     });
 
     it('没有接收器时调用不会往事件流里写东西，但发出去的消息 get_msg 还查得到', async () => {
-        const sent = outcomeOf(await callAndWait(req(NC, 'send_group_msg', { group_id: '100001', message: '悄悄发' })));
+        const sent = outcomeOf(
+            await callAndWait(req(NC, 'send_group_msg', { group_id: '100001', message: '悄悄发' })),
+        );
         const messageId = (sent.data as { message_id: number }).message_id;
         const receivers = mock.receivers();
         await vi.advanceTimersByTimeAsync(400);
         expect(await receivers).toEqual([]);
-        const got = outcomeOf(await callAndWait(req(NC, 'get_msg', { message_id: String(messageId) })));
-        expect(got).toMatchObject({ ok: true, data: { message_id: messageId, message_type: 'group', group_id: 100001 } });
+        const got = outcomeOf(
+            await callAndWait(req(NC, 'get_msg', { message_id: String(messageId) })),
+        );
+        expect(got).toMatchObject({
+            ok: true,
+            data: { message_id: messageId, message_type: 'group', group_id: 100001 },
+        });
     });
 
     it('delete_msg 会推一条撤回通知；禁言 / 踢人也推对应通知', async () => {
         const stream = await open(SL);
-        const sent = outcomeOf(await callAndWait(req(SL, 'send_group_msg', { group_id: 100002, message: '马上撤回' })));
+        const sent = outcomeOf(
+            await callAndWait(req(SL, 'send_group_msg', { group_id: 100002, message: '马上撤回' })),
+        );
         const messageId = (sent.data as { message_id: number }).message_id;
-        expect(outcomeOf(await callAndWait(req(SL, 'delete_msg', { message_id: messageId }))).ok).toBe(true);
-        expect(outcomeOf(await callAndWait(req(SL, 'delete_msg', { message_id: messageId }))).retcode).toBe(1200);
-        await callAndWait(req(SL, 'set_group_ban', { group_id: 100001, user_id: 10002, duration: 0 }));
+        expect(
+            outcomeOf(await callAndWait(req(SL, 'delete_msg', { message_id: messageId }))).ok,
+        ).toBe(true);
+        expect(
+            outcomeOf(await callAndWait(req(SL, 'delete_msg', { message_id: messageId }))).retcode,
+        ).toBe(1200);
+        await callAndWait(
+            req(SL, 'set_group_ban', { group_id: 100001, user_id: 10002, duration: 0 }),
+        );
         await callAndWait(req(SL, 'set_group_kick', { group_id: 100001, user_id: 10003 }));
         await vi.advanceTimersByTimeAsync(100);
 
         const notices = stream
             .events()
-            .flatMap((e) => (e.body.kind === 'ob11' && e.body.payload.post_type === 'notice' ? [e.body.payload] : []));
+            .flatMap((e) =>
+                e.body.kind === 'ob11' && e.body.payload.post_type === 'notice'
+                    ? [e.body.payload]
+                    : [],
+            );
         expect(notices).toContainEqual(
-            expect.objectContaining({ notice_type: 'group_recall', message_id: messageId, group_id: 100002, operator_id: 2854196310 }),
+            expect.objectContaining({
+                notice_type: 'group_recall',
+                message_id: messageId,
+                group_id: 100002,
+                operator_id: 2854196310,
+            }),
         );
-        expect(notices).toContainEqual(expect.objectContaining({ notice_type: 'group_ban', sub_type: 'lift_ban', user_id: 10002 }));
-        expect(notices).toContainEqual(expect.objectContaining({ notice_type: 'group_decrease', sub_type: 'kick', user_id: 10003 }));
+        expect(notices).toContainEqual(
+            expect.objectContaining({
+                notice_type: 'group_ban',
+                sub_type: 'lift_ban',
+                user_id: 10002,
+            }),
+        );
+        expect(notices).toContainEqual(
+            expect.objectContaining({
+                notice_type: 'group_decrease',
+                sub_type: 'kick',
+                user_id: 10003,
+            }),
+        );
         await mock.unsubscribe(stream.response.subscription_id);
     });
 
     it('__ncdDebugFlood：一口气灌进正在被看的 Bot，一批送到；超过缓冲上限时丢最旧的并写 dropped', async () => {
-        const flood = (window as unknown as { __ncdDebugFlood?: (n: number, botId?: string) => number }).__ncdDebugFlood;
+        const flood = (
+            window as unknown as { __ncdDebugFlood?: (n: number, botId?: string) => number }
+        ).__ncdDebugFlood;
         expect(flood).toBeTypeOf('function');
         // 没人看的时候什么都不灌
         expect(flood?.(10)).toBe(0);
@@ -1008,7 +1220,9 @@ describe('调用和事件流联动', () => {
         expect(receiver.first_seq).toBeGreaterThan(1);
         const dropped = stream.events().filter((e) => e.body.kind === 'dropped');
         expect(dropped.length).toBeGreaterThan(0);
-        expect(dropped.reduce((n, e) => n + (e.body.kind === 'dropped' ? e.body.count : 0), 0)).toBe(receiver.dropped_total);
+        expect(
+            dropped.reduce((n, e) => n + (e.body.kind === 'dropped' ? e.body.count : 0), 0),
+        ).toBe(receiver.dropped_total);
         await mock.unsubscribe(stream.response.subscription_id);
         expect(vi.getTimerCount()).toBe(0);
     });
@@ -1017,18 +1231,42 @@ describe('调用和事件流联动', () => {
 describe('历史 / 工作区 / 收藏', () => {
     it('历史只记编辑器和输入框发起的调用，带参数和完整回包', async () => {
         await callAndWait(req(NC, 'get_login_info', {}, { origin: 'editor' }));
-        await callAndWait(req(NC, 'send_group_msg', { group_id: '100001', message: 'hi' }, { origin: 'composer' }));
+        await callAndWait(
+            req(
+                NC,
+                'send_group_msg',
+                { group_id: '100001', message: 'hi' },
+                { origin: 'composer' },
+            ),
+        );
         await callAndWait(req(NC, 'get_group_list', {}, { origin: 'picker' }));
         await callAndWait(req(NC, 'get_status', {}, { origin: 'other' }));
         await callAndWait(req(NC, 'get_group_info', { group_id: '999' }, { origin: 'editor' }));
 
-        const page = mock.history({ action: null, bot_id: null, ok: null, text: null, limit: 20, offset: 0 });
+        const page = mock.history({
+            action: null,
+            bot_id: null,
+            ok: null,
+            text: null,
+            limit: 20,
+            offset: 0,
+        });
         await vi.advanceTimersByTimeAsync(400);
         const { entries, total } = await page;
         expect(total).toBe(3);
         // 新的在前
-        expect(entries.map((e) => e.action)).toEqual(['get_group_info', 'send_group_msg', 'get_login_info']);
-        expect(entries[0]).toMatchObject({ ok: false, retcode: 1200, bot_name: 'NapCat 测试号', origin: 'editor', error_kind: null });
+        expect(entries.map((e) => e.action)).toEqual([
+            'get_group_info',
+            'send_group_msg',
+            'get_login_info',
+        ]);
+        expect(entries[0]).toMatchObject({
+            ok: false,
+            retcode: 1200,
+            bot_name: 'NapCat 测试号',
+            origin: 'editor',
+            error_kind: null,
+        });
         expect(entries[1].origin).toBe('composer');
 
         const entry = mock.historyEntry(entries[1].id);
@@ -1046,7 +1284,11 @@ describe('历史 / 工作区 / 收藏', () => {
     it('历史里的回包：超过 256 KiB 不存只留截断标记，被截断的调用一样；凭据类动作不存也不算截断', async () => {
         // 十万字的消息发出去再 get_msg：回包近 600 KiB，没到 5 MiB，界面拿到的是完整的，但历史里不存
         const long = '长'.repeat(100_000);
-        const sent = outcomeOf(await callAndWait(req(SL, 'send_group_msg', { group_id: 100001, message: long }, { origin: 'other' })));
+        const sent = outcomeOf(
+            await callAndWait(
+                req(SL, 'send_group_msg', { group_id: 100001, message: long }, { origin: 'other' }),
+            ),
+        );
         const messageId = (sent.data as { message_id: number }).message_id;
         const got = outcomeOf(await callAndWait(req(SL, 'get_msg', { message_id: messageId })));
         expect(got.truncated).toBe(false);
@@ -1057,16 +1299,33 @@ describe('历史 / 工作区 / 收藏', () => {
         await callAndWait(req(NC, 'nc_get_rkey'));
         await callAndWait(req(NC, 'get_login_info'));
 
-        const page = mock.history({ action: null, bot_id: null, ok: null, text: null, limit: 20, offset: 0 });
+        const page = mock.history({
+            action: null,
+            bot_id: null,
+            ok: null,
+            text: null,
+            limit: 20,
+            offset: 0,
+        });
         await vi.advanceTimersByTimeAsync(400);
         const { entries } = await page;
-        expect(entries.map((e) => e.action)).toEqual(['get_login_info', 'nc_get_rkey', 'debug_huge_response', 'get_msg']);
+        expect(entries.map((e) => e.action)).toEqual([
+            'get_login_info',
+            'nc_get_rkey',
+            'debug_huge_response',
+            'get_msg',
+        ]);
         const detail = entries.map((e) => mock.historyEntry(e.id));
         await vi.advanceTimersByTimeAsync(400);
         const [login, rkey, big, msg] = await Promise.all(detail);
         expect(login).toMatchObject({ response: { status: 'ok' }, response_truncated: false });
         expect(rkey).toMatchObject({ ok: true, response: null, response_truncated: false });
-        expect(big).toMatchObject({ ok: true, retcode: 0, response: null, response_truncated: true });
+        expect(big).toMatchObject({
+            ok: true,
+            retcode: 0,
+            response: null,
+            response_truncated: true,
+        });
         expect(msg).toMatchObject({ ok: true, response: null, response_truncated: true });
     });
 
@@ -1074,11 +1333,22 @@ describe('历史 / 工作区 / 收藏', () => {
         await callAndWait(req(NC, 'get_login_info'));
         await callAndWait(req(SL, 'get_login_info'));
         await callAndWait(req(SL, 'get_group_info', { group_id: '999' }));
-        await callAndWait(req(NC, 'get_group_member_list', { group_id: '100001' }, { timeout_ms: 50 }), 100);
+        await callAndWait(
+            req(NC, 'get_group_member_list', { group_id: '100001' }, { timeout_ms: 50 }),
+            100,
+        );
         await callAndWait(req(DOCKER, 'get_status'), 100);
 
         const query = (extra: Partial<Parameters<typeof mock.history>[0]>) =>
-            mock.history({ action: null, bot_id: null, ok: null, text: null, limit: 50, offset: 0, ...extra });
+            mock.history({
+                action: null,
+                bot_id: null,
+                ok: null,
+                text: null,
+                limit: 50,
+                offset: 0,
+                ...extra,
+            });
         const run = async <T>(p: Promise<T>) => {
             await vi.advanceTimersByTimeAsync(400);
             return p;
@@ -1089,7 +1359,11 @@ describe('历史 / 工作区 / 收藏', () => {
         expect((await run(query({ bot_id: SL }))).total).toBe(2);
         expect((await run(query({ ok: true }))).total).toBe(2);
         const failed = await run(query({ ok: false }));
-        expect(failed.entries.map((e) => e.error_kind)).toEqual(['bot_not_running', 'timeout', null]);
+        expect(failed.entries.map((e) => e.error_kind)).toEqual([
+            'bot_not_running',
+            'timeout',
+            null,
+        ]);
         expect((await run(query({ text: '999' }))).total).toBe(1);
         expect((await run(query({ text: '小雪' }))).total).toBe(2);
         const paged = await run(query({ limit: 2, offset: 1 }));
@@ -1105,13 +1379,26 @@ describe('历史 / 工作区 / 收藏', () => {
         const initial = mock.workspace();
         await vi.advanceTimersByTimeAsync(400);
         const workspace = await initial;
-        expect(workspace).toMatchObject({ version: 1, tabs: [], selected_bot: null, layout: { right_view: 'chat' } });
+        expect(workspace).toMatchObject({
+            version: 1,
+            tabs: [],
+            selected_bot: null,
+            layout: { right_view: 'chat' },
+        });
 
         const edited = {
             ...workspace,
             selected_bot: NC,
             recent_actions: ['send_group_msg'],
-            tabs: [{ id: 't1', action: 'get_status', params_text: '{}', timeout_ms: null, channel: null }],
+            tabs: [
+                {
+                    id: 't1',
+                    action: 'get_status',
+                    params_text: '{}',
+                    timeout_ms: null,
+                    channel: null,
+                },
+            ],
             active_tab: 't1',
         };
         const saving = mock.saveWorkspace(edited);
@@ -1120,7 +1407,11 @@ describe('历史 / 工作区 / 收藏', () => {
         await saving;
         const reloaded = mock.workspace();
         await vi.advanceTimersByTimeAsync(400);
-        expect(await reloaded).toMatchObject({ selected_bot: NC, recent_actions: ['send_group_msg'], active_tab: 't1' });
+        expect(await reloaded).toMatchObject({
+            selected_bot: NC,
+            recent_actions: ['send_group_msg'],
+            active_tab: 't1',
+        });
     });
 
     it('收藏有一份预置，存 / 导出 / 导入都在内存里走通，导入是并进去且 id 撞了会改名', async () => {
@@ -1162,7 +1453,11 @@ describe('历史 / 工作区 / 收藏', () => {
         const first = mock.storageNotices();
         await vi.advanceTimersByTimeAsync(400);
         expect(await first).toEqual([
-            { file: 'history.jsonl', moved_to: 'history.jsonl.broken-2026-09-30', reason: '第 3,812 行不是合法的 JSON' },
+            {
+                file: 'history.jsonl',
+                moved_to: 'history.jsonl.broken-2026-09-30',
+                reason: '第 3,812 行不是合法的 JSON',
+            },
         ]);
         const second = mock.storageNotices();
         await vi.advanceTimersByTimeAsync(400);
@@ -1173,13 +1468,27 @@ describe('历史 / 工作区 / 收藏', () => {
 describe('参数瘦身与事件流过滤（照后端规则）', () => {
     it('历史里的参数：超长字符串换成占位、整体过大的收成摘要，动过都标 params_truncated', async () => {
         const big = 'x'.repeat(70 * 1024);
-        await callAndWait(req(NC, 'send_group_msg', { group_id: 100001, message: 'm', file: big }, { origin: 'editor' }));
+        await callAndWait(
+            req(
+                NC,
+                'send_group_msg',
+                { group_id: 100001, message: 'm', file: big },
+                { origin: 'editor' },
+            ),
+        );
         // 几千个不大不小的字段：各自没超，加起来超过整体上限，整份收成摘要
         const wide: Record<string, unknown> = { group_id: 100001, message: 'm' };
         for (let i = 0; i < 5000; i += 1) wide[`k${i}`] = 'w'.repeat(60);
         await callAndWait(req(NC, 'send_group_msg', wide, { origin: 'editor' }));
 
-        const page = mock.history({ action: null, bot_id: null, ok: null, text: null, limit: 10, offset: 0 });
+        const page = mock.history({
+            action: null,
+            bot_id: null,
+            ok: null,
+            text: null,
+            limit: 10,
+            offset: 0,
+        });
         await vi.advanceTimersByTimeAsync(400);
         const { entries } = await page;
         expect(entries).toHaveLength(2);
@@ -1198,7 +1507,14 @@ describe('参数瘦身与事件流过滤（照后端规则）', () => {
         // 没瘦身的照旧不标
         await callAndWait(req(NC, 'get_login_info', {}, { origin: 'editor' }));
         const slimPage = await (async () => {
-            const p = mock.history({ action: 'get_login_info', bot_id: null, ok: null, text: null, limit: 10, offset: 0 });
+            const p = mock.history({
+                action: 'get_login_info',
+                bot_id: null,
+                ok: null,
+                text: null,
+                limit: 10,
+                offset: 0,
+            });
             await vi.advanceTimersByTimeAsync(400);
             return p;
         })();
@@ -1209,10 +1525,19 @@ describe('参数瘦身与事件流过滤（照后端规则）', () => {
 
     it('事件流里的调用记录同样瘦身；picker 的查询不进事件流', async () => {
         const stream = await open(NC);
-        await callAndWait(req(NC, 'send_group_msg', { group_id: 100001, message: 'm', file: 'y'.repeat(70 * 1024) }, { origin: 'editor' }));
+        await callAndWait(
+            req(
+                NC,
+                'send_group_msg',
+                { group_id: 100001, message: 'm', file: 'y'.repeat(70 * 1024) },
+                { origin: 'editor' },
+            ),
+        );
         await callAndWait(req(NC, 'get_group_list', {}, { origin: 'picker' }));
 
-        const records = stream.events().flatMap((e) => (e.body.kind === 'call' ? [e.body.record] : []));
+        const records = stream
+            .events()
+            .flatMap((e) => (e.body.kind === 'call' ? [e.body.record] : []));
         // 只有编辑器那次：picker 拉群列表不冒调用小标签
         expect(records).toHaveLength(1);
         expect(JSON.stringify(records[0].params)).toContain('<已省略 ');

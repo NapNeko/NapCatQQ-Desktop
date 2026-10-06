@@ -26,7 +26,17 @@ function matches(query: string, ...texts: (string | undefined)[]): boolean {
     return texts.some((t) => t?.toLowerCase().includes(q));
 }
 
-function Row({ label, command, onPick, onRemove }: { label?: string; command: string; onPick(): void; onRemove?(): void }) {
+function Row({
+    label,
+    command,
+    onPick,
+    onRemove,
+}: {
+    label?: string;
+    command: string;
+    onPick(): void;
+    onRemove?(): void;
+}) {
     return (
         <div className="group relative flex items-center rounded-xs hover:bg-inset focus-within:bg-inset">
             <button
@@ -35,11 +45,15 @@ function Row({ label, command, onPick, onRemove }: { label?: string; command: st
                 title={`填进输入行：${command}`}
                 className="flex min-w-0 flex-1 flex-col gap-px px-2 py-1.5 text-left outline-none"
             >
-                {label && <span className="truncate text-[12px] leading-tight text-text">{label}</span>}
+                {label && (
+                    <span className="truncate text-[12px] leading-tight text-text">{label}</span>
+                )}
                 <span
                     className={cn(
                         'truncate font-mono leading-tight',
-                        label ? 'text-[11px] text-text-tertiary' : 'text-[12px] text-text-secondary',
+                        label
+                            ? 'text-[11px] text-text-tertiary'
+                            : 'text-[12px] text-text-secondary',
                     )}
                 >
                     {command}
@@ -83,7 +97,9 @@ function Section({
             <div className="flex h-6 items-center gap-1.5 px-2 text-[11px] font-medium text-text-tertiary">
                 {icon}
                 <span>{title}</span>
-                {count ? <span className="tabular-nums font-normal opacity-70">{count}</span> : null}
+                {count ? (
+                    <span className="tabular-nums font-normal opacity-70">{count}</span>
+                ) : null}
                 <span className="flex-1" />
                 {action}
             </div>
@@ -102,7 +118,9 @@ function AddForm({ onDone }: { onDone(): void }) {
     const mine = useTerminalPrefs().snippets;
     const save = () => {
         if (!command.trim()) return;
-        terminalPrefs.patch({ snippets: [...mine, { label: label.trim(), command: command.trim() }] });
+        terminalPrefs.patch({
+            snippets: [...mine, { label: label.trim(), command: command.trim() }],
+        });
         onDone();
     };
     return (
@@ -145,7 +163,13 @@ function AddForm({ onDone }: { onDone(): void }) {
                 <Button size="sm" variant="ghost" className="h-6 px-2" onClick={onDone}>
                     取消
                 </Button>
-                <Button size="sm" variant="primary" type="submit" className="h-6 px-2.5" disabled={!command.trim()}>
+                <Button
+                    size="sm"
+                    variant="primary"
+                    type="submit"
+                    className="h-6 px-2.5"
+                    disabled={!command.trim()}
+                >
                     存下
                 </Button>
             </div>
@@ -162,13 +186,20 @@ export function TerminalCommandsMenu({ targetKey, snippets, onPick }: Props) {
     const recents = useTerminalRecents(targetKey);
 
     const q = query.trim();
-    const shownPresets = useMemo(() => snippets.filter((s) => matches(q, s.label, s.command)), [snippets, q]);
+    const shownPresets = useMemo(
+        () => snippets.filter((s) => matches(q, s.label, s.command)),
+        [snippets, q],
+    );
     const shownMine = useMemo(
         () => mine.map((s, i) => ({ s, i })).filter(({ s }) => matches(q, s.label, s.command)),
         [mine, q],
     );
-    const shownRecents = useMemo(() => recents.filter((c) => matches(q, c)).slice(0, 20), [recents, q]);
-    const nothing = q && shownPresets.length === 0 && shownMine.length === 0 && shownRecents.length === 0;
+    const shownRecents = useMemo(
+        () => recents.filter((c) => matches(q, c)).slice(0, 20),
+        [recents, q],
+    );
+    const nothing =
+        q && shownPresets.length === 0 && shownMine.length === 0 && shownRecents.length === 0;
 
     const pick = (cmd: string) => {
         setOpen(false);
@@ -193,7 +224,9 @@ export function TerminalCommandsMenu({ targetKey, snippets, onPick }: Props) {
                     aria-pressed={open}
                     className={cn(
                         'flex h-6 items-center gap-1 rounded-xs px-1.5 text-[11px] transition-colors',
-                        open ? 'bg-inset text-text' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                        open
+                            ? 'bg-inset text-text'
+                            : 'text-text-tertiary hover:bg-inset hover:text-text',
                     )}
                 >
                     <Sparkles size={12} />
@@ -216,7 +249,11 @@ export function TerminalCommandsMenu({ targetKey, snippets, onPick }: Props) {
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => {
                             // 筛出来只剩一条时回车直接填
-                            const only = [...shownPresets.map((s) => s.command), ...shownMine.map((m) => m.s.command), ...shownRecents];
+                            const only = [
+                                ...shownPresets.map((s) => s.command),
+                                ...shownMine.map((m) => m.s.command),
+                                ...shownRecents,
+                            ];
                             if (e.key === 'Enter' && q && only.length > 0) {
                                 e.preventDefault();
                                 pick(only[0] as string);
@@ -246,9 +283,18 @@ export function TerminalCommandsMenu({ targetKey, snippets, onPick }: Props) {
                     {nothing && <Hint>没有匹配「{q}」的命令</Hint>}
 
                     {shownPresets.length > 0 && (
-                        <Section icon={<Sparkles size={11} />} title="常用" count={shownPresets.length}>
+                        <Section
+                            icon={<Sparkles size={11} />}
+                            title="常用"
+                            count={shownPresets.length}
+                        >
                             {shownPresets.map((s) => (
-                                <Row key={`${s.label}-${s.command}`} label={s.label} command={s.command} onPick={() => pick(s.command)} />
+                                <Row
+                                    key={`${s.label}-${s.command}`}
+                                    label={s.label}
+                                    command={s.command}
+                                    onPick={() => pick(s.command)}
+                                />
                             ))}
                         </Section>
                     )}
@@ -278,10 +324,16 @@ export function TerminalCommandsMenu({ targetKey, snippets, onPick }: Props) {
                                     label={s.label || undefined}
                                     command={s.command}
                                     onPick={() => pick(s.command)}
-                                    onRemove={() => terminalPrefs.patch({ snippets: mine.filter((_, j) => j !== i) })}
+                                    onRemove={() =>
+                                        terminalPrefs.patch({
+                                            snippets: mine.filter((_, j) => j !== i),
+                                        })
+                                    }
                                 />
                             ))}
-                            {mine.length === 0 && !adding && <Hint>常敲的命令存在这里，所有终端都能用</Hint>}
+                            {mine.length === 0 && !adding && (
+                                <Hint>常敲的命令存在这里，所有终端都能用</Hint>
+                            )}
                         </Section>
                     )}
 
@@ -306,7 +358,9 @@ export function TerminalCommandsMenu({ targetKey, snippets, onPick }: Props) {
                             {shownRecents.map((cmd) => (
                                 <Row key={cmd} command={cmd} onPick={() => pick(cmd)} />
                             ))}
-                            {recents.length === 0 && <Hint>还没有。带密码、密钥的命令和空格开头的命令不记</Hint>}
+                            {recents.length === 0 && (
+                                <Hint>还没有。带密码、密钥的命令和空格开头的命令不记</Hint>
+                            )}
                         </Section>
                     )}
                 </div>

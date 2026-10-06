@@ -12,7 +12,14 @@ function asBool(v: unknown): boolean | null {
     return null;
 }
 
-export function BooleanField({ field, value, onChange, inputId, describedBy, disabled }: FieldProps) {
+export function BooleanField({
+    field,
+    value,
+    onChange,
+    inputId,
+    describedBy,
+    disabled,
+}: FieldProps) {
     const current = asBool(value);
     const unset = value === undefined;
     const fallback = asBool(field.defaultValue);
@@ -31,11 +38,23 @@ export function BooleanField({ field, value, onChange, inputId, describedBy, dis
                 aria-describedby={describedBy}
                 className={unset ? 'opacity-60' : undefined}
             />
-            <span className={unset || current === null ? 'text-xs text-text-tertiary' : 'font-mono text-[13px] text-text'}>
+            <span
+                className={
+                    unset || current === null
+                        ? 'text-xs text-text-tertiary'
+                        : 'font-mono text-[13px] text-text'
+                }
+            >
                 {state}
             </span>
             {!unset && !field.required && (
-                <IconTip icon={X} label="改回不填" size="sm" onClick={() => onChange(undefined)} disabled={disabled} />
+                <IconTip
+                    icon={X}
+                    label="改回不填"
+                    size="sm"
+                    onClick={() => onChange(undefined)}
+                    disabled={disabled}
+                />
             )}
         </div>
     );

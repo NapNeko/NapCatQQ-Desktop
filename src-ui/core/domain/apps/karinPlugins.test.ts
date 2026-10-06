@@ -30,7 +30,12 @@ const market: KarinPluginMarketEntry[] = [
 describe('filterKarinPlugins', () => {
     it('filters by query and kind', () => {
         const installed = [
-            { name: '@karinjs/plugin-basic', kind: 'npm' as const, version: '1.0.0', enabled: true },
+            {
+                name: '@karinjs/plugin-basic',
+                kind: 'npm' as const,
+                version: '1.0.0',
+                enabled: true,
+            },
         ];
         const q = filterKarinPlugins(market, installed, 'basic', 'all');
         expect(q).toHaveLength(1);
@@ -40,7 +45,9 @@ describe('filterKarinPlugins', () => {
     });
 
     it('keeps installed-only plugins', () => {
-        const extra = [{ name: 'hand-made.js', kind: 'app' as const, version: undefined, enabled: true }];
+        const extra = [
+            { name: 'hand-made.js', kind: 'app' as const, version: undefined, enabled: true },
+        ];
         const rows = filterKarinPlugins(market, extra, 'hand', 'all');
         expect(rows[0].name).toBe('hand-made.js');
         expect(rows[0].installed).toBe(true);
@@ -51,9 +58,17 @@ describe('overlayKarinInstalled', () => {
     it('treats a successful install as installed until scan catches up', () => {
         const rows = filterKarinPlugins(
             market,
-            overlayKarinInstalled([], [
-                { pluginName: '@karinjs/plugin-basic', action: 'install', status: 'success', atMs: 2 },
-            ]),
+            overlayKarinInstalled(
+                [],
+                [
+                    {
+                        pluginName: '@karinjs/plugin-basic',
+                        action: 'install',
+                        status: 'success',
+                        atMs: 2,
+                    },
+                ],
+            ),
             '',
             'all',
         );
@@ -62,11 +77,21 @@ describe('overlayKarinInstalled', () => {
 
     it('lets a later uninstall win', () => {
         const scanned = [
-            { name: '@karinjs/plugin-basic', kind: 'npm' as const, version: '1.0.0', enabled: true },
+            {
+                name: '@karinjs/plugin-basic',
+                kind: 'npm' as const,
+                version: '1.0.0',
+                enabled: true,
+            },
         ];
         const next = overlayKarinInstalled(scanned, [
             { pluginName: '@karinjs/plugin-basic', action: 'install', status: 'success', atMs: 1 },
-            { pluginName: '@karinjs/plugin-basic', action: 'uninstall', status: 'success', atMs: 2 },
+            {
+                pluginName: '@karinjs/plugin-basic',
+                action: 'uninstall',
+                status: 'success',
+                atMs: 2,
+            },
         ]);
         expect(next).toHaveLength(0);
     });

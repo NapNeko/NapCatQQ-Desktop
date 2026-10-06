@@ -27,15 +27,22 @@ export const TermsConsentDialogHost: React.FC = () => {
                         <DialogHeader>
                             <DialogTitle>启动前请阅读并同意</DialogTitle>
                             <DialogDescription>
-                                {state.instanceName} 的上游条款有新版本或还没同意过，同意后才会启动。
+                                {state.instanceName}{' '}
+                                的上游条款有新版本或还没同意过，同意后才会启动。
                             </DialogDescription>
                         </DialogHeader>
                         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
                             {state.terms.map((t) => (
                                 <section key={t.id} className="flex flex-col gap-2">
                                     <div className="flex items-center justify-between gap-2">
-                                        <h3 className="text-sm font-semibold text-text">{t.title}</h3>
-                                        <Button variant="ghost" size="sm" onClick={() => open(t.url)}>
+                                        <h3 className="text-sm font-semibold text-text">
+                                            {t.title}
+                                        </h3>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => open(t.url)}
+                                        >
                                             <ActionMotionIcon icon={ExternalLink} size={13} />
                                             在网页中查看
                                         </Button>

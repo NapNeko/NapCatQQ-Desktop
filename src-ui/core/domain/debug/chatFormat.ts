@@ -42,7 +42,9 @@ export function dayLabel(ms: number, now: number = Date.now()): string {
     yesterday.setDate(today.getDate() - 1);
     if (d.toDateString() === yesterday.toDateString()) return `昨天 ${hm}`;
     const md = `${d.getMonth() + 1}月${d.getDate()}日`;
-    return d.getFullYear() === today.getFullYear() ? `${md} ${hm}` : `${d.getFullYear()}年${md} ${hm}`;
+    return d.getFullYear() === today.getFullYear()
+        ? `${md} ${hm}`
+        : `${d.getFullYear()}年${md} ${hm}`;
 }
 
 /** 两条之间隔了超过 5 分钟（或跨了天）就插一条时间分隔线；第一条总是插 */
@@ -75,7 +77,9 @@ export function needsTimeSeparator(prevAt: number | undefined, at: number): bool
 export function gapRange(fromMs: number, toMs: number): string {
     const sameDay = new Date(fromMs).toDateString() === new Date(toMs).toDateString();
     const from = clockTime(fromMs);
-    const to = sameDay ? clockTime(toMs) : `${dayLabel(toMs).replace(/ \d\d:\d\d$/, '')} ${clockTime(toMs)}`;
+    const to = sameDay
+        ? clockTime(toMs)
+        : `${dayLabel(toMs).replace(/ \d\d:\d\d$/, '')} ${clockTime(toMs)}`;
     return `${from}–${to}`;
 }
 
@@ -110,7 +114,8 @@ export const ROLE_LABEL: Record<string, string> = { owner: '群主', admin: '管
 // 调用状态行（自己发的气泡下面、调用小标签）
 // ---------------------------------------------------------------------------
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * 气泡是哪个发送动作发的。调用状态里记着真正的动作（send_msg、转发都对得上，
@@ -130,11 +135,16 @@ export interface CallLine {
 
 export function callLine(call: ChatCallState): CallLine {
     if (call.ok === false) {
-        const head = call.retcode !== null && call.retcode !== undefined ? `✗ retcode ${call.retcode}` : '✗ 失败';
+        const head =
+            call.retcode !== null && call.retcode !== undefined
+                ? `✗ retcode ${call.retcode}`
+                : '✗ 失败';
         const why = call.wording || call.error;
         return { ok: false, text: why ? `${head} · ${why}` : head };
     }
-    const parts = [call.elapsedMs !== null && call.elapsedMs !== undefined ? `✓ ${call.elapsedMs}ms` : '✓'];
+    const parts = [
+        call.elapsedMs !== null && call.elapsedMs !== undefined ? `✓ ${call.elapsedMs}ms` : '✓',
+    ];
     if (call.channel) parts.push(channelShortLabel(call.channel));
     return { ok: true, text: parts.join(' · ') };
 }
@@ -155,9 +165,11 @@ export function originLabel(origin: string): string {
 // 列表模式的一行
 // ---------------------------------------------------------------------------
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+const str = (v: unknown): string =>
+    typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
-export type RowTone = 'message' | 'notice' | 'request' | 'call' | 'meta' | 'warn' | 'danger' | 'muted';
+export type RowTone =
+    'message' | 'notice' | 'request' | 'call' | 'meta' | 'warn' | 'danger' | 'muted';
 
 export interface ListRow {
     /** post_type/detail 那一列 */
@@ -207,12 +219,24 @@ export function listRowOf(item: ChatItem): ListRow {
         }
         case 'meta': {
             const raw = isRecord(item.raw) ? item.raw : {};
-            return { type: `meta_event/${str(raw.meta_event_type) || '?'}`, summary: item.text, tone: 'meta' };
+            return {
+                type: `meta_event/${str(raw.meta_event_type) || '?'}`,
+                summary: item.text,
+                tone: 'meta',
+            };
         }
         case 'gap':
-            return { type: 'gap', summary: `${gapRange(item.fromMs, item.toMs)} 断开期间可能漏了事件`, tone: 'warn' };
+            return {
+                type: 'gap',
+                summary: `${gapRange(item.fromMs, item.toMs)} 断开期间可能漏了事件`,
+                tone: 'warn',
+            };
         case 'dropped':
-            return { type: 'dropped', summary: `上游丢了 ${item.count} 条（接收太慢）`, tone: 'warn' };
+            return {
+                type: 'dropped',
+                summary: `上游丢了 ${item.count} 条（接收太慢）`,
+                tone: 'warn',
+            };
         case 'receiver':
             return { type: 'receiver', summary: receiverStateCopy(item.state).text, tone: 'muted' };
     }
@@ -263,9 +287,7 @@ const FIELD_KIND_TO_ID: Partial<Record<FormField['kind'], keyof FillIds>> = {
     message_id: 'message_id',
 };
 
-export type FillPlan =
-    | { ok: true; text: string; filled: string[] }
-    | { ok: false; reason: string };
+export type FillPlan = { ok: true; text: string; filled: string[] } | { ok: false; reason: string };
 
 /**
  * 算出填完之后的参数文本。认的参数：动作说明里 role 是群 / 好友 / 成员 / 消息 id 的字段，
@@ -274,7 +296,8 @@ export type FillPlan =
  */
 export function planFill(paramsText: string, fields: readonly FormField[], ids: FillIds): FillPlan {
     const parsed = parseParamsText(paramsText);
-    if (!parsed.ok) return { ok: false, reason: `当前请求的 JSON 第 ${parsed.line} 行有错，改好再填` };
+    if (!parsed.ok)
+        return { ok: false, reason: `当前请求的 JSON 第 ${parsed.line} 行有错，改好再填` };
     const current = parsed.value;
     const targets = new Map<string, { id: keyof FillIds; field?: FormField }>();
     for (const f of fields) {
@@ -284,7 +307,8 @@ export function planFill(paramsText: string, fields: readonly FormField[], ids: 
     for (const name of ['group_id', 'user_id', 'message_id'] as const) {
         if (targets.has(name) || ids[name] === undefined) continue;
         const field = fields.find((f) => f.name === name);
-        if (field || Object.prototype.hasOwnProperty.call(current, name)) targets.set(name, { id: name, field });
+        if (field || Object.prototype.hasOwnProperty.call(current, name))
+            targets.set(name, { id: name, field });
     }
     if (targets.size === 0) {
         return { ok: false, reason: '当前请求里没有能填的群号 / QQ 号 / 消息 id 参数' };
@@ -311,7 +335,8 @@ const sizeFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 });
 
 /** 文件大小：上游给的可能是数字也可能是数字串 */
 export function fileSizeLabel(v: unknown): string {
-    const n = typeof v === 'number' ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : NaN;
+    const n =
+        typeof v === 'number' ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : NaN;
     if (!Number.isFinite(n) || n < 0) return '';
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${sizeFormat.format(n / 1024)} KB`;

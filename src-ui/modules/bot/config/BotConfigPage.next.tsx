@@ -21,10 +21,7 @@ import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { useBotConfig } from '../../../hooks/bot/useBotConfig';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
-import {
-    isBotRunning,
-    isBotStarting,
-} from '../../../core/domain/bot/status';
+import { isBotRunning, isBotStarting } from '../../../core/domain/bot/status';
 import {
     createDefaultBotConfig,
     validateBotConfig,
@@ -50,10 +47,7 @@ import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
 import type { SnowLumaAppConfig } from '../../../core/ipc/generated/domain/SnowLumaAppConfig';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
-import {
-    ActionMotionIcon,
-    infoToneMotion,
-} from '../../../shared/ui/motion';
+import { ActionMotionIcon, infoToneMotion } from '../../../shared/ui/motion';
 import { replaceAppLinkClients } from '../../../core/domain/bot/connections';
 import { IdentityTab } from './next/IdentityTab';
 import { ConnectionsTab } from './next/ConnectionsTab';
@@ -108,16 +102,10 @@ export function BotConfigPageNext({
 
     const [activeTab, setActiveTab] = useState<TabValue>('identity');
     const [formData, setFormData] = useState<BotConfig>(createDefaultBotConfig());
-    const dockerGateMap = useMemo(
-        () => ({ __form__: formData }),
-        [formData],
-    );
+    const dockerGateMap = useMemo(() => ({ __form__: formData }), [formData]);
     const { saveBlock: dockerSaveBlock } = useBotDockerStartGate(dockerGateMap);
 
-    const runtimeGateMap = useMemo(
-        () => ({ __form__: formData }),
-        [formData],
-    );
+    const runtimeGateMap = useMemo(() => ({ __form__: formData }), [formData]);
     const { saveBlock: runtimeSaveBlock } = useBotRuntimeStartGate(runtimeGateMap);
     const [pristine, setPristine] = useState<BotConfig>(createDefaultBotConfig());
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -162,13 +150,13 @@ export function BotConfigPageNext({
     // 跟 BotListPage 共享同一份 query；通常已经在 cache 里，没有额外网络开销。
     const { data: snapshots = [] } = useBotSnapshots();
     const currentSnapshot = useMemo(
-        () => (botId ? snapshots.find((s) => s.bot_id === botId) ?? null : null),
+        () => (botId ? (snapshots.find((s) => s.bot_id === botId) ?? null) : null),
         [snapshots, botId],
     );
     const isRunning = currentSnapshot
         ? isBotRunning(currentSnapshot.state) ||
-        isBotStarting(currentSnapshot.state) ||
-        currentSnapshot.state === 'stopping'
+          isBotStarting(currentSnapshot.state) ||
+          currentSnapshot.state === 'stopping'
         : false;
 
     const {
@@ -215,8 +203,7 @@ export function BotConfigPageNext({
 
     const dirty = useMemo(() => {
         const botDirty = JSON.stringify(formData) !== JSON.stringify(pristine);
-        const snowlumaDirty =
-            JSON.stringify(snowlumaApp) !== JSON.stringify(snowlumaAppPristine);
+        const snowlumaDirty = JSON.stringify(snowlumaApp) !== JSON.stringify(snowlumaAppPristine);
         return botDirty || snowlumaDirty;
     }, [formData, pristine, snowlumaApp, snowlumaAppPristine]);
     const dirtyRef = useRef(dirty);
@@ -382,7 +369,7 @@ export function BotConfigPageNext({
             },
             statusCommand:
                 formData.bot.backend_type === 'snowluma'
-                    ? formData.statusCommand ?? defaultStatusCommandConfig()
+                    ? (formData.statusCommand ?? defaultStatusCommandConfig())
                     : formData.statusCommand,
         };
 
@@ -493,7 +480,14 @@ export function BotConfigPageNext({
             saveWithDecisions(pendingSaveData, decisions);
             setPendingSaveData(null);
         },
-        [pendingSaveData, saveWithDecisions, snowlumaApp, snowlumaAppPristine, dockerSaveBlock, runtimeSaveBlock],
+        [
+            pendingSaveData,
+            saveWithDecisions,
+            snowlumaApp,
+            snowlumaAppPristine,
+            dockerSaveBlock,
+            runtimeSaveBlock,
+        ],
     );
 
     const handleSaveDriftCancel = useCallback(() => {
@@ -556,15 +550,15 @@ export function BotConfigPageNext({
                             {tourDemoMode
                                 ? '新建 Bot（演示）'
                                 : isEditMode
-                                    ? '编辑 Bot 配置'
-                                    : '新建 Bot'}
+                                  ? '编辑 Bot 配置'
+                                  : '新建 Bot'}
                         </h1>
                         <p className="text-xs text-text-tertiary">
                             {tourDemoMode
                                 ? '已预填演示数据，点保存不会写入配置'
                                 : isEditMode
-                                    ? `QQ ${botId} · ${formData.bot.backend_type} · ${formData.bot.runtime_target}`
-                                    : '至少添加一个连接才能与外部通信'}
+                                  ? `QQ ${botId} · ${formData.bot.backend_type} · ${formData.bot.runtime_target}`
+                                  : '至少添加一个连接才能与外部通信'}
                         </p>
                     </div>
                 </div>
@@ -595,10 +589,7 @@ export function BotConfigPageNext({
                         <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
                             <TabsList className="border-b-0">
                                 <TabsTrigger value="identity">身份</TabsTrigger>
-                                <TabsTrigger
-                                    value="connections"
-                                    data-tour-id="bot-connections-tab"
-                                >
+                                <TabsTrigger value="connections" data-tour-id="bot-connections-tab">
                                     连接
                                     <ConnectionCountBadge count={countConnections(formData)} />
                                 </TabsTrigger>
@@ -664,11 +655,16 @@ export function BotConfigPageNext({
                     <DialogHeader>
                         <DialogTitle>彻底删除该 Bot？</DialogTitle>
                         <DialogDescription>
-                            将永久删除 Bot {botId} 的全部配置与数据，运行中的进程会被强制停止。此操作不可撤销。
+                            将永久删除 Bot {botId}{' '}
+                            的全部配置与数据，运行中的进程会被强制停止。此操作不可撤销。
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="ghost" size="sm" onClick={() => setDeleteDialogOpen(false)}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteDialogOpen(false)}
+                        >
                             取消
                         </Button>
                         <Button variant="danger" size="sm" onClick={remove} disabled={isDeleting}>
@@ -725,18 +721,9 @@ interface SaveActionsProps {
     tourDemoMode?: boolean;
 }
 
-function SaveActions({
-    dirty,
-    saving,
-    onSave,
-    onCancel,
-    tourDemoMode = false,
-}: SaveActionsProps) {
+function SaveActions({ dirty, saving, onSave, onCancel, tourDemoMode = false }: SaveActionsProps) {
     return (
-        <div
-            className="flex shrink-0 items-center gap-3 pr-1"
-            data-tour-id="bot-save-actions"
-        >
+        <div className="flex shrink-0 items-center gap-3 pr-1" data-tour-id="bot-save-actions">
             <span className="hidden text-xs sm:inline-flex sm:items-center sm:gap-1.5">
                 {tourDemoMode ? (
                     <span className="text-brand">演示 · 不会写入</span>

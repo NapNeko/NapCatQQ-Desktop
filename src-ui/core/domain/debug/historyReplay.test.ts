@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { DebugHistoryEntry } from '../../ipc/generated/debug/DebugHistoryEntry';
-import { HISTORY_REQUEST_PREFIX, errorKindTitle, paramsTextOf, replayResponse } from './historyReplay';
+import {
+    HISTORY_REQUEST_PREFIX,
+    errorKindTitle,
+    paramsTextOf,
+    replayResponse,
+} from './historyReplay';
 
 function entry(patch: Partial<DebugHistoryEntry> = {}): DebugHistoryEntry {
     return {
@@ -17,7 +22,13 @@ function entry(patch: Partial<DebugHistoryEntry> = {}): DebugHistoryEntry {
         retcode: 0,
         error: null,
         elapsed_ms: 42,
-        response: { status: 'ok', retcode: 0, data: { user_id: 1, nickname: '小雪' }, message: '', wording: '' },
+        response: {
+            status: 'ok',
+            retcode: 0,
+            data: { user_id: 1, nickname: '小雪' },
+            message: '',
+            wording: '',
+        },
         response_truncated: false,
         ...patch,
     };
@@ -43,19 +54,47 @@ describe('replayResponse', () => {
 
     it('上游报失败（retcode 非 0）照样是 ok 形状，带着 wording', () => {
         const r = replayResponse(
-            entry({ ok: false, retcode: 1400, response: { status: 'failed', retcode: 1400, data: null, message: 'bad', wording: '参数错误' } }),
+            entry({
+                ok: false,
+                retcode: 1400,
+                response: {
+                    status: 'failed',
+                    retcode: 1400,
+                    data: null,
+                    message: 'bad',
+                    wording: '参数错误',
+                },
+            }),
         );
-        expect(r.result.kind === 'ok' && r.result.outcome).toMatchObject({ ok: false, status: 'failed', retcode: 1400, wording: '参数错误' });
+        expect(r.result.kind === 'ok' && r.result.outcome).toMatchObject({
+            ok: false,
+            status: 'failed',
+            retcode: 1400,
+            wording: '参数错误',
+        });
     });
 
     it('没拿到回包的记录还原成 err', () => {
-        const r = replayResponse(entry({ ok: false, retcode: null, error: { kind: 'timeout', ms: 60000 }, response: null }));
+        const r = replayResponse(
+            entry({
+                ok: false,
+                retcode: null,
+                error: { kind: 'timeout', ms: 60000 },
+                response: null,
+            }),
+        );
         expect(r.result).toEqual({ kind: 'err', error: { kind: 'timeout', ms: 60000 } });
     });
 
     it('截断的回包只有文本：data 取不出来，原文照留', () => {
-        const r = replayResponse(entry({ response: '{"status":"ok","data":[1,2,', response_truncated: true }));
-        expect(r.result.kind === 'ok' && r.result.outcome).toMatchObject({ data: null, raw: '{"status":"ok","data":[1,2,', truncated: true });
+        const r = replayResponse(
+            entry({ response: '{"status":"ok","data":[1,2,', response_truncated: true }),
+        );
+        expect(r.result.kind === 'ok' && r.result.outcome).toMatchObject({
+            data: null,
+            raw: '{"status":"ok","data":[1,2,',
+            truncated: true,
+        });
     });
 });
 

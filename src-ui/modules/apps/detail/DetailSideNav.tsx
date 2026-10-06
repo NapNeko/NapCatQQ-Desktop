@@ -30,7 +30,11 @@ export const DetailSideNav: React.FC<{
                     {g.items.map((t) => {
                         const tone = badges[t.value];
                         return (
-                            <TabsSideTrigger key={t.value} value={t.value} dot={tone ? DOT[tone] : undefined}>
+                            <TabsSideTrigger
+                                key={t.value}
+                                value={t.value}
+                                dot={tone ? DOT[tone] : undefined}
+                            >
                                 {t.label}
                             </TabsSideTrigger>
                         );

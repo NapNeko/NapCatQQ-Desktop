@@ -9,7 +9,8 @@ import { pushErrorBar } from '../ui/pushErrorBar';
 import { botConfigKey } from '../bot/useBotConfigsMap';
 import type { AppInstance, OneBotLinkPlan } from '../../core/ipc/types';
 
-const appLinkPlanKey = (instanceId: string, botId: string) => ['appLinkPlan', instanceId, botId] as const;
+const appLinkPlanKey = (instanceId: string, botId: string) =>
+    ['appLinkPlan', instanceId, botId] as const;
 
 export function useAppLinkPlan(instanceId: string, botId: string, enabled: boolean) {
     const on = enabled && !!instanceId && !!botId;
@@ -46,7 +47,11 @@ export function useAppLinkPlan(instanceId: string, botId: string, enabled: boole
 
 export function useApplyAppLink() {
     const queryClient = useQueryClient();
-    return useMutation<AppInstance, unknown, { instanceId: string; botId: string; connectionName: string }>({
+    return useMutation<
+        AppInstance,
+        unknown,
+        { instanceId: string; botId: string; connectionName: string }
+    >({
         mutationFn: ({ instanceId, botId }) => appFrameworkService.applyLink(instanceId, botId),
         onSuccess: (next, { botId, connectionName }) => {
             // 实例列表和应用端配置由事件桥跟着 linked 事件更新；Bot 的连接表事件桥不管，这里失效

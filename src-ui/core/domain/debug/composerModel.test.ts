@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildMessageSegments, hasContent, mentionLabel, mentionQueryAt, pruneMentions, remainderAfterSend } from './composerModel';
+import {
+    buildMessageSegments,
+    hasContent,
+    mentionLabel,
+    mentionQueryAt,
+    pruneMentions,
+    remainderAfterSend,
+} from './composerModel';
 
 describe('composerModel', () => {
     it('按插入过的 @ 把文字切成 at 段；删掉的 @ 不发，手打的 @ 当文字', () => {
@@ -47,7 +54,9 @@ describe('composerModel', () => {
     it('光有回复段或只有空白不算有内容；有 @ 就算', () => {
         expect(hasContent(buildMessageSegments('   ', [], 42))).toBe(false);
         expect(hasContent(buildMessageSegments('', []))).toBe(false);
-        expect(hasContent(buildMessageSegments('@阿强', [{ qq: '10003', label: '@阿强' }]))).toBe(true);
+        expect(hasContent(buildMessageSegments('@阿强', [{ qq: '10003', label: '@阿强' }]))).toBe(
+            true,
+        );
         expect(hasContent(buildMessageSegments('嗨', []))).toBe(true);
     });
 

@@ -16,7 +16,12 @@ import {
     validateKoishiConfig,
 } from './koishiConfig';
 
-const p = (name: string, ident: string, enabled = true, config: Record<string, unknown> = {}): KoishiPluginNode => ({
+const p = (
+    name: string,
+    ident: string,
+    enabled = true,
+    config: Record<string, unknown> = {},
+): KoishiPluginNode => ({
     name,
     ident,
     enabled,
@@ -46,7 +51,9 @@ describe('koishiConfig', () => {
         const next = setServerField(cfg, 'port', 23140);
         expect(koishiServer(next).port).toBe(23140);
         expect(nodeAt(next, [0, 0])?.config.maxPort).toBeUndefined();
-        expect(koishiServer(setServerField(next, 'selfUrl', 'https://x')).selfUrl).toBe('https://x');
+        expect(koishiServer(setServerField(next, 'selfUrl', 'https://x')).selfUrl).toBe(
+            'https://x',
+        );
         expect(nodeAt(setServerField(next, 'host', ''), [0, 0])?.config.host).toBeUndefined();
     });
 

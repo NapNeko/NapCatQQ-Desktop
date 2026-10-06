@@ -7,10 +7,7 @@ import { componentService } from '../../core/services/component.service';
 import type { BackendType } from '../../core/ipc/generated/domain/BackendType';
 import type { ComponentInfo } from '../../core/ipc/generated/domain/ComponentInfo';
 import type { RuntimeReadiness } from '../../core/ipc/generated/domain/RuntimeReadiness';
-import {
-    frameworkComponentFor,
-    type ComponentNames,
-} from '../../core/domain/components/readiness';
+import { frameworkComponentFor, type ComponentNames } from '../../core/domain/components/readiness';
 import { useIsHostReachable } from '../remote/useIsHostReachable';
 
 export const RUNTIME_READINESS_QUERY_KEY = 'runtimeReadiness';
@@ -42,7 +39,8 @@ export function useRuntimeReadiness(
     const enabled = hostId != null && reachable;
     const q = useQuery({
         queryKey: runtimeReadinessQueryKey(hostId ?? '', backend),
-        queryFn: () => componentService.resolveRuntimeReadiness(frameworkComponentFor(backend), hostId!),
+        queryFn: () =>
+            componentService.resolveRuntimeReadiness(frameworkComponentFor(backend), hostId!),
         enabled,
         staleTime: 30_000,
     });
@@ -57,7 +55,10 @@ export function useRuntimeReadinessMany(
         queries: targets.map((t) => ({
             queryKey: runtimeReadinessQueryKey(t.hostId, t.backend),
             queryFn: () =>
-                componentService.resolveRuntimeReadiness(frameworkComponentFor(t.backend), t.hostId),
+                componentService.resolveRuntimeReadiness(
+                    frameworkComponentFor(t.backend),
+                    t.hostId,
+                ),
             enabled: t.enabled,
             staleTime: 30_000,
         })),

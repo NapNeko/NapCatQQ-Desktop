@@ -3,10 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProgressEvent, ProgressKind } from '../../ipc/types';
 import { initialActionProgress, reduceActionProgress } from './progress';
 
-function event(
-    timestampMs: number,
-    body: ProgressKind,
-): ProgressEvent {
+function event(timestampMs: number, body: ProgressKind): ProgressEvent {
     return {
         v: 1,
         timestamp_ms: BigInt(timestampMs),
@@ -18,30 +15,42 @@ describe('reduceActionProgress', () => {
     it('derives task-level progress across multiple steps', () => {
         let progress = initialActionProgress;
 
-        progress = reduceActionProgress(progress, event(1000, {
-            kind: 'started',
-            total_steps: 4,
-        }));
-        progress = reduceActionProgress(progress, event(1100, {
-            kind: 'step_begin',
-            step: 1,
-            message: 'download package',
-        }));
-        progress = reduceActionProgress(progress, event(1200, {
-            kind: 'step_progress',
-            step: 1,
-            percent: 50,
-            message: 'download 50%',
-        }));
+        progress = reduceActionProgress(
+            progress,
+            event(1000, {
+                kind: 'started',
+                total_steps: 4,
+            }),
+        );
+        progress = reduceActionProgress(
+            progress,
+            event(1100, {
+                kind: 'step_begin',
+                step: 1,
+                message: 'download package',
+            }),
+        );
+        progress = reduceActionProgress(
+            progress,
+            event(1200, {
+                kind: 'step_progress',
+                step: 1,
+                percent: 50,
+                message: 'download 50%',
+            }),
+        );
 
         expect(progress.percent).toBe(50);
         expect(progress.overallPercent).toBe(13);
 
-        progress = reduceActionProgress(progress, event(1300, {
-            kind: 'step_end',
-            step: 1,
-            ok: true,
-        }));
+        progress = reduceActionProgress(
+            progress,
+            event(1300, {
+                kind: 'step_end',
+                step: 1,
+                ok: true,
+            }),
+        );
 
         expect(progress.overallPercent).toBe(25);
         expect(progress.logs.map((line) => line.message)).toEqual([
@@ -53,21 +62,30 @@ describe('reduceActionProgress', () => {
     it('keeps package-manager step_progress events inside the active step', () => {
         let progress = initialActionProgress;
 
-        progress = reduceActionProgress(progress, event(1000, {
-            kind: 'started',
-            total_steps: 1,
-        }));
-        progress = reduceActionProgress(progress, event(1100, {
-            kind: 'step_begin',
-            step: 1,
-            message: 'install dependencies',
-        }));
-        progress = reduceActionProgress(progress, event(1200, {
-            kind: 'step_progress',
-            step: 0,
-            percent: 40,
-            message: 'install libx11',
-        }));
+        progress = reduceActionProgress(
+            progress,
+            event(1000, {
+                kind: 'started',
+                total_steps: 1,
+            }),
+        );
+        progress = reduceActionProgress(
+            progress,
+            event(1100, {
+                kind: 'step_begin',
+                step: 1,
+                message: 'install dependencies',
+            }),
+        );
+        progress = reduceActionProgress(
+            progress,
+            event(1200, {
+                kind: 'step_progress',
+                step: 0,
+                percent: 40,
+                message: 'install libx11',
+            }),
+        );
 
         expect(progress.currentStep).toBe(1);
         expect(progress.percent).toBe(40);
@@ -77,19 +95,25 @@ describe('reduceActionProgress', () => {
     it('shows the backend queue note while still pending, then yields to started', () => {
         let progress = initialActionProgress;
 
-        progress = reduceActionProgress(progress, event(1000, {
-            kind: 'log',
-            level: 'info',
-            message: '等待前置:QQ、noVNC',
-        }));
+        progress = reduceActionProgress(
+            progress,
+            event(1000, {
+                kind: 'log',
+                level: 'info',
+                message: '等待前置:QQ、noVNC',
+            }),
+        );
 
         expect(progress.status).toBe('pending');
         expect(progress.message).toBe('等待前置:QQ、noVNC');
 
-        progress = reduceActionProgress(progress, event(1100, {
-            kind: 'started',
-            total_steps: 1,
-        }));
+        progress = reduceActionProgress(
+            progress,
+            event(1100, {
+                kind: 'started',
+                total_steps: 1,
+            }),
+        );
 
         expect(progress.status).toBe('running');
         expect(progress.message).toBe('准备中…');

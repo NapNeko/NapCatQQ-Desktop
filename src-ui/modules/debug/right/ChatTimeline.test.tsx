@@ -19,7 +19,10 @@ beforeAll(() => {
             return (this as HTMLElement).dataset.testid === 'chat-scroller' ? VIEW : 50;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 380 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 380,
+    });
 });
 
 afterAll(() => {
@@ -61,7 +64,9 @@ function messages(from: number, to: number): ChatItem[] {
     return out;
 }
 
-const wrapper = ({ children }: { children: ReactNode }) => <TooltipProvider>{children}</TooltipProvider>;
+const wrapper = ({ children }: { children: ReactNode }) => (
+    <TooltipProvider>{children}</TooltipProvider>
+);
 
 function props(items: ChatItem[], patch: Partial<ChatTimelineProps> = {}): ChatTimelineProps {
     return {
@@ -86,7 +91,8 @@ function scrollMetrics(el: HTMLElement) {
     let top = 0;
     // 每次程序滚动的目标，连同当时的最底位置（内容高度会随着行被量出来而变）
     const calls: Array<{ to: number; max: number }> = [];
-    const height = () => parseFloat((el.firstElementChild as HTMLElement | null)?.style.height ?? '') || VIEW;
+    const height = () =>
+        parseFloat((el.firstElementChild as HTMLElement | null)?.style.height ?? '') || VIEW;
     const maxTop = () => Math.max(0, height() - VIEW);
     const move = (to: number) => {
         const next = Math.max(0, Math.min(to, maxTop()));
@@ -103,7 +109,9 @@ function scrollMetrics(el: HTMLElement) {
             top = Math.max(0, Math.min(v, maxTop()));
         },
     });
-    (el as HTMLElement & { scrollTo: (o: ScrollToOptions) => void }).scrollTo = (o: ScrollToOptions) => {
+    (el as HTMLElement & { scrollTo: (o: ScrollToOptions) => void }).scrollTo = (
+        o: ScrollToOptions,
+    ) => {
         if (typeof o.top !== 'number') return;
         calls.push({ to: o.top, max: maxTop() });
         move(o.top);
@@ -135,7 +143,10 @@ type Played = { el: Element; frames: Keyframe[] };
 function recordAnimations(): { played: Played[]; restore: () => void } {
     const played: Played[] = [];
     const original = HTMLElement.prototype.animate;
-    HTMLElement.prototype.animate = function (this: HTMLElement, frames: Keyframe[] | PropertyIndexedKeyframes | null) {
+    HTMLElement.prototype.animate = function (
+        this: HTMLElement,
+        frames: Keyframe[] | PropertyIndexedKeyframes | null,
+    ) {
         played.push({ el: this, frames: (frames ?? []) as Keyframe[] });
         return { cancel() {} } as unknown as Animation;
     };
@@ -167,7 +178,9 @@ describe('ChatTimeline', () => {
         // 翻到顶上：新来 3 条
         m.scrollTo(0);
         rerender(<ChatTimeline {...props(messages(1, 26))} />);
-        expect(screen.getByRole('button', { name: '有 3 条新消息，回到底部' })).toHaveTextContent('3 条新消息');
+        expect(screen.getByRole('button', { name: '有 3 条新消息，回到底部' })).toHaveTextContent(
+            '3 条新消息',
+        );
 
         // 又来 2 条，累加
         rerender(<ChatTimeline {...props(messages(1, 28))} />);
@@ -267,7 +280,10 @@ describe('ChatTimeline', () => {
             const m = scrollMetrics(screen.getByTestId('chat-scroller'));
             m.scrollToBottom();
             rerender(<ChatTimeline {...props(messages(1, 31))} />);
-            const enters = () => rec.played.filter((p) => 'transform' in (p.frames[0] ?? {}) && rowText(p).includes('第 31 条'));
+            const enters = () =>
+                rec.played.filter(
+                    (p) => 'transform' in (p.frames[0] ?? {}) && rowText(p).includes('第 31 条'),
+                );
             expect(enters()).toHaveLength(1);
 
             // 滚到顶上（第 31 条的行被虚拟列表卸掉），再滚回来（重新挂上）；直接改位置，不带滚轮意图
@@ -298,7 +314,9 @@ describe('ChatTimeline', () => {
             m.scrollToBottom();
             const flashes = () =>
                 rec.played.filter(
-                    (p) => (p.frames[0] as { opacity?: number } | undefined)?.opacity === 0.85 && rowText(p).includes('第 2 条'),
+                    (p) =>
+                        (p.frames[0] as { opacity?: number } | undefined)?.opacity === 0.85 &&
+                        rowText(p).includes('第 2 条'),
                 );
 
             act(() => {
@@ -323,7 +341,14 @@ describe('ChatTimeline', () => {
     it('断线缺口、上游丢弃、缓冲裁掉都有提示行', () => {
         const items: ChatItem[] = [
             message(1, '断线前'),
-            { kind: 'gap', key: 'e2', seq: 2, at: BASE + 2000, fromMs: BASE + 1000, toMs: BASE + 65_000 },
+            {
+                kind: 'gap',
+                key: 'e2',
+                seq: 2,
+                at: BASE + 2000,
+                fromMs: BASE + 1000,
+                toMs: BASE + 65_000,
+            },
             { kind: 'dropped', key: 'e3', seq: 3, at: BASE + 3000, count: 42 },
             message(4, '恢复后'),
         ];

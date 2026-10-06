@@ -1,6 +1,12 @@
 // Docker 容器 / 状态的展示派生纯函数。零 React / 零 tauri 依赖。
 
-import type { ContainerInfo, ContainerState, DockerFlavor, DockerStatus, ImageInfo } from '../../ipc/types';
+import type {
+    ContainerInfo,
+    ContainerState,
+    DockerFlavor,
+    DockerStatus,
+    ImageInfo,
+} from '../../ipc/types';
 
 /// 容器状态徽章:给 UI 一个语义色 + 中文标签。color 用中性语义名,
 /// 具体映射到 Fluent / Tailwind 色由组件层决定(这层不碰样式库)。

@@ -25,12 +25,14 @@ const AUTO: DebugChannelId = { kind: 'auto' };
 const CONTACTS_TIMEOUT_MS = 15_000;
 const STALE_MS = 5 * 60_000;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** 上游的号有时是数字有时是数字串；认不出来的行直接跳过 */
 function idOf(v: unknown): number | string | null {
     if (typeof v === 'number' && Number.isFinite(v)) return v;
-    if (typeof v === 'string' && v.trim() !== '') return /^\d+$/.test(v.trim()) ? Number(v) : v.trim();
+    if (typeof v === 'string' && v.trim() !== '')
+        return /^\d+$/.test(v.trim()) ? Number(v) : v.trim();
     return null;
 }
 
@@ -64,7 +66,11 @@ function toOption(kind: DebugContactKind, row: Record<string, unknown>): DebugCo
             const card = str(row.card);
             const label = card || nickname || String(id);
             const role = ROLE_HINT[str(row.role)];
-            const parts = [card && nickname && card !== nickname ? nickname : '', String(id), role ?? ''].filter(Boolean);
+            const parts = [
+                card && nickname && card !== nickname ? nickname : '',
+                String(id),
+                role ?? '',
+            ].filter(Boolean);
             return { id, label, hint: parts.join(' · ') };
         }
     }
@@ -77,7 +83,11 @@ async function fetchContacts(
     channel: DebugChannelId,
 ): Promise<DebugContactOption[]> {
     const action =
-        kind === 'group' ? 'get_group_list' : kind === 'friend' ? 'get_friend_list' : 'get_group_member_list';
+        kind === 'group'
+            ? 'get_group_list'
+            : kind === 'friend'
+              ? 'get_friend_list'
+              : 'get_group_member_list';
     const response = await onebotDebugService.call({
         request_id: newRequestId(),
         bot_id: botId,
@@ -94,7 +104,9 @@ async function fetchContacts(
     }
     const outcome = response.result.outcome;
     if (!outcome.ok || !Array.isArray(outcome.data)) {
-        throw new Error(outcome.wording || outcome.message || `上游返回 retcode ${outcome.retcode}`);
+        throw new Error(
+            outcome.wording || outcome.message || `上游返回 retcode ${outcome.retcode}`,
+        );
     }
     const options: DebugContactOption[] = [];
     for (const row of outcome.data) {
@@ -123,7 +135,8 @@ export function useDebugContacts(
     channelRef.current = useDebugChannelChoice(botId)?.call ?? AUTO;
 
     const group = kind === 'member' ? groupIdNumber(groupId) : null;
-    const enabled = botId !== null && target?.running !== false && (kind !== 'member' || group !== null);
+    const enabled =
+        botId !== null && target?.running !== false && (kind !== 'member' || group !== null);
 
     const query = useQuery<DebugContactOption[], Error>({
         queryKey: enabled ? debugContactsKey(botId, kind, group) : debugIdleKey,

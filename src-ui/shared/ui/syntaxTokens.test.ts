@@ -28,7 +28,10 @@ describe('syntaxTokens', () => {
         ]);
         expect(toks.find((t) => t.text === 'http://localhost:2536')?.kind).toBe('plain');
         expect(toks.find((t) => t.text === '"Bearer a#b"')?.kind).toBe('string');
-        expect(toks.filter((t) => t.kind === 'comment').map((t) => t.text)).toEqual(['# 服务端', '# 对外地址']);
+        expect(toks.filter((t) => t.kind === 'comment').map((t) => t.text)).toEqual([
+            '# 服务端',
+            '# 对外地址',
+        ]);
         expect(toks.find((t) => t.text === '2536')?.kind).toBe('number');
         expect(toks.find((t) => t.text === 'true')?.kind).toBe('bool');
     });
@@ -37,7 +40,11 @@ describe('syntaxTokens', () => {
         const src = '你是 {bot_name}。回 {{"a": 1}} 或 {x}{y}，单独的 } 和 { 不算';
         const toks = tokenize(src, 'prompt');
         expect(joinTokens(toks)).toBe(src);
-        expect(toks.filter((t) => t.kind === 'param').map((t) => t.text)).toEqual(['{bot_name}', '{x}', '{y}']);
+        expect(toks.filter((t) => t.kind === 'param').map((t) => t.text)).toEqual([
+            '{bot_name}',
+            '{x}',
+            '{y}',
+        ]);
         expect(toks.filter((t) => t.kind === 'punct').map((t) => t.text)).toEqual(['{{', '}}']);
     });
 });

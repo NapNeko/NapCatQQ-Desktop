@@ -31,9 +31,7 @@ interface Props {
 
 export function MonitoringTab({ draft, patchDraft }: Props) {
     if (!draft) {
-        return (
-            <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
-        );
+        return <p className="text-[13px] text-text-tertiary">正在加载设置…</p>;
     }
 
     return (
@@ -45,9 +43,7 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                 >
                     <Switch
                         checked={draft.performanceMonitorEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ performanceMonitorEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ performanceMonitorEnabled: v })}
                     />
                 </FieldRow>
 
@@ -60,8 +56,7 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                         value={draft.performanceMonitorIntervalMs}
                         onChange={(v) =>
                             patchDraft({
-                                performanceMonitorIntervalMs:
-                                    clampPerformanceMonitorIntervalMs(v),
+                                performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(v),
                             })
                         }
                         disabled={!draft.performanceMonitorEnabled}
@@ -79,9 +74,7 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                 >
                     <Switch
                         checked={draft.botRuntimeMetricsEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ botRuntimeMetricsEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ botRuntimeMetricsEnabled: v })}
                     />
                 </FieldRow>
                 <FieldRow
@@ -113,9 +106,10 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                             value={draft.botRuntimeMetricsRetentionDays}
                             onValueChange={(value) =>
                                 patchDraft({
-                                    botRuntimeMetricsRetentionDays: clampBotRuntimeMetricsRetentionDays(
-                                        value ?? BOT_RUNTIME_METRICS_RETENTION_DAYS_DEFAULT,
-                                    ),
+                                    botRuntimeMetricsRetentionDays:
+                                        clampBotRuntimeMetricsRetentionDays(
+                                            value ?? BOT_RUNTIME_METRICS_RETENTION_DAYS_DEFAULT,
+                                        ),
                                 })
                             }
                             className="w-20"
@@ -130,22 +124,16 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                 description="已完成、失败或已取消的条目在列表中的保留时间；关闭则保留到重启应用"
             >
                 <FieldRow label="自动清理" isLast>
-                    <InfoBarDismissSliderPresence
-                        visible={draft.taskQueueCleanupEnabled}
-                    >
+                    <InfoBarDismissSliderPresence visible={draft.taskQueueCleanupEnabled}>
                         <TaskQueueCleanupDurationSlider
                             value={draft.taskQueueCleanupLingerMs}
                             defaultMs={DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS}
-                            onChange={(v) =>
-                                patchDraft({ taskQueueCleanupLingerMs: v })
-                            }
+                            onChange={(v) => patchDraft({ taskQueueCleanupLingerMs: v })}
                         />
                     </InfoBarDismissSliderPresence>
                     <Switch
                         checked={draft.taskQueueCleanupEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ taskQueueCleanupEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ taskQueueCleanupEnabled: v })}
                     />
                 </FieldRow>
             </SettingsSection>

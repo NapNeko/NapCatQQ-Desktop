@@ -57,7 +57,11 @@ export function needsStreamCall(action: string, params: unknown): boolean {
  * 发送前在前端就能确定的「不行」：分块下载、或带本机文件的分块上传，点名的 HTTP / WS 通道。
  * 「自动」和内部通道放行给后端落；其它动作带本机文件时传输走内部通道、调用照样走所选通道
  */
-export function streamChannelBlocker(action: string, localFiles: number, channel: DebugChannelId): string | null {
+export function streamChannelBlocker(
+    action: string,
+    localFiles: number,
+    channel: DebugChannelId,
+): string | null {
     if (channel.kind === 'internal' || channel.kind === 'auto') return null;
     if (STREAM_DOWNLOAD_ACTIONS.has(action)) return STREAM_CHANNEL_REASON;
     if (action === STREAM_UPLOAD_ACTION && localFiles > 0) return STREAM_CHANNEL_REASON;

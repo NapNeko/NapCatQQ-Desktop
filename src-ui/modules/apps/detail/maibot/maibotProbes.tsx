@@ -26,7 +26,9 @@ import { useMaiBotProbes } from '../../../../hooks/apps/useMaiBotRuntime';
 const errText = (e: unknown) => toAppConfigError(e).message;
 
 // 列表十几二十条时不限高会顶出窗口；和 AstrBot 预设菜单同一套写法
-const SCROLL_STYLE = { maxHeight: 'min(22rem, calc(var(--radix-popover-content-available-height, 22rem) - 8px))' };
+const SCROLL_STYLE = {
+    maxHeight: 'min(22rem, calc(var(--radix-popover-content-available-height, 22rem) - 8px))',
+};
 
 function describeCheck(c: MaiBotProviderCheck): { tone: 'ok' | 'bad' | 'meh'; text: string } {
     const ms = c.latency_ms !== undefined ? `，${Math.round(c.latency_ms)} ms` : '';
@@ -59,7 +61,8 @@ const ModelMenu: React.FC<{
         );
     }
     if (error) return <p className="px-3 py-3 text-xs text-danger">{errText(error)}</p>;
-    if (!models?.length) return <p className="px-3 py-3 text-xs text-text-tertiary">服务商没列出模型</p>;
+    if (!models?.length)
+        return <p className="px-3 py-3 text-xs text-text-tertiary">服务商没列出模型</p>;
     return (
         <div className="overflow-y-auto overscroll-contain" style={SCROLL_STYLE}>
             {models.map((m) => (
@@ -175,11 +178,18 @@ const McpServerRow: React.FC<{
     return (
         <div className="flex flex-col gap-1.5 py-2.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="min-w-0 truncate text-[13px] font-medium text-text">{server.name || '未命名'}</span>
+                <span className="min-w-0 truncate text-[13px] font-medium text-text">
+                    {server.name || '未命名'}
+                </span>
                 <span className="font-mono text-2xs text-text-tertiary">{server.transport}</span>
                 <span className={cn('text-2xs', TONE[state.tone])}>{state.text}</span>
                 <span className="flex-1" />
-                <Button size="sm" variant="ghost" disabled={testMcp.isPending} onClick={() => testMcp.mutate(server)}>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={testMcp.isPending}
+                    onClick={() => testMcp.mutate(server)}
+                >
                     {testMcp.isPending ? <Spinner size="sm" /> : <PlugZap size={13} />}
                     试连
                 </Button>
@@ -192,7 +202,11 @@ const McpServerRow: React.FC<{
                         连得上，有 {t.tools.length} 个工具
                         {t.tools.length > 0 && (
                             <span className="text-text-tertiary">
-                                ：{t.tools.slice(0, 6).map((x) => x.title || x.name).join('、')}
+                                ：
+                                {t.tools
+                                    .slice(0, 6)
+                                    .map((x) => x.title || x.name)
+                                    .join('、')}
                                 {t.tools.length > 6 && ' 等'}
                             </span>
                         )}
@@ -264,12 +278,18 @@ export const ChatTargetPicker: React.FC<{
                                 <span className="shrink-0 rounded-xs bg-inset px-1 text-2xs text-text-tertiary">
                                     {s.chat_type === 'private' ? '私聊' : '群'}
                                 </span>
-                                <span className="min-w-0 flex-1 truncate text-xs text-text">{s.display_name || s.target_id}</span>
-                                <span className="shrink-0 font-mono text-2xs text-text-tertiary">{s.target_id}</span>
+                                <span className="min-w-0 flex-1 truncate text-xs text-text">
+                                    {s.display_name || s.target_id}
+                                </span>
+                                <span className="shrink-0 font-mono text-2xs text-text-tertiary">
+                                    {s.target_id}
+                                </span>
                             </button>
                         </PopoverClose>
                     ))}
-                    {!shown.length && <p className="px-2 py-2 text-xs text-text-tertiary">没有对得上的</p>}
+                    {!shown.length && (
+                        <p className="px-2 py-2 text-xs text-text-tertiary">没有对得上的</p>
+                    )}
                 </div>
             </PopoverContent>
         </Popover>

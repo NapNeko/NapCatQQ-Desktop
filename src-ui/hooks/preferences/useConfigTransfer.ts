@@ -2,7 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useSyncExternalStore } from 'react';
-import { configTransferService, type ConfigImportOutcome } from '../../core/services/config-transfer.service';
+import {
+    configTransferService,
+    type ConfigImportOutcome,
+} from '../../core/services/config-transfer.service';
 import type { ConfigFrontendPreferences } from '../../core/ipc/types';
 import { flushWorkspace } from '../debug/debugWorkspaceStore';
 import { refreshImportedConfiguration } from './useConfigImportBridge';
@@ -37,19 +40,34 @@ export function useConfigImportOps() {
 export function useConfigTransfer() {
     const client = useQueryClient();
     const [importOpen, setImportOpen] = useState(false);
-    const pendingPreferences = useSyncExternalStore(pendingPreferencesStore.subscribe, pendingPreferencesStore.getSnapshot, pendingPreferencesStore.getSnapshot);
-    const pendingFrameworks = useQuery({ queryKey: frameworkPendingKey, queryFn: configTransferService.pendingFrameworkConfigs });
+    const pendingPreferences = useSyncExternalStore(
+        pendingPreferencesStore.subscribe,
+        pendingPreferencesStore.getSnapshot,
+        pendingPreferencesStore.getSnapshot,
+    );
+    const pendingFrameworks = useQuery({
+        queryKey: frameworkPendingKey,
+        queryFn: configTransferService.pendingFrameworkConfigs,
+    });
     const retryFrameworks = useMutation({
         mutationFn: configTransferService.retryFrameworkConfigs,
-        onSuccess: async result => {
+        onSuccess: async (result) => {
             const pending = result.framework_pending ?? [];
             client.setQueryData(frameworkPendingKey, pending);
             await refreshImportedConfiguration(client, result.files);
-            pushInfoBar({ key: 'config-import-frameworks', tone: pending.length ? 'warning' : 'success',
+            pushInfoBar({
+                key: 'config-import-frameworks',
+                tone: pending.length ? 'warning' : 'success',
                 title: pending.length ? '部分框架配置仍待恢复' : '框架配置已恢复',
-                content: pending.length ? pending.join('；') : '启动实例后会使用恢复的配置。' });
+                content: pending.length ? pending.join('；') : '启动实例后会使用恢复的配置。',
+            });
         },
-        onError: (error: Error) => pushErrorBar({ key: 'config-import-frameworks', title: '框架配置恢复失败', raw: error.message || String(error) }),
+        onError: (error: Error) =>
+            pushErrorBar({
+                key: 'config-import-frameworks',
+                title: '框架配置恢复失败',
+                raw: error.message || String(error),
+            }),
     });
 
     const exportMutation = useMutation({
@@ -80,22 +98,26 @@ export function useConfigTransfer() {
         const frameworkPending = result.framework_pending ?? [];
         if (frameworkPending.length) client.setQueryData(frameworkPendingKey, frameworkPending);
         else void client.invalidateQueries({ queryKey: frameworkPendingKey });
-        const skippedNote = result.skipped.length
-            ? `；未覆盖：${result.skipped.join('、')}`
-            : '';
-        pendingPreferencesStore.setState(result.frontendPreferencesError ? result.frontend_preferences ?? null : null);
+        const skippedNote = result.skipped.length ? `；未覆盖：${result.skipped.join('、')}` : '';
+        pendingPreferencesStore.setState(
+            result.frontendPreferencesError ? (result.frontend_preferences ?? null) : null,
+        );
         const incomplete = Boolean(result.frontendPreferencesError) || frameworkPending.length > 0;
         const pendingNotes = [
             result.frontendPreferencesError ? `界面偏好：${result.frontendPreferencesError}` : '',
             ...frameworkPending,
-        ].filter(Boolean).join('；');
+        ]
+            .filter(Boolean)
+            .join('；');
         pushInfoBar({
             key: 'config-import',
             tone: incomplete ? 'warning' : 'success',
             title: incomplete ? '配置已导入，部分配置待恢复' : '配置已导入，重启后生效',
-            content: `已导入：${result.files.join('、')}${skippedNote}。${incomplete
-                ? `${pendingNotes}，可在配置备份中重试恢复。`
-                : 'SSH 密码、私钥和系统密钥库中的凭据需另外配置。'}`,
+            content: `已导入：${result.files.join('、')}${skippedNote}。${
+                incomplete
+                    ? `${pendingNotes}，可在配置备份中重试恢复。`
+                    : 'SSH 密码、私钥和系统密钥库中的凭据需另外配置。'
+            }`,
         });
         setImportOpen(false);
     };
@@ -105,10 +127,20 @@ export function useConfigTransfer() {
         try {
             configTransferService.restorePreferences(pendingPreferences);
             pendingPreferencesStore.setState(null);
-            pushInfoBar({ key: 'config-import', tone: 'success', title: '界面与终端偏好已恢复', content: pendingFrameworks.data?.length
-                ? '框架配置仍待恢复，可继续单独重试。' : '配置导入完成，启动相关设置在重启后生效。' });
+            pushInfoBar({
+                key: 'config-import',
+                tone: 'success',
+                title: '界面与终端偏好已恢复',
+                content: pendingFrameworks.data?.length
+                    ? '框架配置仍待恢复，可继续单独重试。'
+                    : '配置导入完成，启动相关设置在重启后生效。',
+            });
         } catch (error) {
-            pushErrorBar({ key: 'config-import-preferences', title: '界面偏好恢复失败', raw: error instanceof Error ? error.message : String(error) });
+            pushErrorBar({
+                key: 'config-import-preferences',
+                title: '界面偏好恢复失败',
+                raw: error instanceof Error ? error.message : String(error),
+            });
         }
     };
 

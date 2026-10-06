@@ -35,7 +35,13 @@ function exitTo(dir: number, m: MotionEnv): Keyframe {
     return { opacity: 0, transform: `translate(${x}px, ${y}px) scale(${rich ? 0.992 : 1})` };
 }
 
-export function PageTransition({ visible, children, className, onExited, direction = 0 }: PageTransitionProps) {
+export function PageTransition({
+    visible,
+    children,
+    className,
+    onExited,
+    direction = 0,
+}: PageTransitionProps) {
     const m = useMotion();
     const ref = useRef<HTMLDivElement>(null);
     const animRef = useRef<Animation | null>(null);

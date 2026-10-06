@@ -33,12 +33,7 @@ import { pushErrorBar } from '../ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
 import { SEE_LOGS_HINT } from '../../core/domain/ui/errorBarCopy';
 import { imageRemoveFailureHint } from '../../core/domain/docker/status';
-import type {
-    ContainerAction,
-    ContainerInfo,
-    DockerStatus,
-    ImageInfo,
-} from '../../core/ipc/types';
+import type { ContainerAction, ContainerInfo, DockerStatus, ImageInfo } from '../../core/ipc/types';
 
 /// 容器操作动词。InfoBar 标题用，比裸 action 字面量友好。
 const ACTION_VERB: Record<ContainerAction, string> = {
@@ -169,7 +164,7 @@ export function useDocker(hostId: string, activeTab: 'containers' | 'images' = '
         removeImageAsync: removeImageMutation.mutateAsync,
         isRemovingImage: removeImageMutation.isPending,
         removingImageRef: removeImageMutation.isPending
-            ? removeImageMutation.variables?.imageRef ?? null
+            ? (removeImageMutation.variables?.imageRef ?? null)
             : null,
 
         composeDown: composeDownMutation.mutate,

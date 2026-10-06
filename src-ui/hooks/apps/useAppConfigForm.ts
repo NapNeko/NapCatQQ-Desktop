@@ -128,7 +128,9 @@ export function useAppConfigForm<F extends AppConfigFramework>(
                     config: wrapConfigData(framework, form),
                     // 必须用灌表时的版本号：对接会改 .env，query 刷新后
                     // envelope.revision 变了但表单还是旧内容，拿新版本号保存会把对接键盖掉。
-                    baseRevision: overwrite ? null : (hydratedRevision.current ?? envelope.revision),
+                    baseRevision: overwrite
+                        ? null
+                        : (hydratedRevision.current ?? envelope.revision),
                     confId,
                 });
                 const saved = configDataOf(result.config, framework);
@@ -159,7 +161,9 @@ export function useAppConfigForm<F extends AppConfigFramework>(
                         key: `app-config-invalid:${instanceId}`,
                         tone: 'danger',
                         title: '后端校验未通过',
-                        content: err.issues.map((i) => `${i.path}: ${i.message}`).join('；') || err.message,
+                        content:
+                            err.issues.map((i) => `${i.path}: ${i.message}`).join('；') ||
+                            err.message,
                         autoDismissMs: 6000,
                     });
                     return { kind: 'invalid', issues: err.issues };
@@ -174,7 +178,19 @@ export function useAppConfigForm<F extends AppConfigFramework>(
                 return { kind: 'error', message: err.message };
             }
         },
-        [clientIssues, confId, envelope, form, framework, instanceId, instanceName, reload, running, saveHint, write],
+        [
+            clientIssues,
+            confId,
+            envelope,
+            form,
+            framework,
+            instanceId,
+            instanceName,
+            reload,
+            running,
+            saveHint,
+            write,
+        ],
     );
 
     return {

@@ -53,11 +53,7 @@ describe('buildTaskQueueSnapshot', () => {
         });
 
         expect(snapshot.activeCount).toBe(2);
-        expect(snapshot.items.map((i) => i.id)).toEqual([
-            'task-run',
-            'deploy-1',
-            'task-done',
-        ]);
+        expect(snapshot.items.map((i) => i.id)).toEqual(['task-run', 'deploy-1', 'task-done']);
         expect(snapshot.items[0].status).toBe('running');
         expect(snapshot.items[1].status).toBe('pending');
         expect(snapshot.items[2].status).toBe('success');

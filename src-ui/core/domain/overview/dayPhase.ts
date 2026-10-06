@@ -95,7 +95,7 @@ export function celestialPosition(hour: number, minute: number): CelestialPositi
     const isDay = h >= SUN_RISE && h < SUN_SET;
     const t = isDay
         ? (h - SUN_RISE) / (SUN_SET - SUN_RISE)
-        : (((h - SUN_SET) % 24) + 24) % 24 / (24 - (SUN_SET - SUN_RISE));
+        : ((((h - SUN_SET) % 24) + 24) % 24) / (24 - (SUN_SET - SUN_RISE));
     const altitude = Math.sin(Math.PI * t);
     return {
         kind: isDay ? 'sun' : 'moon',

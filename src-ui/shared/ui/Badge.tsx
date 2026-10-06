@@ -45,11 +45,27 @@ const badgeVariants = cva(
             { tone: 'danger', appearance: 'solid', className: 'bg-danger text-white' },
             { tone: 'info', appearance: 'solid', className: 'bg-info text-white' },
             // outline：边框 + 同色字
-            { tone: 'neutral', appearance: 'outline', className: 'border border-border text-text-secondary' },
+            {
+                tone: 'neutral',
+                appearance: 'outline',
+                className: 'border border-border text-text-secondary',
+            },
             { tone: 'brand', appearance: 'outline', className: 'border border-brand text-brand' },
-            { tone: 'success', appearance: 'outline', className: 'border border-success text-success' },
-            { tone: 'warning', appearance: 'outline', className: 'border border-warning text-warning' },
-            { tone: 'danger', appearance: 'outline', className: 'border border-danger text-danger' },
+            {
+                tone: 'success',
+                appearance: 'outline',
+                className: 'border border-success text-success',
+            },
+            {
+                tone: 'warning',
+                appearance: 'outline',
+                className: 'border border-warning text-warning',
+            },
+            {
+                tone: 'danger',
+                appearance: 'outline',
+                className: 'border border-danger text-danger',
+            },
             { tone: 'info', appearance: 'outline', className: 'border border-info text-info' },
         ],
         defaultVariants: {
@@ -60,8 +76,7 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-    extends HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof badgeVariants> {
+    extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {
     /** 徽章前的指示圆点。常用：success + dot 表示 Bot online。 */
     dot?: boolean;
 }

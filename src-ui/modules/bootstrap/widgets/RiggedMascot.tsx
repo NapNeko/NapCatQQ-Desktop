@@ -23,13 +23,20 @@ function riggedMarkup(primaryColor: string, secondaryColor: string): string {
     const key = `${primaryColor}|${secondaryColor}`;
     let markup = markupCache.get(key);
     if (markup === undefined) {
-        markup = buildRiggedMascotMarkup(recolorMascot(rawCatGirl, primaryColor, secondaryColor), 'ndf-mascot-rig');
+        markup = buildRiggedMascotMarkup(
+            recolorMascot(rawCatGirl, primaryColor, secondaryColor),
+            'ndf-mascot-rig',
+        );
         markupCache.set(key, markup);
     }
     return markup;
 }
 
-export const RiggedMascot: React.FC<RiggedMascotProps> = ({ primaryColor, secondaryColor, className }) => {
+export const RiggedMascot: React.FC<RiggedMascotProps> = ({
+    primaryColor,
+    secondaryColor,
+    className,
+}) => {
     const markup = riggedMarkup(primaryColor, secondaryColor);
     return (
         <div

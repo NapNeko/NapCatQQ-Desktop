@@ -2,7 +2,14 @@
 // 供 master / admin / 黑白名单 / 别名 / 插件启停名单这类「一串 id」字段用。
 // 受控：value 是 string[]，去重与 trim 由本组件负责。
 
-import { useId, useRef, useState, type KeyboardEvent, type ClipboardEvent, type ReactNode } from 'react';
+import {
+    useId,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type ClipboardEvent,
+    type ReactNode,
+} from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -140,7 +147,12 @@ export const StringListField: React.FC<StringListFieldProps> = ({
                 />
             </div>
             {(hint || error) && (
-                <p className={cn('text-2xs leading-snug', invalid ? 'text-danger' : 'text-text-tertiary')}>
+                <p
+                    className={cn(
+                        'text-2xs leading-snug',
+                        invalid ? 'text-danger' : 'text-text-tertiary',
+                    )}
+                >
                     {error ?? hint}
                 </p>
             )}

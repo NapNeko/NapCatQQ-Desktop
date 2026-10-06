@@ -26,8 +26,10 @@ vi.mock('../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) =>
-                (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
         },
     ),
 }));
@@ -138,7 +140,12 @@ beforeAll(() => {
     Element.prototype.setPointerCapture ??= () => {};
     Element.prototype.scrollIntoView ??= () => {};
     // 中栏的 JSON 编辑器（CodeMirror）量文字位置要用
-    Range.prototype.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+    Range.prototype.getClientRects ??= () =>
+        ({
+            length: 0,
+            item: () => null,
+            [Symbol.iterator]: [][Symbol.iterator],
+        }) as unknown as DOMRectList;
     Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 });
 
@@ -185,7 +192,11 @@ describe('DebugConsolePage', () => {
         const ws = deferred<DebugWorkspace>();
         service.workspace.mockImplementation(() => ws.promise);
         service.storageNotices.mockResolvedValue([
-            { file: 'history.jsonl', moved_to: 'history.jsonl.broken-2026-09-30', reason: '第 3,812 行不是合法的 JSON' },
+            {
+                file: 'history.jsonl',
+                moved_to: 'history.jsonl.broken-2026-09-30',
+                reason: '第 3,812 行不是合法的 JSON',
+            },
         ]);
         renderPage();
         expect(service.storageNotices).not.toHaveBeenCalled();
@@ -196,7 +207,6 @@ describe('DebugConsolePage', () => {
         expect(service.storageNotices).toHaveBeenCalledTimes(1);
     });
 
-
     it('画出三栏，默认选中第一个在跑的 Bot 并开始接收', async () => {
         renderPage();
         expect(await screen.findByRole('region', { name: '接口、收藏与历史' })).toBeInTheDocument();
@@ -206,8 +216,16 @@ describe('DebugConsolePage', () => {
 
         await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：小雪，点击切换'));
         expect(debugWorkspaceStore.getSnapshot().ws.selected_bot).toBe('bot-sl');
-        await waitFor(() => expect(service.subscribe).toHaveBeenCalledWith('bot-sl', { kind: 'auto' }, expect.any(Function)));
-        expect(await screen.findByRole('button', { name: '调用通道：自动（内部通道）' })).toBeInTheDocument();
+        await waitFor(() =>
+            expect(service.subscribe).toHaveBeenCalledWith(
+                'bot-sl',
+                { kind: 'auto' },
+                expect.any(Function),
+            ),
+        );
+        expect(
+            await screen.findByRole('button', { name: '调用通道：自动（内部通道）' }),
+        ).toBeInTheDocument();
     });
 
     it('Bot 选择器按宿主分组，切 Bot 后放掉旧的、订新的', async () => {
@@ -226,8 +244,16 @@ describe('DebugConsolePage', () => {
         await user.click(within(list).getByRole('option', { name: /NapCat 测试号/ }));
 
         expect(debugWorkspaceStore.getSnapshot().ws.selected_bot).toBe('bot-nc');
-        await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：NapCat 测试号，点击切换'));
-        await waitFor(() => expect(service.subscribe).toHaveBeenLastCalledWith('bot-nc', { kind: 'auto' }, expect.any(Function)));
+        await waitFor(() =>
+            expect(botTrigger()).toHaveAccessibleName('当前 Bot：NapCat 测试号，点击切换'),
+        );
+        await waitFor(() =>
+            expect(service.subscribe).toHaveBeenLastCalledWith(
+                'bot-nc',
+                { kind: 'auto' },
+                expect.any(Function),
+            ),
+        );
         expect(service.unsubscribe).toHaveBeenCalledWith('sub-1');
     });
 
@@ -235,7 +261,9 @@ describe('DebugConsolePage', () => {
         service.workspace.mockResolvedValue(workspace({ selected_bot: 'bot-off' }));
         renderPage();
         expect(await screen.findByText('Bot 没在运行，启动后会自动开始接收')).toBeInTheDocument();
-        await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：容器里的 NC，点击切换'));
+        await waitFor(() =>
+            expect(botTrigger()).toHaveAccessibleName('当前 Bot：容器里的 NC，点击切换'),
+        );
         expect(service.subscribe).not.toHaveBeenCalled();
     });
 
@@ -291,7 +319,9 @@ describe('DebugConsolePage', () => {
         renderPage();
         await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：小雪，点击切换'));
         act(() => openDebugConsole('bot-nc'));
-        await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：NapCat 测试号，点击切换'));
+        await waitFor(() =>
+            expect(botTrigger()).toHaveAccessibleName('当前 Bot：NapCat 测试号，点击切换'),
+        );
     });
 
     it('调用通道换成 HTTP 后按 Bot 记住', async () => {
@@ -300,13 +330,18 @@ describe('DebugConsolePage', () => {
         const trigger = await screen.findByRole('button', { name: '调用通道：自动（内部通道）' });
         await user.click(trigger);
         const group = await screen.findByRole('radiogroup', { name: '调用通道' });
-        expect(within(group).getByRole('radio', { name: /^自动/ })).toHaveAttribute('aria-checked', 'true');
+        expect(within(group).getByRole('radio', { name: /^自动/ })).toHaveAttribute(
+            'aria-checked',
+            'true',
+        );
         await user.click(within(group).getByRole('radio', { name: /HTTP · http-default :3000/ }));
         expect(debugWorkspaceStore.getSnapshot().ws.channel_choice['bot-sl']).toEqual({
             call: { kind: 'http', name: 'http-default' },
             events: { kind: 'auto' },
         });
-        expect(await screen.findByRole('button', { name: '调用通道：HTTP · http-default' })).toBeInTheDocument();
+        expect(
+            await screen.findByRole('button', { name: '调用通道：HTTP · http-default' }),
+        ).toBeInTheDocument();
     });
 
     it('通道全都不可用时，调用通道下拉给「去组件页 / 机器人页」的出口，点完顺手关上下拉', async () => {
@@ -318,13 +353,17 @@ describe('DebugConsolePage', () => {
             auto_events: null,
         });
         const { onNavigate } = renderPage();
-        await user.click(await screen.findByRole('button', { name: '调用通道：自动（没有可用通道）' }));
+        await user.click(
+            await screen.findByRole('button', { name: '调用通道：自动（没有可用通道）' }),
+        );
         let group = await screen.findByRole('radiogroup', { name: '调用通道' });
         expect(within(group).getByText('眼下没有能用的通道')).toBeInTheDocument();
 
         await user.click(within(group).getByRole('button', { name: '去「组件」页装/修运行时' }));
         expect(onNavigate).toHaveBeenCalledWith('components');
-        await waitFor(() => expect(screen.queryByRole('radiogroup', { name: '调用通道' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('radiogroup', { name: '调用通道' })).not.toBeInTheDocument(),
+        );
 
         await user.click(screen.getByRole('button', { name: '调用通道：自动（没有可用通道）' }));
         group = await screen.findByRole('radiogroup', { name: '调用通道' });
@@ -347,19 +386,37 @@ describe('DebugConsolePage', () => {
             </QueryClientProvider>
         );
         render(<DebugConsolePage />, { wrapper });
-        await user.click(await screen.findByRole('button', { name: '调用通道：自动（没有可用通道）' }));
+        await user.click(
+            await screen.findByRole('button', { name: '调用通道：自动（没有可用通道）' }),
+        );
         const group = await screen.findByRole('radiogroup', { name: '调用通道' });
         expect(within(group).getByText('眼下没有能用的通道')).toBeInTheDocument();
-        expect(within(group).queryByRole('button', { name: '去「组件」页装/修运行时' })).not.toBeInTheDocument();
-        expect(within(group).queryByRole('button', { name: '去「机器人」页开 WS 服务' })).not.toBeInTheDocument();
+        expect(
+            within(group).queryByRole('button', { name: '去「组件」页装/修运行时' }),
+        ).not.toBeInTheDocument();
+        expect(
+            within(group).queryByRole('button', { name: '去「机器人」页开 WS 服务' }),
+        ).not.toBeInTheDocument();
     });
 
     it('标签页快捷键：Ctrl+W 关当前、Ctrl+Shift+T 找回、Ctrl+Tab 切下一个', async () => {
         service.workspace.mockResolvedValue(
             workspace({
                 tabs: [
-                    { id: 't1', action: 'get_status', params_text: '{}', timeout_ms: null, channel: null },
-                    { id: 't2', action: 'get_login_info', params_text: '{}', timeout_ms: null, channel: null },
+                    {
+                        id: 't1',
+                        action: 'get_status',
+                        params_text: '{}',
+                        timeout_ms: null,
+                        channel: null,
+                    },
+                    {
+                        id: 't2',
+                        action: 'get_login_info',
+                        params_text: '{}',
+                        timeout_ms: null,
+                        channel: null,
+                    },
                 ],
                 active_tab: 't1',
             }),
@@ -374,13 +431,24 @@ describe('DebugConsolePage', () => {
         expect(debugWorkspaceStore.getSnapshot().ws.tabs.map((t) => t.id)).toEqual(['t1']);
 
         fireEvent.keyDown(document.body, { key: 'T', ctrlKey: true, shiftKey: true });
-        expect(debugWorkspaceStore.getSnapshot().ws.tabs.map((t) => t.action)).toEqual(['get_status', 'get_login_info']);
+        expect(debugWorkspaceStore.getSnapshot().ws.tabs.map((t) => t.action)).toEqual([
+            'get_status',
+            'get_login_info',
+        ]);
     });
 
     it('Ctrl+K 打开命令面板；面板开着时 Ctrl+W 不关背后的标签，Esc 关面板', async () => {
         service.workspace.mockResolvedValue(
             workspace({
-                tabs: [{ id: 't1', action: 'get_status', params_text: '{}', timeout_ms: null, channel: null }],
+                tabs: [
+                    {
+                        id: 't1',
+                        action: 'get_status',
+                        params_text: '{}',
+                        timeout_ms: null,
+                        channel: null,
+                    },
+                ],
                 active_tab: 't1',
             }),
         );
@@ -396,7 +464,9 @@ describe('DebugConsolePage', () => {
         expect(debugWorkspaceStore.getSnapshot().ws.tabs.map((t) => t.id)).toEqual(['t1']);
 
         await user.keyboard('{Escape}');
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: '搜索接口' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: '搜索接口' })).not.toBeInTheDocument(),
+        );
     });
 
     it('标签条上的「+」先给一个空白标签再打开命令面板', async () => {
@@ -418,7 +488,9 @@ describe('DebugConsolePage', () => {
         Element.prototype.animate = animate as unknown as typeof Element.prototype.animate;
         // 中栏（含它的内容节点）的左边缘：左栏展开时在 244，收起成窄边后在 48。
         // 滑动记录量的是 [data-column-body] 里的内容节点（带 transform 的视觉位置），不是 section 自己
-        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+            this: HTMLElement,
+        ) {
             const collapsed = debugWorkspaceStore.getSnapshot().ws.layout.left_collapsed;
             const left = this.closest('[aria-label="请求与响应"]') ? (collapsed ? 48 : 244) : 0;
             return new DOMRect(left, 0, 500, 600);
@@ -428,15 +500,23 @@ describe('DebugConsolePage', () => {
             renderPage();
             const center = await screen.findByRole('region', { name: '请求与响应' });
             fireEvent.click(screen.getByRole('button', { name: '收起左栏' }));
-            await waitFor(() => expect(debugWorkspaceStore.getSnapshot().ws.layout.left_collapsed).toBe(true));
-            const slide = played.find((p) => center.contains(p.el) && String(p.frames[0]?.transform).startsWith('translateX(196px)'));
+            await waitFor(() =>
+                expect(debugWorkspaceStore.getSnapshot().ws.layout.left_collapsed).toBe(true),
+            );
+            const slide = played.find(
+                (p) =>
+                    center.contains(p.el) &&
+                    String(p.frames[0]?.transform).startsWith('translateX(196px)'),
+            );
             expect(slide).toBeDefined();
             expect(Object.keys(slide?.frames[0] ?? {})).toEqual(['transform']);
 
             played.length = 0;
             preferencesStore.setMotionEnabled(false);
             fireEvent.click(screen.getByRole('button', { name: '展开左栏' }));
-            await waitFor(() => expect(debugWorkspaceStore.getSnapshot().ws.layout.left_collapsed).toBe(false));
+            await waitFor(() =>
+                expect(debugWorkspaceStore.getSnapshot().ws.layout.left_collapsed).toBe(false),
+            );
             expect(played.some((p) => center.contains(p.el))).toBe(false);
         } finally {
             Element.prototype.animate = originalAnimate;
@@ -446,7 +526,9 @@ describe('DebugConsolePage', () => {
     it('离开页面时退掉事件订阅（后端按「没人看」算空闲）', async () => {
         const { unmount } = renderPage();
         await waitFor(() => expect(service.subscribe).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(debugEventStore.getSnapshot().bots['bot-sl']?.subscriptionId).toBe('sub-1'));
+        await waitFor(() =>
+            expect(debugEventStore.getSnapshot().bots['bot-sl']?.subscriptionId).toBe('sub-1'),
+        );
         expect(service.unsubscribe).not.toHaveBeenCalled();
         unmount();
         expect(service.unsubscribe).toHaveBeenCalledWith('sub-1');
@@ -486,7 +568,9 @@ describe('DebugConsolePage', () => {
         ]);
         service.stopReceiver.mockResolvedValue(undefined);
         renderPage();
-        await user.click(await screen.findByRole('button', { name: '正在接收 2 个 Bot 的事件，点击查看' }));
+        await user.click(
+            await screen.findByRole('button', { name: '正在接收 2 个 Bot 的事件，点击查看' }),
+        );
         expect(await screen.findByText('缓冲 1,234 条')).toBeInTheDocument();
         expect(screen.getByText('重连中（第 2 次，2 秒后）')).toBeInTheDocument();
 
@@ -517,10 +601,22 @@ describe('DebugConsolePage', () => {
         expect(debugWorkspaceStore.getSnapshot().ws.selected_bot).toBe('bot-nc');
 
         await act(async () => fresh.resolve([SL, NC]));
-        await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：NapCat 测试号，点击切换'));
+        await waitFor(() =>
+            expect(botTrigger()).toHaveAccessibleName('当前 Bot：NapCat 测试号，点击切换'),
+        );
         expect(debugWorkspaceStore.getSnapshot().ws.selected_bot).toBe('bot-nc');
-        await waitFor(() => expect(service.subscribe).toHaveBeenCalledWith('bot-nc', { kind: 'auto' }, expect.any(Function)));
-        expect(service.subscribe).not.toHaveBeenCalledWith('bot-sl', expect.anything(), expect.anything());
+        await waitFor(() =>
+            expect(service.subscribe).toHaveBeenCalledWith(
+                'bot-nc',
+                { kind: 'auto' },
+                expect.any(Function),
+            ),
+        );
+        expect(service.subscribe).not.toHaveBeenCalledWith(
+            'bot-sl',
+            expect.anything(),
+            expect.anything(),
+        );
     });
 
     it('刷新回来还是找不到带进来的 Bot，才退回默认的', async () => {
@@ -538,10 +634,17 @@ describe('DebugConsolePage', () => {
 
         service.targets.mockResolvedValue([SL, NC, { ...STOPPED, running: true, online: true }]);
         await act(async () => {
-            for (const h of domainHandlers) h({ kind: 'bot_state_changed', snapshot: { bot_id: 'bot-off' } });
+            for (const h of domainHandlers)
+                h({ kind: 'bot_state_changed', snapshot: { bot_id: 'bot-off' } });
         });
 
-        await waitFor(() => expect(service.subscribe).toHaveBeenCalledWith('bot-off', { kind: 'auto' }, expect.any(Function)));
+        await waitFor(() =>
+            expect(service.subscribe).toHaveBeenCalledWith(
+                'bot-off',
+                { kind: 'auto' },
+                expect.any(Function),
+            ),
+        );
         expect(screen.queryByText('Bot 没在运行，启动后会自动开始接收')).not.toBeInTheDocument();
     });
 
@@ -556,7 +659,9 @@ describe('DebugConsolePage', () => {
         service.targets.mockResolvedValue([...remote, local]);
         service.workspace.mockResolvedValue(workspace({ selected_bot: 'r0' }));
         renderPage();
-        await waitFor(() => expect(botTrigger()).toHaveAccessibleName('当前 Bot：远端 0，点击切换'));
+        await waitFor(() =>
+            expect(botTrigger()).toHaveAccessibleName('当前 Bot：远端 0，点击切换'),
+        );
 
         await user.click(botTrigger());
         const search = await screen.findByRole('textbox', { name: '搜索 Bot' });

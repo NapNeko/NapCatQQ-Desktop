@@ -13,7 +13,8 @@ const quiet = (p: Promise<unknown>) => void p.catch(() => undefined);
 export const terminalIo = {
     attach: terminalService.attach,
     write: (id: string, data: string) => quiet(terminalService.write(id, data)),
-    resize: (id: string, cols: number, rows: number) => quiet(terminalService.resize(id, cols, rows)),
+    resize: (id: string, cols: number, rows: number) =>
+        quiet(terminalService.resize(id, cols, rows)),
     ack: (id: string, bytes: number) => quiet(terminalService.ack(id, bytes)),
     clearHistory: (id: string) => quiet(terminalService.clearHistory(id)),
     readClipboard: () => terminalService.readClipboard().catch(() => ''),

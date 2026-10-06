@@ -2,10 +2,7 @@
 // 正向（应用端连 Bot，如 MaiBot）听口在 Bot 侧，隧道方向和反向相反，但哪几种组合能连、要不要桌面端在线是一样的。
 
 export type AppLinkTopology =
-    | 'same_host'
-    | 'local_bot_remote_app'
-    | 'remote_bot_local_app'
-    | 'remote_bot_remote_app';
+    'same_host' | 'local_bot_remote_app' | 'remote_bot_local_app' | 'remote_bot_remote_app';
 
 export function classifyAppLink(
     botHostId: string | null,

@@ -34,9 +34,7 @@ export function isReady(readiness: RuntimeReadiness): boolean {
 
 /** 阻断节点，root 在前 */
 export function blockingNodes(readiness: RuntimeReadiness): DependencyNode[] {
-    return [readiness.root, ...readiness.plan.nodes].filter(
-        (n) => n.status.state !== 'satisfied',
-    );
+    return [readiness.root, ...readiness.plan.nodes].filter((n) => n.status.state !== 'satisfied');
 }
 
 /** 探测不到的节点；与 Rust describe_not_ready 同规则：不拦启动，只提示 */

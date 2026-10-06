@@ -34,9 +34,24 @@ export function messageLinkages(item: MessageItem): EventLinkage[] {
         const replySegment = { type: 'reply', data: { id: item.messageId } };
         out.push(
             peer.type === 'group'
-                ? { id: 'reply', label: '回复', action: 'send_group_msg', params: { group_id: peer.id, message: [replySegment] } }
-                : { id: 'reply', label: '回复', action: 'send_private_msg', params: { user_id: peer.id, message: [replySegment] } },
-            { id: 'recall', label: '撤回', action: 'delete_msg', params: { message_id: item.messageId } },
+                ? {
+                      id: 'reply',
+                      label: '回复',
+                      action: 'send_group_msg',
+                      params: { group_id: peer.id, message: [replySegment] },
+                  }
+                : {
+                      id: 'reply',
+                      label: '回复',
+                      action: 'send_private_msg',
+                      params: { user_id: peer.id, message: [replySegment] },
+                  },
+            {
+                id: 'recall',
+                label: '撤回',
+                action: 'delete_msg',
+                params: { message_id: item.messageId },
+            },
         );
     }
 
@@ -49,7 +64,12 @@ export function messageLinkages(item: MessageItem): EventLinkage[] {
                       action: 'get_group_member_info',
                       params: { group_id: peer.id, user_id: item.senderId },
                   }
-                : { id: 'sender', label: '查发送者', action: 'get_stranger_info', params: { user_id: item.senderId } },
+                : {
+                      id: 'sender',
+                      label: '查发送者',
+                      action: 'get_stranger_info',
+                      params: { user_id: item.senderId },
+                  },
         );
     }
 

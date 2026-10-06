@@ -34,8 +34,7 @@ declare global {
 }
 
 const SUPPORTS_VIEW_TRANSITION =
-    typeof document !== 'undefined' &&
-    typeof document.startViewTransition === 'function';
+    typeof document !== 'undefined' && typeof document.startViewTransition === 'function';
 
 // 光环靠 @property 注册的 <length> 变量插值；没有它变量只能离散跳变，退回硬边圆。
 const SUPPORTS_REGISTERED_PROPERTY =
@@ -57,8 +56,7 @@ function writeHoleKeyframes(endPx: number): void {
         style.id = HOLE_KEYFRAMES_ID;
         document.head.appendChild(style);
     }
-    style.textContent =
-        `@keyframes theme-reveal-hole{from{--theme-reveal-hole:0px}to{--theme-reveal-hole:${endPx}px}}`;
+    style.textContent = `@keyframes theme-reveal-hole{from{--theme-reveal-hole:0px}to{--theme-reveal-hole:${endPx}px}}`;
 }
 
 // 上一次过渡没跑完时直接瞬时切换：叠两个 View Transition 会互相抢伪元素。
@@ -72,11 +70,15 @@ let lastPointerAt = 0;
 
 function ensurePointerTracking(): void {
     if (typeof window === 'undefined' || lastPointerAt !== 0) return;
-    window.addEventListener('pointerdown', (e) => {
-        lastPointerX = e.clientX;
-        lastPointerY = e.clientY;
-        lastPointerAt = Date.now();
-    }, { capture: true, passive: true });
+    window.addEventListener(
+        'pointerdown',
+        (e) => {
+            lastPointerX = e.clientX;
+            lastPointerY = e.clientY;
+            lastPointerAt = Date.now();
+        },
+        { capture: true, passive: true },
+    );
 }
 
 export async function playThemeTransition(
@@ -99,10 +101,14 @@ export async function playThemeTransition(
     const recentClick = Date.now() - lastPointerAt < 2000;
     const cx = Number.isFinite(opts.originX)
         ? (opts.originX as number)
-        : recentClick ? lastPointerX : innerWidth / 2;
+        : recentClick
+          ? lastPointerX
+          : innerWidth / 2;
     const cy = Number.isFinite(opts.originY)
         ? (opts.originY as number)
-        : recentClick ? lastPointerY : innerHeight / 2;
+        : recentClick
+          ? lastPointerY
+          : innerHeight / 2;
 
     // duration 沿用 motion 体系的秒单位（GSAP 约定），CSS 动画要 ms。
     const durMs = Math.max(0, Math.round(opts.duration * 1000));
@@ -160,7 +166,12 @@ export async function playThemeTransition(
         await vt.finished.catch(() => undefined);
     } finally {
         delete rootEl.dataset.themeReveal;
-        for (const name of ['--theme-reveal-dur', '--theme-reveal-x', '--theme-reveal-y', '--theme-reveal-r']) {
+        for (const name of [
+            '--theme-reveal-dur',
+            '--theme-reveal-x',
+            '--theme-reveal-y',
+            '--theme-reveal-r',
+        ]) {
             rootEl.style.removeProperty(name);
         }
         for (const el of originRings) el.remove();

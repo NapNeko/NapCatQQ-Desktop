@@ -100,7 +100,8 @@ function paginate<T>(rows: T[], page: number, size: number): { total: number; it
 }
 
 const chatName = (id: string) => CHATS.find((c) => c.chat_id === id)?.chat_name ?? id;
-const done = (affected: number, message: string): Promise<MaiBotResourceDone> => withMockDelay({ affected, message });
+const done = (affected: number, message: string): Promise<MaiBotResourceDone> =>
+    withMockDelay({ affected, message });
 
 export const mockMaiBotLearning = {
     expressions(inst: AppInstance, q: MaiBotExpressionQuery): Promise<MaiBotExpressionPage> {
@@ -108,7 +109,9 @@ export const mockMaiBotLearning = {
         const kw = q.search.trim().toLowerCase();
         const rows = s.expressions
             .filter((e) => !q.chat_id || e.chat_id === q.chat_id)
-            .filter((e) => (q.filter === 'curated' ? e.curated : q.filter === 'uncurated' ? !e.curated : true))
+            .filter((e) =>
+                q.filter === 'curated' ? e.curated : q.filter === 'uncurated' ? !e.curated : true,
+            )
             .filter((e) => !kw || `${e.situation}${e.style}`.toLowerCase().includes(kw))
             .sort((a, b) => b.last_active - a.last_active);
         return withMockDelay(paginate(rows, q.page, q.page_size));
@@ -150,7 +153,9 @@ export const mockMaiBotLearning = {
                               ...e,
                               situation: a.situation.trim(),
                               style: a.style.trim(),
-                              ...(a.chat_id ? { chat_id: a.chat_id, chat_name: chatName(a.chat_id) } : {}),
+                              ...(a.chat_id
+                                  ? { chat_id: a.chat_id, chat_name: chatName(a.chat_id) }
+                                  : {}),
                               last_active: now,
                           }
                         : e,
@@ -207,7 +212,8 @@ export const mockMaiBotLearning = {
         const s = store(inst);
         switch (a.op) {
             case 'create':
-                if (!a.chat_ids.length) return Promise.reject(makeAppConfigError('invalid', '至少挑一个聊天'));
+                if (!a.chat_ids.length)
+                    return Promise.reject(makeAppConfigError('invalid', '至少挑一个聊天'));
                 s.jargons.unshift({
                     id: s.nextId++,
                     content: a.content.trim(),
@@ -231,13 +237,17 @@ export const mockMaiBotLearning = {
                               is_global: a.is_global,
                               is_jargon: a.is_jargon,
                               pinned: a.pinned,
-                              ...(a.chat_ids ? { chat_ids: a.chat_ids, chat_names: a.chat_ids.map(chatName) } : {}),
+                              ...(a.chat_ids
+                                  ? { chat_ids: a.chat_ids, chat_names: a.chat_ids.map(chatName) }
+                                  : {}),
                           }
                         : j,
                 );
                 return done(1, '改好了');
             case 'set_jargon':
-                s.jargons = s.jargons.map((j) => (a.ids.includes(j.id) ? { ...j, is_jargon: a.is_jargon } : j));
+                s.jargons = s.jargons.map((j) =>
+                    a.ids.includes(j.id) ? { ...j, is_jargon: a.is_jargon } : j,
+                );
                 return done(a.ids.length, a.is_jargon ? '标成黑话了' : '标成不是黑话了');
             case 'delete':
                 s.jargons = s.jargons.filter((j) => !a.ids.includes(j.id));

@@ -22,12 +22,7 @@ export function serverLifecycleBadge(state: ServerState): ServerBadgeSpec {
     }
 }
 
-export type ServerStatusTone =
-    | 'success'
-    | 'warning'
-    | 'danger'
-    | 'brand'
-    | 'neutral';
+export type ServerStatusTone = 'success' | 'warning' | 'danger' | 'brand' | 'neutral';
 
 export function serverStatusLineToneClass(tone: ServerStatusTone): string {
     switch (tone) {

@@ -49,7 +49,13 @@ export interface SNode {
 }
 
 function isSchemaJson(v: unknown): v is SchemaJson {
-    return !!v && typeof v === 'object' && 'uid' in v && 'refs' in v && typeof (v as SchemaJson).refs === 'object';
+    return (
+        !!v &&
+        typeof v === 'object' &&
+        'uid' in v &&
+        'refs' in v &&
+        typeof (v as SchemaJson).refs === 'object'
+    );
 }
 
 /** 把 refs 连成一张图（可能有环：递归的 schema 只是指回同一个 uid）；认不出返回 null */
@@ -58,9 +64,16 @@ export function hydrateSchema(json: unknown): SNode | null {
     const nodes = new Map<string, SNode>();
     for (const [uid, ref] of Object.entries(json.refs)) {
         if (!ref || typeof ref.type !== 'string') continue;
-        nodes.set(uid, { uid: Number(uid), type: ref.type, meta: ref.meta ?? {}, value: ref.value, bits: ref.bits });
+        nodes.set(uid, {
+            uid: Number(uid),
+            type: ref.type,
+            meta: ref.meta ?? {},
+            value: ref.value,
+            bits: ref.bits,
+        });
     }
-    const get = (uid: number | undefined) => (uid === undefined ? undefined : nodes.get(String(uid)));
+    const get = (uid: number | undefined) =>
+        uid === undefined ? undefined : nodes.get(String(uid));
     for (const [uid, ref] of Object.entries(json.refs)) {
         const node = nodes.get(uid);
         if (!node) continue;
@@ -100,7 +113,9 @@ export function isHidden(node: SNode): boolean {
 }
 
 export function isPrimitive(node: SNode): boolean {
-    return ['string', 'number', 'natural', 'percent', 'boolean', 'const', 'date'].includes(node.type);
+    return ['string', 'number', 'natural', 'percent', 'boolean', 'const', 'date'].includes(
+        node.type,
+    );
 }
 
 /** 联合里能选的分支：隐藏的（Koishi 的 computed 把 `$switch` 分支藏起来）去掉 */
@@ -110,13 +125,16 @@ export function visibleBranches(node: SNode): SNode[] {
 
 /** 对象 / 交叉 / 带默认值包装之后的实际字段表（交叉里的对象按顺序拼起来） */
 export function objectFields(node: SNode): { key: string; node: SNode }[] {
-    if (node.type === 'object') return Object.entries(node.dict ?? {}).map(([key, n]) => ({ key, node: n }));
+    if (node.type === 'object')
+        return Object.entries(node.dict ?? {}).map(([key, n]) => ({ key, node: n }));
     if (node.type === 'intersect') return (node.list ?? []).flatMap(objectFields);
     return [];
 }
 
 /** 交叉里带标题的一段段（上游控制台按段画分组）；没有交叉就是一整段 */
-export function objectSections(node: SNode): { title: string; fields: { key: string; node: SNode }[] }[] {
+export function objectSections(
+    node: SNode,
+): { title: string; fields: { key: string; node: SNode }[] }[] {
     if (node.type === 'intersect') {
         return (node.list ?? []).flatMap((part) => {
             if (part.type === 'union') {
@@ -151,7 +169,10 @@ export function unionShape(node: SNode): UnionShape {
     if (branches.length > 0 && branches.every((b) => b.type === 'const')) {
         return {
             kind: 'enum',
-            options: branches.map((b) => ({ value: b.value, label: describe(b) || String(b.value) })),
+            options: branches.map((b) => ({
+                value: b.value,
+                label: describe(b) || String(b.value),
+            })),
         };
     }
     if (branches.length > 1 && branches.every(isObjectLike)) {
@@ -236,7 +257,9 @@ export function renderable(node: SNode, depth = 0): boolean {
             return true;
         case 'object':
         case 'intersect':
-            return objectFields(node).every((f) => isHidden(f.node) || renderable(f.node, depth + 1));
+            return objectFields(node).every(
+                (f) => isHidden(f.node) || renderable(f.node, depth + 1),
+            );
         case 'array':
         case 'dict':
             return !!node.inner && renderable(node.inner, depth + 1);
@@ -325,9 +348,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
     if (a && b && typeof a === 'object' && typeof b === 'object') {
         const ka = Object.keys(a as Obj);
         const kb = Object.keys(b as Obj);
-        return (
-            ka.length === kb.length && ka.every((k) => deepEqual((a as Obj)[k], (b as Obj)[k]))
-        );
+        return ka.length === kb.length && ka.every((k) => deepEqual((a as Obj)[k], (b as Obj)[k]));
     }
     return false;
 }
@@ -336,7 +357,11 @@ function deepEqual(a: unknown, b: unknown): boolean {
 export function simplifyConfig(node: SNode, value: Obj): Obj {
     const out: Obj = { ...value };
     for (const f of visibleFields(node, value)) {
-        if (f.key in out && f.node.meta.default !== undefined && deepEqual(out[f.key], f.node.meta.default)) {
+        if (
+            f.key in out &&
+            f.node.meta.default !== undefined &&
+            deepEqual(out[f.key], f.node.meta.default)
+        ) {
             delete out[f.key];
         }
     }
@@ -405,18 +430,26 @@ function fieldJsonSchema(node: SNode, depth: number): Record<string, unknown> | 
 }
 
 /** 必填但没值的字段（上游 `required` 没默认值时启用会直接报错）；返回点分路径 */
-export function missingRequired(node: SNode, value: unknown, path: string[] = [], depth = 0): string[] {
+export function missingRequired(
+    node: SNode,
+    value: unknown,
+    path: string[] = [],
+    depth = 0,
+): string[] {
     if (depth > 12 || isHidden(node)) return [];
     const v = effectiveValue(node, value);
     if (node.meta.required && (v === undefined || v === null || v === '')) return [path.join('.')];
     if (isObjectLike(node)) {
         const obj = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
-        return objectFields(node).flatMap((f) => missingRequired(f.node, obj[f.key], [...path, f.key], depth + 1));
+        return objectFields(node).flatMap((f) =>
+            missingRequired(f.node, obj[f.key], [...path, f.key], depth + 1),
+        );
     }
     if (node.type === 'union') {
         const shape = unionShape(node);
         if (shape.kind === 'tagged') {
-            const obj = (v && typeof v === 'object' ? v : undefined) as Record<string, unknown> | undefined;
+            const obj = (v && typeof v === 'object' ? v : undefined) as
+                Record<string, unknown> | undefined;
             const b = shape.branches[taggedBranch(shape, obj)];
             return b ? missingRequired(b.node, obj ?? {}, path, depth + 1) : [];
         }

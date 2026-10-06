@@ -20,11 +20,13 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) => {
-                const fn = service[key];
-                if (!fn) throw new Error(`没有模拟 service.${key}`);
-                return fn(...args);
-            },
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) => {
+                    const fn = service[key];
+                    if (!fn) throw new Error(`没有模拟 service.${key}`);
+                    return fn(...args);
+                },
         },
     ),
 }));
@@ -53,7 +55,12 @@ const SL: DebugTarget = {
     online: true,
 };
 
-function saved(id: string, folder: string | null, order: number, patch: Partial<DebugSavedRequest> = {}): DebugSavedRequest {
+function saved(
+    id: string,
+    folder: string | null,
+    order: number,
+    patch: Partial<DebugSavedRequest> = {},
+): DebugSavedRequest {
     return {
         id,
         name: `收藏 ${id}`,
@@ -74,9 +81,21 @@ const SEED: DebugCollections = {
     folders: [{ id: 'f1', name: '常用', order: 0 }],
     requests: [
         saved('a', 'f1', 0, { name: '看看登录号' }),
-        saved('b', 'f1', 1, { name: '测试群打招呼', action: 'send_group_msg', params: { group_id: 1, message: 'hi' } }),
-        saved('r', null, 0, { name: '群列表', action: 'get_group_list', channel: { kind: 'internal' } }),
-        saved('k', null, 1, { name: '踢人', action: 'set_group_kick', params: { group_id: 1, user_id: 2 } }),
+        saved('b', 'f1', 1, {
+            name: '测试群打招呼',
+            action: 'send_group_msg',
+            params: { group_id: 1, message: 'hi' },
+        }),
+        saved('r', null, 0, {
+            name: '群列表',
+            action: 'get_group_list',
+            channel: { kind: 'internal' },
+        }),
+        saved('k', null, 1, {
+            name: '踢人',
+            action: 'set_group_kick',
+            params: { group_id: 1, user_id: 2 },
+        }),
     ],
 };
 
@@ -116,7 +135,8 @@ function renderCollections(target: DebugTarget | null = SL) {
     return render(<LeftColumn target={target} panel="collections" />, { wrapper });
 }
 
-const lastSaved = (): DebugCollections => service.saveCollections.mock.calls.at(-1)?.[0] as DebugCollections;
+const lastSaved = (): DebugCollections =>
+    service.saveCollections.mock.calls.at(-1)?.[0] as DebugCollections;
 const rowOf = (name: string) => screen.getByText(name).closest('[role="treeitem"]') as HTMLElement;
 
 beforeEach(() => {
@@ -157,7 +177,13 @@ describe('收藏', () => {
         renderCollections();
         await screen.findByText('看看登录号');
         const names = screen.getAllByRole('treeitem').map((el) => el.getAttribute('aria-label'));
-        expect(names).toEqual(['文件夹 常用，2 个请求', '看看登录号（get_login_info）', '测试群打招呼（send_group_msg）', '群列表（get_group_list）', '踢人（set_group_kick）']);
+        expect(names).toEqual([
+            '文件夹 常用，2 个请求',
+            '看看登录号（get_login_info）',
+            '测试群打招呼（send_group_msg）',
+            '群列表（get_group_list）',
+            '踢人（set_group_kick）',
+        ]);
         fireEvent.click(rowOf('常用'));
         expect(screen.queryByText('看看登录号')).not.toBeInTheDocument();
         fireEvent.click(rowOf('常用'));
@@ -185,7 +211,9 @@ describe('收藏', () => {
         renderCollections();
         await screen.findByText('看看登录号');
         await waitFor(() => expect(service.catalog).toHaveBeenCalled());
-        await user.click(within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' }));
+        await user.click(
+            within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' }),
+        );
         await waitFor(() => expect(service.call).toHaveBeenCalledTimes(1));
         expect(service.call.mock.calls[0]?.[0]).toMatchObject({
             bot_id: 'bot-sl',
@@ -195,7 +223,9 @@ describe('收藏', () => {
             origin: 'editor',
         });
         const tabId = open.mock.results[0]?.value as string;
-        await waitFor(() => expect(debugWorkspaceStore.getRun(tabId)?.last?.action).toBe('get_login_info'));
+        await waitFor(() =>
+            expect(debugWorkspaceStore.getRun(tabId)?.last?.action).toBe('get_login_info'),
+        );
     });
 
     it('危险接口先确认再发', async () => {
@@ -204,7 +234,9 @@ describe('收藏', () => {
         await screen.findByText('踢人');
         await waitFor(() => expect(service.catalog).toHaveBeenCalled());
         await user.click(within(rowOf('踢人')).getByRole('button', { name: '在当前 Bot 上发送' }));
-        expect(await screen.findByRole('heading', { name: '确认调用 set_group_kick？' })).toBeInTheDocument();
+        expect(
+            await screen.findByRole('heading', { name: '确认调用 set_group_kick？' }),
+        ).toBeInTheDocument();
         expect(screen.getByText(/会把 2 移出群 1/)).toBeInTheDocument();
         expect(screen.getByText('这是收藏「踢人」，会发给 小雪。')).toBeInTheDocument();
         expect(service.call).not.toHaveBeenCalled();
@@ -227,13 +259,17 @@ describe('收藏', () => {
 
         await user.click(within(rowOf('踢人')).getByRole('button', { name: '在当前 Bot 上发送' }));
         await waitFor(() => expect(service.call).toHaveBeenCalledTimes(2));
-        expect(screen.queryByRole('heading', { name: '确认调用 set_group_kick？' })).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole('heading', { name: '确认调用 set_group_kick？' }),
+        ).not.toBeInTheDocument();
     });
 
     it('Bot 没在运行时发送按钮禁用', async () => {
         renderCollections({ ...SL, running: false });
         await screen.findByText('看看登录号');
-        expect(within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' })).toBeDisabled();
+        expect(
+            within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' }),
+        ).toBeDisabled();
     });
 
     it('行内改名：回车保存，Esc 放弃', async () => {
@@ -265,7 +301,11 @@ describe('收藏', () => {
         await waitFor(() => expect(service.saveCollections).toHaveBeenCalledTimes(1));
         expect(lastSaved().requests.map((r) => r.id)).toEqual(['a', 'b', 'k']);
 
-        await waitFor(() => expect(screen.queryByRole('heading', { name: '删除这个收藏？' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(
+                screen.queryByRole('heading', { name: '删除这个收藏？' }),
+            ).not.toBeInTheDocument(),
+        );
         await user.click(within(rowOf('常用')).getByRole('button', { name: '删除文件夹' }));
         expect(await screen.findByText(/和里面的 2 个请求会一起删掉/)).toBeInTheDocument();
     });
@@ -280,7 +320,9 @@ describe('收藏', () => {
         const input = await screen.findByRole('textbox', { name: '文件夹名' });
         await user.clear(input);
         await user.type(input, '群管理{Enter}');
-        await waitFor(() => expect(lastSaved().folders.map((f) => f.name)).toEqual(['常用', '群管理']));
+        await waitFor(() =>
+            expect(lastSaved().folders.map((f) => f.name)).toEqual(['常用', '群管理']),
+        );
     });
 
     it('键盘：↓ 移到下一行，Alt+↓ 把请求往下挪一格', async () => {
@@ -303,11 +345,16 @@ describe('收藏', () => {
         renderCollections();
         await screen.findByText('群列表');
         fireEvent.contextMenu(rowOf('群列表'));
-        fireEvent.pointerDown(await screen.findByRole('menuitem', { name: /移到/ }), { pointerType: 'mouse' });
+        fireEvent.pointerDown(await screen.findByRole('menuitem', { name: /移到/ }), {
+            pointerType: 'mouse',
+        });
         fireEvent.keyDown(screen.getByRole('menuitem', { name: /移到/ }), { key: 'ArrowRight' });
         fireEvent.click(await screen.findByRole('menuitem', { name: '常用' }));
         await waitFor(() => expect(service.saveCollections).toHaveBeenCalledTimes(1));
-        expect(lastSaved().requests.find((r) => r.id === 'r')).toMatchObject({ folder_id: 'f1', order: 2 });
+        expect(lastSaved().requests.find((r) => r.id === 'r')).toMatchObject({
+            folder_id: 'f1',
+            order: 2,
+        });
     });
 
     it('没有收藏时给出说明和导入入口', async () => {
@@ -336,7 +383,9 @@ describe('收藏', () => {
 
         await user.clear(input);
         await user.type(input, '所有群{Enter}');
-        await waitFor(() => expect(lastSaved().requests.find((r) => r.id === 'r')?.name).toBe('所有群'));
+        await waitFor(() =>
+            expect(lastSaved().requests.find((r) => r.id === 'r')?.name).toBe('所有群'),
+        );
         await waitFor(() => expect(rowOf('所有群')).toHaveFocus());
     });
 
@@ -355,7 +404,10 @@ describe('收藏', () => {
         renderCollections();
         await screen.findByText('看看登录号');
         for (const name of ['在当前 Bot 上发送', '打开', '重命名', '删除']) {
-            expect(within(rowOf('看看登录号')).getByRole('button', { name })).toHaveAttribute('tabindex', '-1');
+            expect(within(rowOf('看看登录号')).getByRole('button', { name })).toHaveAttribute(
+                'tabindex',
+                '-1',
+            );
         }
     });
 
@@ -368,7 +420,9 @@ describe('收藏', () => {
         const send = within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' });
         await waitFor(() => expect(send).not.toBeDisabled());
         await user.click(send);
-        expect(await screen.findByRole('heading', { name: '确认调用 get_login_info？' })).toBeInTheDocument();
+        expect(
+            await screen.findByRole('heading', { name: '确认调用 get_login_info？' }),
+        ).toBeInTheDocument();
         expect(screen.getByText(/接口目录没读出来/)).toBeInTheDocument();
         expect(service.call).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: '确认调用' }));
@@ -376,7 +430,13 @@ describe('收藏', () => {
     });
 
     it('目录里没有的接口一键发送也先确认', async () => {
-        disk = { ...SEED, requests: [...SEED.requests, saved('w', null, 2, { name: '神秘接口', action: 'weird_action' })] };
+        disk = {
+            ...SEED,
+            requests: [
+                ...SEED.requests,
+                saved('w', null, 2, { name: '神秘接口', action: 'weird_action' }),
+            ],
+        };
         const user = userEvent.setup();
         renderCollections();
         await screen.findByText('神秘接口');
@@ -392,7 +452,9 @@ describe('收藏', () => {
         service.catalog.mockReturnValue(new Promise(() => {}));
         renderCollections();
         await screen.findByText('看看登录号');
-        expect(within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' })).toBeDisabled();
+        expect(
+            within(rowOf('看看登录号')).getByRole('button', { name: '在当前 Bot 上发送' }),
+        ).toBeDisabled();
     });
 
     it('拖动中按 Esc 放弃：不保存；手还按着和刚松手时补来的点击都不打开请求', async () => {

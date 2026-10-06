@@ -28,9 +28,7 @@ let customOrder: string[] = loadCustomOrderFromStorage();
 const listeners = new Set<() => void>();
 
 const broadcastChannel =
-    typeof BroadcastChannel !== 'undefined'
-        ? new BroadcastChannel(CHANNEL_NAME)
-        : null;
+    typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null;
 
 if (broadcastChannel) {
     broadcastChannel.onmessage = (event) => {
@@ -110,15 +108,9 @@ export function useSortedBots(bots: BotActorSnapshot[]): {
     sortedBots: BotActorSnapshot[];
     reorderBots: (sourceBotId: string, targetBotId: string) => void;
 } {
-    const order = useSyncExternalStore(
-        botSortStore.subscribe,
-        botSortStore.get,
-    );
+    const order = useSyncExternalStore(botSortStore.subscribe, botSortStore.get);
 
-    const sortedBots = useMemo(
-        () => sortBotSnapshotsByCustomOrder(bots, order),
-        [bots, order],
-    );
+    const sortedBots = useMemo(() => sortBotSnapshotsByCustomOrder(bots, order), [bots, order]);
 
     const reorderBots = useCallback(
         (sourceBotId: string, targetBotId: string) => {
@@ -134,5 +126,5 @@ export function useSortedBots(bots: BotActorSnapshot[]): {
 export const BOT_SORT_OPTIONS = [];
 export type BotSortOption = string;
 export function useBotSort() {
-    return { sortOption: 'custom', setSortOption: () => { } };
+    return { sortOption: 'custom', setSortOption: () => {} };
 }

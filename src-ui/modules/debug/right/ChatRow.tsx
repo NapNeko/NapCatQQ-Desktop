@@ -87,7 +87,12 @@ export const ChatRow = memo(function ChatRow({
             />
             {showTime && row.kind !== 'trimmed' && <TimeSeparator at={row.at} />}
             <SafeBoundary fallback={<BrokenRow />}>
-                <RowBody row={row} continued={continued} selected={selected} showSessionName={showSessionName} />
+                <RowBody
+                    row={row}
+                    continued={continued}
+                    selected={selected}
+                    showSessionName={showSessionName}
+                />
             </SafeBoundary>
         </div>
     );
@@ -106,7 +111,14 @@ function RowBody({
 }) {
     switch (row.kind) {
         case 'message':
-            return <MessageBubble item={row} continued={continued} selected={selected} showSessionName={showSessionName} />;
+            return (
+                <MessageBubble
+                    item={row}
+                    continued={continued}
+                    selected={selected}
+                    showSessionName={showSessionName}
+                />
+            );
         case 'notice':
             return <NoticeRow item={row} showSessionName={showSessionName} />;
         case 'request':
@@ -127,5 +139,9 @@ function RowBody({
 }
 
 function BrokenRow() {
-    return <div className="px-6 py-1 text-center text-2xs text-text-tertiary">[这条事件显示不了，切到「列表」看原始数据]</div>;
+    return (
+        <div className="px-6 py-1 text-center text-2xs text-text-tertiary">
+            [这条事件显示不了，切到「列表」看原始数据]
+        </div>
+    );
 }

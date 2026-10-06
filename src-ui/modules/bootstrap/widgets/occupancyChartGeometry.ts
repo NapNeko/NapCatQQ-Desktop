@@ -50,7 +50,12 @@ export function buildSmoothPath(points: ChartPoint[]): string {
 // 纵坐标正好落在曲线上。滚入时绘图区右边缘的端点圆点靠它贴着线走，改控制点要一起改。
 export const EDGE_EASE = 'cubic-bezier(0.5, 0, 0.5, 1)';
 
-export function buildAreaPath(linePath: string, points: ChartPoint[], bottom: number, left: number): string {
+export function buildAreaPath(
+    linePath: string,
+    points: ChartPoint[],
+    bottom: number,
+    left: number,
+): string {
     if (points.length === 0) return '';
     const last = points[points.length - 1];
     return `${linePath} L ${last.x} ${bottom} L ${left} ${bottom} Z`;

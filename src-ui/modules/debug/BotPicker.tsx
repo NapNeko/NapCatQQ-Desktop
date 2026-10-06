@@ -2,7 +2,14 @@
 //
 // 列表是一组按钮，↑ ↓ 在按钮间移动焦点，搜索框里 ↓ 进列表、回车选第一个匹配的。
 
-import { memo, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+    memo,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
+} from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger, Spinner } from '../../shared/ui';
@@ -59,7 +66,16 @@ export function BackendTag({ backend, className }: { backend: BackendType; class
     );
 }
 
-export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, ariaLabel, compact = false, statusIndicator, onSelect, onManageBots }: BotPickerProps) {
+export const BotPicker = memo(function BotPicker({
+    targets,
+    selected,
+    loading = false,
+    ariaLabel,
+    compact = false,
+    statusIndicator,
+    onSelect,
+    onManageBots,
+}: BotPickerProps) {
     const m = useMotion();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -68,12 +84,17 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
 
     const servers = useServerProfiles(open).data;
     const serverName = useMemo(() => {
-        const map = new Map((servers ?? []).map((s) => [s.id, s.name?.trim() || s.host?.trim() || s.id]));
+        const map = new Map(
+            (servers ?? []).map((s) => [s.id, s.name?.trim() || s.host?.trim() || s.id]),
+        );
         return (id: string) => map.get(id);
     }, [servers]);
 
     const showSearch = targets.length > SEARCH_THRESHOLD;
-    const filtered = useMemo(() => (showSearch ? filterTargets(targets, query) : [...targets]), [targets, query, showSearch]);
+    const filtered = useMemo(
+        () => (showSearch ? filterTargets(targets, query) : [...targets]),
+        [targets, query, showSearch],
+    );
     const groups = useMemo(() => groupTargets(filtered, serverName), [filtered, serverName]);
 
     const choose = (botId: string) => {
@@ -86,7 +107,8 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
         if (!next) setQuery('');
     };
 
-    const options = () => Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    const options = () =>
+        Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
 
     const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
         const list = options();
@@ -124,7 +146,12 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    aria-label={ariaLabel ?? (selected ? `当前 Bot：${targetDisplayName(selected)}，点击切换` : '选择 Bot')}
+                    aria-label={
+                        ariaLabel ??
+                        (selected
+                            ? `当前 Bot：${targetDisplayName(selected)}，点击切换`
+                            : '选择 Bot')
+                    }
                     className={cn(
                         'group inline-flex h-8 min-w-0 max-w-[300px] shrink items-center gap-2 rounded-sm border border-border-subtle bg-surface pl-2.5 pr-2 text-left',
                         'transition-colors hover:border-border hover:bg-inset data-[state=open]:border-brand/50 data-[state=open]:bg-inset',
@@ -133,10 +160,24 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
                 >
                     {selected ? (
                         <>
-                            {statusIndicator ?? (!compact && <StatusDot tone={targetTone(selected)} size={7} className="shrink-0" />)}
-                            <span className="min-w-0 truncate text-[13px] font-medium text-text">{targetDisplayName(selected)}</span>
+                            {statusIndicator ??
+                                (!compact && (
+                                    <StatusDot
+                                        tone={targetTone(selected)}
+                                        size={7}
+                                        className="shrink-0"
+                                    />
+                                ))}
+                            <span className="min-w-0 truncate text-[13px] font-medium text-text">
+                                {targetDisplayName(selected)}
+                            </span>
                             <BackendTag backend={selected.backend} />
-                            <span className={cn('hidden shrink-0 font-mono text-2xs tabular-nums text-text-tertiary', !compact && '@min-[880px]:inline')}>
+                            <span
+                                className={cn(
+                                    'hidden shrink-0 font-mono text-2xs tabular-nums text-text-tertiary',
+                                    !compact && '@min-[880px]:inline',
+                                )}
+                            >
                                 {selected.qq_id || selected.bot_id}
                             </span>
                         </>
@@ -167,13 +208,21 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
                     e.preventDefault();
                     if (showSearch) searchRef.current?.focus();
                     else
-                        (listRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]') ?? options()[0])?.focus();
+                        (
+                            listRef.current?.querySelector<HTMLButtonElement>(
+                                '[aria-selected="true"]',
+                            ) ?? options()[0]
+                        )?.focus();
                 }}
             >
                 {showSearch && (
                     <div className="border-b border-border-subtle/70 p-2">
                         <label className="relative flex items-center">
-                            <Search size={13} aria-hidden className="pointer-events-none absolute left-2.5 text-text-tertiary" />
+                            <Search
+                                size={13}
+                                aria-hidden
+                                className="pointer-events-none absolute left-2.5 text-text-tertiary"
+                            />
                             <input
                                 ref={searchRef}
                                 value={query}
@@ -202,7 +251,12 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
                         </p>
                     ) : (
                         groups.map((g) => (
-                            <div key={g.key} role="group" aria-label={g.label} className="pb-1 last:pb-0">
+                            <div
+                                key={g.key}
+                                role="group"
+                                aria-label={g.label}
+                                className="pb-1 last:pb-0"
+                            >
                                 <div className="truncate px-2 pb-1 pt-2 text-2xs font-medium uppercase tracking-wider text-text-tertiary">
                                     {g.label}
                                 </div>
@@ -262,7 +316,9 @@ function BotOption({
             <StatusDot tone={targetTone(target)} size={7} className="shrink-0" />
             <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-[13px] font-medium text-text">{targetDisplayName(target)}</span>
+                    <span className="truncate text-[13px] font-medium text-text">
+                        {targetDisplayName(target)}
+                    </span>
                     <BackendTag backend={target.backend} />
                 </span>
                 <span className="mt-0.5 flex items-center gap-1.5 text-2xs text-text-tertiary">
@@ -272,12 +328,18 @@ function BotOption({
                             <span aria-hidden className="text-border">
                                 ·
                             </span>
-                            <span className={target.running ? 'text-warning' : 'text-text-disabled'}>{state}</span>
+                            <span
+                                className={target.running ? 'text-warning' : 'text-text-disabled'}
+                            >
+                                {state}
+                            </span>
                         </>
                     )}
                 </span>
             </span>
-            {selected && <Check size={14} strokeWidth={2.4} aria-hidden className="shrink-0 text-brand" />}
+            {selected && (
+                <Check size={14} strokeWidth={2.4} aria-hidden className="shrink-0 text-brand" />
+            )}
         </button>
     );
 }

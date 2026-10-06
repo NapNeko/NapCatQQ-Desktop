@@ -3,7 +3,15 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ClipboardPaste, FileText, RotateCcw, Upload, X } from 'lucide-react';
-import { Badge, Button, Progress, Select, Switch, TextAreaField, TextField } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    Progress,
+    Select,
+    Switch,
+    TextAreaField,
+    TextField,
+} from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import type {
     MaiBotLocalTextFile,
@@ -47,7 +55,9 @@ export const STATUS_TEXT: Readonly<Record<MaiBotMemoryTaskStatus, string>> = {
     failed: '失败',
 };
 
-const STATUS_TONE: Readonly<Record<MaiBotMemoryTaskStatus, 'neutral' | 'info' | 'success' | 'warning' | 'danger'>> = {
+const STATUS_TONE: Readonly<
+    Record<MaiBotMemoryTaskStatus, 'neutral' | 'info' | 'success' | 'warning' | 'danger'>
+> = {
     queued: 'neutral',
     preparing: 'info',
     running: 'info',
@@ -69,7 +79,10 @@ const firstLine = (text: string) => {
     return line.length > 24 ? `${line.slice(0, 24)}…` : line;
 };
 
-export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode }> = ({ instanceId, switcher }) => {
+export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode }> = ({
+    instanceId,
+    switcher,
+}) => {
     const setup = useMaiBotMemoryImportSetup(instanceId, true);
     const limits = setup.data?.limits;
     const tasks = useMaiBotMemoryTasks(instanceId, true, limits?.poll_ms);
@@ -80,7 +93,12 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
     const [name, setName] = useState('');
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<MaiBotLocalTextFile[]>([]);
-    const [options, setOptions] = useState<MaiBotMemoryImportOptions>({ kind: 'auto', chat_id: '', use_llm: true, force: false });
+    const [options, setOptions] = useState<MaiBotMemoryImportOptions>({
+        kind: 'auto',
+        chat_id: '',
+        use_llm: true,
+        force: false,
+    });
     // 这次会话里建的任务记着导的是什么；上游的任务列表里没有文件名
     const [labels, setLabels] = useState<Record<string, string>>({});
     const [openTask, setOpenTask] = useState<string | null>(null);
@@ -120,10 +138,14 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
     const tooLong = !!limits && content.length > limits.max_paste_chars;
     const canRun = mode === 'paste' ? content.trim().length > 0 && !tooLong : okFiles.length > 0;
     const kind = KINDS.find((k) => k.value === options.kind) ?? KINDS[0];
-    const set = (patch: Partial<MaiBotMemoryImportOptions>) => setOptions((o) => ({ ...o, ...patch }));
+    const set = (patch: Partial<MaiBotMemoryImportOptions>) =>
+        setOptions((o) => ({ ...o, ...patch }));
 
     const submit = () => {
-        const label = mode === 'paste' ? name.trim() || firstLine(content) : okFiles.map((f) => f.name).join('、');
+        const label =
+            mode === 'paste'
+                ? name.trim() || firstLine(content)
+                : okFiles.map((f) => f.name).join('、');
         const req =
             mode === 'paste'
                 ? ({ op: 'paste', name, content, options } as const)
@@ -147,12 +169,18 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                         <Segmented
                             items={[
                                 { value: 'paste', label: '粘贴文字' },
-                                { value: 'files', label: '选文件', count: files.length || undefined },
+                                {
+                                    value: 'files',
+                                    label: '选文件',
+                                    count: files.length || undefined,
+                                },
                             ]}
                             value={mode}
                             onChange={setMode}
                         />
-                        <span className="text-2xs text-text-tertiary">导进去的成为麦麦的长期记忆，聊到了会想起来</span>
+                        <span className="text-2xs text-text-tertiary">
+                            导进去的成为麦麦的长期记忆，聊到了会想起来
+                        </span>
                     </div>
                     {mode === 'paste' ? (
                         <>
@@ -168,7 +196,11 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                                 placeholder="把资料、设定、聊天记录粘在这里"
                                 value={content}
                                 onValueChange={setContent}
-                                error={tooLong ? `太长了，一次最多 ${limits?.max_paste_chars.toLocaleString()} 字` : undefined}
+                                error={
+                                    tooLong
+                                        ? `太长了，一次最多 ${limits?.max_paste_chars.toLocaleString()} 字`
+                                        : undefined
+                                }
                             />
                             <span className="-mt-2 self-end font-mono text-2xs text-text-tertiary">
                                 {content.length.toLocaleString()}
@@ -176,7 +208,12 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                             </span>
                         </>
                     ) : (
-                        <FilePicker files={files} limits={limits} onPick={() => void importFiles.pick().then(addFiles)} onRemove={(p) => setFiles((fs) => fs.filter((f) => f.path !== p))} />
+                        <FilePicker
+                            files={files}
+                            limits={limits}
+                            onPick={() => void importFiles.pick().then(addFiles)}
+                            onRemove={(p) => setFiles((fs) => fs.filter((f) => f.path !== p))}
+                        />
                     )}
                     <div className="grid gap-3 md:grid-cols-2">
                         <div className="flex flex-col gap-1">
@@ -193,13 +230,18 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                                 label="给谁用"
                                 items={[
                                     { value: GLOBAL, label: '所有聊天' },
-                                    ...(setup.data?.chats ?? []).map((c) => ({ value: c.chat_id, label: c.chat_name })),
+                                    ...(setup.data?.chats ?? []).map((c) => ({
+                                        value: c.chat_id,
+                                        label: c.chat_name,
+                                    })),
                                 ]}
                                 value={options.chat_id || GLOBAL}
                                 onValueChange={(v) => set({ chat_id: v === GLOBAL ? '' : v })}
                             />
                             <span className="text-2xs text-text-tertiary">
-                                {options.chat_id ? '只在这个聊天里想得起来' : '哪个聊天里都想得起来'}
+                                {options.chat_id
+                                    ? '只在这个聊天里想得起来'
+                                    : '哪个聊天里都想得起来'}
                             </span>
                         </div>
                     </div>
@@ -218,9 +260,15 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                                 onCheckedChange={(force) => set({ force })}
                             />
                         </div>
-                        <Button variant="primary" disabled={!canRun || run.isPending} onClick={submit}>
+                        <Button
+                            variant="primary"
+                            disabled={!canRun || run.isPending}
+                            onClick={submit}
+                        >
                             <Upload size={14} />
-                            {mode === 'files' && okFiles.length > 0 ? `导入 ${okFiles.length} 个文件` : '导入'}
+                            {mode === 'files' && okFiles.length > 0
+                                ? `导入 ${okFiles.length} 个文件`
+                                : '导入'}
                         </Button>
                     </div>
                     {dragging && (
@@ -233,7 +281,9 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                 <section className="flex flex-col gap-2 lg:sticky lg:top-0">
                     <h3 className="flex flex-col gap-0.5 text-xs font-medium text-text-secondary">
                         导入记录
-                        <span className="font-normal text-2xs text-text-tertiary">麦麦重启后记录会清空，导进去的记忆不会</span>
+                        <span className="font-normal text-2xs text-text-tertiary">
+                            麦麦重启后记录会清空，导进去的记忆不会
+                        </span>
                     </h3>
                     {list.length === 0 ? (
                         <p className="rounded-md border border-dashed border-border-subtle px-4 py-6 text-center text-xs text-text-tertiary">
@@ -272,20 +322,38 @@ const FilePicker: React.FC<{
         >
             <FileText size={20} />
             <span className="text-sm">挑文件，或者直接拖进窗口</span>
-            <span className="text-2xs">txt / md / json，每个 {limits?.max_file_mb ?? 20} MB 以内，UTF-8 编码</span>
+            <span className="text-2xs">
+                txt / md / json，每个 {limits?.max_file_mb ?? 20} MB 以内，UTF-8 编码
+            </span>
         </button>
         {files.length > 0 && (
             <ul className="flex flex-col gap-1">
                 {files.map((f) => (
                     <li
                         key={f.path}
-                        className={cn('flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-xs', f.problem ? 'bg-danger-soft/50' : 'bg-inset/60')}
+                        className={cn(
+                            'flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-xs',
+                            f.problem ? 'bg-danger-soft/50' : 'bg-inset/60',
+                        )}
                     >
-                        <FileText size={13} className={cn('shrink-0', f.problem ? 'text-danger' : 'text-text-tertiary')} />
+                        <FileText
+                            size={13}
+                            className={cn(
+                                'shrink-0',
+                                f.problem ? 'text-danger' : 'text-text-tertiary',
+                            )}
+                        />
                         <span className="min-w-0 flex-1 truncate text-text" title={f.path}>
                             {f.name}
                         </span>
-                        <span className={cn('shrink-0', f.problem ? 'text-danger' : 'text-text-tertiary')}>{f.problem ?? formatSize(f.size)}</span>
+                        <span
+                            className={cn(
+                                'shrink-0',
+                                f.problem ? 'text-danger' : 'text-text-tertiary',
+                            )}
+                        >
+                            {f.problem ?? formatSize(f.size)}
+                        </span>
                         <button
                             type="button"
                             aria-label={`不导 ${f.name}`}
@@ -313,7 +381,10 @@ const TaskRow: React.FC<{
     const detail = useMaiBotMemoryTask(instanceId, open ? t.id : null, pollMs);
     const active = taskActive(t);
     const Icon = t.source === 'paste' ? ClipboardPaste : FileText;
-    const title = label ?? detail.data?.files.map((f) => f.name).join('、') ?? (t.source === 'paste' ? '粘贴的一段' : `${t.file_count} 个文件`);
+    const title =
+        label ??
+        detail.data?.files.map((f) => f.name).join('、') ??
+        (t.source === 'paste' ? '粘贴的一段' : `${t.file_count} 个文件`);
     const canRetry = t.status === 'failed' || t.status === 'done_with_errors';
     const meta = [
         t.total_chunks > 0 && `${t.done_chunks} / ${t.total_chunks} 块`,
@@ -328,7 +399,11 @@ const TaskRow: React.FC<{
                     <Icon size={15} />
                 </span>
                 {/* 标题独占一行：右栏窄，和状态挤在一行会被截得只剩一个字 */}
-                <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left focus-visible:outline-none">
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    className="min-w-0 flex-1 text-left focus-visible:outline-none"
+                >
                     <span className="block truncate text-[13px] text-text" title={title}>
                         {title}
                     </span>
@@ -337,9 +412,18 @@ const TaskRow: React.FC<{
                             {STATUS_TEXT[t.status]}
                             {active && t.progress > 0 && ` ${Math.round(t.progress * 100)}%`}
                         </Badge>
-                        <span className="truncate text-2xs text-text-tertiary">{meta.join(' · ')}</span>
+                        <span className="truncate text-2xs text-text-tertiary">
+                            {meta.join(' · ')}
+                        </span>
                     </span>
-                    {active && <Progress className="mt-2" size="sm" value={t.progress * 100} indeterminate={t.progress === 0} />}
+                    {active && (
+                        <Progress
+                            className="mt-2"
+                            size="sm"
+                            value={t.progress * 100}
+                            indeterminate={t.progress === 0}
+                        />
+                    )}
                 </button>
                 {active ? (
                     <Button
@@ -373,14 +457,22 @@ const TaskRow: React.FC<{
                             {detail.data.files.map((f, i) => (
                                 <li key={i} className="flex flex-col gap-0.5 text-xs">
                                     <span className="flex items-center gap-2">
-                                        <FileText size={12} className="shrink-0 text-text-tertiary" />
-                                        <span className="min-w-0 flex-1 truncate text-text">{f.name}</span>
+                                        <FileText
+                                            size={12}
+                                            className="shrink-0 text-text-tertiary"
+                                        />
+                                        <span className="min-w-0 flex-1 truncate text-text">
+                                            {f.name}
+                                        </span>
                                         <span className="shrink-0 text-2xs text-text-tertiary">
                                             {STATUS_TEXT[f.status]}
-                                            {f.total_chunks > 0 && ` · ${f.done_chunks} / ${f.total_chunks} 块`}
+                                            {f.total_chunks > 0 &&
+                                                ` · ${f.done_chunks} / ${f.total_chunks} 块`}
                                         </span>
                                     </span>
-                                    {f.error && <span className="pl-5 text-2xs text-danger">{f.error}</span>}
+                                    {f.error && (
+                                        <span className="pl-5 text-2xs text-danger">{f.error}</span>
+                                    )}
                                     {f.warnings.map((w, j) => (
                                         <span key={j} className="pl-5 text-2xs text-warning">
                                             {w}
@@ -390,7 +482,9 @@ const TaskRow: React.FC<{
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-2xs text-text-tertiary">{detail.isError ? '这个任务的详情拿不到了' : '正在读取…'}</p>
+                        <p className="text-2xs text-text-tertiary">
+                            {detail.isError ? '这个任务的详情拿不到了' : '正在读取…'}
+                        </p>
                     )}
                 </div>
             )}

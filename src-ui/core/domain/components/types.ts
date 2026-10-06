@@ -97,10 +97,7 @@ export interface MachineView {
 /// 把 ComponentRow[]（组件主导）翻成 MachineView[]（主机主导）。
 /// 顺序：本机优先，远端按 hosts 输入顺序。组件在每台机器内按 category 分组，
 /// unsupported 的行直接剔掉（机器卡不展示这台装不了的东西）。
-export function groupByHost(
-    rows: ComponentRow[],
-    hosts: HostInfo[],
-): MachineView[] {
+export function groupByHost(rows: ComponentRow[], hosts: HostInfo[]): MachineView[] {
     return hosts.map((host) => {
         const machine: MachineView = {
             host,
@@ -143,10 +140,7 @@ export function machineSummary(machine: MachineView): { installed: number; total
 }
 
 // 内部辅助：判断 host 是否在 component 的 supported_targets 内。
-export function hostSupportsComponent(
-    host: HostInfo,
-    targets: SupportedTarget[],
-): boolean {
+export function hostSupportsComponent(host: HostInfo, targets: SupportedTarget[]): boolean {
     return targets.some((t) => t.os === host.os && t.locality === host.locality);
 }
 

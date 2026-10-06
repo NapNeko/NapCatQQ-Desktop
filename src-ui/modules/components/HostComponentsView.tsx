@@ -39,10 +39,7 @@ interface HostComponentsViewProps {
     latestVersionFor: (id: ComponentId) => string | null;
     /** 远端 release 全文（含更新日志）；无则不显示「日志」按钮 */
     latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
-    getProgress: (
-        componentId: ComponentId,
-        hostId: string,
-    ) => ComponentActionProgress | null;
+    getProgress: (componentId: ComponentId, hostId: string) => ComponentActionProgress | null;
     onAction: (
         componentId: ComponentId,
         hostId: string,
@@ -135,13 +132,21 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     // 仅展示一个「重试探测」动作；“去远端页测试连接”是静态指引（用户可从侧边栏切换到远端页）。
     const allUnknown = allComponents.every((r) => r.status.state === 'unknown');
     const anyConnectivityFail = allComponents.some(
-        (r) => r.status.state === 'unknown' && isHostConnectivityFailureReason((r.status as { state: 'unknown'; reason: string }).reason),
+        (r) =>
+            r.status.state === 'unknown' &&
+            isHostConnectivityFailureReason(
+                (r.status as { state: 'unknown'; reason: string }).reason,
+            ),
     );
     const hostConnectFailed = host.locality === 'remote' && allUnknown && anyConnectivityFail;
 
     if (hostConnectFailed) {
         const found = allComponents.find(
-            (r) => r.status.state === 'unknown' && isHostConnectivityFailureReason((r.status as { state: 'unknown'; reason: string }).reason),
+            (r) =>
+                r.status.state === 'unknown' &&
+                isHostConnectivityFailureReason(
+                    (r.status as { state: 'unknown'; reason: string }).reason,
+                ),
         );
         const sample = found?.status.state === 'unknown' ? found.status.reason : '连接失败';
         if (sample && sample !== '连接失败') {
@@ -152,9 +157,15 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-md border border-border-subtle bg-surface/40 px-6 py-10 text-center">
                     <WifiOff size={28} className="text-text-tertiary" strokeWidth={1.5} />
                     <p className="text-sm text-text-secondary">{host.display_name} 主机不可达</p>
-                    <p className="text-2xs text-text-tertiary">到「远端」页测试连接，或检查网络 / 防火墙 / SSH 配置。</p>
+                    <p className="text-2xs text-text-tertiary">
+                        到「远端」页测试连接，或检查网络 / 防火墙 / SSH 配置。
+                    </p>
                     <div className="mt-1">
-                        <Button size="sm" variant="primary" onClick={() => onRetryDetect(host.host_id)}>
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => onRetryDetect(host.host_id)}
+                        >
                             重试探测
                         </Button>
                     </div>
@@ -275,7 +286,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 onRetryDetect={onRetryDetect}
                 onShowReleaseNotes={onShowReleaseNotes}
             />
-
         </div>
     );
 };
@@ -300,12 +310,18 @@ const AppFrameworkGroup: React.FC<{
             >
                 <div className={componentCardGridClass}>
                     {manifests.map((manifest) => (
-                        <div key={manifest.id} data-tour-id={`comp-row-${manifest.component_id}`} className="min-w-0">
+                        <div
+                            key={manifest.id}
+                            data-tour-id={`comp-row-${manifest.component_id}`}
+                            className="min-w-0"
+                        >
                             <AppFrameworkRow
                                 manifest={manifest}
                                 host={host}
                                 instances={instances.filter(
-                                    (i) => i.host_id === host.host_id && i.framework_id === manifest.id,
+                                    (i) =>
+                                        i.host_id === host.host_id &&
+                                        i.framework_id === manifest.id,
                                 )}
                                 runtimeDeps={runtimeDepsFor(manifest, machine.runtimeDep, (id) =>
                                     componentDisplayName(id as ComponentId),
@@ -338,10 +354,7 @@ const Group: React.FC<{
     lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
     latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
-    getProgress: (
-        componentId: ComponentId,
-        hostId: string,
-    ) => ComponentActionProgress | null;
+    getProgress: (componentId: ComponentId, hostId: string) => ComponentActionProgress | null;
     onAction: (
         componentId: ComponentId,
         hostId: string,
@@ -365,35 +378,35 @@ const Group: React.FC<{
     onShowReleaseNotes,
     trailingFor,
 }) => {
-        if (rows.length === 0) return null;
-        return (
-            <FormSection title={title} description={description} layout="none">
-                <div className={componentCardGridClass}>
-                    {rows.map((row) => (
-                        <div
-                            key={row.info.id}
-                            data-tour-id={`comp-row-${row.info.id}`}
-                            className="min-w-0"
-                        >
-                            <MachineComponentRowView
-                                row={row}
-                                hostId={hostId}
-                                latestRemoteVersion={latestVersionFor(row.info.id)}
-                                latestRelease={latestReleaseFor(row.info.id)}
-                                activeProgress={getProgress(row.info.id, hostId)}
-                                disabled={disableActions}
-                                lifecycleBlockedReason={lifecycleBlockedReason}
-                                onAction={(action) => onAction(row.info.id, hostId, action)}
-                                onRetryDetect={() => onRetryDetect(hostId)}
-                                onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
-                                trailingActions={trailingFor?.(row)}
-                            />
-                        </div>
-                    ))}
-                </div>
-            </FormSection>
-        );
-    };
+    if (rows.length === 0) return null;
+    return (
+        <FormSection title={title} description={description} layout="none">
+            <div className={componentCardGridClass}>
+                {rows.map((row) => (
+                    <div
+                        key={row.info.id}
+                        data-tour-id={`comp-row-${row.info.id}`}
+                        className="min-w-0"
+                    >
+                        <MachineComponentRowView
+                            row={row}
+                            hostId={hostId}
+                            latestRemoteVersion={latestVersionFor(row.info.id)}
+                            latestRelease={latestReleaseFor(row.info.id)}
+                            activeProgress={getProgress(row.info.id, hostId)}
+                            disabled={disableActions}
+                            lifecycleBlockedReason={lifecycleBlockedReason}
+                            onAction={(action) => onAction(row.info.id, hostId, action)}
+                            onRetryDetect={() => onRetryDetect(hostId)}
+                            onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
+                            trailingActions={trailingFor?.(row)}
+                        />
+                    </div>
+                ))}
+            </div>
+        </FormSection>
+    );
+};
 
 /// 运行时依赖组：常规组件行 + 一行 Docker（合成行，状态/动作走 docker hook）。
 const RuntimeDepGroup: React.FC<{
@@ -405,10 +418,7 @@ const RuntimeDepGroup: React.FC<{
     lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
     latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
-    getProgress: (
-        componentId: ComponentId,
-        hostId: string,
-    ) => ComponentActionProgress | null;
+    getProgress: (componentId: ComponentId, hostId: string) => ComponentActionProgress | null;
     onAction: (
         componentId: ComponentId,
         hostId: string,
@@ -446,49 +456,49 @@ const RuntimeDepGroup: React.FC<{
     onOpenDockerDownload,
     trailingFor,
 }) => {
-        const hasRows = rows.length > 0 || showDocker;
-        if (!hasRows) return null;
-        return (
-            <FormSection title="运行时依赖" layout="none">
-                <div className={componentCardGridClass}>
-                    {rows.map((row) => (
-                        <div
-                            key={row.info.id}
-                            data-tour-id={`comp-row-${row.info.id}`}
-                            className="min-w-0"
-                        >
-                            <MachineComponentRowView
-                                row={row}
-                                hostId={hostId}
-                                latestRemoteVersion={latestVersionFor(row.info.id)}
-                                latestRelease={latestReleaseFor(row.info.id)}
-                                activeProgress={getProgress(row.info.id, hostId)}
-                                disabled={disableActions}
-                                lifecycleBlockedReason={lifecycleBlockedReason}
-                                onAction={(action) => onAction(row.info.id, hostId, action)}
-                                onRetryDetect={() => onRetryDetect(hostId)}
-                                onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
-                                trailingActions={trailingFor?.(row)}
-                            />
-                        </div>
-                    ))}
-                    {showDocker ? (
-                        <div data-tour-id="comp-row-docker" className="min-w-0">
-                            <DockerRow
-                                os={os}
-                                status={dockerStatus}
-                                isProbing={isDockerProbing}
-                                isInstalling={isInstallingDocker}
-                                installHint={dockerInstallHint}
-                                installProgress={dockerInstallProgress}
-                                onInstall={onInstallDocker}
-                                onOpenDownload={onOpenDockerDownload}
-                            />
-                        </div>
-                    ) : null}
-                </div>
-            </FormSection>
-        );
-    };
+    const hasRows = rows.length > 0 || showDocker;
+    if (!hasRows) return null;
+    return (
+        <FormSection title="运行时依赖" layout="none">
+            <div className={componentCardGridClass}>
+                {rows.map((row) => (
+                    <div
+                        key={row.info.id}
+                        data-tour-id={`comp-row-${row.info.id}`}
+                        className="min-w-0"
+                    >
+                        <MachineComponentRowView
+                            row={row}
+                            hostId={hostId}
+                            latestRemoteVersion={latestVersionFor(row.info.id)}
+                            latestRelease={latestReleaseFor(row.info.id)}
+                            activeProgress={getProgress(row.info.id, hostId)}
+                            disabled={disableActions}
+                            lifecycleBlockedReason={lifecycleBlockedReason}
+                            onAction={(action) => onAction(row.info.id, hostId, action)}
+                            onRetryDetect={() => onRetryDetect(hostId)}
+                            onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
+                            trailingActions={trailingFor?.(row)}
+                        />
+                    </div>
+                ))}
+                {showDocker ? (
+                    <div data-tour-id="comp-row-docker" className="min-w-0">
+                        <DockerRow
+                            os={os}
+                            status={dockerStatus}
+                            isProbing={isDockerProbing}
+                            isInstalling={isInstallingDocker}
+                            installHint={dockerInstallHint}
+                            installProgress={dockerInstallProgress}
+                            onInstall={onInstallDocker}
+                            onOpenDownload={onOpenDockerDownload}
+                        />
+                    </div>
+                ) : null}
+            </div>
+        </FormSection>
+    );
+};
 
 export default HostComponentsView;

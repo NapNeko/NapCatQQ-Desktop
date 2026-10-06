@@ -3,9 +3,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ImageOff, Trash2 } from 'lucide-react';
-import { Button, Dialog, DialogContent, DialogTitle, Spinner, StringListField } from '../../../../shared/ui';
+import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogTitle,
+    Spinner,
+    StringListField,
+} from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { EMOJI_STATUS_LABEL, emojiMoves, normalizeEmojiTags, type EmojiMove } from '../../../../core/domain/apps/maibotEmoji';
+import {
+    EMOJI_STATUS_LABEL,
+    emojiMoves,
+    normalizeEmojiTags,
+    type EmojiMove,
+} from '../../../../core/domain/apps/maibotEmoji';
 import type { MaiBotEmoji, MaiBotEmojiStatus } from '../../../../core/ipc/types';
 import { useMaiBotEmojiImage } from '../../../../hooks/apps/useMaiBotEmojis';
 import { RowCheck } from '../resourceParts';
@@ -19,7 +31,10 @@ const STATUS_DOT: Record<MaiBotEmojiStatus, string> = {
 };
 
 export const StatusDot: React.FC<{ status: MaiBotEmojiStatus }> = ({ status }) => (
-    <span aria-hidden className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[status])} />
+    <span
+        aria-hidden
+        className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[status])}
+    />
 );
 
 /** 图自己去要：没到时是一块呼吸的底，文件被清理过显示「图没了」 */
@@ -39,15 +54,28 @@ export const EmojiImage: React.FC<{
                 src={src}
                 alt={emoji.tags.join('、')}
                 draggable={false}
-                className={cn('h-full w-full object-contain', emoji.status === 'discarded' && 'opacity-50 grayscale', className)}
+                className={cn(
+                    'h-full w-full object-contain',
+                    emoji.status === 'discarded' && 'opacity-50 grayscale',
+                    className,
+                )}
             />
         );
     }
     if (img.isPending || (img.isFetching && !img.data)) {
-        return <span className={cn('block h-full w-full animate-pulse rounded-sm bg-inset', className)} />;
+        return (
+            <span
+                className={cn('block h-full w-full animate-pulse rounded-sm bg-inset', className)}
+            />
+        );
     }
     return (
-        <span className={cn('flex h-full w-full flex-col items-center justify-center gap-1 text-text-disabled', className)}>
+        <span
+            className={cn(
+                'flex h-full w-full flex-col items-center justify-center gap-1 text-text-disabled',
+                className,
+            )}
+        >
             <ImageOff size={original ? 28 : 18} />
             <span className="text-2xs">{img.isError ? '没取到图' : '图没了'}</span>
         </span>
@@ -66,7 +94,9 @@ export const EmojiTile: React.FC<{
     <div
         className={cn(
             'group relative flex flex-col overflow-hidden rounded-md border bg-surface transition-[border-color,box-shadow]',
-            selected ? 'border-brand/60 ring-2 ring-brand/25' : 'border-border-subtle hover:border-border hover:shadow-sm',
+            selected
+                ? 'border-brand/60 ring-2 ring-brand/25'
+                : 'border-border-subtle hover:border-border hover:shadow-sm',
         )}
     >
         <button
@@ -84,13 +114,20 @@ export const EmojiTile: React.FC<{
         <div
             className={cn(
                 'absolute left-1.5 top-1.5 rounded-xs bg-surface/90 p-0.5 transition-opacity',
-                !selecting && !selected && 'opacity-0 focus-within:opacity-100 group-hover:opacity-100',
+                !selecting &&
+                    !selected &&
+                    'opacity-0 focus-within:opacity-100 group-hover:opacity-100',
             )}
         >
             <RowCheck checked={selected} onPick={onPick} />
         </div>
         <button type="button" onClick={onOpen} tabIndex={-1} className="px-2.5 py-2 text-left">
-            <span className={cn('block truncate text-xs', e.tags.length ? 'text-text' : 'text-text-tertiary')}>
+            <span
+                className={cn(
+                    'block truncate text-xs',
+                    e.tags.length ? 'text-text' : 'text-text-tertiary',
+                )}
+            >
                 {e.tags.length ? e.tags.join(' · ') : '没标签'}
             </span>
             <span className="mt-0.5 flex items-center gap-1 text-2xs text-text-tertiary">
@@ -102,7 +139,12 @@ export const EmojiTile: React.FC<{
     </div>
 );
 
-const MOVE_LABEL: Record<EmojiMove, string> = { adopt: '收下', unadopt: '不再发', discard: '丢弃', restore: '捡回来' };
+const MOVE_LABEL: Record<EmojiMove, string> = {
+    adopt: '收下',
+    unadopt: '不再发',
+    discard: '丢弃',
+    restore: '捡回来',
+};
 
 /**
  * 点开一张：大图（原图，动图会动）、标签随改随存、按状态给收下 / 丢弃这些。
@@ -155,7 +197,12 @@ export const EmojiDetail: React.FC<{
                 {e && (
                     <div className="flex flex-col gap-4">
                         <div className="relative flex h-72 items-center justify-center rounded-md bg-field p-4">
-                            <EmojiImage instanceId={instanceId} emoji={e} original className="max-h-64" />
+                            <EmojiImage
+                                instanceId={instanceId}
+                                emoji={e}
+                                original
+                                className="max-h-64"
+                            />
                             <NavButton side="left" label="上一张" onClick={onPrev} />
                             <NavButton side="right" label="下一张" onClick={onNext} />
                         </div>
@@ -196,7 +243,9 @@ export const EmojiDetail: React.FC<{
                                 <Button
                                     key={m}
                                     size="sm"
-                                    variant={m === 'adopt' || m === 'restore' ? 'primary' : 'secondary'}
+                                    variant={
+                                        m === 'adopt' || m === 'restore' ? 'primary' : 'secondary'
+                                    }
                                     disabled={busy}
                                     onClick={() => onMove(m)}
                                 >
@@ -222,7 +271,11 @@ export const EmojiDetail: React.FC<{
     );
 };
 
-const NavButton: React.FC<{ side: 'left' | 'right'; label: string; onClick?: () => void }> = ({ side, label, onClick }) =>
+const NavButton: React.FC<{ side: 'left' | 'right'; label: string; onClick?: () => void }> = ({
+    side,
+    label,
+    onClick,
+}) =>
     onClick ? (
         <button
             type="button"

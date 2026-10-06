@@ -6,10 +6,7 @@
 import { useCallback } from 'react';
 import { openExternalUrl } from '../../core/ipc/transport';
 import { snowlumaService } from '../../core/services/desktop.service';
-import {
-    buildNapcatWebuiUrl,
-    type NapcatWebuiBinding,
-} from '../../core/domain/webui/availability';
+import { buildNapcatWebuiUrl, type NapcatWebuiBinding } from '../../core/domain/webui/availability';
 import type { Flavor } from '../../core/domain/bot/flavor';
 
 export interface OpenWebuiArgs {

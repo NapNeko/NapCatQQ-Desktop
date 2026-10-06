@@ -58,11 +58,7 @@ export const DesktopExitGate: React.FC = () => {
                     <Button type="button" onClick={() => setOpen(false)}>
                         取消
                     </Button>
-                    <Button
-                        type="button"
-                        disabled={exiting}
-                        onClick={confirmExit}
-                    >
+                    <Button type="button" disabled={exiting} onClick={confirmExit}>
                         {exiting ? '正在退出…' : '退出'}
                     </Button>
                 </DialogFooter>

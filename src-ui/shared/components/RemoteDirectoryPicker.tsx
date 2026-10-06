@@ -100,7 +100,10 @@ export function RemoteDirectoryPicker({
                             const last = i === crumbs.length - 1;
                             return (
                                 <span key={path} className="flex min-w-0 items-center gap-0.5">
-                                    <ChevronRight size={12} className="shrink-0 text-text-tertiary" />
+                                    <ChevronRight
+                                        size={12}
+                                        className="shrink-0 text-text-tertiary"
+                                    />
                                     <Crumb
                                         label={seg}
                                         current={last}
@@ -147,7 +150,11 @@ export function RemoteDirectoryPicker({
                     ) : listing.error ? (
                         <div className="flex flex-1 flex-col items-center justify-center gap-2">
                             <p className="text-sm text-text-secondary">读取失败</p>
-                            <Button size="sm" variant="secondary" onClick={() => void listing.refetch()}>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => void listing.refetch()}
+                            >
                                 重试
                             </Button>
                         </div>
@@ -166,7 +173,9 @@ export function RemoteDirectoryPicker({
                                                 'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-text',
                                                 'hover:bg-inset',
                                             )}
-                                            onClick={() => setBrowsePath(joinPosix(browsePath, entry.name))}
+                                            onClick={() =>
+                                                setBrowsePath(joinPosix(browsePath, entry.name))
+                                            }
                                             onDoubleClick={() =>
                                                 setBrowsePath(joinPosix(browsePath, entry.name))
                                             }

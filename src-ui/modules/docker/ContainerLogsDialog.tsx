@@ -4,13 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { ActionMotionIcon, refreshMotion } from '../../shared/ui/motion';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    Button,
-} from '../../shared/ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Button } from '../../shared/ui';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
 interface ContainerLogsDialogProps {
@@ -53,12 +47,7 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
                 <DialogHeader>
                     <div className="flex items-center justify-between pr-6">
                         <DialogTitle>{name} · 容器运行日志</DialogTitle>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={load}
-                            disabled={loading}
-                        >
+                        <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
                             <ActionMotionIcon
                                 icon={RefreshCw}
                                 size={13}

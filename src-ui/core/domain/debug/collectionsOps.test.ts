@@ -17,7 +17,12 @@ import {
     uniqueName,
 } from './collectionsOps';
 
-function req(id: string, folder: string | null, order: number, extra: Partial<DebugSavedRequest> = {}): DebugSavedRequest {
+function req(
+    id: string,
+    folder: string | null,
+    order: number,
+    extra: Partial<DebugSavedRequest> = {},
+): DebugSavedRequest {
     return {
         id,
         name: id,
@@ -39,7 +44,14 @@ const BASE: DebugCollections = {
         { id: 'f2', name: '第二', order: 1 },
         { id: 'f1', name: '第一', order: 0 },
     ],
-    requests: [req('a', 'f1', 0), req('b', 'f1', 1), req('c', 'f1', 2), req('r1', null, 0), req('r2', null, 1), req('orphan', 'gone', 5)],
+    requests: [
+        req('a', 'f1', 0),
+        req('b', 'f1', 1),
+        req('c', 'f1', 2),
+        req('r1', null, 0),
+        req('r2', null, 1),
+        req('orphan', 'gone', 5),
+    ],
 };
 
 const ids = (list: DebugSavedRequest[]) => list.map((r) => r.id);
@@ -114,11 +126,18 @@ describe('moveFolder / nudge', () => {
     });
 
     it('Alt+↑↓ 挪一格，到头了不动', () => {
-        expect(ids(collectionsView(nudge(BASE, 'request', 'a', 1)).children.get('f1') ?? [])).toEqual(['b', 'a', 'c']);
-        expect(ids(collectionsView(nudge(BASE, 'request', 'b', -1)).children.get('f1') ?? [])).toEqual(['b', 'a', 'c']);
+        expect(
+            ids(collectionsView(nudge(BASE, 'request', 'a', 1)).children.get('f1') ?? []),
+        ).toEqual(['b', 'a', 'c']);
+        expect(
+            ids(collectionsView(nudge(BASE, 'request', 'b', -1)).children.get('f1') ?? []),
+        ).toEqual(['b', 'a', 'c']);
         expect(nudge(BASE, 'request', 'a', -1)).toBe(BASE);
         expect(nudge(BASE, 'request', 'c', 1)).toBe(BASE);
-        expect(collectionsView(nudge(BASE, 'folder', 'f1', 1)).folders.map((f) => f.id)).toEqual(['f2', 'f1']);
+        expect(collectionsView(nudge(BASE, 'folder', 'f1', 1)).folders.map((f) => f.id)).toEqual([
+            'f2',
+            'f1',
+        ]);
         expect(nudge(BASE, 'folder', 'f1', -1)).toBe(BASE);
     });
 });
@@ -131,7 +150,9 @@ describe('改名 / 删除 / 新建', () => {
         expect(a?.updated_at_ms).toBe(5000);
         expect(renameRequest(BASE, 'a', '   ', 5000)).toBe(BASE);
         expect(renameRequest(BASE, 'a', 'a', 5000)).toBe(BASE);
-        expect(renameFolder(BASE, 'f1', '常用').folders.find((f) => f.id === 'f1')?.name).toBe('常用');
+        expect(renameFolder(BASE, 'f1', '常用').folders.find((f) => f.id === 'f1')?.name).toBe(
+            '常用',
+        );
         expect(renameFolder(BASE, 'f1', '')).toBe(BASE);
     });
 
@@ -154,23 +175,48 @@ describe('改名 / 删除 / 新建', () => {
     });
 
     it('新收藏放在目标容器末尾；目标文件夹不存在就进根目录', () => {
-        const { next, id } = addRequest(BASE, { name: '', action: 'get_login_info', params: { a: 1 }, channel: null, folderId: 'f1' }, 9000);
+        const { next, id } = addRequest(
+            BASE,
+            { name: '', action: 'get_login_info', params: { a: 1 }, channel: null, folderId: 'f1' },
+            9000,
+        );
         const created = next.requests.find((r) => r.id === id);
-        expect(created).toMatchObject({ name: 'get_login_info', folder_id: 'f1', order: 3, created_at_ms: 9000 });
-        const other = addRequest(BASE, { name: 'x', action: 'y', params: {}, channel: null, folderId: 'gone' }, 1);
+        expect(created).toMatchObject({
+            name: 'get_login_info',
+            folder_id: 'f1',
+            order: 3,
+            created_at_ms: 9000,
+        });
+        const other = addRequest(
+            BASE,
+            { name: 'x', action: 'y', params: {}, channel: null, folderId: 'gone' },
+            1,
+        );
         expect(other.next.requests.find((r) => r.id === other.id)?.folder_id).toBeNull();
     });
 
     it('同一接口同样参数（键顺序不同）算已收藏', () => {
-        const c: DebugCollections = { ...BASE, requests: [req('s', null, 0, { action: 'send_group_msg', params: { group_id: 1, message: 'hi' } })] };
+        const c: DebugCollections = {
+            ...BASE,
+            requests: [
+                req('s', null, 0, {
+                    action: 'send_group_msg',
+                    params: { group_id: 1, message: 'hi' },
+                }),
+            ],
+        };
         expect(findSameRequest(c, 'send_group_msg', { message: 'hi', group_id: 1 })?.id).toBe('s');
         expect(findSameRequest(c, 'send_group_msg', { message: 'yo', group_id: 1 })).toBeNull();
     });
 
     it('收藏名默认值：简介短就带上简介，长了或没有就是接口名', () => {
-        expect(suggestedRequestName('send_group_msg', '发送群消息')).toBe('发送群消息（send_group_msg）');
+        expect(suggestedRequestName('send_group_msg', '发送群消息')).toBe(
+            '发送群消息（send_group_msg）',
+        );
         expect(suggestedRequestName('get_x', '  ')).toBe('get_x');
         expect(suggestedRequestName('get_x', null)).toBe('get_x');
-        expect(suggestedRequestName('get_x', '很长很长很长很长很长很长很长很长很长很长很长很长的简介')).toBe('get_x');
+        expect(
+            suggestedRequestName('get_x', '很长很长很长很长很长很长很长很长很长很长很长很长的简介'),
+        ).toBe('get_x');
     });
 });

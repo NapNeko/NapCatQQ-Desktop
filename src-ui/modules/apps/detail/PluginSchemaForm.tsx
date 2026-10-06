@@ -101,7 +101,12 @@ const JsonValueField: React.FC<{
                 />
             </div>
             {(error || hint) && (
-                <p className={cn('text-2xs leading-snug', error ? 'text-danger' : 'text-text-tertiary')}>
+                <p
+                    className={cn(
+                        'text-2xs leading-snug',
+                        error ? 'text-danger' : 'text-text-tertiary',
+                    )}
+                >
                     {error ? `JSON 语法错误：${error}` : hint}
                 </p>
             )}
@@ -257,7 +262,12 @@ export const PluginSchemaForm: React.FC<{
     }
     return (
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <PluginSchemaFields fields={fields} value={value} disabled={disabled} onChange={onChange} />
+            <PluginSchemaFields
+                fields={fields}
+                value={value}
+                disabled={disabled}
+                onChange={onChange}
+            />
         </div>
     );
 };

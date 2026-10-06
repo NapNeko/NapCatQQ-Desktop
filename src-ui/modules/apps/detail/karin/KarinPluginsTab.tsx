@@ -133,7 +133,10 @@ const PluginCard: React.FC<{
 
             <div className="flex min-h-0 flex-1 flex-col justify-between px-4 pb-2.5 pt-3">
                 <div className="min-w-0">
-                    <h3 className="truncate font-display text-base font-semibold leading-snug text-text" title={row.name}>
+                    <h3
+                        className="truncate font-display text-base font-semibold leading-snug text-text"
+                        title={row.name}
+                    >
                         {row.name}
                     </h3>
                     {meta ? (
@@ -141,7 +144,9 @@ const PluginCard: React.FC<{
                     ) : null}
                 </div>
                 {row.description ? (
-                    <p className="mt-2 line-clamp-2 text-xs leading-snug text-text-secondary">{row.description}</p>
+                    <p className="mt-2 line-clamp-2 text-xs leading-snug text-text-secondary">
+                        {row.description}
+                    </p>
                 ) : (
                     <span />
                 )}
@@ -177,17 +182,32 @@ const PluginCard: React.FC<{
                             </PopoverTrigger>
                             <PopoverContent align="end" sideOffset={6} className="w-36 p-1">
                                 <PopoverClose asChild>
-                                    <button type="button" className={menuItem} disabled={busy} onClick={onToggle}>
+                                    <button
+                                        type="button"
+                                        className={menuItem}
+                                        disabled={busy}
+                                        onClick={onToggle}
+                                    >
                                         {row.enabled ? '禁用' : '启用'}
                                     </button>
                                 </PopoverClose>
                                 <PopoverClose asChild>
-                                    <button type="button" className={menuItem} disabled={busy} onClick={onUpdate}>
+                                    <button
+                                        type="button"
+                                        className={menuItem}
+                                        disabled={busy}
+                                        onClick={onUpdate}
+                                    >
                                         更新
                                     </button>
                                 </PopoverClose>
                                 <PopoverClose asChild>
-                                    <button type="button" className={menuItem} disabled={busy} onClick={onUninstall}>
+                                    <button
+                                        type="button"
+                                        className={menuItem}
+                                        disabled={busy}
+                                        onClick={onUninstall}
+                                    >
                                         卸载
                                     </button>
                                 </PopoverClose>

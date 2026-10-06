@@ -49,7 +49,9 @@ export interface ResolvedColumns {
 }
 
 function splittersOf(layout: Pick<DebugLayout, 'left_collapsed' | 'right_collapsed'>): number {
-    return (layout.left_collapsed ? 0 : SPLITTER_WIDTH) + (layout.right_collapsed ? 0 : SPLITTER_WIDTH);
+    return (
+        (layout.left_collapsed ? 0 : SPLITTER_WIDTH) + (layout.right_collapsed ? 0 : SPLITTER_WIDTH)
+    );
 }
 
 /**
@@ -63,9 +65,17 @@ export function resolveColumns(
     const measured = available !== null && Number.isFinite(available);
     const narrow = measured && available < NARROW_WORKBENCH_WIDTH;
     const wantLeft =
-        layout.left_width === UNSET_COLUMN_WIDTH ? (narrow ? NARROW_DEFAULTS.left : LEFT_WIDTH.default) : layout.left_width;
+        layout.left_width === UNSET_COLUMN_WIDTH
+            ? narrow
+                ? NARROW_DEFAULTS.left
+                : LEFT_WIDTH.default
+            : layout.left_width;
     const wantRight =
-        layout.right_width === UNSET_COLUMN_WIDTH ? (narrow ? NARROW_DEFAULTS.right : RIGHT_WIDTH.default) : layout.right_width;
+        layout.right_width === UNSET_COLUMN_WIDTH
+            ? narrow
+                ? NARROW_DEFAULTS.right
+                : RIGHT_WIDTH.default
+            : layout.right_width;
     let left = layout.left_collapsed ? LEFT_RAIL_WIDTH : clampColumnWidth('left', wantLeft);
     let right = layout.right_collapsed ? 0 : clampColumnWidth('right', wantRight);
     if (!measured) return { left, right, splitters };
@@ -93,7 +103,8 @@ export function dragBounds(
     resolved: ResolvedColumns,
 ): { min: number; max: number } {
     const range = side === 'left' ? LEFT_WIDTH : RIGHT_WIDTH;
-    if (available === null || !Number.isFinite(available)) return { min: range.min, max: range.max };
+    if (available === null || !Number.isFinite(available))
+        return { min: range.min, max: range.max };
     const other = side === 'left' ? resolved.right : resolved.left;
     const room = available - other - resolved.splitters - CENTER_MIN_WIDTH;
     return { min: range.min, max: Math.max(range.min, Math.min(range.max, Math.floor(room))) };
@@ -115,8 +126,12 @@ export function upgradeLayoutWidths(ws: DebugWorkspace): DebugWorkspace {
         version: EXPLICIT_WIDTH_VERSION,
         layout: {
             ...layout,
-            left_width: layout.left_width === LEFT_WIDTH.default ? UNSET_COLUMN_WIDTH : layout.left_width,
-            right_width: layout.right_width === RIGHT_WIDTH.default ? UNSET_COLUMN_WIDTH : layout.right_width,
+            left_width:
+                layout.left_width === LEFT_WIDTH.default ? UNSET_COLUMN_WIDTH : layout.left_width,
+            right_width:
+                layout.right_width === RIGHT_WIDTH.default
+                    ? UNSET_COLUMN_WIDTH
+                    : layout.right_width,
         },
     };
 }

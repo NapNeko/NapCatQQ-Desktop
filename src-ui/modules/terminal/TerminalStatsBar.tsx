@@ -47,7 +47,9 @@ export function TerminalStatsBar({ sessionId, visible }: { sessionId: string; vi
         stale ? '最近一次没读到，显示的是上一次的数' : null,
         `CPU ${cpu}（${stats.cores} 核）`,
         `内存 ${memText}`,
-        stats.swap_total ? `交换 ${formatBytes(stats.swap_used)} / ${formatBytes(stats.swap_total)}` : null,
+        stats.swap_total
+            ? `交换 ${formatBytes(stats.swap_used)} / ${formatBytes(stats.swap_total)}`
+            : null,
         `根分区 ${diskText}`,
         `网速 ↓ ${formatRate(stats.net_rx_per_sec)} ↑ ${formatRate(stats.net_tx_per_sec)}`,
         `负载（1 / 5 / 15 分钟）${load}`,

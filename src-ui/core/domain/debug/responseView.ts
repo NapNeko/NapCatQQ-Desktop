@@ -10,7 +10,9 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
  * `data` 是「至少一个元素、且每个元素都是对象」的数组时给出表格数据，否则 null（这个视图不可用）。
  * 列是所有行的键并集，按第一次出现的先后排，最多 30 列。
  */
-export function tableView(data: unknown): { columns: string[]; rows: Array<Record<string, unknown>> } | null {
+export function tableView(
+    data: unknown,
+): { columns: string[]; rows: Array<Record<string, unknown>> } | null {
     if (!Array.isArray(data) || data.length === 0) return null;
     const columns = new Set<string>();
     for (const row of data) {

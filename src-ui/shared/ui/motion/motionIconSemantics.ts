@@ -57,9 +57,7 @@ export const FAB_PRIMARY_MOTION: MotionIconPreset = 'pulse';
 export const BATCH_MOTION: MotionIconPreset = 'nudge';
 
 /** InfoBar tone 对应左侧图标（进场由 InfoBarStack 管，静态可挂轻动效）。 */
-export function infoToneMotion(
-    tone: 'info' | 'success' | 'warning' | 'danger',
-): MotionIconPreset {
+export function infoToneMotion(tone: 'info' | 'success' | 'warning' | 'danger'): MotionIconPreset {
     switch (tone) {
         case 'danger':
             return 'wiggle';

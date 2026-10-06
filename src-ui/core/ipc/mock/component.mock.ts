@@ -169,7 +169,12 @@ interface MockHost {
 
 export const mockHosts: MockHost[] = [
     { host_id: 'local', display_name: '本机', os: 'windows', locality: 'local' },
-    { host_id: 'remote:production', display_name: 'remote · production', os: 'linux', locality: 'remote' },
+    {
+        host_id: 'remote:production',
+        display_name: 'remote · production',
+        os: 'linux',
+        locality: 'remote',
+    },
     { host_id: 'remote:dev', display_name: 'remote · dev', os: 'linux', locality: 'remote' },
 ];
 
@@ -277,10 +282,7 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
     },
 };
 
-export function mockDetect(
-    componentId: ComponentId,
-    hostId: string,
-): ComponentDetectResult {
+export function mockDetect(componentId: ComponentId, hostId: string): ComponentDetectResult {
     const info = mockComponentCatalog.find((c) => c.id === componentId);
     const host = mockHosts.find((h) => h.host_id === hostId);
     if (!info || !host) {
@@ -345,9 +347,7 @@ export function mockDependencyPlan(
     const host = mockHosts.find((h) => h.host_id === hostId);
     const nodes = (mockEdges[root] ?? [])
         .filter((id) => id !== 'novnc' || host?.locality === 'remote')
-        .filter(
-            (id) => id !== 'vcredist' || (host?.os === 'windows' && host?.locality === 'local'),
-        )
+        .filter((id) => id !== 'vcredist' || (host?.os === 'windows' && host?.locality === 'local'))
         .map((id) => mockNode(id, hostId, [root]));
     return { root, host_id: hostId, phase, nodes };
 }
@@ -373,11 +373,7 @@ export function mockLocalQqSource(): LocalQqSource {
 const activeMockTasks = new Map<string, ReturnType<typeof setInterval>>();
 let taskCounter = 0;
 
-export function mockRunAction(
-    componentId: ComponentId,
-    hostId: string,
-    kind: StepKind,
-): string {
+export function mockRunAction(componentId: ComponentId, hostId: string, kind: StepKind): string {
     taskCounter += 1;
     const taskId = `mock-task-${Date.now()}-${taskCounter}`;
     const startedAt = Date.now();
@@ -497,11 +493,7 @@ function stepLabel(componentId: ComponentId, kind: StepKind): string {
     }
 }
 
-function applyMockOutcome(
-    componentId: ComponentId,
-    hostId: string,
-    kind: StepKind,
-): void {
+function applyMockOutcome(componentId: ComponentId, hostId: string, kind: StepKind): void {
     const matrix = installedMatrix[componentId];
     if (!matrix) return;
     if (kind === 'uninstall') {

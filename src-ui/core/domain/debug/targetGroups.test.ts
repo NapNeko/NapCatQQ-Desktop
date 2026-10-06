@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DebugTarget } from '../../ipc/generated/debug/DebugTarget';
-import { backendShortLabel, defaultTargetId, filterTargets, groupTargets, targetDisplayName } from './targetGroups';
+import {
+    backendShortLabel,
+    defaultTargetId,
+    filterTargets,
+    groupTargets,
+    targetDisplayName,
+} from './targetGroups';
 
 function target(bot_id: string, patch: Partial<DebugTarget> = {}): DebugTarget {
     return {
@@ -33,7 +39,9 @@ describe('groupTargets', () => {
     });
 
     it('远端没有名字时显示 id', () => {
-        const groups = groupTargets([target('r', { host: { kind: 'remote', server_id: 'srv-9' } })]);
+        const groups = groupTargets([
+            target('r', { host: { kind: 'remote', server_id: 'srv-9' } }),
+        ]);
         expect(groups[0].label).toBe('远端 · srv-9');
     });
 });

@@ -153,8 +153,9 @@ export const ContextMenuContent = React.forwardRef<
 });
 ContextMenuContent.displayName = RadixContextMenu.Content.displayName;
 
-export interface ContextMenuItemProps
-    extends React.ComponentPropsWithoutRef<typeof RadixContextMenu.Item> {
+export interface ContextMenuItemProps extends React.ComponentPropsWithoutRef<
+    typeof RadixContextMenu.Item
+> {
     inset?: boolean;
     tone?: 'default' | 'danger' | 'brand' | 'success';
 }
@@ -168,13 +169,13 @@ export const ContextMenuItem = React.forwardRef<
         className={cn(
             'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2.5 py-1.5 text-xs outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
             tone === 'default' &&
-            'text-text focus:bg-field focus:text-text data-[highlighted]:bg-field data-[highlighted]:text-text',
+                'text-text focus:bg-field focus:text-text data-[highlighted]:bg-field data-[highlighted]:text-text',
             tone === 'danger' &&
-            'text-danger focus:bg-danger-soft/40 focus:text-danger data-[highlighted]:bg-danger-soft/40 data-[highlighted]:text-danger',
+                'text-danger focus:bg-danger-soft/40 focus:text-danger data-[highlighted]:bg-danger-soft/40 data-[highlighted]:text-danger',
             tone === 'brand' &&
-            'text-brand focus:bg-brand/10 focus:text-brand data-[highlighted]:bg-brand/10 data-[highlighted]:text-brand',
+                'text-brand focus:bg-brand/10 focus:text-brand data-[highlighted]:bg-brand/10 data-[highlighted]:text-brand',
             tone === 'success' &&
-            'text-success focus:bg-success-soft/40 focus:text-success data-[highlighted]:bg-success-soft/40 data-[highlighted]:text-success',
+                'text-success focus:bg-success-soft/40 focus:text-success data-[highlighted]:bg-success-soft/40 data-[highlighted]:text-success',
             inset && 'pl-8',
             className,
         )}
@@ -273,4 +274,3 @@ export const ContextMenuShortcut: React.FC<React.HTMLAttributes<HTMLSpanElement>
     );
 };
 ContextMenuShortcut.displayName = 'ContextMenuShortcut';
-

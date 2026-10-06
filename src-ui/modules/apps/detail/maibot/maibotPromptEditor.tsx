@@ -3,7 +3,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, GitCompare, RotateCcw, Save } from 'lucide-react';
-import { Badge, Button, Spinner, SyntaxTextEditor, TextField, type SyntaxTextEditorHandle } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    Spinner,
+    SyntaxTextEditor,
+    TextField,
+    type SyntaxTextEditorHandle,
+} from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import {
     checkPrompt,
@@ -55,16 +62,32 @@ export const PromptEditor: React.FC<{
     const [pending, setPending] = useState<Pending | null>(null);
     const [saveAsLabel, setSaveAsLabel] = useState<string | null>(null);
     const editor = useRef<SyntaxTextEditorHandle>(null);
-    const previewBody = useMaiBotPromptVersion(instanceId, mode, language, info.name, preview?.id ?? null);
+    const previewBody = useMaiBotPromptVersion(
+        instanceId,
+        mode,
+        language,
+        info.name,
+        preview?.id ?? null,
+    );
 
     const busy = act.isPending;
     const canSave = dirty && !check.error && !busy;
     const save = (label = '', asNew = false) => {
         if (!f) return;
-        const active = f.active_version_id && f.active_version_id !== PROMPT_LEGACY_VERSION ? f.active_version_id : null;
+        const active =
+            f.active_version_id && f.active_version_id !== PROMPT_LEGACY_VERSION
+                ? f.active_version_id
+                : null;
         const saved = content;
         act.mutate(
-            { op: 'save', language, name: info.name, content: saved, label, version_id: asNew ? null : active },
+            {
+                op: 'save',
+                language,
+                name: info.name,
+                content: saved,
+                label,
+                version_id: asNew ? null : active,
+            },
             // 存的过程中又改了几个字，草稿留着
             { onSuccess: () => drafts.get(key) === saved && drafts.clear(key) },
         );
@@ -87,7 +110,8 @@ export const PromptEditor: React.FC<{
     };
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey) return;
+            if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey)
+                return;
             if (e.target instanceof Element && e.target.closest('[role="dialog"]')) return;
             e.preventDefault();
             saveRef.current();
@@ -97,7 +121,12 @@ export const PromptEditor: React.FC<{
     }, []);
 
     if (file.isError && !f) {
-        return <PaneLoadError message={`读取「${promptDisplayName(info)}」失败`} onRetry={() => void file.refetch()} />;
+        return (
+            <PaneLoadError
+                message={`读取「${promptDisplayName(info)}」失败`}
+                onRetry={() => void file.refetch()}
+            />
+        );
     }
 
     const changed = f ? changedLines(lineDiff(defaultContent, content)) : 0;
@@ -108,8 +137,14 @@ export const PromptEditor: React.FC<{
             <header className="flex min-w-0 items-start gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
-                        <h3 className="truncate font-display text-[15px] font-semibold text-text">{promptDisplayName(info)}</h3>
-                        {f?.customized ? <Badge tone="brand">已改</Badge> : <Badge tone="neutral">默认</Badge>}
+                        <h3 className="truncate font-display text-[15px] font-semibold text-text">
+                            {promptDisplayName(info)}
+                        </h3>
+                        {f?.customized ? (
+                            <Badge tone="brand">已改</Badge>
+                        ) : (
+                            <Badge tone="neutral">默认</Badge>
+                        )}
                         {info.advanced && <Badge tone="neutral">高级</Badge>}
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-text-tertiary">
@@ -119,7 +154,8 @@ export const PromptEditor: React.FC<{
                     {otherLanguage && (
                         <p className="mt-1 flex items-center gap-1 text-xs text-warning">
                             <AlertCircle size={12} />
-                            麦麦现在用的是{promptLanguageLabel(activeLanguage)}，这一份改了也不会用上
+                            麦麦现在用的是{promptLanguageLabel(activeLanguage)}
+                            ，这一份改了也不会用上
                         </p>
                     )}
                 </div>
@@ -140,7 +176,9 @@ export const PromptEditor: React.FC<{
                         busy={busy}
                         canSaveAs={!!f && !check.error}
                         onPreview={setPreview}
-                        onActivate={(v) => (dirty ? setPending({ kind: 'activate', version: v }) : activate(v))}
+                        onActivate={(v) =>
+                            dirty ? setPending({ kind: 'activate', version: v }) : activate(v)
+                        }
                         onDelete={(v) => setPending({ kind: 'delete', version: v })}
                         onSaveAs={() => setSaveAsLabel('')}
                     />
@@ -159,7 +197,9 @@ export const PromptEditor: React.FC<{
                 <SyntaxTextEditor
                     key={key}
                     value={content}
-                    onChange={(next) => (next === f.content ? drafts.clear(key) : drafts.set(key, next))}
+                    onChange={(next) =>
+                        next === f.content ? drafts.clear(key) : drafts.set(key, next)
+                    }
                     mode="prompt"
                     wrap
                     prose
@@ -187,24 +227,42 @@ export const PromptEditor: React.FC<{
                                 {content.length} 字{changed > 0 && ` · 和默认差 ${changed} 行`}
                             </span>
                             <span className="hidden min-w-0 truncate text-text-tertiary lg:inline">
-                                {live ? '保存后下一次用到就生效' : '麦麦没在运行，保存后下次启动生效'}
+                                {live
+                                    ? '保存后下一次用到就生效'
+                                    : '麦麦没在运行，保存后下次启动生效'}
                             </span>
                         </>
                     )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                     {f?.customized && (
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPending({ kind: 'restore' })}>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => setPending({ kind: 'restore' })}
+                        >
                             <RotateCcw size={13} />
                             恢复默认
                         </Button>
                     )}
                     {dirty && (
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => drafts.clear(key)}>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => drafts.clear(key)}
+                        >
                             撤销改动
                         </Button>
                     )}
-                    <Button size="sm" variant="primary" title="Ctrl+S" disabled={!canSave} onClick={() => save()}>
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        title="Ctrl+S"
+                        disabled={!canSave}
+                        onClick={() => save()}
+                    >
                         {busy ? <Spinner size="xs" className="text-white" /> : <Save size={13} />}
                         保存
                     </Button>
@@ -217,7 +275,9 @@ export const PromptEditor: React.FC<{
                 loading={previewBody.isLoading}
                 busy={busy}
                 onClose={() => setPreview(null)}
-                onActivate={(v) => (dirty ? setPending({ kind: 'activate', version: v }) : activate(v))}
+                onActivate={(v) =>
+                    dirty ? setPending({ kind: 'activate', version: v }) : activate(v)
+                }
             />
 
             {saveAsLabel !== null && (
@@ -263,19 +323,36 @@ export const PromptEditor: React.FC<{
                               : '删掉就找不回来了。'
                           : '没保存的改动会丢掉。'
                 }
-                confirmLabel={pending?.kind === 'restore' ? '恢复默认' : pending?.kind === 'delete' ? '删掉' : '换过去'}
+                confirmLabel={
+                    pending?.kind === 'restore'
+                        ? '恢复默认'
+                        : pending?.kind === 'delete'
+                          ? '删掉'
+                          : '换过去'
+                }
                 onCancel={() => setPending(null)}
                 onConfirm={() => {
                     if (!pending) return;
                     // 恢复默认、删掉在用的版本会换掉内容，草稿跟着作废；删别的版本不动草稿
-                    const replaces = pending.kind === 'restore' || (pending.kind === 'delete' && pending.version.active);
+                    const replaces =
+                        pending.kind === 'restore' ||
+                        (pending.kind === 'delete' && pending.version.active);
                     const done = {
                         onSuccess: () => replaces && drafts.clear(key),
                         onSettled: () => setPending(null),
                     };
-                    if (pending.kind === 'restore') act.mutate({ op: 'restore', language, name: info.name }, done);
+                    if (pending.kind === 'restore')
+                        act.mutate({ op: 'restore', language, name: info.name }, done);
                     else if (pending.kind === 'delete')
-                        act.mutate({ op: 'delete_version', language, name: info.name, version_id: pending.version.id }, done);
+                        act.mutate(
+                            {
+                                op: 'delete_version',
+                                language,
+                                name: info.name,
+                                version_id: pending.version.id,
+                            },
+                            done,
+                        );
                     else {
                         drafts.clear(key);
                         activate(pending.version);

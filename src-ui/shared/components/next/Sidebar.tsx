@@ -82,8 +82,7 @@ const TASKS_NAV: NavItem = {
     icon: ListTodo,
 };
 
-const LOGO_IMG_CLASS =
-    'select-none object-contain [image-rendering:-webkit-optimize-contrast]';
+const LOGO_IMG_CLASS = 'select-none object-contain [image-rendering:-webkit-optimize-contrast]';
 
 // memo：根组件因提示条等重渲时侧栏不跟着重渲，props 都是稳定值
 export const Sidebar = memo(function Sidebar({
@@ -109,9 +108,7 @@ export const Sidebar = memo(function Sidebar({
         const nav = navRef.current;
         const indicator = indicatorRef.current;
         if (!nav || !indicator) return;
-        const activeBtn = nav.querySelector<HTMLElement>(
-            'button[aria-current="page"]',
-        );
+        const activeBtn = nav.querySelector<HTMLElement>('button[aria-current="page"]');
         if (!activeBtn) {
             gsap.set(indicator, { autoAlpha: 0 });
             return;
@@ -164,7 +161,10 @@ export const Sidebar = memo(function Sidebar({
                             alt="NapCatQQ-Desktop logo"
                             width={28}
                             height={28}
-                            className={cn('h-7 w-7 transition-opacity group-hover:opacity-0', LOGO_IMG_CLASS)}
+                            className={cn(
+                                'h-7 w-7 transition-opacity group-hover:opacity-0',
+                                LOGO_IMG_CLASS,
+                            )}
                             draggable={false}
                         />
                         <MotionIcon
@@ -178,7 +178,10 @@ export const Sidebar = memo(function Sidebar({
                     </button>
                 ) : (
                     <>
-                        <div className="flex min-w-0 flex-1 items-center gap-2" data-tauri-drag-region>
+                        <div
+                            className="flex min-w-0 flex-1 items-center gap-2"
+                            data-tauri-drag-region
+                        >
                             <img
                                 src={logoSidebar}
                                 alt="NapCatQQ-Desktop logo"
@@ -267,13 +270,7 @@ interface NavRowProps {
     onPrefetch?: (id: AppRoute) => void;
 }
 
-const NavRow: React.FC<NavRowProps> = ({
-    item,
-    isActive,
-    collapsed,
-    onSelect,
-    onPrefetch,
-}) => {
+const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect, onPrefetch }) => {
     const Icon = item.icon;
     const iconSize = collapsed ? 20 : 15;
 
@@ -290,8 +287,8 @@ const NavRow: React.FC<NavRowProps> = ({
                     item.id === 'components'
                         ? 'nav-components'
                         : item.id === 'bots'
-                            ? 'nav-bots'
-                            : undefined
+                          ? 'nav-bots'
+                          : undefined
                 }
                 className={cn(
                     'group relative flex w-full items-center gap-2.5 rounded-sm px-2.5',
@@ -337,8 +334,7 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
 }) => {
     const busy = activeCount > 0 && !isActive;
     const iconSize = collapsed ? 20 : 15;
-    const label =
-        activeCount > 0 && !collapsed ? `任务 (${activeCount})` : item.label;
+    const label = activeCount > 0 && !collapsed ? `任务 (${activeCount})` : item.label;
     const Icon = item.icon;
 
     return (
@@ -349,12 +345,10 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
                 onMouseEnter={() => onPrefetch?.(item.id)}
                 onFocus={() => onPrefetch?.(item.id)}
                 aria-current={isActive ? 'page' : undefined}
-                title={collapsed ? (activeCount > 0 ? `任务 (${activeCount})` : item.label) : undefined}
-                aria-label={
-                    activeCount > 0
-                        ? `任务队列，${activeCount} 个进行中`
-                        : '任务队列'
+                title={
+                    collapsed ? (activeCount > 0 ? `任务 (${activeCount})` : item.label) : undefined
                 }
+                aria-label={activeCount > 0 ? `任务队列，${activeCount} 个进行中` : '任务队列'}
                 className={cn(
                     'group relative flex w-full items-center gap-2.5 rounded-sm px-2.5',
                     'text-[13.5px] font-medium transition-colors',

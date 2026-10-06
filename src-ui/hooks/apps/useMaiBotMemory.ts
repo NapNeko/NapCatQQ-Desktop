@@ -22,7 +22,12 @@ const root = (id: string) => ['maibotMemory', id] as const;
 const dataKey = (id: string) => [...root(id), 'data'] as const;
 const tasksKey = (id: string) => [...root(id), 'tasks'] as const;
 
-const ACTIVE: ReadonlySet<MaiBotMemoryTaskStatus> = new Set(['queued', 'preparing', 'running', 'cancelling']);
+const ACTIVE: ReadonlySet<MaiBotMemoryTaskStatus> = new Set([
+    'queued',
+    'preparing',
+    'running',
+    'cancelling',
+]);
 export const taskActive = (t: Pick<MaiBotMemoryTask, 'status'>) => ACTIVE.has(t.status);
 
 export function useMaiBotMemoryStatus(instanceId: string, enabled: boolean) {
@@ -64,7 +69,8 @@ export function useMaiBotMemoryTask(instanceId: string, taskId: string | null, p
         queryFn: () => svc.task(instanceId, taskId ?? ''),
         enabled: taskId !== null,
         retry: false,
-        refetchInterval: (q) => (q.state.data && taskActive(q.state.data.task) ? Math.max(500, pollMs) : false),
+        refetchInterval: (q) =>
+            q.state.data && taskActive(q.state.data.task) ? Math.max(500, pollMs) : false,
     });
 }
 
@@ -74,7 +80,11 @@ export function useMaiBotMemoryImport(instanceId: string) {
         mutationFn: (req) => svc.importMemory(instanceId, req),
         onSuccess: () => void qc.invalidateQueries({ queryKey: tasksKey(instanceId) }),
         onError: (err) => {
-            pushErrorBar({ key: `maibotMemoryImport-fail:${instanceId}`, title: '没导进去', raw: toAppConfigError(err).message });
+            pushErrorBar({
+                key: `maibotMemoryImport-fail:${instanceId}`,
+                title: '没导进去',
+                raw: toAppConfigError(err).message,
+            });
         },
     });
 }
@@ -85,14 +95,19 @@ export function useMaiBotMemoryTaskAction(instanceId: string) {
         mutationFn: (a) => svc.taskAction(instanceId, a),
         onSuccess: () => void qc.invalidateQueries({ queryKey: tasksKey(instanceId) }),
         onError: (err) => {
-            pushErrorBar({ key: `maibotMemoryTask-fail:${instanceId}`, title: '导入任务没改成', raw: toAppConfigError(err).message });
+            pushErrorBar({
+                key: `maibotMemoryTask-fail:${instanceId}`,
+                title: '导入任务没改成',
+                raw: toAppConfigError(err).message,
+            });
         },
     });
 }
 
 const importFiles = {
     pick: () => localFilesOrNothing(svc.pickFiles(), 'maibotMemory-pick', '打不开选文件框'),
-    read: (paths: string[]) => localFilesOrNothing(svc.localTexts(paths), 'maibotMemory-read', '读不出这些文件'),
+    read: (paths: string[]) =>
+        localFilesOrNothing(svc.localTexts(paths), 'maibotMemory-read', '读不出这些文件'),
 };
 
 /** 导入前从系统对话框挑文件、看拖进窗口的文件 */
@@ -106,7 +121,11 @@ export function useRefreshMemoryData(instanceId: string) {
     return () => void qc.invalidateQueries({ queryKey: dataKey(instanceId) });
 }
 
-export function useMaiBotMemoryRecords(instanceId: string, query: MaiBotMemoryQuery, enabled: boolean) {
+export function useMaiBotMemoryRecords(
+    instanceId: string,
+    query: MaiBotMemoryQuery,
+    enabled: boolean,
+) {
     return useQuery({
         queryKey: [...dataKey(instanceId), 'records', query],
         queryFn: () => svc.records(instanceId, query),
@@ -117,7 +136,11 @@ export function useMaiBotMemoryRecords(instanceId: string, query: MaiBotMemoryQu
     });
 }
 
-export function useMaiBotMemoryRecord(instanceId: string, kind: MaiBotMemoryRecordKind, recordId: string | null) {
+export function useMaiBotMemoryRecord(
+    instanceId: string,
+    kind: MaiBotMemoryRecordKind,
+    recordId: string | null,
+) {
     return useQuery({
         queryKey: [...dataKey(instanceId), 'record', kind, recordId],
         queryFn: () => svc.record(instanceId, kind, recordId ?? ''),
@@ -156,11 +179,20 @@ export function useMaiBotMemoryDelete(instanceId: string) {
             if (a.op === 'preview') return;
             void qc.invalidateQueries({ queryKey: dataKey(instanceId) });
             if (res.message) {
-                pushInfoBar({ key: `maibotMemoryDelete:${instanceId}`, tone: 'success', title: res.message, autoDismissMs: 3000 });
+                pushInfoBar({
+                    key: `maibotMemoryDelete:${instanceId}`,
+                    tone: 'success',
+                    title: res.message,
+                    autoDismissMs: 3000,
+                });
             }
         },
         onError: (err) => {
-            pushErrorBar({ key: `maibotMemoryDelete-fail:${instanceId}`, title: '没删成', raw: toAppConfigError(err).message });
+            pushErrorBar({
+                key: `maibotMemoryDelete-fail:${instanceId}`,
+                title: '没删成',
+                raw: toAppConfigError(err).message,
+            });
         },
     });
 }

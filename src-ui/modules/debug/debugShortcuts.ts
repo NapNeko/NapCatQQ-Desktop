@@ -10,7 +10,8 @@
 
 import { useEffect, useRef, type RefObject } from 'react';
 
-export type DebugShortcut = 'palette' | 'send' | 'cancel' | 'closeTab' | 'nextTab' | 'prevTab' | 'reopenTab';
+export type DebugShortcut =
+    'palette' | 'send' | 'cancel' | 'closeTab' | 'nextTab' | 'prevTab' | 'reopenTab';
 
 export type DebugShortcutHandlers = Partial<Record<DebugShortcut, () => boolean | void>>;
 
@@ -34,7 +35,10 @@ export function matchDebugShortcut(e: KeyLike): DebugShortcut | null {
 }
 
 function insideIgnoredArea(target: EventTarget | null): boolean {
-    return target instanceof Element && !!target.closest('[role="dialog"], [role="alertdialog"], .xterm');
+    return (
+        target instanceof Element &&
+        !!target.closest('[role="dialog"], [role="alertdialog"], .xterm')
+    );
 }
 
 /** 页面被终端整个盖住（main 加了 hidden）时，快捷键不该在看不见的页面上关标签 */

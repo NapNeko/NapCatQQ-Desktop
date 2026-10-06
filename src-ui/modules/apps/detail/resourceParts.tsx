@@ -32,7 +32,9 @@ export const ResourcePane: React.FC<{
     <div className="relative flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 pb-3">{toolbar}</div>
         {notice && <div className="pb-3">{notice}</div>}
-        <div className={cn('min-h-0 flex-1', fill ? 'overflow-hidden' : 'overflow-y-auto pb-16')}>{children}</div>
+        <div className={cn('min-h-0 flex-1', fill ? 'overflow-hidden' : 'overflow-y-auto pb-16')}>
+            {children}
+        </div>
         {footer && <div className="border-t border-border-subtle pt-2.5">{footer}</div>}
         {overlay}
     </div>
@@ -45,7 +47,10 @@ export const SearchBox: React.FC<{
     className?: string;
 }> = ({ value, onChange, placeholder = '搜索', className }) => (
     <div className={cn('relative min-w-0', className)}>
-        <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
+        <Search
+            size={13}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary"
+        />
         <input
             type="search"
             aria-label={placeholder}
@@ -70,7 +75,10 @@ export function Segmented<V extends string>({
     onChange: (next: V) => void;
 }) {
     return (
-        <div role="radiogroup" className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-inset/70 p-0.5">
+        <div
+            role="radiogroup"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-inset/70 p-0.5"
+        >
             {items.map((it) => {
                 const on = it.value === value;
                 return (
@@ -83,12 +91,19 @@ export function Segmented<V extends string>({
                         className={cn(
                             'inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-[12.5px] transition-colors',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
-                            on ? 'bg-surface font-medium text-text shadow-sm' : 'text-text-secondary hover:text-text',
+                            on
+                                ? 'bg-surface font-medium text-text shadow-sm'
+                                : 'text-text-secondary hover:text-text',
                         )}
                     >
                         {it.label}
                         {it.count !== undefined && (
-                            <span className={cn('font-mono text-2xs', on ? 'text-text-tertiary' : 'text-text-disabled')}>
+                            <span
+                                className={cn(
+                                    'font-mono text-2xs',
+                                    on ? 'text-text-tertiary' : 'text-text-disabled',
+                                )}
+                            >
                                 {it.count}
                             </span>
                         )}
@@ -111,13 +126,27 @@ export const Pager: React.FC<{
             <span>共 {total} 条</span>
             {pages > 1 && (
                 <div className="flex items-center gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label="上一页" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        aria-label="上一页"
+                        disabled={page <= 1}
+                        onClick={() => onPage(page - 1)}
+                    >
                         <ChevronLeft size={14} />
                     </Button>
                     <span className="min-w-[4.5rem] text-center tabular-nums text-text-secondary">
                         {page} / {pages}
                     </span>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label="下一页" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        aria-label="下一页"
+                        disabled={page >= pages}
+                        onClick={() => onPage(page + 1)}
+                    >
                         <ChevronRight size={14} />
                     </Button>
                 </div>
@@ -133,7 +162,13 @@ const enter: EnterFn = (el, env) =>
         { autoAlpha: 1, y: 0, scale: 1, duration: env.duration('base'), ease: env.ease.release },
     );
 const exit: ExitFn = (el, env) =>
-    gsap.to(el, { autoAlpha: 0, y: 16, scale: 0.97, duration: env.duration('fast'), ease: env.ease.exit });
+    gsap.to(el, {
+        autoAlpha: 0,
+        y: 16,
+        scale: 0.97,
+        duration: env.duration('fast'),
+        ease: env.ease.exit,
+    });
 
 type SelectionProps = {
     count: number;
@@ -165,7 +200,13 @@ const SelectionBody = forwardRef<HTMLDivElement, SelectionProps>(
             )}
             <span aria-hidden className="mx-1 h-4 w-px bg-border-subtle" />
             {children}
-            <Button size="sm" variant="ghost" className="h-7 w-7 rounded-full p-0" aria-label="取消选择" onClick={onClear}>
+            <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 rounded-full p-0"
+                aria-label="取消选择"
+                onClick={onClear}
+            >
                 <X size={14} />
             </Button>
         </div>
@@ -191,7 +232,13 @@ export const SelectionBar: React.FC<SelectionProps> = ({ count, ...rest }) => {
  * 点一下勾选框要动哪几条。Shift 且上一下点的还在这页上：从那条到这条整段；否则只动这一条。
  * 整段跟着点的这条走：它原来没选就整段选上，选了就整段取消
  */
-export function pickSpan<K>(picked: ReadonlySet<K>, anchor: K | null, k: K, shift: boolean, order: readonly K[]) {
+export function pickSpan<K>(
+    picked: ReadonlySet<K>,
+    anchor: K | null,
+    k: K,
+    shift: boolean,
+    order: readonly K[],
+) {
     const from = shift && anchor !== null ? order.indexOf(anchor) : -1;
     const to = order.indexOf(k);
     const keys = from < 0 || to < 0 ? [k] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
@@ -229,7 +276,10 @@ export function useSelection<K>() {
 }
 
 /** 行首的勾选框：Shift 点连选；按下时不让浏览器顺手把中间几行的字也选蓝 */
-export const RowCheck: React.FC<{ checked: boolean; onPick: (shift: boolean) => void }> = ({ checked, onPick }) => (
+export const RowCheck: React.FC<{ checked: boolean; onPick: (shift: boolean) => void }> = ({
+    checked,
+    onPick,
+}) => (
     <Checkbox
         aria-label="选中这一条"
         checked={checked}

@@ -82,7 +82,7 @@ export interface RuntimeGateArgs {
     config: BotConfig;
     local?: DirectRuntimeStatus;
     remoteDirect?: DirectRuntimeStatus; // 仅当 remote-direct 时使用
-    docker?: DockerStatusLite;         // 仅当 remote-docker 时使用
+    docker?: DockerStatusLite; // 仅当 remote-docker 时使用
     /** 仅当涉及远端主机时提供；useBotRuntimeStartGate 负责填充。 */
     remoteTransport?: RemoteTransportStatus;
     /** 组件 id → 显示名（catalog）；缺省显示 id */
@@ -100,7 +100,8 @@ function directBlockReason(
     }
     const blocking = describeBlocking(st.readiness, names);
     if (!blocking) return null;
-    const hint = where === '本机' ? '请到「组件」页安装后再启动' : '请到「组件」页为该主机安装后再启动';
+    const hint =
+        where === '本机' ? '请到「组件」页安装后再启动' : '请到「组件」页为该主机安装后再启动';
     return `${where}${blocking}，${hint}`;
 }
 

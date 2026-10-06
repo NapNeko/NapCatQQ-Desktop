@@ -49,14 +49,19 @@ describe('configDataOf / wrapConfigData', () => {
 describe('save summary per framework', () => {
     it('Karin always says how the change lands', () => {
         expect(summary(KARIN_CONFIG_FORM, result())).toBe('Karin 会自动热加载，无需重启');
-        expect(summary(KARIN_CONFIG_FORM, result({ port_changed: true, relinked: true, restart_required: true }))).toBe(
-            '实例端口已同步；已同步更新协议 Bot 侧的对接连接；有改动需重启实例后生效',
-        );
+        expect(
+            summary(
+                KARIN_CONFIG_FORM,
+                result({ port_changed: true, relinked: true, restart_required: true }),
+            ),
+        ).toBe('实例端口已同步；已同步更新协议 Bot 侧的对接连接；有改动需重启实例后生效');
     });
 
     it('NoneBot2 and MaiBot fall back to 已保存 when nothing else happened', () => {
         expect(summary(NONEBOT2_CONFIG_FORM, result())).toBe('已保存');
-        expect(summary(NONEBOT2_CONFIG_FORM, result({ restart_required: true }))).toBe('改完要重启');
+        expect(summary(NONEBOT2_CONFIG_FORM, result({ restart_required: true }))).toBe(
+            '改完要重启',
+        );
         expect(summary(MAIBOT_CONFIG_FORM, result())).toBe('已保存');
         expect(summary(MAIBOT_CONFIG_FORM, result({ port_changed: true }))).toBe('实例端口已同步');
     });
@@ -64,7 +69,9 @@ describe('save summary per framework', () => {
     it('AstrBot tells hot reload from a plain write', () => {
         expect(summary(ASTRBOT_CONFIG_FORM, result(), true)).toBe('已热生效');
         expect(summary(ASTRBOT_CONFIG_FORM, result(), false)).toBe('已写入');
-        expect(summary(ASTRBOT_CONFIG_FORM, result({ restart_required: true }), true)).toBe('改完要重启');
+        expect(summary(ASTRBOT_CONFIG_FORM, result({ restart_required: true }), true)).toBe(
+            '改完要重启',
+        );
         expect(ASTRBOT_CONFIG_FORM.confId).toBe('default');
     });
 });

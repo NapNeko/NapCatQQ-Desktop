@@ -150,7 +150,11 @@ export function advancedHasError(ctx: SchemaCtx, path: readonly string[], node: 
  * 一节里有没有收起来的高级字段（决定小节标题要不要给「高级选项」）。
  * 这页不出的字段不算，不然点开什么也不多
  */
-export function hasAdvanced(ctx: SchemaCtx, path: readonly string[], node: UiNode | undefined): boolean {
+export function hasAdvanced(
+    ctx: SchemaCtx,
+    path: readonly string[],
+    node: UiNode | undefined,
+): boolean {
     if (!node) return false;
     return node.fields.some((f) => {
         const key = shapeKey(path, f.name);
@@ -162,7 +166,11 @@ export function hasAdvanced(ctx: SchemaCtx, path: readonly string[], node: UiNod
     });
 }
 
-const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: UiField }> = ({ ctx, path, field }) => {
+const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: UiField }> = ({
+    ctx,
+    path,
+    field,
+}) => {
     const p = [...path, field.name];
     const value = getIn(ctx.value, p);
     const error = errorOf(ctx, p);
@@ -214,7 +222,10 @@ const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: Ui
                     hint={descs[current] ?? hint}
                     error={error}
                     value={current}
-                    items={(field.options ?? []).map((o) => ({ value: o, label: labels[o] ?? OPTION_LABELS[o] ?? o }))}
+                    items={(field.options ?? []).map((o) => ({
+                        value: o,
+                        label: labels[o] ?? OPTION_LABELS[o] ?? o,
+                    }))}
                     disabled={ctx.disabled}
                     onValueChange={set}
                 />
@@ -223,7 +234,9 @@ const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: Ui
         case 'array': {
             const list = Array.isArray(value) ? value.map(String) : [];
             if (LINE_LISTS.has(shapeKey(path, field.name))) {
-                const itemErrors = Object.fromEntries(list.map((_, i) => [i, errorOf(ctx, [...p, String(i)])]));
+                const itemErrors = Object.fromEntries(
+                    list.map((_, i) => [i, errorOf(ctx, [...p, String(i)])]),
+                );
                 return (
                     <LineListField
                         className={WIDE}
@@ -284,7 +297,11 @@ const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: Ui
 };
 
 /** 字符串到字符串的映射（请求头、环境变量、日志库级别）；值是对象的映射这里改不了，指去原始文件 */
-const StringMapField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: UiField }> = ({ ctx, path, field }) => {
+const StringMapField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: UiField }> = ({
+    ctx,
+    path,
+    field,
+}) => {
     const p = [...path, field.name];
     const raw = getIn(ctx.value, p);
     const map = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
@@ -312,12 +329,12 @@ const StringMapField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field:
     );
 };
 
-const ObjectListField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: UiField; item: UiNode }> = ({
-    ctx,
-    path,
-    field,
-    item,
-}) => {
+const ObjectListField: React.FC<{
+    ctx: SchemaCtx;
+    path: readonly string[];
+    field: UiField;
+    item: UiNode;
+}> = ({ ctx, path, field, item }) => {
     const p = [...path, field.name];
     const raw = getIn(ctx.value, p);
     const items = Array.isArray(raw) ? raw : [];
@@ -327,8 +344,12 @@ const ObjectListField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field
         <div className={cn('flex flex-col gap-2', WIDE)}>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <span className="text-xs font-medium text-text-secondary">{field.label ?? field.name}</span>
-                    {field.description && <p className="text-2xs text-text-tertiary">{field.description}</p>}
+                    <span className="text-xs font-medium text-text-secondary">
+                        {field.label ?? field.name}
+                    </span>
+                    {field.description && (
+                        <p className="text-2xs text-text-tertiary">{field.description}</p>
+                    )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                     {typeField && ctx.chatTargets && (
@@ -342,7 +363,8 @@ const ObjectListField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field
                                         ...newItemFor(item),
                                         platform: s.platform,
                                         item_id: s.target_id,
-                                        [typeField]: s.chat_type === 'private' ? 'private' : 'group',
+                                        [typeField]:
+                                            s.chat_type === 'private' ? 'private' : 'group',
                                     },
                                 ])
                             }
@@ -385,7 +407,11 @@ const ObjectListField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field
 };
 
 /** 一节里的字段；嵌套的对象小节收在最后，按层级缩进出小标题 */
-export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node: UiNode }> = ({ ctx, path, node }) => {
+export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node: UiNode }> = ({
+    ctx,
+    path,
+    node,
+}) => {
     const cells: React.ReactNode[] = [];
     const subs: React.ReactNode[] = [];
     for (const field of node.fields) {
@@ -394,11 +420,17 @@ export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node
         if (ctx.widgets?.[shapeKey(path, field.name)]) {
             cells.push(<SimpleField key={field.name} ctx={ctx} path={path} field={field} />);
         } else if (sub && field.type === 'array') {
-            cells.push(<ObjectListField key={field.name} ctx={ctx} path={path} field={field} item={sub} />);
+            cells.push(
+                <ObjectListField key={field.name} ctx={ctx} path={path} field={field} item={sub} />,
+            );
         } else if (sub) {
             if (sub.uiAdvanced && !ctx.showAdvanced) continue;
             subs.push(
-                <SubSection key={field.name} title={sub.uiLabel ?? field.label ?? field.name} hint={field.description}>
+                <SubSection
+                    key={field.name}
+                    title={sub.uiLabel ?? field.label ?? field.name}
+                    hint={field.description}
+                >
                     <FieldGrid ctx={ctx} path={[...path, field.name]} node={sub} />
                 </SubSection>,
             );
@@ -411,13 +443,19 @@ export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node
     if (!cells.length && !subs.length) return null;
     return (
         <div className="flex flex-col gap-5">
-            {cells.length > 0 && <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">{cells}</div>}
+            {cells.length > 0 && (
+                <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">{cells}</div>
+            )}
             {subs}
         </div>
     );
 };
 
-const SubSection: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({ title, hint, children }) => (
+const SubSection: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({
+    title,
+    hint,
+    children,
+}) => (
     <div className="flex flex-col gap-3 border-l-2 border-border-subtle pl-4">
         <div>
             <h4 className="text-sm font-medium text-text">{title}</h4>

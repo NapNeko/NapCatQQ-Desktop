@@ -86,23 +86,15 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
     const hasRemoteHosts = servers.length > 0;
 
-    const deploymentType: DeploymentType =
-        data.deploymentType === 'docker' ? 'docker' : 'native';
+    const deploymentType: DeploymentType = data.deploymentType === 'docker' ? 'docker' : 'native';
 
     const remoteHostId = useMemo(
-        () =>
-            isRemote
-                ? remoteHostIdFromRuntimeTarget(data.runtime_target)
-                : null,
+        () => (isRemote ? remoteHostIdFromRuntimeTarget(data.runtime_target) : null),
         [isRemote, data.runtime_target],
     );
 
-    const dockerHostIds = useMemo(
-        () => (remoteHostId ? [remoteHostId] : []),
-        [remoteHostId],
-    );
-    const { statusByHost, probingByHost, imageReadyByHost } =
-        useDockerHosts(dockerHostIds);
+    const dockerHostIds = useMemo(() => (remoteHostId ? [remoteHostId] : []), [remoteHostId]);
+    const { statusByHost, probingByHost, imageReadyByHost } = useDockerHosts(dockerHostIds);
 
     // 直接运行的框架 + 依赖状态由后端解析；SnowLuma Full/Lite 也由后端按设置 / 库存判定
     const remoteReadiness = useRuntimeReadiness(
@@ -128,10 +120,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         if (mode === 'local') {
             onChange({ runtime_target: 'local', deploymentType: 'native' });
         } else {
-            const only =
-                servers.length === 1
-                    ? servers[0].id
-                    : RUNTIME_TARGET_REMOTE_PLACEHOLDER;
+            const only = servers.length === 1 ? servers[0].id : RUNTIME_TARGET_REMOTE_PLACEHOLDER;
             onChange({ runtime_target: only });
         }
     };
@@ -160,8 +149,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         (data.backend_type === 'napcat' || data.backend_type === 'snowluma') &&
         remoteHostId != null;
 
-    const dockerFlavorLabel =
-        data.backend_type === 'snowluma' ? 'SnowLuma' : 'NapCat';
+    const dockerFlavorLabel = data.backend_type === 'snowluma' ? 'SnowLuma' : 'NapCat';
 
     // 当前运行场景的机制说明，收进 Popover 默认折叠，不常驻长文。
     const sceneExplainer = useMemo(() => {
@@ -207,11 +195,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         value={data.backend_type}
                         onValueChange={(v) => onChange({ backend_type: v })}
                         disabled={isRunning}
-                        hint={
-                            isRunning
-                                ? '运行中需先停止再切换底座'
-                                : undefined
-                        }
+                        hint={isRunning ? '运行中需先停止再切换底座' : undefined}
                     />
                 </FormSection>
             </div>
@@ -222,9 +206,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     description="本机固定直接运行；远程 Linux 可选 Docker"
                     actions={
                         sceneExplainer ? (
-                            <SceneExplainerPopover>
-                                {sceneExplainer}
-                            </SceneExplainerPopover>
+                            <SceneExplainerPopover>{sceneExplainer}</SceneExplainerPopover>
                         ) : undefined
                     }
                 >
@@ -269,22 +251,30 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                 <div>
                                     <DockerReadinessLine
                                         flavorLabel={dockerFlavorLabel}
-                                        status={remoteHostId ? statusByHost[remoteHostId] : undefined}
-                                        probing={remoteHostId ? probingByHost[remoteHostId] ?? false : false}
+                                        status={
+                                            remoteHostId ? statusByHost[remoteHostId] : undefined
+                                        }
+                                        probing={
+                                            remoteHostId
+                                                ? (probingByHost[remoteHostId] ?? false)
+                                                : false
+                                        }
                                         imageReady={
                                             remoteHostId
                                                 ? imageReadyByHost[remoteHostId]?.[
-                                                data.backend_type === 'snowluma'
-                                                    ? 'snowluma'
-                                                    : 'napcat'
-                                                ]
+                                                      data.backend_type === 'snowluma'
+                                                          ? 'snowluma'
+                                                          : 'napcat'
+                                                  ]
                                                 : undefined
                                         }
                                     />
                                 </div>
                             </GsapPresence>
 
-                            {isRemote && deploymentType === 'native' && remoteHostId && (
+                            {isRemote &&
+                                deploymentType === 'native' &&
+                                remoteHostId &&
                                 (() => {
                                     if (remoteTransportFailed) {
                                         return (
@@ -301,16 +291,17 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                         );
                                     }
                                     return null;
-                                })()
-                            )}
+                                })()}
                         </div>
                     </GsapPresence>
 
-                    {!isRemote && (
+                    {!isRemote &&
                         (() => {
                             if (!localReadiness.readiness) {
                                 return localReadiness.probing ? (
-                                    <InlineNotice tone="neutral">正在检测本机运行时组件…</InlineNotice>
+                                    <InlineNotice tone="neutral">
+                                        正在检测本机运行时组件…
+                                    </InlineNotice>
                                 ) : null;
                             }
                             const blocking = describeBlocking(
@@ -325,8 +316,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                 );
                             }
                             return null;
-                        })()
-                    )}
+                        })()}
                 </FormSection>
             </div>
 
@@ -339,10 +329,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 </FormSection>
             )}
 
-            <FormSection
-                title="附加服务"
-                description="仅发送音乐卡片时需要"
-            >
+            <FormSection title="附加服务" description="仅发送音乐卡片时需要">
                 <TextField
                     label="音乐签名接口"
                     value={data.musicSignUrl}
@@ -386,15 +373,11 @@ function InlineNotice({
         tone === 'ok'
             ? 'bg-success-soft text-success'
             : tone === 'danger'
-                ? 'bg-danger-soft text-danger'
-                : tone === 'warn'
-                    ? 'bg-warning-soft text-warning'
-                    : 'bg-inset text-text-tertiary';
-    return (
-        <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>
-            {children}
-        </p>
-    );
+              ? 'bg-danger-soft text-danger'
+              : tone === 'warn'
+                ? 'bg-warning-soft text-warning'
+                : 'bg-inset text-text-tertiary';
+    return <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>{children}</p>;
 }
 
 function SceneExplainerPopover({ children }: { children: ReactNode }) {

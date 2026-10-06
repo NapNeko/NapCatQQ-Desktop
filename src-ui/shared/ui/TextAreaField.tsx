@@ -1,12 +1,21 @@
 // 多行文本字段：外观、label / hint / error 的排法和 TextField 一致，给人格、提示词这类长文用。
 // 高度随内容撑开到 maxRows 为止，再多就在框里滚，免得一大段提示词把整页推得很长。
 
-import { useEffect, useId, useLayoutEffect, useRef, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import {
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useRef,
+    type ReactNode,
+    type TextareaHTMLAttributes,
+} from 'react';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
 
-export interface TextAreaFieldProps
-    extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value' | 'rows'> {
+export interface TextAreaFieldProps extends Omit<
+    TextareaHTMLAttributes<HTMLTextAreaElement>,
+    'onChange' | 'value' | 'rows'
+> {
     label?: ReactNode;
     hint?: ReactNode;
     error?: ReactNode;
@@ -91,7 +100,10 @@ export const TextAreaField: React.FC<TextAreaFieldProps> = ({
             {(hint || error) && (
                 <p
                     id={describedById}
-                    className={cn('text-2xs leading-snug', invalid ? 'text-danger' : 'text-text-tertiary')}
+                    className={cn(
+                        'text-2xs leading-snug',
+                        invalid ? 'text-danger' : 'text-text-tertiary',
+                    )}
                 >
                     {error ?? hint}
                 </p>

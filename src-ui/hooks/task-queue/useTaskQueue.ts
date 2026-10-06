@@ -7,7 +7,11 @@ import {
     dockerInstallTitle,
     systemPackageTitle,
 } from '../../core/domain/task-queue/labels';
-import type { TaskQueueItem, TaskQueueSnapshot, TaskQueueStatus } from '../../core/domain/task-queue/types';
+import type {
+    TaskQueueItem,
+    TaskQueueSnapshot,
+    TaskQueueStatus,
+} from '../../core/domain/task-queue/types';
 import {
     initialActionProgress,
     reduceActionProgress,
@@ -38,7 +42,10 @@ function progressFromTask(task: DeploymentTaskSnapshot): ActionProgressView | nu
     );
 }
 
-function statusFromTask(task: DeploymentTaskSnapshot, progress: ActionProgressView | null): TaskQueueStatus {
+function statusFromTask(
+    task: DeploymentTaskSnapshot,
+    progress: ActionProgressView | null,
+): TaskQueueStatus {
     switch (task.status) {
         case 'queued':
             return 'pending';
@@ -99,8 +106,7 @@ function taskToItem(
     const progress = progressFromTask(task);
     const status = statusFromTask(task, progress);
     const hostLabel = hostLabelFor(task.hostId, hostLabels);
-    const startedAt =
-        toNumberMs(task.startedAtMs) || toNumberMs(task.submittedAtMs);
+    const startedAt = toNumberMs(task.startedAtMs) || toNumberMs(task.submittedAtMs);
     const endedAt = task.endedAtMs == null ? undefined : toNumberMs(task.endedAtMs);
 
     switch (task.kind.kind) {
@@ -109,7 +115,11 @@ function taskToItem(
             return {
                 id: task.taskId,
                 kind: 'component_action',
-                title: componentActionTitle(componentId, task.kind.action, progress?.message || task.title),
+                title: componentActionTitle(
+                    componentId,
+                    task.kind.action,
+                    progress?.message || task.title,
+                ),
                 hostId: task.hostId,
                 hostLabel,
                 status,
@@ -218,8 +228,7 @@ export function useTaskQueue(options?: UseTaskQueueOptions): TaskQueueSnapshot {
     const hostLabels = options?.hostLabels;
 
     return useMemo(() => {
-        const items = Object.values(taskState.tasks)
-            .map((task) => taskToItem(task, hostLabels));
+        const items = Object.values(taskState.tasks).map((task) => taskToItem(task, hostLabels));
         items.sort(sortTaskItems);
         const activeCount = items.filter((i) => isActiveStatus(i.status)).length;
         return { items, activeCount };

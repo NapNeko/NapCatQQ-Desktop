@@ -63,25 +63,34 @@ const Shapes = memo(function Shapes({
                 const r = radiusOf(n.degree) / k;
                 return (
                     <g key={n.id}>
-                    {/* 实心垫底：上面那层是半透明的柔色，不垫的话线会从点里透出来 */}
-                    <circle cx={p.x} cy={p.y} r={r} className="pointer-events-none fill-field" />
-                    <circle
-                        cx={p.x}
-                        cy={p.y}
-                        r={r}
-                        onPointerEnter={() => onHover(n.id)}
-                        onPointerLeave={() => onHover(null)}
-                        onClick={(ev) => {
-                            ev.stopPropagation();
-                            onSelect(n.id);
-                        }}
-                        className={cn(
-                            'cursor-pointer transition-[fill-opacity,stroke-width] duration-200',
-                            n.id === selected ? 'fill-brand stroke-surface' : near.has(n.id) && focus !== null ? 'fill-brand/70 stroke-surface' : 'fill-info/70 stroke-surface',
-                        )}
-                        strokeWidth={(n.id === selected ? 3 : 1.5) / k}
-                        fillOpacity={dim ? 0.2 : 1}
-                    />
+                        {/* 实心垫底：上面那层是半透明的柔色，不垫的话线会从点里透出来 */}
+                        <circle
+                            cx={p.x}
+                            cy={p.y}
+                            r={r}
+                            className="pointer-events-none fill-field"
+                        />
+                        <circle
+                            cx={p.x}
+                            cy={p.y}
+                            r={r}
+                            onPointerEnter={() => onHover(n.id)}
+                            onPointerLeave={() => onHover(null)}
+                            onClick={(ev) => {
+                                ev.stopPropagation();
+                                onSelect(n.id);
+                            }}
+                            className={cn(
+                                'cursor-pointer transition-[fill-opacity,stroke-width] duration-200',
+                                n.id === selected
+                                    ? 'fill-brand stroke-surface'
+                                    : near.has(n.id) && focus !== null
+                                      ? 'fill-brand/70 stroke-surface'
+                                      : 'fill-info/70 stroke-surface',
+                            )}
+                            strokeWidth={(n.id === selected ? 3 : 1.5) / k}
+                            fillOpacity={dim ? 0.2 : 1}
+                        />
                     </g>
                 );
             })}
@@ -108,7 +117,9 @@ export const GraphCanvas: React.FC<{
     useLayoutEffect(() => {
         const el = box.current;
         if (!el) return;
-        const ro = new ResizeObserver(([entry]) => setSize({ w: entry.contentRect.width, h: entry.contentRect.height }));
+        const ro = new ResizeObserver(([entry]) =>
+            setSize({ w: entry.contentRect.width, h: entry.contentRect.height }),
+        );
         ro.observe(el);
         return () => ro.disconnect();
     }, []);
@@ -160,7 +171,10 @@ export const GraphCanvas: React.FC<{
     };
 
     return (
-        <div ref={box} className="relative h-full w-full overflow-hidden rounded-md border border-border-subtle bg-field">
+        <div
+            ref={box}
+            className="relative h-full w-full overflow-hidden rounded-md border border-border-subtle bg-field"
+        >
             <svg
                 width={size.w}
                 height={size.h}
@@ -188,7 +202,9 @@ export const GraphCanvas: React.FC<{
                     // 在空白处点一下（没拖动）：取消选中
                     if (d && !d.moved && ev.target === ev.currentTarget) onSelect(null);
                 }}
-                onDoubleClick={(ev) => ev.target === ev.currentTarget && setView(fitView(bounds, size.w, size.h))}
+                onDoubleClick={(ev) =>
+                    ev.target === ev.currentTarget && setView(fitView(bounds, size.w, size.h))
+                }
             >
                 <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
                     <Shapes
@@ -212,7 +228,13 @@ export const GraphCanvas: React.FC<{
                                 if (!a || !b) return null;
                                 const m = toScreen({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
                                 return (
-                                    <text key={`l:${e.source}\u0000${e.target}`} x={m.x} y={m.y} textAnchor="middle" className={cn(LABEL, 'fill-brand text-[10px]')}>
+                                    <text
+                                        key={`l:${e.source}\u0000${e.target}`}
+                                        x={m.x}
+                                        y={m.y}
+                                        textAnchor="middle"
+                                        className={cn(LABEL, 'fill-brand text-[10px]')}
+                                    >
                                         {e.label}
                                     </text>
                                 );
@@ -228,7 +250,13 @@ export const GraphCanvas: React.FC<{
                                 key={`n:${n.id}`}
                                 x={s.x + radiusOf(n.degree) + 3}
                                 y={s.y + 4}
-                                className={cn(LABEL, 'text-[11px]', n.id === focus ? 'fill-text font-semibold' : 'fill-text-secondary')}
+                                className={cn(
+                                    LABEL,
+                                    'text-[11px]',
+                                    n.id === focus
+                                        ? 'fill-text font-semibold'
+                                        : 'fill-text-secondary',
+                                )}
                                 opacity={dim ? 0.25 : 1}
                             >
                                 {n.id}
@@ -237,7 +265,9 @@ export const GraphCanvas: React.FC<{
                     })}
                 </g>
             </svg>
-            <p className="pointer-events-none absolute bottom-2 left-3 text-2xs text-text-disabled">拖动平移 · 滚轮缩放 · 双击空白处看全图</p>
+            <p className="pointer-events-none absolute bottom-2 left-3 text-2xs text-text-disabled">
+                拖动平移 · 滚轮缩放 · 双击空白处看全图
+            </p>
         </div>
     );
 };

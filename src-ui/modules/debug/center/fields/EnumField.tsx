@@ -14,8 +14,12 @@ export function EnumField({ field, value, onChange, inputId, disabled }: FieldPr
     const index = options.findIndex((o) => sameJson(o.value, value));
     const items: Array<SelectItem<string>> = [];
     if (!field.required) {
-        const fallback = field.defaultValue !== undefined ? `（默认 ${String(field.defaultValue)}）` : '';
-        items.push({ value: UNSET, label: <span className="text-text-tertiary">不填{fallback}</span> });
+        const fallback =
+            field.defaultValue !== undefined ? `（默认 ${String(field.defaultValue)}）` : '';
+        items.push({
+            value: UNSET,
+            label: <span className="text-text-tertiary">不填{fallback}</span>,
+        });
     }
     options.forEach((o, i) => {
         items.push({
@@ -24,9 +28,16 @@ export function EnumField({ field, value, onChange, inputId, disabled }: FieldPr
         });
     });
     const other = value !== undefined && index < 0;
-    if (other) items.push({ value: OTHER, label: `其它值：${JSON.stringify(value)}`, disabled: true });
+    if (other)
+        items.push({ value: OTHER, label: `其它值：${JSON.stringify(value)}`, disabled: true });
 
-    const selected = other ? OTHER : index >= 0 ? String(index) : field.required ? undefined : UNSET;
+    const selected = other
+        ? OTHER
+        : index >= 0
+          ? String(index)
+          : field.required
+            ? undefined
+            : UNSET;
 
     return (
         <Select

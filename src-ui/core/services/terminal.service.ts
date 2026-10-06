@@ -51,7 +51,9 @@ export const terminalService = {
         isTauri ? invoke('terminal_write', { id, data }) : terminalMock.write(id, data),
 
     resize: (id: string, cols: number, rows: number): Promise<void> =>
-        isTauri ? invoke('terminal_resize', { id, cols, rows }) : terminalMock.resize(id, cols, rows),
+        isTauri
+            ? invoke('terminal_resize', { id, cols, rows })
+            : terminalMock.resize(id, cols, rows),
 
     ack: (id: string, bytes: number): Promise<void> =>
         isTauri ? invoke('terminal_ack', { id, bytes }) : Promise.resolve(),
@@ -108,7 +110,7 @@ export const terminalService = {
     readClipboard: (): Promise<string> =>
         isTauri
             ? invoke('read_clipboard_text')
-            : navigator.clipboard?.readText?.().catch(() => '') ?? Promise.resolve(''),
+            : (navigator.clipboard?.readText?.().catch(() => '') ?? Promise.resolve('')),
 
     pickUploadFiles: (): Promise<string[]> =>
         isTauri ? pickAnyFiles('选择要上传的文件') : Promise.resolve([]),

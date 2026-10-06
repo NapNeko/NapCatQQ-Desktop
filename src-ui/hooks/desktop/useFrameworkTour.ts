@@ -12,15 +12,8 @@ import {
 } from '../../core/domain/onboarding/frameworkTourSteps';
 import { DEMO_REMOTE_HOST_ID } from '../../core/domain/onboarding/tourIds';
 import type { FrameworkTourRequest } from './frameworkTourHost';
-import {
-    clearComponentsHostBridge,
-    setComponentsHostBridge,
-} from './componentsHostBridge';
-import {
-    clearBotTourBridge,
-    setBotTourBridge,
-    type BotTourConfigTab,
-} from './botTourBridge';
+import { clearComponentsHostBridge, setComponentsHostBridge } from './componentsHostBridge';
+import { clearBotTourBridge, setBotTourBridge, type BotTourConfigTab } from './botTourBridge';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 
 type NavigateFn = (route: AppRoute) => void;
@@ -103,8 +96,7 @@ export function useFrameworkTour(opts: {
     const applyHost = useCallback((hostId: string) => {
         setComponentsHostBridge({
             preferredHostId: hostId,
-            includeDemoRemote:
-                keepDemoRemoteRef.current || hostId === DEMO_REMOTE_HOST_ID,
+            includeDemoRemote: keepDemoRemoteRef.current || hostId === DEMO_REMOTE_HOST_ID,
             hostSelectionLocked: true,
         });
     }, []);
@@ -117,10 +109,10 @@ export function useFrameworkTour(opts: {
                 mode === 'local'
                     ? [...LOCAL_FRAMEWORK_STEPS]
                     : mode === 'remote'
-                        ? [...REMOTE_DEMO_STEPS]
-                        : mode === 'bots'
-                            ? [...BOT_CREATE_STEPS]
-                            : [...FULL_FRAMEWORK_TOUR_STEPS];
+                      ? [...REMOTE_DEMO_STEPS]
+                      : mode === 'bots'
+                        ? [...BOT_CREATE_STEPS]
+                        : [...FULL_FRAMEWORK_TOUR_STEPS];
             keepDemoRemoteRef.current = mode === 'full' || mode === 'remote';
             setSteps(next);
             setStepIndex(0);
@@ -172,8 +164,7 @@ export function useFrameworkTour(opts: {
         });
         // 下一帧再 clear，让 BotPage 先处理 requestList
         window.setTimeout(() => clearBotTourBridge(), 120);
-        const shouldOfferContinue =
-            reason === 'done' && (runModeRef.current ?? 'full') === 'full';
+        const shouldOfferContinue = reason === 'done' && (runModeRef.current ?? 'full') === 'full';
         return { shouldOfferContinue };
     }, []);
 
@@ -196,21 +187,14 @@ export function useFrameworkTour(opts: {
                 });
                 // 打开新建 / 切 Tab：TabsContent 非激活不挂载。
                 // 连接步：先等 forceTab 生效再等 body 挂上（见 waitForTourTarget）。
-                const waitMs =
-                    full.id === 'bots-connections'
-                        ? 120
-                        : ui.openCreate
-                            ? 100
-                            : 60;
+                const waitMs = full.id === 'bots-connections' ? 120 : ui.openCreate ? 100 : 60;
                 await new Promise((r) => setTimeout(r, waitMs));
                 if (full.id === 'bots-connections') {
                     await waitForTourTarget('bot-connections-body', 48);
                 } else if (ui.openCreate) {
                     await waitForTourTarget(full.target, 36);
                 }
-                await new Promise((r) =>
-                    requestAnimationFrame(() => requestAnimationFrame(r)),
-                );
+                await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
                 return;
             }
 
@@ -218,9 +202,7 @@ export function useFrameworkTour(opts: {
             navigate('components');
             const hostId = full.selectHostId ?? 'local';
             applyHost(hostId);
-            await new Promise((r) =>
-                setTimeout(r, hostId === DEMO_REMOTE_HOST_ID ? 140 : 60),
-            );
+            await new Promise((r) => setTimeout(r, hostId === DEMO_REMOTE_HOST_ID ? 140 : 60));
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
         },
         [applyHost, navigate, setSidebarCollapsed, steps],

@@ -109,7 +109,13 @@ function runtimeOf(botId: string): Runtime {
 }
 
 function newEntry(selfId?: number): BotEventState {
-    return { chat: emptyChat(selfId), activeSession: 'all', receiver: null, subscriptionId: null, unseenDropped: 0 };
+    return {
+        chat: emptyChat(selfId),
+        activeSession: 'all',
+        receiver: null,
+        subscriptionId: null,
+        unseenDropped: 0,
+    };
 }
 
 function entryOf(botId: string): BotEventState | undefined {
@@ -191,7 +197,10 @@ function flushBot(botId: string): void {
     rt.stateFloor = latestSeq;
 
     const entry = entryOf(botId) ?? newEntry();
-    const chat = reduceEvents(entry.chat, events, { activeSession: entry.activeSession, callWording: wordingTaker(rt) });
+    const chat = reduceEvents(entry.chat, events, {
+        activeSession: entry.activeSession,
+        callWording: wordingTaker(rt),
+    });
     let next = chat === entry.chat ? entry : { ...entry, chat };
     let stoppedSubscription: string | null = null;
     if (latest) {
@@ -251,7 +260,11 @@ function ensureReceiving(botId: string, source: DebugChannelId, selfId?: number)
 
     // 记下自己的 QQ 号：判断「自己发的」气泡靠它
     if (selfId !== undefined) {
-        patchBot(botId, (e) => (e.chat.selfId === selfId ? e : { ...e, chat: { ...e.chat, selfId: e.chat.selfId ?? selfId } }));
+        patchBot(botId, (e) =>
+            e.chat.selfId === selfId
+                ? e
+                : { ...e, chat: { ...e.chat, selfId: e.chat.selfId ?? selfId } },
+        );
     }
 
     rt.source = source;
@@ -274,12 +287,19 @@ function restartReceiving(botId: string, source: DebugChannelId, selfId?: number
 }
 
 /** 订一次并把结果写进 store；不抛（失败写进 error 并弹条） */
-async function subscribeOnce(botId: string, rt: Runtime, source: DebugChannelId, epoch: number): Promise<void> {
+async function subscribeOnce(
+    botId: string,
+    rt: Runtime,
+    source: DebugChannelId,
+    epoch: number,
+): Promise<void> {
     // 出发时已经到手的最大 seq（时间线上的 + 排队等出帧的）：订阅回来后，缓冲起点之前的才算真丢
     let seenBefore = entryOf(botId)?.chat.lastSeq ?? 0;
     for (const e of rt.queue) seenBefore = Math.max(seenBefore, e.seq);
     try {
-        const res = await onebotDebugService.subscribe(botId, source, (batch) => onBatch(botId, epoch, batch));
+        const res = await onebotDebugService.subscribe(botId, source, (batch) =>
+            onBatch(botId, epoch, batch),
+        );
         if (rt.epoch !== epoch) {
             // 等回包的时候页面已经走了 / 又换了通道：这个订阅没人要，别让后端白白多一个观众
             unsubscribeQuietly(res.subscription_id);
@@ -288,7 +308,11 @@ async function subscribeOnce(botId: string, rt: Runtime, source: DebugChannelId,
         // 补给我们的积压都不晚于这个位置；它们里头旧的 Stopped / Reconnecting 不该再改状态。
         // 不把等回包期间进队列的事件算进去：ringLastSeq 已盖住积压范围，而订阅途中到达的
         // 新接收器事件（比如恢复成 connected）必须照常生效，不然状态会卡在订阅那一刻
-        const floor = Math.max(rt.stateFloor, entryOf(botId)?.chat.lastSeq ?? 0, ringLastSeq(res.receiver));
+        const floor = Math.max(
+            rt.stateFloor,
+            entryOf(botId)?.chat.lastSeq ?? 0,
+            ringLastSeq(res.receiver),
+        );
         rt.stateFloor = floor;
         // 接收器重建只是接着编号，不算丢（旧条目还在时间线上）；
         // first_seq 比我们见过的更靠后，才是离开期间缓冲挤掉的、再也要不回来的
@@ -344,14 +368,21 @@ async function stopReceiving(botId: string): Promise<void> {
         await onebotDebugService.stopReceiver(botId);
     } catch (err) {
         rt.manualStop = false;
-        pushErrorBar({ key: `debug-stop-receiver:${botId}`, title: '停止接收失败', raw: errorText(err) });
+        pushErrorBar({
+            key: `debug-stop-receiver:${botId}`,
+            title: '停止接收失败',
+            raw: errorText(err),
+        });
         return;
     }
     releaseView(botId);
     // 后端会发一条 Stopped 事件，但订阅已经退了，等不到；本地直接标成已停
     patchBot(botId, (e) =>
         e.receiver && e.receiver.state.state !== 'stopped'
-            ? { ...e, receiver: { ...e.receiver, state: { state: 'stopped', reason: '已手动停止' } } }
+            ? {
+                  ...e,
+                  receiver: { ...e.receiver, state: { state: 'stopped', reason: '已手动停止' } },
+              }
             : e,
     );
 }
@@ -482,7 +513,13 @@ export interface DebugReceiverView {
     error: string | null;
 }
 
-const IDLE_VIEW: DebugReceiverView = { receiver: null, state: null, subscribed: false, unseenDropped: 0, error: null };
+const IDLE_VIEW: DebugReceiverView = {
+    receiver: null,
+    state: null,
+    subscribed: false,
+    unseenDropped: 0,
+    error: null,
+};
 
 // chat 每帧都在变，视图对象却只该在这几项变了才换，否则订阅它的组件会跟着聊天一起刷
 const receiverViews = new Map<

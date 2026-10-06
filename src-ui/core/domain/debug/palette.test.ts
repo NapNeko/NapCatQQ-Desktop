@@ -11,7 +11,11 @@ import {
     type PaletteRow,
 } from './palette';
 
-const action = (name: string, summary = '', patch: Partial<DebugActionSummary> = {}): DebugActionSummary => ({
+const action = (
+    name: string,
+    summary = '',
+    patch: Partial<DebugActionSummary> = {},
+): DebugActionSummary => ({
     name,
     aliases: [],
     summary,
@@ -31,7 +35,13 @@ const ACTIONS = [
     action('delete_msg', '撤回消息', { safety: 'dangerous', aliases: ['recall_msg'] }),
 ];
 
-const saved = (id: string, name: string, actionName: string, folder: string | null = null, order = 0): DebugSavedRequest => ({
+const saved = (
+    id: string,
+    name: string,
+    actionName: string,
+    folder: string | null = null,
+    order = 0,
+): DebugSavedRequest => ({
     id,
     name,
     folder_id: folder,
@@ -47,7 +57,10 @@ const saved = (id: string, name: string, actionName: string, folder: string | nu
 const COLLECTIONS: DebugCollections = {
     version: 1,
     folders: [{ id: 'f1', name: '常用', order: 0 }],
-    requests: [saved('b', '测试群打招呼', 'send_group_msg', 'f1', 0), saved('a', '看看登录号', 'get_login_info', null, 0)],
+    requests: [
+        saved('b', '测试群打招呼', 'send_group_msg', 'f1', 0),
+        saved('a', '看看登录号', 'get_login_info', null, 0),
+    ],
 };
 
 const summarize = (rows: PaletteRow[]) =>
@@ -65,7 +78,12 @@ const summarize = (rows: PaletteRow[]) =>
 
 describe('buildPaletteRows', () => {
     it('没输入：最近用过、收藏（按文件夹顺序）、全部接口（不重复列最近用过的）', () => {
-        const rows = buildPaletteRows({ actions: ACTIONS, collections: COLLECTIONS, query: '', recent: ['get_login_info', 'gone_action'] });
+        const rows = buildPaletteRows({
+            actions: ACTIONS,
+            collections: COLLECTIONS,
+            query: '',
+            recent: ['get_login_info', 'gone_action'],
+        });
         expect(summarize(rows)).toEqual([
             '# 最近用过',
             'get_login_info *',
@@ -85,50 +103,123 @@ describe('buildPaletteRows', () => {
         const many: DebugCollections = {
             version: 1,
             folders: [],
-            requests: Array.from({ length: PALETTE_SAVED_LIMIT + 3 }, (_, i) => saved(`r${i}`, `收藏 ${i}`, 'get_group_list', null, i)),
+            requests: Array.from({ length: PALETTE_SAVED_LIMIT + 3 }, (_, i) =>
+                saved(`r${i}`, `收藏 ${i}`, 'get_group_list', null, i),
+            ),
         };
-        const rows = buildPaletteRows({ actions: ACTIONS, collections: many, query: '', recent: [] });
+        const rows = buildPaletteRows({
+            actions: ACTIONS,
+            collections: many,
+            query: '',
+            recent: [],
+        });
         expect(rows.filter((r) => r.kind === 'saved')).toHaveLength(PALETTE_SAVED_LIMIT);
-        expect(rows.find((r) => r.kind === 'more')).toMatchObject({ text: '还有 3 个收藏，输入名字缩小范围' });
+        expect(rows.find((r) => r.kind === 'more')).toMatchObject({
+            text: '还有 3 个收藏，输入名字缩小范围',
+        });
     });
 
     it('输入之后：接口按得分排，收藏按名字 / 接口名筛；最近用过的标出来', () => {
-        const rows = buildPaletteRows({ actions: ACTIONS, collections: COLLECTIONS, query: 'group', recent: ['send_group_msg'] });
-        expect(summarize(rows)).toEqual(['# 接口 · 2', 'send_group_msg *', 'get_group_list', '# 收藏 · 1', '☆ 测试群打招呼 @常用']);
-        expect(summarize(buildPaletteRows({ actions: ACTIONS, collections: COLLECTIONS, query: '登录', recent: [] }))).toEqual([
-            '# 接口 · 1',
-            'get_login_info',
+        const rows = buildPaletteRows({
+            actions: ACTIONS,
+            collections: COLLECTIONS,
+            query: 'group',
+            recent: ['send_group_msg'],
+        });
+        expect(summarize(rows)).toEqual([
+            '# 接口 · 2',
+            'send_group_msg *',
+            'get_group_list',
             '# 收藏 · 1',
-            '☆ 看看登录号',
+            '☆ 测试群打招呼 @常用',
         ]);
+        expect(
+            summarize(
+                buildPaletteRows({
+                    actions: ACTIONS,
+                    collections: COLLECTIONS,
+                    query: '登录',
+                    recent: [],
+                }),
+            ),
+        ).toEqual(['# 接口 · 1', 'get_login_info', '# 收藏 · 1', '☆ 看看登录号']);
     });
 
     it('像接口名、目录里又没有的词：给「打开目录外的接口」；没搜到时它排第一，搜到了排在接口最后', () => {
-        expect(summarize(buildPaletteRows({ actions: ACTIONS, collections: null, query: 'delete_msg_async', recent: [] }))).toEqual([
-            '# 接口',
-            '→ delete_msg_async',
-        ]);
-        expect(summarize(buildPaletteRows({ actions: ACTIONS, collections: null, query: 'get_group', recent: [] }))).toEqual([
-            '# 接口 · 1',
-            'get_group_list',
-            '→ get_group',
-        ]);
+        expect(
+            summarize(
+                buildPaletteRows({
+                    actions: ACTIONS,
+                    collections: null,
+                    query: 'delete_msg_async',
+                    recent: [],
+                }),
+            ),
+        ).toEqual(['# 接口', '→ delete_msg_async']);
+        expect(
+            summarize(
+                buildPaletteRows({
+                    actions: ACTIONS,
+                    collections: null,
+                    query: 'get_group',
+                    recent: [],
+                }),
+            ),
+        ).toEqual(['# 接口 · 1', 'get_group_list', '→ get_group']);
         // 名字或别名完全一样就不给
-        expect(buildPaletteRows({ actions: ACTIONS, collections: null, query: 'recall_msg', recent: [] }).some((r) => r.kind === 'free')).toBe(false);
-        expect(buildPaletteRows({ actions: ACTIONS, collections: null, query: 'get_login_info', recent: [] }).some((r) => r.kind === 'free')).toBe(false);
+        expect(
+            buildPaletteRows({
+                actions: ACTIONS,
+                collections: null,
+                query: 'recall_msg',
+                recent: [],
+            }).some((r) => r.kind === 'free'),
+        ).toBe(false);
+        expect(
+            buildPaletteRows({
+                actions: ACTIONS,
+                collections: null,
+                query: 'get_login_info',
+                recent: [],
+            }).some((r) => r.kind === 'free'),
+        ).toBe(false);
         // 不像接口名（中文、带空格）的不给
-        expect(buildPaletteRows({ actions: ACTIONS, collections: null, query: '没有 这个', recent: [] })).toEqual([]);
-        expect(buildPaletteRows({ actions: [], collections: null, query: '.ocr_image', recent: [] }).some((r) => r.kind === 'free')).toBe(true);
+        expect(
+            buildPaletteRows({
+                actions: ACTIONS,
+                collections: null,
+                query: '没有 这个',
+                recent: [],
+            }),
+        ).toEqual([]);
+        expect(
+            buildPaletteRows({
+                actions: [],
+                collections: null,
+                query: '.ocr_image',
+                recent: [],
+            }).some((r) => r.kind === 'free'),
+        ).toBe(true);
     });
 
     it('收藏还没读到时不出收藏那一段', () => {
-        const rows = buildPaletteRows({ actions: ACTIONS, collections: null, query: '', recent: [] });
+        const rows = buildPaletteRows({
+            actions: ACTIONS,
+            collections: null,
+            query: '',
+            recent: [],
+        });
         expect(rows.some((r) => r.kind === 'saved')).toBe(false);
     });
 });
 
 describe('选择', () => {
-    const rows = buildPaletteRows({ actions: ACTIONS, collections: COLLECTIONS, query: '', recent: ['get_login_info'] });
+    const rows = buildPaletteRows({
+        actions: ACTIONS,
+        collections: COLLECTIONS,
+        query: '',
+        recent: ['get_login_info'],
+    });
 
     it('跳过标题行和提示行；到头停住不绕回', () => {
         const first = firstSelectable(rows);

@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DesktopLogLevelFilterValue } from '../../core/domain/desktop-log';
-import {
-    filterLogs,
-    serializeDesktopLogs,
-} from '../../core/domain/events/log-buffer';
+import { filterLogs, serializeDesktopLogs } from '../../core/domain/events/log-buffer';
 import { desktopLogService } from '../../core/services/desktop.service';
 import { useDesktopLogStream } from './useDesktopLogStream';
 
@@ -52,16 +49,15 @@ export function useDesktopLogViewer(enabled: boolean) {
         }
     }, [filtered]);
 
-    const emptyKind: 'loading' | 'error' | 'empty-file' | 'no-match' | 'has' =
-        loading
-            ? 'loading'
-            : error
-              ? 'error'
-              : logs.length === 0
-                ? 'empty-file'
-                : filtered.length === 0
-                  ? 'no-match'
-                  : 'has';
+    const emptyKind: 'loading' | 'error' | 'empty-file' | 'no-match' | 'has' = loading
+        ? 'loading'
+        : error
+          ? 'error'
+          : logs.length === 0
+            ? 'empty-file'
+            : filtered.length === 0
+              ? 'no-match'
+              : 'has';
 
     return {
         level,

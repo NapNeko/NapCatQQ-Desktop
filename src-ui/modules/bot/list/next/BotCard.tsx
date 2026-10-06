@@ -148,19 +148,18 @@ export function BotCard({
     const [qrOpen, setQrOpen] = useState(false);
     const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
     const debugEnabled = useDebugConsoleEnabled();
-    const {
-        enabled: metricsEnabled,
-        metrics: runtimeMetrics,
-    } = useBotRuntimeMetrics(bot.bot_id);
+    const { enabled: metricsEnabled, metrics: runtimeMetrics } = useBotRuntimeMetrics(bot.bot_id);
 
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
 
     // Transport 层失败检查（优先于 Bot 状态和组件状态）
-    const isRemoteTarget = config?.bot.runtime_target != null && !isRuntimeTargetLocal(config.bot.runtime_target);
-    const remoteHostIdForCheck = isRemoteTarget && config?.bot.runtime_target != null
-        ? remoteHostIdFromRuntimeTarget(config.bot.runtime_target)
-        : null;
+    const isRemoteTarget =
+        config?.bot.runtime_target != null && !isRuntimeTargetLocal(config.bot.runtime_target);
+    const remoteHostIdForCheck =
+        isRemoteTarget && config?.bot.runtime_target != null
+            ? remoteHostIdFromRuntimeTarget(config.bot.runtime_target)
+            : null;
     const remoteReachable = useIsHostReachable(remoteHostIdForCheck);
     const transportFailed = isRemoteTarget && remoteHostIdForCheck != null && !remoteReachable;
     const serversQuery = useServerProfiles(isRemoteTarget);
@@ -198,15 +197,12 @@ export function BotCard({
         snowlumaDaemonState: snowlumaDaemonState ?? null,
         snowlumaDockerEndpointsReady: snowlumaDockerEndpointsReady ?? false,
         snowlumaRemoteNativeTunnelReady:
-            isSnowlumaRemoteNativeConfig(config ?? null) &&
-            snowlumaDaemonState === 'ready',
+            isSnowlumaRemoteNativeConfig(config ?? null) && snowlumaDaemonState === 'ready',
     });
     const webuiTip = webuiTooltip({ flavor, available: webuiAvailable });
 
     const displayName =
-        config?.bot.name && config.bot.name.trim().length > 0
-            ? config.bot.name.trim()
-            : bot.bot_id;
+        config?.bot.name && config.bot.name.trim().length > 0 ? config.bot.name.trim() : bot.bot_id;
     const enabledChannels = config ? countEnabledChannels(config) : null;
     const restartHint = config ? formatRestartHint(config) : null;
     const runtimeTarget = config?.bot.runtime_target ?? null;
@@ -223,9 +219,7 @@ export function BotCard({
         fn();
     };
 
-    const lastTransitionRel = bot.last_transition
-        ? formatRelativeTime(bot.last_transition)
-        : null;
+    const lastTransitionRel = bot.last_transition ? formatRelativeTime(bot.last_transition) : null;
 
     const needsQrLogin = hasQrcode && isOnline !== true;
 
@@ -241,10 +235,11 @@ export function BotCard({
         snowlumaDockerEndpointsReady: snowlumaDockerEndpointsReady ?? false,
     });
 
-    const cardAccent =
-        transportFailed
-            ? 'danger'
-            : (isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none');
+    const cardAccent = transportFailed
+        ? 'danger'
+        : isBotStarting(bot.state) || bot.state === 'repairing'
+          ? 'brand'
+          : 'none';
 
     const isActive = isBotActive(bot.state);
     const startPending = actionPending && !isActive;
@@ -255,10 +250,7 @@ export function BotCard({
         daemonState: snowlumaDaemonState ?? null,
     });
 
-    const novncAvailable =
-        isSnowlumaRemoteTunnelUi &&
-        snowlumaTunnelReady &&
-        isActive;
+    const novncAvailable = isSnowlumaRemoteTunnelUi && snowlumaTunnelReady && isActive;
     const snowlumaUiRetryAvailable = isSnowlumaRemoteUiRetryAvailable({
         config: config ?? null,
         active: bot.state === 'running',
@@ -311,7 +303,9 @@ export function BotCard({
             <InfoChip
                 key="sl-mode"
                 icon={Power}
-                tooltip={slStartMode.mode === 'cold_start' ? '启动方式：冷启动' : '启动方式：热启动'}
+                tooltip={
+                    slStartMode.mode === 'cold_start' ? '启动方式：冷启动' : '启动方式：热启动'
+                }
             />,
         );
     }
@@ -389,7 +383,9 @@ export function BotCard({
                                             {displayName}
                                         </h3>
                                         <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-2xs text-text-tertiary">
-                                            <span className="font-mono tabular-nums">QQ {bot.bot_id}</span>
+                                            <span className="font-mono tabular-nums">
+                                                QQ {bot.bot_id}
+                                            </span>
                                             {flavor && (
                                                 <>
                                                     <span aria-hidden className="text-border">
@@ -410,7 +406,9 @@ export function BotCard({
                                                     <span aria-hidden className="text-border">
                                                         ·
                                                     </span>
-                                                    <span className="tabular-nums">{lastTransitionRel}</span>
+                                                    <span className="tabular-nums">
+                                                        {lastTransitionRel}
+                                                    </span>
                                                 </>
                                             )}
                                         </p>
@@ -462,11 +460,15 @@ export function BotCard({
                                             startPending
                                                 ? '正在准备启动'
                                                 : transportFailed
-                                                    ? '远端主机不可达，无法启动'
-                                                    : '启动 Bot'
+                                                  ? '远端主机不可达，无法启动'
+                                                  : '启动 Bot'
                                         }
                                         onClick={stopAction(() => onStart(bot.bot_id))}
-                                        disabled={!canStartBot(bot.state) || transportFailed || startPending}
+                                        disabled={
+                                            !canStartBot(bot.state) ||
+                                            transportFailed ||
+                                            startPending
+                                        }
                                         tone="success"
                                     >
                                         {startPending ? (
@@ -562,7 +564,14 @@ export function BotCard({
                                     <IconButton
                                         visible={terminalEnabled}
                                         tooltip={isDockerBot ? '终端（进容器）' : '终端'}
-                                        onClick={stopAction(() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false }))}
+                                        onClick={stopAction(
+                                            () =>
+                                                void openTerminal({
+                                                    kind: 'bot',
+                                                    bot_id: bot.bot_id,
+                                                    host_dir: false,
+                                                }),
+                                        )}
                                     >
                                         <ToolbarMotionIcon
                                             icon={SquareTerminal}
@@ -632,9 +641,7 @@ export function BotCard({
                     </ContextMenuItem>
                 )}
                 {novncAvailable && onOpenNovnc && (
-                    <ContextMenuItem
-                        onClick={() => onOpenNovnc(bot.bot_id)}
-                    >
+                    <ContextMenuItem onClick={() => onOpenNovnc(bot.bot_id)}>
                         <Monitor size={13} className="text-brand" />
                         <span>打开 noVNC 桌面</span>
                     </ContextMenuItem>
@@ -657,7 +664,6 @@ export function BotCard({
 
                 <ContextMenuSeparator />
 
-
                 {/* 导航跳转 */}
                 <ContextMenuItem onClick={() => onConfigure(bot.bot_id)}>
                     <Settings size={13} />
@@ -678,13 +684,21 @@ export function BotCard({
                     </ContextMenuItem>
                 )}
                 {terminalEnabled && (
-                    <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })}>
+                    <ContextMenuItem
+                        onClick={() =>
+                            void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })
+                        }
+                    >
                         <SquareTerminal size={13} />
                         <span>{isDockerBot ? '终端（进容器）' : '打开终端'}</span>
                     </ContextMenuItem>
                 )}
                 {terminalEnabled && isDockerBot && (
-                    <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: true })}>
+                    <ContextMenuItem
+                        onClick={() =>
+                            void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: true })
+                        }
+                    >
                         <SquareTerminal size={13} />
                         <span>终端（宿主机部署目录）</span>
                     </ContextMenuItem>

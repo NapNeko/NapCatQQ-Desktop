@@ -174,9 +174,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                             migratedNetworks += 1;
                         }
                     } catch (err) {
-                        networkMigrateFailed.push(
-                            `${row.qqId}：${errorText(err)}`,
-                        );
+                        networkMigrateFailed.push(`${row.qqId}：${errorText(err)}`);
                     }
                     await botService.upsertConfig(cfg);
                     created.push(row.qqId);
@@ -212,7 +210,10 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                     parts.push(`已迁移 ${migratedNetworks} 个远端网络配置。`);
                 }
                 if (networkMigrateFailed.length > 0) {
-                    console.error('[import-remote-bots] network migrate failed', networkMigrateFailed);
+                    console.error(
+                        '[import-remote-bots] network migrate failed',
+                        networkMigrateFailed,
+                    );
                     parts.push(`部分网络配置未迁出，详情见日志。`);
                 }
                 pushInfoBar({
@@ -253,17 +254,17 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                 <DialogHeader>
                     <DialogTitle>导入已有 Bot</DialogTitle>
                     <DialogDescription>
-                        登记远端已发现的 NapCat / SnowLuma 安装与 Docker 容器。
-                        不会改写远端 WebUI 密码；若实例还在跑，导入后会接到控制台。
+                        登记远端已发现的 NapCat / SnowLuma 安装与 Docker 容器。 不会改写远端 WebUI
+                        密码；若实例还在跑，导入后会接到控制台。
                     </DialogDescription>
                 </DialogHeader>
 
                 {isLoading ? (
-                    <p className="py-5 text-center text-sm text-text-tertiary">
-                        正在对照远端库存…
-                    </p>
+                    <p className="py-5 text-center text-sm text-text-tertiary">正在对照远端库存…</p>
                 ) : isError ? (
-                    <p className="py-5 text-center text-sm text-text-secondary">读取失败，详情见日志</p>
+                    <p className="py-5 text-center text-sm text-text-secondary">
+                        读取失败，详情见日志
+                    </p>
                 ) : rows.length === 0 ? (
                     <p className="py-5 text-center text-sm text-text-secondary">
                         还没有发现可导入的 Bot。先在远端页添加主机并刷新库存，或点下面重新发现。
@@ -324,10 +325,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
     );
 };
 
-function toBotConfig(
-    row: ImportableRemoteBot,
-    takeOverWebuiPwd: boolean,
-): BotConfig {
+function toBotConfig(row: ImportableRemoteBot, takeOverWebuiPwd: boolean): BotConfig {
     const base = createDefaultBotConfig();
     const backendLabel = importableBackendLabel(row.backend);
     return {
@@ -339,8 +337,7 @@ function toBotConfig(
             runtime_target: row.serverId,
             backend_type: row.backend,
             deploymentType: row.deployment,
-            snowlumaStartMode:
-                row.backend === 'snowluma' ? { mode: 'cold_start' } : undefined,
+            snowlumaStartMode: row.backend === 'snowluma' ? { mode: 'cold_start' } : undefined,
             webuiPasswordTakeover: takeOverWebuiPwd,
         },
     };

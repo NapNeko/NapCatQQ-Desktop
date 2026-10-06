@@ -5,12 +5,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushErrorBar } from '../ui/pushErrorBar';
-import type { MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile } from '../../core/ipc/types';
+import type {
+    MaiBotPromptAction,
+    MaiBotPromptCatalog,
+    MaiBotPromptFile,
+} from '../../core/ipc/types';
 
 /** disk：停着改盘；live：跑着且 WebUI 应答了；waiting：跑着但 WebUI 还没起来 */
 export type PromptMode = 'disk' | 'live' | 'waiting';
 
-export const maibotPromptCatalogKey = (id: string, mode: PromptMode) => ['maibotPromptCatalog', id, mode] as const;
+export const maibotPromptCatalogKey = (id: string, mode: PromptMode) =>
+    ['maibotPromptCatalog', id, mode] as const;
 export const maibotPromptFileKey = (id: string, mode: PromptMode, language: string, name: string) =>
     ['maibotPromptFile', id, mode, language, name] as const;
 
@@ -24,7 +29,12 @@ export function useMaiBotPromptCatalog(instanceId: string, mode: PromptMode) {
     });
 }
 
-export function useMaiBotPromptFile(instanceId: string, mode: PromptMode, language?: string, name?: string) {
+export function useMaiBotPromptFile(
+    instanceId: string,
+    mode: PromptMode,
+    language?: string,
+    name?: string,
+) {
     return useQuery<MaiBotPromptFile, Error>({
         queryKey: maibotPromptFileKey(instanceId, mode, language ?? '', name ?? ''),
         queryFn: () => svc.promptFile(instanceId, language!, name!),

@@ -70,16 +70,26 @@ interface SortKey {
  * 对一组行下标按某列排序。两边都能当数字就按数值比（群号、时间戳存成字符串也一样），
  * 否则按自然序比文本；空值不论升降都排最后。先把键算好再排，避免比较函数里反复转换。
  */
-function sortIndices(rows: Array<Record<string, unknown>>, indices: number[], sort: SortState): number[] {
+function sortIndices(
+    rows: Array<Record<string, unknown>>,
+    indices: number[],
+    sort: SortState,
+): number[] {
     const sign = sort.dir === 'asc' ? 1 : -1;
     const keys: SortKey[] = indices.map((index) => {
         const v = rows[index]?.[sort.column];
         const empty = v === null || v === undefined || v === '';
-        return { index, empty, num: empty ? null : numericValue(v), text: empty ? '' : cellText(v) };
+        return {
+            index,
+            empty,
+            num: empty ? null : numericValue(v),
+            text: empty ? '' : cellText(v),
+        };
     });
     keys.sort((a, b) => {
         if (a.empty || b.empty) return a.empty === b.empty ? 0 : a.empty ? 1 : -1;
-        const cmp = a.num !== null && b.num !== null ? a.num - b.num : collator.compare(a.text, b.text);
+        const cmp =
+            a.num !== null && b.num !== null ? a.num - b.num : collator.compare(a.text, b.text);
         return cmp * sign;
     });
     return keys.map((k) => k.index);
@@ -98,7 +108,12 @@ export function DataTable({ columns, rows, onCellClick, className }: DataTablePr
     const haystack = useMemo(() => {
         let cache: string[] | null = null;
         return () => {
-            cache ??= rows.map((row) => columns.map((c) => cellText(row[c])).join('\u0000').toLowerCase());
+            cache ??= rows.map((row) =>
+                columns
+                    .map((c) => cellText(row[c]))
+                    .join('\u0000')
+                    .toLowerCase(),
+            );
             return cache;
         };
     }, [rows, columns]);
@@ -147,7 +162,11 @@ export function DataTable({ columns, rows, onCellClick, className }: DataTablePr
         >
             <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-surface px-2 py-1.5">
                 <label className="relative flex min-w-0 max-w-64 flex-1 items-center">
-                    <Search size={12} className="pointer-events-none absolute left-2 text-text-tertiary" aria-hidden />
+                    <Search
+                        size={12}
+                        className="pointer-events-none absolute left-2 text-text-tertiary"
+                        aria-hidden
+                    />
                     <input
                         type="search"
                         value={filter}
@@ -188,7 +207,13 @@ export function DataTable({ columns, rows, onCellClick, className }: DataTablePr
                                     key={column}
                                     role="columnheader"
                                     aria-colindex={ci + 1}
-                                    aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}
+                                    aria-sort={
+                                        dir === 'asc'
+                                            ? 'ascending'
+                                            : dir === 'desc'
+                                              ? 'descending'
+                                              : 'none'
+                                    }
                                     className="min-w-0"
                                 >
                                     <button
@@ -202,8 +227,20 @@ export function DataTable({ columns, rows, onCellClick, className }: DataTablePr
                                         )}
                                     >
                                         <span className="min-w-0 truncate">{column}</span>
-                                        {dir === 'asc' && <ArrowUp size={12} className="shrink-0 text-brand" aria-hidden />}
-                                        {dir === 'desc' && <ArrowDown size={12} className="shrink-0 text-brand" aria-hidden />}
+                                        {dir === 'asc' && (
+                                            <ArrowUp
+                                                size={12}
+                                                className="shrink-0 text-brand"
+                                                aria-hidden
+                                            />
+                                        )}
+                                        {dir === 'desc' && (
+                                            <ArrowDown
+                                                size={12}
+                                                className="shrink-0 text-brand"
+                                                aria-hidden
+                                            />
+                                        )}
                                     </button>
                                 </div>
                             );
@@ -215,7 +252,10 @@ export function DataTable({ columns, rows, onCellClick, className }: DataTablePr
                             {rows.length === 0 ? '没有数据' : '没有匹配的行'}
                         </div>
                     ) : (
-                        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+                        <div
+                            className="relative w-full"
+                            style={{ height: virtualizer.getTotalSize() }}
+                        >
                             {items.map((virtualRow) => {
                                 const rowIndex = visible[virtualRow.index];
                                 const row = rowIndex === undefined ? undefined : rows[rowIndex];
@@ -240,28 +280,49 @@ export function DataTable({ columns, rows, onCellClick, className }: DataTablePr
                                                     key={column}
                                                     role="cell"
                                                     aria-colindex={ci + 1}
-                                                    title={text.length > CELL_TITLE_CAP ? text.slice(0, CELL_TITLE_CAP) : text}
-                                                    onClick={onCellClick ? () => onCellClick({ row, column, value }) : undefined}
+                                                    title={
+                                                        text.length > CELL_TITLE_CAP
+                                                            ? text.slice(0, CELL_TITLE_CAP)
+                                                            : text
+                                                    }
+                                                    onClick={
+                                                        onCellClick
+                                                            ? () =>
+                                                                  onCellClick({
+                                                                      row,
+                                                                      column,
+                                                                      value,
+                                                                  })
+                                                            : undefined
+                                                    }
                                                     // 可点的格子要能用键盘到达并触发；不可点的不占 Tab 位
                                                     tabIndex={onCellClick ? 0 : undefined}
                                                     onKeyDown={
                                                         onCellClick
                                                             ? (e) => {
-                                                                if (e.key !== 'Enter') return;
-                                                                e.preventDefault();
-                                                                onCellClick({ row, column, value });
-                                                            }
+                                                                  if (e.key !== 'Enter') return;
+                                                                  e.preventDefault();
+                                                                  onCellClick({
+                                                                      row,
+                                                                      column,
+                                                                      value,
+                                                                  });
+                                                              }
                                                             : undefined
                                                     }
                                                     className={cn(
                                                         'min-w-0 truncate px-2 font-mono text-xs',
-                                                        value === null || value === undefined ? 'text-text-tertiary' : 'text-text',
+                                                        value === null || value === undefined
+                                                            ? 'text-text-tertiary'
+                                                            : 'text-text',
                                                         onCellClick &&
-                                                        'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
+                                                            'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
                                                     )}
                                                     style={{ lineHeight: `${ROW_HEIGHT}px` }}
                                                 >
-                                                    {text.length > CELL_RENDER_CAP ? text.slice(0, CELL_RENDER_CAP) : text}
+                                                    {text.length > CELL_RENDER_CAP
+                                                        ? text.slice(0, CELL_RENDER_CAP)
+                                                        : text}
                                                 </div>
                                             );
                                         })}

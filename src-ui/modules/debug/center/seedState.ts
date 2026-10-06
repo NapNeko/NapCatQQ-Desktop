@@ -34,7 +34,11 @@ export function rememberInitialText(tabId: string, text: string): void {
  * （没填接口名、没选 Bot、读失败、目录外的接口）按 `{}` 算。
  * `spec` 传 react-query 的原始 data：undefined 表示还没有结果，null 表示目录里没有这个接口。
  */
-export function resolveInitialText(tabId: string, spec: DebugActionSpec | null | undefined, loading: boolean): string | null {
+export function resolveInitialText(
+    tabId: string,
+    spec: DebugActionSpec | null | undefined,
+    loading: boolean,
+): string | null {
     const known = initialTexts.get(tabId);
     if (known !== undefined) return known;
     if (spec !== undefined) return initialParamsText(spec);

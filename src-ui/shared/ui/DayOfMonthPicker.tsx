@@ -47,7 +47,12 @@ export function DayOfMonthPicker({
                         className,
                     )}
                 >
-                    <CalendarDays aria-hidden size={13} strokeWidth={2.1} className="text-text-tertiary" />
+                    <CalendarDays
+                        aria-hidden
+                        size={13}
+                        strokeWidth={2.1}
+                        className="text-text-tertiary"
+                    />
                     <span>{current} 日</span>
                 </button>
             </PopoverTrigger>

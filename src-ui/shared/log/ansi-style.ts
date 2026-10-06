@@ -72,7 +72,12 @@ export function ansiColorCss(color: AnsiColor): string {
     const { l, c, h } = rgbToOklch(r, g, b);
     let css: string;
     if (c < 0.04) {
-        css = l >= 0.8 ? 'var(--text-primary)' : l >= 0.6 ? 'var(--text-secondary)' : 'var(--text-tertiary)';
+        css =
+            l >= 0.8
+                ? 'var(--text-primary)'
+                : l >= 0.6
+                  ? 'var(--text-secondary)'
+                  : 'var(--text-tertiary)';
     } else {
         const lightness = `clamp(var(--log-ansi-l-min, 0.36), ${l.toFixed(3)}, var(--log-ansi-l-max, 0.52))`;
         css = `oklch(${lightness} ${c.toFixed(3)} ${h.toFixed(1)})`;

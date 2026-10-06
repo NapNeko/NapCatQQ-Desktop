@@ -1,7 +1,15 @@
 // 左栏三个面板共用的小件：带提示的图标按钮、紧凑搜索框、分段筛选、空 / 错状态、确认框、骨架行，
 // 以及「按 / 聚焦搜索框」。
 
-import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import {
+    forwardRef,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type ReactNode,
+    type RefObject,
+} from 'react';
 import { Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
@@ -84,13 +92,21 @@ export function IconAction({
                 className,
             )}
         >
-            {busy ? <Spinner size="xs" label={label} /> : <Icon size={size === 'sm' ? 13 : 14} strokeWidth={2} aria-hidden />}
+            {busy ? (
+                <Spinner size="xs" label={label} />
+            ) : (
+                <Icon size={size === 'sm' ? 13 : 14} strokeWidth={2} aria-hidden />
+            )}
         </button>
     );
     return (
         <Tooltip>
-            <TooltipTrigger asChild>{disabled ? <span className="inline-flex">{button}</span> : button}</TooltipTrigger>
-            <TooltipContent side={tooltipSide}>{disabledReason ? `${label}：${disabledReason}` : label}</TooltipContent>
+            <TooltipTrigger asChild>
+                {disabled ? <span className="inline-flex">{button}</span> : button}
+            </TooltipTrigger>
+            <TooltipContent side={tooltipSide}>
+                {disabledReason ? `${label}：${disabledReason}` : label}
+            </TooltipContent>
         </Tooltip>
     );
 }
@@ -117,12 +133,28 @@ export interface PanelSearchProps {
 }
 
 export const PanelSearch = forwardRef<HTMLInputElement, PanelSearchProps>(function PanelSearch(
-    { value, onChange, placeholder, ariaLabel, trailing, onKeyDown, onFocus, onBlur, onRequestClose, controls, activeDescendant },
+    {
+        value,
+        onChange,
+        placeholder,
+        ariaLabel,
+        trailing,
+        onKeyDown,
+        onFocus,
+        onBlur,
+        onRequestClose,
+        controls,
+        activeDescendant,
+    },
     ref,
 ) {
     return (
         <label className="relative flex min-w-0 flex-1 items-center">
-            <Search size={13} aria-hidden className="pointer-events-none absolute left-2.5 text-text-tertiary" />
+            <Search
+                size={13}
+                aria-hidden
+                className="pointer-events-none absolute left-2.5 text-text-tertiary"
+            />
             <input
                 ref={ref}
                 type="text"
@@ -161,7 +193,9 @@ export const PanelSearch = forwardRef<HTMLInputElement, PanelSearchProps>(functi
             {value && (
                 <span className="absolute right-1 flex items-center gap-1">
                     {trailing !== undefined && (
-                        <span className="text-[10px] tabular-nums text-text-tertiary">{trailing}</span>
+                        <span className="text-[10px] tabular-nums text-text-tertiary">
+                            {trailing}
+                        </span>
                     )}
                     <button
                         type="button"
@@ -192,12 +226,22 @@ export function useSlashFocus(
     revealRef.current = onReveal;
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || e.isComposing) return;
+            if (
+                e.key !== '/' ||
+                e.ctrlKey ||
+                e.metaKey ||
+                e.altKey ||
+                e.defaultPrevented ||
+                e.isComposing
+            )
+                return;
             const t = e.target;
             if (
                 t instanceof HTMLElement &&
                 (t.isContentEditable ||
-                    t.closest('input, textarea, select, [contenteditable="true"], .cm-editor, [role="dialog"], [role="alertdialog"], .xterm'))
+                    t.closest(
+                        'input, textarea, select, [contenteditable="true"], .cm-editor, [role="dialog"], [role="alertdialog"], .xterm',
+                    ))
             ) {
                 return;
             }
@@ -225,7 +269,13 @@ export function useSlashFocus(
  * 搜索条默认收成标题行（分段切换那行）里的图标按钮，展开才占这一行。
  * 展开时内容轻轻落下来（只动 transform / opacity）；收起不播动画，直接没。
  */
-export function PanelSearchRow({ className, children }: { className?: string; children: ReactNode }) {
+export function PanelSearchRow({
+    className,
+    children,
+}: {
+    className?: string;
+    children: ReactNode;
+}) {
     const m = useMotion();
     const ref = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
@@ -265,7 +315,11 @@ export function Segmented<T extends string>({
     ariaLabel: string;
 }) {
     return (
-        <div role="radiogroup" aria-label={ariaLabel} className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5">
+        <div
+            role="radiogroup"
+            aria-label={ariaLabel}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5"
+        >
             {options.map((o) => {
                 const on = o.id === value;
                 return (
@@ -313,13 +367,17 @@ export function PanelMessage({
             <span
                 className={cn(
                     'inline-flex h-9 w-9 items-center justify-center rounded-md',
-                    tone === 'danger' ? 'bg-danger-soft text-danger' : 'bg-inset text-text-tertiary',
+                    tone === 'danger'
+                        ? 'bg-danger-soft text-danger'
+                        : 'bg-inset text-text-tertiary',
                 )}
             >
                 <Icon size={17} strokeWidth={1.9} aria-hidden />
             </span>
             <p className="font-display text-[13px] font-semibold text-text-secondary">{title}</p>
-            {hint && <p className="max-w-[26rem] text-2xs leading-relaxed text-text-tertiary">{hint}</p>}
+            {hint && (
+                <p className="max-w-[26rem] text-2xs leading-relaxed text-text-tertiary">{hint}</p>
+            )}
             {action}
         </div>
     );
@@ -330,9 +388,16 @@ export function SkeletonRows({ rows = 8, rowHeight = 30 }: { rows?: number; rowH
     return (
         <div aria-hidden className="flex flex-col gap-0 px-2 py-1.5">
             {Array.from({ length: rows }, (_, i) => (
-                <div key={i} className="flex items-center gap-2 px-1.5" style={{ height: rowHeight }}>
+                <div
+                    key={i}
+                    className="flex items-center gap-2 px-1.5"
+                    style={{ height: rowHeight }}
+                >
                     <Shimmer height={7} className="w-[7px] shrink-0 !rounded-full" />
-                    <Shimmer height={10} className={i % 3 === 0 ? 'w-2/5' : i % 3 === 1 ? 'w-3/5' : 'w-1/2'} />
+                    <Shimmer
+                        height={10}
+                        className={i % 3 === 0 ? 'w-2/5' : i % 3 === 1 ? 'w-3/5' : 'w-1/2'}
+                    />
                 </div>
             ))}
         </div>
@@ -360,7 +425,13 @@ export interface ConfirmRequest {
  * 删除、清空、危险调用前的确认。`request` 为 null 时关着；关的动画期间保留上一次的内容，
  * 标题不会在收起时变空。
  */
-export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest | null; onClose: () => void }) {
+export function ConfirmDialog({
+    request,
+    onClose,
+}: {
+    request: ConfirmRequest | null;
+    onClose: () => void;
+}) {
     const [shown, setShown] = useState<ConfirmRequest | null>(request);
     const confirmRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {

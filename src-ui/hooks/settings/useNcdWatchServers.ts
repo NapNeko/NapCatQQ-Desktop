@@ -80,8 +80,7 @@ export function useNcdWatchServers(): {
     const detectQueries = useQueries({
         queries: servers.map((p) => ({
             queryKey: ['component-detect', 'ncd_watch', `remote:${p.id}`],
-            queryFn: () =>
-                componentService.detectComponent('ncd_watch', `remote:${p.id}`),
+            queryFn: () => componentService.detectComponent('ncd_watch', `remote:${p.id}`),
             // 未连接也可尝试；失败时 UI 显示错误，不阻塞其它机
             enabled: isTauri && servers.length > 0,
             staleTime: 20_000,
@@ -100,9 +99,7 @@ export function useNcdWatchServers(): {
             } else if (dq?.isError) {
                 watchInstalled = null;
                 detectError =
-                    dq.error instanceof Error
-                        ? dq.error.message
-                        : String(dq.error ?? '探测失败');
+                    dq.error instanceof Error ? dq.error.message : String(dq.error ?? '探测失败');
             } else if (dq?.data) {
                 if (!dq.data.supported) {
                     watchInstalled = false;

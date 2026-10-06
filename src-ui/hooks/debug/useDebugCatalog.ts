@@ -12,7 +12,13 @@ import { pushErrorBar } from '../ui/pushErrorBar';
 import type { BackendType } from '../../core/ipc/generated/domain/BackendType';
 import type { DebugActionSpec } from '../../core/ipc/generated/debug/DebugActionSpec';
 import type { DebugCatalog } from '../../core/ipc/generated/debug/DebugCatalog';
-import { debugCatalogKey, debugCatalogPrefix, debugIdleKey, debugSpecKey, debugSpecPrefix } from './keys';
+import {
+    debugCatalogKey,
+    debugCatalogPrefix,
+    debugIdleKey,
+    debugSpecKey,
+    debugSpecPrefix,
+} from './keys';
 
 /** `DebugTarget` 可以直接传；没选 Bot 时给 `{ bot_id: null, backend }` */
 export interface DebugCatalogTarget {
@@ -26,7 +32,11 @@ export interface DebugCatalogTarget {
 // 多个组件同时用 useDebugCatalog / useDebugActionSpec 时也只有第一个观察到翻转的会去失效。
 const lastRunning = new Map<string, boolean>();
 
-function noteRunning(client: QueryClient, botId: string | null, running: boolean | undefined): void {
+function noteRunning(
+    client: QueryClient,
+    botId: string | null,
+    running: boolean | undefined,
+): void {
     if (botId === null || running === undefined) return;
     const before = lastRunning.get(botId);
     lastRunning.set(botId, running);
@@ -71,7 +81,8 @@ export function useDebugCatalog(target: DebugCatalogTarget | null) {
         },
         enabled: !!backend,
         staleTime: Infinity,
-        refetchInterval: (query) => (running && query.state.data?.source === 'snapshot' ? SNAPSHOT_REFRESH_MS : false),
+        refetchInterval: (query) =>
+            running && query.state.data?.source === 'snapshot' ? SNAPSHOT_REFRESH_MS : false,
     });
 }
 

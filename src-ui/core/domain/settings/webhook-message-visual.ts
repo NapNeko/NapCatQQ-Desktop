@@ -25,11 +25,11 @@ export const TEMPLATE_VARS: ReadonlyArray<{
     label: string;
     sample: string;
 }> = [
-        { key: 'nickname', label: '昵称', sample: '测试 Bot' },
-        { key: 'uin', label: 'QQ', sample: '10001' },
-        { key: 'event', label: '状态', sample: '掉线' },
-        { key: 'time', label: '时间', sample: '2026-01-01 12:00:00' },
-    ];
+    { key: 'nickname', label: '昵称', sample: '测试 Bot' },
+    { key: 'uin', label: 'QQ', sample: '10001' },
+    { key: 'event', label: '状态', sample: '掉线' },
+    { key: 'time', label: '时间', sample: '2026-01-01 12:00:00' },
+];
 
 const DISCORD_EMBED_COLOR = 15158332;
 const DEFAULT_BARK_GROUP = 'NapCatQQ Desktop';

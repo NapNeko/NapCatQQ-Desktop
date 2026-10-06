@@ -58,7 +58,14 @@ function decodeFile(base64: string, encoding: string | null): string {
     const bin = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     // 上游 chardet 对纯 ASCII 内容爱报 ISO-8859-1；这种文件按 UTF-8 解才不吃中文
     const label = encoding?.toLowerCase() ?? '';
-    const charset = ['iso-8859-1', 'iso8859-1', 'latin1', 'windows-1252', 'ascii', 'us-ascii'].includes(label)
+    const charset = [
+        'iso-8859-1',
+        'iso8859-1',
+        'latin1',
+        'windows-1252',
+        'ascii',
+        'us-ascii',
+    ].includes(label)
         ? 'utf-8'
         : encoding || 'utf-8';
     try {
@@ -85,10 +92,18 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
                 <div className="flex items-center gap-0.5 border-b border-border-subtle/70 px-2 py-1.5">
                     <span className="px-1 text-2xs text-text-tertiary">实例目录</span>
                     <div className="ml-auto flex items-center">
-                        <TreeAction label="新建文件" disabled={!running} onClick={() => setCreating({ kind: 'file', parent: '' })}>
+                        <TreeAction
+                            label="新建文件"
+                            disabled={!running}
+                            onClick={() => setCreating({ kind: 'file', parent: '' })}
+                        >
                             <FilePlus2 size={13} />
                         </TreeAction>
-                        <TreeAction label="新建文件夹" disabled={!running} onClick={() => setCreating({ kind: 'dir', parent: '' })}>
+                        <TreeAction
+                            label="新建文件夹"
+                            disabled={!running}
+                            onClick={() => setCreating({ kind: 'dir', parent: '' })}
+                        >
                             <FolderPlus size={13} />
                         </TreeAction>
                         <TreeAction
@@ -102,11 +117,15 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
                     {!running ? (
-                        <p className="px-3 py-6 text-center text-xs text-text-tertiary">启动实例后可读写</p>
+                        <p className="px-3 py-6 text-center text-xs text-text-tertiary">
+                            启动实例后可读写
+                        </p>
                     ) : tree.isLoading ? (
                         <PaneLoading text="正在读取文件树…" />
                     ) : tree.error ? (
-                        <p className="px-3 py-6 text-center text-xs text-danger">{tree.error.message}</p>
+                        <p className="px-3 py-6 text-center text-xs text-danger">
+                            {tree.error.message}
+                        </p>
                     ) : (
                         <Tree
                             entries={tree.data ?? []}
@@ -122,7 +141,13 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
 
             <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 {openPath ? (
-                    <FileView key={openPath} instance={instance} path={openPath} running={running} ops={ops} />
+                    <FileView
+                        key={openPath}
+                        instance={instance}
+                        path={openPath}
+                        running={running}
+                        ops={ops}
+                    />
                 ) : (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
                         <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-inset text-text-tertiary">
@@ -169,7 +194,9 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
                 <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>删掉 {removing?.split('/').pop()}？</DialogTitle>
-                        <DialogDescription>文件夹会连里面的一起删；实例目录里没有回收站</DialogDescription>
+                        <DialogDescription>
+                            文件夹会连里面的一起删；实例目录里没有回收站
+                        </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="ghost" size="sm" onClick={() => setRemoving(null)}>
@@ -182,7 +209,8 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
                             onClick={() => {
                                 if (!removing) return;
                                 ops.remove.mutate(removing);
-                                if (openPath === removing || openPath?.startsWith(`${removing}/`)) setOpenPath(null);
+                                if (openPath === removing || openPath?.startsWith(`${removing}/`))
+                                    setOpenPath(null);
                                 setRemoving(null);
                             }}
                         >
@@ -247,7 +275,9 @@ function Tree({
                         <div
                             className={cn(
                                 'group flex h-7 items-center gap-1 rounded-md pr-1 text-[12.5px] transition-colors',
-                                openPath === path ? 'bg-brand-soft text-text' : 'text-text-secondary hover:bg-inset',
+                                openPath === path
+                                    ? 'bg-brand-soft text-text'
+                                    : 'text-text-secondary hover:bg-inset',
                             )}
                         >
                             {dir ? (
@@ -257,7 +287,13 @@ function Tree({
                                     className="flex h-5 w-4 shrink-0 items-center justify-center text-text-tertiary"
                                     onClick={() => setFolded((f) => ({ ...f, [path]: open }))}
                                 >
-                                    <ChevronRight size={12} className={cn('transition-transform duration-200', open && 'rotate-90')} />
+                                    <ChevronRight
+                                        size={12}
+                                        className={cn(
+                                            'transition-transform duration-200',
+                                            open && 'rotate-90',
+                                        )}
+                                    />
                                 </button>
                             ) : (
                                 <span className="w-4 shrink-0" />
@@ -265,7 +301,9 @@ function Tree({
                             <button
                                 type="button"
                                 className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                                onClick={() => (dir ? setFolded((f) => ({ ...f, [path]: open })) : onOpen(path))}
+                                onClick={() =>
+                                    dir ? setFolded((f) => ({ ...f, [path]: open })) : onOpen(path)
+                                }
                             >
                                 {dir ? (
                                     open ? (
@@ -278,7 +316,9 @@ function Tree({
                                 )}
                                 <span className="truncate">{e.name}</span>
                                 {e.type === 'symlink' && e.target && (
-                                    <span className="truncate text-2xs text-text-disabled">→ {e.target}</span>
+                                    <span className="truncate text-2xs text-text-disabled">
+                                        → {e.target}
+                                    </span>
                                 )}
                             </button>
                             <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
@@ -338,11 +378,19 @@ function FileView({
             .then((f) => {
                 if (dead) return;
                 if (isImage(f.mime)) {
-                    setState({ phase: 'image', dataUrl: `data:${f.mime};base64,${f.base64}`, mime: f.mime! });
+                    setState({
+                        phase: 'image',
+                        dataUrl: `data:${f.mime};base64,${f.base64}`,
+                        mime: f.mime!,
+                    });
                     return;
                 }
                 if (f.mime && !f.mime.startsWith('text/') && f.mime !== 'application/json') {
-                    setState({ phase: 'binary', mime: f.mime, size: Math.round((f.base64.length * 3) / 4) });
+                    setState({
+                        phase: 'binary',
+                        mime: f.mime,
+                        size: Math.round((f.base64.length * 3) / 4),
+                    });
                     return;
                 }
                 const text = decodeFile(f.base64, f.encoding);
@@ -350,7 +398,11 @@ function FileView({
                 setState({ phase: 'text', original: text });
             })
             .catch((e: unknown) => {
-                if (!dead) setState({ phase: 'error', message: e instanceof Error ? e.message : String(e) });
+                if (!dead)
+                    setState({
+                        phase: 'error',
+                        message: e instanceof Error ? e.message : String(e),
+                    });
             });
         return () => {
             dead = true;
@@ -371,7 +423,8 @@ function FileView({
                             disabled={!dirty || !running || ops.write.isPending}
                             onClick={() => {
                                 ops.write.mutate({ path, content: draft });
-                                if (state.phase === 'text') setState({ phase: 'text', original: draft });
+                                if (state.phase === 'text')
+                                    setState({ phase: 'text', original: draft });
                             }}
                         >
                             {ops.write.isPending ? <Spinner size="sm" /> : null}
@@ -387,13 +440,18 @@ function FileView({
                 )}
                 {state.phase === 'image' && (
                     <div className="flex flex-1 items-center justify-center overflow-auto p-4">
-                        <img src={state.dataUrl} alt={name} className="max-h-full max-w-full rounded-md object-contain" />
+                        <img
+                            src={state.dataUrl}
+                            alt={name}
+                            className="max-h-full max-w-full rounded-md object-contain"
+                        />
                     </div>
                 )}
                 {state.phase === 'binary' && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
                         <p className="text-xs text-text-tertiary">
-                            二进制文件（{state.mime ?? '未知类型'}，{state.size} 字节），只能改名或删除
+                            二进制文件（{state.mime ?? '未知类型'}，{state.size}{' '}
+                            字节），只能改名或删除
                         </p>
                     </div>
                 )}
@@ -448,7 +506,12 @@ function NameDialog({
                     <Button variant="ghost" size="sm" onClick={onClose}>
                         取消
                     </Button>
-                    <Button variant="primary" size="sm" disabled={!name.trim()} onClick={() => onSubmit(name.trim())}>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={!name.trim()}
+                        onClick={() => onSubmit(name.trim())}
+                    >
                         确定
                     </Button>
                 </DialogFooter>

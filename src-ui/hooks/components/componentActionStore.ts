@@ -20,7 +20,10 @@ import {
     type ActionProgressView,
 } from '../../core/domain/components/progress';
 import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
-import { scheduleTaskQueueTerminalCleanup, trimTerminalTasksWhenAutoCleanupOff } from '../task-queue/taskQueueTerminalLinger';
+import {
+    scheduleTaskQueueTerminalCleanup,
+    trimTerminalTasksWhenAutoCleanupOff,
+} from '../task-queue/taskQueueTerminalLinger';
 
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
@@ -71,7 +74,7 @@ function clearActiveForTask(taskId: string): void {
         ...current,
         activeByTarget: cleanedActive,
         tasks: cleanedTasks,
-        taskTargets: cleanedTargets
+        taskTargets: cleanedTargets,
     });
 }
 
@@ -160,11 +163,7 @@ export const componentActionStore = {
     /** invoke 失败时把任务标为 failed，避免队列里一直 pending。 */
     failTask(taskId: string, err: unknown): void {
         const msg =
-            err instanceof Error
-                ? err.message
-                : typeof err === 'string'
-                  ? err
-                  : '组件操作启动失败';
+            err instanceof Error ? err.message : typeof err === 'string' ? err : '组件操作启动失败';
         const current = store.getSnapshot();
         const prev = current.tasks[taskId] ?? initialActionProgress;
         const next: ActionProgressView = {

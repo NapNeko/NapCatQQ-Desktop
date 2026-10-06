@@ -40,14 +40,30 @@ function notifyRefresh(sessionId: string) {
 }
 
 /** 往某个会话所在的主机传文件（拖进终端 / 文件栏时用），传完刷新它的文件栏 */
-export async function uploadToSession(sessionId: string, localPaths: string[], destDir: string): Promise<void> {
+export async function uploadToSession(
+    sessionId: string,
+    localPaths: string[],
+    destDir: string,
+): Promise<void> {
     if (localPaths.length === 0) return;
     // 同一个 key 后推的顶掉先推的：「正在上传」换成结果
     const key = `terminal-upload:${sessionId}:${Date.now()}`;
-    pushInfoBar({ key, tone: 'info', title: `正在上传 ${localPaths.length} 项…`, content: destDir, autoDismissMs: 0 });
+    pushInfoBar({
+        key,
+        tone: 'info',
+        title: `正在上传 ${localPaths.length} 项…`,
+        content: destDir,
+        autoDismissMs: 0,
+    });
     try {
         const count = await terminalService.upload(sessionId, localPaths, destDir);
-        pushInfoBar({ key, tone: 'success', title: `已上传 ${count} 个文件`, content: destDir, autoDismissMs: 4000 });
+        pushInfoBar({
+            key,
+            tone: 'success',
+            title: `已上传 ${count} 个文件`,
+            content: destDir,
+            autoDismissMs: 4000,
+        });
     } catch (err) {
         pushErrorBar({ key, title: '上传失败', raw: errorText(err) });
     } finally {
@@ -55,7 +71,11 @@ export async function uploadToSession(sessionId: string, localPaths: string[], d
     }
 }
 
-export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd: string | null): TerminalFilesApi {
+export function useTerminalFiles(
+    sessionId: string,
+    hostOs: TerminalHostOs,
+    cwd: string | null,
+): TerminalFilesApi {
     const [path, setPath] = useState<string | null>(cwd);
     const [follow, setFollow] = useState(true);
     const [listing, setListing] = useState<TerminalDirListing | null>(null);
@@ -137,7 +157,12 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
             if (!dest || localPaths.length === 0) return;
             await run(`上传 ${localPaths.length} 项`, async () => {
                 const count = await terminalService.upload(sessionId, localPaths, dest);
-                pushInfoBar({ tone: 'success', title: `已上传 ${count} 个文件`, content: dest, autoDismissMs: 4000 });
+                pushInfoBar({
+                    tone: 'success',
+                    title: `已上传 ${count} 个文件`,
+                    content: dest,
+                    autoDismissMs: 4000,
+                });
             });
         },
         [listing?.path, path, run, sessionId],
@@ -163,12 +188,26 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
             if (path !== null) void load(path);
         },
         makeDir: (name) =>
-            run('新建文件夹', () => terminalService.makeDir(sessionId, joinHostPath(hostOs, listing?.path ?? path ?? '', name))),
+            run('新建文件夹', () =>
+                terminalService.makeDir(
+                    sessionId,
+                    joinHostPath(hostOs, listing?.path ?? path ?? '', name),
+                ),
+            ),
         rename: (entry, name) => {
-            const dir = entry.path.slice(0, entry.path.length - baseName(entry.path).length).replace(/[\\/]$/, '');
-            return run('改名', () => terminalService.rename(sessionId, entry.path, joinHostPath(hostOs, dir || '/', name)));
+            const dir = entry.path
+                .slice(0, entry.path.length - baseName(entry.path).length)
+                .replace(/[\\/]$/, '');
+            return run('改名', () =>
+                terminalService.rename(
+                    sessionId,
+                    entry.path,
+                    joinHostPath(hostOs, dir || '/', name),
+                ),
+            );
         },
-        remove: (entry) => run('删除', () => terminalService.remove(sessionId, entry.path, entry.is_dir)),
+        remove: (entry) =>
+            run('删除', () => terminalService.remove(sessionId, entry.path, entry.is_dir)),
         upload,
         async pickAndUpload() {
             const picked = await terminalService.pickUploadFiles();
@@ -179,7 +218,12 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
             if (!dest) return;
             await run('下载', async () => {
                 await terminalService.download(sessionId, entry.path, dest);
-                pushInfoBar({ tone: 'success', title: '已下载', content: dest, autoDismissMs: 4000 });
+                pushInfoBar({
+                    tone: 'success',
+                    title: '已下载',
+                    content: dest,
+                    autoDismissMs: 4000,
+                });
             });
         },
         async readText(entry) {

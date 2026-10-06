@@ -46,7 +46,12 @@ import { useDebugActionSpec } from '../../../hooks/debug/useDebugCatalog';
 import { useDebugTargets } from '../../../hooks/debug/useDebugTargets';
 import { useSaveResponse } from '../../../hooks/debug/useSaveResponse';
 import { debugErrorCopy, retcodeHint } from '../../../core/domain/debug/errorCopy';
-import { copyAllResponseCopy, formatBytes, isClickableId, tableView } from '../../../core/domain/debug/responseView';
+import {
+    copyAllResponseCopy,
+    formatBytes,
+    isClickableId,
+    tableView,
+} from '../../../core/domain/debug/responseView';
 import { buildFormModel, coerceInput } from '../../../core/domain/debug/schemaForm';
 import { formatParams, initialParamsText, setParam } from '../../../core/domain/debug/paramsText';
 import type { DebugCallOutcome } from '../../../core/ipc/generated/debug/DebugCallOutcome';
@@ -57,7 +62,13 @@ import { HISTORY_REQUEST_PREFIX } from '../../../core/domain/debug/historyReplay
 import { IconTip, Segmented, copyWithToast } from './centerParts';
 import { ResponseStatus } from './ResponseStatus';
 import { markSeeded } from './seedState';
-import { FOLLOW_UP_ACTION, isIdValue, isImageUrl, prettyJson, type ClickableIdKey } from './viewHelpers';
+import {
+    FOLLOW_UP_ACTION,
+    isIdValue,
+    isImageUrl,
+    prettyJson,
+    type ClickableIdKey,
+} from './viewHelpers';
 
 type View = 'tree' | 'raw' | 'table';
 
@@ -105,8 +116,8 @@ export const ResponsePanel = memo(function ResponsePanel({
         !last || inflight
             ? ''
             : last.response.result.kind === 'err'
-                ? `没拿到回包：${debugErrorCopy(last.response.result.error).title}`
-                : `${last.response.result.outcome.ok ? '成功' : '失败'}，retcode ${last.response.result.outcome.retcode}`;
+              ? `没拿到回包：${debugErrorCopy(last.response.result.error).title}`
+              : `${last.response.result.outcome.ok ? '成功' : '失败'}，retcode ${last.response.result.outcome.retcode}`;
     const live = (
         <span className="sr-only" role="status">
             {announce}
@@ -148,9 +159,12 @@ export const ResponsePanel = memo(function ResponsePanel({
                             <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-inset text-text-tertiary">
                                 <Send size={16} strokeWidth={1.9} aria-hidden />
                             </span>
-                            <p className="text-[13px] text-text-secondary">按 {MOD_KEY_LABEL}+Enter 发送，回包显示在这里</p>
+                            <p className="text-[13px] text-text-secondary">
+                                按 {MOD_KEY_LABEL}+Enter 发送，回包显示在这里
+                            </p>
                             <p className="max-w-xs text-2xs leading-relaxed text-text-tertiary">
-                                点回包里的 group_id / user_id / message_id，可以填进请求或者用它新开查询
+                                点回包里的 group_id / user_id /
+                                message_id，可以填进请求或者用它新开查询
                             </p>
                         </>
                     )}
@@ -191,7 +205,11 @@ function ResultView({
                 </p>
             )}
             <div
-                className={cn('flex min-h-0 flex-1 flex-col', fade && 'transition-opacity duration-200', inflight && 'opacity-50')}
+                className={cn(
+                    'flex min-h-0 flex-1 flex-col',
+                    fade && 'transition-opacity duration-200',
+                    inflight && 'opacity-50',
+                )}
                 aria-busy={inflight || undefined}
             >
                 {result.kind === 'err' ? (
@@ -246,8 +264,10 @@ function ErrorCard({
     onNavigate?: (route: AppRoute) => void;
 }) {
     const copy = debugErrorCopy(error);
-    const tone = error.kind === 'cancelled' ? 'neutral' : error.kind === 'timeout' ? 'warning' : 'danger';
-    const Icon = error.kind === 'cancelled' ? Ban : error.kind === 'timeout' ? TimerOff : AlertTriangle;
+    const tone =
+        error.kind === 'cancelled' ? 'neutral' : error.kind === 'timeout' ? 'warning' : 'danger';
+    const Icon =
+        error.kind === 'cancelled' ? Ban : error.kind === 'timeout' ? TimerOff : AlertTriangle;
     return (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-6">
             <div
@@ -266,12 +286,20 @@ function ErrorCard({
                         aria-hidden
                         className={cn(
                             'mt-0.5 shrink-0',
-                            tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-text-tertiary',
+                            tone === 'danger'
+                                ? 'text-danger'
+                                : tone === 'warning'
+                                  ? 'text-warning'
+                                  : 'text-text-tertiary',
                         )}
                     />
                     <div className="min-w-0 flex-1 space-y-1">
                         <p className="text-[13.5px] font-semibold text-text">{copy.title}</p>
-                        {copy.detail && <p className="break-words text-xs leading-relaxed text-text-secondary">{copy.detail}</p>}
+                        {copy.detail && (
+                            <p className="break-words text-xs leading-relaxed text-text-secondary">
+                                {copy.detail}
+                            </p>
+                        )}
                     </div>
                 </div>
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -285,13 +313,23 @@ function ErrorCard({
                         copy.exits?.map((exit) => {
                             const ExitIcon = EXIT_ICON[exit.route];
                             return (
-                                <Button key={exit.route + exit.label} size="sm" variant="secondary" onClick={() => onNavigate(exit.route)}>
+                                <Button
+                                    key={exit.route + exit.label}
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => onNavigate(exit.route)}
+                                >
                                     {ExitIcon ? <ExitIcon size={12} aria-hidden /> : null}
                                     {exit.label}
                                 </Button>
                             );
                         })}
-                    <Button size="sm" variant="secondary" disabled={!canResend || inflight} onClick={onResend}>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!canResend || inflight}
+                        onClick={onResend}
+                    >
                         <RotateCcw size={12} aria-hidden />
                         重试
                     </Button>
@@ -355,7 +393,12 @@ function OutcomeView({
     // 超大回包没有 data，只能看原文；不是对象数组的回包没有表格
     const effective: View = outcome.truncated ? 'raw' : view === 'table' && !table ? 'tree' : view;
     const rawText = useMemo(
-        () => (effective === 'raw' ? (outcome.truncated ? String(outcome.raw) : prettyJson(outcome.raw)) : ''),
+        () =>
+            effective === 'raw'
+                ? outcome.truncated
+                    ? String(outcome.raw)
+                    : prettyJson(outcome.raw)
+                : '',
         [effective, outcome],
     );
 
@@ -365,12 +408,19 @@ function OutcomeView({
         () =>
             ({
                 get current() {
-                    return hostRef.current?.querySelector<HTMLElement>('[role="tree"], [role="table"], .cm-scroller') ?? null;
+                    return (
+                        hostRef.current?.querySelector<HTMLElement>(
+                            '[role="tree"], [role="table"], .cm-scroller',
+                        ) ?? null
+                    );
                 },
             }) as RefObject<HTMLElement | null>,
         [],
     );
-    useScrollMemory(effective === 'tree' ? `response:${tabId}` : `response:${tabId}:${effective}`, scrollRef);
+    useScrollMemory(
+        effective === 'tree' ? `response:${tabId}` : `response:${tabId}:${effective}`,
+        scrollRef,
+    );
     // 原文视图的编辑器在子组件的 effect 里才建好，补一次渲染让滚动记忆接上它
     const [, bump] = useState(0);
     useEffect(() => {
@@ -399,7 +449,10 @@ function OutcomeView({
     // 截断时复制到手的只是开头 256 KiB 的预览，按钮名字和提示都按截不截断来
     const copyAllCopy = copyAllResponseCopy(outcome.truncated);
     const copyAll = () =>
-        void copyWithToast(outcome.truncated ? String(outcome.raw) : prettyJson(outcome.raw), copyAllCopy.toast);
+        void copyWithToast(
+            outcome.truncated ? String(outcome.raw) : prettyJson(outcome.raw),
+            copyAllCopy.toast,
+        );
 
     const failureText = !outcome.ok ? outcome.wording || outcome.message : '';
     const hint = !outcome.ok ? retcodeHint(outcome.retcode) : null;
@@ -417,7 +470,12 @@ function OutcomeView({
                     value={effective}
                     onChange={setView}
                     options={[
-                        { value: 'tree', label: '树', disabled: outcome.truncated, title: outcome.truncated ? '回包太大，只能看原文' : undefined },
+                        {
+                            value: 'tree',
+                            label: '树',
+                            disabled: outcome.truncated,
+                            title: outcome.truncated ? '回包太大，只能看原文' : undefined,
+                        },
                         { value: 'raw', label: '原文' },
                         {
                             value: 'table',
@@ -439,7 +497,8 @@ function OutcomeView({
             {outcome.truncated && (
                 <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-subtle/70 bg-warning-soft/40 px-3 py-1.5 text-2xs text-text-secondary">
                     <span className="min-w-0 flex-1">
-                        回包有 {formatBytes(outcome.size_bytes)}，太大了：树和表格用不了，原文只显示开头的一段。
+                        回包有 {formatBytes(outcome.size_bytes)}
+                        ，太大了：树和表格用不了，原文只显示开头的一段。
                         {fromHistory && '历史记录里没有留完整内容。'}
                     </span>
                     {!fromHistory && <SaveFullButton requestId={requestId} action={action} />}
@@ -462,7 +521,9 @@ function OutcomeView({
                         value={treeValue}
                         defaultExpandDepth={3}
                         onValueClick={(ctx: JsonTreeNodeContext) => openMenu(ctx.key, ctx.value)}
-                        valueActions={(ctx) => (isImageUrl(ctx.value) ? <ImagePeek url={ctx.value} /> : null)}
+                        valueActions={(ctx) =>
+                            isImageUrl(ctx.value) ? <ImagePeek url={ctx.value} /> : null
+                        }
                     />
                 )}
                 {effective === 'raw' && (
@@ -518,7 +579,11 @@ function SaveFullButton({ requestId, action }: { requestId: string; action: stri
             onClick={() => save.mutate({ requestId, action })}
             className="shrink-0"
         >
-            {save.isPending ? <Spinner size="xs" label="正在另存" /> : <Download size={12} aria-hidden />}
+            {save.isPending ? (
+                <Spinner size="xs" label="正在另存" />
+            ) : (
+                <Download size={12} aria-hidden />
+            )}
             另存完整内容
         </Button>
     );
@@ -542,12 +607,18 @@ function IdMenuBody({
     const follow = FOLLOW_UP_ACTION[menu.key];
     // 新开的查询按它自己的参数类型填号（NapCat 的 id 是字符串、SnowLuma 是整数），说明多半已在缓存里
     const followSpec = useDebugActionSpec(target, follow).data ?? null;
-    const fillBlocked = !canFill ? '参数 JSON 有错，先改好' : fillKeys && !fillKeys.has(menu.key) ? `当前接口没有 ${menu.key} 参数` : null;
+    const fillBlocked = !canFill
+        ? '参数 JSON 有错，先改好'
+        : fillKeys && !fillKeys.has(menu.key)
+          ? `当前接口没有 ${menu.key} 参数`
+          : null;
 
     const openFollowUp = () => {
         let text: string;
         if (followSpec) {
-            const field = buildFormModel(followSpec.params_schema).fields.find((f) => f.name === menu.key);
+            const field = buildFormModel(followSpec.params_schema).fields.find(
+                (f) => f.name === menu.key,
+            );
             const value = field ? coerceInput(field, String(menu.value)) : menu.value;
             text = setParam(initialParamsText(followSpec), menu.key, value);
         } else {
@@ -570,10 +641,18 @@ function IdMenuBody({
             <p className="truncate px-2 pb-1 pt-0.5 font-mono text-[11px] text-text-tertiary">
                 {menu.key} = <span className="text-text">{String(menu.value)}</span>
             </p>
-            <button type="button" className={item} disabled={!!fillBlocked} title={fillBlocked ?? undefined} onClick={() => onFill(menu.key, menu.value)}>
+            <button
+                type="button"
+                className={item}
+                disabled={!!fillBlocked}
+                title={fillBlocked ?? undefined}
+                onClick={() => onFill(menu.key, menu.value)}
+            >
                 填进当前请求
             </button>
-            {fillBlocked && <p className="px-2 pb-1 text-[10.5px] text-text-tertiary">{fillBlocked}</p>}
+            {fillBlocked && (
+                <p className="px-2 pb-1 text-[10.5px] text-text-tertiary">{fillBlocked}</p>
+            )}
             <button type="button" className={item} onClick={openFollowUp}>
                 用它新开 <code className="font-mono text-brand">{follow}</code>
             </button>
@@ -604,7 +683,10 @@ function ImagePeek({ url }: { url: string }) {
                     <ImageIcon size={12} aria-hidden />
                 </button>
             </TooltipTrigger>
-            <TooltipContent side="left" className="whitespace-normal border border-border-subtle bg-elevated p-1.5">
+            <TooltipContent
+                side="left"
+                className="whitespace-normal border border-border-subtle bg-elevated p-1.5"
+            >
                 <img
                     src={url}
                     alt="图片预览"

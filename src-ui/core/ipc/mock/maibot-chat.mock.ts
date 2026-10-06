@@ -1,7 +1,11 @@
 // 浏览器预览：试聊。连上先给会话信息、最近的记录和一次欢迎语；发一句先回显、打字中，
 // 过一会儿回一句（发了图的回图，问句回得犹豫些）。记录按实例留在内存里，清空后重来。
 
-import type { MaiBotChatImage, MaiBotChatMessage, MaiBotChatSegment } from '../../domain/apps/maibotChat';
+import type {
+    MaiBotChatImage,
+    MaiBotChatMessage,
+    MaiBotChatSegment,
+} from '../../domain/apps/maibotChat';
 import type { MaiBotChatConnection, MaiBotChatHandlers } from '../../services/maibot-chat.service';
 import type { AppInstance, MaiBotLocalImage, MaiBotResourceDone } from '../types';
 import { withMockDelay } from './bootstrap.mock';
@@ -21,9 +25,27 @@ function seed(): MaiBotChatMessage[] {
     const now = Date.now() / 1000;
     const text = (t: string): MaiBotChatSegment[] => [{ type: 'text', text: t }];
     return [
-        { id: 'mock-h1', fromBot: false, senderName: '人类', segments: text('麦麦早上好'), at: now - 86400 - 3600 },
-        { id: 'mock-h2', fromBot: true, senderName: '麦麦', segments: text('早呀～今天也要元气满满'), at: now - 86400 - 3590 },
-        { id: 'mock-h3', fromBot: false, senderName: '人类', segments: text('今天考试好紧张'), at: now - 1800 },
+        {
+            id: 'mock-h1',
+            fromBot: false,
+            senderName: '人类',
+            segments: text('麦麦早上好'),
+            at: now - 86400 - 3600,
+        },
+        {
+            id: 'mock-h2',
+            fromBot: true,
+            senderName: '麦麦',
+            segments: text('早呀～今天也要元气满满'),
+            at: now - 86400 - 3590,
+        },
+        {
+            id: 'mock-h3',
+            fromBot: false,
+            senderName: '人类',
+            segments: text('今天考试好紧张'),
+            at: now - 1800,
+        },
         {
             id: 'mock-h4',
             fromBot: true,
@@ -39,8 +61,13 @@ function seed(): MaiBotChatMessage[] {
 }
 
 function replyTo(text: string, images: number, n: number): MaiBotChatSegment[] {
-    if (images > 0) return [{ type: 'text', text: images > 1 ? `一下发了 ${images} 张！都好好看` : '这图好可爱！' }, { type: 'emoji', src: SMILE }];
-    if (/[?？吗]$/.test(text.trim())) return [{ type: 'text', text: '这个嘛……我也说不准，你觉得呢' }];
+    if (images > 0)
+        return [
+            { type: 'text', text: images > 1 ? `一下发了 ${images} 张！都好好看` : '这图好可爱！' },
+            { type: 'emoji', src: SMILE },
+        ];
+    if (/[?？吗]$/.test(text.trim()))
+        return [{ type: 'text', text: '这个嘛……我也说不准，你觉得呢' }];
     return [{ type: 'text', text: REPLIES[n % REPLIES.length] }];
 }
 
@@ -71,7 +98,12 @@ export const mockMaiBotChat = {
             h.onEvent({ kind: 'history', messages: [...history] });
             if (!welcomed.has(inst.id)) {
                 welcomed.add(inst.id);
-                h.onEvent({ kind: 'notice', text: '已连接到本地聊天室，可以开始与 麦麦 对话了！', at: Date.now() / 1000, error: false });
+                h.onEvent({
+                    kind: 'notice',
+                    text: '已连接到本地聊天室，可以开始与 麦麦 对话了！',
+                    at: Date.now() / 1000,
+                    error: false,
+                });
             }
         });
 
@@ -85,7 +117,10 @@ export const mockMaiBotChat = {
                     senderName: name,
                     segments: [
                         ...(text ? [{ type: 'text' as const, text }] : []),
-                        ...images.map((i) => ({ type: 'image' as const, src: `data:${i.mimeType};base64,${i.base64}` })),
+                        ...images.map((i) => ({
+                            type: 'image' as const,
+                            src: `data:${i.mimeType};base64,${i.base64}`,
+                        })),
                     ],
                     at,
                 };
@@ -132,8 +167,18 @@ export const mockMaiBotChat = {
             "<circle cx='45' cy='42' r='6' fill='#264653'/><circle cx='75' cy='42' r='6' fill='#264653'/>" +
             "<path d='M52 58 Q60 64 68 58' stroke='#264653' stroke-width='3' fill='none'/></svg>";
         return withMockDelay([
-            { path: 'C:/Users/me/Pictures/橘猫.png', name: '橘猫.png', size: 48_120, preview: `data:image/svg+xml;base64,${btoa(cat)}` },
-            { path: 'C:/Users/me/Pictures/笑脸.png', name: '笑脸.png', size: 12_004, preview: SMILE },
+            {
+                path: 'C:/Users/me/Pictures/橘猫.png',
+                name: '橘猫.png',
+                size: 48_120,
+                preview: `data:image/svg+xml;base64,${btoa(cat)}`,
+            },
+            {
+                path: 'C:/Users/me/Pictures/笑脸.png',
+                name: '笑脸.png',
+                size: 12_004,
+                preview: SMILE,
+            },
         ]);
     },
 };

@@ -29,9 +29,16 @@ import {
 import { useNowMs } from '../../hooks/ui/useNowMs';
 import { Copy, Loader2, Trash2, XCircle } from 'lucide-react';
 import { MotionIcon } from '../../shared/ui/motion';
-import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../../shared/components/progressView';
+import {
+    ProgressLine,
+    shouldShowProgressBar,
+    ProgressBarOverlay,
+} from '../../shared/components/progressView';
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
-import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail } from '../../core/domain/components/dockerPullProgress';
+import {
+    shouldShowDockerPullLayersInTaskDetail,
+    shouldShowStepLogsInTaskDetail,
+} from '../../core/domain/components/dockerPullProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { useTaskQueueActions } from '../../hooks/task-queue/useTaskQueueActions';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
@@ -60,9 +67,7 @@ function DockerDeployProgressBlock({
         return <p className="text-[12px] text-success">镜像已就绪</p>;
     }
 
-    const rootClass = expanded
-        ? 'flex min-h-0 flex-1 flex-col'
-        : undefined;
+    const rootClass = expanded ? 'flex min-h-0 flex-1 flex-col' : undefined;
 
     return (
         <div className={rootClass}>
@@ -85,7 +90,10 @@ function DockerDeployProgressBlock({
             </div>
             {shouldShowProgressBar(progress) && (
                 <div className="relative mt-2 h-1.5 w-full shrink-0 overflow-hidden rounded-pill bg-inset/60">
-                    <ProgressBarOverlay progress={progress} determinate={progress.dockerLayers.length > 0} />
+                    <ProgressBarOverlay
+                        progress={progress}
+                        determinate={progress.dockerLayers.length > 0}
+                    />
                 </div>
             )}
             {showLayers && (
@@ -107,8 +115,7 @@ export interface TaskDetailPanelProps {
     item: TaskQueueItem;
 }
 
-const LOG_SURFACE =
-    'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
+const LOG_SURFACE = 'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
 
 function stopButtonLabel(status: TaskQueueItem['status']): string {
     switch (status) {
@@ -140,9 +147,7 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
     const [contextIndex, setContextIndex] = React.useState<number | null>(null);
 
     if (!progress) {
-        return (
-            <p className="py-8 text-center text-[12px] text-text-tertiary">等待任务启动…</p>
-        );
+        return <p className="py-8 text-center text-[12px] text-text-tertiary">等待任务启动…</p>;
     }
     if (progress.logs.length === 0) {
         return (
@@ -293,8 +298,12 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
                                     WebkitUserSelect: 'none',
                                 }}
                             >
-                                <span className="tabular-nums text-[11px] text-text-tertiary select-none">{time}</span>
-                                <span className="min-w-0 break-words text-text select-none">{log.message}</span>
+                                <span className="tabular-nums text-[11px] text-text-tertiary select-none">
+                                    {time}
+                                </span>
+                                <span className="min-w-0 break-words text-text select-none">
+                                    {log.message}
+                                </span>
                             </div>
                         );
                     })}
@@ -302,10 +311,7 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
             </ContextMenuTrigger>
             <ContextMenuContent className="w-56">
                 {selectedIndices.size > 1 ? (
-                    <ContextMenuItem
-                        onClick={onCopySelected}
-                        className="flex items-center gap-2"
-                    >
+                    <ContextMenuItem onClick={onCopySelected} className="flex items-center gap-2">
                         <Copy size={13} className="text-brand" />
                         <span>复制选中日志</span>
                         <span className="ml-auto text-2xs text-text-tertiary">
@@ -322,7 +328,11 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
                         <span>复制当前行</span>
                     </ContextMenuItem>
                 )}
-                <ContextMenuItem onClick={onCopyAll} disabled={progress.logs.length === 0} className="flex items-center gap-2">
+                <ContextMenuItem
+                    onClick={onCopyAll}
+                    disabled={progress.logs.length === 0}
+                    className="flex items-center gap-2"
+                >
                     <Copy size={13} className="text-text-tertiary" />
                     <span>复制全部步骤日志</span>
                     <span className="ml-auto text-2xs text-text-tertiary">
@@ -432,10 +442,18 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                                     <h2 className="font-display text-lg font-semibold leading-tight text-text">
                                         {item.title}
                                     </h2>
-                                    <Badge tone={kindBadgeTone(item.kind)} appearance="soft" className="text-[11px]">
+                                    <Badge
+                                        tone={kindBadgeTone(item.kind)}
+                                        appearance="soft"
+                                        className="text-[11px]"
+                                    >
                                         {kindLabel(item.kind)}
                                     </Badge>
-                                    <Badge tone={statusTone(item.status)} appearance="soft" className="text-[11px]">
+                                    <Badge
+                                        tone={statusTone(item.status)}
+                                        appearance="soft"
+                                        className="text-[11px]"
+                                    >
                                         {statusLabel(item.status)}
                                     </Badge>
                                 </div>
@@ -469,12 +487,19 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                                     {canCancel && (
                                         <Button
                                             size="sm"
-                                            variant={item.status === 'pending' || item.status === 'paused' ? 'secondary' : 'danger'}
+                                            variant={
+                                                item.status === 'pending' ||
+                                                item.status === 'paused'
+                                                    ? 'secondary'
+                                                    : 'danger'
+                                            }
                                             disabled={cancelling}
                                             onClick={handleCancel}
                                         >
                                             <XCircle size={13} />
-                                            {cancelling ? '正在停止…' : stopButtonLabel(item.status)}
+                                            {cancelling
+                                                ? '正在停止…'
+                                                : stopButtonLabel(item.status)}
                                         </Button>
                                     )}
                                     {canDelete && (
@@ -520,7 +545,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                                         <ProgressLine progress={progress} />
                                         {shouldShowProgressBar(progress) && (
                                             <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-inset/60">
-                                                <ProgressBarOverlay progress={progress} determinate />
+                                                <ProgressBarOverlay
+                                                    progress={progress}
+                                                    determinate
+                                                />
                                             </div>
                                         )}
                                     </>
@@ -537,7 +565,11 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                                     LOG_SURFACE,
                                 )}
                             >
-                                <DockerDeployProgressBlock item={item} progress={progress} expanded />
+                                <DockerDeployProgressBlock
+                                    item={item}
+                                    progress={progress}
+                                    expanded
+                                />
                             </div>
                         </div>
                     )}
@@ -586,11 +618,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                 {(canCancel || canDelete) && <ContextMenuSeparator />}
 
                 {canCancel && (
-                    <ContextMenuItem
-                        tone="danger"
-                        disabled={cancelling}
-                        onClick={handleCancel}
-                    >
+                    <ContextMenuItem tone="danger" disabled={cancelling} onClick={handleCancel}>
                         <XCircle size={13} className="text-danger" />
                         <span>{cancelling ? '正在停止…' : stopButtonLabel(item.status)}</span>
                     </ContextMenuItem>

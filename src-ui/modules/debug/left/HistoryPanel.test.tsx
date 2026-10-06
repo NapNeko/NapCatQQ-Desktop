@@ -22,11 +22,13 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) => {
-                const fn = service[key];
-                if (!fn) throw new Error(`没有模拟 service.${key}`);
-                return fn(...args);
-            },
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) => {
+                    const fn = service[key];
+                    if (!fn) throw new Error(`没有模拟 service.${key}`);
+                    return fn(...args);
+                },
         },
     ),
 }));
@@ -47,7 +49,10 @@ beforeAll(() => {
             return (this as HTMLElement).classList.contains('overflow-y-auto') ? 600 : 30;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 280 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 280,
+    });
     Element.prototype.hasPointerCapture ??= () => false;
     Element.prototype.releasePointerCapture ??= () => {};
     Element.prototype.setPointerCapture ??= () => {};
@@ -107,8 +112,19 @@ function summary(e: DebugHistoryEntry): DebugHistorySummary {
 
 const ENTRIES = [
     full('h1'),
-    full('h2', { action: 'send_group_msg', ok: false, retcode: 1400, params: { group_id: 1, message: 'hi' } }),
-    full('h3', { action: 'get_login_info', ok: false, retcode: null, error: { kind: 'timeout', ms: 60000 }, response: null }),
+    full('h2', {
+        action: 'send_group_msg',
+        ok: false,
+        retcode: 1400,
+        params: { group_id: 1, message: 'hi' },
+    }),
+    full('h3', {
+        action: 'get_login_info',
+        ok: false,
+        retcode: null,
+        error: { kind: 'timeout', ms: 60000 },
+        response: null,
+    }),
 ];
 
 const COLLECTIONS: DebugCollections = { version: 1, folders: [], requests: [] };
@@ -123,7 +139,8 @@ function renderHistory(target: DebugTarget | null = SL) {
     return render(<LeftColumn target={target} panel="history" />, { wrapper });
 }
 
-const lastQuery = (): DebugHistoryQuery => service.history.mock.calls.at(-1)?.[0] as DebugHistoryQuery;
+const lastQuery = (): DebugHistoryQuery =>
+    service.history.mock.calls.at(-1)?.[0] as DebugHistoryQuery;
 const row = (text: string) => screen.getByText(text).closest('[role="option"]') as HTMLElement;
 
 beforeEach(() => {
@@ -134,9 +151,14 @@ beforeEach(() => {
     setLeftSearchOpen('history', false);
     service.history.mockImplementation(async (q: DebugHistoryQuery) => {
         const matched = ENTRIES.filter((e) => q.ok === null || e.ok === q.ok);
-        return { entries: matched.slice(q.offset, q.offset + q.limit).map(summary), total: matched.length };
+        return {
+            entries: matched.slice(q.offset, q.offset + q.limit).map(summary),
+            total: matched.length,
+        };
     });
-    service.historyEntry.mockImplementation(async (id: string) => ENTRIES.find((e) => e.id === id) ?? null);
+    service.historyEntry.mockImplementation(
+        async (id: string) => ENTRIES.find((e) => e.id === id) ?? null,
+    );
     service.clearHistory.mockResolvedValue(undefined);
     // 收藏按「磁盘」记着：保存后重拉拿到的是存进去的那份
     let disk = COLLECTIONS;
@@ -168,7 +190,13 @@ describe('调用历史', () => {
     it('列出记录：成败、Bot、多久以前、失败原因', async () => {
         renderHistory();
         await screen.findByText('get_group_list');
-        expect(lastQuery()).toMatchObject({ limit: 100, offset: 0, ok: null, text: null, bot_id: null });
+        expect(lastQuery()).toMatchObject({
+            limit: 100,
+            offset: 0,
+            ok: null,
+            text: null,
+            bot_id: null,
+        });
         expect(within(row('get_group_list')).getByText('3 分钟前')).toBeInTheDocument();
         expect(within(row('get_group_list')).getByText('128ms')).toBeInTheDocument();
         expect(within(row('send_group_msg')).getByText('retcode 1400')).toBeInTheDocument();
@@ -183,7 +211,10 @@ describe('调用历史', () => {
         fireEvent.click(await screen.findByText('get_group_list'));
 
         await waitFor(() => expect(open).toHaveBeenCalled());
-        expect(open).toHaveBeenCalledWith('get_group_list', { newTab: true, paramsText: '{\n  "no_cache": true\n}' });
+        expect(open).toHaveBeenCalledWith('get_group_list', {
+            newTab: true,
+            paramsText: '{\n  "no_cache": true\n}',
+        });
         const tabId = open.mock.results[0]?.value as string;
         expect(setRun).toHaveBeenCalledWith(tabId, {
             last: expect.objectContaining({
@@ -231,7 +262,9 @@ describe('调用历史', () => {
     });
 
     it('一次取 100 条，「加载更多」再取 100 条', async () => {
-        const many = Array.from({ length: 150 }, (_, i) => summary(full(`m${i}`, { action: `act_${i}` })));
+        const many = Array.from({ length: 150 }, (_, i) =>
+            summary(full(`m${i}`, { action: `act_${i}` })),
+        );
         service.history.mockImplementation(async (q: DebugHistoryQuery) => ({
             entries: many.slice(q.offset, q.offset + q.limit),
             total: many.length,
@@ -283,7 +316,9 @@ describe('调用历史', () => {
             channel: null,
             folder_id: null,
         });
-        await waitFor(() => expect(screen.queryByRole('heading', { name: '收藏请求' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.queryByRole('heading', { name: '收藏请求' })).not.toBeInTheDocument(),
+        );
 
         await user.click(within(row('send_group_msg')).getByRole('button', { name: '收藏' }));
         expect(await screen.findByText(/已经收藏过一份一样的请求：「打招呼」/)).toBeInTheDocument();
@@ -297,7 +332,11 @@ describe('调用历史', () => {
         act(() => list.focus());
         await user.keyboard('{ArrowDown}');
         await user.keyboard('c');
-        await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(JSON.stringify({ no_cache: true }, null, 2)));
+        await waitFor(async () =>
+            expect(await navigator.clipboard.readText()).toBe(
+                JSON.stringify({ no_cache: true }, null, 2),
+            ),
+        );
         // 带 Ctrl 的是系统快捷键（Ctrl+S / Ctrl+C），不当成收藏 / 复制
         await user.keyboard('{Control>}s{/Control}');
         await new Promise((r) => setTimeout(r, 20));
@@ -313,7 +352,9 @@ describe('调用历史', () => {
         renderHistory();
         await screen.findByText('get_group_list');
         await user.click(within(row('get_group_list')).getByRole('button', { name: '复制参数' }));
-        await waitFor(async () => expect(await navigator.clipboard.readText()).toBe('{\n  "no_cache": true\n}'));
+        await waitFor(async () =>
+            expect(await navigator.clipboard.readText()).toBe('{\n  "no_cache": true\n}'),
+        );
     });
 
     it('没有记录时给出说明', async () => {
@@ -329,11 +370,19 @@ describe('调用历史', () => {
         await user.click(screen.getByRole('radio', { name: '失败' }));
         await waitFor(() => expect(screen.queryByText('get_group_list')).not.toBeInTheDocument());
         await user.click(screen.getByRole('button', { name: '清空历史' }));
-        expect(await screen.findByText('会删掉全部调用历史（不只是现在筛选出的 2 条），连同当时的响应，不能撤销。收藏不受影响。')).toBeInTheDocument();
+        expect(
+            await screen.findByText(
+                '会删掉全部调用历史（不只是现在筛选出的 2 条），连同当时的响应，不能撤销。收藏不受影响。',
+            ),
+        ).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '取消' }));
         expect(service.clearHistory).not.toHaveBeenCalled();
         // 复原，筛选记在模块里
-        await waitFor(() => expect(screen.queryByRole('heading', { name: '清空调用历史？' })).not.toBeInTheDocument());
+        await waitFor(() =>
+            expect(
+                screen.queryByRole('heading', { name: '清空调用历史？' }),
+            ).not.toBeInTheDocument(),
+        );
         await user.click(screen.getByRole('radio', { name: '全部' }));
         await waitFor(() => expect(lastQuery().ok).toBeNull());
     });

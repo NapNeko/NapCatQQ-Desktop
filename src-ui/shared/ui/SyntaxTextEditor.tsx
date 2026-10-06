@@ -122,7 +122,10 @@ export function SyntaxTextEditor({
                 const view = viewRef.current;
                 if (!view || view.state.readOnly) return;
                 const { from, to } = view.state.selection.main;
-                view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+                view.dispatch({
+                    changes: { from, to, insert: text },
+                    selection: { anchor: from + text.length },
+                });
                 view.focus();
             },
             focus: () => viewRef.current?.focus(),

@@ -11,7 +11,12 @@ import { KnowledgeGraph } from './maibotKnowledgeGraph';
 import { KnowledgeImport } from './maibotKnowledgeImport';
 import { KnowledgeSwitch, type KnowledgeView } from './maibotKnowledgeParts';
 
-const Gate: React.FC<{ icon: typeof Brain; title: string; text: string; action?: React.ReactNode }> = ({ icon: Icon, title, text, action }) => (
+const Gate: React.FC<{
+    icon: typeof Brain;
+    title: string;
+    text: string;
+    action?: React.ReactNode;
+}> = ({ icon: Icon, title, text, action }) => (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         <span className="mb-1 inline-flex h-11 w-11 items-center justify-center rounded-full bg-inset text-text-tertiary">
             <Icon size={20} />
@@ -34,7 +39,10 @@ export const MaiBotKnowledgeTab: React.FC<{
     const live = maibotLive(status);
     const mem = useMaiBotMemoryStatus(instance.id, live);
 
-    if (!live) return <MaiBotLiveGate status={status} what="知识库" onStart={onStart} starting={starting} />;
+    if (!live)
+        return (
+            <MaiBotLiveGate status={status} what="知识库" onStart={onStart} starting={starting} />
+        );
     const goMemory = (
         <Button size="sm" variant="primary" onClick={() => onGoTab('memory')}>
             去「记忆」页
@@ -42,7 +50,16 @@ export const MaiBotKnowledgeTab: React.FC<{
     );
     if (!mem.data) {
         return mem.isError ? (
-            <Gate icon={AlertTriangle} title="没问到长期记忆的状态" text={mem.error.message} action={<Button size="sm" variant="secondary" onClick={() => void mem.refetch()}>再试一次</Button>} />
+            <Gate
+                icon={AlertTriangle}
+                title="没问到长期记忆的状态"
+                text={mem.error.message}
+                action={
+                    <Button size="sm" variant="secondary" onClick={() => void mem.refetch()}>
+                        再试一次
+                    </Button>
+                }
+            />
         ) : (
             <div className="flex flex-1 items-center justify-center">
                 <Spinner size="md" tone="brand" label="正在读取" />
@@ -71,7 +88,14 @@ export const MaiBotKnowledgeTab: React.FC<{
         );
     }
     if (s.state === 'failed') {
-        return <Gate icon={AlertTriangle} title="长期记忆没加载起来" text={s.message || '看看「记忆」页里的嵌入模型配置，或者麦麦的日志。'} action={goMemory} />;
+        return (
+            <Gate
+                icon={AlertTriangle}
+                title="长期记忆没加载起来"
+                text={s.message || '看看「记忆」页里的嵌入模型配置，或者麦麦的日志。'}
+                action={goMemory}
+            />
+        );
     }
 
     const switcher = <KnowledgeSwitch view={view} onView={onView} />;
@@ -86,9 +110,17 @@ export const MaiBotKnowledgeTab: React.FC<{
             {view === 'import' ? (
                 <KnowledgeImport instanceId={instance.id} switcher={switcher} />
             ) : view === 'browse' ? (
-                <KnowledgeBrowse instanceId={instance.id} switcher={switcher} onImport={() => onView('import')} />
+                <KnowledgeBrowse
+                    instanceId={instance.id}
+                    switcher={switcher}
+                    onImport={() => onView('import')}
+                />
             ) : (
-                <KnowledgeGraph instanceId={instance.id} switcher={switcher} onImport={() => onView('import')} />
+                <KnowledgeGraph
+                    instanceId={instance.id}
+                    switcher={switcher}
+                    onImport={() => onView('import')}
+                />
             )}
         </div>
     );

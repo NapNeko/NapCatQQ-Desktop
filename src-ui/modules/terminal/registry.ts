@@ -38,9 +38,15 @@ function sync() {
 }
 
 async function detectWindowsBuild() {
-    const uad = (navigator as Navigator & {
-        userAgentData?: { getHighEntropyValues?: (hints: string[]) => Promise<{ platform?: string; platformVersion?: string }> };
-    }).userAgentData;
+    const uad = (
+        navigator as Navigator & {
+            userAgentData?: {
+                getHighEntropyValues?: (
+                    hints: string[],
+                ) => Promise<{ platform?: string; platformVersion?: string }>;
+            };
+        }
+    ).userAgentData;
     if (!uad?.getHighEntropyValues) return;
     try {
         const values = await uad.getHighEntropyValues(['platform', 'platformVersion']);
@@ -58,9 +64,10 @@ async function detectWindowsBuild() {
 /** 应用根上调一次：接上已有会话，之后跟着会话表走 */
 export function startTerminalRuntimes(): () => void {
     started++;
-    if (started > 1) return () => {
-        started--;
-    };
+    if (started > 1)
+        return () => {
+            started--;
+        };
     void detectWindowsBuild();
     const unsubscribeStore = terminalStore.subscribe(sync);
     let lastPrefs = terminalPrefs.get();

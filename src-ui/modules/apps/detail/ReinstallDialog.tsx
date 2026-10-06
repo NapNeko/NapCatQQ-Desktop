@@ -39,7 +39,9 @@ export const ReinstallDialog: React.FC<{
         <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
             <DialogContent className="max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{reinstall ? '重装' : '安装'} {instance.display_name}</DialogTitle>
+                    <DialogTitle>
+                        {reinstall ? '重装' : '安装'} {instance.display_name}
+                    </DialogTitle>
                     <DialogDescription>
                         {busy
                             ? '实例正在忙，等当前操作结束后再试。'
@@ -80,7 +82,12 @@ export const ReinstallDialog: React.FC<{
                     <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
                         取消
                     </Button>
-                    <Button variant="primary" size="sm" disabled={busy} onClick={() => void onConfirm()}>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void onConfirm()}
+                    >
                         {busy && <Spinner size="xs" className="text-white" />}
                         {reinstall ? '重装' : '安装'}
                     </Button>

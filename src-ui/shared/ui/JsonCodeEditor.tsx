@@ -81,7 +81,8 @@ function collectProperties(schema: unknown): PropertyEntry[] {
         for (const key of COMBINATOR_KEYS) {
             const branches = node[key];
             if (!Array.isArray(branches)) continue;
-            for (const branch of branches) visit(branch, depth + 1, requiredCounts && key === 'allOf');
+            for (const branch of branches)
+                visit(branch, depth + 1, requiredCounts && key === 'allOf');
         }
     };
     visit(schema, 0, true);
@@ -99,7 +100,8 @@ function propertyTypeLabel(entry: PropertyEntry): string {
     for (const s of entry.schemas) {
         const t = s.type;
         if (typeof t === 'string') return t;
-        if (Array.isArray(t) && t.length > 0) return t.filter((x) => typeof x === 'string').join('|');
+        if (Array.isArray(t) && t.length > 0)
+            return t.filter((x) => typeof x === 'string').join('|');
         if (Array.isArray(s.enum) || 'const' in s) return 'enum';
     }
     return '';
@@ -298,7 +300,9 @@ function applyKey(name: string, inString: boolean): NonNullable<Completion['appl
 function applyValue(value: unknown, inString: boolean): NonNullable<Completion['apply']> {
     return (view, _completion, from, to) => {
         const end = inString ? to + stringTailLength(view, to) : to;
-        const insert = inString ? `${JSON.stringify(String(value)).slice(1, -1)}"` : JSON.stringify(value);
+        const insert = inString
+            ? `${JSON.stringify(String(value)).slice(1, -1)}"`
+            : JSON.stringify(value);
         view.dispatch({
             changes: { from, to: end, insert },
             selection: { anchor: from + insert.length },
@@ -313,7 +317,9 @@ function applyValue(value: unknown, inString: boolean): NonNullable<Completion['
  * - 键后面的冒号之后，列出该属性的 enum / const（布尔给 true / false）。
  * 只做顶层：更深的层级 Schema 形态太杂，补错了比不补更烦。
  */
-export function schemaKeyCompletion(schema: Record<string, unknown> | null | undefined): CompletionSource {
+export function schemaKeyCompletion(
+    schema: Record<string, unknown> | null | undefined,
+): CompletionSource {
     const properties = collectProperties(schema);
     const byName = new Map(properties.map((p) => [p.name, p]));
 
@@ -369,7 +375,9 @@ export function schemaKeyCompletion(schema: Record<string, unknown> | null | und
         const entry = byName.get(frame.key);
         if (!entry) return null;
         // 落在字符串里只能补字符串值；数字、布尔要在引号外补
-        const choices = collectValueChoices(entry).filter((v) => !inString || typeof v === 'string');
+        const choices = collectValueChoices(entry).filter(
+            (v) => !inString || typeof v === 'string',
+        );
         if (choices.length === 0) return null;
         return {
             from,
@@ -516,7 +524,9 @@ export function JsonCodeEditor({
         const view = viewRef.current;
         if (!view || appliedSchemaKeyRef.current === schemaKey) return;
         appliedSchemaKeyRef.current = schemaKey;
-        view.dispatch({ effects: schemaGateRef.current.reconfigure(schemaExtension(schemaRef.current)) });
+        view.dispatch({
+            effects: schemaGateRef.current.reconfigure(schemaExtension(schemaRef.current)),
+        });
     }, [schemaKey]);
 
     useEffect(() => {
@@ -554,7 +564,10 @@ export function JsonCodeEditor({
         const { anchor, head } = view.state.selection.main;
         view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: value },
-            selection: { anchor: Math.min(anchor, value.length), head: Math.min(head, value.length) },
+            selection: {
+                anchor: Math.min(anchor, value.length),
+                head: Math.min(head, value.length),
+            },
         });
     }, [value]);
 

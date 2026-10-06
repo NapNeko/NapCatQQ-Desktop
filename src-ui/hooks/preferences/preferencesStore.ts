@@ -187,9 +187,7 @@ export const preferencesStore = {
             motionSpeed: normalizeMotionSpeed(
                 patch.motionSpeed !== undefined ? patch.motionSpeed : state.motionSpeed,
             ),
-            radiusStyle: normalizeRadiusStyle(
-                patch.radiusStyle ?? state.radiusStyle,
-            ),
+            radiusStyle: normalizeRadiusStyle(patch.radiusStyle ?? state.radiusStyle),
         };
         persist();
         notify();

@@ -30,7 +30,11 @@ import {
     type WheelEvent,
 } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
-import { forgetScroll, recallScroll, useScrollMemory } from '../../../hooks/debug/debugScrollMemory';
+import {
+    forgetScroll,
+    recallScroll,
+    useScrollMemory,
+} from '../../../hooks/debug/debugScrollMemory';
 
 const STICK_PX = 120;
 /** 一批来得太多（刷屏、积压补发）就不做进场动画，满屏一起动反而看不清 */
@@ -110,7 +114,9 @@ export function useStickToBottom<T extends Keyed>(opts: {
     const { scrollRef, virtualizer, items, memoryKey, resetToken, filterToken, animate } = opts;
 
     // 记着位置（之前翻上去过）就从那里开始，否则从底部开始
-    const stickRef = useRef<boolean>(!opts.initialDetached && (memoryKey === null || recallScroll(memoryKey) === undefined));
+    const stickRef = useRef<boolean>(
+        !opts.initialDetached && (memoryKey === null || recallScroll(memoryKey) === undefined),
+    );
     const downwardIntent = useRef(false);
     /** 用户明确往上翻了：几何上还在 120px 以内也不贴底 */
     const detachedRef = useRef(!stickRef.current);
@@ -142,8 +148,15 @@ export function useStickToBottom<T extends Keyed>(opts: {
             autoRef.current = false;
         }
         // 放开之后：滚到最底，或者自己往下滚回 120px 以内，才重新贴底
-        if (detachedRef.current && (!opts.reattachOnIntent || downwardIntent.current) && (d <= REATTACH_PX || (movedDown && d < STICK_PX))) detachedRef.current = false;
-        const stuck = !detachedRef.current && (opts.followUntilUserScroll && stickRef.current || d < STICK_PX);
+        if (
+            detachedRef.current &&
+            (!opts.reattachOnIntent || downwardIntent.current) &&
+            (d <= REATTACH_PX || (movedDown && d < STICK_PX))
+        )
+            detachedRef.current = false;
+        const stuck =
+            !detachedRef.current &&
+            ((opts.followUntilUserScroll && stickRef.current) || d < STICK_PX);
         stickRef.current = stuck;
         if (stuck) setUnseen(0);
         setAway(!stuck && d > el.clientHeight);
@@ -162,7 +175,8 @@ export function useStickToBottom<T extends Keyed>(opts: {
     const snapToEnd = useCallback(() => {
         if (opts.followUntilUserScroll) {
             const element = scrollRef.current;
-            if (element) element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+            if (element)
+                element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
             return;
         }
         const n = virtualizer.options.count;
@@ -188,7 +202,8 @@ export function useStickToBottom<T extends Keyed>(opts: {
                 return;
             }
             const view = el.clientHeight;
-            if (distanceFromBottom(el) > view * 1.5) el.scrollTop = Math.max(0, el.scrollHeight - view * 2);
+            if (distanceFromBottom(el) > view * 1.5)
+                el.scrollTop = Math.max(0, el.scrollHeight - view * 2);
             autoRef.current = true;
             el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
             clearAutoTimer();
@@ -354,5 +369,15 @@ export function useStickToBottom<T extends Keyed>(opts: {
 
     const isFollowing = useCallback(() => stickRef.current, []);
     const canPinToEnd = useCallback(() => stickRef.current && !autoRef.current, []);
-    return { unseen, away, enterFrom, takeEnter, handlers, jumpToLatest, detach, isFollowing, canPinToEnd };
+    return {
+        unseen,
+        away,
+        enterFrom,
+        takeEnter,
+        handlers,
+        jumpToLatest,
+        detach,
+        isFollowing,
+        canPinToEnd,
+    };
 }

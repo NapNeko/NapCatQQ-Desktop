@@ -117,7 +117,10 @@ export function rssBytesOf(metrics: BotRuntimeMetrics | null | undefined): numbe
 }
 
 /** 相对时间：刚采集 / N 秒前 / N 分钟前 */
-export function formatCollectedAgo(collectedAtMs: number | null | undefined, nowMs = Date.now()): string {
+export function formatCollectedAgo(
+    collectedAtMs: number | null | undefined,
+    nowMs = Date.now(),
+): string {
     if (collectedAtMs == null || !Number.isFinite(collectedAtMs) || collectedAtMs <= 0) {
         return '尚无采集';
     }
@@ -139,24 +142,24 @@ export const METRICS_HISTORY_RANGE_OPTIONS: {
     shortLabel: string;
     ms: number;
 }[] = [
-        { id: '1h', label: '1 小时', shortLabel: '1h', ms: 3600_000 },
-        { id: '6h', label: '6 小时', shortLabel: '6h', ms: 6 * 3600_000 },
-        { id: '24h', label: '24 小时', shortLabel: '1d', ms: 86400_000 },
-        { id: '7d', label: '7 天', shortLabel: '7d', ms: 7 * 86400_000 },
-        { id: '14d', label: '14 天', shortLabel: '14d', ms: 14 * 86400_000 },
-        { id: '30d', label: '30 天', shortLabel: '30d', ms: 30 * 86400_000 },
-    ];
+    { id: '1h', label: '1 小时', shortLabel: '1h', ms: 3600_000 },
+    { id: '6h', label: '6 小时', shortLabel: '6h', ms: 6 * 3600_000 },
+    { id: '24h', label: '24 小时', shortLabel: '1d', ms: 86400_000 },
+    { id: '7d', label: '7 天', shortLabel: '7d', ms: 7 * 86400_000 },
+    { id: '14d', label: '14 天', shortLabel: '14d', ms: 14 * 86400_000 },
+    { id: '30d', label: '30 天', shortLabel: '30d', ms: 30 * 86400_000 },
+];
 
 /** 趋势图查询窗口：预设 或 自定义起止 */
 export type MetricsHistoryWindow =
     | { mode: 'preset'; range: MetricsHistoryRange }
     | {
-        mode: 'custom';
-        fromMs: number;
-        toMs: number;
-        /** true 时每次刷新 to = now */
-        followNow: boolean;
-    };
+          mode: 'custom';
+          fromMs: number;
+          toMs: number;
+          /** true 时每次刷新 to = now */
+          followNow: boolean;
+      };
 
 export function historyRangeToFromMs(
     range: MetricsHistoryRange,
@@ -214,8 +217,7 @@ export function resolveHistoryWindowBounds(
 export function formatHistoryWindowLabel(window: MetricsHistoryWindow): string {
     if (window.mode === 'preset') {
         return (
-            METRICS_HISTORY_RANGE_OPTIONS.find((o) => o.id === window.range)?.label ??
-            '时间范围'
+            METRICS_HISTORY_RANGE_OPTIONS.find((o) => o.id === window.range)?.label ?? '时间范围'
         );
     }
     const fmt = (ms: number) =>

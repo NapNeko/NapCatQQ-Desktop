@@ -48,7 +48,9 @@ export const NeoBotPromptsTab: React.FC<{
                                             </span>
                                             <span className="flex shrink-0 items-baseline gap-1.5">
                                                 {k.overridden && (
-                                                    <span className="text-2xs text-warning">已改</span>
+                                                    <span className="text-2xs text-warning">
+                                                        已改
+                                                    </span>
                                                 )}
                                                 <span className="font-mono text-2xs text-text-tertiary">
                                                     {k.kind}

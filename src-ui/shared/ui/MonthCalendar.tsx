@@ -52,16 +52,11 @@ export function MonthCalendar({
 }: MonthCalendarProps) {
     const year = month.getFullYear();
     const mon = month.getMonth();
-    const days = useMemo(
-        () => getCalendarDays(new Date(year, mon, 1)),
-        [year, mon],
-    );
+    const days = useMemo(() => getCalendarDays(new Date(year, mon, 1)), [year, mon]);
 
-    const rangeStart =
-        rangeStartMs != null ? startOfLocalDay(rangeStartMs) : null;
+    const rangeStart = rangeStartMs != null ? startOfLocalDay(rangeStartMs) : null;
     const rangeEnd = rangeEndMs != null ? startOfLocalDay(rangeEndMs) : null;
-    const selected =
-        selectedDayMs != null ? startOfLocalDay(selectedDayMs) : null;
+    const selected = selectedDayMs != null ? startOfLocalDay(selectedDayMs) : null;
     const today = startOfLocalDay(Date.now());
 
     const title = new Intl.DateTimeFormat('zh-CN', {
@@ -69,11 +64,8 @@ export function MonthCalendar({
         month: 'long',
     }).format(new Date(year, mon, 1));
 
-    const canPrev =
-        minDayMs == null ||
-        new Date(year, mon, 0).getTime() >= minDayMs - 86400_000;
-    const canNext =
-        maxDayMs == null || new Date(year, mon + 1, 1).getTime() <= maxDayMs;
+    const canPrev = minDayMs == null || new Date(year, mon, 0).getTime() >= minDayMs - 86400_000;
+    const canNext = maxDayMs == null || new Date(year, mon + 1, 1).getTime() <= maxDayMs;
 
     return (
         <div
@@ -96,13 +88,7 @@ export function MonthCalendar({
                     type="button"
                     className="rounded-sm px-1.5 text-[12px] font-semibold text-text transition-colors hover:text-brand"
                     onClick={() =>
-                        onMonthChange(
-                            new Date(
-                                new Date().getFullYear(),
-                                new Date().getMonth(),
-                                1,
-                            ),
-                        )
+                        onMonthChange(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
                     }
                     title="回到本月"
                 >
@@ -155,18 +141,13 @@ export function MonthCalendar({
                                 'relative min-h-7 w-full rounded-sm text-[11px] font-medium tabular-nums transition-colors',
                                 !inMonth && 'text-text-disabled/45',
                                 inMonth &&
-                                !inRange &&
-                                !isSelected &&
-                                'text-text-secondary hover:bg-elevated hover:text-text',
-                                inRange &&
-                                !isEndpoint &&
-                                'bg-brand-soft/45 text-brand',
+                                    !inRange &&
+                                    !isSelected &&
+                                    'text-text-secondary hover:bg-elevated hover:text-text',
+                                inRange && !isEndpoint && 'bg-brand-soft/45 text-brand',
                                 (isEndpoint || isSelected) &&
-                                'bg-brand font-semibold text-white shadow-sm',
-                                isToday &&
-                                !isEndpoint &&
-                                !isSelected &&
-                                'ring-1 ring-brand/35',
+                                    'bg-brand font-semibold text-white shadow-sm',
+                                isToday && !isEndpoint && !isSelected && 'ring-1 ring-brand/35',
                                 disabled && 'pointer-events-none opacity-30',
                             )}
                         >

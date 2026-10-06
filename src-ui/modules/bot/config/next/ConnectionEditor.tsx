@@ -3,14 +3,7 @@
 // 全局 InfoBar 只作 fallback（用户切走时还能看到）。
 
 import { useEffect, useState } from 'react';
-import {
-    Button,
-    TextField,
-    NumberField,
-    Switch,
-    Select,
-    Checkbox,
-} from '../../../../shared/ui';
+import { Button, TextField, NumberField, Switch, Select, Checkbox } from '../../../../shared/ui';
 import {
     type ConnectionKind,
     type ConnectionConfig,
@@ -66,7 +59,7 @@ export function ConnectionEditor({
 
     // 类型安全的局部 patch：保持 data 的具体类型不被 widen。
     const patch = <K extends keyof ConnectionConfig>(field: K, value: ConnectionConfig[K]) => {
-        setData((prev) => ({ ...prev, [field]: value } as ConnectionConfig));
+        setData((prev) => ({ ...prev, [field]: value }) as ConnectionConfig);
     };
 
     const handleSave = () => {
@@ -118,7 +111,13 @@ export function ConnectionEditor({
                 />
             </div>
 
-            <KindSpecificFields kind={kind} data={data} patch={patch} isSnowLuma={isSnowLuma} error={error} />
+            <KindSpecificFields
+                kind={kind}
+                data={data}
+                patch={patch}
+                isSnowLuma={isSnowLuma}
+                error={error}
+            />
 
             {/* token + debug 放尾部，频次低 */}
             <TextField
@@ -165,15 +164,47 @@ interface KindSpecificFieldsProps {
 function KindSpecificFields({ kind, data, patch, isSnowLuma, error }: KindSpecificFieldsProps) {
     switch (kind) {
         case 'httpServer':
-            return <HttpServerFields data={data as HttpServerConfig} patch={patch} isSnowLuma={isSnowLuma} error={error} />;
+            return (
+                <HttpServerFields
+                    data={data as HttpServerConfig}
+                    patch={patch}
+                    isSnowLuma={isSnowLuma}
+                    error={error}
+                />
+            );
         case 'httpSseServer':
-            return <HttpSseServerFields data={data as HttpSseServerConfig} patch={patch} error={error} />;
+            return (
+                <HttpSseServerFields
+                    data={data as HttpSseServerConfig}
+                    patch={patch}
+                    error={error}
+                />
+            );
         case 'httpClient':
-            return <HttpClientFields data={data as HttpClientConfig} patch={patch} isSnowLuma={isSnowLuma} error={error} />;
+            return (
+                <HttpClientFields
+                    data={data as HttpClientConfig}
+                    patch={patch}
+                    isSnowLuma={isSnowLuma}
+                    error={error}
+                />
+            );
         case 'websocketServer':
-            return <WebsocketServerFields data={data as WebsocketServerConfig} patch={patch} error={error} />;
+            return (
+                <WebsocketServerFields
+                    data={data as WebsocketServerConfig}
+                    patch={patch}
+                    error={error}
+                />
+            );
         case 'websocketClient':
-            return <WebsocketClientFields data={data as WebsocketClientConfig} patch={patch} error={error} />;
+            return (
+                <WebsocketClientFields
+                    data={data as WebsocketClientConfig}
+                    patch={patch}
+                    error={error}
+                />
+            );
     }
 }
 
@@ -208,7 +239,9 @@ function HttpServerFields({
                     label="端口"
                     required
                     value={data.port}
-                    onValueChange={(v) => patch('port' as keyof ConnectionConfig, (v ?? 0) as never)}
+                    onValueChange={(v) =>
+                        patch('port' as keyof ConnectionConfig, (v ?? 0) as never)
+                    }
                     placeholder="3000"
                     min={1}
                     max={65535}
@@ -226,12 +259,16 @@ function HttpServerFields({
                     <Checkbox
                         label="允许跨域请求 (CORS)"
                         checked={data.enableCors}
-                        onCheckedChange={(v) => patch('enableCors' as keyof ConnectionConfig, v as never)}
+                        onCheckedChange={(v) =>
+                            patch('enableCors' as keyof ConnectionConfig, v as never)
+                        }
                     />
                     <Checkbox
                         label="兼任 WebSocket 握手"
                         checked={data.enableWebsocket}
-                        onCheckedChange={(v) => patch('enableWebsocket' as keyof ConnectionConfig, v as never)}
+                        onCheckedChange={(v) =>
+                            patch('enableWebsocket' as keyof ConnectionConfig, v as never)
+                        }
                     />
                 </div>
             )}
@@ -239,7 +276,15 @@ function HttpServerFields({
     );
 }
 
-function HttpSseServerFields({ data, patch, error }: { data: HttpSseServerConfig; patch: Patch; error: string | null }) {
+function HttpSseServerFields({
+    data,
+    patch,
+    error,
+}: {
+    data: HttpSseServerConfig;
+    patch: Patch;
+    error: string | null;
+}) {
     return (
         <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -255,7 +300,9 @@ function HttpSseServerFields({ data, patch, error }: { data: HttpSseServerConfig
                     label="端口"
                     required
                     value={data.port}
-                    onValueChange={(v) => patch('port' as keyof ConnectionConfig, (v ?? 0) as never)}
+                    onValueChange={(v) =>
+                        patch('port' as keyof ConnectionConfig, (v ?? 0) as never)
+                    }
                     placeholder="3001"
                     min={1}
                     max={65535}
@@ -266,17 +313,23 @@ function HttpSseServerFields({ data, patch, error }: { data: HttpSseServerConfig
                 <Checkbox
                     label="允许跨域请求"
                     checked={data.enableCors}
-                    onCheckedChange={(v) => patch('enableCors' as keyof ConnectionConfig, v as never)}
+                    onCheckedChange={(v) =>
+                        patch('enableCors' as keyof ConnectionConfig, v as never)
+                    }
                 />
                 <Checkbox
                     label="兼任 WebSocket 握手"
                     checked={data.enableWebsocket}
-                    onCheckedChange={(v) => patch('enableWebsocket' as keyof ConnectionConfig, v as never)}
+                    onCheckedChange={(v) =>
+                        patch('enableWebsocket' as keyof ConnectionConfig, v as never)
+                    }
                 />
                 <Checkbox
                     label="上报 Bot 自身消息"
                     checked={data.reportSelfMessage}
-                    onCheckedChange={(v) => patch('reportSelfMessage' as keyof ConnectionConfig, v as never)}
+                    onCheckedChange={(v) =>
+                        patch('reportSelfMessage' as keyof ConnectionConfig, v as never)
+                    }
                 />
             </div>
         </>
@@ -308,7 +361,9 @@ function HttpClientFields({
             <Checkbox
                 label="上报 Bot 自身发出的消息"
                 checked={data.reportSelfMessage}
-                onCheckedChange={(v) => patch('reportSelfMessage' as keyof ConnectionConfig, v as never)}
+                onCheckedChange={(v) =>
+                    patch('reportSelfMessage' as keyof ConnectionConfig, v as never)
+                }
             />
             {isSnowLuma && (
                 <NumberField
@@ -348,7 +403,9 @@ function WebsocketServerFields({
                     label="端口"
                     required
                     value={data.port}
-                    onValueChange={(v) => patch('port' as keyof ConnectionConfig, (v ?? 0) as never)}
+                    onValueChange={(v) =>
+                        patch('port' as keyof ConnectionConfig, (v ?? 0) as never)
+                    }
                     placeholder="3001"
                     min={1}
                     max={65535}
@@ -417,7 +474,9 @@ function WebsocketClientFields({
                 onValueChange={(v) => patch('url' as keyof ConnectionConfig, v as never)}
                 placeholder="ws://127.0.0.1:8080/onebot/v11"
                 hint="必须以 ws:// 或 wss:// 开头"
-                error={error?.includes('WebSocket URL') || error?.includes('URL') ? error : undefined}
+                error={
+                    error?.includes('WebSocket URL') || error?.includes('URL') ? error : undefined
+                }
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Select
@@ -451,7 +510,9 @@ function WebsocketClientFields({
             <Checkbox
                 label="上报 Bot 自身发出的消息"
                 checked={data.reportSelfMessage}
-                onCheckedChange={(v) => patch('reportSelfMessage' as keyof ConnectionConfig, v as never)}
+                onCheckedChange={(v) =>
+                    patch('reportSelfMessage' as keyof ConnectionConfig, v as never)
+                }
             />
         </>
     );

@@ -16,8 +16,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function allowedKey(key: string): boolean {
-    return JSON_KEYS.has(key) || (key.startsWith(NICKNAME_PREFIX)
-        && /^[A-Za-z0-9_-]{1,160}$/.test(key.slice(NICKNAME_PREFIX.length)));
+    return (
+        JSON_KEYS.has(key) ||
+        (key.startsWith(NICKNAME_PREFIX) &&
+            /^[A-Za-z0-9_-]{1,160}$/.test(key.slice(NICKNAME_PREFIX.length)))
+    );
 }
 
 function invalid(key: string): never {
@@ -25,29 +28,38 @@ function invalid(key: string): never {
 }
 
 function stringList(value: unknown, maxLength = 1024): value is string[] {
-    return Array.isArray(value) && value.length <= maxLength
-        && value.every(item => typeof item === 'string' && item.length <= 256);
+    return (
+        Array.isArray(value) &&
+        value.length <= maxLength &&
+        value.every((item) => typeof item === 'string' && item.length <= 256)
+    );
 }
 
 function validateJsonPreference(key: string, value: unknown): void {
     if (key === 'ncd:bot_custom_order:v1') {
-        if (!stringList(value) || value.some(id => id.length === 0)) invalid(key);
+        if (!stringList(value) || value.some((id) => id.length === 0)) invalid(key);
         return;
     }
     if (!isRecord(value)) invalid(key);
     const data = value as Record<string, unknown>;
-    const numbers = key === 'ncd.terminal.prefs.v1'
-        ? ['fontSize', 'lineHeight', 'scrollback']
-        : key === 'ncd.terminal.layout.v1'
-            ? ['height', 'filesWidth'] : ['listWidth', 'composerHeight'];
+    const numbers =
+        key === 'ncd.terminal.prefs.v1'
+            ? ['fontSize', 'lineHeight', 'scrollback']
+            : key === 'ncd.terminal.layout.v1'
+              ? ['height', 'filesWidth']
+              : ['listWidth', 'composerHeight'];
     for (const field of numbers) {
         const item = data[field];
         if (field === 'composerHeight' && item === null) continue;
-        if (item !== undefined && (typeof item !== 'number' || !Number.isFinite(item))) invalid(key);
+        if (item !== undefined && (typeof item !== 'number' || !Number.isFinite(item)))
+            invalid(key);
     }
-    const booleans = key === 'ncd.terminal.prefs.v1'
-        ? ['cursorBlink', 'copyOnSelect', 'highlight', 'confirmMultilinePaste', 'gpu']
-        : key === 'ncd.terminal.layout.v1' ? ['filesOpen'] : [];
+    const booleans =
+        key === 'ncd.terminal.prefs.v1'
+            ? ['cursorBlink', 'copyOnSelect', 'highlight', 'confirmMultilinePaste', 'gpu']
+            : key === 'ncd.terminal.layout.v1'
+              ? ['filesOpen']
+              : [];
     for (const field of booleans) {
         if (data[field] !== undefined && typeof data[field] !== 'boolean') invalid(key);
     }
@@ -61,32 +73,53 @@ function validateJsonPreference(key: string, value: unknown): void {
         for (const [field, allowed] of Object.entries(choices)) {
             if (data[field] !== undefined && !allowed.includes(data[field])) invalid(key);
         }
-        if (data.snippets !== undefined && (!Array.isArray(data.snippets) || data.snippets.length > 1000
-            || data.snippets.some(item => !isRecord(item) || typeof item.label !== 'string'
-                || typeof item.command !== 'string' || item.label.length > 256 || item.command.length > 32768))) {
+        if (
+            data.snippets !== undefined &&
+            (!Array.isArray(data.snippets) ||
+                data.snippets.length > 1000 ||
+                data.snippets.some(
+                    (item) =>
+                        !isRecord(item) ||
+                        typeof item.label !== 'string' ||
+                        typeof item.command !== 'string' ||
+                        item.label.length > 256 ||
+                        item.command.length > 32768,
+                ))
+        ) {
             invalid(key);
         }
     }
     if (key === 'ncd.chat.ui.v1' && data.hiddenConversations !== undefined) {
-        if (!isRecord(data.hiddenConversations) || Object.keys(data.hiddenConversations).length > 128
-            || Object.values(data.hiddenConversations).some(keys => !stringList(keys))) invalid(key);
+        if (
+            !isRecord(data.hiddenConversations) ||
+            Object.keys(data.hiddenConversations).length > 128 ||
+            Object.values(data.hiddenConversations).some((keys) => !stringList(keys))
+        )
+            invalid(key);
     }
 }
 
-export function validateFrontendPreferences(value: unknown): asserts value is ConfigFrontendPreferences {
+export function validateFrontendPreferences(
+    value: unknown,
+): asserts value is ConfigFrontendPreferences {
     if (!isRecord(value) || value.version !== 1 || !isRecord(value.storage)) {
         throw new Error('界面偏好备份格式不受支持');
     }
     const entries = Object.entries(value.storage);
     if (entries.length > 512) throw new Error('界面偏好条目过多');
     const encoder = new TextEncoder();
-    if (encoder.encode(JSON.stringify(value)).length > MAX_TOTAL_BYTES) throw new Error('界面偏好备份过大');
+    if (encoder.encode(JSON.stringify(value)).length > MAX_TOTAL_BYTES)
+        throw new Error('界面偏好备份过大');
     for (const [key, raw] of entries) {
         if (!allowedKey(key)) throw new Error(`不支持恢复此界面偏好：${key}`);
         if (typeof raw !== 'string' || encoder.encode(raw).length > MAX_VALUE_BYTES) invalid(key);
         if (JSON_KEYS.has(key)) {
             let parsed: unknown;
-            try { parsed = JSON.parse(raw as string); } catch { invalid(key); }
+            try {
+                parsed = JSON.parse(raw as string);
+            } catch {
+                invalid(key);
+            }
             validateJsonPreference(key, parsed);
         } else if ((raw as string).length > 128 || (raw as string).includes('\0')) {
             invalid(key);
@@ -94,7 +127,9 @@ export function validateFrontendPreferences(value: unknown): asserts value is Co
     }
 }
 
-export function collectFrontendPreferences(storage: Storage = window.localStorage): ConfigFrontendPreferences {
+export function collectFrontendPreferences(
+    storage: Storage = window.localStorage,
+): ConfigFrontendPreferences {
     const snapshot: ConfigFrontendPreferences = { version: 1, storage: {} };
     for (let index = 0; index < storage.length; index += 1) {
         const key = storage.key(index);
@@ -118,7 +153,7 @@ export function restoreFrontendPreferences(
         if (key !== null && allowedKey(key) && !(key in snapshot.storage)) omitted.push(key);
     }
     const touched = [...omitted, ...Object.keys(snapshot.storage)];
-    const before = new Map(touched.map(key => [key, storage.getItem(key)]));
+    const before = new Map(touched.map((key) => [key, storage.getItem(key)]));
     const attempted: string[] = [];
     try {
         for (const key of omitted) {
@@ -141,10 +176,14 @@ export function restoreFrontendPreferences(
             }
         }
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`界面偏好恢复失败：${message}${rollbackErrors.length ? `；部分原偏好未能恢复：${rollbackErrors.join('；')}` : ''}`);
+        throw new Error(
+            `界面偏好恢复失败：${message}${rollbackErrors.length ? `；部分原偏好未能恢复：${rollbackErrors.join('；')}` : ''}`,
+        );
     }
     if (storage === window.localStorage) {
-        window.dispatchEvent(new CustomEvent<string[]>(RESTORED_EVENT, { detail: Object.keys(snapshot.storage) }));
+        window.dispatchEvent(
+            new CustomEvent<string[]>(RESTORED_EVENT, { detail: Object.keys(snapshot.storage) }),
+        );
     }
 }
 

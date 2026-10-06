@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { _resetTermsDialog, peekTermsDialog, requestTermsConsent } from './termsDialogStore';
 import type { AppPendingTerms } from '../../core/ipc/types';
 
-const eula: AppPendingTerms = { id: 'eula', title: 'EULA', url: 'https://example.com', text: '# EULA' };
+const eula: AppPendingTerms = {
+    id: 'eula',
+    title: 'EULA',
+    url: 'https://example.com',
+    text: '# EULA',
+};
 
 afterEach(() => _resetTermsDialog());
 

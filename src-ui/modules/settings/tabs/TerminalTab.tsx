@@ -48,7 +48,10 @@ export function TerminalTab() {
                     <Select
                         value={String(prefs.lineHeight)}
                         onValueChange={(v) => patch({ lineHeight: Number(v) })}
-                        items={LINE_HEIGHTS.map((n) => ({ value: String(n), label: n.toFixed(2).replace(/0$/, '') }))}
+                        items={LINE_HEIGHTS.map((n) => ({
+                            value: String(n),
+                            label: n.toFixed(2).replace(/0$/, ''),
+                        }))}
                     />
                 </FieldRow>
                 <FieldRow label="配色">
@@ -73,12 +76,25 @@ export function TerminalTab() {
                     />
                 </FieldRow>
                 <FieldRow label="光标闪烁">
-                    <Switch checked={prefs.cursorBlink} onCheckedChange={(v) => patch({ cursorBlink: v })} />
+                    <Switch
+                        checked={prefs.cursorBlink}
+                        onCheckedChange={(v) => patch({ cursorBlink: v })}
+                    />
                 </FieldRow>
-                <FieldRow label="关键字高亮" description="错误、警告、成功字样和 IP、链接自动上色；程序自己上了色的不动">
-                    <Switch checked={prefs.highlight} onCheckedChange={(v) => patch({ highlight: v })} />
+                <FieldRow
+                    label="关键字高亮"
+                    description="错误、警告、成功字样和 IP、链接自动上色；程序自己上了色的不动"
+                >
+                    <Switch
+                        checked={prefs.highlight}
+                        onCheckedChange={(v) => patch({ highlight: v })}
+                    />
                 </FieldRow>
-                <FieldRow label="显卡加速" description="字多、刷屏快时更顺；显示不正常时关掉" isLast>
+                <FieldRow
+                    label="显卡加速"
+                    description="字多、刷屏快时更顺；显示不正常时关掉"
+                    isLast
+                >
                     <Switch checked={prefs.gpu} onCheckedChange={(v) => patch({ gpu: v })} />
                 </FieldRow>
             </SettingsSection>
@@ -87,7 +103,9 @@ export function TerminalTab() {
                 <FieldRow label="本机默认 shell">
                     <Select
                         value={prefs.defaultShell ?? 'auto'}
-                        onValueChange={(v) => patch({ defaultShell: v === 'auto' ? null : (v as LocalShellKind) })}
+                        onValueChange={(v) =>
+                            patch({ defaultShell: v === 'auto' ? null : (v as LocalShellKind) })
+                        }
                         items={[
                             { value: 'auto', label: '自动（PowerShell 7 优先）' },
                             ...shells.map((s) => ({ value: s.kind, label: s.label })),
@@ -105,7 +123,10 @@ export function TerminalTab() {
                     />
                 </FieldRow>
                 <FieldRow label="选中即复制">
-                    <Switch checked={prefs.copyOnSelect} onCheckedChange={(v) => patch({ copyOnSelect: v })} />
+                    <Switch
+                        checked={prefs.copyOnSelect}
+                        onCheckedChange={(v) => patch({ copyOnSelect: v })}
+                    />
                 </FieldRow>
                 <FieldRow label="粘贴多行前先确认" description="防止一粘贴就连着执行好几条命令">
                     <Switch
@@ -127,7 +148,9 @@ export function TerminalTab() {
                     {SHORTCUTS.map(([keys, action]) => (
                         <div key={keys} className="contents">
                             <dt>
-                                <kbd className="rounded-xs bg-inset px-1.5 py-0.5 text-[12px] text-text">{keys}</kbd>
+                                <kbd className="rounded-xs bg-inset px-1.5 py-0.5 text-[12px] text-text">
+                                    {keys}
+                                </kbd>
                             </dt>
                             <dd className="text-text-secondary">{action}</dd>
                         </div>
@@ -139,7 +162,9 @@ export function TerminalTab() {
                 <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => terminalPrefs.patch({ ...DEFAULT_TERMINAL_PREFS, snippets: prefs.snippets })}
+                    onClick={() =>
+                        terminalPrefs.patch({ ...DEFAULT_TERMINAL_PREFS, snippets: prefs.snippets })
+                    }
                 >
                     恢复默认（保留我的命令）
                 </Button>

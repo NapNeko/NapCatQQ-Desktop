@@ -5,7 +5,15 @@ import { ArrowRight } from 'lucide-react';
 import { cn } from '../../../../shared/utils/cn';
 import { ASTRBOT_TAB_LABEL } from './astrbotNav';
 
-export { ConfirmDelete, EmptyHint, EntityRow, FormDialog, PickList, Pill, SubHeader } from '../entityParts';
+export {
+    ConfirmDelete,
+    EmptyHint,
+    EntityRow,
+    FormDialog,
+    PickList,
+    Pill,
+    SubHeader,
+} from '../entityParts';
 
 /** 「去『模型』页」这类内联跳转。空态 / 占位文字里的死胡同都换成它。 */
 export const JumpLink: React.FC<{

@@ -1,6 +1,13 @@
 // 云崽「基础」：bot.yaml 里进程怎么跑的那部分。渲染用的浏览器在「渲染」页，端口在「连接」页。
 
-import { FormSection, NumberField, Select, StringListField, Switch, TextField } from '../../../../shared/ui';
+import {
+    FormSection,
+    NumberField,
+    Select,
+    StringListField,
+    Switch,
+    TextField,
+} from '../../../../shared/ui';
 import { YUNZAI_LOG_LEVELS } from '../../../../core/domain/apps/yunzaiConfig';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import type { YunzaiBotConfig, YunzaiInstanceConfig } from '../../../../core/ipc/types';
@@ -14,9 +21,15 @@ export interface YunzaiTabProps {
 
 const LOG_LEVEL_ITEMS = YUNZAI_LOG_LEVELS.map((v) => ({ value: v, label: v }));
 
-export const YunzaiBasicTab: React.FC<YunzaiTabProps> = ({ config, onChange, errors, disabled }) => {
+export const YunzaiBasicTab: React.FC<YunzaiTabProps> = ({
+    config,
+    onChange,
+    errors,
+    disabled,
+}) => {
     const bot = config.bot;
-    const set = (patch: Partial<YunzaiBotConfig>) => onChange({ ...config, bot: { ...bot, ...patch } });
+    const set = (patch: Partial<YunzaiBotConfig>) =>
+        onChange({ ...config, bot: { ...bot, ...patch } });
 
     return (
         <ConfigForm>

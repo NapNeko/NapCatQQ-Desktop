@@ -11,7 +11,13 @@ import type {
 } from '../types';
 import { withMockDelay } from './bootstrap.mock';
 
-type Seed = { name: string; display: string; description: string; advanced: boolean; content: string };
+type Seed = {
+    name: string;
+    display: string;
+    description: string;
+    advanced: boolean;
+    content: string;
+};
 
 const ZH: Seed[] = [
     {
@@ -42,7 +48,8 @@ const ZH: Seed[] = [
         display: '表情包内容分析',
         description: '分析表情包图片表达的情绪，生成标签。',
         advanced: true,
-        content: '这是一个{image_type}表情包。用 3 到 6 个逗号分隔的词描述它表达的情绪和场景，不要写句子。',
+        content:
+            '这是一个{image_type}表情包。用 3 到 6 个逗号分隔的词描述它表达的情绪和场景，不要写句子。',
     },
     {
         name: 'learn_style.prompt',
@@ -57,21 +64,24 @@ const ZH: Seed[] = [
         display: '学习黑话',
         description: '找出聊天里反复出现、外人看不懂的词。',
         advanced: true,
-        content: '聊天记录：\n{chat_str}\n\n列出里面像是圈内黑话、梗或缩写的词，每行一个，不确定的不要写。',
+        content:
+            '聊天记录：\n{chat_str}\n\n列出里面像是圈内黑话、梗或缩写的词，每行一个，不确定的不要写。',
     },
     {
         name: 'expression_evaluation.prompt',
         display: '表达方式评估',
         description: '判断学到的表达方式值不值得留下。',
         advanced: true,
-        content: '情境：{situation}\n表达：{style}\n\n按下面的标准打分并说明理由：\n{criteria_list}',
+        content:
+            '情境：{situation}\n表达：{style}\n\n按下面的标准打分并说明理由：\n{criteria_list}',
     },
     {
         name: 'mid_term_memory_summary.prompt',
         display: '聊天回想总结',
         description: '把一段时间的聊天压成回想，供之后召回。',
         advanced: true,
-        content: '参与者：{participants_text}\n时间：{time_range}\n\n用几句话总结这段时间聊了什么、谁说了什么重要的事。',
+        content:
+            '参与者：{participants_text}\n时间：{time_range}\n\n用几句话总结这段时间聊了什么、谁说了什么重要的事。',
     },
 ];
 
@@ -105,10 +115,23 @@ function store(instanceId: string): Map<string, Entry> {
         // 预置一份改过的回复模板，走查时能看到「已改」和版本
         const replyer = s.get('zh-CN/maisaka_replyer.prompt')!;
         const now = Date.now() / 1000;
-        replyer.custom = replyer.seed.content.replace('只输出要说的话', '只输出要说的话，句子短一点');
-        replyer.versions = [{ id: 'v20260920101500', label: '短句一点', created_at: now - 86400 * 6, modified_at: now - 86400 * 6 }];
+        replyer.custom = replyer.seed.content.replace(
+            '只输出要说的话',
+            '只输出要说的话，句子短一点',
+        );
+        replyer.versions = [
+            {
+                id: 'v20260920101500',
+                label: '短句一点',
+                created_at: now - 86400 * 6,
+                modified_at: now - 86400 * 6,
+            },
+        ];
         replyer.active = 'v20260920101500';
-        versionBodies.set(bodyKey(instanceId, 'zh-CN', replyer.seed.name, 'v20260920101500'), replyer.custom);
+        versionBodies.set(
+            bodyKey(instanceId, 'zh-CN', replyer.seed.name, 'v20260920101500'),
+            replyer.custom,
+        );
         stores.set(instanceId, s);
     }
     return s;
@@ -123,7 +146,13 @@ function entry(inst: AppInstance, language: string, name: string): Entry {
 function versionsOf(e: Entry): MaiBotPromptVersion[] {
     const out = e.versions.map((v) => ({ ...v, active: v.id === e.active }));
     if (e.custom !== undefined && !e.active && out.length === 0) {
-        out.push({ id: PROMPT_LEGACY_VERSION, label: '当前自定义（旧格式）', created_at: 0, modified_at: 0, active: true });
+        out.push({
+            id: PROMPT_LEGACY_VERSION,
+            label: '当前自定义（旧格式）',
+            created_at: 0,
+            modified_at: 0,
+            active: true,
+        });
     }
     return out.sort((a, b) => b.modified_at - a.modified_at);
 }
@@ -165,7 +194,11 @@ export const mockMaiBotPrompts = {
         const languages = [...byLang.values()]
             .map((l) => ({ ...l, prompts: l.prompts.sort((a, b) => a.name.localeCompare(b.name)) }))
             .sort((a, b) => a.language.localeCompare(b.language));
-        return withMockDelay({ languages, active_language: 'zh-CN', live: inst.state === 'running' });
+        return withMockDelay({
+            languages,
+            active_language: 'zh-CN',
+            live: inst.state === 'running',
+        });
     },
 
     file(inst: AppInstance, language: string, name: string): Promise<MaiBotPromptFile> {
@@ -175,8 +208,11 @@ export const mockMaiBotPrompts = {
     version(inst: AppInstance, language: string, name: string, versionId: string): Promise<string> {
         const e = entry(inst, language, name);
         const content =
-            versionId === PROMPT_LEGACY_VERSION ? e.custom : versionBodies.get(bodyKey(inst.id, language, name, versionId));
-        if (content === undefined) return Promise.reject(makeAppConfigError('invalid', '这个版本已经不在了'));
+            versionId === PROMPT_LEGACY_VERSION
+                ? e.custom
+                : versionBodies.get(bodyKey(inst.id, language, name, versionId));
+        if (content === undefined)
+            return Promise.reject(makeAppConfigError('invalid', '这个版本已经不在了'));
         return withMockDelay(content);
     },
 
@@ -188,18 +224,25 @@ export const mockMaiBotPrompts = {
             case 'save': {
                 const check = checkPrompt(action.content, e.seed.content);
                 if (check.error) return Promise.reject(makeAppConfigError('invalid', check.error));
-                let id = action.version_id && action.version_id !== PROMPT_LEGACY_VERSION ? action.version_id : null;
+                let id =
+                    action.version_id && action.version_id !== PROMPT_LEGACY_VERSION
+                        ? action.version_id
+                        : null;
                 const existing = id ? e.versions.find((v) => v.id === id) : undefined;
-                if (id && !existing) return Promise.reject(makeAppConfigError('invalid', '这个版本已经不在了'));
+                if (id && !existing)
+                    return Promise.reject(makeAppConfigError('invalid', '这个版本已经不在了'));
                 if (existing) {
                     if (action.label.trim()) existing.label = action.label.trim();
                     existing.modified_at = now;
                 } else {
                     id = stamp();
                     const base = id;
-                    for (let n = 2; e.versions.some((v) => v.id === id); n += 1) id = `${base}-${n}`;
+                    for (let n = 2; e.versions.some((v) => v.id === id); n += 1)
+                        id = `${base}-${n}`;
                     const stem = name.replace(/\.prompt$/, '');
-                    const label = action.label.trim() || `${stem} 自定义版本 ${new Date().toLocaleString('zh-CN', { hour12: false })}`;
+                    const label =
+                        action.label.trim() ||
+                        `${stem} 自定义版本 ${new Date().toLocaleString('zh-CN', { hour12: false })}`;
                     e.versions.push({ id, label, created_at: now, modified_at: now });
                 }
                 versionBodies.set(bodyKey(inst.id, language, name, id!), action.content);
@@ -212,7 +255,8 @@ export const mockMaiBotPrompts = {
                     action.version_id === PROMPT_LEGACY_VERSION
                         ? e.custom
                         : versionBodies.get(bodyKey(inst.id, language, name, action.version_id));
-                if (content === undefined) return Promise.reject(makeAppConfigError('invalid', '这个版本已经不在了'));
+                if (content === undefined)
+                    return Promise.reject(makeAppConfigError('invalid', '这个版本已经不在了'));
                 e.custom = content;
                 if (action.version_id !== PROMPT_LEGACY_VERSION) e.active = action.version_id;
                 break;

@@ -8,7 +8,9 @@ describe('colorizeText', () => {
         expect(colorizeText('build failed with 2 errors')).toBe(
             `build ${E}[31mfailed${E}[0m with 2 ${E}[31merrors${E}[0m`,
         );
-        expect(colorizeText('WARNING: disk almost full')).toBe(`${E}[33mWARNING${E}[0m: disk almost full`);
+        expect(colorizeText('WARNING: disk almost full')).toBe(
+            `${E}[33mWARNING${E}[0m: disk almost full`,
+        );
         expect(colorizeText('安装成功')).toBe(`安装${E}[32m成功${E}[0m`);
         expect(colorizeText('listen 192.168.1.10:8080 now')).toBe(
             `listen ${E}[35m192.168.1.10:8080${E}[0m now`,

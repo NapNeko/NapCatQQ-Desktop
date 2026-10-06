@@ -39,7 +39,10 @@ export function useRevealOnError(advanced: AdvancedSections, keys: readonly stri
     }, [joined, reveal]);
 }
 
-export const AdvancedToggle: React.FC<{ open: boolean; onToggle: () => void }> = ({ open, onToggle }) => (
+export const AdvancedToggle: React.FC<{ open: boolean; onToggle: () => void }> = ({
+    open,
+    onToggle,
+}) => (
     <Button
         size="sm"
         variant="ghost"

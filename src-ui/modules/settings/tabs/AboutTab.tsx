@@ -104,8 +104,7 @@ export function AboutTab() {
                 key: 'about-desktop-update',
                 tone: 'info',
                 title: '正在安装更新',
-                content:
-                    '应用会短暂退出，安装完成后自动重开；进度见任务队列。',
+                content: '应用会短暂退出，安装完成后自动重开；进度见任务队列。',
             });
             await startAction('desktop_self', 'local', 'update');
             // 成功路径后端会 exit；若仍返回则多为 mock / 异常未退出
@@ -138,12 +137,12 @@ export function AboutTab() {
         checkState === 'latest'
             ? 'success'
             : checkState === 'available'
-                ? 'brand'
-                : checkState === 'error'
-                    ? 'danger'
-                    : checkState === 'checking'
-                        ? 'muted'
-                        : 'neutral';
+              ? 'brand'
+              : checkState === 'error'
+                ? 'danger'
+                : checkState === 'checking'
+                  ? 'muted'
+                  : 'neutral';
 
     return (
         <SettingsTabSections>
@@ -179,9 +178,7 @@ export function AboutTab() {
                                 disabled={installing}
                                 onClick={() => void handleInstallUpdate()}
                             >
-                                {installing ? (
-                                    <Spinner size="xs" className="text-white" />
-                                ) : null}
+                                {installing ? <Spinner size="xs" className="text-white" /> : null}
                                 {installing
                                     ? '安装中…'
                                     : `安装 ${formatUpdateVersion(available.version)}`}
@@ -271,10 +268,7 @@ export function AboutTab() {
             </SettingsSection>
 
             {APP_CREDIT_GROUPS.map((group) => (
-                <SettingsSection
-                    key={group.title}
-                    title={`鸣谢 · ${group.title}`}
-                >
+                <SettingsSection key={group.title} title={`鸣谢 · ${group.title}`}>
                     {group.items.map((item, index) => (
                         <FieldRow
                             key={item.name}
@@ -345,5 +339,3 @@ function StatusPill({
         </span>
     );
 }
-
-

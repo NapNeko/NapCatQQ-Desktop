@@ -25,7 +25,12 @@ export function TextField({
             value={text}
             disabled={disabled}
             onChange={(e) => setText(e.target.value)}
-            placeholder={placeholder ?? (field.defaultValue !== undefined ? `默认 ${valueText(field.defaultValue)}` : undefined)}
+            placeholder={
+                placeholder ??
+                (field.defaultValue !== undefined
+                    ? `默认 ${valueText(field.defaultValue)}`
+                    : undefined)
+            }
             aria-invalid={invalid || undefined}
             aria-describedby={describedBy}
             spellCheck={false}

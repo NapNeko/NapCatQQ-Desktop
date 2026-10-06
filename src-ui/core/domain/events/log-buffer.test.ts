@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { appendLine, buildHistoryEntries, canonicalizeLogEntry, stripAnsiEscapes } from './log-buffer';
+import {
+    appendLine,
+    buildHistoryEntries,
+    canonicalizeLogEntry,
+    stripAnsiEscapes,
+} from './log-buffer';
 import type { LogEntry } from './log-buffer';
 
 function one(raw: string): LogEntry {
@@ -68,7 +73,12 @@ describe('appendLine · Koishi', () => {
         expect(first.scope).toBe('telemetry');
         expect(first.text).toBe('');
         let logs = appendLine([], '2026-09-29 21:22:15 [E] app Error: boom', 'stdout', '00:00:00');
-        logs = appendLine(logs, '    at Object.<anonymous> (/app/index.js:1:1)', 'stdout', '00:00:00');
+        logs = appendLine(
+            logs,
+            '    at Object.<anonymous> (/app/index.js:1:1)',
+            'stdout',
+            '00:00:00',
+        );
         expect(logs[1].level).toBe('error');
         expect(logs[1].continuation).toBe(true);
     });
@@ -110,7 +120,9 @@ describe('appendLine · AstrBot', () => {
         );
         expect(entry.timestamp).toBe('18:55:54');
         expect(entry.level).toBe('info');
-        expect(entry.text).toBe('[Core] [config.astrbot_config:199]: Config key missing; added default.');
+        expect(entry.text).toBe(
+            '[Core] [config.astrbot_config:199]: Config key missing; added default.',
+        );
         expect(spanTexts(entry)).toEqual(['Config key missing; added default.']);
     });
 
@@ -119,8 +131,12 @@ describe('appendLine · AstrBot', () => {
             '[10:42:49.906] [astrbot_plugin_vikunja] [WARN] [v4.28.0] [astrbot-plugin-vikunja.main:228]: 未配置',
         );
         expect(plugin.level).toBe('warn');
-        expect(plugin.text).toBe('[astrbot_plugin_vikunja] [v4.28.0] [astrbot-plugin-vikunja.main:228]: 未配置');
-        const hypercorn = one('[2026-09-27 10:42:49 +0800] [20504] [INFO] Running on http://0.0.0.0:6185');
+        expect(plugin.text).toBe(
+            '[astrbot_plugin_vikunja] [v4.28.0] [astrbot-plugin-vikunja.main:228]: 未配置',
+        );
+        const hypercorn = one(
+            '[2026-09-27 10:42:49 +0800] [20504] [INFO] Running on http://0.0.0.0:6185',
+        );
         expect(hypercorn.timestamp).toBe('10:42:49');
         expect(hypercorn.level).toBe('info');
         expect(hypercorn.text).toBe('[20504] Running on http://0.0.0.0:6185');
@@ -198,7 +214,10 @@ describe('续行', () => {
 
     it('第一行前面没东西可接；自己写了等级的不算续行', () => {
         expect(one('Welcome to AstrBot CLI!').continuation).toBeUndefined();
-        const [, second] = buildHistoryEntries(['09-27 11:14:47 [INFO] a | b', '[Karin][INFO] heartbeat #1'], '00:00:00');
+        const [, second] = buildHistoryEntries(
+            ['09-27 11:14:47 [INFO] a | b', '[Karin][INFO] heartbeat #1'],
+            '00:00:00',
+        );
         expect(second.continuation).toBeUndefined();
         expect(second.level).toBe('info');
         expect(second.text).toBe('[Karin] heartbeat #1');

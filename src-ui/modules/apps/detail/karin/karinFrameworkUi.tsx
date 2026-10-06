@@ -62,7 +62,11 @@ function KarinFrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProps) 
         return (
             <>
                 {TYPED_TAB_VALUES.map((value) => (
-                    <TabsContent key={value} value={value} className="flex min-h-0 flex-1 flex-col pt-2">
+                    <TabsContent
+                        key={value}
+                        value={value}
+                        className="flex min-h-0 flex-1 flex-col pt-2"
+                    >
                         <PaneLoading text="正在读取配置…" />
                     </TabsContent>
                 ))}
@@ -74,7 +78,11 @@ function KarinFrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProps) 
         return (
             <>
                 {TYPED_TAB_VALUES.map((value) => (
-                    <TabsContent key={value} value={value} className="flex min-h-0 flex-1 flex-col pt-2">
+                    <TabsContent
+                        key={value}
+                        value={value}
+                        className="flex min-h-0 flex-1 flex-col pt-2"
+                    >
                         <PaneLoadError
                             message="读取配置失败"
                             onRetry={() => void form.reloadDiscard()}

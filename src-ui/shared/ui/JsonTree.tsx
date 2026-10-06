@@ -101,7 +101,9 @@ function computeAutoExpanded(root: unknown, maxDepth: number): Set<string> {
     const expanded = new Set<string>();
     if (maxDepth <= 0) return expanded;
     let budget = AUTO_EXPAND_ROW_BUDGET;
-    const queue: Array<{ value: unknown; id: string; depth: number }> = [{ value: root, id: ROOT_ID, depth: 0 }];
+    const queue: Array<{ value: unknown; id: string; depth: number }> = [
+        { value: root, id: ROOT_ID, depth: 0 },
+    ];
     // 广度优先：浅层先用预算，深层用不起了就收着
     for (let head = 0; head < queue.length && budget > 0; head += 1) {
         const { value, id, depth } = queue[head]!;
@@ -116,12 +118,14 @@ function computeAutoExpanded(root: unknown, maxDepth: number): Set<string> {
         if (kind === 'array') {
             const arr = value as unknown[];
             for (let i = 0; i < arr.length; i += 1) {
-                if (containerKind(arr[i])) queue.push({ value: arr[i], id: id + SEP + i, depth: depth + 1 });
+                if (containerKind(arr[i]))
+                    queue.push({ value: arr[i], id: id + SEP + i, depth: depth + 1 });
             }
         } else {
             const obj = value as Record<string, unknown>;
             for (const k of Object.keys(obj)) {
-                if (containerKind(obj[k])) queue.push({ value: obj[k], id: id + SEP + k, depth: depth + 1 });
+                if (containerKind(obj[k]))
+                    queue.push({ value: obj[k], id: id + SEP + k, depth: depth + 1 });
             }
         }
     }
@@ -133,7 +137,13 @@ function flatten(root: unknown, isExpanded: (id: string, depth: number) => boole
     const rows: Row[] = [];
     let truncated = false;
 
-    const walk = (value: unknown, id: string, depth: number, pathKey: string | number | null, parent: number) => {
+    const walk = (
+        value: unknown,
+        id: string,
+        depth: number,
+        pathKey: string | number | null,
+        parent: number,
+    ) => {
         if (rows.length >= MAX_ROWS) {
             truncated = true;
             return;
@@ -264,7 +274,10 @@ export function JsonTree({
         copyTimerRef.current = window.setTimeout(() => setCopiedId(null), 1500);
     }, []);
 
-    const autoExpanded = useMemo(() => computeAutoExpanded(value, defaultExpandDepth), [value, defaultExpandDepth]);
+    const autoExpanded = useMemo(
+        () => computeAutoExpanded(value, defaultExpandDepth),
+        [value, defaultExpandDepth],
+    );
     const rows = useMemo(
         () =>
             flatten(value, (id, depth) => {
@@ -384,7 +397,8 @@ export function JsonTree({
             onKeyDown={onKeyDown}
             onFocus={(e) => {
                 // 键盘 Tab 进来时先落在第一行，方向键才有起点
-                if (e.target === e.currentTarget && activeId === null && rows[0]) setActiveId(rows[0].id);
+                if (e.target === e.currentTarget && activeId === null && rows[0])
+                    setActiveId(rows[0].id);
             }}
             className={cn(
                 'min-h-0 flex-1 overflow-auto rounded-sm bg-inset font-mono text-xs outline-none',
@@ -484,17 +498,19 @@ function TreeRowView({
         const n = childCountOf(row.value);
         const open = row.container === 'array' ? '[' : '{';
         const close = row.container === 'array' ? ']' : '}';
-        valueNode = n === 0 ? (
-            <span className="text-text-tertiary">{open + close}</span>
-        ) : (
-            <span className="text-text-tertiary">
-                {`${open}…${close}`}
-                <span className="ml-1.5">{n} 项</span>
-            </span>
-        );
+        valueNode =
+            n === 0 ? (
+                <span className="text-text-tertiary">{open + close}</span>
+            ) : (
+                <span className="text-text-tertiary">
+                    {`${open}…${close}`}
+                    <span className="ml-1.5">{n} 项</span>
+                </span>
+            );
     } else if (longString && stringOpen) {
         const full = row.value as string;
-        const shown = full.length > LONG_STRING_RENDER_CAP ? full.slice(0, LONG_STRING_RENDER_CAP) : full;
+        const shown =
+            full.length > LONG_STRING_RENDER_CAP ? full.slice(0, LONG_STRING_RENDER_CAP) : full;
         valueNode = (
             <span className={cn(toneClass(row.value), 'min-w-0 whitespace-pre-wrap break-all')}>
                 {`"${shown}"`}
@@ -507,15 +523,21 @@ function TreeRowView({
         );
     } else if (longString) {
         const head = JSON.stringify((row.value as string).slice(0, LONG_STRING)).slice(0, -1);
-        valueNode = <span className={cn(toneClass(row.value), 'min-w-0 truncate')}>{`${head}…"`}</span>;
+        valueNode = (
+            <span className={cn(toneClass(row.value), 'min-w-0 truncate')}>{`${head}…"`}</span>
+        );
     } else {
-        valueNode = <span className={cn(toneClass(row.value), 'min-w-0 truncate')}>{primitiveText(row.value)}</span>;
+        valueNode = (
+            <span className={cn(toneClass(row.value), 'min-w-0 truncate')}>
+                {primitiveText(row.value)}
+            </span>
+        );
     }
 
     const handleValueClick = onValueClick
         ? () => {
-            onValueClick(context());
-        }
+              onValueClick(context());
+          }
         : undefined;
 
     return (
@@ -539,7 +561,11 @@ function TreeRowView({
                 lineHeight: `${ROW_HEIGHT}px`,
             }}
         >
-            <span className="flex shrink-0 items-center" style={{ height: ROW_HEIGHT, width: 12 }} aria-hidden>
+            <span
+                className="flex shrink-0 items-center"
+                style={{ height: ROW_HEIGHT, width: 12 }}
+                aria-hidden
+            >
                 {row.expandable && (
                     <ChevronRight
                         size={12}
@@ -554,14 +580,22 @@ function TreeRowView({
             </span>
             {keyLabel !== null && (
                 <>
-                    <span className={cn('shrink-0', keyIsIndex ? 'text-text-tertiary' : 'text-text-secondary')}>
+                    <span
+                        className={cn(
+                            'shrink-0',
+                            keyIsIndex ? 'text-text-tertiary' : 'text-text-secondary',
+                        )}
+                    >
                         {keyLabel}
                     </span>
                     <span className="shrink-0 text-text-tertiary">:</span>
                 </>
             )}
             <span
-                className={cn('flex min-w-0 items-start gap-2', handleValueClick && 'cursor-pointer hover:underline')}
+                className={cn(
+                    'flex min-w-0 items-start gap-2',
+                    handleValueClick && 'cursor-pointer hover:underline',
+                )}
                 onClick={handleValueClick}
             >
                 {valueNode}

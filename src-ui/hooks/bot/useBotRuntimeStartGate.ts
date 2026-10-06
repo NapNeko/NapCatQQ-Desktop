@@ -19,9 +19,7 @@ import { serverService } from '../../core/services/server.service';
 import { isTauri } from '../../core/ipc/transport';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 
-export function useBotRuntimeStartGate(
-    configByBot: Record<string, BotConfig | undefined | null>,
-): {
+export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | undefined | null>): {
     startBlock: (botId: string) => string | null;
     saveBlock: (config: BotConfig) => string | null;
 } {
@@ -41,7 +39,11 @@ export function useBotRuntimeStartGate(
             const req = getRuntimeRequirement(c);
             if (!req) continue;
             const hostId =
-                req.kind === 'local-direct' ? 'local' : req.kind === 'remote-direct' ? req.hostId : null;
+                req.kind === 'local-direct'
+                    ? 'local'
+                    : req.kind === 'remote-direct'
+                      ? req.hostId
+                      : null;
             if (!hostId) continue;
             const key = `${hostId}|${req.backend}`;
             if (!seen.has(key)) {

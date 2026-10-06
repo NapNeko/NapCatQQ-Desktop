@@ -82,7 +82,12 @@ export const MaiBotSchemaTab: React.FC<{
                 <div className="flex flex-wrap items-center gap-1">
                     {links.map((l) =>
                         'tab' in l ? (
-                            <Button key={l.label} size="sm" variant="ghost" onClick={() => onGoTab(l.tab, l.view)}>
+                            <Button
+                                key={l.label}
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onGoTab(l.tab, l.view)}
+                            >
                                 <ArrowRight size={13} />
                                 {l.label}
                             </Button>
@@ -117,7 +122,10 @@ export const MaiBotSchemaTab: React.FC<{
                         description={def.description}
                         actions={
                             collapsible ? (
-                                <AdvancedToggle open={open} onToggle={() => advancedSections.toggle(key)} />
+                                <AdvancedToggle
+                                    open={open}
+                                    onToggle={() => advancedSections.toggle(key)}
+                                />
                             ) : undefined
                         }
                     >

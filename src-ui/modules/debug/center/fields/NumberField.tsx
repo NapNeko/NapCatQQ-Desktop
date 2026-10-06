@@ -14,12 +14,21 @@ function rangeHint(min?: number, max?: number): string | undefined {
     return undefined;
 }
 
-export function NumberField({ field, value, onChange, invalid, inputId, describedBy, disabled }: FieldProps) {
+export function NumberField({
+    field,
+    value,
+    onChange,
+    invalid,
+    inputId,
+    describedBy,
+    disabled,
+}: FieldProps) {
     const [text, setText] = useTextDraft(value, valueText, (t) => coerceInput(field, t), onChange);
     const placeholder =
         field.defaultValue !== undefined
             ? `默认 ${valueText(field.defaultValue)}`
-            : (rangeHint(field.minimum, field.maximum) ?? (field.valueType === 'integer' ? '整数' : '数字'));
+            : (rangeHint(field.minimum, field.maximum) ??
+              (field.valueType === 'integer' ? '整数' : '数字'));
     return (
         <input
             id={inputId}
@@ -43,7 +52,11 @@ export function NumberField({ field, value, onChange, invalid, inputId, describe
             aria-invalid={invalid || undefined}
             aria-describedby={describedBy}
             autoComplete="off"
-            className={cn(FIELD_INPUT_CLASS, fieldBorder(invalid), 'font-mono text-[13px] tabular-nums')}
+            className={cn(
+                FIELD_INPUT_CLASS,
+                fieldBorder(invalid),
+                'font-mono text-[13px] tabular-nums',
+            )}
         />
     );
 }

@@ -72,11 +72,7 @@ function canUpdateWatch(row: NcdWatchServerRow, latestVersion: string | null): b
     return compareSemver(local, latestVersion) > 0;
 }
 
-export function NcdWatchRemoteSection({
-    settingsDirty,
-}: {
-    settingsDirty: boolean;
-}) {
+export function NcdWatchRemoteSection({ settingsDirty }: { settingsDirty: boolean }) {
     const { rows, loading, refetchAll } = useNcdWatchServers();
     const { snapshot: releases } = useReleases();
     const latestWatchVersion = releases.ncdWatch?.version ?? null;
@@ -225,23 +221,22 @@ export function NcdWatchRemoteSection({
                     settingsDirty
                         ? '设置未保存：同步会用磁盘上的旧通知配置，需先保存'
                         : loading && rows.length === 0
-                            ? '正在加载远端主机…'
-                            : rows.length === 0
-                                ? '还没有远端服务器；先在「远程」页添加'
-                                : installedCount > 0
-                                    ? `${rows.length} 台主机 · ${installedCount} 台已装 Watch${updateCount > 0
-                                        ? ` · ${updateCount} 台可更新${latestWatchVersion
-                                            ? `（${latestWatchVersion}）`
-                                            : ''
-                                        }`
+                          ? '正在加载远端主机…'
+                          : rows.length === 0
+                            ? '还没有远端服务器；先在「远程」页添加'
+                            : installedCount > 0
+                              ? `${rows.length} 台主机 · ${installedCount} 台已装 Watch${
+                                    updateCount > 0
+                                        ? ` · ${updateCount} 台可更新${
+                                              latestWatchVersion ? `（${latestWatchVersion}）` : ''
+                                          }`
                                         : latestWatchVersion
-                                            ? ` · 最新 ${latestWatchVersion}`
-                                            : ''
-                                    }`
-                                    : `${rows.length} 台主机 · 尚未安装 Watch${latestWatchVersion
-                                        ? ` · 可装 ${latestWatchVersion}`
-                                        : ''
-                                    }`
+                                          ? ` · 最新 ${latestWatchVersion}`
+                                          : ''
+                                }`
+                              : `${rows.length} 台主机 · 尚未安装 Watch${
+                                    latestWatchVersion ? ` · 可装 ${latestWatchVersion}` : ''
+                                }`
                 }
                 isLast={rows.length === 0}
             >
@@ -261,12 +256,7 @@ export function NcdWatchRemoteSection({
                         type="button"
                         variant="secondary"
                         size="sm"
-                        disabled={
-                            loading ||
-                            anyBusy ||
-                            rows.length === 0 ||
-                            settingsDirty
-                        }
+                        disabled={loading || anyBusy || rows.length === 0 || settingsDirty}
                         onClick={() => void syncAll()}
                     >
                         {bulkSyncing ? '同步中…' : '全部同步'}
@@ -277,10 +267,7 @@ export function NcdWatchRemoteSection({
             {rows.map((row, index) => {
                 const rowBusy = busy[row.serverId];
                 const syncDisabled =
-                    !!rowBusy ||
-                    bulkSyncing ||
-                    settingsDirty ||
-                    row.state === 'connecting';
+                    !!rowBusy || bulkSyncing || settingsDirty || row.state === 'connecting';
                 const actionDisabled = !!rowBusy || bulkSyncing;
                 const showUpdate = canUpdateWatch(row, latestWatchVersion);
                 return (
@@ -294,9 +281,7 @@ export function NcdWatchRemoteSection({
                             <span
                                 className={cn(
                                     'mr-1 h-1.5 w-1.5 shrink-0 rounded-full',
-                                    readyDot(row)
-                                        ? 'bg-success'
-                                        : 'bg-text-tertiary/45',
+                                    readyDot(row) ? 'bg-success' : 'bg-text-tertiary/45',
                                 )}
                                 aria-hidden
                             />

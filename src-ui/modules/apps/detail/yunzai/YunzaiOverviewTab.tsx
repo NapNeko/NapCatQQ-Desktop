@@ -8,7 +8,11 @@ import { Blocks, CheckCircle2, Circle, Crown, Link2, Play } from 'lucide-react';
 import { Button, Card, Spinner } from '../../../../shared/ui';
 import { yunzaiNeedsMaster } from '../../../../core/domain/apps/yunzaiConfig';
 import { appFrameworkService } from '../../../../core/services/app-framework.service';
-import { APP_STORE_GC_MS, APP_STORE_STALE_MS, appStoreInstalledKey } from '../../../../hooks/apps/appStoreQuery';
+import {
+    APP_STORE_GC_MS,
+    APP_STORE_STALE_MS,
+    appStoreInstalledKey,
+} from '../../../../hooks/apps/appStoreQuery';
 import { cn } from '../../../../shared/utils/cn';
 import type { AppInstance, YunzaiInstanceConfig } from '../../../../core/ipc/types';
 
@@ -53,7 +57,11 @@ export const YunzaiOverviewTab: React.FC<{
 
     const conds: { key: CondKey; ok: boolean; label: string }[] = [
         { key: 'link', ok: linked, label: linked ? 'QQ 已对接' : 'QQ 还没对接' },
-        { key: 'master', ok: !needsMaster, label: needsMaster ? '还没设主人' : `主人 ${masterCount} 个` },
+        {
+            key: 'master',
+            ok: !needsMaster,
+            label: needsMaster ? '还没设主人' : `主人 ${masterCount} 个`,
+        },
         { key: 'run', ok: running, label: running ? '运行中' : '已停止' },
     ];
     const missing = conds.filter((c) => !c.ok);
@@ -76,7 +84,8 @@ export const YunzaiOverviewTab: React.FC<{
         tone = 'todo';
         title = `还差 ${missing.length} 步就能在 QQ 上用`;
         if (next === 'link') {
-            sub = '先对接同一台机器上的 NapCat / SnowLuma 机器人：Bot 用反向 WS 连到云崽的 /OneBotv11';
+            sub =
+                '先对接同一台机器上的 NapCat / SnowLuma 机器人：Bot 用反向 WS 连到云崽的 /OneBotv11';
             actions = (
                 <Button size="sm" variant="primary" onClick={onOpenLink}>
                     <Link2 size={13} />
@@ -84,7 +93,8 @@ export const YunzaiOverviewTab: React.FC<{
                 </Button>
             );
         } else if (next === 'master') {
-            sub = '#更新、#重启、#设置 这些管理指令只认主人；在这里填 QQ 号，不用去群里发 #设置主人 再抄验证码';
+            sub =
+                '#更新、#重启、#设置 这些管理指令只认主人；在这里填 QQ 号，不用去群里发 #设置主人 再抄验证码';
             actions = (
                 <Button size="sm" variant="primary" onClick={() => onGoTab('permissions')}>
                     <Crown size={13} />
@@ -103,10 +113,18 @@ export const YunzaiOverviewTab: React.FC<{
                 <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
                     <div className="min-w-0 flex-1">
                         <h2 className="flex items-center gap-3 font-display text-[19px] font-semibold leading-snug text-text">
-                            <span className={cn('h-2 w-2 shrink-0 rounded-full ring-4', TONE_DOT[tone])} aria-hidden />
+                            <span
+                                className={cn(
+                                    'h-2 w-2 shrink-0 rounded-full ring-4',
+                                    TONE_DOT[tone],
+                                )}
+                                aria-hidden
+                            />
                             {title}
                         </h2>
-                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">{sub}</p>
+                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">
+                            {sub}
+                        </p>
                     </div>
                     {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
                 </div>
@@ -116,13 +134,20 @@ export const YunzaiOverviewTab: React.FC<{
                             key={c.key}
                             className={cn(
                                 'inline-flex items-center gap-1.5 text-xs',
-                                c.ok ? 'text-text-secondary' : c.key === next ? 'font-medium text-text' : 'text-text-tertiary',
+                                c.ok
+                                    ? 'text-text-secondary'
+                                    : c.key === next
+                                      ? 'font-medium text-text'
+                                      : 'text-text-tertiary',
                             )}
                         >
                             {c.ok ? (
                                 <CheckCircle2 size={14} className="text-success" />
                             ) : (
-                                <Circle size={14} className={c.key === next ? 'text-brand' : 'text-text-disabled'} />
+                                <Circle
+                                    size={14}
+                                    className={c.key === next ? 'text-brand' : 'text-text-disabled'}
+                                />
                             )}
                             {c.label}
                         </li>
@@ -130,7 +155,10 @@ export const YunzaiOverviewTab: React.FC<{
                 </ul>
             </Card>
 
-            <Card padding="none" className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <Card
+                padding="none"
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+            >
                 <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-text-secondary">
                     {missingPlugins.length > 0
                         ? `云崽本体只带基础指令，原神 / 星铁面板要装${missingPlugins.map((p) => p.label).join('和')}。插件页按插件索引分了功能、游戏、文游、单 JS 几类。`

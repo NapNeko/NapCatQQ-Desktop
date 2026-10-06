@@ -38,12 +38,12 @@ export function ReleaseNotesDialog({
     const publishedLabel =
         publishedAt && publishedAt > 0
             ? new Date(publishedAt * 1000).toLocaleString(undefined, {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-            })
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+              })
             : null;
 
     return (
@@ -90,11 +90,7 @@ export function ReleaseNotesDialog({
 
                 <DialogFooter>
                     {htmlUrl ? (
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => openExternal(htmlUrl)}
-                        >
+                        <Button size="sm" variant="secondary" onClick={() => openExternal(htmlUrl)}>
                             <ExternalLink size={14} strokeWidth={2} aria-hidden />
                             在浏览器打开
                         </Button>

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    initialNapcatLoginState,
-    reduceNapcatLogin,
-} from './login-aggregator';
+import { initialNapcatLoginState, reduceNapcatLogin } from './login-aggregator';
 
 describe('reduceNapcatLogin', () => {
     it('新 WebUI binding 不继承上个进程的在线状态', () => {

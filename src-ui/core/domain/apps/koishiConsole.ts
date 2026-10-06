@@ -8,7 +8,8 @@ export type KoishiSegment =
     | { kind: 'quote'; id?: string }
     | { kind: 'element'; name: string; raw: string };
 
-const TAG = /<([a-z][\w-]*)((?:\s+[\w-]+=(?:"[^"]*"|'[^']*'|[^\s>]+))*)\s*(\/?)>|<\/([a-z][\w-]*)>/g;
+const TAG =
+    /<([a-z][\w-]*)((?:\s+[\w-]+=(?:"[^"]*"|'[^']*'|[^\s>]+))*)\s*(\/?)>|<\/([a-z][\w-]*)>/g;
 
 function attrsOf(raw: string): Record<string, string> {
     const out: Record<string, string> = {};

@@ -6,7 +6,10 @@ import type { ServerStats } from '../../core/ipc/generated/domain/ServerStats';
 
 const INTERVAL_MS = 3000;
 
-export function useTerminalStats(sessionId: string, enabled: boolean): { stats: ServerStats | null; stale: boolean } {
+export function useTerminalStats(
+    sessionId: string,
+    enabled: boolean,
+): { stats: ServerStats | null; stale: boolean } {
     const [stats, setStats] = useState<ServerStats | null>(null);
     const [stale, setStale] = useState(false);
 

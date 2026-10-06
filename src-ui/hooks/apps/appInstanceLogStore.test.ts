@@ -131,12 +131,18 @@ describe('appInstanceLogStore', () => {
 
         hydrateAppInstanceLogs('m');
         sub.getHandler()!({ kind: 'app_instance_log_reset', instance_id: 'm' });
-        sub.getHandler()!({ kind: 'app_instance_log_appended', instance_id: 'm', line: '新一轮第一行' });
+        sub.getHandler()!({
+            kind: 'app_instance_log_appended',
+            instance_id: 'm',
+            line: '新一轮第一行',
+        });
         resolveTail({ lines: ['上一轮 1', '上一轮 2'], total_lines: 2 });
         await flush();
         await flush();
 
-        expect(appInstanceLogStore.getSnapshot().byId['m'].map((l) => l.text)).toEqual(['新一轮第一行']);
+        expect(appInstanceLogStore.getSnapshot().byId['m'].map((l) => l.text)).toEqual([
+            '新一轮第一行',
+        ]);
         unsub();
     });
 
@@ -160,12 +166,17 @@ describe('appInstanceLogStore', () => {
     });
 
     it('桌面端打开前就在跑的实例（没见过它的开头）：开页从盘上补', async () => {
-        tailLogMock.mockResolvedValueOnce({ lines: ['09-27 11:14:47 [INFO] a | 早先的'], total_lines: 1 });
+        tailLogMock.mockResolvedValueOnce({
+            lines: ['09-27 11:14:47 [INFO] a | 早先的'],
+            total_lines: 1,
+        });
         hydrateAppInstanceLogs('running-before');
         await flush();
         await flush();
         expect(tailLogMock).toHaveBeenCalledWith('running-before', 1000);
-        expect(appInstanceLogStore.getSnapshot().byId['running-before'].map((l) => l.text)).toEqual(['a | 早先的']);
+        expect(appInstanceLogStore.getSnapshot().byId['running-before'].map((l) => l.text)).toEqual(
+            ['a | 早先的'],
+        );
     });
 
     it('删除实例丢掉缓冲', async () => {

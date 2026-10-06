@@ -61,7 +61,9 @@ export function groupActions(list: DebugActionSummary[]): {
     const groups = CATEGORY_ORDER.flatMap((category) => {
         const actions = byCategory.get(category);
         if (!actions || actions.length === 0) return [];
-        return [{ category, label: CATEGORY_LABEL[category], actions: actions.sort(compareByName) }];
+        return [
+            { category, label: CATEGORY_LABEL[category], actions: actions.sort(compareByName) },
+        ];
     });
     return { groups, unsupported: unsupported.sort(compareByName) };
 }
@@ -92,7 +94,11 @@ function scoreOf(action: DebugActionSummary, q: string): number {
  * 空查询没有得分可比：最近用过的排最前（新的在前），其余按名字。
  * `recent` 里最新的在最前面。
  */
-export function searchActions(list: DebugActionSummary[], query: string, recent: string[]): DebugActionSummary[] {
+export function searchActions(
+    list: DebugActionSummary[],
+    query: string,
+    recent: string[],
+): DebugActionSummary[] {
     const q = query.trim().toLowerCase();
     const recency = new Map<string, number>();
     recent.forEach((name, i) => {
@@ -141,10 +147,13 @@ export function lookupSummary(
     action: string,
 ): { summary: DebugActionSummary | null; summaryFrom: string | null } {
     if (!action || !actions) return { summary: null, summaryFrom: null };
-    const find = (name: string) => actions.find((a) => a.name === name || a.aliases.includes(name)) ?? null;
+    const find = (name: string) =>
+        actions.find((a) => a.name === name || a.aliases.includes(name)) ?? null;
     const direct = find(action);
     if (direct) return { summary: direct, summaryFrom: null };
     const base = baseActionName(action);
     const viaBase = base !== action ? find(base) : null;
-    return viaBase ? { summary: viaBase, summaryFrom: viaBase.name } : { summary: null, summaryFrom: null };
+    return viaBase
+        ? { summary: viaBase, summaryFrom: viaBase.name }
+        : { summary: null, summaryFrom: null };
 }

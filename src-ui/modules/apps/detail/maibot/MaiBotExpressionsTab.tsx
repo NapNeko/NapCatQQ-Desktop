@@ -16,9 +16,22 @@ import {
     useMaiBotExpressions,
 } from '../../../../hooks/apps/useMaiBotLearning';
 import { ConfirmDelete, EmptyHint } from '../entityParts';
-import { Pager, ResourcePane, SearchBox, Segmented, SelectionBar, useDebounced, useSelection } from '../resourceParts';
+import {
+    Pager,
+    ResourcePane,
+    SearchBox,
+    Segmented,
+    SelectionBar,
+    useDebounced,
+    useSelection,
+} from '../resourceParts';
 import { MaiBotLiveGate, maibotLive } from './MaiBotLiveGate';
-import { ExpressionDialog, ExpressionReview, ExpressionRow, type ExpressionDraft } from './maibotExpressionParts';
+import {
+    ExpressionDialog,
+    ExpressionReview,
+    ExpressionRow,
+    type ExpressionDraft,
+} from './maibotExpressionParts';
 
 const PAGE_SIZE = 20;
 const ALL_CHATS = '__all__';
@@ -42,7 +55,13 @@ export const MaiBotExpressionsTab: React.FC<{
     const sel = useSelection<number>();
     const q = useDebounced(search.trim());
 
-    const query = { page, page_size: PAGE_SIZE, search: q, chat_id: chatId === ALL_CHATS ? '' : chatId, filter };
+    const query = {
+        page,
+        page_size: PAGE_SIZE,
+        search: q,
+        chat_id: chatId === ALL_CHATS ? '' : chatId,
+        filter,
+    };
     const list = useMaiBotExpressions(instance.id, query, live);
     const overview = useMaiBotExpressionOverview(instance.id, live);
     const reviewQueue = useMaiBotExpressions(
@@ -52,19 +71,30 @@ export const MaiBotExpressionsTab: React.FC<{
     );
     const act = useMaiBotExpressionAction(instance.id);
 
-    if (!live) return <MaiBotLiveGate status={status} what="学到的表达方式" onStart={onStart} starting={starting} />;
+    if (!live)
+        return (
+            <MaiBotLiveGate
+                status={status}
+                what="学到的表达方式"
+                onStart={onStart}
+                starting={starting}
+            />
+        );
 
     const ov = overview.data;
     const chats = ov?.chats ?? [];
     const usedChats = chats.filter((c) => ov?.used_chat_ids.includes(c.chat_id));
     const items = list.data?.items ?? [];
     const total = list.data?.total ?? 0;
-    const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
-        set(v);
-        setPage(1);
-        sel.clear();
-    };
-    const curate = (ids: number[], curated: boolean) => act.mutateAsync({ op: 'curate', ids, curated });
+    const resetPage =
+        <T,>(set: (v: T) => void) =>
+        (v: T) => {
+            set(v);
+            setPage(1);
+            sel.clear();
+        };
+    const curate = (ids: number[], curated: boolean) =>
+        act.mutateAsync({ op: 'curate', ids, curated });
     const pickedIds = [...sel.picked];
     const pageIds = items.map((e) => e.id);
     const pageAllPicked = pageIds.every((id) => sel.has(id));
@@ -73,11 +103,19 @@ export const MaiBotExpressionsTab: React.FC<{
         <>
             <Select
                 className="w-44 [&_button]:h-8 [&_button]:min-h-8 [&_button]:text-[12.5px]"
-                items={[{ value: ALL_CHATS, label: '全部聊天' }, ...usedChats.map((c) => ({ value: c.chat_id, label: c.chat_name }))]}
+                items={[
+                    { value: ALL_CHATS, label: '全部聊天' },
+                    ...usedChats.map((c) => ({ value: c.chat_id, label: c.chat_name })),
+                ]}
                 value={chatId}
                 onValueChange={resetPage(setChatId)}
             />
-            <SearchBox className="w-56" placeholder="搜情境或说法" value={search} onChange={resetPage(setSearch)} />
+            <SearchBox
+                className="w-56"
+                placeholder="搜情境或说法"
+                value={search}
+                onChange={resetPage(setSearch)}
+            />
             <Segmented
                 items={[
                     { value: 'all', label: '全部', count: ov?.total },
@@ -97,7 +135,13 @@ export const MaiBotExpressionsTab: React.FC<{
             <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => setDraft({ situation: '', style: '', chat_id: chatId === ALL_CHATS ? '' : chatId })}
+                onClick={() =>
+                    setDraft({
+                        situation: '',
+                        style: '',
+                        chat_id: chatId === ALL_CHATS ? '' : chatId,
+                    })
+                }
             >
                 <Plus size={13} />
                 新建
@@ -116,18 +160,38 @@ export const MaiBotExpressionsTab: React.FC<{
         <ResourcePane
             toolbar={toolbar}
             notice={notice}
-            footer={<Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={(p) => { setPage(p); sel.clear(); }} />}
+            footer={
+                <Pager
+                    page={page}
+                    pageSize={PAGE_SIZE}
+                    total={total}
+                    onPage={(p) => {
+                        setPage(p);
+                        sel.clear();
+                    }}
+                />
+            }
             overlay={
                 <SelectionBar
                     count={sel.picked.size}
                     onClear={sel.clear}
                     onSelectAll={pageAllPicked ? undefined : () => sel.setAll(pageIds, true)}
                 >
-                    <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => void curate(pickedIds, true).then(sel.clear)}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={act.isPending}
+                        onClick={() => void curate(pickedIds, true).then(sel.clear)}
+                    >
                         <Star size={13} />
                         精选
                     </Button>
-                    <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => void curate(pickedIds, false).then(sel.clear)}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={act.isPending}
+                        onClick={() => void curate(pickedIds, false).then(sel.clear)}
+                    >
                         <StarOff size={13} />
                         取消精选
                     </Button>
@@ -165,7 +229,12 @@ export const MaiBotExpressionsTab: React.FC<{
                             onPick={(shift) => sel.pick(item.id, shift, pageIds)}
                             onToggleCurated={() => void curate([item.id], !item.curated)}
                             onEdit={() =>
-                                setDraft({ id: item.id, situation: item.situation, style: item.style, chat_id: item.chat_id })
+                                setDraft({
+                                    id: item.id,
+                                    situation: item.situation,
+                                    style: item.style,
+                                    chat_id: item.chat_id,
+                                })
                             }
                             onDelete={() => setPendingDelete([item.id])}
                         />
@@ -184,13 +253,22 @@ export const MaiBotExpressionsTab: React.FC<{
                     const original = items.find((e) => e.id === draft.id);
                     const run =
                         draft.id === undefined
-                            ? act.mutateAsync({ op: 'create', situation: draft.situation, style: draft.style, chat_id: draft.chat_id, toast: true })
+                            ? act.mutateAsync({
+                                  op: 'create',
+                                  situation: draft.situation,
+                                  style: draft.style,
+                                  chat_id: draft.chat_id,
+                                  toast: true,
+                              })
                             : act.mutateAsync({
                                   op: 'update',
                                   id: draft.id,
                                   situation: draft.situation,
                                   style: draft.style,
-                                  chat_id: original && draft.chat_id !== original.chat_id ? draft.chat_id : null,
+                                  chat_id:
+                                      original && draft.chat_id !== original.chat_id
+                                          ? draft.chat_id
+                                          : null,
                               });
                     void run.then(() => setDraft(null));
                 }}
@@ -198,7 +276,11 @@ export const MaiBotExpressionsTab: React.FC<{
 
             <ConfirmDelete
                 open={pendingDelete !== null}
-                title={pendingDelete && pendingDelete.length > 1 ? `删掉这 ${pendingDelete.length} 条表达方式？` : '删掉这条表达方式？'}
+                title={
+                    pendingDelete && pendingDelete.length > 1
+                        ? `删掉这 ${pendingDelete.length} 条表达方式？`
+                        : '删掉这条表达方式？'
+                }
                 description="删掉就找不回来了。以后聊到类似的，麦麦可能又学回来。"
                 busy={act.isPending}
                 onCancel={() => setPendingDelete(null)}

@@ -49,7 +49,8 @@ export interface FormModel {
 type Json = Record<string, unknown>;
 type Scalar = string | number | boolean;
 
-const isRecord = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Json =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const ROLE_KIND: Record<string, FieldKind> = {
     group_id: 'group',
@@ -66,7 +67,14 @@ const ROLE_KIND: Record<string, FieldKind> = {
 };
 
 /** 走「数字优先」输入规则的控件：纯数字文本能转数字就转，不然留字符串 */
-const NUMERIC_TEXT_KINDS: ReadonlySet<FieldKind> = new Set(['group', 'friend', 'member', 'message_id', 'face', 'timestamp']);
+const NUMERIC_TEXT_KINDS: ReadonlySet<FieldKind> = new Set([
+    'group',
+    'friend',
+    'member',
+    'message_id',
+    'face',
+    'timestamp',
+]);
 
 /** allOf 里的片段并进来，外层自己写的键优先；只做浅合并，参数 schema 里 allOf 很少见 */
 function flatten(schema: Json): Json {
@@ -99,7 +107,8 @@ function collectTypes(schema: Json, out: Set<string>, depth = 0): void {
     if (typeof t === 'undefined') {
         if (isRecord(schema.properties)) out.add('object');
         else if (schema.items !== undefined) out.add('array');
-        else if (Array.isArray(schema.enum)) for (const v of schema.enum) out.add(jsonTypeOfValue(v));
+        else if (Array.isArray(schema.enum))
+            for (const v of schema.enum) out.add(jsonTypeOfValue(v));
         else if ('const' in schema) out.add(jsonTypeOfValue(schema.const));
     }
     for (const b of branchesOf(schema)) collectTypes(b, out, depth + 1);
@@ -119,7 +128,8 @@ function enumEntriesOf(schema: Json, depth = 0): Array<{ value: Scalar; label: s
         return schema.enum.filter(isScalar).map((value) => ({ value, label: String(value) }));
     }
     if ('const' in schema && isScalar(schema.const)) {
-        const label = typeof schema.title === 'string' && schema.title ? schema.title : String(schema.const);
+        const label =
+            typeof schema.title === 'string' && schema.title ? schema.title : String(schema.const);
         return [{ value: schema.const, label }];
     }
     const branches = branchesOf(schema);
@@ -150,13 +160,15 @@ function numericValueType(types: ReadonlySet<string>): 'number' | 'integer' {
 function enumValueType(values: Scalar[]): FormField['valueType'] {
     if (values.every((v) => typeof v === 'boolean')) return 'boolean';
     if (values.every((v) => typeof v === 'string')) return 'string';
-    if (values.every((v) => typeof v === 'number')) return values.every(Number.isInteger) ? 'integer' : 'number';
+    if (values.every((v) => typeof v === 'number'))
+        return values.every(Number.isInteger) ? 'integer' : 'number';
     return 'any';
 }
 
 function itemKindOf(schema: Json): 'text' | 'number' | null {
     // items 可能写在 anyOf 的数组分支里（anyOf[array, null]）
-    const holder = schema.items !== undefined ? schema : branchesOf(schema).find((b) => b.items !== undefined);
+    const holder =
+        schema.items !== undefined ? schema : branchesOf(schema).find((b) => b.items !== undefined);
     const items = holder?.items;
     if (!isRecord(items)) return null;
     const types = new Set<string>();
@@ -197,7 +209,12 @@ function fieldFor(name: string, rawSchema: unknown, required: boolean): FormFiel
     } else if (hasArray && !hasObject && types.size === 1 && itemKindOf(schema)) {
         kind = 'array';
         itemKind = itemKindOf(schema) ?? 'text';
-    } else if (hasObject || hasArray || types.size === 0 || (types.size === 1 && types.has('null'))) {
+    } else if (
+        hasObject ||
+        hasArray ||
+        types.size === 0 ||
+        (types.size === 1 && types.has('null'))
+    ) {
         kind = 'json';
     } else {
         kind = 'text';
@@ -229,7 +246,9 @@ function fieldFor(name: string, rawSchema: unknown, required: boolean): FormFiel
         acceptsNumber = hasNumber;
     }
 
-    const defaultValue = firstDefined(schema, (s) => (s.default !== undefined ? s.default : undefined));
+    const defaultValue = firstDefined(schema, (s) =>
+        s.default !== undefined ? s.default : undefined,
+    );
     const field: FormField = {
         name,
         // 参数名本身就是开发者要对着上游文档找的东西，标题（title）不拿来顶替
@@ -279,19 +298,26 @@ export function buildFormModel(schema: Record<string, unknown> | null | undefine
     if (!isRecord(schema)) return { fields: [], allowsExtra: true };
     const root = flatten(schema);
     const properties = isRecord(root.properties) ? root.properties : {};
-    const requiredNames = Array.isArray(root.required) ? root.required.filter((r): r is string => typeof r === 'string') : [];
+    const requiredNames = Array.isArray(root.required)
+        ? root.required.filter((r): r is string => typeof r === 'string')
+        : [];
     const requiredSet = new Set(requiredNames);
 
     const requiredFields: FormField[] = [];
     const optionalFields: FormField[] = [];
     for (const [name, prop] of Object.entries(properties)) {
-        (requiredSet.has(name) ? requiredFields : optionalFields).push(fieldFor(name, prop, requiredSet.has(name)));
+        (requiredSet.has(name) ? requiredFields : optionalFields).push(
+            fieldFor(name, prop, requiredSet.has(name)),
+        );
     }
     // required 里点了名、properties 里却没定义的：照样要用户填，只能当未知类型
     for (const name of requiredNames) {
         if (!(name in properties)) requiredFields.push(fieldFor(name, undefined, true));
     }
-    return { fields: [...requiredFields, ...optionalFields], allowsExtra: root.additionalProperties !== false };
+    return {
+        fields: [...requiredFields, ...optionalFields],
+        allowsExtra: root.additionalProperties !== false,
+    };
 }
 
 const NUMBER_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
@@ -301,7 +327,12 @@ const SIGNED_DIGITS = /^-?\d+$/;
  * 允许带负号的 id 类控件。SnowLuma 的 message_id 是有符号 32 位整数，会出现负数；
  * 群号 / QQ 号实际不会为负，但放行负号没有坏处，省得为它们再分一套规则。
  */
-const SIGNED_ID_KINDS: ReadonlySet<FieldKind> = new Set(['group', 'friend', 'member', 'message_id']);
+const SIGNED_ID_KINDS: ReadonlySet<FieldKind> = new Set([
+    'group',
+    'friend',
+    'member',
+    'message_id',
+]);
 
 function numberFromText(raw: string): number | undefined {
     const text = raw.trim();
@@ -333,7 +364,8 @@ export function coerceInput(field: FormField, raw: string): unknown {
     if (raw === '') return undefined;
     switch (field.kind) {
         case 'number': {
-            if (field.acceptsString && SIGNED_DIGITS.test(raw.trim())) return digitsToNumber(raw, field) ?? raw;
+            if (field.acceptsString && SIGNED_DIGITS.test(raw.trim()))
+                return digitsToNumber(raw, field) ?? raw;
             return numberFromText(raw) ?? raw;
         }
         case 'boolean': {

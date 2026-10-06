@@ -65,7 +65,9 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
         dockerActionStore.markPulling(hostId, flavor, id);
         const mirrorArg = mirror === 'auto' ? null : mirror;
         const mirrorHint =
-            mirror === 'auto' ? '自动换源' : MIRROR_OPTIONS.find((o) => o.id === mirror)?.label ?? mirror;
+            mirror === 'auto'
+                ? '自动换源'
+                : (MIRROR_OPTIONS.find((o) => o.id === mirror)?.label ?? mirror);
         pushInfoBar({
             key: `docker-deploy-start:${id}`,
             tone: 'info',
@@ -146,7 +148,9 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                                     <span className="text-[12.5px] font-medium text-text">
                                         {opt.label}
                                     </span>
-                                    <span className="text-[11px] text-text-tertiary">{opt.hint}</span>
+                                    <span className="text-[11px] text-text-tertiary">
+                                        {opt.hint}
+                                    </span>
                                 </button>
                             </li>
                         ))}

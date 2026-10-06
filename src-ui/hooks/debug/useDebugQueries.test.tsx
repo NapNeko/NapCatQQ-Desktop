@@ -33,10 +33,19 @@ const subscribeDomainEvents = vi.fn((handler: (event: DomainEvent) => void) => {
 });
 
 vi.mock('../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy({}, { get: (_t, key: string) => (...args: unknown[]) => (service as Record<string, (...a: unknown[]) => unknown>)[key](...args) }),
+    onebotDebugService: new Proxy(
+        {},
+        {
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+        },
+    ),
 }));
 vi.mock('../../core/services/domain-event-hub', () => ({
-    subscribeDomainEvents: (handler: (event: DomainEvent) => void) => subscribeDomainEvents(handler),
+    subscribeDomainEvents: (handler: (event: DomainEvent) => void) =>
+        subscribeDomainEvents(handler),
 }));
 vi.mock('../ui/pushErrorBar', () => ({
     pushErrorBar: (...args: unknown[]) => pushErrorBar(...args),
@@ -49,7 +58,11 @@ import { useDebugTargets } from './useDebugTargets';
 import { useDebugChannels, useTestChannel } from './useDebugChannels';
 import { _resetDebugCatalogForTests, useDebugCatalog } from './useDebugCatalog';
 import { useDebugContacts } from './useDebugContacts';
-import { useDebugCollections, useImportCollections, useSaveCollections } from './useDebugCollections';
+import {
+    useDebugCollections,
+    useImportCollections,
+    useSaveCollections,
+} from './useDebugCollections';
 import { debugWorkspaceStore } from './debugWorkspaceStore';
 import { debugCatalogPrefix, debugChannelsKey, debugSpecPrefix, debugTargetsKey } from './keys';
 
@@ -111,7 +124,12 @@ describe('useDebugTargets', () => {
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugSpecPrefix('b1') });
 
         invalidate.mockClear();
-        fire({ kind: 'napcat_webui_available', bot_id: 'b2', port: 6099, token: 't' } as DomainEvent);
+        fire({
+            kind: 'napcat_webui_available',
+            bot_id: 'b2',
+            port: 6099,
+            token: 't',
+        } as DomainEvent);
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugChannelsKey('b2') });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugCatalogPrefix('b2') });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugSpecPrefix('b2') });
@@ -119,7 +137,11 @@ describe('useDebugTargets', () => {
 
         invalidate.mockClear();
         fire({ kind: 'snowluma_uin_detected', bot_id: 'b3', uin: '1' } as DomainEvent);
-        fire({ kind: 'snowluma_login_state_changed', bot_id: 'b4', state: 'LoggedIn' } as unknown as DomainEvent);
+        fire({
+            kind: 'snowluma_login_state_changed',
+            bot_id: 'b4',
+            state: 'LoggedIn',
+        } as unknown as DomainEvent);
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugChannelsKey('b3') });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugChannelsKey('b4') });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugCatalogPrefix('b3') });
@@ -131,7 +153,11 @@ describe('useDebugTargets', () => {
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugTargetsKey });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugCatalogPrefix('b5') });
         invalidate.mockClear();
-        fire({ kind: 'napcat_login_invalidated', bot_id: 'b5', reason: 'KickedOffline' } as unknown as DomainEvent);
+        fire({
+            kind: 'napcat_login_invalidated',
+            bot_id: 'b5',
+            reason: 'KickedOffline',
+        } as unknown as DomainEvent);
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugTargetsKey });
         expect(invalidate).not.toHaveBeenCalledWith({ queryKey: debugCatalogPrefix('b5') });
 
@@ -143,7 +169,11 @@ describe('useDebugTargets', () => {
     it('读取失败弹错误条', async () => {
         service.targets.mockRejectedValue('后端没起来');
         renderHook(() => useDebugTargets(), { wrapper: wrapperFor(makeClient()) });
-        await waitFor(() => expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-targets' })));
+        await waitFor(() =>
+            expect(pushErrorBar).toHaveBeenCalledWith(
+                expect.objectContaining({ key: 'debug-targets' }),
+            ),
+        );
     });
 });
 
@@ -155,13 +185,32 @@ describe('useTestChannel', () => {
             auto_call: { kind: 'internal' },
             auto_events: { kind: 'internal' },
             channels: [
-                { id: { kind: 'internal' }, label: '内部', can_call: true, can_receive: true, status: { kind: 'unknown' }, endpoint: null, token_hint: null },
-                { id: { kind: 'http', name: 'main' }, label: 'HTTP', can_call: true, can_receive: false, status: { kind: 'unknown' }, endpoint: null, token_hint: null },
+                {
+                    id: { kind: 'internal' },
+                    label: '内部',
+                    can_call: true,
+                    can_receive: true,
+                    status: { kind: 'unknown' },
+                    endpoint: null,
+                    token_hint: null,
+                },
+                {
+                    id: { kind: 'http', name: 'main' },
+                    label: 'HTTP',
+                    can_call: true,
+                    can_receive: false,
+                    status: { kind: 'unknown' },
+                    endpoint: null,
+                    token_hint: null,
+                },
             ],
         };
         const after: DebugChannels = {
             ...before,
-            channels: [before.channels[0], { ...before.channels[1], status: { kind: 'available' } }],
+            channels: [
+                before.channels[0],
+                { ...before.channels[1], status: { kind: 'available' } },
+            ],
         };
         service.channels.mockResolvedValueOnce(before).mockResolvedValue(after);
         const wrapper = wrapperFor(client);
@@ -172,14 +221,21 @@ describe('useTestChannel', () => {
         service.testChannel.mockResolvedValue(after.channels[1]);
         const test = renderHook(() => useTestChannel(), { wrapper });
         await act(async () => {
-            await test.result.current.mutateAsync({ botId: 'b1', channel: { kind: 'http', name: 'main' } });
+            await test.result.current.mutateAsync({
+                botId: 'b1',
+                channel: { kind: 'http', name: 'main' },
+            });
         });
 
         expect(invalidate).toHaveBeenCalledWith({ queryKey: debugChannelsKey('b1') });
         await waitFor(() =>
-            expect(client.getQueryData<DebugChannels>(debugChannelsKey('b1'))?.channels[1].status).toEqual({ kind: 'available' }),
+            expect(
+                client.getQueryData<DebugChannels>(debugChannelsKey('b1'))?.channels[1].status,
+            ).toEqual({ kind: 'available' }),
         );
-        expect(client.getQueryData<DebugChannels>(debugChannelsKey('b1'))?.channels[0].status).toEqual({ kind: 'unknown' });
+        expect(
+            client.getQueryData<DebugChannels>(debugChannelsKey('b1'))?.channels[0].status,
+        ).toEqual({ kind: 'unknown' });
         expect(service.channels).toHaveBeenCalledTimes(2);
     });
 });
@@ -198,10 +254,13 @@ describe('useDebugCatalog', () => {
     });
 
     it('Bot 的运行状态翻转时重取；没翻转时用缓存', async () => {
-        service.catalog.mockResolvedValueOnce(catalog('snapshot')).mockResolvedValueOnce(catalog('live'));
+        service.catalog
+            .mockResolvedValueOnce(catalog('snapshot'))
+            .mockResolvedValueOnce(catalog('live'));
         const client = makeClient();
         const { result, rerender } = renderHook(
-            (p: { running: boolean }) => useDebugCatalog({ bot_id: 'b1', backend: 'napcat', running: p.running }),
+            (p: { running: boolean }) =>
+                useDebugCatalog({ bot_id: 'b1', backend: 'napcat', running: p.running }),
             { wrapper: wrapperFor(client), initialProps: { running: false } },
         );
         await waitFor(() => expect(result.current.data?.source).toBe('snapshot'));
@@ -217,9 +276,12 @@ describe('useDebugCatalog', () => {
 
     it('没选 Bot 时按后端看内置快照', async () => {
         service.catalog.mockResolvedValue(catalog('snapshot'));
-        const { result } = renderHook(() => useDebugCatalog({ bot_id: null, backend: 'snowluma' }), {
-            wrapper: wrapperFor(makeClient()),
-        });
+        const { result } = renderHook(
+            () => useDebugCatalog({ bot_id: null, backend: 'snowluma' }),
+            {
+                wrapper: wrapperFor(makeClient()),
+            },
+        );
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(service.catalog).toHaveBeenCalledWith(null, 'snowluma');
     });
@@ -232,16 +294,21 @@ describe('useDebugCatalog', () => {
                 .mockResolvedValueOnce(catalog('live'))
                 .mockResolvedValue(catalog('live'));
             const client = makeClient();
-            const { result } = renderHook(() => useDebugCatalog({ bot_id: 'b1', backend: 'napcat', running: true }), {
-                wrapper: wrapperFor(client),
-            });
+            const { result } = renderHook(
+                () => useDebugCatalog({ bot_id: 'b1', backend: 'napcat', running: true }),
+                {
+                    wrapper: wrapperFor(client),
+                },
+            );
             await vi.waitFor(() => expect(result.current.data?.source).toBe('snapshot'));
             expect(service.catalog).toHaveBeenCalledTimes(1);
 
             // 还没到下一分钟到不了第二次；过一分钟自动再问，数据换成在线版
             await vi.advanceTimersByTimeAsync(59_000);
             expect(service.catalog).toHaveBeenCalledTimes(1);
-            await vi.waitFor(() => expect(result.current.data?.source).toBe('live'), { timeout: 90_000 });
+            await vi.waitFor(() => expect(result.current.data?.source).toBe('live'), {
+                timeout: 90_000,
+            });
             expect(service.catalog).toHaveBeenCalledTimes(2);
 
             // 换到在线版之后不再定时重拉
@@ -259,9 +326,13 @@ describe('useDebugCatalog', () => {
             renderHook(() => useDebugCatalog({ bot_id: 'b1', backend: 'napcat', running: false }), {
                 wrapper: wrapperFor(makeClient()),
             });
-            await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(0);
+            });
             expect(service.catalog).toHaveBeenCalledTimes(1);
-            await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(180_000);
+            });
             expect(service.catalog).toHaveBeenCalledTimes(1);
         } finally {
             vi.useRealTimers();
@@ -291,7 +362,10 @@ describe('useDebugContacts', () => {
     });
 
     it('群列表：按当前调用通道发 picker 调用，转成选项', async () => {
-        debugWorkspaceStore.setChannelChoice('b1', { call: { kind: 'http', name: 'main' }, events: { kind: 'auto' } });
+        debugWorkspaceStore.setChannelChoice('b1', {
+            call: { kind: 'http', name: 'main' },
+            events: { kind: 'auto' },
+        });
         service.call.mockResolvedValue(
             okData([
                 { group_id: 100, group_name: '测试群', member_count: 30 },
@@ -299,12 +373,19 @@ describe('useDebugContacts', () => {
                 { group_name: '没有群号的行' },
             ]),
         );
-        const { result } = renderHook(() => useDebugContacts({ bot_id: 'b1', running: true }, 'group'), {
-            wrapper: wrapperFor(makeClient()),
-        });
+        const { result } = renderHook(
+            () => useDebugContacts({ bot_id: 'b1', running: true }, 'group'),
+            {
+                wrapper: wrapperFor(makeClient()),
+            },
+        );
 
         await waitFor(() => expect(result.current.options).toHaveLength(2));
-        expect(result.current.options[0]).toEqual({ id: 100, label: '测试群', hint: '100 · 30 人' });
+        expect(result.current.options[0]).toEqual({
+            id: 100,
+            label: '测试群',
+            hint: '100 · 30 人',
+        });
         expect(result.current.options[1]).toEqual({ id: 200, label: '200', hint: '200' });
         expect(result.current.error).toBeNull();
         expect(service.call).toHaveBeenCalledWith(
@@ -327,7 +408,8 @@ describe('useDebugContacts', () => {
         );
         const client = makeClient();
         const { result, rerender } = renderHook(
-            (p: { groupId: string }) => useDebugContacts({ bot_id: 'b1', running: true }, 'member', p.groupId),
+            (p: { groupId: string }) =>
+                useDebugContacts({ bot_id: 'b1', running: true }, 'member', p.groupId),
             { wrapper: wrapperFor(client), initialProps: { groupId: '' } },
         );
         expect(service.call).not.toHaveBeenCalled();
@@ -335,8 +417,15 @@ describe('useDebugContacts', () => {
 
         rerender({ groupId: '100' });
         await waitFor(() => expect(result.current.options).toHaveLength(2));
-        expect(service.call.mock.calls[0][0]).toMatchObject({ action: 'get_group_member_list', params: { group_id: 100 } });
-        expect(result.current.options[0]).toEqual({ id: 1, label: '名片', hint: '昵称 · 1 · 管理员' });
+        expect(service.call.mock.calls[0][0]).toMatchObject({
+            action: 'get_group_member_list',
+            params: { group_id: 100 },
+        });
+        expect(result.current.options[0]).toEqual({
+            id: 1,
+            label: '名片',
+            hint: '昵称 · 1 · 管理员',
+        });
         expect(result.current.options[1]).toEqual({ id: 2, label: '路人', hint: '2' });
     });
 
@@ -345,9 +434,12 @@ describe('useDebugContacts', () => {
             request_id: 'r',
             result: { kind: 'err', error: { kind: 'timeout', ms: 15000 } },
         } satisfies DebugCallResponse);
-        const { result } = renderHook(() => useDebugContacts({ bot_id: 'b1', running: true }, 'friend'), {
-            wrapper: wrapperFor(makeClient()),
-        });
+        const { result } = renderHook(
+            () => useDebugContacts({ bot_id: 'b1', running: true }, 'friend'),
+            {
+                wrapper: wrapperFor(makeClient()),
+            },
+        );
 
         await waitFor(() => expect(result.current.error).not.toBeNull());
         expect(result.current.options).toEqual([]);
@@ -370,7 +462,10 @@ describe('useSaveCollections', () => {
 
     // 在渲染里就把要看的字段读出来：react-query 只在被读过的字段变化时才让组件重渲染。
     // folderCounts 记下每次渲染看到的文件夹数，用来确认界面有没有被拉回旧值
-    const readCollections = (wrapper: ReturnType<typeof wrapperFor>, folderCounts: Array<number | null> = []) =>
+    const readCollections = (
+        wrapper: ReturnType<typeof wrapperFor>,
+        folderCounts: Array<number | null> = [],
+    ) =>
         renderHook(
             () => {
                 const { data, isSuccess } = useDebugCollections();
@@ -395,7 +490,11 @@ describe('useSaveCollections', () => {
         await act(async () => {
             rejectSave('磁盘满了');
         });
-        await waitFor(() => expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-collections-save' })));
+        await waitFor(() =>
+            expect(pushErrorBar).toHaveBeenCalledWith(
+                expect.objectContaining({ key: 'debug-collections-save' }),
+            ),
+        );
         await waitFor(() => expect(read.result.current.data).toEqual(base));
         await waitFor(() => expect(service.collections).toHaveBeenCalledTimes(2));
     });
@@ -458,7 +557,9 @@ describe('useImportCollections', () => {
         service.pickCollectionsFile.mockResolvedValue({ path: 'C:/a.json', ignored: 2 });
         service.importCollections.mockResolvedValue(merged);
         service.collections.mockResolvedValue(merged);
-        const { result } = renderHook(() => useImportCollections(), { wrapper: wrapperFor(makeClient()) });
+        const { result } = renderHook(() => useImportCollections(), {
+            wrapper: wrapperFor(makeClient()),
+        });
 
         await act(async () => {
             await result.current.mutateAsync();
@@ -469,18 +570,24 @@ describe('useImportCollections', () => {
         expect(pushInfoBar).toHaveBeenCalledWith(
             expect.objectContaining({ key: 'debug-import-multi', tone: 'warning' }),
         );
-        expect(pushInfoBar).toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-collections-import' }));
+        expect(pushInfoBar).toHaveBeenCalledWith(
+            expect.objectContaining({ key: 'debug-collections-import' }),
+        );
     });
 
     it('只选了一个文件不提示；取消选择什么也不做', async () => {
         service.importCollections.mockResolvedValue(merged);
-        const { result } = renderHook(() => useImportCollections(), { wrapper: wrapperFor(makeClient()) });
+        const { result } = renderHook(() => useImportCollections(), {
+            wrapper: wrapperFor(makeClient()),
+        });
 
         service.pickCollectionsFile.mockResolvedValue({ path: 'C:/a.json', ignored: 0 });
         await act(async () => {
             await result.current.mutateAsync();
         });
-        expect(pushInfoBar).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'debug-import-multi' }));
+        expect(pushInfoBar).not.toHaveBeenCalledWith(
+            expect.objectContaining({ key: 'debug-import-multi' }),
+        );
 
         service.importCollections.mockClear();
         pushInfoBar.mockClear();

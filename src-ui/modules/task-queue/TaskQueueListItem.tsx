@@ -76,7 +76,11 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
     const nowMs = useNowMs(busy && endedAt === undefined);
     const elapsed =
         item.startedAt > 0
-            ? formatElapsedCompact(item.startedAt, endedAt, endedAt === undefined ? nowMs : undefined)
+            ? formatElapsedCompact(
+                  item.startedAt,
+                  endedAt,
+                  endedAt === undefined ? nowMs : undefined,
+              )
             : '';
     const { tile } = taskKindIconClasses(item.kind, selected);
     const canDelete = isTerminalTaskStatus(item.status) && onDelete;

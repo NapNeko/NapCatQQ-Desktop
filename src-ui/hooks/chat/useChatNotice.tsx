@@ -4,7 +4,13 @@ import { pushInfoBar, removeSoonInfoBar } from '../ui/globalInfoBarStore';
 import { Button } from '../../shared/ui/Button';
 import type { InfoBarTone } from '../../shared/ui/InfoBar';
 
-export function useChatNotice(key: string, title: string, message: string | null | undefined, onRetry?: () => void, tone: InfoBarTone = 'danger') {
+export function useChatNotice(
+    key: string,
+    title: string,
+    message: string | null | undefined,
+    onRetry?: () => void,
+    tone: InfoBarTone = 'danger',
+) {
     const retry = useRef(onRetry);
     retry.current = onRetry;
     const canRetry = !!onRetry;
@@ -15,7 +21,11 @@ export function useChatNotice(key: string, title: string, message: string | null
             tone,
             title,
             content: message,
-            children: canRetry ? <Button variant="ghost" size="sm" onClick={() => retry.current?.()}>重试</Button> : undefined,
+            children: canRetry ? (
+                <Button variant="ghost" size="sm" onClick={() => retry.current?.()}>
+                    重试
+                </Button>
+            ) : undefined,
         });
         return () => removeSoonInfoBar(id);
     }, [key, title, message, canRetry, tone]);

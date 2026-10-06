@@ -10,12 +10,21 @@ describe('pickSpan', () => {
     });
 
     it('shift click spans from the last clicked row, either direction', () => {
-        expect(pickSpan(new Set([12]), 12, 14, true, order)).toEqual({ keys: [12, 13, 14], on: true });
-        expect(pickSpan(new Set([14]), 14, 11, true, order)).toEqual({ keys: [11, 12, 13, 14], on: true });
+        expect(pickSpan(new Set([12]), 12, 14, true, order)).toEqual({
+            keys: [12, 13, 14],
+            on: true,
+        });
+        expect(pickSpan(new Set([14]), 14, 11, true, order)).toEqual({
+            keys: [11, 12, 13, 14],
+            on: true,
+        });
     });
 
     it('shift click on a picked row clears the whole span', () => {
-        expect(pickSpan(new Set([12, 13, 14]), 12, 14, true, order)).toEqual({ keys: [12, 13, 14], on: false });
+        expect(pickSpan(new Set([12, 13, 14]), 12, 14, true, order)).toEqual({
+            keys: [12, 13, 14],
+            on: false,
+        });
     });
 
     it('falls back to a single row when there is no anchor on this page', () => {

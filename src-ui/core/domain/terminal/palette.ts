@@ -33,9 +33,22 @@ export interface TerminalPalette {
 
 type Ansi16 = Pick<
     TerminalPalette,
-    | 'black' | 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' | 'white'
-    | 'brightBlack' | 'brightRed' | 'brightGreen' | 'brightYellow' | 'brightBlue'
-    | 'brightMagenta' | 'brightCyan' | 'brightWhite'
+    | 'black'
+    | 'red'
+    | 'green'
+    | 'yellow'
+    | 'blue'
+    | 'magenta'
+    | 'cyan'
+    | 'white'
+    | 'brightBlack'
+    | 'brightRed'
+    | 'brightGreen'
+    | 'brightYellow'
+    | 'brightBlue'
+    | 'brightMagenta'
+    | 'brightCyan'
+    | 'brightWhite'
 >;
 
 const DARK_ANSI: Ansi16 = {
@@ -118,7 +131,10 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 export function buildPalette(input: PaletteInput, scheme: 'auto' | 'dark'): TerminalPalette {
-    const base = scheme === 'dark' ? FIXED_DARK : { background: input.background, foreground: input.foreground };
+    const base =
+        scheme === 'dark'
+            ? FIXED_DARK
+            : { background: input.background, foreground: input.foreground };
     const dark = isDarkColor(base.background);
     const ansi = dark ? DARK_ANSI : LIGHT_ANSI;
     return {

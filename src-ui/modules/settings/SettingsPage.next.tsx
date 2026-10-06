@@ -21,11 +21,7 @@ import { DesktopLogToolbar } from './tabs/DesktopLogToolbar';
 import { AboutTab } from './tabs/AboutTab';
 import { consumeSettingsLogTab } from '../../hooks/task-queue/settingsLogNavigation';
 import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
-import {
-    draftFromBackendAndPrefs,
-    isSettingsDirty,
-    type SettingsDraft,
-} from './settings-draft';
+import { draftFromBackendAndPrefs, isSettingsDirty, type SettingsDraft } from './settings-draft';
 
 export function SettingsPageNext() {
     const { bootstrap, openDataDir, isOpeningDir } = useBootstrap();
@@ -55,8 +51,7 @@ export function SettingsPageNext() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settings]);
 
-    const dirty =
-        draft !== null && settings !== null && isSettingsDirty(draft, settings);
+    const dirty = draft !== null && settings !== null && isSettingsDirty(draft, settings);
 
     const patchDraft = (patch: Partial<SettingsDraft>) =>
         setDraft((cur) => (cur ? { ...cur, ...patch } : cur));
@@ -72,19 +67,13 @@ export function SettingsPageNext() {
     return (
         <div className="flex h-full min-h-0 w-full flex-col">
             <header className="shrink-0 pb-3 pt-2">
-                <h1 className="font-display text-xl font-semibold leading-none text-text">
-                    设置
-                </h1>
+                <h1 className="font-display text-xl font-semibold leading-none text-text">设置</h1>
                 <p className="mt-1.5 text-[13px] text-text-secondary">
                     多数设置需保存后生效；数据页操作即时执行
                 </p>
             </header>
 
-            <Tabs
-                value={tab}
-                onValueChange={setTab}
-                className="flex min-h-0 flex-1 flex-col"
-            >
+            <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
                 <div
                     className={
                         tab === 'log'
@@ -124,7 +113,10 @@ export function SettingsPageNext() {
                             : 'scrollbar-hide min-h-0 flex-1 overflow-y-auto px-0.5 pr-2'
                     }
                 >
-                    <TabsContent value="appearance" className="pb-10 pt-7 focus-visible:outline-none">
+                    <TabsContent
+                        value="appearance"
+                        className="pb-10 pt-7 focus-visible:outline-none"
+                    >
                         <AppearanceTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
@@ -137,7 +129,10 @@ export function SettingsPageNext() {
                     </TabsContent>
 
                     {terminalEnabled && (
-                        <TabsContent value="terminal" className="pb-10 pt-7 focus-visible:outline-none">
+                        <TabsContent
+                            value="terminal"
+                            className="pb-10 pt-7 focus-visible:outline-none"
+                        >
                             <TerminalTab />
                         </TabsContent>
                     )}
@@ -146,11 +141,17 @@ export function SettingsPageNext() {
                         <RuntimeTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
-                    <TabsContent value="monitoring" className="pb-10 pt-7 focus-visible:outline-none">
+                    <TabsContent
+                        value="monitoring"
+                        className="pb-10 pt-7 focus-visible:outline-none"
+                    >
                         <MonitoringTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
-                    <TabsContent value="notifications" className="pb-10 pt-7 focus-visible:outline-none">
+                    <TabsContent
+                        value="notifications"
+                        className="pb-10 pt-7 focus-visible:outline-none"
+                    >
                         <NotificationsTab
                             draft={draft}
                             patchDraft={patchDraft}
@@ -230,20 +231,10 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
                 )}
             </span>
             <div className="flex items-center gap-1.5">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onCancel}
-                    disabled={!dirty || saving}
-                >
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={!dirty || saving}>
                     撤销
                 </Button>
-                <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={onSave}
-                    disabled={!dirty || saving}
-                >
+                <Button variant="primary" size="sm" onClick={onSave} disabled={!dirty || saving}>
                     {saving ? (
                         <>
                             <Spinner size="xs" />

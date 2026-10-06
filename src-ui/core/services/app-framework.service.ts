@@ -237,7 +237,8 @@ export const appFrameworkService = {
         baseRevision: string | null,
         confId?: string | null,
     ): Promise<AppConfigWriteResult> => {
-        if (!isTauri) return mockAppFrameworkApi.writeConfig(instanceId, config, baseRevision, confId);
+        if (!isTauri)
+            return mockAppFrameworkApi.writeConfig(instanceId, config, baseRevision, confId);
         return invoke<AppConfigWriteResult>('write_app_instance_config', {
             instanceId,
             config,
@@ -379,11 +380,19 @@ export const appFrameworkService = {
         persona: AstrBotPersona,
         creating: boolean,
     ): Promise<AstrBotPersona[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotUpsertPersona(instanceId, persona, creating);
-        return invoke<AstrBotPersona[]>('astrbot_upsert_persona', { instanceId, persona, creating });
+        if (!isTauri)
+            return mockAppFrameworkApi.astrbotUpsertPersona(instanceId, persona, creating);
+        return invoke<AstrBotPersona[]>('astrbot_upsert_persona', {
+            instanceId,
+            persona,
+            creating,
+        });
     },
 
-    astrbotDeletePersona: async (instanceId: string, personaId: string): Promise<AstrBotPersona[]> => {
+    astrbotDeletePersona: async (
+        instanceId: string,
+        personaId: string,
+    ): Promise<AstrBotPersona[]> => {
         if (!isTauri) return mockAppFrameworkApi.astrbotDeletePersona(instanceId, personaId);
         return invoke<AstrBotPersona[]>('astrbot_delete_persona', { instanceId, personaId });
     },
@@ -442,7 +451,10 @@ export const appFrameworkService = {
         return invoke<AstrBotAbconfInfo[]>('astrbot_create_abconf', { instanceId, name });
     },
 
-    astrbotDeleteAbconf: async (instanceId: string, abconfId: string): Promise<AstrBotAbconfInfo[]> => {
+    astrbotDeleteAbconf: async (
+        instanceId: string,
+        abconfId: string,
+    ): Promise<AstrBotAbconfInfo[]> => {
         if (!isTauri) return mockAppFrameworkApi.astrbotDeleteAbconf(instanceId, abconfId);
         return invoke<AstrBotAbconfInfo[]>('astrbot_delete_abconf', { instanceId, abconfId });
     },
@@ -477,12 +489,18 @@ export const appFrameworkService = {
         return invoke<MaiBotChatSession[]>('maibot_chat_sessions', { instanceId });
     },
 
-    maibotProviderModels: async (instanceId: string, provider: MaiBotAPIProvider): Promise<MaiBotProviderModel[]> => {
+    maibotProviderModels: async (
+        instanceId: string,
+        provider: MaiBotAPIProvider,
+    ): Promise<MaiBotProviderModel[]> => {
         if (!isTauri) return mockAppFrameworkApi.maibotProviderModels(instanceId, provider);
         return invoke<MaiBotProviderModel[]>('maibot_provider_models', { instanceId, provider });
     },
 
-    maibotTestProvider: async (instanceId: string, provider: MaiBotAPIProvider): Promise<MaiBotProviderCheck> => {
+    maibotTestProvider: async (
+        instanceId: string,
+        provider: MaiBotAPIProvider,
+    ): Promise<MaiBotProviderCheck> => {
         if (!isTauri) return mockAppFrameworkApi.maibotTestProvider(instanceId, provider);
         return invoke<MaiBotProviderCheck>('maibot_test_provider', { instanceId, provider });
     },
@@ -492,7 +510,10 @@ export const appFrameworkService = {
         return invoke<MaiBotMcpStatus>('maibot_mcp_status', { instanceId });
     },
 
-    maibotTestMcp: async (instanceId: string, server: MaiBotMCPServerItemConfig): Promise<MaiBotMcpTest> => {
+    maibotTestMcp: async (
+        instanceId: string,
+        server: MaiBotMCPServerItemConfig,
+    ): Promise<MaiBotMcpTest> => {
         if (!isTauri) return mockAppFrameworkApi.maibotTestMcp(instanceId, server);
         return invoke<MaiBotMcpTest>('maibot_test_mcp', { instanceId, server });
     },

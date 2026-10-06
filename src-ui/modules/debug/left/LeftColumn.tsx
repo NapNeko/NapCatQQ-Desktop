@@ -45,7 +45,11 @@ export const LeftColumn = memo(function LeftColumn({ target, panel }: LeftColumn
     }, [panel, m]);
 
     return (
-        <div ref={ref} data-debug-left-panel={panel} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+            ref={ref}
+            data-debug-left-panel={panel}
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
             {panel === 'catalog' ? (
                 <CatalogPanel target={target} />
             ) : panel === 'collections' ? (

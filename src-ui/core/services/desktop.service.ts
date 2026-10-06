@@ -107,7 +107,7 @@ export const windowControlService = {
 
     onResize: async (cb: (isMaximized: boolean) => void): Promise<() => void> => {
         const w = await getWindow();
-        if (!w) return () => { };
+        if (!w) return () => {};
         try {
             const { listen } = await import('@tauri-apps/api/event');
             const unlisten = await listen('tauri://resize', async () => {
@@ -120,7 +120,7 @@ export const windowControlService = {
             return unlisten;
         } catch (err) {
             console.error('初始化标题栏窗口状态失败:', err);
-            return () => { };
+            return () => {};
         }
     },
 };
@@ -147,7 +147,7 @@ export const windowEventService = {
                 cb(e.payload),
             );
         } catch {
-            return () => { };
+            return () => {};
         }
     },
 };
@@ -158,10 +158,7 @@ export const diagnosticsService = {
 };
 
 export const desktopLogService = {
-    tailLog: async (
-        lines?: number,
-        levelFilter?: { level?: string },
-    ): Promise<LogSnapshot> => {
+    tailLog: async (lines?: number, levelFilter?: { level?: string }): Promise<LogSnapshot> => {
         if (isTauri) {
             return invoke<LogSnapshot>('tail_desktop_log', {
                 lines: lines ?? 2000,

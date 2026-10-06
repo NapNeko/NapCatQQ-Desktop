@@ -28,7 +28,13 @@ describe('parseNeoBotPlugins', () => {
                     missing_python_dependencies: ['httpx'],
                     tags: ['a', 'b'],
                 },
-                { name: 'dashboard', official: true, manageable: false, tags: [], missing_python_dependencies: [] },
+                {
+                    name: 'dashboard',
+                    official: true,
+                    manageable: false,
+                    tags: [],
+                    missing_python_dependencies: [],
+                },
             ],
         })!;
         expect(p.items).toHaveLength(2);
@@ -54,7 +60,12 @@ describe('parseNeoBotModels', () => {
     it('按 platforms 标出「供应商没配 Key」', () => {
         const m = parseNeoBotModels({
             library: [
-                { model_ref: 'a', provider: 'DeepSeek', model_name: 'deepseek-chat', model_type: 'chat' },
+                {
+                    model_ref: 'a',
+                    provider: 'DeepSeek',
+                    model_name: 'deepseek-chat',
+                    model_type: 'chat',
+                },
                 { model_ref: 'b', provider: 'SiliconFlow', model_name: 'qwen' },
             ],
             platforms: { DeepSeek: { has_key: true } },
@@ -84,7 +95,14 @@ describe('parseNeoBotPrompts', () => {
                 {
                     name: 'reply',
                     keys: [
-                        { path: 'system', label: '系统提示词', kind: 'template', value: 'v', overridden: true, placeholders: ['nickname'] },
+                        {
+                            path: 'system',
+                            label: '系统提示词',
+                            kind: 'template',
+                            value: 'v',
+                            overridden: true,
+                            placeholders: ['nickname'],
+                        },
                         { path: 'x', value: 123 },
                     ],
                 },

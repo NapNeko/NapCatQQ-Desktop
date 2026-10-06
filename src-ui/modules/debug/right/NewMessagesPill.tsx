@@ -30,7 +30,15 @@ function useRiseIn<T extends HTMLElement>(dep: string) {
     return ref;
 }
 
-export function NewMessagesPill({ count, away, onClick }: { count: number; away: boolean; onClick: () => void }) {
+export function NewMessagesPill({
+    count,
+    away,
+    onClick,
+}: {
+    count: number;
+    away: boolean;
+    onClick: () => void;
+}) {
     const visible = count > 0 || away;
     if (!visible) return null;
     return <PillButton count={count} onClick={onClick} />;
@@ -74,7 +82,8 @@ export function PausedPill({ pending, onResume }: { pending: number; onResume: (
         >
             <Play size={11} strokeWidth={2.6} aria-hidden className="shrink-0" />
             <span className="truncate tabular-nums">
-                已暂停显示{pending > 0 ? ` · 期间到了 ${countFormat.format(pending)} 条` : ''} · 继续
+                已暂停显示{pending > 0 ? ` · 期间到了 ${countFormat.format(pending)} 条` : ''} ·
+                继续
             </span>
         </button>
     );

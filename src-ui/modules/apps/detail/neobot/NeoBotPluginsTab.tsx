@@ -94,11 +94,7 @@ const PluginRow: React.FC<{
                         size="sm"
                         variant="secondary"
                         disabled={disabled || busy || !plugin.manageable}
-                        onClick={() =>
-                            onAction(
-                                '/api/plugins/' + plugin.id + '/toggle',
-                            )
-                        }
+                        onClick={() => onAction('/api/plugins/' + plugin.id + '/toggle')}
                     >
                         {plugin.enabled ? '停用' : '启用'}
                     </Button>
@@ -197,9 +193,7 @@ export const NeoBotPluginsTab: React.FC<{
                             <Button
                                 variant="primary"
                                 size="sm"
-                                disabled={
-                                    !data.manageEnabled || action.isPending || !repo.trim()
-                                }
+                                disabled={!data.manageEnabled || action.isPending || !repo.trim()}
                                 onClick={install}
                             >
                                 {action.isPending ? '提交中…' : '安装'}

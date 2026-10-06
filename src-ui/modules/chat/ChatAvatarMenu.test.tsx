@@ -7,26 +7,64 @@ import { ChatAvatarMenu } from './ChatAvatarMenu';
 import { ChatMessageActions } from './ChatMessageActions';
 
 const contact: Contact = { key: 'group:12', id: '12', name: '群', type: 'group' };
-const baseMessage: Message = { key: 'group:12/2', session: 'group:12', id: '2', senderId: '20', senderName: '小明', at: 0, mine: false, segments: [{ type: 'text', data: { text: '内容' } }], status: 'sent' };
+const baseMessage: Message = {
+    key: 'group:12/2',
+    session: 'group:12',
+    id: '2',
+    senderId: '20',
+    senderName: '小明',
+    at: 0,
+    mine: false,
+    segments: [{ type: 'text', data: { text: '内容' } }],
+    status: 'sent',
+};
 
 function setup(message = baseMessage, session: Contact = contact, connected = true) {
-    const call = vi.fn(async () => ({ request_id: 'r', result: { kind: 'ok', outcome: { ok: true, retcode: 0, data: null } } }));
+    const call = vi.fn(async () => ({
+        request_id: 'r',
+        result: { kind: 'ok', outcome: { ok: true, retcode: 0, data: null } },
+    }));
     const transport = { call, subscribe: vi.fn(), unsubscribe: vi.fn() };
     const store = new ChatAccountStore(
-        { bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true },
+        {
+            bot_id: 'bot',
+            name: '测试',
+            qq_id: 99,
+            backend: 'napcat',
+            host: { kind: 'local' },
+            running: true,
+            online: true,
+        },
         transport as never,
     );
     if (connected) store.getSnapshot().connection = { state: 'connected' };
-    const onFocusComposer = vi.fn(); const onError = vi.fn();
+    const onFocusComposer = vi.fn();
+    const onError = vi.fn();
     render(
-        <ChatMessageActions store={store} contact={session} message={message} onFocusComposer={onFocusComposer} onError={onError}>
-            {controls => <article>
-                <ChatAvatarMenu store={store} contact={session} message={message} onFocusComposer={onFocusComposer} onError={onError}>
-                    <img alt="头像" />
-                </ChatAvatarMenu>
-                <p>消息内容</p>{controls}
-            </article>}
-        </ChatMessageActions>);
+        <ChatMessageActions
+            store={store}
+            contact={session}
+            message={message}
+            onFocusComposer={onFocusComposer}
+            onError={onError}
+        >
+            {(controls) => (
+                <article>
+                    <ChatAvatarMenu
+                        store={store}
+                        contact={session}
+                        message={message}
+                        onFocusComposer={onFocusComposer}
+                        onError={onError}
+                    >
+                        <img alt="头像" />
+                    </ChatAvatarMenu>
+                    <p>消息内容</p>
+                    {controls}
+                </article>
+            )}
+        </ChatMessageActions>,
+    );
     return { store, call, onFocusComposer, onError };
 }
 
@@ -47,7 +85,10 @@ describe('ChatAvatarMenu', () => {
         await user.pointer({ keys: '[MouseRight]', target: screen.getByAltText('头像') });
         await user.click(screen.getByRole('menuitem', { name: '提及 小明' }));
         expect(store.getSnapshot().account.drafts[contact.key]).toEqual({
-            text: '@小明 ', mentions: [{ qq: '20', label: '@小明' }], attachments: [], reply: null,
+            text: '@小明 ',
+            mentions: [{ qq: '20', label: '@小明' }],
+            attachments: [],
+            reply: null,
         });
         expect(onFocusComposer).toHaveBeenCalled();
     });
@@ -56,8 +97,15 @@ describe('ChatAvatarMenu', () => {
         const { store, call } = setup();
         await user.pointer({ keys: '[MouseRight]', target: screen.getByAltText('头像') });
         await user.click(screen.getByRole('menuitem', { name: '拍一拍 小明' }));
-        await waitFor(() => expect(call).toHaveBeenCalledWith('bot', 'group_poke', { group_id: '12', user_id: '20' }));
-        expect(store.getSnapshot().account.messages.some(m => m.notice === '你拍了拍20')).toBe(true);
+        await waitFor(() =>
+            expect(call).toHaveBeenCalledWith('bot', 'group_poke', {
+                group_id: '12',
+                user_id: '20',
+            }),
+        );
+        expect(store.getSnapshot().account.messages.some((m) => m.notice === '你拍了拍20')).toBe(
+            true,
+        );
     });
     it('offers poke without mention in private chats and reports failures', async () => {
         const user = userEvent.setup();
@@ -67,7 +115,9 @@ describe('ChatAvatarMenu', () => {
         expect(screen.queryByRole('menuitem', { name: /提及/ })).not.toBeInTheDocument();
         call.mockRejectedValueOnce(new Error('backend down'));
         await user.click(screen.getByRole('menuitem', { name: '拍一拍 小明' }));
-        await waitFor(() => expect(call).toHaveBeenCalledWith('bot', 'friend_poke', { user_id: '20' }));
+        await waitFor(() =>
+            expect(call).toHaveBeenCalledWith('bot', 'friend_poke', { user_id: '20' }),
+        );
         await waitFor(() => expect(onError).toHaveBeenCalledWith('backend down'));
     });
     it('keeps the plain message menu on my own avatar', async () => {
@@ -81,6 +131,9 @@ describe('ChatAvatarMenu', () => {
         const user = userEvent.setup();
         setup(baseMessage, contact, false);
         await user.pointer({ keys: '[MouseRight]', target: screen.getByAltText('头像') });
-        expect(screen.getByRole('menuitem', { name: '拍一拍 小明' })).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.getByRole('menuitem', { name: '拍一拍 小明' })).toHaveAttribute(
+            'aria-disabled',
+            'true',
+        );
     });
 });

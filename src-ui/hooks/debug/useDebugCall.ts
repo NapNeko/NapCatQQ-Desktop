@@ -41,7 +41,10 @@ export function useDebugCall() {
      * 下载动作、或参数里有本机文件占位时自动走流式命令（进度一路上报、可取消）。
      */
     const send = useCallback(
-        async (tabId: string | null, req: Omit<DebugCallRequest, 'request_id'>): Promise<DebugCallResponse> => {
+        async (
+            tabId: string | null,
+            req: Omit<DebugCallRequest, 'request_id'>,
+        ): Promise<DebugCallResponse> => {
             const requestId = newRequestId();
             if (tabId !== null) {
                 // 保留上一次的结果，新结果回来之前视图不必先空一下
@@ -55,9 +58,14 @@ export function useDebugCall() {
             try {
                 if (needsStreamCall(req.action, req.params)) {
                     response = await onebotDebugService.callStream(
-                        { ...req, request_id: requestId, local_files: localFilesInParams(req.params) },
+                        {
+                            ...req,
+                            request_id: requestId,
+                            local_files: localFilesInParams(req.params),
+                        },
                         (p) => {
-                            if (tabId !== null && p.request_id === requestId) recordProgress(tabId, requestId, p);
+                            if (tabId !== null && p.request_id === requestId)
+                                recordProgress(tabId, requestId, p);
                         },
                     );
                 } else {
@@ -72,13 +80,20 @@ export function useDebugCall() {
 
             // 拿到了回包但 OB11 说失败：事件流里的调用记录不带上游的说明，这里补给聊天时间线。
             // 选择器的查询不进聊天，不必记
-            if (response.result.kind === 'ok' && !response.result.outcome.ok && req.origin !== 'picker') {
+            if (
+                response.result.kind === 'ok' &&
+                !response.result.outcome.ok &&
+                req.origin !== 'picker'
+            ) {
                 const { wording, message } = response.result.outcome;
                 const why = wording.trim() || message.trim();
                 if (why) debugEventStore.noteCallWording(req.bot_id, requestId, why);
             }
 
-            if (tabId !== null && debugWorkspaceStore.getRun(tabId)?.inflight?.requestId === requestId) {
+            if (
+                tabId !== null &&
+                debugWorkspaceStore.getRun(tabId)?.inflight?.requestId === requestId
+            ) {
                 debugWorkspaceStore.setRun(tabId, {
                     last: { response, at: Date.now(), botId: req.bot_id, action: req.action },
                 });
@@ -106,7 +121,8 @@ export function useDebugCall() {
 
     /** 此刻这个标签有没有在等的调用。读的是当下的快照、不会让调用方跟着重渲染；要跟着变用 useTabRun */
     const isInflight = useCallback(
-        (tabId: string | null): boolean => tabId !== null && !!debugWorkspaceStore.getRun(tabId)?.inflight,
+        (tabId: string | null): boolean =>
+            tabId !== null && !!debugWorkspaceStore.getRun(tabId)?.inflight,
         [],
     );
 

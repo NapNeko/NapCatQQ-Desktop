@@ -77,9 +77,7 @@ describe('parseMarkdownBlocks', () => {
             ].join('\n'),
         );
 
-        expect(blocks.some((b) => b.kind === 'paragraph' && b.text.includes('BEGIN'))).toBe(
-            false,
-        );
+        expect(blocks.some((b) => b.kind === 'paragraph' && b.text.includes('BEGIN'))).toBe(false);
         expect(blocks.filter((b) => b.kind === 'heading').map((b) => b.text)).toEqual([
             'NapCatQQ Desktop 更新日志（v2.2.8）',
             'Tips',
@@ -113,9 +111,7 @@ describe('parseMarkdownBlocks', () => {
             ].join('\n'),
         );
 
-        const links = blocks.filter(
-            (b) => b.kind === 'paragraph' && b.text.includes(']('),
-        );
+        const links = blocks.filter((b) => b.kind === 'paragraph' && b.text.includes(']('));
         expect(links.length).toBeGreaterThanOrEqual(3);
 
         const ordered = blocks.filter((b) => b.kind === 'list_item' && b.ordered);
@@ -153,9 +149,7 @@ describe('parseMarkdownBlocks', () => {
             ['SHA256SUMS', '校验和'],
         ]);
         // 分隔行不应再以段落出现
-        expect(
-            blocks.some((b) => b.kind === 'paragraph' && b.text.includes('------')),
-        ).toBe(false);
+        expect(blocks.some((b) => b.kind === 'paragraph' && b.text.includes('------'))).toBe(false);
     });
 });
 
@@ -189,11 +183,7 @@ describe('tokenizeInlineMarkdown', () => {
         const tokens = tokenizeInlineMarkdown(
             '**默认WebUi密钥为随机密码** [安装运行库](https://aka.ms/vc)',
         );
-        expect(tokens.some((t) => t.kind === 'link' && t.href.includes('aka.ms'))).toBe(
-            true,
-        );
-        expect(tokens.some((t) => t.kind === 'bold' && t.text.includes('默认WebUi'))).toBe(
-            true,
-        );
+        expect(tokens.some((t) => t.kind === 'link' && t.href.includes('aka.ms'))).toBe(true);
+        expect(tokens.some((t) => t.kind === 'bold' && t.text.includes('默认WebUi'))).toBe(true);
     });
 });

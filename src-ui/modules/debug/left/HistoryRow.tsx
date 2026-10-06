@@ -46,7 +46,16 @@ function formatElapsed(ms: number): string {
     return ms >= 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 }
 
-export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, busy, compare, onIntent, onCopyAction }: HistoryRowProps) {
+export const HistoryRow = memo(function HistoryRow({
+    id,
+    entry,
+    nowMs,
+    active,
+    busy,
+    compare,
+    onIntent,
+    onCopyAction,
+}: HistoryRowProps) {
     const when = relativeTimeFromMs(entry.at_ms, undefined, nowMs) ?? '';
     const failure = failureNote(entry);
     // 全局的 title 气泡是单行的，用「·」隔开
@@ -86,7 +95,9 @@ export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, b
                             aria-hidden
                             className={cn(
                                 'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-xs border transition-colors',
-                                compare.selected ? 'border-brand bg-brand text-white' : 'border-border bg-field',
+                                compare.selected
+                                    ? 'border-brand bg-brand text-white'
+                                    : 'border-border bg-field',
                             )}
                         >
                             {compare.selected && <Check size={11} strokeWidth={3} />}
@@ -96,14 +107,26 @@ export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, b
                         {busy ? (
                             <Spinner size="xs" label="正在读取这条记录" />
                         ) : entry.ok ? (
-                            <CheckCircle2 size={14} strokeWidth={2.2} aria-label="成功" className="text-success" />
+                            <CheckCircle2
+                                size={14}
+                                strokeWidth={2.2}
+                                aria-label="成功"
+                                className="text-success"
+                            />
                         ) : (
-                            <XCircle size={14} strokeWidth={2.2} aria-label="失败" className="text-danger" />
+                            <XCircle
+                                size={14}
+                                strokeWidth={2.2}
+                                aria-label="失败"
+                                className="text-danger"
+                            />
                         )}
                     </span>
                     <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-2">
-                            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">{entry.action}</span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">
+                                {entry.action}
+                            </span>
                             <span className="shrink-0 text-[10px] tabular-nums text-text-tertiary transition-opacity group-focus-within:opacity-0 group-hover:opacity-0">
                                 {formatElapsed(entry.elapsed_ms)}
                             </span>
@@ -126,13 +149,26 @@ export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, b
                             'pointer-events-none group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100',
                         )}
                     >
-                        <IconAction icon={Star} label="收藏" tone="brand" focusable={false} onClick={() => onIntent(entry, 'save')} />
-                        <IconAction icon={Copy} label="复制参数" focusable={false} onClick={() => onIntent(entry, 'copy')} />
+                        <IconAction
+                            icon={Star}
+                            label="收藏"
+                            tone="brand"
+                            focusable={false}
+                            onClick={() => onIntent(entry, 'save')}
+                        />
+                        <IconAction
+                            icon={Copy}
+                            label="复制参数"
+                            focusable={false}
+                            onClick={() => onIntent(entry, 'copy')}
+                        />
                     </span>
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-48">
-                <ContextMenuLabel className="truncate font-mono text-2xs">{entry.action}</ContextMenuLabel>
+                <ContextMenuLabel className="truncate font-mono text-2xs">
+                    {entry.action}
+                </ContextMenuLabel>
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={() => onIntent(entry, 'open')}>
                     <ExternalLink size={13} />

@@ -48,7 +48,11 @@ function swapText(el: HTMLElement, next: string, k: number): gsap.core.Timeline 
         .add(() => {
             el.textContent = next;
         })
-        .fromTo(el, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: 0.08 * k, ease: 'power2.out' });
+        .fromTo(
+            el,
+            { autoAlpha: 0, y: 6 },
+            { autoAlpha: 1, y: 0, duration: 0.08 * k, ease: 'power2.out' },
+        );
 }
 
 interface SplashParticle {
@@ -128,7 +132,11 @@ export interface StartupSplashProps {
     onFinished: () => void;
 }
 
-export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReveal, onFinished }) => {
+export const StartupSplash: React.FC<StartupSplashProps> = ({
+    shellReady,
+    onReveal,
+    onFinished,
+}) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const stageRef = useRef<HTMLDivElement>(null);
     const logoRef = useRef<HTMLImageElement>(null);
@@ -203,13 +211,27 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         const rootFx = [spark, focusRing, shock, rim].filter(Boolean) as HTMLDivElement[];
 
         if (!motion.enabled) {
-            gsap.set([stage, logoWrap, logoBox, logo, title, sub, subText, bar, barTrack, version].filter(Boolean), {
-                autoAlpha: 1,
-                y: 0,
-                scale: 1,
-                scaleX: 1,
-                clearProps: 'filter,letterSpacing',
-            });
+            gsap.set(
+                [
+                    stage,
+                    logoWrap,
+                    logoBox,
+                    logo,
+                    title,
+                    sub,
+                    subText,
+                    bar,
+                    barTrack,
+                    version,
+                ].filter(Boolean),
+                {
+                    autoAlpha: 1,
+                    y: 0,
+                    scale: 1,
+                    scaleX: 1,
+                    clearProps: 'filter,letterSpacing',
+                },
+            );
             if (subText) subText.textContent = SUB_TEXT.prepare;
             if (glow) gsap.set(glow, { autoAlpha: 0.35 });
             if (aurora) gsap.set(aurora, { autoAlpha: 0.7 });
@@ -233,7 +255,9 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         const richBoost = isRich ? 1 : flourish ? 0.65 : 0.35;
 
         // 迸发原点取 logo 的纯布局中心；effect 重跑时元素上可能残留上一轮 transform，先清掉再量
-        gsap.set([stage, logoWrap, logoBox, ...particles].filter(Boolean), { clearProps: 'transform' });
+        gsap.set([stage, logoWrap, logoBox, ...particles].filter(Boolean), {
+            clearProps: 'transform',
+        });
         const logoRect = logoBox.getBoundingClientRect();
         const cx = logoRect.left + logoRect.width / 2;
         const cy = logoRect.top + logoRect.height / 2;
@@ -257,7 +281,13 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         gsap.set(
             logoBox,
             isRich
-                ? { autoAlpha: 0, rotationY: -32, rotationX: 16, transformPerspective: 640, filter: 'brightness(2.2)' }
+                ? {
+                      autoAlpha: 0,
+                      rotationY: -32,
+                      rotationX: 16,
+                      transformPerspective: 640,
+                      filter: 'brightness(2.2)',
+                  }
                 : { autoAlpha: 0 },
         );
         gsap.set(logo, { autoAlpha: 1 });
@@ -271,7 +301,12 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
             gsap.set(subText, { autoAlpha: 1, y: 0 });
         }
         gsap.set(sub, { autoAlpha: 0, y: 8 });
-        gsap.set(bar, { autoAlpha: 0, scaleX: 0, transformOrigin: 'left center', clearProps: 'filter' });
+        gsap.set(bar, {
+            autoAlpha: 0,
+            scaleX: 0,
+            transformOrigin: 'left center',
+            clearProps: 'filter',
+        });
         if (barTrack) gsap.set(barTrack, { autoAlpha: 0, y: 0 });
         if (barShine) gsap.set(barShine, { xPercent: -120, autoAlpha: 0 });
         if (version) gsap.set(version, { autoAlpha: 0, y: 6 });
@@ -329,7 +364,11 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         const birthAt = flourish ? s(0.18) : 0;
         if (flourish) {
             if (spark) {
-                tl.to(spark, { autoAlpha: 1, scale: 1, duration: s(0.1), ease: 'back.out(2.5)' }, 0).to(
+                tl.to(
+                    spark,
+                    { autoAlpha: 1, scale: 1, duration: s(0.1), ease: 'back.out(2.5)' },
+                    0,
+                ).to(
                     spark,
                     {
                         keyframes: {
@@ -354,7 +393,11 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         // 第二幕 诞生：火星炸开成一圈冲击波，logo 从火星里长出来翻正，星点顺势迸向四周
         if (flourish) {
             if (spark) {
-                tl.to(spark, { scale: 4.5, autoAlpha: 0, duration: s(0.12), ease: 'power2.out' }, birthAt);
+                tl.to(
+                    spark,
+                    { scale: 4.5, autoAlpha: 0, duration: s(0.12), ease: 'power2.out' },
+                    birthAt,
+                );
             }
             if (focusRing) tl.set(focusRing, { autoAlpha: 0 }, birthAt);
             if (shock) {
@@ -390,21 +433,26 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
             logoBox,
             isRich
                 ? {
-                    autoAlpha: 1,
-                    rotationY: 0,
-                    rotationX: 0,
-                    filter: 'brightness(1)',
-                    clearProps: 'filter',
-                    duration: s(0.4),
-                    ease: 'back.out(1.6)',
-                }
+                      autoAlpha: 1,
+                      rotationY: 0,
+                      rotationX: 0,
+                      filter: 'brightness(1)',
+                      clearProps: 'filter',
+                      duration: s(0.4),
+                      ease: 'back.out(1.6)',
+                  }
                 : { autoAlpha: 1, duration: enterDur * 0.7, ease: 'power2.out' },
             birthAt + (flourish ? 0 : s(0.04)),
         );
         if (brandPulse && richBoost > 0.25) {
             tl.to(
                 brandPulse,
-                { autoAlpha: 0.55 * richBoost, scale: 1, duration: enterDur * 0.95, ease: t.ease.enter },
+                {
+                    autoAlpha: 0.55 * richBoost,
+                    scale: 1,
+                    duration: enterDur * 0.95,
+                    ease: t.ease.enter,
+                },
                 birthAt + s(0.02),
             );
         }
@@ -437,21 +485,33 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
                 autoAlpha: 1,
                 y: 0,
                 ...(flourish
-                    ? { letterSpacing: '-0.025em', filter: 'blur(0px)', clearProps: 'filter,letterSpacing' }
+                    ? {
+                          letterSpacing: '-0.025em',
+                          filter: 'blur(0px)',
+                          clearProps: 'filter,letterSpacing',
+                      }
                     : {}),
                 duration: flourish ? s(0.36) : baseDur,
                 ease: isRich ? 'expo.out' : t.ease.enter,
             },
             birthAt + s(0.1),
         )
-            .to(sub, { autoAlpha: 1, y: 0, duration: fast, ease: t.ease.enterMicro }, birthAt + s(0.15))
+            .to(
+                sub,
+                { autoAlpha: 1, y: 0, duration: fast, ease: t.ease.enterMicro },
+                birthAt + s(0.15),
+            )
             .to(
                 bar,
                 { autoAlpha: 1, scaleX: BAR_ENTER, duration: s(0.25), ease: t.ease.damped },
                 birthAt + s(0.17),
             );
         if (barTrack) {
-            tl.to(barTrack, { autoAlpha: 1, duration: fast, ease: 'power2.out' }, birthAt + s(0.16));
+            tl.to(
+                barTrack,
+                { autoAlpha: 1, duration: fast, ease: 'power2.out' },
+                birthAt + s(0.16),
+            );
         }
         if (barShine && richBoost > 0.4) {
             tl.to(
@@ -461,12 +521,19 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
             );
         }
         if (version) {
-            tl.to(version, { autoAlpha: 1, y: 0, duration: fast, ease: t.ease.enterMicro }, birthAt + s(0.22));
+            tl.to(
+                version,
+                { autoAlpha: 1, y: 0, duration: fast, ease: t.ease.enterMicro },
+                birthAt + s(0.22),
+            );
         }
 
-        const safetyEnterTimer = window.setTimeout(() => {
-            setEnterDone(true);
-        }, tl.duration() * 1000 + 300);
+        const safetyEnterTimer = window.setTimeout(
+            () => {
+                setEnterDone(true);
+            },
+            tl.duration() * 1000 + 300,
+        );
 
         return () => {
             window.clearTimeout(safetyEnterTimer);
@@ -532,7 +599,13 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         }
         if (logoWrap && isRich) {
             loops.push(
-                gsap.to(logoWrap, { y: -4, duration: 2.4 * k, ease: 'sine.inOut', yoyo: true, repeat: -1 }),
+                gsap.to(logoWrap, {
+                    y: -4,
+                    duration: 2.4 * k,
+                    ease: 'sine.inOut',
+                    yoyo: true,
+                    repeat: -1,
+                }),
             );
         }
         if (brandPulse && isRich) {
@@ -584,7 +657,12 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
                     gsap.fromTo(
                         ring,
                         { rotation: 0 },
-                        { rotation: 360 * cfg.spin, duration: cfg.dur * k, ease: 'none', repeat: -1 },
+                        {
+                            rotation: 360 * cfg.spin,
+                            duration: cfg.dur * k,
+                            ease: 'none',
+                            repeat: -1,
+                        },
                     ),
                 );
             });
@@ -696,8 +774,21 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         if (bar) {
             exitTl
                 .to(bar, { scaleX: 1, autoAlpha: 1, duration: s(0.1), ease: 'power3.out' }, 0)
-                .to(bar, { filter: 'brightness(1.6)', duration: s(0.05), ease: 'power2.out' }, s(0.06))
-                .to(bar, { filter: 'brightness(1)', clearProps: 'filter', duration: s(0.12), ease: 'power2.out' }, s(0.11));
+                .to(
+                    bar,
+                    { filter: 'brightness(1.6)', duration: s(0.05), ease: 'power2.out' },
+                    s(0.06),
+                )
+                .to(
+                    bar,
+                    {
+                        filter: 'brightness(1)',
+                        clearProps: 'filter',
+                        duration: s(0.12),
+                        ease: 'power2.out',
+                    },
+                    s(0.11),
+                );
         }
         if (barShine && flourish) {
             exitTl.fromTo(
@@ -710,7 +801,11 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
 
         if (!flourish) {
             notifyReveal();
-            exitTl.to(root, { autoAlpha: 0, duration: exitDur * 1.2, ease: 'power2.inOut' }, s(0.12));
+            exitTl.to(
+                root,
+                { autoAlpha: 0, duration: exitDur * 1.2, ease: 'power2.inOut' },
+                s(0.12),
+            );
             return;
         }
 
@@ -728,7 +823,13 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         if (rings.length > 0) {
             exitTl.to(
                 rings,
-                { scale: 0.3, autoAlpha: 0, rotation: '+=160', duration: s(0.16), ease: 'power3.in' },
+                {
+                    scale: 0.3,
+                    autoAlpha: 0,
+                    rotation: '+=160',
+                    duration: s(0.16),
+                    ease: 'power3.in',
+                },
                 gatherAt,
             );
         }
@@ -800,7 +901,11 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         }
         if (brandPulse) {
             exitTl
-                .to(brandPulse, { autoAlpha: 0.95, scale: 1.2, duration: s(0.05), ease: 'power2.out' }, burstAt)
+                .to(
+                    brandPulse,
+                    { autoAlpha: 0.95, scale: 1.2, duration: s(0.05), ease: 'power2.out' },
+                    burstAt,
+                )
                 .to(
                     brandPulse,
                     { autoAlpha: 0, scale: 1.7, duration: s(0.24), ease: 'power2.out' },
@@ -813,7 +918,11 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
         exitTl.call(notifyReveal, undefined, revealAt);
         if (stage) exitTl.to(stage, { scale: 1.1, duration: s(0.3), ease: 'power2.in' }, revealAt);
         if (logoWrap) {
-            exitTl.to(logoWrap, { scale: 1.45, autoAlpha: 0, duration: s(0.14), ease: 'power2.in' }, revealAt);
+            exitTl.to(
+                logoWrap,
+                { scale: 1.45, autoAlpha: 0, duration: s(0.14), ease: 'power2.in' },
+                revealAt,
+            );
         }
         exitTl.to(
             [title, sub, barTrack ?? bar, version].filter(Boolean),
@@ -821,7 +930,8 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
             revealAt,
         );
         if (glow) exitTl.to(glow, { autoAlpha: 0, duration: s(0.2), ease: 'power2.out' }, revealAt);
-        if (aurora) exitTl.to(aurora, { autoAlpha: 0, duration: s(0.2), ease: 'power2.out' }, revealAt);
+        if (aurora)
+            exitTl.to(aurora, { autoAlpha: 0, duration: s(0.2), ease: 'power2.out' }, revealAt);
 
         if (IRIS_SUPPORTED) {
             const maxR = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) + 8;
@@ -847,9 +957,22 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
                 revealAt,
             );
         } else {
-            exitTl.to(root, { autoAlpha: 0, duration: s(0.2), ease: 'power2.inOut' }, revealAt + s(0.06));
+            exitTl.to(
+                root,
+                { autoAlpha: 0, duration: s(0.2), ease: 'power2.inOut' },
+                revealAt + s(0.06),
+            );
         }
-    }, [exiting, motion.enabled, motion.speed, motion.preset.timing, finish, notifyReveal, isRich, flourish]);
+    }, [
+        exiting,
+        motion.enabled,
+        motion.speed,
+        motion.preset.timing,
+        finish,
+        notifyReveal,
+        isRich,
+        flourish,
+    ]);
 
     const ringFxStyle = { marginLeft: -RING_FX_SIZE / 2, marginTop: -RING_FX_SIZE / 2 };
 
@@ -906,7 +1029,12 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
                 style={ringFxStyle}
                 aria-hidden
             />
-            <div ref={shockRef} className="ndf-splash-shockwave z-20 opacity-0" style={ringFxStyle} aria-hidden />
+            <div
+                ref={shockRef}
+                className="ndf-splash-shockwave z-20 opacity-0"
+                style={ringFxStyle}
+                aria-hidden
+            />
             <div
                 ref={rimRef}
                 className="ndf-splash-shockwave ndf-splash-shockwave--rim z-20 opacity-0"
@@ -915,7 +1043,10 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
             />
 
             <div ref={stageRef} className="relative z-10 flex flex-col items-center gap-5 px-8">
-                <div ref={logoWrapRef} className="relative flex shrink-0 items-center justify-center opacity-0">
+                <div
+                    ref={logoWrapRef}
+                    className="relative flex shrink-0 items-center justify-center opacity-0"
+                >
                     <div
                         ref={brandPulseRef}
                         className="pointer-events-none absolute left-1/2 top-1/2 rounded-full opacity-0"
@@ -1008,7 +1139,10 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
                     >
                         NapCatQQ Desktop
                     </h1>
-                    <div ref={subRef} className="flex items-center gap-2 text-sm text-text-secondary">
+                    <div
+                        ref={subRef}
+                        className="flex items-center gap-2 text-sm text-text-secondary"
+                    >
                         <span className="ndf-splash-pulse-dot" aria-hidden />
                         <span ref={subTextRef}>{SUB_TEXT.wake}</span>
                     </div>
@@ -1018,7 +1152,10 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onReve
                     className="relative h-1.5 w-56 overflow-hidden rounded-full bg-border-subtle shadow-inner"
                     aria-hidden
                 >
-                    <div ref={barRef} className="ndf-splash-laser-bar h-full w-full origin-left rounded-full" />
+                    <div
+                        ref={barRef}
+                        className="ndf-splash-laser-bar h-full w-full origin-left rounded-full"
+                    />
                     <div
                         ref={barShineRef}
                         className="ndf-splash-bar-shine pointer-events-none absolute inset-y-0 left-0 w-1/3 rounded-full opacity-0"

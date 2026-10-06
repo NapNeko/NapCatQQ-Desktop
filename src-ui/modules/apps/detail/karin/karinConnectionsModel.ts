@@ -6,11 +6,50 @@ import type { KarinInstanceConfig } from '../../../../core/ipc/types';
 export type KarinConnKind = 'webui' | 'reverseWs' | 'forwardWs' | 'onebotHttp' | 'console';
 
 export type KarinConnRow =
-    | { key: string; kind: 'webui'; title: string; enable: boolean; summary: string; removable: false }
-    | { key: string; kind: 'reverseWs'; title: string; enable: boolean; summary: string; removable: false; linked: boolean }
-    | { key: string; kind: 'forwardWs'; idx: number; title: string; enable: boolean; summary: string; removable: true }
-    | { key: string; kind: 'onebotHttp'; idx: number; title: string; enable: boolean; summary: string; removable: true }
-    | { key: string; kind: 'console'; title: string; enable: boolean; summary: string; removable: false; localOnly: boolean };
+    | {
+          key: string;
+          kind: 'webui';
+          title: string;
+          enable: boolean;
+          summary: string;
+          removable: false;
+      }
+    | {
+          key: string;
+          kind: 'reverseWs';
+          title: string;
+          enable: boolean;
+          summary: string;
+          removable: false;
+          linked: boolean;
+      }
+    | {
+          key: string;
+          kind: 'forwardWs';
+          idx: number;
+          title: string;
+          enable: boolean;
+          summary: string;
+          removable: true;
+      }
+    | {
+          key: string;
+          kind: 'onebotHttp';
+          idx: number;
+          title: string;
+          enable: boolean;
+          summary: string;
+          removable: true;
+      }
+    | {
+          key: string;
+          kind: 'console';
+          title: string;
+          enable: boolean;
+          summary: string;
+          removable: false;
+          localOnly: boolean;
+      };
 
 export const KIND_BADGE: Record<KarinConnKind, string> = {
     webui: 'WebUI',
@@ -78,9 +117,7 @@ export function listKarinConnections(config: KarinInstanceConfig, linked: boolea
         kind: 'console',
         title: '控制台',
         enable: true,
-        summary: adapter.console.isLocal
-            ? '仅本机'
-            : adapter.console.host.trim() || '未限制来源',
+        summary: adapter.console.isLocal ? '仅本机' : adapter.console.host.trim() || '未限制来源',
         removable: false,
         localOnly: adapter.console.isLocal,
     });

@@ -5,10 +5,7 @@
 // import { pushInfoBar } from './globalInfoBarStore'（非 React 上下文友好）。
 
 import { useCallback, useSyncExternalStore } from 'react';
-import {
-    globalInfoBarStore,
-    type PushInfoBarOptions,
-} from './globalInfoBarStore';
+import { globalInfoBarStore, type PushInfoBarOptions } from './globalInfoBarStore';
 import type { InfoBarStackItem } from '../../shared/ui';
 
 export interface UseGlobalInfoBarsResult {

@@ -17,7 +17,11 @@ function byRecent(a: ChatSession, b: ChatSession): number {
     return b.lastAt - a.lastAt || a.key.localeCompare(b.key);
 }
 
-export const SessionStrip = memo(function SessionStrip({ sessions, active, onSelect }: SessionStripProps) {
+export const SessionStrip = memo(function SessionStrip({
+    sessions,
+    active,
+    onSelect,
+}: SessionStripProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [frozenOrder, setFrozenOrder] = useState<SessionKey[] | null>(null);
 
@@ -26,7 +30,10 @@ export const SessionStrip = memo(function SessionStrip({ sessions, active, onSel
         if (!frozenOrder) return all.sort(byRecent);
         // 冻住时：已有的按冻住时的顺序，新冒出来的接在后面
         const rank = new Map(frozenOrder.map((k, i) => [k, i]));
-        return all.sort((a, b) => (rank.get(a.key) ?? Infinity) - (rank.get(b.key) ?? Infinity) || byRecent(a, b));
+        return all.sort(
+            (a, b) =>
+                (rank.get(a.key) ?? Infinity) - (rank.get(b.key) ?? Infinity) || byRecent(a, b),
+        );
     }, [sessions, frozenOrder]);
 
     // 选中的会话一直留在视野里：点了之后、以及别的会话来了新消息把它往后挤的时候（指针在条上时不动，免得抢着滚）
@@ -53,11 +60,20 @@ export const SessionStrip = memo(function SessionStrip({ sessions, active, onSel
             onPointerLeave={() => setFrozenOrder(null)}
             className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border-subtle/70 px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-            <Chip label="全部" on={active === 'all'} onClick={() => onSelect('all')} title="所有会话按时间合在一起，每条标来源" />
+            <Chip
+                label="全部"
+                on={active === 'all'}
+                onClick={() => onSelect('all')}
+                title="所有会话按时间合在一起，每条标来源"
+            />
             {list.map((s) => (
                 <SessionChip key={s.key} session={s} on={active === s.key} onSelect={onSelect} />
             ))}
-            {list.length === 0 && <span className="px-1 text-2xs text-text-tertiary">收到消息后这里会列出群和私聊</span>}
+            {list.length === 0 && (
+                <span className="px-1 text-2xs text-text-tertiary">
+                    收到消息后这里会列出群和私聊
+                </span>
+            )}
         </div>
     );
 });
@@ -109,7 +125,9 @@ function Chip({
             className={cn(
                 'inline-flex h-6 max-w-[11rem] shrink-0 items-center gap-1 rounded-pill px-2.5 text-[12px] transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                on ? 'bg-text font-medium text-canvas' : 'bg-inset text-text-secondary hover:bg-inset/70 hover:text-text',
+                on
+                    ? 'bg-text font-medium text-canvas'
+                    : 'bg-inset text-text-secondary hover:bg-inset/70 hover:text-text',
             )}
         >
             {icon}

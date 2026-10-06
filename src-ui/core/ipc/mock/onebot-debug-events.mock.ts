@@ -90,7 +90,12 @@ export function personAt(n: number): MockPerson {
     const nickname = round === 0 ? base : `${base}${round + 1}`;
     const card = CARD_POOL[n % CARD_POOL.length] as string;
     const role = n === 1 ? 'owner' : n <= 4 ? 'admin' : 'member';
-    return { id: USER_ID_BASE + n, nickname, card: card === '管理员' ? `${nickname}·管理` : card, role };
+    return {
+        id: USER_ID_BASE + n,
+        nickname,
+        card: card === '管理员' ? `${nickname}·管理` : card,
+        role,
+    };
 }
 
 /** 群里说话的五个人，同时也是好友里的前五位 */
@@ -123,7 +128,8 @@ export interface Ob11Segment {
     data: Record<string, unknown>;
 }
 
-const escapeCqText = (s: string) => s.replace(/&/g, '&amp;').replace(/\[/g, '&#91;').replace(/\]/g, '&#93;');
+const escapeCqText = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/\[/g, '&#91;').replace(/\]/g, '&#93;');
 const escapeCqValue = (s: string) => escapeCqText(s).replace(/,/g, '&#44;');
 const unescapeCq = (s: string) =>
     s.replace(/&#91;/g, '[').replace(/&#93;/g, ']').replace(/&#44;/g, ',').replace(/&amp;/g, '&');
@@ -147,7 +153,8 @@ export function cqToSegments(text: string): Ob11Segment[] {
     const re = /\[CQ:([A-Za-z_]+)((?:,[^\]]*)?)\]/g;
     let last = 0;
     for (let m = re.exec(text); m; m = re.exec(text)) {
-        if (m.index > last) out.push({ type: 'text', data: { text: unescapeCq(text.slice(last, m.index)) } });
+        if (m.index > last)
+            out.push({ type: 'text', data: { text: unescapeCq(text.slice(last, m.index)) } });
         const data: Record<string, unknown> = {};
         for (const pair of (m[2] ?? '').split(',').filter(Boolean)) {
             const eq = pair.indexOf('=');
@@ -156,7 +163,8 @@ export function cqToSegments(text: string): Ob11Segment[] {
         out.push({ type: m[1] as string, data });
         last = m.index + m[0].length;
     }
-    if (last < text.length) out.push({ type: 'text', data: { text: unescapeCq(text.slice(last)) } });
+    if (last < text.length)
+        out.push({ type: 'text', data: { text: unescapeCq(text.slice(last)) } });
     return out;
 }
 
@@ -168,7 +176,10 @@ export function messageToSegments(message: unknown): Ob11Segment[] {
             .filter((s): s is Record<string, unknown> => typeof s === 'object' && s !== null)
             .map((s) => ({
                 type: String(s.type ?? 'text'),
-                data: typeof s.data === 'object' && s.data !== null ? (s.data as Record<string, unknown>) : {},
+                data:
+                    typeof s.data === 'object' && s.data !== null
+                        ? (s.data as Record<string, unknown>)
+                        : {},
             }));
     }
     if (typeof message === 'object' && message !== null) return messageToSegments([message]);
@@ -220,7 +231,12 @@ const TEXT_POOL = [
     '先这样，明天再说',
 ];
 
-const REQUEST_COMMENTS = ['我是群里的阿强，加一下', '看到你在测试群，想交个朋友', '来自开发者交流群', '请通过一下，谢谢'];
+const REQUEST_COMMENTS = [
+    '我是群里的阿强，加一下',
+    '看到你在测试群，想交个朋友',
+    '来自开发者交流群',
+    '请通过一下，谢谢',
+];
 
 const text = (t: string): Ob11Segment => ({ type: 'text', data: { text: t } });
 
@@ -266,13 +282,17 @@ function napcatRaw(
         guildName: '',
         channelName: '',
         elements: segments.map((seg, index) => ({
-            elementType: seg.type === 'text' || seg.type === 'at' ? 1 : seg.type === 'image' ? 2 : 6,
+            elementType:
+                seg.type === 'text' || seg.type === 'at' ? 1 : seg.type === 'image' ? 2 : 6,
             elementId: String(index),
             extBufForUI: '0x',
             textElement:
                 seg.type === 'text' || seg.type === 'at'
                     ? {
-                          content: seg.type === 'text' ? String(seg.data.text) : `@${String(seg.data.qq)}`,
+                          content:
+                              seg.type === 'text'
+                                  ? String(seg.data.text)
+                                  : `@${String(seg.data.qq)}`,
                           atType: seg.type === 'at' ? 2 : 0,
                           atUid: seg.type === 'at' ? String(seg.data.qq) : '0',
                           atTinyId: '0',
@@ -362,7 +382,16 @@ export function makeGroupMessage(
         payload.real_seq = String(messageId % 1000000);
         payload.message_format = 'array';
         payload.group_name = groupNameOf(groupId);
-        payload.raw = napcatRaw(ctx, messageId, person, groupId, groupNameOf(groupId), 2, atMs, segments);
+        payload.raw = napcatRaw(
+            ctx,
+            messageId,
+            person,
+            groupId,
+            groupNameOf(groupId),
+            2,
+            atMs,
+            segments,
+        );
     }
     return payload;
 }
@@ -391,7 +420,16 @@ function makePrivateMessage(ctx: EventContext, atMs: number): Record<string, unk
         payload.real_seq = '0';
         payload.message_format = 'array';
         payload.target_id = ctx.selfId;
-        payload.raw = napcatRaw(ctx, messageId, person, ctx.selfId, ctx.selfName, 1, atMs, segments);
+        payload.raw = napcatRaw(
+            ctx,
+            messageId,
+            person,
+            ctx.selfId,
+            ctx.selfName,
+            1,
+            atMs,
+            segments,
+        );
     }
     return payload;
 }
@@ -400,7 +438,12 @@ function makePrivateMessage(ctx: EventContext, atMs: number): Record<string, unk
 export function makeSelfMessage(
     ctx: EventContext,
     atMs: number,
-    opts: { messageId: number; messageType: 'group' | 'private'; targetId: number; segments: Ob11Segment[] },
+    opts: {
+        messageId: number;
+        messageType: 'group' | 'private';
+        targetId: number;
+        segments: Ob11Segment[];
+    },
 ): Record<string, unknown> {
     const self: MockPerson = { id: ctx.selfId, nickname: ctx.selfName, card: '', role: 'member' };
     const group = opts.messageType === 'group';

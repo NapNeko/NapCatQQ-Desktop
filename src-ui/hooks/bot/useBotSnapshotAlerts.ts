@@ -35,17 +35,13 @@ function normError(v: string | null | undefined): string | null {
 
 function isSnowLumaConsentError(raw: string): boolean {
     return (
-        raw.includes('SNOWLUMA_CONSENT_REQUIRED')
-        || raw.includes('DESKTOP_CONSENT_REQUIRED')
-        || raw.includes('"consentRequired":true')
+        raw.includes('SNOWLUMA_CONSENT_REQUIRED') ||
+        raw.includes('DESKTOP_CONSENT_REQUIRED') ||
+        raw.includes('"consentRequired":true')
     );
 }
 
-
-function pushIfNotSuppressed(
-    alertKey: string,
-    opts: Parameters<typeof pushInfoBar>[0],
-): void {
+function pushIfNotSuppressed(alertKey: string, opts: Parameters<typeof pushInfoBar>[0]): void {
     if (isBotSnapshotAlertSuppressed(alertKey)) return;
     pushInfoBar({
         ...opts,
@@ -64,8 +60,7 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             const lastError = normError(row.bot.last_error);
             const kicked = row.invalidationReason === 'kicked';
             const crashed = row.bot.state === 'crashed';
-            const daemonCrashed =
-                row.isSnowLuma && row.snowlumaDaemonState === 'crashed';
+            const daemonCrashed = row.isSnowLuma && row.snowlumaDaemonState === 'crashed';
 
             const prev = getBotSnapshotPrev(id);
             const label = row.displayName;

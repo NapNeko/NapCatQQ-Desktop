@@ -22,8 +22,14 @@ describe('parseOsc633', () => {
     });
 
     it('reads the command line and the cwd', () => {
-        expect(parseOsc633('E;ls -la\\x3b pwd')).toEqual({ kind: 'command_line', command: 'ls -la; pwd' });
-        expect(parseOsc633('E;uv pip list;nonce123')).toEqual({ kind: 'command_line', command: 'uv pip list' });
+        expect(parseOsc633('E;ls -la\\x3b pwd')).toEqual({
+            kind: 'command_line',
+            command: 'ls -la; pwd',
+        });
+        expect(parseOsc633('E;uv pip list;nonce123')).toEqual({
+            kind: 'command_line',
+            command: 'uv pip list',
+        });
         expect(parseOsc633('E;')).toEqual({ kind: 'command_line', command: '' });
         expect(parseOsc633('P;Cwd=/home/u/麦麦')).toEqual({ kind: 'cwd', path: '/home/u/麦麦' });
         expect(parseOsc633('P;Cwd=C:\\\\Windows')).toEqual({ kind: 'cwd', path: 'C:\\Windows' });
@@ -40,7 +46,10 @@ describe('other sequences', () => {
     });
 
     it('reads OSC 7 file urls', () => {
-        expect(parseOsc7('file://vps1/home/u/my%20dir')).toEqual({ kind: 'cwd', path: '/home/u/my dir' });
+        expect(parseOsc7('file://vps1/home/u/my%20dir')).toEqual({
+            kind: 'cwd',
+            path: '/home/u/my dir',
+        });
         expect(parseOsc7('file:///C:/Users/x')).toEqual({ kind: 'cwd', path: 'C:\\Users\\x' });
         expect(parseOsc7('http://x/y')).toBeNull();
     });

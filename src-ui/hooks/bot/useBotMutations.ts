@@ -49,9 +49,9 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
         onError: (err: any) => {
             const text = err.message || String(err);
             if (
-                text.includes('SNOWLUMA_CONSENT_REQUIRED')
-                || text.includes('DESKTOP_CONSENT_REQUIRED')
-                || text.includes('"consentRequired":true')
+                text.includes('SNOWLUMA_CONSENT_REQUIRED') ||
+                text.includes('DESKTOP_CONSENT_REQUIRED') ||
+                text.includes('"consentRequired":true')
             ) {
                 return;
             }

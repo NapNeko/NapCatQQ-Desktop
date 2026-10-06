@@ -105,9 +105,7 @@ export const NoneBot2ConnectionsTab: React.FC<NoneBot2TabProps> = ({
                     label="命令前缀"
                     value={prefixes}
                     disabled={disabled}
-                    onChange={(next) =>
-                        set({ command_start: allowBare ? [...next, ''] : next })
-                    }
+                    onChange={(next) => set({ command_start: allowBare ? [...next, ''] : next })}
                 />
                 <Switch
                     label="无前缀也响应"
@@ -115,9 +113,7 @@ export const NoneBot2ConnectionsTab: React.FC<NoneBot2TabProps> = ({
                     disabled={disabled}
                     onCheckedChange={(v) =>
                         set({
-                            command_start: v
-                                ? [...prefixes, '']
-                                : prefixes,
+                            command_start: v ? [...prefixes, ''] : prefixes,
                         })
                     }
                 />

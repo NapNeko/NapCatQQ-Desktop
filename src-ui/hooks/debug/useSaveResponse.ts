@@ -16,13 +16,23 @@ export interface SaveResponseArgs {
 
 export function useSaveResponse() {
     return useMutation<boolean, unknown, SaveResponseArgs>({
-        mutationFn: ({ requestId, action }) => onebotDebugService.saveResponseFile(requestId, responseFileName(action, Date.now())),
+        mutationFn: ({ requestId, action }) =>
+            onebotDebugService.saveResponseFile(requestId, responseFileName(action, Date.now())),
         onSuccess: (saved) => {
             if (!saved) return;
-            pushInfoBar({ key: 'debug-save-response', tone: 'success', title: '完整回包已保存', autoDismissMs: 2500 });
+            pushInfoBar({
+                key: 'debug-save-response',
+                tone: 'success',
+                title: '完整回包已保存',
+                autoDismissMs: 2500,
+            });
         },
         onError: (err) => {
-            pushErrorBar({ key: 'debug-save-response', title: '另存完整回包失败', raw: errorText(err) });
+            pushErrorBar({
+                key: 'debug-save-response',
+                title: '另存完整回包失败',
+                raw: errorText(err),
+            });
         },
     });
 }

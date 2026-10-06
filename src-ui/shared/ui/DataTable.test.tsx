@@ -14,7 +14,10 @@ beforeAll(() => {
             return (this as HTMLElement).getAttribute('role') === 'table' ? 300 : 28;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 600 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 600,
+    });
 });
 
 afterAll(() => {
@@ -46,27 +49,31 @@ describe('DataTable 排序', () => {
 
         await user.click(screen.getByRole('button', { name: 'score' }));
         expect(firstColumn()).toEqual(['dave', 'alice', 'carol', 'bob']);
-        expect(screen.getByRole('columnheader', { name: 'score' })).toHaveAttribute('aria-sort', 'ascending');
+        expect(screen.getByRole('columnheader', { name: 'score' })).toHaveAttribute(
+            'aria-sort',
+            'ascending',
+        );
 
         // 再点一次降序
         await user.click(screen.getByRole('button', { name: 'score' }));
         expect(firstColumn()).toEqual(['bob', 'carol', 'alice', 'dave']);
-        expect(screen.getByRole('columnheader', { name: 'score' })).toHaveAttribute('aria-sort', 'descending');
+        expect(screen.getByRole('columnheader', { name: 'score' })).toHaveAttribute(
+            'aria-sort',
+            'descending',
+        );
 
         // 第三次还原成原顺序
         await user.click(screen.getByRole('button', { name: 'score' }));
         expect(firstColumn()).toEqual(['alice', 'bob', 'carol', 'dave']);
-        expect(screen.getByRole('columnheader', { name: 'score' })).toHaveAttribute('aria-sort', 'none');
+        expect(screen.getByRole('columnheader', { name: 'score' })).toHaveAttribute(
+            'aria-sort',
+            'none',
+        );
     });
 
     it('存成字符串的数字也按数值排；空值不论升降都在最后', async () => {
         const user = userEvent.setup();
-        const rows = [
-            { id: '100' },
-            { id: null },
-            { id: '9' },
-            { id: '20' },
-        ];
+        const rows = [{ id: '100' }, { id: null }, { id: '9' }, { id: '20' }];
         render(<DataTable columns={['id']} rows={rows} />);
 
         await user.click(screen.getByRole('button', { name: 'id' }));
@@ -77,7 +84,12 @@ describe('DataTable 排序', () => {
 
     it('文本列用自然序：群 2 排在群 10 前面', async () => {
         const user = userEvent.setup();
-        render(<DataTable columns={['name']} rows={[{ name: '群 10' }, { name: '群 2' }, { name: '群 1' }]} />);
+        render(
+            <DataTable
+                columns={['name']}
+                rows={[{ name: '群 10' }, { name: '群 2' }, { name: '群 1' }]}
+            />,
+        );
         await user.click(screen.getByRole('button', { name: 'name' }));
         expect(firstColumn()).toEqual(['群 1', '群 2', '群 10']);
     });
@@ -115,7 +127,11 @@ describe('DataTable 过滤与渲染', () => {
         render(<DataTable columns={COLUMNS} rows={ROWS} onCellClick={onCellClick} />);
 
         await user.click(screen.getByText('bob'));
-        expect(onCellClick).toHaveBeenLastCalledWith({ row: ROWS[1], column: 'name', value: 'bob' });
+        expect(onCellClick).toHaveBeenLastCalledWith({
+            row: ROWS[1],
+            column: 'name',
+            value: 'bob',
+        });
         await user.click(screen.getByText('100'));
         expect(onCellClick).toHaveBeenLastCalledWith({ row: ROWS[1], column: 'score', value: 100 });
     });
@@ -123,7 +139,9 @@ describe('DataTable 过滤与渲染', () => {
     it('可点的格子能用键盘到达，回车触发；没传 onCellClick 时格子不占 Tab 位', async () => {
         const user = userEvent.setup();
         const onCellClick = vi.fn();
-        const { unmount } = render(<DataTable columns={COLUMNS} rows={ROWS} onCellClick={onCellClick} />);
+        const { unmount } = render(
+            <DataTable columns={COLUMNS} rows={ROWS} onCellClick={onCellClick} />,
+        );
 
         const cell = screen.getByText('bob');
         expect(cell).toHaveAttribute('tabindex', '0');

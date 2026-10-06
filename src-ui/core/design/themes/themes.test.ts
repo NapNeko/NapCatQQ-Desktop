@@ -12,7 +12,9 @@ const tokensCss = readFileSync(resolve(__dirname, '../tokens.css'), 'utf-8');
 function declsOfBlock(css: string, selector: string): Map<string, string> {
     const start = css.indexOf(selector);
     const body = css.slice(css.indexOf('{', start) + 1, css.indexOf('}', start));
-    return new Map([...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+    return new Map(
+        [...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]),
+    );
 }
 
 function varsOfBlock(css: string, selector: string): string[] {
@@ -28,7 +30,8 @@ function resolveHex(selector: string, name: string): string {
         const ref = value.slice(4, -1).trim();
         value = own.get(ref) ?? root.get(ref) ?? '';
     }
-    if (!/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${selector} ${name} 解析不出 hex：${value}`);
+    if (!/^#[0-9a-f]{6}$/i.test(value))
+        throw new Error(`${selector} ${name} 解析不出 hex：${value}`);
     return value;
 }
 
@@ -77,19 +80,25 @@ describe('palette theme css', () => {
         expect(lightRootVars.length).toBeGreaterThan(40);
     });
 
-    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))('%s overrides every themed token', (_, p) => {
-        const css = buildPaletteThemeCss(p);
-        expect(css.startsWith(`html:root[data-theme="${p.id}"] {`)).toBe(true);
-        for (const name of new Set([...darkBlockVars, ...lightRootVars])) {
-            expect(css, name).toContain(`${name}:`);
-        }
-    });
+    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))(
+        '%s overrides every themed token',
+        (_, p) => {
+            const css = buildPaletteThemeCss(p);
+            expect(css.startsWith(`html:root[data-theme="${p.id}"] {`)).toBe(true);
+            for (const name of new Set([...darkBlockVars, ...lightRootVars])) {
+                expect(css, name).toContain(`${name}:`);
+            }
+        },
+    );
 
-    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))('%s keeps body text readable', (_, p) => {
-        expect(contrastRatio(p.text, p.canvas)).toBeGreaterThanOrEqual(4.5);
-        expect(contrastRatio(p.text, p.card)).toBeGreaterThanOrEqual(4.5);
-        expect(contrastRatio(p.text2, p.canvas)).toBeGreaterThanOrEqual(3);
-    });
+    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))(
+        '%s keeps body text readable',
+        (_, p) => {
+            expect(contrastRatio(p.text, p.canvas)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(p.text, p.card)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(p.text2, p.canvas)).toBeGreaterThanOrEqual(3);
+        },
+    );
 
     // 实测（屏幕反光 + 轻微失焦的拍屏模拟）：1.4:1 的深底深码 WeChat 引擎只扫出一半，
     // 4:1 左右已经和高对比码一样稳。3.5 留一点余量。
@@ -110,13 +119,16 @@ describe('palette theme css', () => {
         expect(contrastRatio(fg, '#000000')).toBeLessThan(contrastRatio(bg, '#000000'));
     });
 
-    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))('%s draws the QR code dark on light with enough contrast', (_, p) => {
-        const css = buildPaletteThemeCss(p);
-        const fg = css.match(/--qr-foreground: (#[0-9a-f]{6});/i)![1];
-        const bg = css.match(/--qr-background: (#[0-9a-f]{6});/i)![1];
-        expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(QR_MIN_CONTRAST);
-        expect(contrastRatio(fg, '#000000')).toBeLessThan(contrastRatio(bg, '#000000'));
-    });
+    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))(
+        '%s draws the QR code dark on light with enough contrast',
+        (_, p) => {
+            const css = buildPaletteThemeCss(p);
+            const fg = css.match(/--qr-foreground: (#[0-9a-f]{6});/i)![1];
+            const bg = css.match(/--qr-background: (#[0-9a-f]{6});/i)![1];
+            expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(QR_MIN_CONTRAST);
+            expect(contrastRatio(fg, '#000000')).toBeLessThan(contrastRatio(bg, '#000000'));
+        },
+    );
 
     it('picks dark text on pastel brand colors and white on saturated ones', () => {
         expect(pickOnColor('#c4a7e7', '#13111d')).toBe('#13111d');

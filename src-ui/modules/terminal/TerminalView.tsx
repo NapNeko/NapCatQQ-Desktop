@@ -91,7 +91,10 @@ export function TerminalView({ sessionId, focused, dropHint }: Props) {
                     />
                 </ContextMenuTrigger>
                 <ContextMenuContent className="min-w-[180px]">
-                    <ContextMenuItem disabled={!hasSelection} onClick={() => runtime.copySelection()}>
+                    <ContextMenuItem
+                        disabled={!hasSelection}
+                        onClick={() => runtime.copySelection()}
+                    >
                         <ClipboardCopy size={13} />
                         <span>复制</span>
                         <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
@@ -118,7 +121,9 @@ export function TerminalView({ sessionId, focused, dropHint }: Props) {
                 </ContextMenuContent>
             </ContextMenu>
 
-            {searchOpen && <TerminalSearchBar runtime={runtime} onClose={() => setSearchOpen(false)} />}
+            {searchOpen && (
+                <TerminalSearchBar runtime={runtime} onClose={() => setSearchOpen(false)} />
+            )}
 
             {session.sudoPrompt && (
                 <div className="ncd-term-pop absolute bottom-3 right-5 z-20">
@@ -139,7 +144,10 @@ export function TerminalView({ sessionId, focused, dropHint }: Props) {
 
             {dropHint && <div className="ncd-term-drop">{dropHint}</div>}
 
-            <Dialog open={pendingPaste !== null} onOpenChange={(open) => !open && answerPaste(false)}>
+            <Dialog
+                open={pendingPaste !== null}
+                onOpenChange={(open) => !open && answerPaste(false)}
+            >
                 <DialogContent size="lg">
                     <DialogHeader>
                         <DialogTitle>粘贴 {lines.length} 行？</DialogTitle>

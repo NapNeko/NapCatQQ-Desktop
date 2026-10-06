@@ -5,8 +5,7 @@
 // 最后一段是空的就留前一段。背景色不画，日志面板自己有底色。
 
 export type AnsiColor =
-    | { kind: 'palette'; index: number }
-    | { kind: 'rgb'; r: number; g: number; b: number };
+    { kind: 'palette'; index: number } | { kind: 'rgb'; r: number; g: number; b: number };
 
 export interface AnsiStyle {
     fg?: AnsiColor;
@@ -119,7 +118,8 @@ export function cutAnsi(src: AnsiText, cuts: ReadonlyArray<readonly [number, num
             if (start >= end) return;
             const shifted = { start: start + offsets[k], end: end + offsets[k], style: span.style };
             const last = spans[spans.length - 1];
-            if (last && last.end === shifted.start && last.style === span.style) last.end = shifted.end;
+            if (last && last.end === shifted.start && last.style === span.style)
+                last.end = shifted.end;
             else spans.push(shifted);
         });
     }
@@ -199,7 +199,10 @@ function byte(v: number | undefined): number {
 function extendedColor(rest: number[]): { color?: AnsiColor; used: number } {
     if (rest[0] === 5) return { color: { kind: 'palette', index: byte(rest[1]) }, used: 2 };
     if (rest[0] === 2) {
-        return { color: { kind: 'rgb', r: byte(rest[1]), g: byte(rest[2]), b: byte(rest[3]) }, used: 4 };
+        return {
+            color: { kind: 'rgb', r: byte(rest[1]), g: byte(rest[2]), b: byte(rest[3]) },
+            used: 4,
+        };
     }
     return { used: rest.length };
 }

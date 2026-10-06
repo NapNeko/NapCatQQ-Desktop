@@ -9,7 +9,9 @@ import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { EventDetailPopover, type DetailTarget } from './EventDetailPopover';
 
-const wrapper = ({ children }: { children: ReactNode }) => <TooltipProvider>{children}</TooltipProvider>;
+const wrapper = ({ children }: { children: ReactNode }) => (
+    <TooltipProvider>{children}</TooltipProvider>
+);
 
 function message(patch: Partial<MessageItem> = {}): MessageItem {
     return {
@@ -23,7 +25,13 @@ function message(patch: Partial<MessageItem> = {}): MessageItem {
         senderName: '小明',
         messageId: 4242,
         segments: [{ type: 'text', data: { text: '在吗' } }],
-        raw: { post_type: 'message', message_type: 'group', group_id: 100001, user_id: 10001, message_id: 4242 },
+        raw: {
+            post_type: 'message',
+            message_type: 'group',
+            group_id: 100001,
+            user_id: 10001,
+            message_id: 4242,
+        },
         ...patch,
     };
 }
@@ -58,7 +66,10 @@ describe('EventDetailPopover 消息快捷操作', () => {
         const { onClose } = openPopover(message());
 
         await user.click(await screen.findByRole('button', { name: '撤回' }));
-        expect(open).toHaveBeenCalledWith('delete_msg', { newTab: true, paramsText: '{\n  "message_id": 4242\n}' });
+        expect(open).toHaveBeenCalledWith('delete_msg', {
+            newTab: true,
+            paramsText: '{\n  "message_id": 4242\n}',
+        });
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
@@ -70,7 +81,8 @@ describe('EventDetailPopover 消息快捷操作', () => {
         await user.click(await screen.findByRole('button', { name: '回复' }));
         expect(open).toHaveBeenCalledWith('send_group_msg', {
             newTab: true,
-            paramsText: '{\n  "group_id": 100001,\n  "message": [\n    {\n      "type": "reply",\n      "data": {\n        "id": 4242\n      }\n    }\n  ]\n}',
+            paramsText:
+                '{\n  "group_id": 100001,\n  "message": [\n    {\n      "type": "reply",\n      "data": {\n        "id": 4242\n      }\n    }\n  ]\n}',
         });
     });
 
@@ -79,9 +91,17 @@ describe('EventDetailPopover 消息快捷操作', () => {
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         const { rerender, onClose } = openPopover(message({ session: 'private:10001' }));
         await user.click(await screen.findByRole('button', { name: '查发送者' }));
-        expect(open).toHaveBeenCalledWith('get_stranger_info', { newTab: true, paramsText: '{\n  "user_id": 10001\n}' });
+        expect(open).toHaveBeenCalledWith('get_stranger_info', {
+            newTab: true,
+            paramsText: '{\n  "user_id": 10001\n}',
+        });
 
-        rerender(<EventDetailPopover target={targetOf(message({ direction: 'out', senderName: '我' }))} onClose={onClose} />);
+        rerender(
+            <EventDetailPopover
+                target={targetOf(message({ direction: 'out', senderName: '我' }))}
+                onClose={onClose}
+            />,
+        );
         expect(screen.queryByRole('button', { name: '查发送者' })).not.toBeInTheDocument();
         // 回复和撤回还在
         expect(await screen.findByRole('button', { name: '回复' })).toBeInTheDocument();
@@ -94,7 +114,14 @@ describe('EventDetailPopover 消息快捷操作', () => {
         expect(screen.queryByRole('button', { name: '回复' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: '撤回' })).not.toBeInTheDocument();
 
-        const notice: ChatItem = { kind: 'notice', key: 'e2', seq: 2, at: 1, text: '小明 加入了群', raw: {} };
+        const notice: ChatItem = {
+            kind: 'notice',
+            key: 'e2',
+            seq: 2,
+            at: 1,
+            text: '小明 加入了群',
+            raw: {},
+        };
         rerender(<EventDetailPopover target={targetOf(notice)} onClose={onClose} />);
         expect(screen.queryByRole('button', { name: '回复' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: '查发送者' })).not.toBeInTheDocument();

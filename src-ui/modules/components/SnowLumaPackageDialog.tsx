@@ -16,11 +16,7 @@ interface Props {
     onConfirm: (pkg: SnowLumaPackage) => void;
 }
 
-export const SnowLumaPackageDialog: React.FC<Props> = ({
-    open,
-    onOpenChange,
-    onConfirm,
-}) => {
+export const SnowLumaPackageDialog: React.FC<Props> = ({ open, onOpenChange, onConfirm }) => {
     const [pkg, setPkg] = useState<SnowLumaPackage>('full');
 
     useEffect(() => {

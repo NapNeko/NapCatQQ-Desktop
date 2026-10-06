@@ -10,7 +10,17 @@ interface Props {
     onClose(): void;
 }
 
-function Toggle({ active, onClick, title, children }: { active: boolean; onClick(): void; title: string; children: React.ReactNode }) {
+function Toggle({
+    active,
+    onClick,
+    title,
+    children,
+}: {
+    active: boolean;
+    onClick(): void;
+    title: string;
+    children: React.ReactNode;
+}) {
     return (
         <button
             type="button"
@@ -19,7 +29,9 @@ function Toggle({ active, onClick, title, children }: { active: boolean; onClick
             onClick={onClick}
             className={cn(
                 'flex h-6 w-6 items-center justify-center rounded-xs transition-colors',
-                active ? 'bg-accent-soft text-text' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                active
+                    ? 'bg-accent-soft text-text'
+                    : 'text-text-tertiary hover:bg-inset hover:text-text',
             )}
         >
             {children}
@@ -90,8 +102,14 @@ export function TerminalSearchBar({ runtime, onClose }: Props) {
                 spellCheck={false}
                 className="h-6 w-44 rounded-xs bg-field px-2 text-[12px] text-text outline-none placeholder:text-text-tertiary"
             />
-            <span className="w-12 text-center text-[11px] tabular-nums text-text-tertiary">{count}</span>
-            <Toggle active={caseSensitive} onClick={() => setCaseSensitive((v) => !v)} title="区分大小写">
+            <span className="w-12 text-center text-[11px] tabular-nums text-text-tertiary">
+                {count}
+            </span>
+            <Toggle
+                active={caseSensitive}
+                onClick={() => setCaseSensitive((v) => !v)}
+                title="区分大小写"
+            >
                 <CaseSensitive size={14} />
             </Toggle>
             <Toggle active={wholeWord} onClick={() => setWholeWord((v) => !v)} title="全字匹配">

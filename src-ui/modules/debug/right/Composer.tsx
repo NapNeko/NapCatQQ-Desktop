@@ -17,9 +17,26 @@ import {
     type MouseEvent as ReactMouseEvent,
     type MutableRefObject,
 } from 'react';
-import { AtSign, Blocks, CornerDownLeft, Reply, SendHorizontal, TriangleAlert, Users, X } from 'lucide-react';
+import {
+    AtSign,
+    Blocks,
+    CornerDownLeft,
+    Reply,
+    SendHorizontal,
+    TriangleAlert,
+    Users,
+    X,
+} from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
-import { Popover, PopoverAnchor, PopoverContent, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
+import {
+    Popover,
+    PopoverAnchor,
+    PopoverContent,
+    Spinner,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '../../../shared/ui';
 import { IconAction } from './rightParts';
 import { useDebugCall } from '../../../hooks/debug/useDebugCall';
 import { useDebugContacts, type DebugContactOption } from '../../../hooks/debug/useDebugContacts';
@@ -124,7 +141,9 @@ export const Composer = memo(function Composer({
     const key = botId && to ? draftKey(botId, to.session) : null;
     const { send } = useDebugCall();
 
-    const [draft, setDraftState] = useState<ComposerEntry>(() => (key ? readEntry(key) : EMPTY_ENTRY));
+    const [draft, setDraftState] = useState<ComposerEntry>(() =>
+        key ? readEntry(key) : EMPTY_ENTRY,
+    );
     const draftRef = useRef(draft);
     draftRef.current = draft;
     const keyRef = useRef(key);
@@ -200,14 +219,20 @@ export const Composer = memo(function Composer({
         if (!picker) return [];
         const q = picker.query.trim().toLowerCase();
         const out: PickOption[] = [];
-        if (q === '' || '全体成员'.includes(q) || 'all'.startsWith(q)) out.push({ qq: 'all', label: '全体成员', hint: '需要管理员权限' });
+        if (q === '' || '全体成员'.includes(q) || 'all'.startsWith(q))
+            out.push({ qq: 'all', label: '全体成员', hint: '需要管理员权限' });
         const matched = contacts.options.filter(
             (o: DebugContactOption) =>
-                q === '' || o.label.toLowerCase().includes(q) || String(o.id).startsWith(q) || (o.hint ?? '').toLowerCase().includes(q),
+                q === '' ||
+                o.label.toLowerCase().includes(q) ||
+                String(o.id).startsWith(q) ||
+                (o.hint ?? '').toLowerCase().includes(q),
         );
-        for (const o of matched.slice(0, MAX_OPTIONS)) out.push({ qq: String(o.id), label: o.label, hint: o.hint });
+        for (const o of matched.slice(0, MAX_OPTIONS))
+            out.push({ qq: String(o.id), label: o.label, hint: o.hint });
         // 拉不到成员、或者名单里没有：直接 @ 一个号
-        if (/^\d{5,12}$/.test(q) && !out.some((o) => o.qq === q)) out.push({ qq: q, label: q, hint: '直接 @ 这个 QQ 号' });
+        if (/^\d{5,12}$/.test(q) && !out.some((o) => o.qq === q))
+            out.push({ qq: q, label: q, hint: '直接 @ 这个 QQ 号' });
         return out;
     }, [picker, contacts.options]);
     const moreCount = picker ? Math.max(0, contacts.options.length - MAX_OPTIONS) : 0;
@@ -225,7 +250,15 @@ export const Composer = memo(function Composer({
                 return;
             }
             const m = mentionQueryAt(text, caret);
-            setPicker((prev) => (m ? { start: m.start, query: m.query, index: prev && prev.start === m.start ? prev.index : -1 } : null));
+            setPicker((prev) =>
+                m
+                    ? {
+                          start: m.start,
+                          query: m.query,
+                          index: prev && prev.start === m.start ? prev.index : -1,
+                      }
+                    : null,
+            );
         },
         [isGroup],
     );
@@ -238,7 +271,10 @@ export const Composer = memo(function Composer({
         const sameName = contacts.options.filter((o) => o.label === opt.label).length;
         const label = mentionLabel(opt.label, opt.qq, draft.mentions, sameName);
         const text = `${draft.text.slice(0, picker.start)}${label} ${draft.text.slice(caret)}`;
-        const mentions: Mention[] = [...draft.mentions.filter((m) => m.label !== label || m.qq === opt.qq), { qq: opt.qq, label }];
+        const mentions: Mention[] = [
+            ...draft.mentions.filter((m) => m.label !== label || m.qq === opt.qq),
+            { qq: opt.qq, label },
+        ];
         setDraft({ text, mentions: dedupe(mentions) });
         setPicker(null);
         const pos = picker.start + label.length + 1;
@@ -249,7 +285,10 @@ export const Composer = memo(function Composer({
     };
 
     // ---- 发送
-    const segments = useMemo(() => assembleMessage(draft, reply?.messageId), [draft, reply?.messageId]);
+    const segments = useMemo(
+        () => assembleMessage(draft, reply?.messageId),
+        [draft, reply?.messageId],
+    );
     const sendable = canCompose && !sending && hasMessageContent(segments);
 
     const submit = async () => {
@@ -262,7 +301,10 @@ export const Composer = memo(function Composer({
             bot_id: botId,
             channel: callChannel,
             action: to.type === 'group' ? 'send_group_msg' : 'send_private_msg',
-            params: to.type === 'group' ? { group_id: to.id, message: segments } : { user_id: to.id, message: segments },
+            params:
+                to.type === 'group'
+                    ? { group_id: to.id, message: segments }
+                    : { user_id: to.id, message: segments },
             origin: 'composer',
             timeout_ms: SEND_TIMEOUT_MS,
         });
@@ -277,7 +319,11 @@ export const Composer = memo(function Composer({
             if (sentKey) {
                 const old = readEntry(sentKey);
                 const text = remainderAfterSend(old.text, sentText);
-                writeEntry(sentKey, { text, mentions: pruneMentions(text, old.mentions), rich: [] });
+                writeEntry(sentKey, {
+                    text,
+                    mentions: pruneMentions(text, old.mentions),
+                    rich: [],
+                });
             }
             return;
         }
@@ -328,7 +374,9 @@ export const Composer = memo(function Composer({
             const el = e.currentTarget;
             if (el.selectionStart !== el.selectionEnd) return;
             const before = draft.text.slice(0, el.selectionStart);
-            const hit = draft.mentions.find((m) => before.endsWith(`${m.label} `) || before.endsWith(m.label));
+            const hit = draft.mentions.find(
+                (m) => before.endsWith(`${m.label} `) || before.endsWith(m.label),
+            );
             if (!hit) return;
             const cut = before.endsWith(`${hit.label} `) ? hit.label.length + 1 : hit.label.length;
             e.preventDefault();
@@ -384,7 +432,11 @@ export const Composer = memo(function Composer({
                             <span className="min-w-0 flex-1 truncate">
                                 回复 {reply.senderName}：{reply.preview || '（空消息）'}
                             </span>
-                            <ChipClose label="不回复了" onClick={onClearReply} className="hover:bg-brand/15" />
+                            <ChipClose
+                                label="不回复了"
+                                onClick={onClearReply}
+                                className="hover:bg-brand/15"
+                            />
                         </span>
                     )}
                 </div>
@@ -394,7 +446,9 @@ export const Composer = memo(function Composer({
                     <div
                         className={cn(
                             'flex items-end gap-1 rounded-md border bg-surface px-1.5 py-1 transition-colors',
-                            canCompose ? 'border-border-subtle focus-within:border-brand/45' : 'border-border-subtle/60 bg-inset/40',
+                            canCompose
+                                ? 'border-border-subtle focus-within:border-brand/45'
+                                : 'border-border-subtle/60 bg-inset/40',
                             error && 'border-danger/40',
                         )}
                     >
@@ -408,9 +462,13 @@ export const Composer = memo(function Composer({
                                     const el = areaRef.current;
                                     if (!el) return;
                                     const caret = el.selectionStart ?? draft.text.length;
-                                    const needsSpace = caret > 0 && !/\s$/.test(draft.text.slice(0, caret));
+                                    const needsSpace =
+                                        caret > 0 && !/\s$/.test(draft.text.slice(0, caret));
                                     const insert = `${needsSpace ? ' ' : ''}@`;
-                                    const text = draft.text.slice(0, caret) + insert + draft.text.slice(caret);
+                                    const text =
+                                        draft.text.slice(0, caret) +
+                                        insert +
+                                        draft.text.slice(caret);
                                     setDraft({ ...draft, text });
                                     const pos = caret + insert.length;
                                     setPicker({ start: pos - 1, query: '', index: -1 });
@@ -441,7 +499,11 @@ export const Composer = memo(function Composer({
                             value={draft.text}
                             disabled={!canCompose}
                             placeholder={placeholder}
-                            title={canCompose ? `Enter 发送，Shift + Enter 换行${isGroup ? '，输入 @ 提到群成员' : ''}` : undefined}
+                            title={
+                                canCompose
+                                    ? `Enter 发送，Shift + Enter 换行${isGroup ? '，输入 @ 提到群成员' : ''}`
+                                    : undefined
+                            }
                             aria-label={to ? `发到 ${to.name} 的消息` : '消息'}
                             onChange={(e) => {
                                 const text = e.target.value;
@@ -451,10 +513,15 @@ export const Composer = memo(function Composer({
                             onKeyDown={onKeyDown}
                             onKeyUp={(e) => {
                                 if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
-                                    refreshPicker(e.currentTarget.value, e.currentTarget.selectionStart);
+                                    refreshPicker(
+                                        e.currentTarget.value,
+                                        e.currentTarget.selectionStart,
+                                    );
                                 }
                             }}
-                            onClick={(e) => refreshPicker(e.currentTarget.value, e.currentTarget.selectionStart)}
+                            onClick={(e) =>
+                                refreshPicker(e.currentTarget.value, e.currentTarget.selectionStart)
+                            }
                             className="min-h-[28px] min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-[13px] leading-5 text-text outline-none placeholder:text-text-disabled disabled:cursor-not-allowed"
                         />
                         <Tooltip>
@@ -474,14 +541,20 @@ export const Composer = memo(function Composer({
                                     )}
                                 >
                                     {sending ? (
-                                        <Spinner size="xs" label="正在发送" className="text-white" />
+                                        <Spinner
+                                            size="xs"
+                                            label="正在发送"
+                                            className="text-white"
+                                        />
                                     ) : (
                                         <SendHorizontal size={13} aria-hidden />
                                     )}
                                     <span className="hidden @min-[340px]/right:inline">发送</span>
                                 </button>
                             </TooltipTrigger>
-                            <TooltipContent side="top">{sending ? '正在发送…' : '发送（Enter）'}</TooltipContent>
+                            <TooltipContent side="top">
+                                {sending ? '正在发送…' : '发送（Enter）'}
+                            </TooltipContent>
                         </Tooltip>
                     </div>
                 </PopoverAnchor>
@@ -505,10 +578,17 @@ export const Composer = memo(function Composer({
                 </PopoverContent>
             </Popover>
             {error && (
-                <div role="alert" className="mt-1 flex items-start gap-1.5 px-0.5 text-2xs leading-relaxed text-danger">
+                <div
+                    role="alert"
+                    className="mt-1 flex items-start gap-1.5 px-0.5 text-2xs leading-relaxed text-danger"
+                >
                     <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
                     <span className="min-w-0 flex-1 break-words">{error}</span>
-                    <ChipClose label="关掉这条提示" onClick={() => setError(null)} className="hover:bg-danger-soft" />
+                    <ChipClose
+                        label="关掉这条提示"
+                        onClick={() => setError(null)}
+                        className="hover:bg-danger-soft"
+                    />
                 </div>
             )}
             <MessageBuilderDialog
@@ -526,13 +606,24 @@ export const Composer = memo(function Composer({
 });
 
 /** 小胶囊上的 ×：带悬停提示 */
-function ChipClose({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+function ChipClose({
+    label,
+    onClick,
+    className,
+}: {
+    label: string;
+    onClick: () => void;
+    className?: string;
+}) {
     return (
         <IconAction
             label={label}
             onClick={onClick}
             onMouseDown={(e) => e.preventDefault()}
-            className={cn('h-4 w-4 rounded-full text-current hover:bg-inset hover:text-current', className)}
+            className={cn(
+                'h-4 w-4 rounded-full text-current hover:bg-inset hover:text-current',
+                className,
+            )}
         >
             <X size={10} aria-hidden />
         </IconAction>
@@ -573,7 +664,9 @@ function MemberList({
 }) {
     const listRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
+        listRef.current
+            ?.querySelector<HTMLElement>('[aria-selected="true"]')
+            ?.scrollIntoView?.({ block: 'nearest' });
     }, [activeIndex]);
 
     // 指针真的动了才跟着换高亮。弹层是在指针底下弹出来的：指针正好停在「全体成员」上时，
@@ -591,8 +684,15 @@ function MemberList({
     };
     return (
         <div>
-            <p className="px-2 pb-1 pt-0.5 text-2xs font-medium text-text-tertiary">@ 谁（↑↓ 选，回车确定）</p>
-            <div ref={listRef} role="listbox" aria-label="群成员" className="max-h-[220px] overflow-y-auto">
+            <p className="px-2 pb-1 pt-0.5 text-2xs font-medium text-text-tertiary">
+                @ 谁（↑↓ 选，回车确定）
+            </p>
+            <div
+                ref={listRef}
+                role="listbox"
+                aria-label="群成员"
+                className="max-h-[220px] overflow-y-auto"
+            >
                 {options.map((o, i) => (
                     <div
                         key={`${o.qq}:${i}`}
@@ -603,11 +703,17 @@ function MemberList({
                         onClick={() => onPick(o)}
                         className={cn(
                             'flex cursor-pointer items-baseline gap-2 rounded-xs px-2 py-1 text-xs',
-                            i === activeIndex ? 'bg-brand-soft text-text' : 'text-text-secondary hover:bg-inset',
+                            i === activeIndex
+                                ? 'bg-brand-soft text-text'
+                                : 'text-text-secondary hover:bg-inset',
                         )}
                     >
                         <span className="min-w-0 truncate font-medium">{o.label}</span>
-                        {o.hint && <span className="ml-auto min-w-0 shrink truncate text-2xs text-text-tertiary">{o.hint}</span>}
+                        {o.hint && (
+                            <span className="ml-auto min-w-0 shrink truncate text-2xs text-text-tertiary">
+                                {o.hint}
+                            </span>
+                        )}
                     </div>
                 ))}
             </div>
@@ -618,9 +724,15 @@ function MemberList({
                 </p>
             )}
             {error && (
-                <p className="px-2 py-1.5 text-2xs leading-relaxed text-warning">拉不到群成员（{error}）。直接输入 QQ 号也能 @。</p>
+                <p className="px-2 py-1.5 text-2xs leading-relaxed text-warning">
+                    拉不到群成员（{error}）。直接输入 QQ 号也能 @。
+                </p>
             )}
-            {more > 0 && <p className="px-2 pb-1 pt-0.5 text-2xs text-text-tertiary">还有 {more} 人，输入名字或 QQ 号缩小范围</p>}
+            {more > 0 && (
+                <p className="px-2 pb-1 pt-0.5 text-2xs text-text-tertiary">
+                    还有 {more} 人，输入名字或 QQ 号缩小范围
+                </p>
+            )}
             {!loading && !error && options.length === 0 && (
                 <p className="px-2 py-1.5 text-2xs text-text-tertiary">没有叫这个名字的成员</p>
             )}

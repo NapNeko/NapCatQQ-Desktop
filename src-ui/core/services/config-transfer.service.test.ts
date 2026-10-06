@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ipc = vi.hoisted(() => ({ native: true, invoke: vi.fn(), save: vi.fn(), listen: vi.fn() }));
 vi.mock('../ipc/transport', () => ({
-    get isTauri() { return ipc.native; },
+    get isTauri() {
+        return ipc.native;
+    },
     invoke: ipc.invoke,
     listen: ipc.listen,
     saveZipFile: ipc.save,
@@ -26,19 +28,25 @@ describe('complete configuration transfer', () => {
             callback(['应用设置', 'API 调试工作区']);
             return () => {};
         });
-        await configTransferService.onImported(files => received.push(files));
+        await configTransferService.onImported((files) => received.push(files));
         expect(received).toEqual([['应用设置', 'API 调试工作区']]);
     });
     it('includes saved UI preferences without terminal history or unrelated storage', async () => {
         const { configTransferService } = await import('./config-transfer.service');
-        localStorage.setItem('ncd.terminal.prefs.v1', '{"fontSize":17,"snippets":[{"label":"状态","command":"pwd"}]}');
+        localStorage.setItem(
+            'ncd.terminal.prefs.v1',
+            '{"fontSize":17,"snippets":[{"label":"状态","command":"pwd"}]}',
+        );
         localStorage.setItem('ncd.chat.ui.v1', '{"listWidth":300}');
         localStorage.setItem('ncd:bot_custom_order:v1', '["10002","10001"]');
         localStorage.setItem('ncd.maibot.chat.name.instance-1', '桌面用户');
         localStorage.setItem('ncd.terminal.recents.v1', '{"local":["private command"]}');
         localStorage.setItem('ncd_perf_marks', '1');
         ipc.save.mockResolvedValue('D:/backup/config.ZIP');
-        ipc.invoke.mockResolvedValue({ export_path: 'D:/backup/config.ZIP', files: ['界面与终端偏好'] });
+        ipc.invoke.mockResolvedValue({
+            export_path: 'D:/backup/config.ZIP',
+            files: ['界面与终端偏好'],
+        });
 
         await configTransferService.export();
 
@@ -47,7 +55,8 @@ describe('complete configuration transfer', () => {
             frontendPreferences: {
                 version: 1,
                 storage: {
-                    'ncd.terminal.prefs.v1': '{"fontSize":17,"snippets":[{"label":"状态","command":"pwd"}]}',
+                    'ncd.terminal.prefs.v1':
+                        '{"fontSize":17,"snippets":[{"label":"状态","command":"pwd"}]}',
                     'ncd.chat.ui.v1': '{"listWidth":300}',
                     'ncd:bot_custom_order:v1': '["10002","10001"]',
                     'ncd.maibot.chat.name.instance-1': '桌面用户',
@@ -78,11 +87,15 @@ describe('complete configuration transfer', () => {
         botSortStore.set(['old-bot']);
         localStorage.setItem('unrelated-key', 'keep');
         ipc.invoke.mockResolvedValue({
-            files: ['界面与终端偏好'], skipped: [],
-            frontend_preferences: { version: 1, storage: {
-                'ncd.terminal.prefs.v1': '{"fontSize":21}',
-                'ncd:bot_custom_order:v1': '["10002","10001"]',
-            } },
+            files: ['界面与终端偏好'],
+            skipped: [],
+            frontend_preferences: {
+                version: 1,
+                storage: {
+                    'ncd.terminal.prefs.v1': '{"fontSize":21}',
+                    'ncd:bot_custom_order:v1': '["10002","10001"]',
+                },
+            },
         });
 
         await configTransferService.import('D:/backup/config.zip');
@@ -99,9 +112,14 @@ describe('complete configuration transfer', () => {
         localStorage.setItem('ncd.terminal.layout.v1', '{"height":300}');
         localStorage.setItem('ncd.maibot.chat.name.instance-1', '旧昵称');
         localStorage.setItem('unrelated-key', 'keep');
-        ipc.invoke.mockResolvedValue({ files: ['界面与终端偏好'], skipped: [], frontend_preferences: {
-            version: 1, storage: { 'ncd.terminal.prefs.v1': '{"fontSize":21}' },
-        } });
+        ipc.invoke.mockResolvedValue({
+            files: ['界面与终端偏好'],
+            skipped: [],
+            frontend_preferences: {
+                version: 1,
+                storage: { 'ncd.terminal.prefs.v1': '{"fontSize":21}' },
+            },
+        });
 
         await configTransferService.import('config.zip');
 
@@ -115,17 +133,29 @@ describe('complete configuration transfer', () => {
         const { configTransferService } = await import('./config-transfer.service');
         localStorage.setItem('ncd.terminal.layout.v1', '{"height":300}');
         const set = Storage.prototype.setItem;
-        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
-            if (key === 'ncd.terminal.prefs.v1') throw new DOMException('Storage full', 'QuotaExceededError');
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+            this: Storage,
+            key,
+            value,
+        ) {
+            if (key === 'ncd.terminal.prefs.v1')
+                throw new DOMException('Storage full', 'QuotaExceededError');
             set.call(this, key, value);
         });
-        ipc.invoke.mockResolvedValue({ files: ['界面与终端偏好'], skipped: [], frontend_preferences: {
-            version: 1, storage: { 'ncd.terminal.prefs.v1': '{"fontSize":19}' },
-        } });
+        ipc.invoke.mockResolvedValue({
+            files: ['界面与终端偏好'],
+            skipped: [],
+            frontend_preferences: {
+                version: 1,
+                storage: { 'ncd.terminal.prefs.v1': '{"fontSize":19}' },
+            },
+        });
 
         const result = await configTransferService.import('config.zip');
 
-        expect(result).toMatchObject({ frontendPreferencesError: expect.stringContaining('Storage full') });
+        expect(result).toMatchObject({
+            frontendPreferencesError: expect.stringContaining('Storage full'),
+        });
         expect(localStorage.getItem('ncd.terminal.layout.v1')).toBe('{"height":300}');
         expect(localStorage.getItem('ncd.terminal.prefs.v1')).toBeNull();
     });
@@ -141,13 +171,21 @@ describe('complete configuration transfer', () => {
     it('rejects unknown preference keys before changing any existing preference', async () => {
         const { configTransferService } = await import('./config-transfer.service');
         localStorage.setItem('ncd.chat.ui.v1', '{"listWidth":280}');
-        ipc.invoke.mockResolvedValue({ files: ['应用设置'], skipped: [], frontend_preferences: {
-            version: 1, storage: { 'ncd.chat.ui.v1': '{"listWidth":310}', 'untrusted-key': 'overwrite' },
-        } });
+        ipc.invoke.mockResolvedValue({
+            files: ['应用设置'],
+            skipped: [],
+            frontend_preferences: {
+                version: 1,
+                storage: { 'ncd.chat.ui.v1': '{"listWidth":310}', 'untrusted-key': 'overwrite' },
+            },
+        });
 
         const result = await configTransferService.import('config.zip');
 
-        expect(result).toMatchObject({ files: ['应用设置'], frontendPreferencesError: expect.any(String) });
+        expect(result).toMatchObject({
+            files: ['应用设置'],
+            frontendPreferencesError: expect.any(String),
+        });
         expect(localStorage.getItem('ncd.chat.ui.v1')).toBe('{"listWidth":280}');
         expect(localStorage.getItem('untrusted-key')).toBeNull();
     });
@@ -156,17 +194,33 @@ describe('complete configuration transfer', () => {
         const { configTransferService } = await import('./config-transfer.service');
         localStorage.setItem('ncd.terminal.prefs.v1', '{"fontSize":13}');
         const set = Storage.prototype.setItem;
-        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
-            if (key === 'ncd.chat.ui.v1') throw new DOMException('Storage full', 'QuotaExceededError');
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+            this: Storage,
+            key,
+            value,
+        ) {
+            if (key === 'ncd.chat.ui.v1')
+                throw new DOMException('Storage full', 'QuotaExceededError');
             set.call(this, key, value);
         });
-        ipc.invoke.mockResolvedValue({ files: ['应用设置'], skipped: [], frontend_preferences: {
-            version: 1, storage: { 'ncd.terminal.prefs.v1': '{"fontSize":19}', 'ncd.chat.ui.v1': '{"listWidth":300}' },
-        } });
+        ipc.invoke.mockResolvedValue({
+            files: ['应用设置'],
+            skipped: [],
+            frontend_preferences: {
+                version: 1,
+                storage: {
+                    'ncd.terminal.prefs.v1': '{"fontSize":19}',
+                    'ncd.chat.ui.v1': '{"listWidth":300}',
+                },
+            },
+        });
 
         const result = await configTransferService.import('config.zip');
 
-        expect(result).toMatchObject({ files: ['应用设置'], frontendPreferencesError: expect.stringContaining('Storage full') });
+        expect(result).toMatchObject({
+            files: ['应用设置'],
+            frontendPreferencesError: expect.stringContaining('Storage full'),
+        });
         expect(localStorage.getItem('ncd.terminal.prefs.v1')).toBe('{"fontSize":13}');
         expect(localStorage.getItem('ncd.chat.ui.v1')).toBeNull();
     });
@@ -174,9 +228,17 @@ describe('complete configuration transfer', () => {
     it('rejects malformed terminal settings before restoring another preference', async () => {
         const { configTransferService } = await import('./config-transfer.service');
         localStorage.setItem('ncd.chat.ui.v1', '{"listWidth":280}');
-        ipc.invoke.mockResolvedValue({ files: ['应用设置'], skipped: [], frontend_preferences: {
-            version: 1, storage: { 'ncd.chat.ui.v1': '{"listWidth":300}', 'ncd.terminal.prefs.v1': '{"fontSize":"bad"}' },
-        } });
+        ipc.invoke.mockResolvedValue({
+            files: ['应用设置'],
+            skipped: [],
+            frontend_preferences: {
+                version: 1,
+                storage: {
+                    'ncd.chat.ui.v1': '{"listWidth":300}',
+                    'ncd.terminal.prefs.v1': '{"fontSize":"bad"}',
+                },
+            },
+        });
 
         const result = await configTransferService.import('config.zip');
 

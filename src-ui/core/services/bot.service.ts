@@ -70,16 +70,12 @@ export const botService = {
     fetchBotRemoteNetwork: (botId: string): Promise<ImportedNetworkConfig | null> => {
         if (isTauri)
             return invoke<ImportedNetworkConfig | null>('fetch_bot_remote_network', { botId });
-        return new Promise((resolve) =>
-            setTimeout(() => resolve(mockRemoteNetwork()), 400),
-        );
+        return new Promise((resolve) => setTimeout(() => resolve(mockRemoteNetwork()), 400));
     },
 
     listSnapshots: async (): Promise<BotActorSnapshot[]> => {
         if (isTauri) return invoke<BotActorSnapshot[]>('list_bot_snapshots');
-        return new Promise((resolve) =>
-            setTimeout(() => resolve([...mockSnapshots]), 200),
-        );
+        return new Promise((resolve) => setTimeout(() => resolve([...mockSnapshots]), 200));
     },
 
     getRuntimeMetrics: async (botId: string): Promise<BotRuntimeMetrics> => {
@@ -130,10 +126,11 @@ export const botService = {
         toMs?: number,
     ): Promise<MetricsHistoryPoint[]> => {
         if (isTauri) {
-            return invoke<MetricsHistoryPoint[]>(
-                'get_bot_runtime_metrics_history',
-                { botId, fromMs, toMs },
-            );
+            return invoke<MetricsHistoryPoint[]>('get_bot_runtime_metrics_history', {
+                botId,
+                fromMs,
+                toMs,
+            });
         }
         void botId;
         const end = toMs ?? Date.now();
@@ -318,7 +315,11 @@ export const botService = {
         config: BotConfig,
         decisions: DriftDecision[],
     ): Promise<BotActorSnapshot> => {
-        if (isTauri) return invoke<BotActorSnapshot>('upsert_bot_config_with_decisions', { config, decisions });
+        if (isTauri)
+            return invoke<BotActorSnapshot>('upsert_bot_config_with_decisions', {
+                config,
+                decisions,
+            });
         return mockUpsertBotConfig(config);
     },
 
@@ -335,7 +336,8 @@ export const botService = {
         botId: string,
         decisions: DriftDecision[],
     ): Promise<BotActorSnapshot> => {
-        if (isTauri) return invoke<BotActorSnapshot>('start_bot_with_drift_decisions', { botId, decisions });
+        if (isTauri)
+            return invoke<BotActorSnapshot>('start_bot_with_drift_decisions', { botId, decisions });
         return mockStartBot(botId);
     },
 
@@ -399,7 +401,10 @@ export const botService = {
     },
 
     prepareSnowLumaAgreements: async (botId: string): Promise<SnowLumaAgreementsPayload | null> => {
-        if (isTauri) return invoke<SnowLumaAgreementsPayload | null>('prepare_snowluma_agreements', { botId });
+        if (isTauri)
+            return invoke<SnowLumaAgreementsPayload | null>('prepare_snowluma_agreements', {
+                botId,
+            });
         return null;
     },
 

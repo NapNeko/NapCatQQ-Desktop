@@ -10,9 +10,7 @@ const FLAVOR_LABEL: Record<DockerFlavor, string> = {
     snowluma: 'SnowLuma',
 };
 
-export function dockerFlavorForBackend(
-    backend: BotConfig['bot']['backend_type'],
-): DockerFlavor {
+export function dockerFlavorForBackend(backend: BotConfig['bot']['backend_type']): DockerFlavor {
     return backend === 'snowluma' ? 'snowluma' : 'napcat';
 }
 
@@ -41,8 +39,7 @@ function dockerImageGateReason(
     const { config, dockerStatus, imageReady, dockerProbing } = args;
     if (!isDockerBotConfig(config)) return null;
 
-    const label =
-        FLAVOR_LABEL[dockerFlavorForBackend(config.bot.backend_type)];
+    const label = FLAVOR_LABEL[dockerFlavorForBackend(config.bot.backend_type)];
     const later = when === 'save' ? '后再保存' : '后再启动';
 
     if (dockerProbing && !dockerStatus) {
@@ -52,9 +49,7 @@ function dockerImageGateReason(
     }
 
     const dockerOk =
-        dockerStatus?.installed &&
-        dockerStatus.daemonRunning &&
-        dockerStatus.composeAvailable;
+        dockerStatus?.installed && dockerStatus.daemonRunning && dockerStatus.composeAvailable;
 
     if (!dockerOk) {
         return '此主机 Docker 未就绪，请到「组件」页安装并启动 Docker';
@@ -104,8 +99,7 @@ export function dockerReadinessNotice(args: {
         return { tone: 'neutral', text: '正在检查 Docker…' };
     }
 
-    const dockerOk =
-        status?.installed && status.daemonRunning && status.composeAvailable;
+    const dockerOk = status?.installed && status.daemonRunning && status.composeAvailable;
 
     if (!dockerOk) {
         return {

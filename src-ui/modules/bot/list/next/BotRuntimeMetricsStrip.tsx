@@ -26,8 +26,7 @@ export function BotRuntimeMetricsStrip({
     const clickable = typeof onOpenDetail === 'function';
 
     if (metrics.probe === 'not_injected' || metrics.probe === 'error') {
-        const short =
-            metrics.probe === 'error' ? '指标异常' : '未注入';
+        const short = metrics.probe === 'error' ? '指标异常' : '未注入';
         const detail = metrics.probe_error?.trim() || undefined;
         const Icon = metrics.probe === 'error' ? AlertCircle : Clock3;
         if (!clickable) {
@@ -40,7 +39,9 @@ export function BotRuntimeMetricsStrip({
         return (
             <button
                 type="button"
-                aria-label={detail ? `查看运行时指标：${short}。${detail}` : `查看运行时指标：${short}`}
+                aria-label={
+                    detail ? `查看运行时指标：${short}。${detail}` : `查看运行时指标：${short}`
+                }
                 title={detail ?? short}
                 className={cn(
                     'flex h-5.5 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-[11px]',
@@ -92,8 +93,13 @@ export function BotRuntimeMetricsStrip({
             />
             <span className="flex min-w-0 items-center gap-1.5 font-mono tabular-nums">
                 <span className="truncate">RSS {formatBytes(rss)}</span>
-                <span aria-hidden className="text-border">·</span>
-                <span className="shrink-0">流量 {formatCompactCount(totals.eventsOut)} / {formatCompactCount(totals.actionsIn)}</span>
+                <span aria-hidden className="text-border">
+                    ·
+                </span>
+                <span className="shrink-0">
+                    流量 {formatCompactCount(totals.eventsOut)} /{' '}
+                    {formatCompactCount(totals.actionsIn)}
+                </span>
             </span>
             {metrics.probe === 'stale' ? (
                 <Clock3 aria-hidden size={11} className="shrink-0 text-warning" />

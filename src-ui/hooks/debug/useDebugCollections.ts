@@ -15,7 +15,11 @@ export function useDebugCollections() {
             try {
                 return await onebotDebugService.collections();
             } catch (err) {
-                pushErrorBar({ key: 'debug-collections', title: '读取收藏失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: 'debug-collections',
+                    title: '读取收藏失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },
@@ -35,7 +39,12 @@ export function useDebugCollections() {
  */
 export function useSaveCollections() {
     const client = useQueryClient();
-    return useMutation<void, unknown, DebugCollections, { previous: DebugCollections | undefined; optimistic: DebugCollections | undefined }>({
+    return useMutation<
+        void,
+        unknown,
+        DebugCollections,
+        { previous: DebugCollections | undefined; optimistic: DebugCollections | undefined }
+    >({
         mutationKey: debugCollectionsSaveKey,
         scope: { id: 'debug-collections-save' },
         mutationFn: (next) => onebotDebugService.saveCollections(next),
@@ -53,7 +62,11 @@ export function useSaveCollections() {
             ) {
                 client.setQueryData<DebugCollections>(debugCollectionsKey, context.previous);
             }
-            pushErrorBar({ key: 'debug-collections-save', title: '保存收藏失败', raw: errorText(err) });
+            pushErrorBar({
+                key: 'debug-collections-save',
+                title: '保存收藏失败',
+                raw: errorText(err),
+            });
         },
         onSettled: () => {
             // 此刻这次保存自己还算在「进行中」里，所以 <= 1 就是没有别的保存了
@@ -85,7 +98,11 @@ export function useExportCollections() {
             }
         },
         onError: (err) => {
-            pushErrorBar({ key: 'debug-collections-export', title: '导出收藏失败', raw: errorText(err) });
+            pushErrorBar({
+                key: 'debug-collections-export',
+                title: '导出收藏失败',
+                raw: errorText(err),
+            });
         },
     });
 }
@@ -123,7 +140,11 @@ export function useImportCollections() {
             });
         },
         onError: (err) => {
-            pushErrorBar({ key: 'debug-collections-import', title: '导入收藏失败', raw: errorText(err) });
+            pushErrorBar({
+                key: 'debug-collections-import',
+                title: '导入收藏失败',
+                raw: errorText(err),
+            });
         },
     });
 }

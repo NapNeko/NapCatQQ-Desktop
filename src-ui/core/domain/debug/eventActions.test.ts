@@ -19,7 +19,8 @@ function item(patch: Partial<MessageItem> = {}): MessageItem {
     };
 }
 
-const byId = (list: ReturnType<typeof messageLinkages>, id: string) => list.find((l) => l.id === id);
+const byId = (list: ReturnType<typeof messageLinkages>, id: string) =>
+    list.find((l) => l.id === id);
 
 describe('messageLinkages', () => {
     it('群消息：回复发 send_group_msg（带 reply 段和群号）、撤复发 delete_msg、查发送者发 get_group_member_info', () => {
@@ -30,7 +31,10 @@ describe('messageLinkages', () => {
             action: 'send_group_msg',
             params: { group_id: 100001, message: [{ type: 'reply', data: { id: 4242 } }] },
         });
-        expect(byId(links, 'recall')).toMatchObject({ action: 'delete_msg', params: { message_id: 4242 } });
+        expect(byId(links, 'recall')).toMatchObject({
+            action: 'delete_msg',
+            params: { message_id: 4242 },
+        });
         expect(byId(links, 'sender')).toMatchObject({
             action: 'get_group_member_info',
             params: { group_id: 100001, user_id: 10001 },
@@ -43,12 +47,22 @@ describe('messageLinkages', () => {
             action: 'send_private_msg',
             params: { user_id: 10001, message: [{ type: 'reply', data: { id: 4242 } }] },
         });
-        expect(byId(links, 'sender')).toMatchObject({ action: 'get_stranger_info', params: { user_id: 10001 } });
+        expect(byId(links, 'sender')).toMatchObject({
+            action: 'get_stranger_info',
+            params: { user_id: 10001 },
+        });
         expect(byId(links, 'sender')?.params.group_id).toBeUndefined();
     });
 
     it('自己发的私聊气泡：回复发给会话对象（不是自己），没有「查发送者」', () => {
-        const links = messageLinkages(item({ session: 'private:20002', direction: 'out', senderId: 1919810, senderName: '我' }));
+        const links = messageLinkages(
+            item({
+                session: 'private:20002',
+                direction: 'out',
+                senderId: 1919810,
+                senderName: '我',
+            }),
+        );
         expect(byId(links, 'reply')?.params.user_id).toBe(20002);
         expect(byId(links, 'sender')).toBeUndefined();
         // 自己的消息照样能撤

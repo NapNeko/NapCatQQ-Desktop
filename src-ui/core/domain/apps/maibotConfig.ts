@@ -54,11 +54,11 @@ export function maibotDefaultConfig(webuiPort: number): MaiBotInstanceConfig {
 /** 上游默认就是这样：白名单开着、群聊私聊名单都空，适配器把所有消息丢掉，麦麦一句都不回 */
 export function maibotChatDropsEverything(chat: MaiBotChatFilter): boolean {
     return (
-        chat.enable_chat_list_filter
-        && chat.group_list_type === 'whitelist'
-        && chat.group_list.length === 0
-        && chat.private_list_type === 'whitelist'
-        && chat.private_list.length === 0
+        chat.enable_chat_list_filter &&
+        chat.group_list_type === 'whitelist' &&
+        chat.group_list.length === 0 &&
+        chat.private_list_type === 'whitelist' &&
+        chat.private_list.length === 0
     );
 }
 
@@ -106,9 +106,14 @@ export function maibotModelSetupIssue(models: MaiBotModelConfigFile): MaiBotMode
     if (!models.api_providers.length) return 'no_provider';
     const t = models.model_task_config;
     const picked = new Set(MAIBOT_REQUIRED_TASKS.flatMap((k) => t[k].model_list));
-    const used = new Set(models.models.filter((m) => picked.has(m.name)).map((m) => m.api_provider));
+    const used = new Set(
+        models.models.filter((m) => picked.has(m.name)).map((m) => m.api_provider),
+    );
     const placeholder = models.api_providers.some(
-        (p) => used.has(p.name) && p.auth_type !== 'none' && p.api_key.trim() === MAIBOT_PLACEHOLDER_API_KEY,
+        (p) =>
+            used.has(p.name) &&
+            p.auth_type !== 'none' &&
+            p.api_key.trim() === MAIBOT_PLACEHOLDER_API_KEY,
     );
     if (placeholder) return 'placeholder_key';
     if (MAIBOT_REQUIRED_TASKS.some((k) => !t[k].model_list.length)) return 'no_task_model';
@@ -128,23 +133,127 @@ export type MaiBotProviderPreset = {
 
 // 照上游 WebUI 的 providerTemplates，去掉接口不兼容的几家，补上两个本机服务
 export const MAIBOT_PROVIDER_PRESETS: readonly MaiBotProviderPreset[] = [
-    { id: 'deepseek', label: 'DeepSeek', name: 'DeepSeek', base_url: 'https://api.deepseek.com', client_type: 'openai' },
-    { id: 'siliconflow', label: '硅基流动', name: 'SiliconFlow', base_url: 'https://api.siliconflow.cn/v1', client_type: 'openai' },
-    { id: 'alibaba', label: '阿里云百炼', name: 'Alibaba', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', client_type: 'openai' },
-    { id: 'zhipu', label: '智谱 GLM', name: 'ZhipuAI', base_url: 'https://open.bigmodel.cn/api/paas/v4', client_type: 'openai' },
-    { id: 'moonshot', label: 'Moonshot / Kimi', name: 'Moonshot', base_url: 'https://api.moonshot.cn/v1', client_type: 'openai' },
-    { id: 'doubao', label: '火山方舟（豆包）', name: 'Doubao', base_url: 'https://ark.cn-beijing.volces.com/api/v3', client_type: 'openai' },
-    { id: 'minimax', label: 'MiniMax', name: 'MiniMax', base_url: 'https://api.minimax.chat/v1', client_type: 'openai' },
-    { id: 'stepfun', label: '阶跃星辰', name: 'StepFun', base_url: 'https://api.stepfun.com/v1', client_type: 'openai' },
-    { id: 'openai', label: 'OpenAI', name: 'OpenAI', base_url: 'https://api.openai.com/v1', client_type: 'openai' },
-    { id: 'gemini', label: 'Google Gemini', name: 'Gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', client_type: 'gemini' },
-    { id: 'openrouter', label: 'OpenRouter', name: 'OpenRouter', base_url: 'https://openrouter.ai/api/v1', client_type: 'openai' },
-    { id: 'xai', label: 'xAI（Grok）', name: 'xAI', base_url: 'https://api.x.ai/v1', client_type: 'openai' },
-    { id: 'groq', label: 'Groq', name: 'Groq', base_url: 'https://api.groq.com/openai/v1', client_type: 'openai' },
-    { id: 'mistral', label: 'Mistral', name: 'Mistral', base_url: 'https://api.mistral.ai/v1', client_type: 'openai' },
-    { id: 'ollama', label: 'Ollama（本机）', name: 'Ollama', base_url: 'http://127.0.0.1:11434/v1', client_type: 'openai', local: true },
-    { id: 'lm_studio', label: 'LM Studio（本机）', name: 'LMStudio', base_url: 'http://127.0.0.1:1234/v1', client_type: 'openai', local: true },
-    { id: 'custom', label: '自定义 OpenAI 兼容接口', name: '', base_url: '', client_type: 'openai' },
+    {
+        id: 'deepseek',
+        label: 'DeepSeek',
+        name: 'DeepSeek',
+        base_url: 'https://api.deepseek.com',
+        client_type: 'openai',
+    },
+    {
+        id: 'siliconflow',
+        label: '硅基流动',
+        name: 'SiliconFlow',
+        base_url: 'https://api.siliconflow.cn/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'alibaba',
+        label: '阿里云百炼',
+        name: 'Alibaba',
+        base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'zhipu',
+        label: '智谱 GLM',
+        name: 'ZhipuAI',
+        base_url: 'https://open.bigmodel.cn/api/paas/v4',
+        client_type: 'openai',
+    },
+    {
+        id: 'moonshot',
+        label: 'Moonshot / Kimi',
+        name: 'Moonshot',
+        base_url: 'https://api.moonshot.cn/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'doubao',
+        label: '火山方舟（豆包）',
+        name: 'Doubao',
+        base_url: 'https://ark.cn-beijing.volces.com/api/v3',
+        client_type: 'openai',
+    },
+    {
+        id: 'minimax',
+        label: 'MiniMax',
+        name: 'MiniMax',
+        base_url: 'https://api.minimax.chat/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'stepfun',
+        label: '阶跃星辰',
+        name: 'StepFun',
+        base_url: 'https://api.stepfun.com/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'openai',
+        label: 'OpenAI',
+        name: 'OpenAI',
+        base_url: 'https://api.openai.com/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'gemini',
+        label: 'Google Gemini',
+        name: 'Gemini',
+        base_url: 'https://generativelanguage.googleapis.com/v1beta',
+        client_type: 'gemini',
+    },
+    {
+        id: 'openrouter',
+        label: 'OpenRouter',
+        name: 'OpenRouter',
+        base_url: 'https://openrouter.ai/api/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'xai',
+        label: 'xAI（Grok）',
+        name: 'xAI',
+        base_url: 'https://api.x.ai/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'groq',
+        label: 'Groq',
+        name: 'Groq',
+        base_url: 'https://api.groq.com/openai/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'mistral',
+        label: 'Mistral',
+        name: 'Mistral',
+        base_url: 'https://api.mistral.ai/v1',
+        client_type: 'openai',
+    },
+    {
+        id: 'ollama',
+        label: 'Ollama（本机）',
+        name: 'Ollama',
+        base_url: 'http://127.0.0.1:11434/v1',
+        client_type: 'openai',
+        local: true,
+    },
+    {
+        id: 'lm_studio',
+        label: 'LM Studio（本机）',
+        name: 'LMStudio',
+        base_url: 'http://127.0.0.1:1234/v1',
+        client_type: 'openai',
+        local: true,
+    },
+    {
+        id: 'custom',
+        label: '自定义 OpenAI 兼容接口',
+        name: '',
+        base_url: '',
+        client_type: 'openai',
+    },
 ];
 
 /** 照预设起一个新提供商：其余字段取上游默认；名字撞了往后编号，自定义的给个占位名 */
@@ -172,17 +281,27 @@ export function newMaiBotProvider(
  * 提供商改名后（列表里已经是新名字），把引用旧名字的模型跟过去。
  * 还有别的提供商叫旧名字时不动，免得把人家的模型也挪过来。
  */
-export function renameMaiBotProvider(models: MaiBotModelConfigFile, from: string, to: string): MaiBotModelConfigFile {
+export function renameMaiBotProvider(
+    models: MaiBotModelConfigFile,
+    from: string,
+    to: string,
+): MaiBotModelConfigFile {
     if (from === to || !from) return models;
     if (models.api_providers.some((p) => p.name === from)) return models;
     return {
         ...models,
-        models: models.models.map((m) => (m.api_provider === from ? { ...m, api_provider: to } : m)),
+        models: models.models.map((m) =>
+            m.api_provider === from ? { ...m, api_provider: to } : m,
+        ),
     };
 }
 
 /** 模型改名后，任务里挑了旧名字的跟过去；规则同上 */
-export function renameMaiBotModel(models: MaiBotModelConfigFile, from: string, to: string): MaiBotModelConfigFile {
+export function renameMaiBotModel(
+    models: MaiBotModelConfigFile,
+    from: string,
+    to: string,
+): MaiBotModelConfigFile {
     if (from === to || !from) return models;
     if (models.models.some((m) => m.name === from)) return models;
     const tasks = { ...models.model_task_config };
@@ -201,8 +320,10 @@ const blank = (s: string | null | undefined) => !s || !s.trim();
 function botRules(bot: MaiBotBotConfigFile, out: Issues) {
     const kw = bot.keyword_reaction;
     const rule = (path: string, r: MaiBotKeywordRuleConfig) => {
-        if (!r.keywords.length && !r.regex.length) out.push({ path: `${path}/keywords`, message: '关键词和正则至少填一个' });
-        if (blank(r.reaction)) out.push({ path: `${path}/reaction`, message: '要写命中后给麦麦的提示' });
+        if (!r.keywords.length && !r.regex.length)
+            out.push({ path: `${path}/keywords`, message: '关键词和正则至少填一个' });
+        if (blank(r.reaction))
+            out.push({ path: `${path}/reaction`, message: '要写命中后给麦麦的提示' });
     };
     kw.keyword_rules.forEach((r, i) => rule(`bot/keyword_reaction/keyword_rules/${i}`, r));
     kw.regex_rules.forEach((r, i) => rule(`bot/keyword_reaction/regex_rules/${i}`, r));
@@ -212,7 +333,10 @@ function botRules(bot: MaiBotBotConfigFile, out: Issues) {
         if (filled.some(Boolean) && !filled.every(Boolean)) {
             (['platform', 'item_id', 'prompt'] as const).forEach((name, j) => {
                 if (!filled[j]) {
-                    out.push({ path: `bot/chat/reply_style/chat_prompts/${i}/${name}`, message: '平台、聊天 ID 和提示词要一起填' });
+                    out.push({
+                        path: `bot/chat/reply_style/chat_prompts/${i}/${name}`,
+                        message: '平台、聊天 ID 和提示词要一起填',
+                    });
                 }
             });
         }
@@ -228,11 +352,18 @@ function botRules(bot: MaiBotBotConfigFile, out: Issues) {
 
     const mcp = bot.mcp;
     mcp.client.roots.items.forEach((root, i) => {
-        if (root.enabled && blank(root.uri)) out.push({ path: `bot/mcp/client/roots/items/${i}/uri`, message: '启用的目录要填 uri' });
+        if (root.enabled && blank(root.uri))
+            out.push({
+                path: `bot/mcp/client/roots/items/${i}/uri`,
+                message: '启用的目录要填 uri',
+            });
     });
     const eli = mcp.client.elicitation;
     if (eli.enable && !(eli.allow_form || eli.allow_url)) {
-        out.push({ path: 'bot/mcp/client/elicitation/allow_form', message: '开启后至少允许一种方式' });
+        out.push({
+            path: 'bot/mcp/client/elicitation/allow_form',
+            message: '开启后至少允许一种方式',
+        });
     }
     const names = new Set<string>();
     mcp.servers.forEach((s, i) => {
@@ -240,29 +371,38 @@ function botRules(bot: MaiBotBotConfigFile, out: Issues) {
         const path = `bot/mcp/servers/${i}`;
         const name = s.name.trim();
         if (!name) out.push({ path: `${path}/name`, message: '要起个名字' });
-        else if (names.has(name)) out.push({ path: `${path}/name`, message: '和别的 MCP 服务重名了' });
+        else if (names.has(name))
+            out.push({ path: `${path}/name`, message: '和别的 MCP 服务重名了' });
         names.add(name);
-        if (s.transport === 'stdio' && blank(s.command)) out.push({ path: `${path}/command`, message: 'stdio 方式要填启动命令' });
+        if (s.transport === 'stdio' && blank(s.command))
+            out.push({ path: `${path}/command`, message: 'stdio 方式要填启动命令' });
         if ((s.transport === 'streamable_http' || s.transport === 'sse') && blank(s.url)) {
             out.push({ path: `${path}/url`, message: '这种连接方式要填地址' });
         }
         if (s.authorization.mode === 'bearer' && blank(s.authorization.bearer_token)) {
-            out.push({ path: `${path}/authorization/bearer_token`, message: 'bearer 认证要填 token' });
+            out.push({
+                path: `${path}/authorization/bearer_token`,
+                message: 'bearer 认证要填 token',
+            });
         }
     });
 }
 
 function modelRules(models: MaiBotModelConfigFile, out: Issues) {
-    if (!models.api_providers.length) out.push({ path: 'models/api_providers', message: '至少要有一个提供商' });
+    if (!models.api_providers.length)
+        out.push({ path: 'models/api_providers', message: '至少要有一个提供商' });
     if (!models.models.length) out.push({ path: 'models/models', message: '至少要有一个模型' });
     const providers = new Set<string>();
     models.api_providers.forEach((p, i) => {
         const path = `models/api_providers/${i}`;
         if (blank(p.name)) out.push({ path: `${path}/name`, message: '要起个名字' });
-        else if (providers.has(p.name)) out.push({ path: `${path}/name`, message: '和别的提供商重名了' });
+        else if (providers.has(p.name))
+            out.push({ path: `${path}/name`, message: '和别的提供商重名了' });
         providers.add(p.name);
-        if (p.auth_type !== 'none' && blank(p.api_key)) out.push({ path: `${path}/api_key`, message: '要填 API Key' });
-        if (p.client_type !== 'gemini' && blank(p.base_url)) out.push({ path: `${path}/base_url`, message: '要填接口地址' });
+        if (p.auth_type !== 'none' && blank(p.api_key))
+            out.push({ path: `${path}/api_key`, message: '要填 API Key' });
+        if (p.client_type !== 'gemini' && blank(p.base_url))
+            out.push({ path: `${path}/base_url`, message: '要填接口地址' });
         if (p.auth_type === 'header' && blank(p.auth_header_name)) {
             out.push({ path: `${path}/auth_header_name`, message: '请求头认证要填头名' });
         }
@@ -276,13 +416,18 @@ function modelRules(models: MaiBotModelConfigFile, out: Issues) {
         if (blank(m.name)) out.push({ path: `${path}/name`, message: '要起个名字' });
         else if (names.has(m.name)) out.push({ path: `${path}/name`, message: '和别的模型重名了' });
         names.add(m.name);
-        if (blank(m.model_identifier)) out.push({ path: `${path}/model_identifier`, message: '要填服务商那边的模型标识' });
-        if (!providers.has(m.api_provider)) out.push({ path: `${path}/api_provider`, message: '选一个已有的提供商' });
+        if (blank(m.model_identifier))
+            out.push({ path: `${path}/model_identifier`, message: '要填服务商那边的模型标识' });
+        if (!providers.has(m.api_provider))
+            out.push({ path: `${path}/api_provider`, message: '选一个已有的提供商' });
     });
     for (const task of MAIBOT_TASK_KEYS) {
         models.model_task_config[task].model_list.forEach((name, j) => {
             if (!names.has(name)) {
-                out.push({ path: `models/model_task_config/${task}/model_list/${j}`, message: `没有叫 ${JSON.stringify(name)} 的模型` });
+                out.push({
+                    path: `models/model_task_config/${task}/model_list/${j}`,
+                    message: `没有叫 ${JSON.stringify(name)} 的模型`,
+                });
             }
         });
     }
@@ -303,7 +448,10 @@ export function validateMaiBotConfig(cfg: MaiBotInstanceConfig): AppConfigIssue[
         if (!validPort(mm.api_server_port)) {
             out.push({ path: 'bot/maim_message/api_server_port', message: '要在 1 到 65535 之间' });
         } else if (mm.api_server_port === webui || mm.api_server_port === legacy) {
-            out.push({ path: 'bot/maim_message/api_server_port', message: '不能和 WebUI 或旧版消息服务用同一个端口' });
+            out.push({
+                path: 'bot/maim_message/api_server_port',
+                message: '不能和 WebUI 或旧版消息服务用同一个端口',
+            });
         }
     }
     out.push(...schemaIssues(BOT_SCHEMA, cfg.bot, 'bot'));

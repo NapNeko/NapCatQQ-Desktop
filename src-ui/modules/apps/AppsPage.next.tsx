@@ -13,7 +13,9 @@ type View = 'list' | 'detail';
 
 const VIEW_ORDER: ReadonlyArray<View> = ['list', 'detail'];
 
-export const AppsPageNext: React.FC<{ onNavigate?: (route: AppRoute) => void }> = ({ onNavigate }) => {
+export const AppsPageNext: React.FC<{ onNavigate?: (route: AppRoute) => void }> = ({
+    onNavigate,
+}) => {
     const [view, setView] = useState<View>('list');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [initialTab, setInitialTab] = useState<DetailTabHint | undefined>(undefined);

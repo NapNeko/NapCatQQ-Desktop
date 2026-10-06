@@ -5,7 +5,16 @@
 // 悬停（或键盘聚焦）出一条小工具条：看原始 JSON、回复、复制 id、填入请求。工具条只在悬停时挂上，
 // 几十行同时在屏上也不会多出几百个按钮。
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import {
+    memo,
+    useCallback,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type RefObject,
+} from 'react';
 import { Braces, Check, Copy, FileInput, Reply } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui';
@@ -13,7 +22,14 @@ import { messagePreview } from '../../../core/domain/debug/segments';
 import { retcodeHint } from '../../../core/domain/debug/errorCopy';
 import type { ChatItem } from '../../../core/domain/debug/chat';
 import { useChatView } from './chatContext';
-import { ROLE_LABEL, callLine, clockTime, idsOfItem, sendActionOf, type MessageItem } from '../../../core/domain/debug/chatFormat';
+import {
+    ROLE_LABEL,
+    callLine,
+    clockTime,
+    idsOfItem,
+    sendActionOf,
+    type MessageItem,
+} from '../../../core/domain/debug/chatFormat';
 import { Avatar, IconAction, useCopy } from './rightParts';
 import { SegmentList, isPictureOnly } from './SegmentView';
 
@@ -28,7 +44,8 @@ function mightOverflow(item: MessageItem): boolean {
         if (s.type === 'markdown') return true;
         if (s.type !== 'text' || typeof s.data.text !== 'string') continue;
         chars += s.data.text.length;
-        for (let i = 0; i < s.data.text.length; i += 1) if (s.data.text.charCodeAt(i) === 10) lines += 1;
+        for (let i = 0; i < s.data.text.length; i += 1)
+            if (s.data.text.charCodeAt(i) === 10) lines += 1;
     }
     // 右栏最窄时一行十几个字，150 字就可能超过 12 行
     return chars > 150 || lines >= 11;
@@ -79,9 +96,12 @@ export function HoverActions({
     const message = item.kind === 'message' ? item : null;
 
     const copyEntries: Array<{ tag: string; label: string; value: string }> = [];
-    if (ids.message_id !== undefined) copyEntries.push({ tag: 'mid', label: 'message_id', value: String(ids.message_id) });
-    if (ids.user_id !== undefined) copyEntries.push({ tag: 'uid', label: 'user_id', value: String(ids.user_id) });
-    if (ids.group_id !== undefined) copyEntries.push({ tag: 'gid', label: 'group_id', value: String(ids.group_id) });
+    if (ids.message_id !== undefined)
+        copyEntries.push({ tag: 'mid', label: 'message_id', value: String(ids.message_id) });
+    if (ids.user_id !== undefined)
+        copyEntries.push({ tag: 'uid', label: 'user_id', value: String(ids.user_id) });
+    if (ids.group_id !== undefined)
+        copyEntries.push({ tag: 'gid', label: 'group_id', value: String(ids.group_id) });
     if (message) {
         const text = messagePreview(message.segments);
         if (text) copyEntries.push({ tag: 'text', label: '文字内容', value: text });
@@ -112,7 +132,11 @@ export function HoverActions({
                 <Braces size={13} aria-hidden />
             </IconAction>
             {message && message.messageId !== undefined && (
-                <IconAction label="回复" tip="回复这条（在下面的输入框里写）" onClick={() => api.reply(message)}>
+                <IconAction
+                    label="回复"
+                    tip="回复这条（在下面的输入框里写）"
+                    onClick={() => api.reply(message)}
+                >
                     <Reply size={13} aria-hidden />
                 </IconAction>
             )}
@@ -120,10 +144,18 @@ export function HoverActions({
                 <Popover open={menuOpen} onOpenChange={setMenu}>
                     <PopoverTrigger asChild>
                         <IconAction label="复制" tip={copied ? '已复制' : '复制 id'}>
-                            {copied ? <Check size={13} aria-hidden className="text-success" /> : <Copy size={13} aria-hidden />}
+                            {copied ? (
+                                <Check size={13} aria-hidden className="text-success" />
+                            ) : (
+                                <Copy size={13} aria-hidden />
+                            )}
                         </IconAction>
                     </PopoverTrigger>
-                    <PopoverContent side="bottom" align={side === 'right' ? 'end' : 'start'} className="w-[220px] p-1">
+                    <PopoverContent
+                        side="bottom"
+                        align={side === 'right' ? 'end' : 'start'}
+                        className="w-[220px] p-1"
+                    >
                         {copyEntries.map((e) => (
                             <button
                                 key={e.tag}
@@ -134,8 +166,12 @@ export function HoverActions({
                                 }}
                                 className="flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-inset hover:text-text"
                             >
-                                <span className="shrink-0 font-mono text-[11px] text-text-tertiary">{e.label}</span>
-                                <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px]">{e.value}</span>
+                                <span className="shrink-0 font-mono text-[11px] text-text-tertiary">
+                                    {e.label}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px]">
+                                    {e.value}
+                                </span>
                             </button>
                         ))}
                     </PopoverContent>
@@ -151,14 +187,21 @@ export function HoverActions({
                           ? `填进当前请求：${plan.filled.join('、')}`
                           : plan.reason
                 }
-                className={cn(!plan.ok && 'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-text-tertiary')}
+                className={cn(
+                    !plan.ok &&
+                        'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-text-tertiary',
+                )}
                 onClick={() => {
                     if (!plan.ok) return;
                     const res = api.fill(item);
                     if (res.ok) setFilled(res.filled);
                 }}
             >
-                {filled ? <Check size={13} aria-hidden className="text-success" /> : <FileInput size={13} aria-hidden />}
+                {filled ? (
+                    <Check size={13} aria-hidden className="text-success" />
+                ) : (
+                    <FileInput size={13} aria-hidden />
+                )}
             </IconAction>
         </div>
     );
@@ -177,7 +220,12 @@ export interface MessageBubbleProps {
     showSessionName: boolean;
 }
 
-export const MessageBubble = memo(function MessageBubble({ item, continued, selected, showSessionName }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({
+    item,
+    continued,
+    selected,
+    showSessionName,
+}: MessageBubbleProps) {
     const api = useChatView();
     const out = item.direction === 'out';
     const rowRef = useRef<HTMLDivElement>(null);
@@ -244,8 +292,17 @@ export const MessageBubble = memo(function MessageBubble({ item, continued, sele
                 'focus-visible:bg-inset/40',
             )}
         >
-            {continued ? <span aria-hidden className="w-8 shrink-0" /> : <Avatar id={avatarId} name={name} mine={out} />}
-            <div className={cn('flex min-w-0 max-w-[82%] flex-col', out ? 'items-end' : 'items-start')}>
+            {continued ? (
+                <span aria-hidden className="w-8 shrink-0" />
+            ) : (
+                <Avatar id={avatarId} name={name} mine={out} />
+            )}
+            <div
+                className={cn(
+                    'flex min-w-0 max-w-[82%] flex-col',
+                    out ? 'items-end' : 'items-start',
+                )}
+            >
                 {!continued && (
                     <div
                         className={cn(
@@ -258,7 +315,9 @@ export const MessageBubble = memo(function MessageBubble({ item, continued, sele
                             <span
                                 className={cn(
                                     'shrink-0 rounded-xs px-1 text-[10px] leading-4',
-                                    item.senderRole === 'owner' ? 'bg-warning-soft text-warning' : 'bg-info-soft text-info',
+                                    item.senderRole === 'owner'
+                                        ? 'bg-warning-soft text-warning'
+                                        : 'bg-info-soft text-info',
                                 )}
                             >
                                 {role}
@@ -296,7 +355,13 @@ export const MessageBubble = memo(function MessageBubble({ item, continued, sele
                         className={cn('relative min-w-0', clamped && 'overflow-hidden')}
                         style={clamped ? { maxHeight: CLAMP_PX } : undefined}
                     >
-                        <SegmentList segments={item.segments} mine={out} messageId={item.messageId !== undefined ? String(item.messageId) : undefined} />
+                        <SegmentList
+                            segments={item.segments}
+                            mine={out}
+                            messageId={
+                                item.messageId !== undefined ? String(item.messageId) : undefined
+                            }
+                        />
                         {clamped && overflowing && (
                             <span
                                 aria-hidden
@@ -322,7 +387,11 @@ export const MessageBubble = memo(function MessageBubble({ item, continued, sele
                 </div>
                 {line && (
                     <div
-                        title={failed && item.call?.retcode ? (retcodeHint(item.call.retcode) ?? undefined) : undefined}
+                        title={
+                            failed && item.call?.retcode
+                                ? (retcodeHint(item.call.retcode) ?? undefined)
+                                : undefined
+                        }
                         className={cn(
                             'mt-0.5 max-w-full truncate px-0.5 font-mono text-[10.5px]',
                             line.ok ? 'text-success' : 'text-danger',
@@ -332,7 +401,14 @@ export const MessageBubble = memo(function MessageBubble({ item, continued, sele
                     </div>
                 )}
             </div>
-            {hover.active && <HoverActions item={item} side={out ? 'left' : 'right'} anchorRef={rowRef} onHold={hover.hold} />}
+            {hover.active && (
+                <HoverActions
+                    item={item}
+                    side={out ? 'left' : 'right'}
+                    anchorRef={rowRef}
+                    onHold={hover.hold}
+                />
+            )}
         </div>
     );
 });

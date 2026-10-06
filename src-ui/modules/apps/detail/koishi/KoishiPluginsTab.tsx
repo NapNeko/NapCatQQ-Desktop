@@ -3,7 +3,17 @@
 // 「添加」从已装的包里挑（没进树的排前面），装新包去插件市场。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Folder, FolderOpen, FolderPlus, Lock, Plus, Puzzle, Search, Store } from 'lucide-react';
+import {
+    ChevronRight,
+    Folder,
+    FolderOpen,
+    FolderPlus,
+    Lock,
+    Plus,
+    Puzzle,
+    Search,
+    Store,
+} from 'lucide-react';
 import {
     Badge,
     Button,
@@ -33,9 +43,17 @@ import {
 } from '../../../../core/domain/apps/koishiConfig';
 import { useKoishiPackages } from '../../../../hooks/apps/useKoishiRuntime';
 import { KoishiNodeDetail } from './koishiPluginDetail';
-import type { AppInstance, KoishiInstanceConfig, KoishiPluginNode } from '../../../../core/ipc/types';
+import type {
+    AppInstance,
+    KoishiInstanceConfig,
+    KoishiPluginNode,
+} from '../../../../core/ipc/types';
 
-function findPath(nodes: readonly KoishiPluginNode[], key: string, base: number[] = []): number[] | null {
+function findPath(
+    nodes: readonly KoishiPluginNode[],
+    key: string,
+    base: number[] = [],
+): number[] | null {
     for (let i = 0; i < nodes.length; i += 1) {
         if (nodeKey(nodes[i]) === key) return [...base, i];
         const hit = findPath(nodes[i].children, key, [...base, i]);
@@ -138,7 +156,18 @@ interface RowsProps {
 }
 
 function TreeRows(props: RowsProps) {
-    const { nodes, base, depth, selected, onSelect, onToggle, errorKeys, query, disabled, parentOn } = props;
+    const {
+        nodes,
+        base,
+        depth,
+        selected,
+        onSelect,
+        onToggle,
+        errorKeys,
+        query,
+        disabled,
+        parentOn,
+    } = props;
     const [folded, setFolded] = useState<Record<string, boolean>>({});
     return (
         <>
@@ -163,7 +192,12 @@ function TreeRows(props: RowsProps) {
                             )}
                             style={{ paddingLeft: 6 + depth * 16 }}
                         >
-                            {isSel && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand" aria-hidden />}
+                            {isSel && (
+                                <span
+                                    className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand"
+                                    aria-hidden
+                                />
+                            )}
                             {group ? (
                                 <button
                                     type="button"
@@ -171,11 +205,25 @@ function TreeRows(props: RowsProps) {
                                     className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-tertiary hover:text-text"
                                     onClick={() => setFolded((f) => ({ ...f, [key]: open }))}
                                 >
-                                    <ChevronRight size={13} className={cn('transition-transform duration-200', open && 'rotate-90')} />
+                                    <ChevronRight
+                                        size={13}
+                                        className={cn(
+                                            'transition-transform duration-200',
+                                            open && 'rotate-90',
+                                        )}
+                                    />
                                 </button>
                             ) : (
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden>
-                                    <span className={cn('h-1.5 w-1.5 rounded-full', live ? 'bg-success' : 'bg-text-disabled/60')} />
+                                <span
+                                    className="flex h-5 w-5 shrink-0 items-center justify-center"
+                                    aria-hidden
+                                >
+                                    <span
+                                        className={cn(
+                                            'h-1.5 w-1.5 rounded-full',
+                                            live ? 'bg-success' : 'bg-text-disabled/60',
+                                        )}
+                                    />
                                 </span>
                             )}
                             <button
@@ -184,7 +232,13 @@ function TreeRows(props: RowsProps) {
                                 onClick={() => onSelect(key)}
                             >
                                 {group && (
-                                    <GroupIcon size={14} className={cn('shrink-0', live ? 'text-brand/80' : 'text-text-disabled')} />
+                                    <GroupIcon
+                                        size={14}
+                                        className={cn(
+                                            'shrink-0',
+                                            live ? 'text-brand/80' : 'text-text-disabled',
+                                        )}
+                                    />
                                 )}
                                 <span
                                     className={cn(
@@ -203,7 +257,10 @@ function TreeRows(props: RowsProps) {
                                 )}
                                 {isLinkNode(n) && <Badge tone="brand">对接</Badge>}
                                 {typeof n.meta.$if === 'string' && (
-                                    <span className="shrink-0 text-2xs text-text-disabled" title={String(n.meta.$if)}>
+                                    <span
+                                        className="shrink-0 text-2xs text-text-disabled"
+                                        title={String(n.meta.$if)}
+                                    >
                                         按条件
                                     </span>
                                 )}
@@ -217,7 +274,9 @@ function TreeRows(props: RowsProps) {
                                 </span>
                             ) : (
                                 <MiniToggle
-                                    label={n.enabled ? `停用 ${nodeLabel(n)}` : `启用 ${nodeLabel(n)}`}
+                                    label={
+                                        n.enabled ? `停用 ${nodeLabel(n)}` : `启用 ${nodeLabel(n)}`
+                                    }
                                     checked={n.enabled}
                                     disabled={disabled}
                                     visible={isSel}
@@ -227,7 +286,13 @@ function TreeRows(props: RowsProps) {
                         </div>
                         {group && open && n.children.length > 0 && (
                             <ul className="flex flex-col">
-                                <TreeRows {...props} nodes={n.children} base={path} depth={depth + 1} parentOn={live} />
+                                <TreeRows
+                                    {...props}
+                                    nodes={n.children}
+                                    base={path}
+                                    depth={depth + 1}
+                                    parentOn={live}
+                                />
                             </ul>
                         )}
                     </li>
@@ -292,10 +357,18 @@ export const KoishiPluginsTab: React.FC<{
                     <SearchBox value={query} onChange={setQuery} />
                     <div className="flex items-center justify-between gap-2">
                         <span className="text-2xs text-text-tertiary">
-                            <span className="font-medium tabular-nums text-text-secondary">{on}</span> / {total} 个在用
+                            <span className="font-medium tabular-nums text-text-secondary">
+                                {on}
+                            </span>{' '}
+                            / {total} 个在用
                         </span>
                         <div className="flex items-center gap-1">
-                            <Button size="sm" variant="ghost" disabled={disabled} onClick={() => setAdding(true)}>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={disabled}
+                                onClick={() => setAdding(true)}
+                            >
                                 <Plus size={13} />
                                 添加
                             </Button>
@@ -324,14 +397,18 @@ export const KoishiPluginsTab: React.FC<{
                         depth={0}
                         selected={selected}
                         onSelect={setSelected}
-                        onToggle={(p, enabled) => onChange(replaceAt(config, p, (n) => ({ ...n, enabled })))}
+                        onToggle={(p, enabled) =>
+                            onChange(replaceAt(config, p, (n) => ({ ...n, enabled })))
+                        }
                         errorKeys={errorKeys}
                         query={q}
                         disabled={disabled}
                         parentOn
                     />
                     {q && !config.plugins.some((n) => matches(n, q)) && (
-                        <li className="px-3 py-6 text-center text-xs text-text-tertiary">树里没有「{query.trim()}」</li>
+                        <li className="px-3 py-6 text-center text-xs text-text-tertiary">
+                            树里没有「{query.trim()}」
+                        </li>
                     )}
                 </ul>
             </aside>
@@ -417,8 +494,16 @@ function AddPluginDialog({
     const [q, setQ] = useState('');
     const inTree = new Set(walk(config.plugins).map((n) => n.name));
     const rows = (packages.data ?? [])
-        .filter((p) => !q || `${p.name} ${p.package} ${p.description}`.toLowerCase().includes(q.toLowerCase()))
-        .sort((a, b) => Number(inTree.has(a.name)) - Number(inTree.has(b.name)) || a.name.localeCompare(b.name));
+        .filter(
+            (p) =>
+                !q ||
+                `${p.name} ${p.package} ${p.description}`.toLowerCase().includes(q.toLowerCase()),
+        )
+        .sort(
+            (a, b) =>
+                Number(inTree.has(a.name)) - Number(inTree.has(b.name)) ||
+                a.name.localeCompare(b.name),
+        );
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
             <DialogContent size="lg">
@@ -430,9 +515,15 @@ function AddPluginDialog({
                 </DialogHeader>
                 <SearchBox value={q} onChange={setQ} />
                 <ul className="-mx-1 flex max-h-[46vh] flex-col overflow-y-auto">
-                    {packages.isLoading && <li className="py-8 text-center text-sm text-text-tertiary">正在读取已装的包…</li>}
+                    {packages.isLoading && (
+                        <li className="py-8 text-center text-sm text-text-tertiary">
+                            正在读取已装的包…
+                        </li>
+                    )}
                     {packages.error && (
-                        <li className="py-8 text-center text-sm text-danger">读取失败：{packages.error.message}</li>
+                        <li className="py-8 text-center text-sm text-danger">
+                            读取失败：{packages.error.message}
+                        </li>
                     )}
                     {rows.map((p) => (
                         <li key={p.package}>
@@ -447,15 +538,24 @@ function AddPluginDialog({
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 text-[13px] font-medium text-text">
                                         {p.name}
-                                        {inTree.has(p.name) && <Badge tone="neutral">已在树里</Badge>}
+                                        {inTree.has(p.name) && (
+                                            <Badge tone="neutral">已在树里</Badge>
+                                        )}
                                         {!p.version && <Badge tone="warning">没装上</Badge>}
                                     </div>
                                     <div className="mt-0.5 truncate text-2xs text-text-tertiary">
                                         {p.description || p.package}
-                                        {p.version && <span className="ml-1.5 font-mono text-text-disabled">v{p.version}</span>}
+                                        {p.version && (
+                                            <span className="ml-1.5 font-mono text-text-disabled">
+                                                v{p.version}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
-                                <Plus size={15} className="shrink-0 text-text-disabled transition-colors group-hover:text-brand" />
+                                <Plus
+                                    size={15}
+                                    className="shrink-0 text-text-disabled transition-colors group-hover:text-brand"
+                                />
                             </button>
                         </li>
                     ))}

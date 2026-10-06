@@ -9,10 +9,7 @@ interface DeployResultBannerProps {
     onDismiss: () => void;
 }
 
-export const DeployResultBanner: React.FC<DeployResultBannerProps> = ({
-    result,
-    onDismiss,
-}) => {
+export const DeployResultBanner: React.FC<DeployResultBannerProps> = ({ result, onDismiss }) => {
     return (
         <div className="flex flex-col gap-3 rounded-md border border-success/30 bg-success-soft px-4 py-3">
             <div className="flex items-start justify-between gap-2">

@@ -16,7 +16,11 @@ export function useDebugStorageNotices({ enabled = true }: { enabled?: boolean }
             try {
                 return await onebotDebugService.storageNotices();
             } catch (err) {
-                pushErrorBar({ key: 'debug-storage-notices', title: '读取存储提示失败', raw: errorText(err) });
+                pushErrorBar({
+                    key: 'debug-storage-notices',
+                    title: '读取存储提示失败',
+                    raw: errorText(err),
+                });
                 throw err instanceof Error ? err : new Error(errorText(err));
             }
         },

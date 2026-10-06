@@ -95,7 +95,9 @@ export const NeoBotOverviewTab: React.FC<{
                                 >
                                     <p className="text-xs text-warning">{n.text}</p>
                                     {n.hint && (
-                                        <p className="mt-0.5 text-2xs text-text-tertiary">{n.hint}</p>
+                                        <p className="mt-0.5 text-2xs text-text-tertiary">
+                                            {n.hint}
+                                        </p>
                                     )}
                                 </div>
                             ))}

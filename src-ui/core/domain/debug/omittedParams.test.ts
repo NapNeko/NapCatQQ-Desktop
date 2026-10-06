@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { countOmittedInValue, countOmittedParams, isFullyOmitted, omittedBlocker } from './omittedParams';
+import {
+    countOmittedInValue,
+    countOmittedParams,
+    isFullyOmitted,
+    omittedBlocker,
+} from './omittedParams';
 
 describe('省略占位检测', () => {
     it('超长字符串占位按叶子计数，嵌套的也数', () => {
@@ -27,7 +32,14 @@ describe('省略占位检测', () => {
     it('文本版：JSON 写坏了算 0；没有子串时不解析直接 0；正常参数是 0', () => {
         expect(countOmittedParams('{"file":')).toBe(0);
         expect(countOmittedParams('{"group_id": 123, "message": "你好"}')).toBe(0);
-        expect(countOmittedParams(JSON.stringify({ file: '<已省略 65537 字节>', message: [{ data: { file: '<已省略 1 字节>' } }] }))).toBe(2);
+        expect(
+            countOmittedParams(
+                JSON.stringify({
+                    file: '<已省略 65537 字节>',
+                    message: [{ data: { file: '<已省略 1 字节>' } }],
+                }),
+            ),
+        ).toBe(2);
     });
 
     it('拦截文案按条数拼', () => {

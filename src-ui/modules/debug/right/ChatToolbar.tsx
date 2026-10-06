@@ -4,7 +4,18 @@
 // 接收状态点开能「停止接收」/「重新接收」。标题行是一个容器查询：窄的时候把次要文字收起来。
 
 import { memo, useEffect, useRef, useState } from 'react';
-import { Eraser, List, ListFilter, MessagesSquare, Pause, Play, RotateCw, Search, Square, X } from 'lucide-react';
+import {
+    Eraser,
+    List,
+    ListFilter,
+    MessagesSquare,
+    Pause,
+    Play,
+    RotateCw,
+    Search,
+    Square,
+    X,
+} from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import {
     Checkbox,
@@ -94,7 +105,9 @@ export const ChatToolbar = memo(function ChatToolbar(props: ChatToolbarProps) {
                         className="min-w-0 flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-disabled"
                     />
                     {search !== '' && (
-                        <span className="shrink-0 text-2xs tabular-nums text-text-tertiary">{countFormat.format(props.matchCount)} 条</span>
+                        <span className="shrink-0 text-2xs tabular-nums text-text-tertiary">
+                            {countFormat.format(props.matchCount)} 条
+                        </span>
                     )}
                     <IconAction
                         label="关闭搜索"
@@ -125,7 +138,12 @@ export const ChatToolbar = memo(function ChatToolbar(props: ChatToolbarProps) {
             >
                 {props.paused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}
             </IconAction>
-            <IconAction label="清屏" tip="清屏：只清这里的显示，不影响接收" disabled={!props.canClear} onClick={props.onClear}>
+            <IconAction
+                label="清屏"
+                tip="清屏：只清这里的显示，不影响接收"
+                disabled={!props.canClear}
+                onClick={props.onClear}
+            >
                 <Eraser size={14} aria-hidden />
             </IconAction>
             <ReceiverChip
@@ -138,13 +156,23 @@ export const ChatToolbar = memo(function ChatToolbar(props: ChatToolbarProps) {
     );
 });
 
-function ViewSwitch({ view, onChange }: { view: DebugChatView; onChange: (v: DebugChatView) => void }) {
+function ViewSwitch({
+    view,
+    onChange,
+}: {
+    view: DebugChatView;
+    onChange: (v: DebugChatView) => void;
+}) {
     const options: Array<{ id: DebugChatView; label: string; icon: typeof List }> = [
         { id: 'chat', label: '聊天', icon: MessagesSquare },
         { id: 'list', label: '列表', icon: List },
     ];
     return (
-        <div role="radiogroup" aria-label="显示方式" className="flex shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5">
+        <div
+            role="radiogroup"
+            aria-label="显示方式"
+            className="flex shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5"
+        >
             {options.map((o) => {
                 const on = o.id === view;
                 const Icon = o.icon;
@@ -159,7 +187,9 @@ function ViewSwitch({ view, onChange }: { view: DebugChatView; onChange: (v: Deb
                         className={cn(
                             'inline-flex h-6 items-center gap-1 rounded-sm px-2 text-[12px] font-medium transition-colors',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                            on ? 'bg-elevated text-text shadow-sm ring-1 ring-border-subtle' : 'text-text-tertiary hover:text-text',
+                            on
+                                ? 'bg-elevated text-text shadow-sm ring-1 ring-border-subtle'
+                                : 'text-text-tertiary hover:text-text',
                         )}
                     >
                         <Icon size={12} strokeWidth={2.2} aria-hidden />
@@ -171,12 +201,22 @@ function ViewSwitch({ view, onChange }: { view: DebugChatView; onChange: (v: Deb
     );
 }
 
-function FilterButton({ kinds, showHeartbeat, onKindsChange, filterActive, onResetFilter }: ChatToolbarProps) {
+function FilterButton({
+    kinds,
+    showHeartbeat,
+    onKindsChange,
+    filterActive,
+    onResetFilter,
+}: ChatToolbarProps) {
     const [open, setOpen] = useState(false);
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <IconAction label="筛选" tip={filterActive ? '筛选（有条件在生效）' : '筛选'} active={filterActive}>
+                <IconAction
+                    label="筛选"
+                    tip={filterActive ? '筛选（有条件在生效）' : '筛选'}
+                    active={filterActive}
+                >
                     <ListFilter size={14} aria-hidden />
                 </IconAction>
             </PopoverTrigger>
@@ -187,7 +227,9 @@ function FilterButton({ kinds, showHeartbeat, onKindsChange, filterActive, onRes
                         <Checkbox
                             key={k.key}
                             checked={kinds[k.key]}
-                            onCheckedChange={(v) => onKindsChange({ ...kinds, [k.key]: v }, showHeartbeat)}
+                            onCheckedChange={(v) =>
+                                onKindsChange({ ...kinds, [k.key]: v }, showHeartbeat)
+                            }
                             label={k.label}
                             hint={k.hint}
                         />
@@ -230,7 +272,10 @@ const TEXT = {
 } as const;
 
 /** 胶囊上写的就是完整状态（「重连中（第 n 次，x 秒后）」「已停止：原因」）；窄的时候只剩圆点，悬停看全文 */
-function receiverSummary(r: DebugReceiverView, running: boolean): { text: string; tone: keyof typeof DOT } {
+function receiverSummary(
+    r: DebugReceiverView,
+    running: boolean,
+): { text: string; tone: keyof typeof DOT } {
     if (r.state) return receiverStateCopy(r.state);
     if (r.error) return { text: `接收失败：${r.error}`, tone: 'danger' };
     if (!running) return { text: 'Bot 没在运行', tone: 'neutral' };
@@ -273,8 +318,14 @@ function ReceiverChip({
                                 TEXT[s.tone],
                             )}
                         >
-                            <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT[s.tone])} />
-                            <span aria-hidden className="hidden min-w-0 truncate @min-[360px]:inline">
+                            <span
+                                aria-hidden
+                                className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT[s.tone])}
+                            />
+                            <span
+                                aria-hidden
+                                className="hidden min-w-0 truncate @min-[360px]:inline"
+                            >
                                 {s.text}
                             </span>
                         </button>
@@ -291,13 +342,19 @@ function ReceiverChip({
                     {info && (
                         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-2xs text-text-tertiary">
                             <dt>来源</dt>
-                            <dd className="truncate text-text-secondary">{channelShortLabel(info.source)}</dd>
+                            <dd className="truncate text-text-secondary">
+                                {channelShortLabel(info.source)}
+                            </dd>
                             <dt>缓冲</dt>
-                            <dd className="tabular-nums text-text-secondary">{countFormat.format(info.buffered)} 条</dd>
+                            <dd className="tabular-nums text-text-secondary">
+                                {countFormat.format(info.buffered)} 条
+                            </dd>
                             {info.dropped_total > 0 && (
                                 <>
                                     <dt>丢了</dt>
-                                    <dd className="tabular-nums text-warning">{countFormat.format(info.dropped_total)} 条</dd>
+                                    <dd className="tabular-nums text-warning">
+                                        {countFormat.format(info.dropped_total)} 条
+                                    </dd>
                                 </>
                             )}
                         </dl>
@@ -314,7 +371,11 @@ function ReceiverChip({
                             onClick={() => run('restart', onRestart)}
                             className="inline-flex h-7 items-center gap-1 rounded-xs bg-brand px-2.5 text-2xs font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {busy === 'restart' ? <Spinner size="xs" label="正在开始接收" className="text-white" /> : <RotateCw size={11} aria-hidden />}
+                            {busy === 'restart' ? (
+                                <Spinner size="xs" label="正在开始接收" className="text-white" />
+                            ) : (
+                                <RotateCw size={11} aria-hidden />
+                            )}
                             {running ? '重新接收' : 'Bot 没在运行'}
                         </button>
                     ) : (
@@ -324,7 +385,11 @@ function ReceiverChip({
                             onClick={() => run('stop', onStop)}
                             className="inline-flex h-7 items-center gap-1 rounded-xs px-2.5 text-2xs font-medium text-text-secondary transition-colors hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {busy === 'stop' ? <Spinner size="xs" label="正在停止" /> : <Square size={10} strokeWidth={3} aria-hidden />}
+                            {busy === 'stop' ? (
+                                <Spinner size="xs" label="正在停止" />
+                            ) : (
+                                <Square size={10} strokeWidth={3} aria-hidden />
+                            )}
                             停止接收
                         </button>
                     )}

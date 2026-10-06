@@ -20,8 +20,10 @@ const baseClass = [
     '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
 ].join(' ');
 
-export interface NumberFieldProps
-    extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value' | 'type' | 'size'> {
+export interface NumberFieldProps extends Omit<
+    InputHTMLAttributes<HTMLInputElement>,
+    'onChange' | 'value' | 'type' | 'size'
+> {
     label?: ReactNode;
     hint?: ReactNode;
     error?: ReactNode;
@@ -61,10 +63,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
         return (
             <div className={cn('flex flex-col gap-1.5', className)}>
                 {label && (
-                    <label
-                        htmlFor={fieldId}
-                        className="text-xs font-medium text-text-secondary"
-                    >
+                    <label htmlFor={fieldId} className="text-xs font-medium text-text-secondary">
                         {label}
                         {required && <span className="ml-0.5 text-danger">*</span>}
                     </label>

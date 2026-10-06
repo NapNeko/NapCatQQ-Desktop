@@ -15,11 +15,13 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) => {
-                const fn = service[key];
-                if (!fn) throw new Error(`没有模拟 service.${key}`);
-                return fn(...args);
-            },
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) => {
+                    const fn = service[key];
+                    if (!fn) throw new Error(`没有模拟 service.${key}`);
+                    return fn(...args);
+                },
         },
     ),
 }));
@@ -43,7 +45,10 @@ beforeAll(() => {
             return (this as HTMLElement).classList.contains('overflow-y-auto') ? 600 : 30;
         },
     });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 280 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get: () => 280,
+    });
 });
 afterAll(() => {
     if (offsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeight);
@@ -83,9 +88,21 @@ function catalog(patch: Partial<DebugCatalog> = {}): DebugCatalog {
         actions: [
             action('get_group_list', { summary: '获取群列表' }),
             action('get_group_info', { summary: '获取群信息' }),
-            action('send_group_msg', { category: 'message', safety: 'side_effect', summary: '发送群消息' }),
-            action('set_group_kick', { category: 'group_admin', safety: 'dangerous', summary: '踢出群成员' }),
-            action('nc_only_thing', { category: 'extension', other_backend_present: false, param_diff: true }),
+            action('send_group_msg', {
+                category: 'message',
+                safety: 'side_effect',
+                summary: '发送群消息',
+            }),
+            action('set_group_kick', {
+                category: 'group_admin',
+                safety: 'dangerous',
+                summary: '踢出群成员',
+            }),
+            action('nc_only_thing', {
+                category: 'extension',
+                other_backend_present: false,
+                param_diff: true,
+            }),
             action('upload_file_stream', { category: 'stream', stream: true }),
             action('mystery_action', { supported: false, category: 'extension' }),
         ],
@@ -107,7 +124,10 @@ function renderLeft(target: DebugTarget | null = NC) {
 const rowNames = () =>
     screen
         .getAllByRole('treeitem')
-        .filter((el) => el.getAttribute('aria-level') !== null && el.getAttribute('aria-expanded') === null)
+        .filter(
+            (el) =>
+                el.getAttribute('aria-level') !== null && el.getAttribute('aria-expanded') === null,
+        )
         .map((el) => el.getAttribute('data-flip')?.replace(/^a:/, ''));
 
 // 行上看见的主名是简介，mock 目录的简介就是这个格式（见 action()）
@@ -131,9 +151,15 @@ describe('接口目录', () => {
         expect(within(tree).getByText('消息')).toBeInTheDocument();
         expect(within(tree).getByText('群信息')).toBeInTheDocument();
         // 分类顺序：消息在群信息前面
-        expect(rowNames().slice(0, 3)).toEqual(['send_group_msg', 'get_group_info', 'get_group_list']);
+        expect(rowNames().slice(0, 3)).toEqual([
+            'send_group_msg',
+            'get_group_info',
+            'get_group_list',
+        ]);
 
-        const unsupported = screen.getByText('当前 Bot 不支持（1）').closest('[role="treeitem"]') as HTMLElement;
+        const unsupported = screen
+            .getByText('当前 Bot 不支持（1）')
+            .closest('[role="treeitem"]') as HTMLElement;
         expect(unsupported).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByText(summaryOf('mystery_action'))).not.toBeInTheDocument();
         fireEvent.click(unsupported);
@@ -144,10 +170,14 @@ describe('接口目录', () => {
 
     it('徽章：仅 NC、参数不同、流式', async () => {
         renderLeft();
-        const row = (await screen.findByText(summaryOf('nc_only_thing'))).closest('[role="treeitem"]') as HTMLElement;
+        const row = (await screen.findByText(summaryOf('nc_only_thing'))).closest(
+            '[role="treeitem"]',
+        ) as HTMLElement;
         expect(within(row).getByText('仅 NC')).toBeInTheDocument();
         expect(within(row).getByText('参数不同')).toBeInTheDocument();
-        const stream = screen.getByText(summaryOf('upload_file_stream')).closest('[role="treeitem"]') as HTMLElement;
+        const stream = screen
+            .getByText(summaryOf('upload_file_stream'))
+            .closest('[role="treeitem"]') as HTMLElement;
         expect(within(stream).getByText('流式')).toBeInTheDocument();
     });
 
@@ -211,7 +241,9 @@ describe('接口目录', () => {
     it('单击打开；Ctrl+单击、中键另开标签', async () => {
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         renderLeft();
-        const row = (await screen.findByText('发送群消息')).closest('[role="treeitem"]') as HTMLElement;
+        const row = (await screen.findByText('发送群消息')).closest(
+            '[role="treeitem"]',
+        ) as HTMLElement;
 
         fireEvent.click(row);
         expect(open).toHaveBeenLastCalledWith('send_group_msg', { newTab: false });
@@ -264,7 +296,9 @@ describe('接口目录', () => {
     it('选了 Bot 且目录来自内置快照时显示提示条，可以点「重新获取」马上再问一次', async () => {
         service.catalog.mockResolvedValue(catalog({ source: 'snapshot' }));
         renderLeft({ ...NC, running: false });
-        expect(await screen.findByText('按内置目录显示（4.15.18），可能和你的版本不同')).toBeInTheDocument();
+        expect(
+            await screen.findByText('按内置目录显示（4.15.18），可能和你的版本不同'),
+        ).toBeInTheDocument();
         expect(service.catalog).toHaveBeenCalledTimes(1);
 
         // 「重新获取」：内部通道可能刚好就绪（比如登录完成但事件没落），不等定时重拉
@@ -277,7 +311,9 @@ describe('接口目录', () => {
     it('在线目录不显示快照提示；当前标签打开的接口标出来', async () => {
         debugWorkspaceStore.openAction('get_group_info');
         renderLeft();
-        const row = (await screen.findByText('获取群信息')).closest('[role="treeitem"]') as HTMLElement;
+        const row = (await screen.findByText('获取群信息')).closest(
+            '[role="treeitem"]',
+        ) as HTMLElement;
         expect(row).toHaveAttribute('aria-current', 'true');
         expect(screen.queryByText(/按内置目录显示/)).not.toBeInTheDocument();
     });
@@ -299,7 +335,9 @@ describe('接口目录', () => {
         act(() => tree.focus());
         // 高亮落在 send_group_msg 上
         await user.keyboard('{ArrowDown}{ArrowDown}');
-        fireEvent.contextMenu(screen.getByText('获取群列表').closest('[role="treeitem"]') as HTMLElement);
+        fireEvent.contextMenu(
+            screen.getByText('获取群列表').closest('[role="treeitem"]') as HTMLElement,
+        );
         const item = await screen.findByRole('menuitem', { name: '复制接口名' });
         fireEvent.keyDown(item, { key: 'Enter' });
         await new Promise((r) => setTimeout(r, 20));

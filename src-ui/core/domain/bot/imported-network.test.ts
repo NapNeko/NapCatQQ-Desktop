@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ConnectConfig } from '../../ipc/generated/domain/ConnectConfig';
 import { createDefaultBotConfig } from './config-defaults';
-import {
-    applyImportedNetwork,
-    isPreviewEmpty,
-    previewImportedNetwork,
-} from './imported-network';
+import { applyImportedNetwork, isPreviewEmpty, previewImportedNetwork } from './imported-network';
 
 const emptyConnect: ConnectConfig = {
     httpServers: [],
@@ -94,19 +90,31 @@ describe('previewImportedNetwork', () => {
         const cfg = createDefaultBotConfig();
         cfg.connect = {
             ...emptyConnect,
-            httpServers: [httpServer('keep', 3000), httpServer('edit', 3001), httpServer('gone', 3002)],
+            httpServers: [
+                httpServer('keep', 3000),
+                httpServer('edit', 3001),
+                httpServer('gone', 3002),
+            ],
         };
         const preview = previewImportedNetwork(cfg, {
             connect: {
                 ...emptyConnect,
-                httpServers: [httpServer('keep', 3000), httpServer('edit', 3999), httpServer('new', 3003)],
+                httpServers: [
+                    httpServer('keep', 3000),
+                    httpServer('edit', 3999),
+                    httpServer('new', 3003),
+                ],
             },
         });
         expect(preview.added).toEqual([{ kind: 'httpServer', name: 'new' }]);
         expect(preview.removed).toEqual([{ kind: 'httpServer', name: 'gone' }]);
         expect(preview.changed).toEqual([{ kind: 'httpServer', name: 'edit' }]);
         expect(preview.otherChanged).toBe(false);
-        expect(preview.next.connect.httpServers.map((c) => c.name)).toEqual(['keep', 'edit', 'new']);
+        expect(preview.next.connect.httpServers.map((c) => c.name)).toEqual([
+            'keep',
+            'edit',
+            'new',
+        ]);
     });
 
     it('does not mutate the current config', () => {

@@ -32,13 +32,17 @@ describe('koishiSchema', () => {
     it('adapter-onebot is a tagged union on protocol', () => {
         const node = hydrateSchema(table['adapter-onebot'].schema)!;
         const sections = objectSections(node);
-        const union = sections.flatMap((s) => s.fields).find((f) => f.key === '' && f.node.type === 'union');
+        const union = sections
+            .flatMap((s) => s.fields)
+            .find((f) => f.key === '' && f.node.type === 'union');
         expect(union).toBeTruthy();
         const shape = unionShape(union!.node);
         expect(shape.kind).toBe('tagged');
         if (shape.kind !== 'tagged') return;
         expect(shape.key).toBe('protocol');
-        expect(shape.branches.map((b) => b.value)).toEqual(expect.arrayContaining(['http', 'ws', 'ws-reverse']));
+        expect(shape.branches.map((b) => b.value)).toEqual(
+            expect.arrayContaining(['http', 'ws', 'ws-reverse']),
+        );
         // 没写 protocol 时落在 required(false) 的 ws-reverse 那支（上游默认值）
         expect(shape.branches[taggedBranch(shape, {})].value).toBe('ws-reverse');
         expect(shape.branches[taggedBranch(shape, { protocol: 'ws' })].value).toBe('ws');
@@ -67,7 +71,8 @@ describe('koishiSchema', () => {
         const output = objectFields(i18n).find((f) => f.key === 'output')!.node;
         const shape = unionShape(output);
         expect(shape.kind).toBe('enum');
-        if (shape.kind === 'enum') expect(shape.options.map((o) => o.value)).toEqual(['prefer-user', 'prefer-channel']);
+        if (shape.kind === 'enum')
+            expect(shape.options.map((o) => o.value)).toEqual(['prefer-user', 'prefer-channel']);
         expect(describeNode(output)).toBe('输出语言偏好设置。');
     });
 
@@ -85,7 +90,10 @@ describe('koishiSchema', () => {
         const help = hydrateSchema(table.help.schema)!;
         expect(materializeConfig(help, {})).toEqual({ shortcut: true, options: true });
         // 写了的不动
-        expect(materializeConfig(help, { shortcut: false })).toEqual({ shortcut: false, options: true });
+        expect(materializeConfig(help, { shortcut: false })).toEqual({
+            shortcut: false,
+            options: true,
+        });
         // 标签联合段（adapter-onebot 的连接设置）按当前判别值展开分支字段
         const onebot = hydrateSchema(table['adapter-onebot'].schema)!;
         const m = materializeConfig(onebot, { selfId: '10001' });
@@ -97,7 +105,9 @@ describe('koishiSchema', () => {
 
     it('simplifyConfig 把和默认值一样的键删掉，自加的键留着', () => {
         const help = hydrateSchema(table.help.schema)!;
-        expect(simplifyConfig(help, { shortcut: true, options: false })).toEqual({ options: false });
+        expect(simplifyConfig(help, { shortcut: true, options: false })).toEqual({
+            options: false,
+        });
         expect(simplifyConfig(help, { shortcut: true, extra: 1 })).toEqual({ extra: 1 });
     });
 

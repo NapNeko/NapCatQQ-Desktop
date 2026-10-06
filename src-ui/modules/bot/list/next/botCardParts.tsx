@@ -1,23 +1,9 @@
 // BotCard 子件：头像 / 信息 chip / 底栏工具钮 / 配置摘要 helpers
 
-import {
-    forwardRef,
-    useEffect,
-    useRef,
-    useState,
-    type ComponentType,
-} from 'react';
+import { forwardRef, useEffect, useRef, useState, type ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '../../../../shared/ui';
-import {
-    ActionMotionIcon,
-    MotionIcon,
-    type MotionIconPreset,
-} from '../../../../shared/ui/motion';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../../shared/ui';
+import { ActionMotionIcon, MotionIcon, type MotionIconPreset } from '../../../../shared/ui/motion';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
 import { describeAutoRestartSchedule } from '../../../../core/domain/bot/auto-restart';
@@ -146,7 +132,8 @@ export function InfoChip({
                 ],
                 tone === 'brand' && 'border-brand/30 bg-brand-soft/50 text-brand font-medium',
                 tone === 'danger' && 'border-danger/30 bg-danger-soft/50 text-danger font-medium',
-                tone === 'warning' && 'border-warning/30 bg-warning-soft/50 text-warning font-medium',
+                tone === 'warning' &&
+                    'border-warning/30 bg-warning-soft/50 text-warning font-medium',
                 tone === 'info' && 'border-info/30 bg-info-soft/50 text-info font-medium',
             )}
         >
@@ -178,7 +165,11 @@ export function InfoChip({
                 <span
                     className={cn(
                         'max-w-[7.5rem] truncate font-medium',
-                        tone === 'neutral' ? (muted ? 'text-text-tertiary' : 'text-text') : 'currentColor',
+                        tone === 'neutral'
+                            ? muted
+                                ? 'text-text-tertiary'
+                                : 'text-text'
+                            : 'currentColor',
                     )}
                 >
                     {value}
@@ -239,7 +230,8 @@ function forwardRefIcon() {
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                             'disabled:cursor-not-allowed disabled:opacity-40',
                             m.level !== 'rich' && 'hover:scale-[1.04]',
-                            tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
+                            tone === 'neutral' &&
+                                'text-text-secondary hover:bg-inset hover:text-text',
                             tone === 'brand' && 'text-brand hover:bg-brand-soft',
                             tone === 'success' && 'text-success hover:bg-success-soft',
                             tone === 'danger' && 'text-danger hover:bg-danger-soft',

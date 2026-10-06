@@ -1,7 +1,18 @@
 // Karin「基础」：进程怎么跑。听口 / 对接口在「连接」，不在这里重复 HTTP。
 
-import { FormSection, KeyValueListEditor, NumberField, Select, Switch, TextField } from '../../../../shared/ui';
-import { KARIN_LOG_LEVELS, KARIN_NODE_ENVS, KARIN_RUNTIMES } from '../../../../core/domain/apps/karinConfig';
+import {
+    FormSection,
+    KeyValueListEditor,
+    NumberField,
+    Select,
+    Switch,
+    TextField,
+} from '../../../../shared/ui';
+import {
+    KARIN_LOG_LEVELS,
+    KARIN_NODE_ENVS,
+    KARIN_RUNTIMES,
+} from '../../../../core/domain/apps/karinConfig';
 import { CONFIG_PAIR, ConfigForm } from './configLayout';
 import type { KarinEnv, KarinInstanceConfig } from '../../../../core/ipc/types';
 

@@ -5,13 +5,24 @@ import { koishiService } from '../../core/services/koishi.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
-import type { KoishiPackageInfo, KoishiPluginSchema, KoishiRuntimeStatus } from '../../core/ipc/types';
+import type {
+    KoishiPackageInfo,
+    KoishiPluginSchema,
+    KoishiRuntimeStatus,
+} from '../../core/ipc/types';
 
-export const koishiStatusKey = (id: string, running: boolean) => ['koishiStatus', id, running] as const;
+export const koishiStatusKey = (id: string, running: boolean) =>
+    ['koishiStatus', id, running] as const;
 export const koishiSchemaKey = (id: string, name: string) => ['koishiSchema', id, name] as const;
 export const koishiPackagesKey = (id: string) => ['koishiPackages', id] as const;
 
-const NOT_RUNNING: KoishiRuntimeStatus = { gate: 'not_running', message: null, bots: [], memory: null, cpu: null };
+const NOT_RUNNING: KoishiRuntimeStatus = {
+    gate: 'not_running',
+    message: null,
+    bots: [],
+    memory: null,
+    cpu: null,
+};
 
 export function useKoishiStatus(instanceId: string, running: boolean) {
     const query = useQuery<KoishiRuntimeStatus, Error>({
@@ -66,9 +77,16 @@ export function useKoishiRestart(instanceId: string, instanceName: string) {
                 content: '几秒后回来，Bot 会自己重连',
                 autoDismissMs: 5000,
             });
-            setTimeout(() => void qc.invalidateQueries({ queryKey: ['koishiStatus', instanceId] }), 2000);
+            setTimeout(
+                () => void qc.invalidateQueries({ queryKey: ['koishiStatus', instanceId] }),
+                2000,
+            );
         },
         onError: (err: unknown) =>
-            pushErrorBar({ key: `koishi-restart:${instanceId}`, title: '重启失败', raw: toAppConfigError(err).message }),
+            pushErrorBar({
+                key: `koishi-restart:${instanceId}`,
+                title: '重启失败',
+                raw: toAppConfigError(err).message,
+            }),
     });
 }

@@ -3,7 +3,16 @@
 
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { Badge, Button, FormSection, NumberField, Select, StringListField, Switch, TextField } from '../../../../shared/ui';
+import {
+    Badge,
+    Button,
+    FormSection,
+    NumberField,
+    Select,
+    StringListField,
+    Switch,
+    TextField,
+} from '../../../../shared/ui';
 import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import {
     YUNZAI_ADD_LIMITS,
@@ -20,12 +29,18 @@ const REPLY_ITEMS = YUNZAI_REPLY_MODES.map((m) => ({ value: String(m.value), lab
 const ADD_LIMIT_ITEMS = YUNZAI_ADD_LIMITS.map((m) => ({ value: String(m.value), label: m.label }));
 const INHERIT = '__inherit__';
 
-export const YunzaiGroupsTab: React.FC<YunzaiTabProps> = ({ config, onChange, errors, disabled }) => {
+export const YunzaiGroupsTab: React.FC<YunzaiTabProps> = ({
+    config,
+    onChange,
+    errors,
+    disabled,
+}) => {
     const group = config.group;
     const d = group.default;
     const setDefault = (patch: Partial<YunzaiGroupDefaults>) =>
         onChange({ ...config, group: { ...group, default: { ...d, ...patch } } });
-    const setOverrides = (overrides: YunzaiGroupOverride[]) => onChange({ ...config, group: { ...group, overrides } });
+    const setOverrides = (overrides: YunzaiGroupOverride[]) =>
+        onChange({ ...config, group: { ...group, overrides } });
     // 新加的那条直接展开
     const [openIndex, setOpenIndex] = useState<number | null>(null);
 
@@ -154,7 +169,9 @@ export const YunzaiGroupsTab: React.FC<YunzaiTabProps> = ({ config, onChange, er
                         errors={errors}
                         disabled={disabled}
                         defaultOpen={openIndex === i}
-                        onChange={(next) => setOverrides(group.overrides.map((r, j) => (j === i ? next : r)))}
+                        onChange={(next) =>
+                            setOverrides(group.overrides.map((r, j) => (j === i ? next : r)))
+                        }
                         onRemove={() => setOverrides(group.overrides.filter((_, j) => j !== i))}
                     />
                 ))}
@@ -177,7 +194,8 @@ const OverrideCard: React.FC<{
     const set = (patch: Partial<YunzaiGroupOverride>) => onChange({ ...rule, ...patch });
     const keyError = errors[`group/overrides/${index}/key`];
     const count = yunzaiOverrideFieldCount(rule);
-    const replyLabel = YUNZAI_REPLY_MODES.find((m) => m.value === defaults.only_reply_at)?.label ?? '';
+    const replyLabel =
+        YUNZAI_REPLY_MODES.find((m) => m.value === defaults.only_reply_at)?.label ?? '';
 
     return (
         <div className="border-b border-border-subtle/70 py-3 first:pt-1 last:border-0 last:pb-1">
@@ -189,8 +207,12 @@ const OverrideCard: React.FC<{
                     onClick={() => setOpen((v) => !v)}
                 >
                     <ExpandChevron open={open} />
-                    <span className="truncate font-mono text-sm text-text">{rule.key || '（未填）'}</span>
-                    <span className="truncate text-2xs text-text-tertiary">{yunzaiOverrideScope(rule.key)}</span>
+                    <span className="truncate font-mono text-sm text-text">
+                        {rule.key || '（未填）'}
+                    </span>
+                    <span className="truncate text-2xs text-text-tertiary">
+                        {yunzaiOverrideScope(rule.key)}
+                    </span>
                     {count > 0 && (
                         <Badge tone="neutral" appearance="outline">
                             改了 {count} 项
@@ -223,10 +245,15 @@ const OverrideCard: React.FC<{
                     />
                     <Select
                         label="响应哪些消息"
-                        items={[{ value: INHERIT, label: `沿用默认（${replyLabel}）` }, ...REPLY_ITEMS]}
+                        items={[
+                            { value: INHERIT, label: `沿用默认（${replyLabel}）` },
+                            ...REPLY_ITEMS,
+                        ]}
                         value={rule.only_reply_at == null ? INHERIT : String(rule.only_reply_at)}
                         disabled={disabled}
-                        onValueChange={(v) => set({ only_reply_at: v === INHERIT ? undefined : Number(v) })}
+                        onValueChange={(v) =>
+                            set({ only_reply_at: v === INHERIT ? undefined : Number(v) })
+                        }
                     />
                     <div className={CONFIG_PAIR}>
                         <NumberField
@@ -293,7 +320,12 @@ const InheritableList: React.FC<{
                 onCheckedChange={(on) => onChange(on ? [...fallback] : undefined)}
             />
             {own ? (
-                <StringListField value={value} mono={false} disabled={disabled} onChange={onChange} />
+                <StringListField
+                    value={value}
+                    mono={false}
+                    disabled={disabled}
+                    onChange={onChange}
+                />
             ) : (
                 <p className="text-2xs text-text-tertiary">
                     沿用默认：{fallback.length ? fallback.join('、') : '空'}

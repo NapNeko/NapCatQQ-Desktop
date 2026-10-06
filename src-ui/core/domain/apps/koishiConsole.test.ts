@@ -7,7 +7,9 @@ describe('parseKoishiMessage', () => {
     });
 
     it('元素和文本混排：at / img / 不认识的降级', () => {
-        const segs = parseKoishiMessage('你好 <at id="123" name="小明"/> 看图<img src="http://x/a.png"/>完<face id="1"/>');
+        const segs = parseKoishiMessage(
+            '你好 <at id="123" name="小明"/> 看图<img src="http://x/a.png"/>完<face id="1"/>',
+        );
         expect(segs.map((s) => s.kind)).toEqual(['text', 'at', 'text', 'img', 'text', 'element']);
         expect(segs[1]).toMatchObject({ id: '123', name: '小明' });
         expect(segs[3]).toMatchObject({ src: 'http://x/a.png' });
@@ -22,7 +24,10 @@ describe('parseKoishiMessage', () => {
 
     it('空串和裸括号不炸', () => {
         expect(parseKoishiMessage('')).toEqual([]);
-        expect(parseKoishiMessage('a < b > c')[0]).toMatchObject({ kind: 'text', text: 'a < b > c' });
+        expect(parseKoishiMessage('a < b > c')[0]).toMatchObject({
+            kind: 'text',
+            text: 'a < b > c',
+        });
     });
 
     it('频道：私聊 @用户、群聊 #', () => {

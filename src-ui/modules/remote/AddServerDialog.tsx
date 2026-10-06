@@ -192,7 +192,11 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         <Field
                             id={passwordId}
                             label="SSH 密码"
-                            description={isEdit ? '留空表示不改动已保存的凭据。' : '留空时仅添加档案，下次连接时再填。'}
+                            description={
+                                isEdit
+                                    ? '留空表示不改动已保存的凭据。'
+                                    : '留空时仅添加档案，下次连接时再填。'
+                            }
                         >
                             <TextInput
                                 id={passwordId}
@@ -206,7 +210,10 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                     )}
 
                     {!isEdit && authMethod === 'password' && (
-                        <label htmlFor={autoKeyId} className="flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
+                        <label
+                            htmlFor={autoKeyId}
+                            className="flex cursor-pointer items-center gap-2 text-xs text-text-secondary"
+                        >
                             <input
                                 id={autoKeyId}
                                 type="checkbox"
@@ -222,7 +229,11 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         <Field
                             id={scannedKeys.length > 0 ? keyPathSelectId : keyPathCustomId}
                             label="私钥文件路径"
-                            description={scannedKeys.length > 0 ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。` : '~/.ssh/ 下未发现标准命名密钥，手动填路径。'}
+                            description={
+                                scannedKeys.length > 0
+                                    ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。`
+                                    : '~/.ssh/ 下未发现标准命名密钥，手动填路径。'
+                            }
                         >
                             {scannedKeys.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">
@@ -271,7 +282,10 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         </Field>
                     )}
 
-                    <label htmlFor={rememberId} className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-text-secondary">
+                    <label
+                        htmlFor={rememberId}
+                        className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-text-secondary"
+                    >
                         <input
                             id={rememberId}
                             type="checkbox"
@@ -294,7 +308,13 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                             type="submit"
                             disabled={!canSubmit || isSubmitting}
                         >
-                            {isSubmitting ? (isEdit ? '保存中…' : '添加中…') : isEdit ? '保存' : '添加'}
+                            {isSubmitting
+                                ? isEdit
+                                    ? '保存中…'
+                                    : '添加中…'
+                                : isEdit
+                                  ? '保存'
+                                  : '添加'}
                         </Button>
                     </DialogFooter>
                 </form>

@@ -137,9 +137,7 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
             <DialogContent size="md" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>从 SSH 配置导入</DialogTitle>
-                    <DialogDescription>
-                        把本机已能连上的机器加进远端列表。
-                    </DialogDescription>
+                    <DialogDescription>把本机已能连上的机器加进远端列表。</DialogDescription>
                 </DialogHeader>
 
                 {isLoading ? (
@@ -147,7 +145,9 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
                         正在读取本机 SSH 配置…
                     </p>
                 ) : isError ? (
-                    <p className="py-5 text-center text-sm text-text-secondary">读取失败，详情见日志</p>
+                    <p className="py-5 text-center text-sm text-text-secondary">
+                        读取失败，详情见日志
+                    </p>
                 ) : hosts.length === 0 ? (
                     <p className="py-5 text-center text-sm text-text-secondary">
                         本机还没有可用的 SSH 主机条目。仍可手动添加服务器。
@@ -276,8 +276,8 @@ function HostPickRow({
     const sideNote = host.skipReason
         ? shortSkipReason(host.skipReason)
         : host.identityFileMissing
-            ? '密钥缺失'
-            : null;
+          ? '密钥缺失'
+          : null;
 
     return (
         <li className={cn(divided && 'border-t border-border-subtle/70')}>

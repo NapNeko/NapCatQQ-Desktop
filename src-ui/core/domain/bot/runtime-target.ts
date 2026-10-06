@@ -19,10 +19,7 @@ export function isRuntimeTargetLocal(runtimeTarget: string): boolean {
 /** 已选具体远程主机（server profile id），非 local / remote 占位。 */
 export function isRuntimeTargetConcreteRemote(runtimeTarget: string): boolean {
     const t = normalizeRuntimeTargetFromDisk(runtimeTarget);
-    return (
-        t !== 'local' &&
-        t !== RUNTIME_TARGET_REMOTE_PLACEHOLDER
-    );
+    return t !== 'local' && t !== RUNTIME_TARGET_REMOTE_PLACEHOLDER;
 }
 
 /** 运行宿主 Radio：本机 | 远程（含已选具体主机 id 时仍显示远程）。 */
@@ -30,9 +27,7 @@ export function runtimeModeForTarget(runtimeTarget: string): 'local' | 'remote' 
     return isRuntimeTargetLocal(runtimeTarget) ? 'local' : 'remote';
 }
 
-export function remoteHostIdFromRuntimeTarget(
-    runtimeTarget: string,
-): string | null {
+export function remoteHostIdFromRuntimeTarget(runtimeTarget: string): string | null {
     const id = normalizeRuntimeTargetFromDisk(runtimeTarget);
     if (!isRuntimeTargetConcreteRemote(id)) return null;
     return `remote:${id}`;

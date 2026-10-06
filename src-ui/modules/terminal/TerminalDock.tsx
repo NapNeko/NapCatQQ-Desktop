@@ -17,9 +17,16 @@ import {
     useTerminalLayout,
     useTerminalPrefs,
 } from '../../hooks/terminal/terminalPrefs';
-import { terminalStore, useTerminalState, type TerminalGroup } from '../../hooks/terminal/terminalStore';
+import {
+    terminalStore,
+    useTerminalState,
+    type TerminalGroup,
+} from '../../hooks/terminal/terminalStore';
 import { uploadToSession } from '../../hooks/terminal/useTerminalFiles';
-import { useTerminalFileDrop, type TerminalDropTarget } from '../../hooks/terminal/useTerminalFileDrop';
+import {
+    useTerminalFileDrop,
+    type TerminalDropTarget,
+} from '../../hooks/terminal/useTerminalFileDrop';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { buildPalette } from '../../core/domain/terminal/palette';
 import { quotePath, shellSyntaxOf } from '../../core/domain/terminal/paths';
@@ -51,13 +58,23 @@ function useDrag(onMove: (e: PointerEvent) => void, onEnd?: () => void) {
     return { dragging, start };
 }
 
-function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: boolean; drop: TerminalDropTarget | null }) {
+function GroupView({
+    group,
+    visible,
+    drop,
+}: {
+    group: TerminalGroup;
+    visible: boolean;
+    drop: TerminalDropTarget | null;
+}) {
     const boxRef = useRef<HTMLDivElement>(null);
     const divider = useDrag((e) => {
         const rect = boxRef.current?.getBoundingClientRect();
         if (!rect) return;
         const ratio =
-            group.split === 'row' ? (e.clientX - rect.left) / rect.width : (e.clientY - rect.top) / rect.height;
+            group.split === 'row'
+                ? (e.clientX - rect.left) / rect.width
+                : (e.clientY - rect.top) / rect.height;
         terminalStore.setRatio(group.id, ratio);
     });
     const [first, second] = group.panes;
@@ -66,12 +83,19 @@ function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: bo
     return (
         <div
             ref={boxRef}
-            className={cn('ncd-term-group flex min-h-0 min-w-0 flex-1', group.split === 'column' ? 'flex-col' : 'flex-row')}
+            className={cn(
+                'ncd-term-group flex min-h-0 min-w-0 flex-1',
+                group.split === 'column' ? 'flex-col' : 'flex-row',
+            )}
         >
             {first && (
                 <div
                     className="flex min-h-0 min-w-0"
-                    style={second ? { flexBasis: `${group.ratio * 100}%`, flexGrow: 0, flexShrink: 0 } : { flex: 1 }}
+                    style={
+                        second
+                            ? { flexBasis: `${group.ratio * 100}%`, flexGrow: 0, flexShrink: 0 }
+                            : { flex: 1 }
+                    }
                 >
                     <TerminalPane
                         sessionId={first}
@@ -90,7 +114,10 @@ function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: bo
                         data-dragging={divider.dragging}
                         onPointerDown={divider.start}
                     />
-                    <div className="ncd-term-pane-in flex min-h-0 min-w-0 flex-1" data-split={group.split}>
+                    <div
+                        className="ncd-term-pane-in flex min-h-0 min-w-0 flex-1"
+                        data-split={group.split}
+                    >
                         <TerminalPane
                             sessionId={second}
                             focused={group.focused === second}
@@ -106,7 +133,13 @@ function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: bo
 }
 
 /** 没分屏时点了把当前这个目标在右边再开一块；分了以后换成左右 / 上下切换，按钮不挪位置 */
-function SplitButton({ group, focusedId }: { group: TerminalGroup; focusedId: string | undefined }) {
+function SplitButton({
+    group,
+    focusedId,
+}: {
+    group: TerminalGroup;
+    focusedId: string | undefined;
+}) {
     const split = group.panes.length > 1;
     const label = !split ? '左右分屏' : group.split === 'row' ? '改成上下分屏' : '改成左右分屏';
     const Icon = split && group.split === 'row' ? Rows2 : Columns2;
@@ -116,7 +149,12 @@ function SplitButton({ group, focusedId }: { group: TerminalGroup; focusedId: st
             return;
         }
         const view = focusedId ? terminalStore.getSnapshot().sessions[focusedId] : undefined;
-        if (view) void terminalStore.open(view.info.target, { shell: view.info.shell, splitFrom: focusedId, split: 'row' });
+        if (view)
+            void terminalStore.open(view.info.target, {
+                shell: view.info.shell,
+                splitFrom: focusedId,
+                split: 'row',
+            });
     };
     return (
         <button
@@ -208,7 +246,12 @@ export function TerminalDock() {
             maxAnim.current = gsap.fromTo(
                 el,
                 { y: edge },
-                { y: 0, duration: motion.duration('base'), ease: motion.ease.enter, clearProps: 'transform' },
+                {
+                    y: 0,
+                    duration: motion.duration('base'),
+                    ease: motion.ease.enter,
+                    clearProps: 'transform',
+                },
             );
         } else {
             maxAnim.current = gsap.fromTo(
@@ -226,7 +269,8 @@ export function TerminalDock() {
     }, [state.maximized, state.open, motion.enabled]);
     useLayoutEffect(() => {
         const el = dockRef.current;
-        if (el && !shownMax && !maxAnim.current?.isActive()) gsap.set(el, { clearProps: 'transform' });
+        if (el && !shownMax && !maxAnim.current?.isActive())
+            gsap.set(el, { clearProps: 'transform' });
     }, [shownMax]);
 
     // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这几样避开面板。
@@ -288,13 +332,19 @@ export function TerminalDock() {
             if (!dock || !parent) return;
             const bottom = dock.getBoundingClientRect().bottom;
             const max = bottom - parent.getBoundingClientRect().top - DOCK_TOP_KEEP;
-            const next = Math.round(Math.min(Math.max(bottom - e.clientY, DOCK_HEIGHT_MIN), Math.max(DOCK_HEIGHT_MIN, max)));
+            const next = Math.round(
+                Math.min(
+                    Math.max(bottom - e.clientY, DOCK_HEIGHT_MIN),
+                    Math.max(DOCK_HEIGHT_MIN, max),
+                ),
+            );
             liveHeightRef.current = next;
             setLiveHeight(next);
         },
         () => {
             // 拖的时候只改本地高度，松手才落盘
-            if (liveHeightRef.current !== null) terminalLayout.patch({ height: liveHeightRef.current });
+            if (liveHeightRef.current !== null)
+                terminalLayout.patch({ height: liveHeightRef.current });
             liveHeightRef.current = null;
             setLiveHeight(null);
         },
@@ -308,11 +358,17 @@ export function TerminalDock() {
             void uploadToSession(target.sessionId, paths, target.dir);
         } else if (info.host_id === 'local') {
             const syntax = shellSyntaxOf(info.host_os, info.shell);
-            getRuntime(target.sessionId)?.fillInput(`${paths.map((p) => quotePath(p, syntax)).join(' ')} `);
+            getRuntime(target.sessionId)?.fillInput(
+                `${paths.map((p) => quotePath(p, syntax)).join(' ')} `,
+            );
         } else if (info.features.files) {
             void uploadToSession(target.sessionId, paths, view.cwd ?? '~');
         } else {
-            pushInfoBar({ tone: 'warning', title: '容器里的终端没法直接传文件', content: '改用「宿主机部署目录」那个终端传' });
+            pushInfoBar({
+                tone: 'warning',
+                title: '容器里的终端没法直接传文件',
+                content: '改用「宿主机部署目录」那个终端传',
+            });
         }
     }, []);
     const drop = useTerminalFileDrop(state.open && state.groups.length > 0, onDrop);
@@ -359,7 +415,9 @@ export function TerminalDock() {
                 <SquareTerminal size={14} className="mx-1 shrink-0 text-text-tertiary" />
                 <TerminalTabs state={state} />
                 <TerminalNewMenu busy={state.busy} />
-                {focusedView && activeGroup && <SplitButton group={activeGroup} focusedId={focusedId} />}
+                {focusedView && activeGroup && (
+                    <SplitButton group={activeGroup} focusedId={focusedId} />
+                )}
                 <button
                     type="button"
                     title={state.maximized ? '还原终端面板' : '最大化终端面板'}
@@ -380,11 +438,20 @@ export function TerminalDock() {
                 </button>
             </header>
             {activeGroup ? (
-                <GroupView key={activeGroup.id} group={activeGroup} visible={state.open} drop={drop} />
+                <GroupView
+                    key={activeGroup.id}
+                    group={activeGroup}
+                    visible={state.open}
+                    drop={drop}
+                />
             ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-text-secondary">
                     <p>没有开着的终端</p>
-                    <Button size="sm" disabled={state.busy} onClick={() => void terminalStore.open({ kind: 'local' })}>
+                    <Button
+                        size="sm"
+                        disabled={state.busy}
+                        onClick={() => void terminalStore.open({ kind: 'local' })}
+                    >
                         <SquareTerminal size={14} />
                         开一个本机终端
                     </Button>

@@ -20,20 +20,33 @@ function millis(d: Date): string {
 }
 
 /** 麦麦 lite 样式：时间戳的颜色就是等级，模块名和正文用模块色 */
-function mai(d: Date, level: 'info' | 'warn' | 'error', module: string, rgb: string | null, text: string): string {
+function mai(
+    d: Date,
+    level: 'info' | 'warn' | 'error',
+    module: string,
+    rgb: string | null,
+    text: string,
+): string {
     const stamp = { info: '38;5;117', warn: '33', error: '31' }[level];
     const head = `${E}${stamp}m${monthDay(d)} ${clock(d)}${E}0m`;
     if (!rgb) return `${head} [${module}] ${text}`;
     return `${head} ${E}38;2;${rgb}m[${module}]${E}0m ${E}38;2;${rgb}m${text}${E}0m`;
 }
 
-function astr(d: Date, level: 'INFO' | 'WARN', module: string, where: string, text: string): string {
+function astr(
+    d: Date,
+    level: 'INFO' | 'WARN',
+    module: string,
+    where: string,
+    text: string,
+): string {
     const tone = level === 'WARN' ? `${E}33m${E}1m` : `${E}1m`;
     return `${E}32m[${millis(d)}]${E}0m [${module}] ${tone}[${level}]${E}0m [${where}]: ${tone}${text}${E}0m`;
 }
 
 function nb(d: Date, level: 'SUCCESS' | 'INFO' | 'WARNING', logger: string, text: string): string {
-    const tone = level === 'SUCCESS' ? `${E}32m${E}1m` : level === 'WARNING' ? `${E}33m${E}1m` : `${E}1m`;
+    const tone =
+        level === 'SUCCESS' ? `${E}32m${E}1m` : level === 'WARNING' ? `${E}33m${E}1m` : `${E}1m`;
     return `${E}32m${monthDay(d)} ${clock(d)}${E}0m [${tone}${level}${E}0m] ${E}36m${E}4m${logger}${E}0m${E}36m${E}0m | ${text}`;
 }
 
@@ -44,7 +57,15 @@ function logu(
     module: string,
     text: string,
 ): string {
-    const stamp = { TRACE: '90', DEBUG: '36', INFO: '32', SUCCESS: '32;1', WARNING: '33;1', ERROR: '31;1', CRITICAL: '35;1' }[level];
+    const stamp = {
+        TRACE: '90',
+        DEBUG: '36',
+        INFO: '32',
+        SUCCESS: '32;1',
+        WARNING: '33;1',
+        ERROR: '31;1',
+        CRITICAL: '35;1',
+    }[level];
     // loguru 的 <green>{time}</green> 与 <level>{level: <8}</level>
     return `${E}${stamp}m${iso(d)}${E}0m | ${E}${stamp}m${level.padEnd(8)}${E}0m | ${E}36m${module.padEnd(24)}${E}0m | ${text}`;
 }
@@ -84,15 +105,28 @@ function startup(inst: AppInstance, d: Date): string[] {
                 koi(d, 'I', 'server', `server listening at http://127.0.0.1:${inst.port}`),
                 koi(d, 'I', 'console', `webui is available at http://127.0.0.1:${inst.port}`),
                 koi(d, 'I', 'sqlite', 'auto creating table user'),
-                koi(d, 'S', 'telemetry', '欢迎使用 Koishi！在您点击「同意」前，telemetry 服务不会启动。'),
+                koi(
+                    d,
+                    'S',
+                    'telemetry',
+                    '欢迎使用 Koishi！在您点击「同意」前，telemetry 服务不会启动。',
+                ),
             ];
         case 'yunzai':
             return [
                 trss(d, 'MARK', `${E}33mTRSS-Yunzai v3.1.3${E}39m 启动中`),
                 trss(d, 'MARK', `正在连接 ${E}36mredis://127.0.0.1:${inst.port + 1}${E}39m`),
-                trss(d, 'WARN', `Redis 连接失败，正在启动 ${dir}\\..\\..\\tools\\redis\\redis-server.exe`),
+                trss(
+                    d,
+                    'WARN',
+                    `Redis 连接失败，正在启动 ${dir}\\..\\..\\tools\\redis\\redis-server.exe`,
+                ),
                 trss(d, 'MARK', 'Redis 连接成功'),
-                trss(d, 'INFO', `加载插件 ${E}36m[system]${E}39m ${E}36m[other]${E}39m ${E}36m[example]${E}39m 共 18 个`),
+                trss(
+                    d,
+                    'INFO',
+                    `加载插件 ${E}36m[system]${E}39m ${E}36m[other]${E}39m ${E}36m[example]${E}39m 共 18 个`,
+                ),
                 trss(d, 'WARN', `[genshin] 未安装，原神相关指令不可用`),
                 trss(d, 'MARK', `启动 HTTP 服务器：${E}36mhttp://localhost:${inst.port}${E}39m`),
                 trss(d, 'MARK', `${E}36m[OneBotv11]${E}39m 连接建立 ${E}36m/OneBotv11${E}39m`),
@@ -101,9 +135,21 @@ function startup(inst: AppInstance, d: Date): string[] {
         case 'maibot':
             return [
                 mai(d, 'info', '主程序', '255;255;255', '正在启动MaiBot'),
-                mai(d, 'info', '日志系统', '128;128;128', '日志系统已初始化：控制台=INFO，文件=DEBUG，轮转=30个文件，清理=30天前'),
+                mai(
+                    d,
+                    'info',
+                    '日志系统',
+                    '128;128;128',
+                    '日志系统已初始化：控制台=INFO，文件=DEBUG，轮转=30个文件，清理=30天前',
+                ),
                 mai(d, 'info', '配置', '162;255;0', 'MaiCore 当前版本: 1.2.5'),
-                mai(d, 'warn', '配置', '162;255;0', `配置文件缺失，正在生成默认配置: ${dir}\\config\\model_config.toml`),
+                mai(
+                    d,
+                    'warn',
+                    '配置',
+                    '162;255;0',
+                    `配置文件缺失，正在生成默认配置: ${dir}\\config\\model_config.toml`,
+                ),
                 mai(d, 'info', '表情包', '255;175;0', '启动表情包管理器'),
                 mai(d, 'info', '记忆存储', '175;135;255', '记事本创建成功！'),
                 mai(
@@ -122,7 +168,13 @@ function startup(inst: AppInstance, d: Date): string[] {
         case 'astrbot':
             return [
                 'Welcome to AstrBot CLI!',
-                astr(d, 'INFO', 'Core', 'config.astrbot_config:199', 'Config key missing; added default.'),
+                astr(
+                    d,
+                    'INFO',
+                    'Core',
+                    'config.astrbot_config:199',
+                    'Config key missing; added default.',
+                ),
                 astr(
                     d,
                     'INFO',
@@ -132,7 +184,13 @@ function startup(inst: AppInstance, d: Date): string[] {
                 ),
                 astr(d, 'INFO', 'Core', 'core.core_lifecycle:364', 'AstrBot started.'),
                 `[${d.getFullYear()}-${monthDay(d)} ${clock(d)} +0800] [20504] [INFO] Running on http://0.0.0.0:${inst.port} (CTRL + C to quit)`,
-                astr(d, 'WARN', 'astrbot_plugin_vikunja', 'astrbot-plugin-vikunja.main:228', 'Vikunja 插件未配置 URL 或 API Token，提醒调度未启动'),
+                astr(
+                    d,
+                    'WARN',
+                    'astrbot_plugin_vikunja',
+                    'astrbot-plugin-vikunja.main:228',
+                    'Vikunja 插件未配置 URL 或 API Token，提醒调度未启动',
+                ),
             ];
         case 'neobot':
             // loguru 控制台格式（colorize=True）：{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name: <24} | {message}
@@ -140,8 +198,18 @@ function startup(inst: AppInstance, d: Date): string[] {
             return [
                 logu(d, 'INFO', 'neobot_app.cli', 'NeoBot 启动中…'),
                 logu(d, 'INFO', 'neobot_app.config', '配置已加载：app/data/config.toml'),
-                logu(d, 'INFO', 'neobot_app.adapter', `反向 WebSocket 监听 ${E}36mws://127.0.0.1:${inst.port}${E}0m（access token 校验：已启用）`),
-                logu(d, 'INFO', 'neobot_app.plugin', `面板已挂载：${E}36mhttp://127.0.0.1:9981${E}0m`),
+                logu(
+                    d,
+                    'INFO',
+                    'neobot_app.adapter',
+                    `反向 WebSocket 监听 ${E}36mws://127.0.0.1:${inst.port}${E}0m（access token 校验：已启用）`,
+                ),
+                logu(
+                    d,
+                    'INFO',
+                    'neobot_app.plugin',
+                    `面板已挂载：${E}36mhttp://127.0.0.1:9981${E}0m`,
+                ),
                 logu(d, 'SUCCESS', 'neobot_app.core', 'OneBot 11 连接已建立'),
                 logu(d, 'DEBUG', 'neobot_app.memory', '记忆库已就绪：3 个会话'),
                 logu(d, 'WARNING', 'neobot_app.llm', '未配置备用模型，请求失败时不降级'),
@@ -150,15 +218,34 @@ function startup(inst: AppInstance, d: Date): string[] {
             return [
                 nb(d, 'SUCCESS', 'nonebot', 'NoneBot is initializing...'),
                 nb(d, 'INFO', 'nonebot', `Current ${E}33m${E}1mEnv: prod${E}0m${E}33m${E}0m`),
-                nb(d, 'WARNING', 'nonebot', 'Legacy project format found! Upgrade with `nb upgrade-format`.'),
-                nb(d, 'SUCCESS', 'nonebot', `Succeeded to load plugin "${E}33mnonebot_plugin_translator${E}0m"`),
-                nb(d, 'INFO', 'uvicorn', `Uvicorn running on http://127.0.0.1:${inst.port} (Press CTRL+C to quit)`),
+                nb(
+                    d,
+                    'WARNING',
+                    'nonebot',
+                    'Legacy project format found! Upgrade with `nb upgrade-format`.',
+                ),
+                nb(
+                    d,
+                    'SUCCESS',
+                    'nonebot',
+                    `Succeeded to load plugin "${E}33mnonebot_plugin_translator${E}0m"`,
+                ),
+                nb(
+                    d,
+                    'INFO',
+                    'uvicorn',
+                    `Uvicorn running on http://127.0.0.1:${inst.port} (Press CTRL+C to quit)`,
+                ),
             ];
         default:
             return [
                 karin(d, 'MARK', 'Karin 启动中...'),
                 karin(d, 'INFO', `[server] express 正在监听: http://127.0.0.1:${inst.port}`),
-                karin(d, 'WARN', '[plugin] karin-plugin-example 缺少依赖 puppeteer，渲染功能不可用'),
+                karin(
+                    d,
+                    'WARN',
+                    '[plugin] karin-plugin-example 缺少依赖 puppeteer，渲染功能不可用',
+                ),
             ];
     }
 }
@@ -168,7 +255,11 @@ function heartbeat(inst: AppInstance, d: Date, n: number): string {
         case 'koishi':
             return koi(d, 'I', 'onebot', `[receive] heartbeat #${n}`);
         case 'yunzai':
-            return trss(d, 'INFO', `${E}36m[10001]${E}39m 群消息：[测试群(123456), 小明(10002)] #帮助 ${n}`);
+            return trss(
+                d,
+                'INFO',
+                `${E}36m[10001]${E}39m 群消息：[测试群(123456), 小明(10002)] #帮助 ${n}`,
+            );
         case 'maibot':
             return mai(d, 'info', '心流', '255;135;175', `第 ${n} 次观察：群里没有新消息`);
         case 'astrbot':
@@ -197,9 +288,17 @@ export function playMockAppRun(inst: AppInstance, isRunning: () => boolean): voi
     clearInterval(heartbeats.get(inst.id));
     emitMockEvent({ kind: 'app_instance_log_reset', instance_id: inst.id });
     startup(inst, new Date()).forEach((line, i) => {
-        setTimeout(() => {
-            if (isRunning()) emitMockEvent({ kind: 'app_instance_log_appended', instance_id: inst.id, line });
-        }, 150 + i * 120);
+        setTimeout(
+            () => {
+                if (isRunning())
+                    emitMockEvent({
+                        kind: 'app_instance_log_appended',
+                        instance_id: inst.id,
+                        line,
+                    });
+            },
+            150 + i * 120,
+        );
     });
     let n = 0;
     const timer = setInterval(() => {
@@ -207,7 +306,11 @@ export function playMockAppRun(inst: AppInstance, isRunning: () => boolean): voi
             clearInterval(timer);
             return;
         }
-        emitMockEvent({ kind: 'app_instance_log_appended', instance_id: inst.id, line: heartbeat(inst, new Date(), n) });
+        emitMockEvent({
+            kind: 'app_instance_log_appended',
+            instance_id: inst.id,
+            line: heartbeat(inst, new Date(), n),
+        });
     }, 2000);
     heartbeats.set(inst.id, timer);
 }

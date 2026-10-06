@@ -7,7 +7,10 @@ describe('promptFields', () => {
             ok: true,
             fields: ['bot_name', 'a', 'c', 'd', 'e', 'f'],
         });
-        expect(promptFields('{{literal}} {x} 例子 {{"k": 1}}')).toEqual({ ok: true, fields: ['x'] });
+        expect(promptFields('{{literal}} {x} 例子 {{"k": 1}}')).toEqual({
+            ok: true,
+            fields: ['x'],
+        });
         expect(promptFields('{}')).toEqual({ ok: true, fields: [''] });
         expect(promptFields('单独的 } 不行').ok).toBe(false);
         expect(promptFields('没收尾的 {name').ok).toBe(false);
@@ -35,7 +38,11 @@ describe('checkPrompt', () => {
 
 describe('promptDisplayName', () => {
     it('falls back to the file stem', () => {
-        expect(promptDisplayName({ display_name: '回复', name: 'maisaka_replyer.prompt' })).toBe('回复');
-        expect(promptDisplayName({ display_name: '', name: 'learn_style.prompt' })).toBe('learn_style');
+        expect(promptDisplayName({ display_name: '回复', name: 'maisaka_replyer.prompt' })).toBe(
+            '回复',
+        );
+        expect(promptDisplayName({ display_name: '', name: 'learn_style.prompt' })).toBe(
+            'learn_style',
+        );
     });
 });

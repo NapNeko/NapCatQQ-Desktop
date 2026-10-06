@@ -69,7 +69,9 @@ interface BotListPageNextProps {
 
 function isSnowLumaConsentError(err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return message.includes('SNOWLUMA_CONSENT_REQUIRED') || message.includes('"consentRequired":true');
+    return (
+        message.includes('SNOWLUMA_CONSENT_REQUIRED') || message.includes('"consentRequired":true')
+    );
 }
 
 function isDesktopConsentError(err: unknown) {
@@ -122,7 +124,9 @@ export function BotListPageNext({
     const [consentBotId, setConsentBotId] = useState<string | null>(null);
     const [consentPayload, setConsentPayload] = useState<SnowLumaAgreementsPayload | null>(null);
     const [consentSubmitting, setConsentSubmitting] = useState(false);
-    const [consentRetryDecisions, setConsentRetryDecisions] = useState<DriftDecision[] | null>(null);
+    const [consentRetryDecisions, setConsentRetryDecisions] = useState<DriftDecision[] | null>(
+        null,
+    );
     const [startingBotId, setStartingBotId] = useState<string | null>(null);
     const [systemQqBotId, setSystemQqBotId] = useState<string | null>(null);
     const [batchStartPreparing, setBatchStartPreparing] = useState(false);
@@ -134,246 +138,285 @@ export function BotListPageNext({
         activeConsentBotRef.current = consentBotId;
     }, [consentBotId]);
 
-    const suppressCurrentConsentError = useCallback((botId: string) => {
-        const currentError = botSnapshots
-            .find((bot) => bot.bot_id === botId)
-            ?.last_error
-            ?.trim();
-        if (currentError && isSnowLumaConsentError(currentError)) {
-            suppressedConsentErrorsRef.current.set(botId, currentError);
-        }
-    }, [botSnapshots]);
+    const suppressCurrentConsentError = useCallback(
+        (botId: string) => {
+            const currentError = botSnapshots
+                .find((bot) => bot.bot_id === botId)
+                ?.last_error?.trim();
+            if (currentError && isSnowLumaConsentError(currentError)) {
+                suppressedConsentErrorsRef.current.set(botId, currentError);
+            }
+        },
+        [botSnapshots],
+    );
 
     const clearConsentErrorSuppression = useCallback((botId: string) => {
         suppressedConsentErrorsRef.current.delete(botId);
     }, []);
 
-    const openSnowLumaConsent = useCallback(async (
-        botId: string,
-        decisions: DriftDecision[] | null = null,
-        preparedPayload?: SnowLumaAgreementsPayload,
-    ) => {
-        const activeBot = activeConsentBotRef.current;
-        if (activeBot || openingConsentBotRef.current) return;
-        activeConsentBotRef.current = botId;
-        openingConsentBotRef.current = botId;
-        setConsentBotId(botId);
-        setConsentRetryDecisions(decisions);
-        if (preparedPayload) {
-            setConsentPayload(preparedPayload);
-            openingConsentBotRef.current = null;
-            return;
-        }
-        setConsentPayload(null);
-        try {
-            const payload = await botService.getSnowLumaAgreements(botId);
-            setConsentPayload(payload);
-        } catch (err: unknown) {
-            if (activeConsentBotRef.current === botId) {
-                activeConsentBotRef.current = null;
-            }
-            setConsentBotId(null);
-            setConsentRetryDecisions(null);
-            pushErrorBar({
-                title: '读取 SnowLuma 协议失败',
-                raw: errorText(err),
-            });
-        } finally {
-            if (openingConsentBotRef.current === botId) {
+    const openSnowLumaConsent = useCallback(
+        async (
+            botId: string,
+            decisions: DriftDecision[] | null = null,
+            preparedPayload?: SnowLumaAgreementsPayload,
+        ) => {
+            const activeBot = activeConsentBotRef.current;
+            if (activeBot || openingConsentBotRef.current) return;
+            activeConsentBotRef.current = botId;
+            openingConsentBotRef.current = botId;
+            setConsentBotId(botId);
+            setConsentRetryDecisions(decisions);
+            if (preparedPayload) {
+                setConsentPayload(preparedPayload);
                 openingConsentBotRef.current = null;
+                return;
             }
-        }
-    }, []);
-
-    const prepareSnowLumaConsentOrOpen = useCallback(async (
-        botId: string,
-        decisions: DriftDecision[] | null = null,
-    ) => {
-        try {
-            const payload = await botService.prepareSnowLumaAgreements(botId);
-            if (payload?.consent_required) {
-                openSnowLumaConsent(botId, decisions, payload);
-                return false;
-            }
-            return true;
-        } catch (err: unknown) {
-            if (isSnowLumaConsentError(err)) {
-                await openSnowLumaConsent(botId, decisions);
-                return false;
-            }
-            pushErrorBar({
-                title: 'SnowLuma 启动前检查失败',
-                raw: errorText(err),
-            });
-            return false;
-        }
-    }, [openSnowLumaConsent]);
-
-    const startBotDirect = useCallback(async (botId: string) => {
-        setStartingBotId(botId);
-        const ready = await prepareSnowLumaConsentOrOpen(botId);
-        if (!ready) {
-            setStartingBotId(null);
-            return;
-        }
-        try {
-            await mutations.startBotAsync(botId);
-        } catch (err: unknown) {
-            if (isDesktopConsentError(err)) {
-                await requestDesktopConsent(async () => {
-                    const again = await prepareSnowLumaConsentOrOpen(botId);
-                    if (!again) return;
-                    await mutations.startBotAsync(botId);
+            setConsentPayload(null);
+            try {
+                const payload = await botService.getSnowLumaAgreements(botId);
+                setConsentPayload(payload);
+            } catch (err: unknown) {
+                if (activeConsentBotRef.current === botId) {
+                    activeConsentBotRef.current = null;
+                }
+                setConsentBotId(null);
+                setConsentRetryDecisions(null);
+                pushErrorBar({
+                    title: '读取 SnowLuma 协议失败',
+                    raw: errorText(err),
                 });
+            } finally {
+                if (openingConsentBotRef.current === botId) {
+                    openingConsentBotRef.current = null;
+                }
+            }
+        },
+        [],
+    );
+
+    const prepareSnowLumaConsentOrOpen = useCallback(
+        async (botId: string, decisions: DriftDecision[] | null = null) => {
+            try {
+                const payload = await botService.prepareSnowLumaAgreements(botId);
+                if (payload?.consent_required) {
+                    openSnowLumaConsent(botId, decisions, payload);
+                    return false;
+                }
+                return true;
+            } catch (err: unknown) {
+                if (isSnowLumaConsentError(err)) {
+                    await openSnowLumaConsent(botId, decisions);
+                    return false;
+                }
+                pushErrorBar({
+                    title: 'SnowLuma 启动前检查失败',
+                    raw: errorText(err),
+                });
+                return false;
+            }
+        },
+        [openSnowLumaConsent],
+    );
+
+    const startBotDirect = useCallback(
+        async (botId: string) => {
+            setStartingBotId(botId);
+            const ready = await prepareSnowLumaConsentOrOpen(botId);
+            if (!ready) {
+                setStartingBotId(null);
                 return;
             }
-            if (isSnowLumaConsentError(err)) {
-                await openSnowLumaConsent(botId);
-                return;
+            try {
+                await mutations.startBotAsync(botId);
+            } catch (err: unknown) {
+                if (isDesktopConsentError(err)) {
+                    await requestDesktopConsent(async () => {
+                        const again = await prepareSnowLumaConsentOrOpen(botId);
+                        if (!again) return;
+                        await mutations.startBotAsync(botId);
+                    });
+                    return;
+                }
+                if (isSnowLumaConsentError(err)) {
+                    await openSnowLumaConsent(botId);
+                    return;
+                }
+                throw err;
+            } finally {
+                setStartingBotId(null);
             }
-            throw err;
-        } finally {
-            setStartingBotId(null);
-        }
-    }, [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+        },
+        [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen],
+    );
 
     // 配置漂移 → SnowLuma 协议 → start；系统 QQ 提醒点「继续启动」后也从这里接着走
-    const startAfterQqCheck = useCallback(async (botId: string) => {
-        setStartingBotId(botId);
-        let drift: ConfigDrift | null = null;
-        try {
-            drift = await botService.detectConfigDrift(botId);
-        } catch {
-            drift = null;
-        }
-        if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
-            setDriftBotId(botId);
-            setPendingDrift(drift);
-            setStartingBotId(null);
-            return;
-        }
-        startBotDirect(botId).catch(() => undefined);
-    }, [startBotDirect]);
+    const startAfterQqCheck = useCallback(
+        async (botId: string) => {
+            setStartingBotId(botId);
+            let drift: ConfigDrift | null = null;
+            try {
+                drift = await botService.detectConfigDrift(botId);
+            } catch {
+                drift = null;
+            }
+            if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
+                setDriftBotId(botId);
+                setPendingDrift(drift);
+                setStartingBotId(null);
+                return;
+            }
+            startBotDirect(botId).catch(() => undefined);
+        },
+        [startBotDirect],
+    );
 
     // 探测失败不拦启动，提醒而已
-    const needsSystemQqWarning = useCallback(async (botId: string) => {
-        const config = configByBot[botId];
-        if (!config || !launchesLocalQq(config) || isSystemQqWarningDismissed()) return false;
-        try {
-            return (await componentService.localQqSource()) === 'system';
-        } catch {
-            return false;
-        }
-    }, [configByBot]);
+    const needsSystemQqWarning = useCallback(
+        async (botId: string) => {
+            const config = configByBot[botId];
+            if (!config || !launchesLocalQq(config) || isSystemQqWarningDismissed()) return false;
+            try {
+                return (await componentService.localQqSource()) === 'system';
+            } catch {
+                return false;
+            }
+        },
+        [configByBot],
+    );
 
-    const handleStartBot = useCallback(async (botId: string) => {
-        // 顺序：Desktop 协议 → 运行时 / Docker 门禁 → 系统 QQ 提醒 → 配置漂移 → SnowLuma 协议 → start
-        const allowed = await requestDesktopConsent(async () => {
-            clearConsentErrorSuppression(botId);
-            setStartingBotId(botId);
-            const runtimeGate = runtimeStartGate(botId);
+    const handleStartBot = useCallback(
+        async (botId: string) => {
+            // 顺序：Desktop 协议 → 运行时 / Docker 门禁 → 系统 QQ 提醒 → 配置漂移 → SnowLuma 协议 → start
+            const allowed = await requestDesktopConsent(async () => {
+                clearConsentErrorSuppression(botId);
+                setStartingBotId(botId);
+                const runtimeGate = runtimeStartGate(botId);
+                if (runtimeGate) {
+                    pushInfoBar({
+                        tone: 'danger',
+                        title: '无法启动',
+                        content: runtimeGate,
+                        key: `bot-start-gate:${botId}`,
+                    });
+                    setStartingBotId(null);
+                    return;
+                }
+                const gate = dockerStartGate(botId);
+                if (gate) {
+                    pushInfoBar({
+                        tone: 'danger',
+                        title: '无法启动',
+                        content: gate,
+                        key: `bot-start-gate:${botId}`,
+                    });
+                    setStartingBotId(null);
+                    return;
+                }
+                if (await needsSystemQqWarning(botId)) {
+                    setSystemQqBotId(botId);
+                    setStartingBotId(null);
+                    return;
+                }
+                await startAfterQqCheck(botId);
+            });
+            if (!allowed) return;
+        },
+        [
+            clearConsentErrorSuppression,
+            dockerStartGate,
+            needsSystemQqWarning,
+            runtimeStartGate,
+            startAfterQqCheck,
+        ],
+    );
+
+    const handleSystemQqContinue = useCallback(
+        (dismissForever: boolean) => {
+            const botId = systemQqBotId;
+            setSystemQqBotId(null);
+            if (dismissForever) dismissSystemQqWarning();
+            if (botId) startAfterQqCheck(botId).catch(() => undefined);
+        },
+        [startAfterQqCheck, systemQqBotId],
+    );
+
+    const handleSystemQqInstall = useCallback(
+        (dismissForever: boolean) => {
+            setSystemQqBotId(null);
+            if (dismissForever) dismissSystemQqWarning();
+            onNavigate?.('components');
+        },
+        [onNavigate],
+    );
+
+    const handleDriftConfirm = useCallback(
+        async (decisions: DriftDecision[]) => {
+            if (!driftBotId) return;
+            clearConsentErrorSuppression(driftBotId);
+            setStartingBotId(driftBotId);
+            const runtimeGate = runtimeStartGate(driftBotId);
             if (runtimeGate) {
+                setPendingDrift(null);
                 pushInfoBar({
                     tone: 'danger',
                     title: '无法启动',
                     content: runtimeGate,
-                    key: `bot-start-gate:${botId}`,
+                    key: `bot-start-gate:${driftBotId}`,
                 });
+                setDriftBotId(null);
                 setStartingBotId(null);
                 return;
             }
-            const gate = dockerStartGate(botId);
+            const gate = dockerStartGate(driftBotId);
             if (gate) {
+                setPendingDrift(null);
                 pushInfoBar({
                     tone: 'danger',
                     title: '无法启动',
                     content: gate,
-                    key: `bot-start-gate:${botId}`,
+                    key: `bot-start-gate:${driftBotId}`,
                 });
+                setDriftBotId(null);
                 setStartingBotId(null);
                 return;
             }
-            if (await needsSystemQqWarning(botId)) {
-                setSystemQqBotId(botId);
-                setStartingBotId(null);
-                return;
-            }
-            await startAfterQqCheck(botId);
-        });
-        if (!allowed) return;
-    }, [clearConsentErrorSuppression, dockerStartGate, needsSystemQqWarning, runtimeStartGate, startAfterQqCheck]);
-
-    const handleSystemQqContinue = useCallback((dismissForever: boolean) => {
-        const botId = systemQqBotId;
-        setSystemQqBotId(null);
-        if (dismissForever) dismissSystemQqWarning();
-        if (botId) startAfterQqCheck(botId).catch(() => undefined);
-    }, [startAfterQqCheck, systemQqBotId]);
-
-    const handleSystemQqInstall = useCallback((dismissForever: boolean) => {
-        setSystemQqBotId(null);
-        if (dismissForever) dismissSystemQqWarning();
-        onNavigate?.('components');
-    }, [onNavigate]);
-
-    const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
-        if (!driftBotId) return;
-        clearConsentErrorSuppression(driftBotId);
-        setStartingBotId(driftBotId);
-        const runtimeGate = runtimeStartGate(driftBotId);
-        if (runtimeGate) {
             setPendingDrift(null);
-            pushInfoBar({
-                tone: 'danger',
-                title: '无法启动',
-                content: runtimeGate,
-                key: `bot-start-gate:${driftBotId}`,
-            });
+            try {
+                const ready = await prepareSnowLumaConsentOrOpen(driftBotId, decisions);
+                if (!ready) {
+                    setDriftBotId(null);
+                    return;
+                }
+                const snap = await botService.startWithDecisions(driftBotId, decisions);
+                pushInfoBar({
+                    tone: 'success',
+                    title: '操作完成',
+                    content: `已发送启动指令给 Bot: ${snap.bot_id}`,
+                    autoDismissMs: 4000,
+                });
+            } catch (err: unknown) {
+                if (isSnowLumaConsentError(err)) {
+                    await openSnowLumaConsent(driftBotId, decisions);
+                    setDriftBotId(null);
+                    return;
+                }
+                pushErrorBar({
+                    title: '启动失败',
+                    raw: errorText(err),
+                });
+            }
             setDriftBotId(null);
             setStartingBotId(null);
-            return;
-        }
-        const gate = dockerStartGate(driftBotId);
-        if (gate) {
-            setPendingDrift(null);
-            pushInfoBar({
-                tone: 'danger',
-                title: '无法启动',
-                content: gate,
-                key: `bot-start-gate:${driftBotId}`,
-            });
-            setDriftBotId(null);
-            setStartingBotId(null);
-            return;
-        }
-        setPendingDrift(null);
-        try {
-            const ready = await prepareSnowLumaConsentOrOpen(driftBotId, decisions);
-            if (!ready) {
-                setDriftBotId(null);
-                return;
-            }
-            const snap = await botService.startWithDecisions(driftBotId, decisions);
-            pushInfoBar({
-                tone: 'success',
-                title: '操作完成',
-                content: `已发送启动指令给 Bot: ${snap.bot_id}`,
-                autoDismissMs: 4000,
-            });
-        } catch (err: unknown) {
-            if (isSnowLumaConsentError(err)) {
-                await openSnowLumaConsent(driftBotId, decisions);
-                setDriftBotId(null);
-                return;
-            }
-            pushErrorBar({
-                title: '启动失败',
-                raw: errorText(err),
-            });
-        }
-        setDriftBotId(null);
-        setStartingBotId(null);
-    }, [clearConsentErrorSuppression, driftBotId, dockerStartGate, runtimeStartGate, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+        },
+        [
+            clearConsentErrorSuppression,
+            driftBotId,
+            dockerStartGate,
+            runtimeStartGate,
+            openSnowLumaConsent,
+            prepareSnowLumaConsentOrOpen,
+        ],
+    );
 
     const handleConsentConfirm = useCallback(async () => {
         if (!consentBotId || !consentPayload) return;
@@ -424,7 +467,14 @@ export function BotListPageNext({
         } else {
             startBotDirect(retryBotId).catch(() => undefined);
         }
-    }, [consentBotId, consentPayload, consentRetryDecisions, prepareSnowLumaConsentOrOpen, startBotDirect, suppressCurrentConsentError]);
+    }, [
+        consentBotId,
+        consentPayload,
+        consentRetryDecisions,
+        prepareSnowLumaConsentOrOpen,
+        startBotDirect,
+        suppressCurrentConsentError,
+    ]);
 
     const handleConsentCancel = useCallback(() => {
         if (consentSubmitting) return;
@@ -511,8 +561,7 @@ export function BotListPageNext({
         setConfirmDeleteOpen(false);
     };
 
-    const allSelected =
-        botSnapshots.length > 0 && batch.selectedIds.size === botSnapshots.length;
+    const allSelected = botSnapshots.length > 0 && batch.selectedIds.size === botSnapshots.length;
     const selectAll = () => {
         for (const bot of botSnapshots) {
             if (!batch.selectedIds.has(bot.bot_id)) batch.toggleSelect(bot.bot_id);
@@ -530,19 +579,18 @@ export function BotListPageNext({
                 data-tour-id="bot-list-header"
             >
                 <div>
-                    <p className="text-2xs uppercase tracking-widest text-text-tertiary">
-                        bots
-                    </p>
-                    <h1 className="font-display text-xl font-semibold text-text">
-                        Bot 实例
-                    </h1>
+                    <p className="text-2xs uppercase tracking-widest text-text-tertiary">bots</p>
+                    <h1 className="font-display text-xl font-semibold text-text">Bot 实例</h1>
                     <p className="mt-1 text-sm text-text-secondary">
                         管理本机和远端 Bot 配置、生命周期与登录态。
                     </p>
                 </div>
                 <div className="flex items-baseline gap-1 text-xs text-text-tertiary tabular-nums">
                     <span>共</span>
-                    <Counter value={botSnapshots.length} className="font-medium text-text-secondary" />
+                    <Counter
+                        value={botSnapshots.length}
+                        className="font-medium text-text-secondary"
+                    />
                     <span>个实例</span>
                 </div>
             </header>
@@ -676,9 +724,7 @@ function LoadingState() {
 function ErrorState({ onRetry }: { onRetry: () => void }) {
     return (
         <PagePlaceholder className="gap-3">
-            <p className="text-sm text-text-secondary">
-                Bot 列表加载失败，详情见顶部提示条。
-            </p>
+            <p className="text-sm text-text-secondary">Bot 列表加载失败，详情见顶部提示条。</p>
             <Button size="sm" variant="primary" onClick={onRetry}>
                 重试
             </Button>
@@ -686,13 +732,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
     );
 }
 
-function EmptyState({
-    onCreate,
-    onImport,
-}: {
-    onCreate: () => void;
-    onImport: () => void;
-}) {
+function EmptyState({ onCreate, onImport }: { onCreate: () => void; onImport: () => void }) {
     return (
         <PagePlaceholder className="gap-4">
             <MotionIcon
@@ -705,16 +745,10 @@ function EmptyState({
                 className="text-text-tertiary"
             />
             <div>
-                <p className="font-display text-md font-semibold text-text">
-                    还没有 Bot 实例
-                </p>
+                <p className="font-display text-md font-semibold text-text">还没有 Bot 实例</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={onImport}
-                >
+                <Button size="sm" variant="secondary" onClick={onImport}>
                     导入已有 Bot
                 </Button>
                 <Button
@@ -734,10 +768,10 @@ function EmptyState({
 /// motion 逻辑。stagger 由档位 preset 提供;优雅档 stagger=0 退化为同步进场。
 type GridProps = {
     bots: ReturnType<typeof useBotSnapshots>['data'] extends infer T
-    ? T extends readonly (infer U)[]
-    ? U[]
-    : never
-    : never;
+        ? T extends readonly (infer U)[]
+            ? U[]
+            : never
+        : never;
     flavorByBot: ReturnType<typeof useBotFlavorMap>;
     configByBot: ReturnType<typeof useBotConfigsMap>;
     napcat: ReturnType<typeof useNapcatLogin>;
@@ -796,18 +830,18 @@ function BotListGrid({
     const ghostTiltDeg = !m.enabled
         ? 0
         : m.level === 'rich'
-            ? 3.5
-            : m.level === 'standard'
-                ? 2.0
-                : 0.8;
+          ? 3.5
+          : m.level === 'standard'
+            ? 2.0
+            : 0.8;
 
     const ghostScale = !m.enabled
         ? 1.0
         : m.level === 'rich'
-            ? 1.06
-            : m.level === 'standard'
-                ? 1.03
-                : 1.01;
+          ? 1.06
+          : m.level === 'standard'
+            ? 1.03
+            : 1.01;
 
     const measureCards = useCallback(() => {
         if (!containerRef.current) return [];
@@ -835,7 +869,10 @@ function BotListGrid({
         if (batch.isBatchMode || e.button !== 0) return;
         const target = e.target as HTMLElement;
         const isHandle = !!target.closest('[data-drag-handle]');
-        if (!isHandle && target.closest('button, input, [role="button"], a, select, [tabindex], [data-no-drag]')) {
+        if (
+            !isHandle &&
+            target.closest('button, input, [role="button"], a, select, [tabindex], [data-no-drag]')
+        ) {
             return;
         }
 
@@ -916,7 +953,12 @@ function BotListGrid({
             const currentDragged = startPosRef.current?.id;
             const currentTarget = lastHoverTargetRef.current;
 
-            if (isDraggingRef.current && currentDragged && currentTarget && currentDragged !== currentTarget) {
+            if (
+                isDraggingRef.current &&
+                currentDragged &&
+                currentTarget &&
+                currentDragged !== currentTarget
+            ) {
                 onReorderBots(currentDragged, currentTarget);
                 // 放置成功时播放符合当前动效档位的微回弹反馈
                 if (m.enabled && containerRef.current) {
@@ -1022,8 +1064,7 @@ function BotListGrid({
                 return {
                     bot,
                     displayName: name && name.length > 0 ? name : bot.bot_id,
-                    invalidationReason:
-                        napcat.byBot[bot.bot_id]?.invalidationReason ?? null,
+                    invalidationReason: napcat.byBot[bot.bot_id]?.invalidationReason ?? null,
                     isSnowLuma: isSnowLumaFlavor(flavor),
                     snowlumaDaemonState: snowlumaDaemonStateForConfig(
                         config,
@@ -1043,7 +1084,10 @@ function BotListGrid({
             if (!root || !m.enabled) return;
             return animateListChildrenEnterAfterPaint(root, bots.length, m);
         },
-        { scope: containerRef, dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger] },
+        {
+            scope: containerRef,
+            dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger],
+        },
     );
 
     const draggedConfig = draggedId ? configByBot[draggedId] : null;
@@ -1170,8 +1214,8 @@ function BotListGrid({
                     !m.enabled
                         ? 'shadow-none ring-0'
                         : m.level === 'rich'
-                            ? 'shadow-[0_24px_48px_-12px_rgba(0,0,0,0.45)] ring-2 ring-brand/60'
-                            : 'shadow-2xl ring-1 ring-border-subtle',
+                          ? 'shadow-[0_24px_48px_-12px_rgba(0,0,0,0.45)] ring-2 ring-brand/60'
+                          : 'shadow-2xl ring-1 ring-border-subtle',
                 )}
             >
                 <GripVertical size={16} className="text-brand shrink-0" />
@@ -1179,9 +1223,7 @@ function BotListGrid({
                     <span className="text-xs font-semibold text-text truncate max-w-[160px]">
                         {draggedDisplayName}
                     </span>
-                    <span className="font-mono text-2xs text-text-tertiary">
-                        QQ {draggedId}
-                    </span>
+                    <span className="font-mono text-2xs text-text-tertiary">QQ {draggedId}</span>
                 </div>
             </div>
         </>

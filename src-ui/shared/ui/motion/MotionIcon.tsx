@@ -11,14 +11,7 @@ import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion'
 import { cn } from '../../utils/cn';
 
 export type MotionIconPreset =
-    | 'none'
-    | 'pulse'
-    | 'breathe'
-    | 'wiggle'
-    | 'spin'
-    | 'spin-slow'
-    | 'nudge'
-    | 'bob';
+    'none' | 'pulse' | 'breathe' | 'wiggle' | 'spin' | 'spin-slow' | 'nudge' | 'bob';
 
 export interface MotionIconProps extends LucideProps {
     icon: ComponentType<LucideProps>;
@@ -37,7 +30,10 @@ export interface MotionIconProps extends LucideProps {
  * animation-direction: alternate，时长是单程；nudge / wiggle 的停顿写在关键帧里，时长是整轮。
  * 数值沿用原来的 GSAP 参数，观感不变。
  */
-function loopStyle(preset: MotionIconPreset, m: MotionEnv): { cls: string; style: CSSProperties } | null {
+function loopStyle(
+    preset: MotionIconPreset,
+    m: MotionEnv,
+): { cls: string; style: CSSProperties } | null {
     const speed = Math.max(0.5, m.speed);
     const f = m.preset.feel;
     const sec = (v: number) => `${(v / speed).toFixed(3)}s`;
@@ -61,16 +57,34 @@ function loopStyle(preset: MotionIconPreset, m: MotionEnv): { cls: string; style
         // elegant 档不做旋转，退化成轻微缩放
         case 'wiggle':
             return m.level === 'elegant'
-                ? { cls: 'ndf-icon-loop--swell', style: { '--ndf-icon-dur': sec(f.breathDuration) } as CSSProperties }
-                : { cls: 'ndf-icon-loop--wiggle', style: { '--ndf-icon-dur': sec(1.76) } as CSSProperties };
+                ? {
+                      cls: 'ndf-icon-loop--swell',
+                      style: { '--ndf-icon-dur': sec(f.breathDuration) } as CSSProperties,
+                  }
+                : {
+                      cls: 'ndf-icon-loop--wiggle',
+                      style: { '--ndf-icon-dur': sec(1.76) } as CSSProperties,
+                  };
         case 'spin':
-            return { cls: 'ndf-icon-loop--spin', style: { '--ndf-icon-dur': sec(2.4) } as CSSProperties };
+            return {
+                cls: 'ndf-icon-loop--spin',
+                style: { '--ndf-icon-dur': sec(2.4) } as CSSProperties,
+            };
         case 'spin-slow':
-            return { cls: 'ndf-icon-loop--spin', style: { '--ndf-icon-dur': sec(4.5) } as CSSProperties };
+            return {
+                cls: 'ndf-icon-loop--spin',
+                style: { '--ndf-icon-dur': sec(4.5) } as CSSProperties,
+            };
         case 'nudge':
-            return { cls: 'ndf-icon-loop--nudge', style: { '--ndf-icon-dur': sec(2.64) } as CSSProperties };
+            return {
+                cls: 'ndf-icon-loop--nudge',
+                style: { '--ndf-icon-dur': sec(2.64) } as CSSProperties,
+            };
         case 'bob':
-            return { cls: 'ndf-icon-loop--bob', style: { '--ndf-icon-dur': sec(0.65) } as CSSProperties };
+            return {
+                cls: 'ndf-icon-loop--bob',
+                style: { '--ndf-icon-dur': sec(0.65) } as CSSProperties,
+            };
         default:
             return null;
     }
@@ -78,9 +92,7 @@ function loopStyle(preset: MotionIconPreset, m: MotionEnv): { cls: string; style
 
 function collectStrokedNodes(svg: SVGSVGElement): SVGGeometryElement[] {
     return Array.from(
-        svg.querySelectorAll<SVGGeometryElement>(
-            'path, line, circle, rect, polyline, ellipse',
-        ),
+        svg.querySelectorAll<SVGGeometryElement>('path, line, circle, rect, polyline, ellipse'),
     ).filter((el) => {
         const stroke = el.getAttribute('stroke');
         return stroke !== 'none' && stroke !== null;
@@ -162,9 +174,7 @@ export function MotionIcon({
             const drawDur = (m.duration('fast') * 1.1) / speed;
             paths.forEach((p, i) => {
                 const len =
-                    typeof p.getTotalLength === 'function'
-                        ? Math.max(p.getTotalLength(), 6)
-                        : 24;
+                    typeof p.getTotalLength === 'function' ? Math.max(p.getTotalLength(), 6) : 24;
                 gsap.set(p, { strokeDasharray: len, strokeDashoffset: len });
                 enterTl.to(
                     p,

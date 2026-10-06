@@ -27,7 +27,10 @@ export const KoishiServerTab: React.FC<{
     const open = server.host !== '127.0.0.1' && server.host !== 'localhost';
     return (
         <ConfigForm>
-            <FormSection title="监听" description="控制台和 Bot 反向连接共用这一个口；改端口后桌面端会同步改 Bot 侧的对接地址">
+            <FormSection
+                title="监听"
+                description="控制台和 Bot 反向连接共用这一个口；改端口后桌面端会同步改 Bot 侧的对接地址"
+            >
                 <div className={CONFIG_PAIR}>
                     <NumberField
                         label="端口"
@@ -36,22 +39,31 @@ export const KoishiServerTab: React.FC<{
                         max={65535}
                         error={errors['server/port']}
                         disabled={disabled}
-                        onValueChange={(v) => v !== null && onChange(setServerField(config, 'port', v))}
+                        onValueChange={(v) =>
+                            v !== null && onChange(setServerField(config, 'port', v))
+                        }
                     />
                     <Select
                         label="监听地址"
                         value={hostKnown ? server.host : '__custom'}
-                        items={hostKnown ? HOSTS : [...HOSTS, { value: '__custom', label: server.host }]}
+                        items={
+                            hostKnown
+                                ? HOSTS
+                                : [...HOSTS, { value: '__custom', label: server.host }]
+                        }
                         hint="跨机器对接桌面端会走 SSH 隧道，不用对外开放"
                         disabled={disabled}
-                        onValueChange={(v) => v !== '__custom' && onChange(setServerField(config, 'host', v))}
+                        onValueChange={(v) =>
+                            v !== '__custom' && onChange(setServerField(config, 'host', v))
+                        }
                     />
                 </div>
                 {open && (
                     <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-[13px] leading-relaxed text-text">
                         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
                         <span>
-                            局域网、公网都能打开控制台，而它默认不要登录、能装插件改配置。开放前先到「插件」页启用 auth 插件设好账号
+                            局域网、公网都能打开控制台，而它默认不要登录、能装插件改配置。开放前先到「插件」页启用
+                            auth 插件设好账号
                         </span>
                     </div>
                 )}
@@ -79,7 +91,9 @@ export const KoishiServerTab: React.FC<{
                 }
             >
                 <div className="flex flex-col gap-1.5">
-                    <span className="text-xs text-text-secondary">本机地址；远端实例由桌面端经 SSH 隧道打开</span>
+                    <span className="text-xs text-text-secondary">
+                        本机地址；远端实例由桌面端经 SSH 隧道打开
+                    </span>
                     <CopyCodeBlock command={`http://127.0.0.1:${server.port}/`} />
                 </div>
             </FormSection>

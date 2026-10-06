@@ -4,7 +4,14 @@
 // 调用失败分两种：没拿到回包的原因（超时、通道不可用……）放在 `DebugCallResponse.result` 里当数据返回，
 // 不会抛；其余命令失败时 invoke 抛出后端给的中文字符串，由调用方经 `errorText` 处理。
 
-import { Channel, invoke, isTauri, pickAnyFiles, pickTextFiles, saveFileAs } from '../ipc/transport';
+import {
+    Channel,
+    invoke,
+    isTauri,
+    pickAnyFiles,
+    pickTextFiles,
+    saveFileAs,
+} from '../ipc/transport';
 import { onebotDebugMock } from '../ipc/mock/onebot-debug.mock';
 import type { BackendType } from '../ipc/generated/domain/BackendType';
 import type { DebugActionSpec } from '../ipc/generated/debug/DebugActionSpec';
@@ -121,7 +128,9 @@ export const onebotDebugService = {
             await onebotDebugMock.saveResponse(requestId, `preview://${defaultName}`);
             return true;
         }
-        const path = await saveFileAs('另存完整回包', defaultName, [{ name: 'JSON', extensions: ['json'] }]);
+        const path = await saveFileAs('另存完整回包', defaultName, [
+            { name: 'JSON', extensions: ['json'] },
+        ]);
         if (!path) return false;
         await invoke('onebot_debug_save_response', { requestId, path });
         return true;
@@ -149,7 +158,9 @@ export const onebotDebugService = {
         isTauri ? invoke('onebot_debug_receivers') : onebotDebugMock.receivers(),
 
     stopReceiver: (botId: string): Promise<void> =>
-        isTauri ? invoke('onebot_debug_stop_receiver', { botId }) : onebotDebugMock.stopReceiver(botId),
+        isTauri
+            ? invoke('onebot_debug_stop_receiver', { botId })
+            : onebotDebugMock.stopReceiver(botId),
 
     /** 按序号游标读缓冲：seq 大于 sinceSeq 的前 limit 条，按 seq 升序 */
     readEvents: (botId: string, sinceSeq: number, limit: number): Promise<DebugEvent[]> =>
@@ -160,7 +171,10 @@ export const onebotDebugService = {
     workspace: async (): Promise<DebugWorkspace> => {
         if (!isTauri) return onebotDebugMock.workspace();
         const snapshot = await invoke<DebugWorkspaceSnapshot>('onebot_debug_workspace');
-        return { ...snapshot.workspace, _configurationRevision: snapshot.revision } as RevisionStamped<DebugWorkspace>;
+        return {
+            ...snapshot.workspace,
+            _configurationRevision: snapshot.revision,
+        } as RevisionStamped<DebugWorkspace>;
     },
 
     saveWorkspace: async (workspace: DebugWorkspace): Promise<void> => {
@@ -172,7 +186,10 @@ export const onebotDebugService = {
     collections: async (): Promise<DebugCollections> => {
         if (!isTauri) return onebotDebugMock.collections();
         const snapshot = await invoke<DebugCollectionsSnapshot>('onebot_debug_collections');
-        return { ...snapshot.collections, _configurationRevision: snapshot.revision } as RevisionStamped<DebugCollections>;
+        return {
+            ...snapshot.collections,
+            _configurationRevision: snapshot.revision,
+        } as RevisionStamped<DebugCollections>;
     },
 
     saveCollections: async (collections: DebugCollections): Promise<void> => {
@@ -188,8 +205,13 @@ export const onebotDebugService = {
 
     importCollections: async (path: string): Promise<DebugCollections> => {
         if (!isTauri) return onebotDebugMock.importCollections(path);
-        const snapshot = await invoke<DebugCollectionsSnapshot>('onebot_debug_import_collections', { path });
-        return { ...snapshot.collections, _configurationRevision: snapshot.revision } as RevisionStamped<DebugCollections>;
+        const snapshot = await invoke<DebugCollectionsSnapshot>('onebot_debug_import_collections', {
+            path,
+        });
+        return {
+            ...snapshot.collections,
+            _configurationRevision: snapshot.revision,
+        } as RevisionStamped<DebugCollections>;
     },
 
     /**

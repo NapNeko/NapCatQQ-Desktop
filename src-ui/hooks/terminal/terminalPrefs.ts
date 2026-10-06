@@ -86,9 +86,13 @@ function save(key: string, value: unknown) {
 function clampPrefs(p: TerminalPrefs): TerminalPrefs {
     return {
         ...p,
-        fontSize: Math.round(Math.min(FONT_SIZE_RANGE.max, Math.max(FONT_SIZE_RANGE.min, p.fontSize))),
+        fontSize: Math.round(
+            Math.min(FONT_SIZE_RANGE.max, Math.max(FONT_SIZE_RANGE.min, p.fontSize)),
+        ),
         lineHeight: Math.min(2, Math.max(1, p.lineHeight)),
-        scrollback: Math.round(Math.min(SCROLLBACK_RANGE.max, Math.max(SCROLLBACK_RANGE.min, p.scrollback))),
+        scrollback: Math.round(
+            Math.min(SCROLLBACK_RANGE.max, Math.max(SCROLLBACK_RANGE.min, p.scrollback)),
+        ),
         snippets: Array.isArray(p.snippets) ? p.snippets.filter((s) => s && s.command) : [],
     };
 }
@@ -119,7 +123,9 @@ export const terminalPrefs = {
     },
     zoom(delta: number) {
         const current = prefsStore.getSnapshot().fontSize;
-        terminalPrefs.patch({ fontSize: delta === 0 ? DEFAULT_TERMINAL_PREFS.fontSize : current + delta });
+        terminalPrefs.patch({
+            fontSize: delta === 0 ? DEFAULT_TERMINAL_PREFS.fontSize : current + delta,
+        });
     },
 };
 
@@ -134,9 +140,17 @@ export const terminalLayout = {
 };
 
 export function useTerminalPrefs(): TerminalPrefs {
-    return useSyncExternalStore(prefsStore.subscribe, prefsStore.getSnapshot, prefsStore.getSnapshot);
+    return useSyncExternalStore(
+        prefsStore.subscribe,
+        prefsStore.getSnapshot,
+        prefsStore.getSnapshot,
+    );
 }
 
 export function useTerminalLayout(): TerminalLayoutPrefs {
-    return useSyncExternalStore(layoutStore.subscribe, layoutStore.getSnapshot, layoutStore.getSnapshot);
+    return useSyncExternalStore(
+        layoutStore.subscribe,
+        layoutStore.getSnapshot,
+        layoutStore.getSnapshot,
+    );
 }

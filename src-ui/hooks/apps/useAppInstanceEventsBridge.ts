@@ -19,7 +19,9 @@ export function useAppInstanceEventsBridge(): void {
             );
             const reason = event.reason ?? '';
             if (reason === 'linked' || reason === 'unlinked' || reason === 'port_changed') {
-                queryClient.invalidateQueries({ queryKey: ['appInstanceConfig', event.instance.id] });
+                queryClient.invalidateQueries({
+                    queryKey: ['appInstanceConfig', event.instance.id],
+                });
                 queryClient.invalidateQueries({ queryKey: ['appConfigText', event.instance.id] });
             }
             return;

@@ -10,8 +10,12 @@ const pushInfoBar = vi.fn();
 vi.mock('../../core/services/onebot-debug.service', () => ({
     onebotDebugService: { saveResponseFile: (...args: unknown[]) => saveResponseFile(...args) },
 }));
-vi.mock('../ui/pushErrorBar', () => ({ pushErrorBar: (...args: unknown[]) => pushErrorBar(...args) }));
-vi.mock('../ui/globalInfoBarStore', () => ({ pushInfoBar: (...args: unknown[]) => pushInfoBar(...args) }));
+vi.mock('../ui/pushErrorBar', () => ({
+    pushErrorBar: (...args: unknown[]) => pushErrorBar(...args),
+}));
+vi.mock('../ui/globalInfoBarStore', () => ({
+    pushInfoBar: (...args: unknown[]) => pushInfoBar(...args),
+}));
 
 import { useSaveResponse } from './useSaveResponse';
 
@@ -35,8 +39,15 @@ describe('useSaveResponse', () => {
         saveResponseFile.mockResolvedValue(true);
         const { result } = renderSave();
         act(() => result.current.mutate({ requestId: 'req-1', action: 'get_group_member_list' }));
-        await waitFor(() => expect(pushInfoBar).toHaveBeenCalledWith(expect.objectContaining({ title: '完整回包已保存' })));
-        expect(saveResponseFile).toHaveBeenCalledWith('req-1', expect.stringMatching(/^get_group_member_list-\d{8}-\d{6}\.json$/));
+        await waitFor(() =>
+            expect(pushInfoBar).toHaveBeenCalledWith(
+                expect.objectContaining({ title: '完整回包已保存' }),
+            ),
+        );
+        expect(saveResponseFile).toHaveBeenCalledWith(
+            'req-1',
+            expect.stringMatching(/^get_group_member_list-\d{8}-\d{6}\.json$/),
+        );
         expect(pushErrorBar).not.toHaveBeenCalled();
     });
 
@@ -55,7 +66,10 @@ describe('useSaveResponse', () => {
         act(() => result.current.mutate({ requestId: 'old', action: 'x' }));
         await waitFor(() => expect(pushErrorBar).toHaveBeenCalledTimes(1));
         expect(pushErrorBar).toHaveBeenCalledWith(
-            expect.objectContaining({ key: 'debug-save-response', raw: '没有这次调用的完整回包：只保留最近 3 次被截断的回包' }),
+            expect.objectContaining({
+                key: 'debug-save-response',
+                raw: '没有这次调用的完整回包：只保留最近 3 次被截断的回包',
+            }),
         );
     });
 });

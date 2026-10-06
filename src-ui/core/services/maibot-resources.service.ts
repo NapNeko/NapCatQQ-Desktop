@@ -47,22 +47,38 @@ export const maibotResourcesService = {
         return invoke<MaiBotPromptCatalog>('maibot_prompt_catalog', { instanceId });
     },
 
-    promptFile: async (instanceId: string, language: string, name: string): Promise<MaiBotPromptFile> => {
+    promptFile: async (
+        instanceId: string,
+        language: string,
+        name: string,
+    ): Promise<MaiBotPromptFile> => {
         if (!isTauri) return mockMaiBotPrompts.file(mockInst(instanceId), language, name);
         return invoke<MaiBotPromptFile>('maibot_prompt_file', { instanceId, language, name });
     },
 
-    promptVersion: async (instanceId: string, language: string, name: string, versionId: string): Promise<string> => {
-        if (!isTauri) return mockMaiBotPrompts.version(mockInst(instanceId), language, name, versionId);
+    promptVersion: async (
+        instanceId: string,
+        language: string,
+        name: string,
+        versionId: string,
+    ): Promise<string> => {
+        if (!isTauri)
+            return mockMaiBotPrompts.version(mockInst(instanceId), language, name, versionId);
         return invoke<string>('maibot_prompt_version', { instanceId, language, name, versionId });
     },
 
-    promptAction: async (instanceId: string, action: MaiBotPromptAction): Promise<MaiBotPromptFile> => {
+    promptAction: async (
+        instanceId: string,
+        action: MaiBotPromptAction,
+    ): Promise<MaiBotPromptFile> => {
         if (!isTauri) return mockMaiBotPrompts.action(mockInst(instanceId), action);
         return invoke<MaiBotPromptFile>('maibot_prompt_action', { instanceId, action });
     },
 
-    expressions: async (instanceId: string, query: MaiBotExpressionQuery): Promise<MaiBotExpressionPage> => {
+    expressions: async (
+        instanceId: string,
+        query: MaiBotExpressionQuery,
+    ): Promise<MaiBotExpressionPage> => {
         if (!isTauri) return mockMaiBotLearning.expressions(mockInst(instanceId), query);
         return invoke<MaiBotExpressionPage>('maibot_expressions', { instanceId, query });
     },
@@ -72,7 +88,10 @@ export const maibotResourcesService = {
         return invoke<MaiBotExpressionOverview>('maibot_expression_overview', { instanceId });
     },
 
-    expressionAction: async (instanceId: string, action: MaiBotExpressionAction): Promise<MaiBotResourceDone> => {
+    expressionAction: async (
+        instanceId: string,
+        action: MaiBotExpressionAction,
+    ): Promise<MaiBotResourceDone> => {
         if (!isTauri) return mockMaiBotLearning.expressionAction(mockInst(instanceId), action);
         return invoke<MaiBotResourceDone>('maibot_expression_action', { instanceId, action });
     },
@@ -87,12 +106,18 @@ export const maibotResourcesService = {
         return invoke<MaiBotJargonOverview>('maibot_jargon_overview', { instanceId });
     },
 
-    jargonAction: async (instanceId: string, action: MaiBotJargonAction): Promise<MaiBotResourceDone> => {
+    jargonAction: async (
+        instanceId: string,
+        action: MaiBotJargonAction,
+    ): Promise<MaiBotResourceDone> => {
         if (!isTauri) return mockMaiBotLearning.jargonAction(mockInst(instanceId), action);
         return invoke<MaiBotResourceDone>('maibot_jargon_action', { instanceId, action });
     },
 
-    behaviors: async (instanceId: string, query: MaiBotBehaviorQuery): Promise<MaiBotBehaviorPage> => {
+    behaviors: async (
+        instanceId: string,
+        query: MaiBotBehaviorQuery,
+    ): Promise<MaiBotBehaviorPage> => {
         if (!isTauri) return mockMaiBotBehaviors.list(mockInst(instanceId), query);
         return invoke<MaiBotBehaviorPage>('maibot_behaviors', { instanceId, query });
     },
@@ -117,7 +142,10 @@ export const maibotResourcesService = {
         return invoke<MaiBotPersonOverview>('maibot_person_overview', { instanceId });
     },
 
-    personAction: async (instanceId: string, action: MaiBotPersonAction): Promise<MaiBotResourceDone> => {
+    personAction: async (
+        instanceId: string,
+        action: MaiBotPersonAction,
+    ): Promise<MaiBotResourceDone> => {
         if (!isTauri) return mockMaiBotPersons.action(mockInst(instanceId), action);
         return invoke<MaiBotResourceDone>('maibot_person_action', { instanceId, action });
     },
@@ -132,17 +160,27 @@ export const maibotResourcesService = {
         return invoke<MaiBotEmojiOverview>('maibot_emoji_overview', { instanceId });
     },
 
-    emojiAction: async (instanceId: string, action: MaiBotEmojiAction): Promise<MaiBotResourceDone> => {
+    emojiAction: async (
+        instanceId: string,
+        action: MaiBotEmojiAction,
+    ): Promise<MaiBotResourceDone> => {
         if (!isTauri) return mockMaiBotEmojis.action(mockInst(instanceId), action);
         return invoke<MaiBotResourceDone>('maibot_emoji_action', { instanceId, action });
     },
 
-    emojiImage: async (instanceId: string, emojiId: number, original: boolean): Promise<MaiBotEmojiImage> => {
+    emojiImage: async (
+        instanceId: string,
+        emojiId: number,
+        original: boolean,
+    ): Promise<MaiBotEmojiImage> => {
         if (!isTauri) return mockMaiBotEmojis.image(mockInst(instanceId), emojiId, original);
         return invoke<MaiBotEmojiImage>('maibot_emoji_image', { instanceId, emojiId, original });
     },
 
-    emojiUpload: async (instanceId: string, upload: MaiBotEmojiUpload): Promise<MaiBotEmojiUploadDone> => {
+    emojiUpload: async (
+        instanceId: string,
+        upload: MaiBotEmojiUpload,
+    ): Promise<MaiBotEmojiUploadDone> => {
         if (!isTauri) return mockMaiBotEmojis.upload(mockInst(instanceId), upload);
         return invoke<MaiBotEmojiUploadDone>('maibot_emoji_upload', { instanceId, upload });
     },

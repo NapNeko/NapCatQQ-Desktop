@@ -29,18 +29,12 @@ describe('runtimeTargetDisplayLabel', () => {
     });
 
     it('未选定主机时显示远程', () => {
-        expect(
-            runtimeTargetDisplayLabel(RUNTIME_TARGET_REMOTE_PLACEHOLDER, servers),
-        ).toBe('远程');
+        expect(runtimeTargetDisplayLabel(RUNTIME_TARGET_REMOTE_PLACEHOLDER, servers)).toBe('远程');
     });
 
     it('用档案名称而不是内部 id', () => {
-        expect(runtimeTargetDisplayLabel('4c494f8581d453eb', servers)).toBe(
-            'kunming-4-8',
-        );
-        expect(
-            runtimeTargetDisplayLabel('remote:4c494f8581d453eb', servers),
-        ).toBe('kunming-4-8');
+        expect(runtimeTargetDisplayLabel('4c494f8581d453eb', servers)).toBe('kunming-4-8');
+        expect(runtimeTargetDisplayLabel('remote:4c494f8581d453eb', servers)).toBe('kunming-4-8');
     });
 
     it('没有名称时回退到主机地址', () => {
@@ -60,8 +54,6 @@ describe('runtimeTargetTooltip', () => {
     });
 
     it('非 22 端口带上端口号', () => {
-        expect(runtimeTargetTooltip('host-only', servers)).toBe(
-            '远程主机 · ubuntu@10.0.0.2:2222',
-        );
+        expect(runtimeTargetTooltip('host-only', servers)).toBe('远程主机 · ubuntu@10.0.0.2:2222');
     });
 });

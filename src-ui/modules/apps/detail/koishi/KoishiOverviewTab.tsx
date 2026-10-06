@@ -25,9 +25,21 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Card, Spinner } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { effective, isGroup, isLinkNode, koishiServer, linkNode, walk } from '../../../../core/domain/apps/koishiConfig';
+import {
+    effective,
+    isGroup,
+    isLinkNode,
+    koishiServer,
+    linkNode,
+    walk,
+} from '../../../../core/domain/apps/koishiConfig';
 import { useKoishiRestart, useKoishiStatus } from '../../../../hooks/apps/useKoishiRuntime';
-import type { AppInstance, KoishiBotState, KoishiBotStatus, KoishiInstanceConfig } from '../../../../core/ipc/types';
+import type {
+    AppInstance,
+    KoishiBotState,
+    KoishiBotStatus,
+    KoishiInstanceConfig,
+} from '../../../../core/ipc/types';
 
 type CondKey = 'link' | 'adapter' | 'run';
 type Tone = 'ready' | 'todo' | 'idle';
@@ -38,7 +50,10 @@ const TONE_DOT: Record<Tone, string> = {
     idle: 'bg-text-disabled ring-text-disabled/15',
 };
 
-const BOT_STATE: Record<KoishiBotState, { label: string; tone: 'success' | 'warning' | 'neutral' }> = {
+const BOT_STATE: Record<
+    KoishiBotState,
+    { label: string; tone: 'success' | 'warning' | 'neutral' }
+> = {
     online: { label: '在线', tone: 'success' },
     connect: { label: '连接中', tone: 'warning' },
     reconnect: { label: '重连中', tone: 'warning' },
@@ -47,7 +62,12 @@ const BOT_STATE: Record<KoishiBotState, { label: string; tone: 'success' | 'warn
 };
 
 /** 控制台功能的直达（都是应用内的原生页：试聊 / 日志 / 数据库 / 文件 / 指令） */
-const CONSOLE_LINKS: { tab: string; label: string; sub: string; icon: ComponentType<LucideProps> }[] = [
+const CONSOLE_LINKS: {
+    tab: string;
+    label: string;
+    sub: string;
+    icon: ComponentType<LucideProps>;
+}[] = [
     { tab: 'sandbox', label: '试聊', sub: '不连 QQ 也能试指令', icon: MessageSquare },
     { tab: 'log', label: '日志', sub: '搜索、按级别筛', icon: ScrollText },
     { tab: 'database', label: '数据库', sub: '用户、频道和插件的表', icon: Database },
@@ -59,7 +79,9 @@ function SectionTitle({ children }: { children: ReactNode }) {
     return (
         <div className="mb-3 mt-8 flex items-center gap-2.5">
             <span className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45" aria-hidden />
-            <h3 className="text-[13.5px] font-semibold leading-none tracking-tight text-text">{children}</h3>
+            <h3 className="text-[13.5px] font-semibold leading-none tracking-tight text-text">
+                {children}
+            </h3>
         </div>
     );
 }
@@ -79,11 +101,19 @@ export const KoishiOverviewTab: React.FC<{
     const entryOn = !!entry && effective(config.plugins).some(isLinkNode);
 
     const conds: { key: CondKey; ok: boolean; label: string }[] = [
-        { key: 'link', ok: linked, label: linked ? `已对接 Bot ${instance.link?.bot_id}` : 'QQ 还没对接' },
+        {
+            key: 'link',
+            ok: linked,
+            label: linked ? `已对接 Bot ${instance.link?.bot_id}` : 'QQ 还没对接',
+        },
         {
             key: 'adapter',
             ok: !linked || entryOn,
-            label: !linked ? 'OneBot 适配器随对接写好' : entryOn ? 'OneBot 适配器已启用' : 'OneBot 适配器被停用了',
+            label: !linked
+                ? 'OneBot 适配器随对接写好'
+                : entryOn
+                  ? 'OneBot 适配器已启用'
+                  : 'OneBot 适配器被停用了',
         },
         { key: 'run', ok: running, label: running ? '运行中' : '已停止' },
     ];
@@ -140,10 +170,18 @@ export const KoishiOverviewTab: React.FC<{
                 <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
                     <div className="min-w-0 flex-1">
                         <h2 className="flex items-center gap-3 font-display text-[19px] font-semibold leading-snug text-text">
-                            <span className={cn('h-2 w-2 shrink-0 rounded-full ring-4', TONE_DOT[tone])} aria-hidden />
+                            <span
+                                className={cn(
+                                    'h-2 w-2 shrink-0 rounded-full ring-4',
+                                    TONE_DOT[tone],
+                                )}
+                                aria-hidden
+                            />
                             {title}
                         </h2>
-                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">{sub}</p>
+                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">
+                            {sub}
+                        </p>
                     </div>
                     {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
                 </div>
@@ -153,13 +191,20 @@ export const KoishiOverviewTab: React.FC<{
                             key={c.key}
                             className={cn(
                                 'inline-flex items-center gap-1.5 text-xs',
-                                c.ok ? 'text-text-secondary' : c.key === next ? 'font-medium text-text' : 'text-text-tertiary',
+                                c.ok
+                                    ? 'text-text-secondary'
+                                    : c.key === next
+                                      ? 'font-medium text-text'
+                                      : 'text-text-tertiary',
                             )}
                         >
                             {c.ok ? (
                                 <CheckCircle2 size={14} className="text-success" />
                             ) : (
-                                <Circle size={14} className={c.key === next ? 'text-brand' : 'text-text-disabled'} />
+                                <Circle
+                                    size={14}
+                                    className={c.key === next ? 'text-brand' : 'text-text-disabled'}
+                                />
                             )}
                             {c.label}
                         </li>
@@ -175,7 +220,12 @@ export const KoishiOverviewTab: React.FC<{
             <SectionTitle>工具</SectionTitle>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 {CONSOLE_LINKS.map((l) => (
-                    <ConsoleLink key={l.tab} link={l} disabled={!running} onOpen={() => onGoTab(l.tab)} />
+                    <ConsoleLink
+                        key={l.tab}
+                        link={l}
+                        disabled={!running}
+                        onOpen={() => onGoTab(l.tab)}
+                    />
                 ))}
             </div>
             {!running && <p className="mt-2.5 text-2xs text-text-tertiary">启动后才能用</p>}
@@ -192,12 +242,15 @@ function StartButton({ starting, onStart }: { starting: boolean; onStart: () => 
     );
 }
 
-const pct = (v: number | undefined) => (v === undefined ? '—' : `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`);
+const pct = (v: number | undefined) =>
+    v === undefined ? '—' : `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
 
 function Stat({ label, value }: { label: string; value: string }) {
     return (
         <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="font-display text-[17px] font-semibold tabular-nums leading-tight text-text">{value}</span>
+            <span className="font-display text-[17px] font-semibold tabular-nums leading-tight text-text">
+                {value}
+            </span>
             <span className="text-2xs text-text-tertiary">{label}</span>
         </div>
     );
@@ -210,7 +263,12 @@ function BotRow({ bot }: { bot: KoishiBotStatus }) {
         <li className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
             <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-inset text-[13px] font-medium text-text-secondary">
                 {bot.avatar ? (
-                    <img src={bot.avatar} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    <img
+                        src={bot.avatar}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                    />
                 ) : (
                     name.slice(0, 1).toUpperCase()
                 )}
@@ -227,11 +285,15 @@ function BotRow({ bot }: { bot: KoishiBotStatus }) {
             </div>
             <div className="hidden shrink-0 items-center gap-5 text-right sm:flex">
                 <div>
-                    <p className="text-[13px] font-medium tabular-nums text-text">{bot.message_received}</p>
+                    <p className="text-[13px] font-medium tabular-nums text-text">
+                        {bot.message_received}
+                    </p>
                     <p className="text-2xs text-text-tertiary">收到</p>
                 </div>
                 <div>
-                    <p className="text-[13px] font-medium tabular-nums text-text">{bot.message_sent}</p>
+                    <p className="text-[13px] font-medium tabular-nums text-text">
+                        {bot.message_sent}
+                    </p>
                     <p className="text-2xs text-text-tertiary">发出</p>
                 </div>
             </div>
@@ -262,7 +324,12 @@ function RuntimeSection({ instance }: { instance: AppInstance }) {
                         <span>{s?.message || '正在连 Koishi 控制台…'}</span>
                     </div>
                 )}
-                <Button size="sm" variant="secondary" disabled={!ok || restart.isPending} onClick={() => restart.mutate()}>
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!ok || restart.isPending}
+                    onClick={() => restart.mutate()}
+                >
                     {restart.isPending ? <Spinner size="sm" /> : <RotateCw size={13} />}
                     重启
                 </Button>
@@ -327,9 +394,30 @@ function SettingTiles({
             value: `${server.host === '0.0.0.0' ? '所有网卡' : '只本机'} · ${server.port}`,
             empty: '',
         },
-        { key: 'prefix', tab: 'global', icon: Hash, label: '指令前缀', value: listText(config.global.prefix), empty: '没设' },
-        { key: 'nickname', tab: 'global', icon: AtSign, label: '昵称', value: listText(config.global.nickname), empty: '没设' },
-        { key: 'plugins', tab: 'plugins', icon: FolderTree, label: '插件', value: `${on.length} / ${plugins.length} 个在用`, empty: '' },
+        {
+            key: 'prefix',
+            tab: 'global',
+            icon: Hash,
+            label: '指令前缀',
+            value: listText(config.global.prefix),
+            empty: '没设',
+        },
+        {
+            key: 'nickname',
+            tab: 'global',
+            icon: AtSign,
+            label: '昵称',
+            value: listText(config.global.nickname),
+            empty: '没设',
+        },
+        {
+            key: 'plugins',
+            tab: 'plugins',
+            icon: FolderTree,
+            label: '插件',
+            value: `${on.length} / ${plugins.length} 个在用`,
+            empty: '',
+        },
         {
             key: 'link',
             tab: 'connection',
@@ -338,7 +426,14 @@ function SettingTiles({
             value: instance.link ? `Bot ${instance.link.bot_id}` : null,
             empty: '还没对接',
         },
-        { key: 'market', tab: 'market', icon: Store, label: '插件市场', value: '几千个插件可装', empty: '' },
+        {
+            key: 'market',
+            tab: 'market',
+            icon: Store,
+            label: '插件市场',
+            value: '几千个插件可装',
+            empty: '',
+        },
     ];
     return (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -414,7 +509,9 @@ function ConsoleLink({
             </span>
             <span className="min-w-0">
                 <span className="block text-[13px] font-medium text-text">{link.label}</span>
-                <span className="mt-0.5 block truncate text-2xs text-text-tertiary">{link.sub}</span>
+                <span className="mt-0.5 block truncate text-2xs text-text-tertiary">
+                    {link.sub}
+                </span>
             </span>
         </button>
     );

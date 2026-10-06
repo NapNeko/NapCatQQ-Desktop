@@ -130,7 +130,11 @@ export function createKeywordHighlighter(): KeywordHighlighter {
     };
 
     const onOsc = (body: string) => {
-        const mark = body.startsWith('633;') ? body[4] : body.startsWith('133;') ? body[4] : undefined;
+        const mark = body.startsWith('633;')
+            ? body[4]
+            : body.startsWith('133;')
+              ? body[4]
+              : undefined;
         if (mark === 'A') {
             inPrompt = true;
             inInput = false;

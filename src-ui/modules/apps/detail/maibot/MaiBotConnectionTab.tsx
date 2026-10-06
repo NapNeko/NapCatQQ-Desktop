@@ -26,7 +26,9 @@ export const MaiBotConnectionTab: React.FC<{
                     <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
                         <dt className="text-text-tertiary">对接</dt>
                         <dd className="text-text">
-                            {linked ? `已对接 Bot ${instance.link?.bot_id}` : '还没对接，到「概览」点对接'}
+                            {linked
+                                ? `已对接 Bot ${instance.link?.bot_id}`
+                                : '还没对接，到「概览」点对接'}
                         </dd>
                         <dt className="text-text-tertiary">适配器</dt>
                         <dd className="text-text">{adapter.enabled ? '已启用' : '未启用'}</dd>
@@ -58,7 +60,13 @@ export const MaiBotConnectionTab: React.FC<{
                         onValueChange={(v) =>
                             onChange({
                                 ...config,
-                                bot: { ...config.bot, webui: { ...config.bot.webui, port: v ?? config.bot.webui.port } },
+                                bot: {
+                                    ...config.bot,
+                                    webui: {
+                                        ...config.bot.webui,
+                                        port: v ?? config.bot.webui.port,
+                                    },
+                                },
                             })
                         }
                     />
@@ -86,7 +94,9 @@ export const MaiBotConnectionTab: React.FC<{
                 </div>
                 {config.webui_token && (
                     <div className="flex flex-col gap-1.5">
-                        <span className="text-xs text-text-secondary">登录 token（改 token 去 WebUI 的设置里）</span>
+                        <span className="text-xs text-text-secondary">
+                            登录 token（改 token 去 WebUI 的设置里）
+                        </span>
                         <CopyCodeBlock command={config.webui_token} />
                     </div>
                 )}

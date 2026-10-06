@@ -123,10 +123,10 @@ export function filterAppStore(args: {
             if (kindFilter === 'official' && !entry.is_official) continue;
             if (tag !== null && !entry.tags.includes(tag)) continue;
             if (
-                resource === 'plugin'
-                && entry.supported_adapters.length > 0
-                && enabledAdapterModules.length > 0
-                && !entry.supported_adapters.some((m) => enabledAdapterModules.includes(m))
+                resource === 'plugin' &&
+                entry.supported_adapters.length > 0 &&
+                enabledAdapterModules.length > 0 &&
+                !entry.supported_adapters.some((m) => enabledAdapterModules.includes(m))
             ) {
                 continue;
             }
@@ -198,16 +198,28 @@ export function storeGridFit(width: number, height: number): StoreGridFit {
     }
     const cols = Math.min(
         4,
-        Math.max(1, Math.floor((width + STORE_GRID_GAP_PX) / (STORE_CARD_MIN_WIDTH_PX + STORE_GRID_GAP_PX))),
+        Math.max(
+            1,
+            Math.floor((width + STORE_GRID_GAP_PX) / (STORE_CARD_MIN_WIDTH_PX + STORE_GRID_GAP_PX)),
+        ),
     );
     const rows = Math.min(
         4,
-        Math.max(1, Math.floor((height + STORE_GRID_GAP_PX) / (STORE_CARD_MIN_HEIGHT_PX + STORE_GRID_GAP_PX))),
+        Math.max(
+            1,
+            Math.floor(
+                (height + STORE_GRID_GAP_PX) / (STORE_CARD_MIN_HEIGHT_PX + STORE_GRID_GAP_PX),
+            ),
+        ),
     );
     return { cols, rows, pageSize: cols * rows };
 }
 
-export function paginateStore<T>(rows: readonly T[], page: number, pageSize = STORE_PAGE_SIZE): T[] {
+export function paginateStore<T>(
+    rows: readonly T[],
+    page: number,
+    pageSize = STORE_PAGE_SIZE,
+): T[] {
     if (rows.length === 0) return [];
     const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
     const safe = Math.min(Math.max(page, 0), totalPages - 1);

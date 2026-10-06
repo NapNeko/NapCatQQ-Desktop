@@ -30,9 +30,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
     }, [configuredNode, configuredNodeIsValid, patchDraft, probeComplete]);
 
     const nodeSelectItems = useMemo(() => {
-        const items = [
-            { value: '__auto__', label: '自动选择（默认优先级）' },
-        ];
+        const items = [{ value: '__auto__', label: '自动选择（默认优先级）' }];
         for (const cand of candidates) {
             items.push({
                 value: cand.path,
@@ -45,9 +43,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
     const currentNodeValue = configuredNodeIsValid ? configuredNode : '__auto__';
 
     if (!draft) {
-        return (
-            <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
-        );
+        return <p className="text-[13px] text-text-tertiary">正在加载设置…</p>;
     }
 
     return (
@@ -113,9 +109,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                 >
                     <Switch
                         checked={draft.remoteHostHealthProbeEnabled}
-                        onCheckedChange={(v) =>
-                            patchDraft({ remoteHostHealthProbeEnabled: v })
-                        }
+                        onCheckedChange={(v) => patchDraft({ remoteHostHealthProbeEnabled: v })}
                     />
                 </FieldRow>
 
@@ -170,9 +164,7 @@ function BackendNumber({
                     onChange(Math.max(min, Math.min(max, Math.round(value))));
                 }}
             />
-            {suffix && (
-                <span className="text-[11.5px] text-text-tertiary">{suffix}</span>
-            )}
+            {suffix && <span className="text-[11.5px] text-text-tertiary">{suffix}</span>}
         </div>
     );
 }

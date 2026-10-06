@@ -11,7 +11,13 @@ type Rgb = readonly [number, number, number];
 
 function hexToRgb(hex: string): Rgb {
     const h = hex.replace('#', '');
-    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6);
+    const full =
+        h.length === 3
+            ? h
+                  .split('')
+                  .map((c) => c + c)
+                  .join('')
+            : h.slice(0, 6);
     return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16)) as unknown as Rgb;
 }
 
@@ -43,8 +49,19 @@ const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pc
 
 /** 一个颜色展开成 50~900 阶梯：浅阶混白、深阶混黑，明暗主题同一套，和 Catppuccin 块的阶梯走向一致。 */
 function ramp(prefix: string, base: string): string[] {
-    const lighter: Array<[number, number]> = [[50, 8], [100, 16], [200, 32], [300, 55], [400, 78]];
-    const darker: Array<[number, number]> = [[600, 86], [700, 72], [800, 58], [900, 44]];
+    const lighter: Array<[number, number]> = [
+        [50, 8],
+        [100, 16],
+        [200, 32],
+        [300, 55],
+        [400, 78],
+    ];
+    const darker: Array<[number, number]> = [
+        [600, 86],
+        [700, 72],
+        [800, 58],
+        [900, 44],
+    ];
     return [
         ...lighter.map(([step, pct]) => `--${prefix}-${step}: ${mix(base, pct, '#ffffff')};`),
         `--${prefix}-500: ${base};`,

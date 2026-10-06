@@ -41,22 +41,14 @@ export const desktopUpdateService = {
      * `expected` 只带 UI 看到的版本；后端会重新 check，不信任本地下发的 URL。
      * `taskId` 与组件任务队列对齐，后端推 component_action_progress。
      */
-    install: async (
-        expected: AvailableUpdate,
-        taskId?: string,
-    ): Promise<string> => {
+    install: async (expected: AvailableUpdate, taskId?: string): Promise<string> => {
         if (isTauri) {
             return invoke<string>('install_desktop_update', {
                 expected,
                 taskId: taskId ?? null,
             });
         }
-        console.info(
-            '[desktopUpdateService] mock install',
-            expected.version,
-            'from',
-            APP_VERSION,
-        );
+        console.info('[desktopUpdateService] mock install', expected.version, 'from', APP_VERSION);
         return withMockDelay(taskId ?? 'mock-desktop-update', 200);
     },
 

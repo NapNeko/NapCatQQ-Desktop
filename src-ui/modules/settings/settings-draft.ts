@@ -4,10 +4,7 @@ import type { MotionLevel } from '../../core/design/motion';
 import { scaleDuration } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';
 import { clampPerformanceMonitorIntervalMs } from '../../core/domain/performance/performanceSettings';
-import {
-    clientPrefsFromBackend,
-    type BackendSettings,
-} from '../../core/services/settings.service';
+import { clientPrefsFromBackend, type BackendSettings } from '../../core/services/settings.service';
 import { webhookChannelsEqual } from '../../core/domain/settings/offline-notify-defaults';
 import { featuresEqual } from '../../core/domain/settings/features';
 import {
@@ -45,9 +42,7 @@ export type SettingsDraft = Omit<BackendSettings, 'taskQueueCleanup'> & {
 } & InfoBarDismissDraftSlice &
     TaskQueueCleanupDraftSlice;
 
-function infoBarDismissDraftFromSettingsDraft(
-    draft: SettingsDraft,
-): InfoBarDismissDraftSlice {
+function infoBarDismissDraftFromSettingsDraft(draft: SettingsDraft): InfoBarDismissDraftSlice {
     return {
         infoBarDismissInfoEnabled: draft.infoBarDismissInfoEnabled,
         infoBarDismissInfoMs: draft.infoBarDismissInfoMs,
@@ -125,9 +120,7 @@ export function draftFromBackendAndPrefs(
 }
 
 export function backendSlice(draft: SettingsDraft): BackendSettings {
-    const dismiss = infoBarDismissPrefsFromDraftFields(
-        infoBarDismissDraftFromSettingsDraft(draft),
-    );
+    const dismiss = infoBarDismissPrefsFromDraftFields(infoBarDismissDraftFromSettingsDraft(draft));
     return {
         botLoginCheckIntervalMs: draft.botLoginCheckIntervalMs,
         botOfflineWebHookNotice: draft.botOfflineWebHookNotice,
@@ -201,10 +194,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
     };
 }
 
-export function isSettingsDirty(
-    draft: SettingsDraft,
-    backend: BackendSettings,
-): boolean {
+export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings): boolean {
     const baseline = draftFromBackendAndPrefs(backend);
     return (
         draft.botLoginCheckIntervalMs !== baseline.botLoginCheckIntervalMs ||
@@ -214,16 +204,14 @@ export function isSettingsDirty(
         draft.performanceMonitorIntervalMs !== baseline.performanceMonitorIntervalMs ||
         draft.botRuntimeMetricsEnabled !== baseline.botRuntimeMetricsEnabled ||
         draft.botRuntimeMetricsIntervalMs !== baseline.botRuntimeMetricsIntervalMs ||
-        draft.botRuntimeMetricsRetentionDays !==
-        baseline.botRuntimeMetricsRetentionDays ||
+        draft.botRuntimeMetricsRetentionDays !== baseline.botRuntimeMetricsRetentionDays ||
         draft.githubPat !== baseline.githubPat ||
         draft.closeAction !== baseline.closeAction ||
         draft.afterCloseUiBehavior !== baseline.afterCloseUiBehavior ||
         draft.enterLightweightDelaySecs !== baseline.enterLightweightDelaySecs ||
         draft.uiModeOnStartup !== baseline.uiModeOnStartup ||
         draft.launchOnStartup !== baseline.launchOnStartup ||
-        draft.minimizeToTrayCountsAsHidden !==
-        baseline.minimizeToTrayCountsAsHidden ||
+        draft.minimizeToTrayCountsAsHidden !== baseline.minimizeToTrayCountsAsHidden ||
         draft.notifyOnOffline !== baseline.notifyOnOffline ||
         draft.notifyOnBotCrashed !== baseline.notifyOnBotCrashed ||
         draft.notifyOnLoginKicked !== baseline.notifyOnLoginKicked ||
@@ -246,8 +234,7 @@ export function isSettingsDirty(
         draft.taskQueueCleanupEnabled !== baseline.taskQueueCleanupEnabled ||
         draft.taskQueueCleanupLingerMs !== baseline.taskQueueCleanupLingerMs ||
         draft.remoteHostHealthProbeEnabled !== baseline.remoteHostHealthProbeEnabled ||
-        draft.remoteHostHealthProbeIntervalMs !==
-        baseline.remoteHostHealthProbeIntervalMs ||
+        draft.remoteHostHealthProbeIntervalMs !== baseline.remoteHostHealthProbeIntervalMs ||
         !webhookChannelsEqual(draft.webHookChannels, baseline.webHookChannels) ||
         draft.webHookUrl !== baseline.webHookUrl ||
         draft.webHookSecret !== baseline.webHookSecret ||
@@ -261,8 +248,7 @@ export function isSettingsDirty(
         draft.emailEncryption !== baseline.emailEncryption ||
         draft.onebotNoticeEnabled !== baseline.onebotNoticeEnabled ||
         draft.onebotMessengerBotId !== baseline.onebotMessengerBotId ||
-        draft.onebotMessengerBotIds.join(',') !==
-        baseline.onebotMessengerBotIds.join(',') ||
+        draft.onebotMessengerBotIds.join(',') !== baseline.onebotMessengerBotIds.join(',') ||
         draft.onebotTargetType !== baseline.onebotTargetType ||
         draft.onebotTargetId !== baseline.onebotTargetId ||
         draft.onebotTargetIds.join(',') !== baseline.onebotTargetIds.join(',') ||
@@ -338,9 +324,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
                 motionSpeed: draft.motionSpeed,
                 radiusStyle: draft.radiusStyle,
             },
-            infoBarDismissPrefsFromDraftFields(
-                infoBarDismissDraftFromSettingsDraft(draft),
-            ),
+            infoBarDismissPrefsFromDraftFields(infoBarDismissDraftFromSettingsDraft(draft)),
         ),
     );
     taskQueueCleanupPrefsStore.applyPrefs({

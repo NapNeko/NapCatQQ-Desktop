@@ -7,7 +7,10 @@ import { isTauri, onFileDragDrop, type FileDragDropEvent } from '../../core/ipc/
 export type { FileDragDropEvent };
 
 /** `active` 时订阅原生拖放，关掉或卸载时退订；各种拖放区（终端格子、导入向导）都从这里接 */
-export function useFileDragDrop(active: boolean, onEvent: (event: FileDragDropEvent) => void): void {
+export function useFileDragDrop(
+    active: boolean,
+    onEvent: (event: FileDragDropEvent) => void,
+): void {
     const onEventRef = useRef(onEvent);
     onEventRef.current = onEvent;
 

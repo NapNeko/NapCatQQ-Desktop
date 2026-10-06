@@ -11,7 +11,8 @@ export { baseActionName, lookupSummary } from '../../../core/domain/debug/catalo
 
 type Json = Record<string, unknown>;
 
-const isRecord = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Json =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** 空文本和 `{}` 都算「什么都没填」 */
 export function isBlankParams(text: string): boolean {
@@ -118,7 +119,8 @@ export function schemaTypeText(raw: unknown, depth = 0): string {
     if (!isRecord(raw) || depth > 4) return 'any';
     const t = raw.type;
     if (typeof t === 'string') {
-        if (t === 'array' && isRecord(raw.items)) return `${schemaTypeText(raw.items, depth + 1)}[]`;
+        if (t === 'array' && isRecord(raw.items))
+            return `${schemaTypeText(raw.items, depth + 1)}[]`;
         return t;
     }
     if (Array.isArray(t)) return t.filter((x) => typeof x === 'string').join(' | ') || 'any';
@@ -151,19 +153,26 @@ const MAX_SIMPLIFY_DEPTH = 6;
  */
 export function simplifySchema(raw: unknown, depth = 0): unknown {
     if (!isRecord(raw)) return 'any';
-    const desc = typeof raw.description === 'string' && raw.description.trim() ? raw.description.trim() : '';
+    const desc =
+        typeof raw.description === 'string' && raw.description.trim() ? raw.description.trim() : '';
     if (depth < MAX_SIMPLIFY_DEPTH) {
         if (isRecord(raw.properties)) {
             const out: Json = {};
             for (const [k, v] of Object.entries(raw.properties)) {
-                Object.defineProperty(out, k, { value: simplifySchema(v, depth + 1), enumerable: true, writable: true, configurable: true });
+                Object.defineProperty(out, k, {
+                    value: simplifySchema(v, depth + 1),
+                    enumerable: true,
+                    writable: true,
+                    configurable: true,
+                });
             }
             return out;
         }
         if (isRecord(raw.items)) return [simplifySchema(raw.items, depth + 1)];
         // anyOf 里带结构的分支（常见：anyOf[object, null]）比「object | null」一行字有用
         const structured = branches(raw).find((b) => isRecord(b.properties) || isRecord(b.items));
-        if (structured) return simplifySchema({ description: desc || undefined, ...structured }, depth);
+        if (structured)
+            return simplifySchema({ description: desc || undefined, ...structured }, depth);
     }
     const type = schemaTypeText(raw);
     return desc ? `${type} · ${desc}` : type;
@@ -195,7 +204,13 @@ export function segmentsToText(v: unknown): string | null {
     if (!Array.isArray(v)) return null;
     let out = '';
     for (const seg of v) {
-        if (!isRecord(seg) || seg.type !== 'text' || !isRecord(seg.data) || typeof seg.data.text !== 'string') return null;
+        if (
+            !isRecord(seg) ||
+            seg.type !== 'text' ||
+            !isRecord(seg.data) ||
+            typeof seg.data.text !== 'string'
+        )
+            return null;
         out += seg.data.text;
     }
     return out;
@@ -209,7 +224,8 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Unix 秒 → `datetime-local` 要的本地时间文本（精确到秒）；不是有效时间给空串 */
 export function secondsToLocalInput(seconds: unknown): string {
-    const n = typeof seconds === 'string' && /^\d+$/.test(seconds.trim()) ? Number(seconds) : seconds;
+    const n =
+        typeof seconds === 'string' && /^\d+$/.test(seconds.trim()) ? Number(seconds) : seconds;
     if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return '';
     const d = new Date(n * 1000);
     if (Number.isNaN(d.getTime())) return '';
@@ -255,7 +271,8 @@ export function sendBlocker(s: SendState): string | null {
     if (s.specLoading) return '正在读取接口说明…';
     if (s.channels) {
         if (s.channel.kind === 'auto' && s.channels.auto_call === null) return '没有能用的调用通道';
-        if (s.channel.kind !== 'auto' && !findChannel(s.channels, s.channel)) return '选的通道已经不在了，换一条';
+        if (s.channel.kind !== 'auto' && !findChannel(s.channels, s.channel))
+            return '选的通道已经不在了，换一条';
     }
     return null;
 }

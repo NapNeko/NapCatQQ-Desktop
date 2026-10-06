@@ -1,7 +1,16 @@
 // 远端页只管主机档案；组件部署走组件页。
 
 import React, { useRef, useState } from 'react';
-import { Server, RefreshCw, Plus, Eye, EyeOff, ShieldCheck, ShieldAlert, Import } from 'lucide-react';
+import {
+    Server,
+    RefreshCw,
+    Plus,
+    Eye,
+    EyeOff,
+    ShieldCheck,
+    ShieldAlert,
+    Import,
+} from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
@@ -34,8 +43,8 @@ function hostKeyVerifyCommand(prompt: HostKeyPrompt): string {
     const file = kind.includes('ed25519')
         ? '/etc/ssh/ssh_host_ed25519_key.pub'
         : kind.includes('rsa')
-            ? '/etc/ssh/ssh_host_rsa_key.pub'
-            : '/etc/ssh/ssh_host_ecdsa_key.pub';
+          ? '/etc/ssh/ssh_host_rsa_key.pub'
+          : '/etc/ssh/ssh_host_ecdsa_key.pub';
     return `ssh-keygen -lf ${file}`;
 }
 
@@ -178,12 +187,8 @@ export const RemoteHostPanelNext: React.FC = () => {
         <div className="flex min-h-0 flex-1 flex-col">
             <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
                 <div>
-                    <p className="text-2xs uppercase tracking-widest text-text-tertiary">
-                        servers
-                    </p>
-                    <h1 className="font-display text-xl font-semibold text-text">
-                        远端主机
-                    </h1>
+                    <p className="text-2xs uppercase tracking-widest text-text-tertiary">servers</p>
+                    <h1 className="font-display text-xl font-semibold text-text">远端主机</h1>
                 </div>
                 <div className="flex items-center gap-1.5">
                     <Tooltip>
@@ -194,23 +199,15 @@ export const RemoteHostPanelNext: React.FC = () => {
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                                 aria-label={revealIp ? '隐藏 IP 信息' : '显示 IP 信息'}
                             >
-                                <ActionMotionIcon
-                                    icon={revealIp ? Eye : EyeOff}
-                                    size={14}
-                                />
+                                <ActionMotionIcon icon={revealIp ? Eye : EyeOff} size={14} />
                             </button>
                         </TooltipTrigger>
                         <TooltipContent>
                             {revealIp ? '隐藏 IP 信息' : '显示 IP 信息'}
                         </TooltipContent>
                     </Tooltip>
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setImportOpen(true)}
-                    >
-                        <ActionMotionIcon icon={Import} size={14} />
-                        从 SSH 配置导入
+                    <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
+                        <ActionMotionIcon icon={Import} size={14} />从 SSH 配置导入
                     </Button>
                     <Button
                         size="sm"
@@ -406,9 +403,7 @@ function EmptyState({ onCreate, onImport }: { onCreate: () => void; onImport: ()
                 className="text-text-tertiary"
             />
             <div>
-                <p className="font-display text-md font-semibold text-text">
-                    还没有远端服务器
-                </p>
+                <p className="font-display text-md font-semibold text-text">还没有远端服务器</p>
                 <p className="mt-1 text-xs text-text-secondary">
                     添加 SSH 服务器后，可在组件页把 NapCat 部署到远端。
                 </p>
@@ -479,7 +474,10 @@ function KeyAuthPasswordDialog({
                     className="flex flex-col gap-3"
                 >
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor={passwordId} className="text-xs font-medium text-text-secondary">
+                        <label
+                            htmlFor={passwordId}
+                            className="text-xs font-medium text-text-secondary"
+                        >
                             当前 SSH 密码
                         </label>
                         <input

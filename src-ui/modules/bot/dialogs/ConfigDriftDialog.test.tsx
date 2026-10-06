@@ -17,18 +17,33 @@ vi.mock('../../../shared/ui', () => ({
         children,
         dismissOnOutsideClick: _dismiss,
         ...props
-    }: HTMLAttributes<HTMLDivElement> & { dismissOnOutsideClick?: boolean }) => <div {...props}>{children}</div>,
-    DialogHeader: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+    }: HTMLAttributes<HTMLDivElement> & { dismissOnOutsideClick?: boolean }) => (
+        <div {...props}>{children}</div>
+    ),
+    DialogHeader: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => (
+        <div {...props}>{children}</div>
+    ),
     DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
     DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
-    DialogFooter: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
-    Button: ({ children, size: _size, variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { size?: unknown; variant?: unknown }) => (
+    DialogFooter: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => (
+        <div {...props}>{children}</div>
+    ),
+    Button: ({
+        children,
+        size: _size,
+        variant: _variant,
+        ...props
+    }: ButtonHTMLAttributes<HTMLButtonElement> & { size?: unknown; variant?: unknown }) => (
         <button {...props}>{children}</button>
     ),
     Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-    Switch: ({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (v: boolean) => void }) => (
-        <button type="button" aria-pressed={checked} onClick={() => onCheckedChange(!checked)} />
-    ),
+    Switch: ({
+        checked,
+        onCheckedChange,
+    }: {
+        checked: boolean;
+        onCheckedChange: (v: boolean) => void;
+    }) => <button type="button" aria-pressed={checked} onClick={() => onCheckedChange(!checked)} />,
 }));
 
 function manyConflicts(): ConfigDrift {

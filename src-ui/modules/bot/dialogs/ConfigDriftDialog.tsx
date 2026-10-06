@@ -93,21 +93,30 @@ export function ConfigDriftDialog({
         const d: DriftDecision[] = [];
         for (const e of drift.added) {
             const k = ek(e);
-            d.push(addedKeep[k]
-                ? { kind: 'keep_added', file: e.file, path: e.path }
-                : { kind: 'drop_added', file: e.file, path: e.path });
+            d.push(
+                addedKeep[k]
+                    ? { kind: 'keep_added', file: e.file, path: e.path }
+                    : { kind: 'drop_added', file: e.file, path: e.path },
+            );
         }
         for (const e of drift.modified) {
             const k = ek(e);
-            d.push(modChoice[k] === 'external'
-                ? { kind: 'accept_external', file: e.file, path: e.path, value: e.external }
-                : { kind: 'use_internal', file: e.file, path: e.path });
+            d.push(
+                modChoice[k] === 'external'
+                    ? { kind: 'accept_external', file: e.file, path: e.path, value: e.external }
+                    : { kind: 'use_internal', file: e.file, path: e.path },
+            );
         }
         onConfirm(d);
     };
 
     return (
-        <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
+        <Dialog
+            open={open}
+            onOpenChange={(o) => {
+                if (!o) onCancel();
+            }}
+        >
             <DialogContent size="sheet" dismissOnOutsideClick={false}>
                 <DialogHeader className="shrink-0">
                     <DialogTitle className="flex items-center gap-2">
@@ -132,7 +141,11 @@ export function ConfigDriftDialog({
                                 共 {totalModified} 处配置差异
                             </span>
                             {allDecided ? (
-                                <Badge tone="success" appearance="soft" className="gap-1 font-normal">
+                                <Badge
+                                    tone="success"
+                                    appearance="soft"
+                                    className="gap-1 font-normal"
+                                >
                                     <Check size={11} strokeWidth={2.5} /> 全部已决断
                                 </Badge>
                             ) : (
@@ -190,7 +203,9 @@ export function ConfigDriftDialog({
                                         motion={EMPHASIS_MOTION}
                                         className="text-success"
                                     />
-                                    <span className="text-xs font-semibold text-text">运行时新增字段</span>
+                                    <span className="text-xs font-semibold text-text">
+                                        运行时新增字段
+                                    </span>
                                     <Badge tone="success" appearance="soft">
                                         {drift.added.length}
                                     </Badge>
@@ -224,7 +239,9 @@ export function ConfigDriftDialog({
                                         key={ek(entry)}
                                         entry={entry}
                                         keep={addedKeep[ek(entry)] ?? true}
-                                        onToggle={(v) => setAddedKeep((m) => ({ ...m, [ek(entry)]: v }))}
+                                        onToggle={(v) =>
+                                            setAddedKeep((m) => ({ ...m, [ek(entry)]: v }))
+                                        }
                                     />
                                 ))}
                             </div>
@@ -240,12 +257,19 @@ export function ConfigDriftDialog({
                             </span>
                         ) : (
                             <span>
-                                剩余 <strong className="text-warning font-semibold">{remaining}</strong> 项待选择
+                                剩余{' '}
+                                <strong className="text-warning font-semibold">{remaining}</strong>{' '}
+                                项待选择
                             </span>
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="secondary" size="sm" onClick={onCancel} className="rounded-sm">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={onCancel}
+                            className="rounded-sm"
+                        >
                             {intent === 'save' ? '取消' : '取消启动'}
                         </Button>
                         <Button
@@ -280,9 +304,7 @@ function FlatConflictRow({
             {/* 字段纯净元信息行 */}
             <div className="flex items-center justify-between text-xs px-0.5">
                 <div className="flex items-baseline gap-2 min-w-0">
-                    <span className="font-semibold text-text text-sm">
-                        {item.label}
-                    </span>
+                    <span className="font-semibold text-text text-sm">{item.label}</span>
                     <code
                         className="rounded-xs bg-field/80 px-1.5 py-0.5 font-mono text-[11px] text-text-tertiary border border-border-subtle/50 truncate max-w-[240px]"
                         title={item.path}
@@ -291,7 +313,10 @@ function FlatConflictRow({
                     </code>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono text-2xs text-text-tertiary truncate max-w-[180px]" title={item.file}>
+                    <span
+                        className="font-mono text-2xs text-text-tertiary truncate max-w-[180px]"
+                        title={item.file}
+                    >
                         {item.file}
                     </span>
                     {choice === 'internal' && (
@@ -371,10 +396,14 @@ function FlatOptionButton({
                     >
                         {selected && <Check size={9} strokeWidth={3} />}
                     </div>
-                    <span className={cn(
-                        'text-xs font-medium transition-colors',
-                        selected ? 'text-brand font-semibold' : 'text-text-secondary group-hover:text-text'
-                    )}>
+                    <span
+                        className={cn(
+                            'text-xs font-medium transition-colors',
+                            selected
+                                ? 'text-brand font-semibold'
+                                : 'text-text-secondary group-hover:text-text',
+                        )}
+                    >
                         {label}
                     </span>
                 </div>
@@ -407,10 +436,18 @@ function ValueDisplay({ value }: { value: DriftDisplayValue }) {
                 );
             }
             if (value.text === '开启') {
-                return <Badge tone="success" appearance="soft">true · 开启</Badge>;
+                return (
+                    <Badge tone="success" appearance="soft">
+                        true · 开启
+                    </Badge>
+                );
             }
             if (value.text === '关闭') {
-                return <Badge tone="neutral" appearance="soft">false · 关闭</Badge>;
+                return (
+                    <Badge tone="neutral" appearance="soft">
+                        false · 关闭
+                    </Badge>
+                );
             }
             return (
                 <div className="inline-flex items-center rounded-xs bg-canvas/80 px-2 py-0.5 font-mono text-xs font-medium text-text border border-border-subtle/60 break-all">
@@ -432,19 +469,12 @@ function ValueDisplay({ value }: { value: DriftDisplayValue }) {
 
 function ConnectionList({ items }: { items: ConnectionSummary[] }) {
     if (items.length === 0) {
-        return (
-            <div className="text-2xs italic text-text-tertiary">
-                (无活动连接配置)
-            </div>
-        );
+        return <div className="text-2xs italic text-text-tertiary">(无活动连接配置)</div>;
     }
     return (
         <div className="flex flex-col gap-1">
             {items.map((c, i) => (
-                <div
-                    key={i}
-                    className="flex flex-wrap items-center gap-1.5 text-2xs text-text"
-                >
+                <div key={i} className="flex flex-wrap items-center gap-1.5 text-2xs text-text">
                     {c.enabled ? (
                         <ActionMotionIcon
                             icon={Wifi}
@@ -461,7 +491,10 @@ function ConnectionList({ items }: { items: ConnectionSummary[] }) {
                     )}
                     <span className="font-medium truncate">{c.name}</span>
                     <span className="font-mono text-text-tertiary text-[10px]">({c.type})</span>
-                    <span className="font-mono text-text-secondary truncate max-w-[160px]" title={c.endpoint}>
+                    <span
+                        className="font-mono text-text-secondary truncate max-w-[160px]"
+                        title={c.endpoint}
+                    >
                         {c.endpoint || '(无端点)'}
                     </span>
                     {c.token && c.token !== '(无)' && (
@@ -477,7 +510,11 @@ function ConnectionList({ items }: { items: ConnectionSummary[] }) {
 
 // ─── Added row ───────────────────────────────────────────────────────────────
 
-function AddedRow({ entry, keep, onToggle }: {
+function AddedRow({
+    entry,
+    keep,
+    onToggle,
+}: {
     entry: DriftEntry;
     keep: boolean;
     onToggle: (v: boolean) => void;
@@ -488,14 +525,15 @@ function AddedRow({ entry, keep, onToggle }: {
                 <span className="text-xs font-mono font-medium text-text truncate">
                     {entry.path}
                 </span>
-                <span className="text-2xs font-mono text-text-tertiary truncate max-w-[420px]" title={briefValue(entry.external)}>
+                <span
+                    className="text-2xs font-mono text-text-tertiary truncate max-w-[420px]"
+                    title={briefValue(entry.external)}
+                >
                     检测值: {briefValue(entry.external)}
                 </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-                <span className="text-2xs text-text-secondary">
-                    {keep ? '保留' : '丢弃'}
-                </span>
+                <span className="text-2xs text-text-secondary">{keep ? '保留' : '丢弃'}</span>
                 <Switch checked={keep} onCheckedChange={onToggle} label="" />
             </div>
         </div>
@@ -516,8 +554,3 @@ function briefValue(v: unknown): string {
     const s = JSON.stringify(v);
     return s.length > 60 ? s.slice(0, 57) + '...' : s;
 }
-
-
-
-
-

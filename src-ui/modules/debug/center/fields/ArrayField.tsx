@@ -57,7 +57,10 @@ function ItemInput({
     const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
         if (!onPasteMany) return;
         const pasted = e.clipboardData.getData('text');
-        const parts = pasted.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean);
+        const parts = pasted
+            .split(/[\n,，]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
         if (parts.length < 2) return;
         e.preventDefault();
         onPasteMany(parts);
@@ -86,7 +89,15 @@ function ItemInput({
     );
 }
 
-export function ArrayField({ field, value, onChange, invalid, inputId, describedBy, disabled }: FieldProps) {
+export function ArrayField({
+    field,
+    value,
+    onChange,
+    invalid,
+    inputId,
+    describedBy,
+    disabled,
+}: FieldProps) {
     const [pending, setPending] = useState(false);
     const kind = field.itemKind;
 
@@ -124,7 +135,9 @@ export function ArrayField({ field, value, onChange, invalid, inputId, described
     // React 复用同一个输入框，焦点不丢
     const rows = items.map((item, i) => (
         <div key={i} className="flex items-center gap-1">
-            <span className="w-5 shrink-0 text-right font-mono text-[10.5px] text-text-tertiary">{i}</span>
+            <span className="w-5 shrink-0 text-right font-mono text-[10.5px] text-text-tertiary">
+                {i}
+            </span>
             <ItemInput
                 id={i === 0 ? inputId : undefined}
                 value={item}
@@ -135,13 +148,22 @@ export function ArrayField({ field, value, onChange, invalid, inputId, described
                 onCommit={(v) => setAt(i, v)}
                 onEnter={() => setPending(true)}
             />
-            <IconTip icon={X} label={`删掉第 ${i} 项`} size="sm" tone="danger" disabled={disabled} onClick={() => removeAt(i)} />
+            <IconTip
+                icon={X}
+                label={`删掉第 ${i} 项`}
+                size="sm"
+                tone="danger"
+                disabled={disabled}
+                onClick={() => removeAt(i)}
+            />
         </div>
     ));
     if (pending) {
         rows.push(
             <div key={items.length} className="flex items-center gap-1">
-                <span className="w-5 shrink-0 text-right font-mono text-[10.5px] text-text-tertiary">{items.length}</span>
+                <span className="w-5 shrink-0 text-right font-mono text-[10.5px] text-text-tertiary">
+                    {items.length}
+                </span>
                 <ItemInput
                     id={items.length === 0 ? inputId : undefined}
                     value={undefined}
@@ -149,7 +171,9 @@ export function ArrayField({ field, value, onChange, invalid, inputId, described
                     invalid={false}
                     disabled={disabled}
                     autoFocus
-                    placeholder={kind === 'number' ? '数字，可粘贴一串用逗号隔开' : '可粘贴多行一次加好几项'}
+                    placeholder={
+                        kind === 'number' ? '数字，可粘贴一串用逗号隔开' : '可粘贴多行一次加好几项'
+                    }
                     onCommit={(v) => {
                         if (v === '' || v === undefined) return;
                         onChange([...items, v]);
@@ -182,7 +206,9 @@ export function ArrayField({ field, value, onChange, invalid, inputId, described
                     <Plus size={12} aria-hidden />
                     添加一项
                 </button>
-                {items.length > 0 && <span className="text-2xs text-text-tertiary">{items.length} 项</span>}
+                {items.length > 0 && (
+                    <span className="text-2xs text-text-tertiary">{items.length} 项</span>
+                )}
             </div>
         </div>
     );

@@ -3,10 +3,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Trash2, Pencil, Lock, Link2, CloudDownload } from 'lucide-react';
-import {
-    ActionMotionIcon,
-    EMPHASIS_MOTION,
-} from '../../../../shared/ui/motion';
+import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../../shared/ui/motion';
 import {
     Button,
     Badge,
@@ -163,9 +160,7 @@ export function ConnectionsTab({
                 // 空态：磁贴上下左右居中在剩余空间里
                 <div className="flex min-h-[60vh] flex-1 items-center justify-center">
                     <div className="w-full max-w-xs rounded-md border border-dashed border-border-subtle bg-canvas/60 px-5 py-6 text-center">
-                        <p className="text-sm font-medium text-text-secondary">
-                            暂无协议连接
-                        </p>
+                        <p className="text-sm font-medium text-text-secondary">暂无协议连接</p>
                         <p className="mt-1 text-2xs text-text-tertiary leading-relaxed">
                             Bot 启动后无法与外部 OneBot 客户端通信
                         </p>
@@ -174,9 +169,7 @@ export function ConnectionsTab({
             ) : (
                 <div className="flex flex-col gap-8 pb-2">
                     <FormSection
-                        actions={
-                            <span className="text-2xs text-text-tertiary">{total} 项</span>
-                        }
+                        actions={<span className="text-2xs text-text-tertiary">{total} 项</span>}
                     >
                         <ConnectionList
                             data={data}
@@ -238,8 +231,7 @@ export function ConnectionsTab({
                         <>
                             <DialogHeader>
                                 <DialogTitle>
-                                    {editingMount.type === 'create' ? '新增' : '编辑'}
-                                    {' '}
+                                    {editingMount.type === 'create' ? '新增' : '编辑'}{' '}
                                     {getKindMeta(editingMount.kind).title}
                                 </DialogTitle>
                                 <DialogDescription>
@@ -251,7 +243,9 @@ export function ConnectionsTab({
                                 initialData={editingMount.draft}
                                 existingNames={
                                     editingMount.type === 'edit'
-                                        ? collectAllNames(data).filter((n) => n !== editingMount.draft.name)
+                                        ? collectAllNames(data).filter(
+                                              (n) => n !== editingMount.draft.name,
+                                          )
                                         : collectAllNames(data)
                                 }
                                 backendType={backendType}
@@ -369,9 +363,7 @@ function FloatingAddBar({
                         <TooltipContent>在远端 WebUI 里改过连接时，先拉回来再保存</TooltipContent>
                     </Tooltip>
                 )}
-                {onPullRemote && (
-                    <span className="mx-0.5 h-4 w-px bg-border-subtle" aria-hidden />
-                )}
+                {onPullRemote && <span className="mx-0.5 h-4 w-px bg-border-subtle" aria-hidden />}
                 <span className="px-1 text-2xs font-medium uppercase tracking-wide text-text-tertiary">
                     新增
                 </span>
@@ -404,9 +396,7 @@ function FloatingAddBar({
                             <TooltipTrigger asChild>
                                 <span>{btn}</span>
                             </TooltipTrigger>
-                            <TooltipContent>
-                                当前底座（{backendType}）不支持此类型
-                            </TooltipContent>
+                            <TooltipContent>当前底座（{backendType}）不支持此类型</TooltipContent>
                         </Tooltip>
                     );
                 })}
@@ -459,7 +449,11 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                 >
                     {/* 第一行：协议标识 + 连接名称 + 运行状态 */}
                     <div className="flex items-center gap-2 min-w-0">
-                        <Badge tone="info" appearance="soft" className="font-mono text-[11px] shrink-0">
+                        <Badge
+                            tone="info"
+                            appearance="soft"
+                            className="font-mono text-[11px] shrink-0"
+                        >
                             {KIND_BADGE[kind]}
                         </Badge>
                         <span className="truncate text-sm font-semibold text-text">

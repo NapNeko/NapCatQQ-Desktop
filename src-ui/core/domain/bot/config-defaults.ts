@@ -16,7 +16,13 @@ export function createDefaultBotConfig(): BotConfig {
             name: '',
             QQID: 0,
             musicSignUrl: '',
-            autoRestartSchedule: { enable: false, mode: 'interval', time_unit: 'h', duration: 6, cron: '' },
+            autoRestartSchedule: {
+                enable: false,
+                mode: 'interval',
+                time_unit: 'h',
+                duration: 6,
+                cron: '',
+            },
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',
@@ -45,15 +51,20 @@ export function createDefaultBotConfig(): BotConfig {
             fileLogLevel: 'debug',
             consoleLogLevel: 'info',
             o3HookMode: 1,
-            bypass: { hook: false, window: false, module: false, process: false, container: false, js: false },
+            bypass: {
+                hook: false,
+                window: false,
+                module: false,
+                process: false,
+                container: false,
+                js: false,
+            },
         },
         statusCommand: undefined,
     };
 }
 
-export type ValidationResult =
-    | { ok: true }
-    | { ok: false; reason: string };
+export type ValidationResult = { ok: true } | { ok: false; reason: string };
 
 /// 保存前的最低限度校验。
 /// 后端 Rust 还会再做一次完整校验（`BotConfig::validate`），这里只挡住明显错误。
@@ -72,7 +83,10 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     // 本机(Windows)不支持 Docker:Docker Desktop 安装链路太麻烦,本机只走直接运行。
     // Docker 启动方式只允许配合远程 SSH 主机。
     if (config.bot.deploymentType === 'docker' && config.bot.runtime_target === 'local') {
-        return { ok: false, reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。' };
+        return {
+            ok: false,
+            reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。',
+        };
     }
     // cron 语法由后端解析并回报错误；这里只挡空表达式
     const sched = config.bot.autoRestartSchedule;

@@ -16,10 +16,7 @@ import type { LucideProps } from 'lucide-react';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import type { BotActorSnapshot } from '../../../core/ipc/types';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
-import {
-    computeBotFleetStats,
-    listActionableBots,
-} from '../../../core/domain/overview/glance';
+import { computeBotFleetStats, listActionableBots } from '../../../core/domain/overview/glance';
 import { OccupancyChart } from './OccupancyChart';
 import { useResourceMonitor } from '../../../hooks/diagnostics/useResourceMonitor';
 
@@ -56,13 +53,7 @@ export function OverviewCommandColumn({
     configs: Record<string, BotConfig | null>;
     onNavigate: OverviewNavigate;
 }) {
-    return (
-        <BotFleetOverviewCard
-            snapshots={snapshots}
-            configs={configs}
-            onNavigate={onNavigate}
-        />
-    );
+    return <BotFleetOverviewCard snapshots={snapshots} configs={configs} onNavigate={onNavigate} />;
 }
 
 export function BotFleetOverviewCard({
@@ -118,13 +109,7 @@ export function BotFleetOverviewCard({
                     label="运行中"
                     value={String(stats.running)}
                     srSummary={`${stats.running} 个实例正在运行`}
-                    tone={
-                        stats.crashed > 0
-                            ? 'danger'
-                            : stats.running > 0
-                              ? 'success'
-                              : 'neutral'
-                    }
+                    tone={stats.crashed > 0 ? 'danger' : stats.running > 0 ? 'success' : 'neutral'}
                 />
                 <GlanceCell
                     label="已停止"
@@ -141,11 +126,7 @@ export function BotFleetOverviewCard({
                             : `${actionable.length} 项需进入实例页处理`
                     }
                     tone={
-                        stats.crashed > 0
-                            ? 'danger'
-                            : actionable.length > 0
-                              ? 'warning'
-                              : 'success'
+                        stats.crashed > 0 ? 'danger' : actionable.length > 0 ? 'warning' : 'success'
                     }
                 />
             </div>
@@ -153,10 +134,13 @@ export function BotFleetOverviewCard({
             {/* 列表内容区 */}
             {stats.total === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-4 text-center rounded-md bg-inset/40 border border-dashed border-border-subtle/80">
-                    <p className="text-xs text-text-secondary">
-                        尚未创建 Bot 实例
-                    </p>
-                    <Button variant="primary" size="sm" onClick={() => onNavigate('bots')} className="text-2xs h-7">
+                    <p className="text-xs text-text-secondary">尚未创建 Bot 实例</p>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => onNavigate('bots')}
+                        className="text-2xs h-7"
+                    >
                         前往实例页创建
                     </Button>
                 </div>
@@ -164,7 +148,10 @@ export function BotFleetOverviewCard({
                 <div className="space-y-2.5">
                     {/* 待处置列表 */}
                     {actionable.length > 0 && (
-                        <section aria-labelledby="overview-actionable-heading" className="space-y-1">
+                        <section
+                            aria-labelledby="overview-actionable-heading"
+                            className="space-y-1"
+                        >
                             <h4
                                 id="overview-actionable-heading"
                                 className="text-[11px] font-semibold uppercase tracking-wide text-warning"
@@ -218,7 +205,10 @@ export function BotFleetOverviewCard({
                                                         {displayBotName(snap.bot_id, configs)}
                                                     </p>
                                                     <p className="font-mono text-[10px] text-text-tertiary truncate">
-                                                        {backend === 'snowluma' ? 'SnowLuma' : 'NapCat'} · {snap.bot_id}
+                                                        {backend === 'snowluma'
+                                                            ? 'SnowLuma'
+                                                            : 'NapCat'}{' '}
+                                                        · {snap.bot_id}
                                                     </p>
                                                 </div>
                                             </div>
@@ -292,7 +282,10 @@ export function PerformanceChartsSection({
 
     if (resource.status === 'error') {
         return (
-            <Card padding="md" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
+            <Card
+                padding="md"
+                className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center"
+            >
                 <AlertTriangle size={20} className="text-warning" />
                 <p className="text-[13px] font-medium text-text">无法读取系统指标</p>
                 <p className="max-w-[240px] text-[12px] text-text-tertiary">
@@ -304,17 +297,18 @@ export function PerformanceChartsSection({
 
     if (resource.status === 'warming' && resource.history.length < 1) {
         return (
-            <Card padding="md" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
+            <Card
+                padding="md"
+                className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center"
+            >
                 <WarmingActivityIcon size={20} className="text-brand" />
                 <p className="text-[13px] text-text-secondary">正在获取首个采样…</p>
             </Card>
         );
     }
 
-    const cpuText =
-        resource.status === 'ready' ? `${resource.cpu}%` : '…';
-    const ramText =
-        resource.status === 'ready' ? `${resource.ram}%` : '…';
+    const cpuText = resource.status === 'ready' ? `${resource.cpu}%` : '…';
+    const ramText = resource.status === 'ready' ? `${resource.ram}%` : '…';
 
     return (
         <>

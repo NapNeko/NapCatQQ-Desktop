@@ -18,7 +18,12 @@ import { KOISHI_LINK_IDENT, KOISHI_LINK_NAME, walk } from '../../domain/apps/koi
 import { withMockDelay } from './bootstrap.mock';
 import schemaTable from './koishi-schemas.json';
 
-const p = (name: string, ident: string, enabled = true, config: Record<string, unknown> = {}): KoishiPluginNode => ({
+const p = (
+    name: string,
+    ident: string,
+    enabled = true,
+    config: Record<string, unknown> = {},
+): KoishiPluginNode => ({
     name,
     ident,
     enabled,
@@ -27,7 +32,11 @@ const p = (name: string, ident: string, enabled = true, config: Record<string, u
     children: [],
 });
 
-const g = (ident: string, children: KoishiPluginNode[], meta: Record<string, unknown> = {}): KoishiPluginNode => ({
+const g = (
+    ident: string,
+    children: KoishiPluginNode[],
+    meta: Record<string, unknown> = {},
+): KoishiPluginNode => ({
     name: 'group',
     ident,
     enabled: true,
@@ -61,7 +70,10 @@ export function koishiMockConfig(port: number): KoishiInstanceConfig {
             g('console', [
                 p('actions', 'iq2hre'),
                 p('analytics', '7y13u6'),
-                { ...p('android', 'u3ymjh'), meta: { $if: "env.KOISHI_AGENT?.includes('Android')" } },
+                {
+                    ...p('android', 'u3ymjh'),
+                    meta: { $if: "env.KOISHI_AGENT?.includes('Android')" },
+                },
                 p('auth', 'ur640t', false),
                 p('config', '3qwe05'),
                 p('console', 'helk2a', true, { open: false }),
@@ -69,7 +81,9 @@ export function koishiMockConfig(port: number): KoishiInstanceConfig {
                 p('explorer', 'ylb65g'),
                 p('logger', 'ec6dby'),
                 p('insight', 'xtjkzs'),
-                p('market', 'op0ext', true, { search: { endpoint: 'https://registry.koishi.chat/index.json' } }),
+                p('market', 'op0ext', true, {
+                    search: { endpoint: 'https://registry.koishi.chat/index.json' },
+                }),
                 p('notifier', 'welnss'),
                 p('oobe', 'eieen6'),
                 p('sandbox', 'ivxeh4'),
@@ -86,7 +100,9 @@ export function koishiMockConfig(port: number): KoishiInstanceConfig {
                 p('adapter-qq', 'p1wspk', false),
                 p('adapter-telegram', '6jsf0v', false),
             ]),
-            g('develop', [p('hmr', 'k4b2ot', true, { root: '.' })], { $if: "env.NODE_ENV === 'development'" }),
+            g('develop', [p('hmr', 'k4b2ot', true, { root: '.' })], {
+                $if: "env.NODE_ENV === 'development'",
+            }),
         ],
     };
 }
@@ -119,7 +135,11 @@ const DESCRIPTIONS: Record<string, string> = {
 
 /** 包列表按树里出现过的插件造，外加一个装了还没进树的 */
 export function koishiMockPackages(cfg: KoishiInstanceConfig): KoishiPackageInfo[] {
-    const names = new Set(walk(cfg.plugins).filter((n) => n.name !== 'group').map((n) => n.name));
+    const names = new Set(
+        walk(cfg.plugins)
+            .filter((n) => n.name !== 'group')
+            .map((n) => n.name),
+    );
     names.add('adapter-onebot');
     names.add('echo');
     return [...names].sort().map((name) => ({
@@ -137,7 +157,14 @@ export function koishiMockSchemas(names: string[]): KoishiPluginSchema[] {
     return names.map((name) => {
         const hit = table[name];
         if (name === 'nope' || (!hit && name.startsWith('missing'))) {
-            return { name, package: null, version: null, schema: null, usage: null, error: `Cannot find module '${name}'` };
+            return {
+                name,
+                package: null,
+                version: null,
+                schema: null,
+                usage: null,
+                error: `Cannot find module '${name}'`,
+            };
         }
         return {
             name,
@@ -150,11 +177,22 @@ export function koishiMockSchemas(names: string[]): KoishiPluginSchema[] {
     });
 }
 
-export function koishiMockStatus(instance: AppInstance, cfg: KoishiInstanceConfig): Promise<KoishiRuntimeStatus> {
+export function koishiMockStatus(
+    instance: AppInstance,
+    cfg: KoishiInstanceConfig,
+): Promise<KoishiRuntimeStatus> {
     if (instance.state !== 'running') {
-        return withMockDelay({ gate: 'not_running', message: null, bots: [], memory: null, cpu: null });
+        return withMockDelay({
+            gate: 'not_running',
+            message: null,
+            bots: [],
+            memory: null,
+            cpu: null,
+        });
     }
-    const link = walk(cfg.plugins).find((n) => n.name === KOISHI_LINK_NAME && n.ident === KOISHI_LINK_IDENT);
+    const link = walk(cfg.plugins).find(
+        (n) => n.name === KOISHI_LINK_NAME && n.ident === KOISHI_LINK_IDENT,
+    );
     const selfId = typeof link?.config.selfId === 'string' ? link.config.selfId : '';
     const bots =
         link?.enabled && selfId
@@ -173,7 +211,13 @@ export function koishiMockStatus(instance: AppInstance, cfg: KoishiInstanceConfi
                   },
               ]
             : [];
-    return withMockDelay({ gate: 'ok', message: null, bots, memory: [0.012, 0.46], cpu: [0.004, 0.13] });
+    return withMockDelay({
+        gate: 'ok',
+        message: null,
+        bots,
+        memory: [0.012, 0.46],
+        cpu: [0.004, 0.13],
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +244,14 @@ export function koishiMockSandboxSend(
     const log = sandboxLogs.get(instanceId) ?? [];
     sandboxLogs.set(instanceId, log);
     const id = () => Math.random().toString(36).slice(2, 10);
-    log.push({ id: id(), user: msg.user, channel: msg.channel, content: msg.content, platform: msg.platform, quote: null });
+    log.push({
+        id: id(),
+        user: msg.user,
+        channel: msg.channel,
+        content: msg.content,
+        platform: msg.platform,
+        quote: null,
+    });
     // 群聊里 Bot 回在 `#`，私聊回在 `@用户`
     log.push({
         id: id(),
@@ -230,13 +281,62 @@ const mockCommands = new Map<string, MockCommand[]>();
 
 function defaultCommands(): MockCommand[] {
     return [
-        { name: 'help', children: [], created: false, paths: ['ejb1rf'], aliases: ['帮助'], config: { authority: 1, showTip: true } },
-        { name: 'echo', children: [], created: false, paths: [], aliases: [], config: { authority: 1 } },
-        { name: 'bind', children: [], created: false, paths: ['5cq4q4'], aliases: ['绑定'], config: { authority: 1 } },
-        { name: 'inspect', children: [], created: false, paths: ['wppufr'], aliases: [], config: { authority: 1 } },
-        { name: 'admin', children: ['admin.channel'], created: false, paths: ['9ypkqi'], aliases: [], config: { authority: 3 } },
-        { name: 'admin.channel', children: [], created: false, paths: ['9ypkqi'], aliases: [], config: { authority: 3, minInterval: 1000 } },
-        { name: 'status', children: [], created: false, paths: ['9dlk7e'], aliases: ['状态'], config: { authority: 1, maxUsage: 5 } },
+        {
+            name: 'help',
+            children: [],
+            created: false,
+            paths: ['ejb1rf'],
+            aliases: ['帮助'],
+            config: { authority: 1, showTip: true },
+        },
+        {
+            name: 'echo',
+            children: [],
+            created: false,
+            paths: [],
+            aliases: [],
+            config: { authority: 1 },
+        },
+        {
+            name: 'bind',
+            children: [],
+            created: false,
+            paths: ['5cq4q4'],
+            aliases: ['绑定'],
+            config: { authority: 1 },
+        },
+        {
+            name: 'inspect',
+            children: [],
+            created: false,
+            paths: ['wppufr'],
+            aliases: [],
+            config: { authority: 1 },
+        },
+        {
+            name: 'admin',
+            children: ['admin.channel'],
+            created: false,
+            paths: ['9ypkqi'],
+            aliases: [],
+            config: { authority: 3 },
+        },
+        {
+            name: 'admin.channel',
+            children: [],
+            created: false,
+            paths: ['9ypkqi'],
+            aliases: [],
+            config: { authority: 3, minInterval: 1000 },
+        },
+        {
+            name: 'status',
+            children: [],
+            created: false,
+            paths: ['9dlk7e'],
+            aliases: ['状态'],
+            config: { authority: 1, maxUsage: 5 },
+        },
     ];
 }
 
@@ -246,24 +346,39 @@ export function koishiMockCommands(instanceId: string): Promise<KoishiCommandRow
     return withMockDelay(structuredClone(list));
 }
 
-export function koishiMockCommandUpdate(instanceId: string, name: string, config: Record<string, unknown>): Promise<void> {
+export function koishiMockCommandUpdate(
+    instanceId: string,
+    name: string,
+    config: Record<string, unknown>,
+): Promise<void> {
     const list = mockCommands.get(instanceId) ?? defaultCommands();
     const row = list.find((c) => c.name === name);
     if (row) row.config = { ...row.config, ...config };
     return withMockDelay(undefined);
 }
 
-export function koishiMockCommandAliases(instanceId: string, name: string, aliases: string[]): Promise<void> {
+export function koishiMockCommandAliases(
+    instanceId: string,
+    name: string,
+    aliases: string[],
+): Promise<void> {
     const list = mockCommands.get(instanceId) ?? defaultCommands();
     const row = list.find((c) => c.name === name);
     if (row) row.aliases = aliases;
     return withMockDelay(undefined);
 }
 
-const MOCK_TABLES: Record<string, { primary: string[]; fields: Record<string, unknown>; rows: Record<string, unknown>[] }> = {
+const MOCK_TABLES: Record<
+    string,
+    { primary: string[]; fields: Record<string, unknown>; rows: Record<string, unknown>[] }
+> = {
     user: {
         primary: ['id'],
-        fields: { id: { type: 'integer' }, name: { type: 'string' }, authority: { type: 'integer' } },
+        fields: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            authority: { type: 'integer' },
+        },
         rows: [
             { id: 1, name: 'Alice', authority: 1 },
             { id: 2, name: 'koishi', authority: 4 },
@@ -271,7 +386,11 @@ const MOCK_TABLES: Record<string, { primary: string[]; fields: Record<string, un
     },
     channel: {
         primary: ['platform', 'id'],
-        fields: { platform: { type: 'string' }, id: { type: 'string' }, assignee: { type: 'string' } },
+        fields: {
+            platform: { type: 'string' },
+            id: { type: 'string' },
+            assignee: { type: 'string' },
+        },
         rows: [{ platform: 'sandbox:ncd-desktop', id: '#', assignee: 'koishi' }],
     },
     binding: {
@@ -292,7 +411,11 @@ export function koishiMockDatabaseTables(): Promise<KoishiDatabaseTable[]> {
     );
 }
 
-export function koishiMockDatabaseRows(table: string, offset: number, limit: number): Promise<Record<string, unknown>[]> {
+export function koishiMockDatabaseRows(
+    table: string,
+    offset: number,
+    limit: number,
+): Promise<Record<string, unknown>[]> {
     const t = MOCK_TABLES[table];
     return withMockDelay(t ? structuredClone(t.rows.slice(offset, offset + limit)) : []);
 }
@@ -307,17 +430,29 @@ interface MockFsNode {
 function defaultFs(): MockFsNode[] {
     return [
         { type: 'file', name: 'koishi.yml', content: '# Koishi 配置\nplugins:\n  group:entry:\n' },
-        { type: 'file', name: 'package.json', content: '{\n  "name": "@koishijs/boilerplate"\n}\n' },
+        {
+            type: 'file',
+            name: 'package.json',
+            content: '{\n  "name": "@koishijs/boilerplate"\n}\n',
+        },
         { type: 'file', name: '.env', content: 'KOISHI_ENV=production\n' },
         {
             type: 'directory',
             name: 'data',
             children: [
                 { type: 'file', name: 'koishi.db', content: '' },
-                { type: 'directory', name: 'logs', children: [{ type: 'file', name: '2026-10-01.log', content: '...' }] },
+                {
+                    type: 'directory',
+                    name: 'logs',
+                    children: [{ type: 'file', name: '2026-10-01.log', content: '...' }],
+                },
             ],
         },
-        { type: 'directory', name: 'locales', children: [{ type: 'file', name: 'zh-CN.yml', content: 'help: 帮助\n' }] },
+        {
+            type: 'directory',
+            name: 'locales',
+            children: [{ type: 'file', name: 'zh-CN.yml', content: 'help: 帮助\n' }],
+        },
     ];
 }
 
@@ -353,14 +488,26 @@ export function koishiMockExplorerTree(instanceId: string): Promise<KoishiFileEn
     return withMockDelay(structuredClone(tree) as KoishiFileEntry[]);
 }
 
-export function koishiMockExplorerRead(instanceId: string, path: string): Promise<KoishiFileContent> {
+export function koishiMockExplorerRead(
+    instanceId: string,
+    path: string,
+): Promise<KoishiFileContent> {
     const node = fsFind(mockFs.get(instanceId) ?? defaultFs(), path);
     if (!node || node.type !== 'file') throw new Error(`文件不存在：${path}`);
     const text = node.content ?? '';
-    return withMockDelay({ base64: btoa(unescape(encodeURIComponent(text))), mime: null, encoding: 'UTF-8' });
+    return withMockDelay({
+        base64: btoa(unescape(encodeURIComponent(text))),
+        mime: null,
+        encoding: 'UTF-8',
+    });
 }
 
-export function koishiMockExplorerWrite(instanceId: string, path: string, content: string, _binary?: boolean): Promise<void> {
+export function koishiMockExplorerWrite(
+    instanceId: string,
+    path: string,
+    content: string,
+    _binary?: boolean,
+): Promise<void> {
     const tree = mockFs.get(instanceId) ?? defaultFs();
     mockFs.set(instanceId, tree);
     const existing = fsFind(tree, path);
@@ -390,7 +537,11 @@ export function koishiMockExplorerRemove(instanceId: string, path: string): Prom
     return withMockDelay(undefined);
 }
 
-export function koishiMockExplorerRename(instanceId: string, from: string, to: string): Promise<void> {
+export function koishiMockExplorerRename(
+    instanceId: string,
+    from: string,
+    to: string,
+): Promise<void> {
     const tree = mockFs.get(instanceId) ?? defaultFs();
     mockFs.set(instanceId, tree);
     const node = fsFind(tree, from);

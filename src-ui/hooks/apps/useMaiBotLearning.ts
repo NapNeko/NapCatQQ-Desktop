@@ -22,7 +22,11 @@ import type {
 const exprKey = (id: string) => ['maibotExpressions', id] as const;
 const jargonKey = (id: string) => ['maibotJargons', id] as const;
 
-export function useMaiBotExpressions(instanceId: string, query: MaiBotExpressionQuery, enabled: boolean) {
+export function useMaiBotExpressions(
+    instanceId: string,
+    query: MaiBotExpressionQuery,
+    enabled: boolean,
+) {
     return useQuery<MaiBotExpressionPage, Error>({
         queryKey: [...exprKey(instanceId), 'list', query],
         queryFn: () => svc.expressions(instanceId, query),
@@ -66,16 +70,30 @@ export function useMaiBotJargonOverview(instanceId: string, enabled: boolean) {
 }
 
 export function useMaiBotExpressionAction(instanceId: string) {
-    return useResourceAction<MaiBotExpressionAction>(instanceId, exprKey(instanceId), svc.expressionAction, '表达方式没改成');
+    return useResourceAction<MaiBotExpressionAction>(
+        instanceId,
+        exprKey(instanceId),
+        svc.expressionAction,
+        '表达方式没改成',
+    );
 }
 
 export function useMaiBotJargonAction(instanceId: string) {
-    return useResourceAction<MaiBotJargonAction>(instanceId, jargonKey(instanceId), svc.jargonAction, '黑话没改成');
+    return useResourceAction<MaiBotJargonAction>(
+        instanceId,
+        jargonKey(instanceId),
+        svc.jargonAction,
+        '黑话没改成',
+    );
 }
 
 const behaviorKey = (id: string) => ['maibotBehaviors', id] as const;
 
-export function useMaiBotBehaviors(instanceId: string, query: MaiBotBehaviorQuery, enabled: boolean) {
+export function useMaiBotBehaviors(
+    instanceId: string,
+    query: MaiBotBehaviorQuery,
+    enabled: boolean,
+) {
     return useQuery<MaiBotBehaviorPage, Error>({
         queryKey: [...behaviorKey(instanceId), 'list', query],
         queryFn: () => svc.behaviors(instanceId, query),

@@ -79,8 +79,18 @@ describe('globalInfoBarStore 同 key 去重', () => {
 describe('globalInfoBarStore 同文折叠与延迟移除', () => {
     it('同 tone 同一句正文的不同来源只留一条，原位顶替成最新', () => {
         globalInfoBarStore.push({ key: 'other', tone: 'info', title: '别的' });
-        globalInfoBarStore.push({ key: 'chat:a:history', tone: 'danger', title: '历史消息读取失败', content: '连接出错' });
-        globalInfoBarStore.push({ key: 'chat:a:settings', tone: 'danger', title: '账号设置读取失败', content: '连接出错' });
+        globalInfoBarStore.push({
+            key: 'chat:a:history',
+            tone: 'danger',
+            title: '历史消息读取失败',
+            content: '连接出错',
+        });
+        globalInfoBarStore.push({
+            key: 'chat:a:settings',
+            tone: 'danger',
+            title: '账号设置读取失败',
+            content: '连接出错',
+        });
 
         const bars = globalInfoBarStore.getSnapshot().bars;
         expect(bars).toHaveLength(2);

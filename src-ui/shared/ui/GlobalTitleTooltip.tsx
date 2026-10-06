@@ -42,7 +42,9 @@ export const GlobalTitleTooltip: React.FC = () => {
                 return null;
             }
 
-            const el = start.closest('[title], [data-tooltip], [data-native-title]') as HTMLElement | null;
+            const el = start.closest(
+                '[title], [data-tooltip], [data-native-title]',
+            ) as HTMLElement | null;
             if (!el || el === document.body || el === document.documentElement) {
                 // 兜底：**图标按钮**用 aria-label 当提示。
                 //
@@ -66,7 +68,10 @@ export const GlobalTitleTooltip: React.FC = () => {
                 }
                 return null;
             }
-            if (el.hasAttribute('data-no-tooltip') || el.closest('[role="log"], [data-no-tooltip]')) {
+            if (
+                el.hasAttribute('data-no-tooltip') ||
+                el.closest('[role="log"], [data-no-tooltip]')
+            ) {
                 return null;
             }
 

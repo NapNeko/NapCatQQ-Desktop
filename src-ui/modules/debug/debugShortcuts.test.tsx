@@ -2,9 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { preferencesStore } from '../../hooks/preferences/preferencesStore';
 import { Dialog, DialogContent, DialogTitle } from '../../shared/ui';
-import { matchDebugShortcut, useDebugShortcuts, type DebugShortcutHandlers } from './debugShortcuts';
+import {
+    matchDebugShortcut,
+    useDebugShortcuts,
+    type DebugShortcutHandlers,
+} from './debugShortcuts';
 
-const key = (k: string, mods: Partial<Record<'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey', boolean>> = {}) => ({
+const key = (
+    k: string,
+    mods: Partial<Record<'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey', boolean>> = {},
+) => ({
     key: k,
     ctrlKey: false,
     metaKey: false,
@@ -57,7 +64,10 @@ describe('useDebugShortcuts', () => {
     it('处理了就拦下默认行为', () => {
         const closeTab = vi.fn();
         render(<Harness handlers={{ closeTab }} />);
-        const ev = fireEvent.keyDown(screen.getByLabelText('普通输入框'), { key: 'w', ctrlKey: true });
+        const ev = fireEvent.keyDown(screen.getByLabelText('普通输入框'), {
+            key: 'w',
+            ctrlKey: true,
+        });
         expect(closeTab).toHaveBeenCalledTimes(1);
         expect(ev).toBe(false);
     });

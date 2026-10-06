@@ -24,13 +24,7 @@ describe('webhook-message-visual', () => {
     });
 
     it('round-trips visual fields for each service', () => {
-        const kinds = [
-            'serverchan',
-            'dingtalk',
-            'feishu',
-            'discord',
-            'bark',
-        ] as const;
+        const kinds = ['serverchan', 'dingtalk', 'feishu', 'discord', 'bark'] as const;
         for (const kind of kinds) {
             const fields = fieldsFromPresetBody(kind);
             fields.title = 'T {event}';

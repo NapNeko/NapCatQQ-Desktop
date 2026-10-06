@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatCallState, ChatItem } from './chat';
-import { callLine, listRowOf, needsTimeSeparator, planFill, sendActionOf, type MessageItem } from './chatFormat';
+import {
+    callLine,
+    listRowOf,
+    needsTimeSeparator,
+    planFill,
+    sendActionOf,
+    type MessageItem,
+} from './chatFormat';
 import type { FormField } from './schemaForm';
 
 const call = (over: Partial<ChatCallState> = {}): ChatCallState => ({
@@ -29,7 +36,11 @@ const bubble = (over: Partial<MessageItem> = {}): MessageItem => ({
     ...over,
 });
 
-const field = (name: string, kind: FormField['kind'], accepts: { string: boolean; number: boolean }): FormField => ({
+const field = (
+    name: string,
+    kind: FormField['kind'],
+    accepts: { string: boolean; number: boolean },
+): FormField => ({
     name,
     label: name,
     required: true,
@@ -46,15 +57,24 @@ describe('callLine', () => {
     });
 
     it('OB11 层失败：retcode 加上游给的说明；没有说明就只写 retcode', () => {
-        expect(callLine(call({ ok: false, retcode: 1200, elapsedMs: 30, wording: '消息内容为空' }))).toEqual({
+        expect(
+            callLine(call({ ok: false, retcode: 1200, elapsedMs: 30, wording: '消息内容为空' })),
+        ).toEqual({
             ok: false,
             text: '✗ retcode 1200 · 消息内容为空',
         });
-        expect(callLine(call({ ok: false, retcode: 1200 }))).toEqual({ ok: false, text: '✗ retcode 1200' });
+        expect(callLine(call({ ok: false, retcode: 1200 }))).toEqual({
+            ok: false,
+            text: '✗ retcode 1200',
+        });
     });
 
     it('没拿到回包：写没拿到的原因', () => {
-        expect(callLine(call({ ok: false, retcode: null, elapsedMs: 30000, error: '等太久了，调用超时' }))).toEqual({
+        expect(
+            callLine(
+                call({ ok: false, retcode: null, elapsedMs: 30000, error: '等太久了，调用超时' }),
+            ),
+        ).toEqual({
             ok: false,
             text: '✗ 失败 · 等太久了，调用超时',
         });
@@ -64,7 +84,9 @@ describe('callLine', () => {
 describe('sendActionOf', () => {
     it('按调用状态里记的动作写，send_msg、转发不会被说成 send_group_msg', () => {
         expect(sendActionOf(bubble({ call: call({ action: 'send_msg' }) }))).toBe('send_msg');
-        expect(sendActionOf(bubble({ call: call({ action: 'send_group_forward_msg' }) }))).toBe('send_group_forward_msg');
+        expect(sendActionOf(bubble({ call: call({ action: 'send_group_forward_msg' }) }))).toBe(
+            'send_group_forward_msg',
+        );
     });
 
     it('没有动作可看时才按会话类型推断', () => {
@@ -76,11 +98,27 @@ describe('sendActionOf', () => {
 
 describe('listRowOf', () => {
     it('消息：post_type/会话类型，摘要带发送者；发送失败标红', () => {
-        const inbound = bubble({ direction: 'in', senderName: '小明', raw: { post_type: 'message' } });
-        expect(listRowOf(inbound)).toEqual({ type: 'message/group', summary: '小明：你好', tone: 'message' });
+        const inbound = bubble({
+            direction: 'in',
+            senderName: '小明',
+            raw: { post_type: 'message' },
+        });
+        expect(listRowOf(inbound)).toEqual({
+            type: 'message/group',
+            summary: '小明：你好',
+            tone: 'message',
+        });
         // 调用先到、还没被 message_sent 合并：raw 是调用记录，没有 post_type
-        const failed = bubble({ session: 'private:10002', segments: [], call: call({ ok: false, retcode: 100 }) });
-        expect(listRowOf(failed)).toEqual({ type: 'call/private', summary: '我：（空消息）', tone: 'danger' });
+        const failed = bubble({
+            session: 'private:10002',
+            segments: [],
+            call: call({ ok: false, retcode: 100 }),
+        });
+        expect(listRowOf(failed)).toEqual({
+            type: 'call/private',
+            summary: '我：（空消息）',
+            tone: 'danger',
+        });
     });
 
     it('调用：动作名 + 状态行 + 参数摘要', () => {
@@ -95,9 +133,16 @@ describe('listRowOf', () => {
             summary: 'group_id=100001',
             raw: {},
         };
-        expect(listRowOf(item)).toEqual({ type: 'call/get_group_info', summary: '✓ 9ms · 内部通道  group_id=100001', tone: 'call' });
+        expect(listRowOf(item)).toEqual({
+            type: 'call/get_group_info',
+            summary: '✓ 9ms · 内部通道  group_id=100001',
+            tone: 'call',
+        });
         const failed = { ...item, call: call({ ok: false, retcode: 1404, wording: '群不存在' }) };
-        expect(listRowOf(failed)).toMatchObject({ summary: '✗ retcode 1404 · 群不存在  group_id=100001', tone: 'danger' });
+        expect(listRowOf(failed)).toMatchObject({
+            summary: '✗ retcode 1404 · 群不存在  group_id=100001',
+            tone: 'danger',
+        });
     });
 });
 
@@ -123,7 +168,10 @@ describe('planFill', () => {
     });
 
     it('JSON 写坏了不填，告诉用户第几行', () => {
-        expect(planFill('{\n  "group_id": ,\n}', [], ids)).toEqual({ ok: false, reason: '当前请求的 JSON 第 2 行有错，改好再填' });
+        expect(planFill('{\n  "group_id": ,\n}', [], ids)).toEqual({
+            ok: false,
+            reason: '当前请求的 JSON 第 2 行有错，改好再填',
+        });
     });
 
     it('没有能填的参数', () => {

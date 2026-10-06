@@ -56,13 +56,17 @@ export const AstrBotRuntimeGate: React.FC<{
     const Icon = look.icon;
     return (
         <div className={`flex items-center gap-3 rounded-md border px-3.5 py-3 ${look.box}`}>
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${look.well}`}>
+            <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${look.well}`}
+            >
                 <Icon size={15} />
             </span>
             <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium text-text">{look.title}</p>
                 {status.message && (
-                    <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{status.message}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">
+                        {status.message}
+                    </p>
                 )}
             </div>
             {status.gate === 'not_running' && onStart && (

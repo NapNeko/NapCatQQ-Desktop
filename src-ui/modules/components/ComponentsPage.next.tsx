@@ -1,6 +1,13 @@
 // 组件页：先选主机，再看这台机器能装啥。
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    useSyncExternalStore,
+} from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../shared/ui';
@@ -30,8 +37,15 @@ import {
     type CreateInstanceRequest,
     type ImportInstanceTarget,
 } from '../apps';
-import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
-import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
+import {
+    groupByHost,
+    type ComponentRow,
+    type MachineView,
+} from '../../core/domain/components/types';
+import {
+    componentMutationBlockedReason,
+    componentLifecycleBlockedReason,
+} from '../../core/domain/components/mutation-gate';
 import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';
 import {
     getComponentsHostBridge,
@@ -73,8 +87,11 @@ export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
     const { startAction, cancelAction, getProgressFor, onTaskTerminal } = useComponentAction();
     const { detectQqDependencies, rememberSudoPassword } = useQqDependencyOps();
-    const { snapshot: releases, refetch: refetchReleases, isFetching: releasesFetching } =
-        useReleases();
+    const {
+        snapshot: releases,
+        refetch: refetchReleases,
+        isFetching: releasesFetching,
+    } = useReleases();
     const { data: botSnapshots = [] } = useBotSnapshots();
     const botConfigs = useBotConfigsMap(botSnapshots);
 
@@ -130,12 +147,7 @@ export const ComponentsPageNext: React.FC = () => {
         }
         const stillThere = machines.some((m) => m.host.host_id === activeHostId);
         if (!stillThere) setActiveHostId(machines[0].host.host_id);
-    }, [
-        machines,
-        activeHostId,
-        hostBridge.preferredHostId,
-        hostBridge.hostSelectionLocked,
-    ]);
+    }, [machines, activeHostId, hostBridge.preferredHostId, hostBridge.hostSelectionLocked]);
 
     const activeMachine = useMemo(
         () => machines.find((m) => m.host.host_id === activeHostId) ?? machines[0] ?? null,
@@ -188,10 +200,9 @@ export const ComponentsPageNext: React.FC = () => {
         void probeQqDependencies(activeMachine.host.host_id);
     }, [activeMachine, probeQqDependencies]);
 
-    const activeQqDependencyReport =
-        activeMachine
-            ? qqDependencyByHost[activeMachine.host.host_id]?.report ?? null
-            : null;
+    const activeQqDependencyReport = activeMachine
+        ? (qqDependencyByHost[activeMachine.host.host_id]?.report ?? null)
+        : null;
 
     // 清单 / 探测 / 组件操作终态 → 全局 InfoBar（顶层 InfoBarStack 渲染）。
     useComponentPageAlerts(allRows, error, activeHostId);
@@ -355,7 +366,8 @@ export const ComponentsPageNext: React.FC = () => {
                 }
                 if (
                     componentId === 'snowluma' &&
-                    (payload.stepKind === 'ensure_installed' || payload.stepKind === 'force_install')
+                    (payload.stepKind === 'ensure_installed' ||
+                        payload.stepKind === 'force_install')
                 ) {
                     setSlPkgPrompt({
                         componentId,
@@ -385,12 +397,9 @@ export const ComponentsPageNext: React.FC = () => {
             if (!pending) return;
             setSlPkgPrompt(null);
 
-            void beginComponentAction(
-                pending.componentId,
-                pending.hostId,
-                pending.stepKind,
-                { snowlumaLinuxPackage: pkg },
-            ).catch((err) => {
+            void beginComponentAction(pending.componentId, pending.hostId, pending.stepKind, {
+                snowlumaLinuxPackage: pkg,
+            }).catch((err) => {
                 reportActionStartError(pending.componentId, pending.hostId, err);
             });
         },
@@ -398,8 +407,7 @@ export const ComponentsPageNext: React.FC = () => {
     );
 
     const lifecycleBlockedReasonForHost = useCallback(
-        (hostId: string) =>
-            componentLifecycleBlockedReason(botSnapshots, botConfigs, hostId),
+        (hostId: string) => componentLifecycleBlockedReason(botSnapshots, botConfigs, hostId),
         [botSnapshots, botConfigs],
     );
 
@@ -470,8 +478,9 @@ export const ComponentsPageNext: React.FC = () => {
             if (qqSudoPromptedTaskIds.has(taskId)) continue;
             const target = componentActionSnap.taskTargets[taskId];
             if (!target || target.componentId !== 'qq') continue;
-            const msg = [...progress.logs].reverse().find((l) => l.level === 'error')?.message
-                ?? progress.message;
+            const msg =
+                [...progress.logs].reverse().find((l) => l.level === 'error')?.message ??
+                progress.message;
             if (!msg.includes('elevation_required')) continue;
             qqSudoPromptedTaskIds.add(taskId);
             globalInfoBarStore.push({
@@ -481,12 +490,15 @@ export const ComponentsPageNext: React.FC = () => {
                 content: '安装 QQ 系统依赖需要提权，请输入密码后重试。',
                 autoDismissMs: 0,
             });
-            setSudoPrompt(p => p ?? {
-                hostId: target.hostId,
-                hostName: hostNameOf(target.hostId),
-                reason: msg,
-                purpose: 'qq_deps',
-            });
+            setSudoPrompt(
+                (p) =>
+                    p ?? {
+                        hostId: target.hostId,
+                        hostName: hostNameOf(target.hostId),
+                        reason: msg,
+                        purpose: 'qq_deps',
+                    },
+            );
             break;
         }
     }, [componentActionSnap, hostNameOf]);
@@ -632,7 +644,13 @@ export const ComponentsPageNext: React.FC = () => {
                     <SectionLoading />
                 ) : allEmpty ? (
                     <PagePlaceholder className="gap-2">
-                        <MotionIcon icon={Box} motion="none" playEnter={false} size={28} className="text-text-tertiary" />
+                        <MotionIcon
+                            icon={Box}
+                            motion="none"
+                            playEnter={false}
+                            size={28}
+                            className="text-text-tertiary"
+                        />
                         <p className="text-sm text-text-secondary">没有可管理的组件</p>
                         <p className="text-xs text-text-tertiary">请检查远端连接或刷新组件清单</p>
                     </PagePlaceholder>
@@ -654,8 +672,12 @@ export const ComponentsPageNext: React.FC = () => {
                         )}
                         qqDependencyReport={activeQqDependencyReport}
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
-                        isDockerProbing={dockerHosts.probingByHost[activeMachine.host.host_id] ?? false}
-                        isInstallingDocker={dockerHosts.installingByHost[activeMachine.host.host_id] ?? false}
+                        isDockerProbing={
+                            dockerHosts.probingByHost[activeMachine.host.host_id] ?? false
+                        }
+                        isInstallingDocker={
+                            dockerHosts.installingByHost[activeMachine.host.host_id] ?? false
+                        }
                         dockerInstallHint={
                             dockerHosts.installHintByHost[activeMachine.host.host_id]
                         }
@@ -684,9 +706,7 @@ export const ComponentsPageNext: React.FC = () => {
                     if (!open) setReleaseNotesTarget(null);
                 }}
                 componentLabel={releaseNotesLabel(releaseNotesTarget)}
-                release={
-                    releaseNotesTarget ? latestReleaseFor(releaseNotesTarget) : null
-                }
+                release={releaseNotesTarget ? latestReleaseFor(releaseNotesTarget) : null}
             />
 
             <SnowLumaPackageDialog
@@ -742,7 +762,9 @@ export const ComponentsPageNext: React.FC = () => {
                         install_renderer: createAppRequest?.manifest.has_install_renderer
                             ? draft.installRenderer
                             : undefined,
-                        webui_username: userPassword ? draft.webuiUsername.trim() || undefined : undefined,
+                        webui_username: userPassword
+                            ? draft.webuiUsername.trim() || undefined
+                            : undefined,
                         webui_password: userPassword ? draft.webuiPassword || undefined : undefined,
                         // 新建实例默认不随桌面端启动，要的话到详情页打开
                         auto_start: false,
@@ -760,7 +782,9 @@ export const ComponentsPageNext: React.FC = () => {
                             draft.installNow
                                 ? '安装进度见任务队列；装好后到「应用端」页启动并对接协议 Bot。'
                                 : '实例已登记但未安装；到「应用端」页可随时安装。',
-                            userPassword && !draft.webuiPassword ? 'WebUI 密码已随机生成，见实例详情「连接」页。' : '',
+                            userPassword && !draft.webuiPassword
+                                ? 'WebUI 密码已随机生成，见实例详情「连接」页。'
+                                : '',
                         ]
                             .filter(Boolean)
                             .join(' '),
@@ -773,8 +797,8 @@ export const ComponentsPageNext: React.FC = () => {
                 <SudoPasswordDialog
                     hostName={sudoPrompt.hostName}
                     reason={
-                        sudoPrompt.reason
-                        ?? (sudoPrompt.purpose === 'qq_deps'
+                        sudoPrompt.reason ??
+                        (sudoPrompt.purpose === 'qq_deps'
                             ? '安装 QQ 系统依赖需要 sudo 权限'
                             : undefined)
                     }
@@ -793,7 +817,13 @@ export const ComponentsPageNext: React.FC = () => {
 
 const SectionLoading: React.FC = () => (
     <PagePlaceholder className="gap-2 py-12">
-        <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={16} className="text-text-tertiary" />
+        <MotionIcon
+            icon={Loader2}
+            motion="spin"
+            playEnter={false}
+            size={16}
+            className="text-text-tertiary"
+        />
         <span className="text-sm text-text-tertiary">加载中…</span>
     </PagePlaceholder>
 );

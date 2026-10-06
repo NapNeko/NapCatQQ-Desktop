@@ -12,7 +12,13 @@ import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule } from 
 // 其余页都是只读的面板数据（一个页签一个端点，状态处理见 PanelStateView）。
 // 原始文件、日志由外壳追加。
 const NAV: readonly FrameworkNavGroup[] = [
-    { id: 'home', items: [{ value: 'deploy', label: '部署' }, { value: 'overview', label: '概览' }] },
+    {
+        id: 'home',
+        items: [
+            { value: 'deploy', label: '部署' },
+            { value: 'overview', label: '概览' },
+        ],
+    },
     {
         id: 'ai',
         label: 'AI',
@@ -33,7 +39,12 @@ const FILL_PANE = new Set<string>();
 
 const PANE = 'flex min-h-0 flex-1 flex-col pt-2';
 
-function NeoBotFrameworkDetail({ instance, onOpenWebUi, onGoTab, onNavigate }: FrameworkDetailProps) {
+function NeoBotFrameworkDetail({
+    instance,
+    onOpenWebUi,
+    onGoTab,
+    onNavigate,
+}: FrameworkDetailProps) {
     const instanceId = instance.id;
     return (
         <>

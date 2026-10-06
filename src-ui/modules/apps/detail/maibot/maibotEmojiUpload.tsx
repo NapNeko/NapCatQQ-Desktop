@@ -44,12 +44,19 @@ export const EmojiUploadDialog: React.FC<{
                         key={f.path}
                         className={cn(
                             'group relative flex flex-col overflow-hidden rounded-md border',
-                            f.problem ? 'border-danger/40 bg-danger-soft/40' : 'border-border-subtle bg-surface',
+                            f.problem
+                                ? 'border-danger/40 bg-danger-soft/40'
+                                : 'border-border-subtle bg-surface',
                         )}
                     >
                         <div className="flex aspect-square items-center justify-center bg-field p-1.5">
                             {f.preview ? (
-                                <img src={f.preview} alt="" draggable={false} className="h-full w-full object-contain" />
+                                <img
+                                    src={f.preview}
+                                    alt=""
+                                    draggable={false}
+                                    className="h-full w-full object-contain"
+                                />
                             ) : (
                                 <ImagePlus size={20} className="text-text-disabled" />
                             )}
@@ -58,7 +65,15 @@ export const EmojiUploadDialog: React.FC<{
                             <p className="truncate text-2xs text-text" title={f.name}>
                                 {f.name}
                             </p>
-                            <p className={cn('text-2xs', f.problem ? 'line-clamp-2 text-danger' : 'truncate text-text-tertiary')} title={f.problem}>
+                            <p
+                                className={cn(
+                                    'text-2xs',
+                                    f.problem
+                                        ? 'line-clamp-2 text-danger'
+                                        : 'truncate text-text-tertiary',
+                                )}
+                                title={f.problem}
+                            >
                                 {f.problem ?? formatSize(f.size)}
                             </p>
                         </div>
@@ -104,7 +119,10 @@ export const EmojiDropOverlay: React.FC<{ visible: boolean }> = ({ visible }) =>
         </div>
     ) : null;
 
-export const UploadButton: React.FC<{ onClick: () => void; busy?: boolean }> = ({ onClick, busy }) => (
+export const UploadButton: React.FC<{ onClick: () => void; busy?: boolean }> = ({
+    onClick,
+    busy,
+}) => (
     <Button size="sm" variant="secondary" disabled={busy} onClick={onClick}>
         <Upload size={13} />
         上传

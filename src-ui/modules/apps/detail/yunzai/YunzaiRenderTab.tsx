@@ -11,9 +11,15 @@ import type { YunzaiTabProps } from './YunzaiBasicTab';
 const AUTO = '__auto__';
 const RENDERER_ITEMS = YUNZAI_RENDERERS.map((r) => ({ value: r.value || AUTO, label: r.label }));
 
-export const YunzaiRenderTab: React.FC<YunzaiTabProps> = ({ config, onChange, errors, disabled }) => {
+export const YunzaiRenderTab: React.FC<YunzaiTabProps> = ({
+    config,
+    onChange,
+    errors,
+    disabled,
+}) => {
     const bot = config.bot;
-    const setBot = (patch: Partial<YunzaiBotConfig>) => onChange({ ...config, bot: { ...bot, ...patch } });
+    const setBot = (patch: Partial<YunzaiBotConfig>) =>
+        onChange({ ...config, bot: { ...bot, ...patch } });
 
     return (
         <ConfigForm>
@@ -25,7 +31,9 @@ export const YunzaiRenderTab: React.FC<YunzaiTabProps> = ({ config, onChange, er
                     items={RENDERER_ITEMS}
                     value={config.renderer.name || AUTO}
                     disabled={disabled}
-                    onValueChange={(v) => onChange({ ...config, renderer: { name: v === AUTO ? '' : v } })}
+                    onValueChange={(v) =>
+                        onChange({ ...config, renderer: { name: v === AUTO ? '' : v } })
+                    }
                 />
             </FormSection>
 

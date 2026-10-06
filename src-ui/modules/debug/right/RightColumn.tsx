@@ -6,7 +6,16 @@
 // 筛选、暂停、选中的气泡、打开的详情都是界面状态，放在这里；换 Bot 时整块按 Bot 重新挂（key），各管各的。
 // 筛选条件跨 Bot 保留（记在模块里），收起右栏再展开也还在。
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+    memo,
+    useCallback,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
 import { MessagesSquare, RotateCw } from 'lucide-react';
 import { Button, Dialog, DialogContent, DialogTitle } from '../../../shared/ui';
 import {
@@ -23,8 +32,17 @@ import {
 } from '../../../hooks/debug/debugWorkspaceStore';
 import { useDebugActionSpec } from '../../../hooks/debug/useDebugCatalog';
 import { useOpenExternal } from '../../../hooks/useOpenExternal';
-import { MAX_CHAT_ITEMS, type ChatItem, type ChatState, type SessionKey } from '../../../core/domain/debug/chat';
-import { DEFAULT_CHAT_FILTER, filterItems, type ChatFilter } from '../../../core/domain/debug/chatFilter';
+import {
+    MAX_CHAT_ITEMS,
+    type ChatItem,
+    type ChatState,
+    type SessionKey,
+} from '../../../core/domain/debug/chat';
+import {
+    DEFAULT_CHAT_FILTER,
+    filterItems,
+    type ChatFilter,
+} from '../../../core/domain/debug/chatFilter';
 import { messagePreview } from '../../../core/domain/debug/segments';
 import { buildFormModel, type FormField } from '../../../core/domain/debug/schemaForm';
 import { targetDisplayName } from '../../../core/domain/debug/targetGroups';
@@ -32,7 +50,13 @@ import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChan
 import type { DebugChatView } from '../../../core/ipc/generated/debug/DebugChatView';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import { ChatViewContext, type ChatViewApi } from './chatContext';
-import { idsOfItem, parseSessionKey, planFill, type FillPlan, type MessageItem } from '../../../core/domain/debug/chatFormat';
+import {
+    idsOfItem,
+    parseSessionKey,
+    planFill,
+    type FillPlan,
+    type MessageItem,
+} from '../../../core/domain/debug/chatFormat';
 import { callProblem } from '../../../core/domain/debug/errorCopy';
 import { handleRequestCall } from '../../../core/domain/debug/requestHandling';
 import { useDebugCall } from '../../../hooks/debug/useDebugCall';
@@ -113,7 +137,8 @@ function lazyIndex<V>(build: (items: readonly ChatItem[]) => Map<number, V>) {
 
 const messageIndex = lazyIndex<MessageItem>((items) => {
     const map = new Map<number, MessageItem>();
-    for (const it of items) if (it.kind === 'message' && it.messageId !== undefined) map.set(it.messageId, it);
+    for (const it of items)
+        if (it.kind === 'message' && it.messageId !== undefined) map.set(it.messageId, it);
     return map;
 });
 
@@ -142,10 +167,15 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
         setKinds(k);
         setShowHeartbeat(hb);
     }, []);
-    const resetFilter = useCallback(() => onKindsChange(DEFAULT_CHAT_FILTER.kinds, DEFAULT_CHAT_FILTER.showHeartbeat), [onKindsChange]);
+    const resetFilter = useCallback(
+        () => onKindsChange(DEFAULT_CHAT_FILTER.kinds, DEFAULT_CHAT_FILTER.showHeartbeat),
+        [onKindsChange],
+    );
     const filterActive =
         showHeartbeat !== DEFAULT_CHAT_FILTER.showHeartbeat ||
-        (Object.keys(kinds) as Array<keyof KindFilter>).some((k) => kinds[k] !== DEFAULT_CHAT_FILTER.kinds[k]);
+        (Object.keys(kinds) as Array<keyof KindFilter>).some(
+            (k) => kinds[k] !== DEFAULT_CHAT_FILTER.kinds[k],
+        );
 
     // ---- 暂停：画面停在按下那一刻，store 照常收
     const [frozen, setFrozen] = useState<{ items: ChatItem[]; lastSeq: number } | null>(null);
@@ -190,7 +220,10 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     // 重启后那些「更早的」其实还在时间线上，那样算会误报「已丢弃」
     const first = chat.items[0];
     const localDropped = chat.items.length >= MAX_CHAT_ITEMS && first ? first.seq - 1 : 0;
-    const trimmed = Math.max(0, Math.max(receiver.unseenDropped, localDropped) - (clearedAt.get(botId) ?? 0));
+    const trimmed = Math.max(
+        0,
+        Math.max(receiver.unseenDropped, localDropped) - (clearedAt.get(botId) ?? 0),
+    );
 
     // ---- 换到某个会话：「全部」里定下的发往会话作废；不属于新会话的回复也作废
     useEffect(() => {
@@ -204,18 +237,25 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     chatRef.current = chat;
     const selfName = targetDisplayName(target);
     const selfRef = useRef({ id: target.qq_id > 0 ? target.qq_id : undefined, name: selfName });
-    selfRef.current = { id: chat.selfId ?? (target.qq_id > 0 ? target.qq_id : undefined), name: selfName };
+    selfRef.current = {
+        id: chat.selfId ?? (target.qq_id > 0 ? target.qq_id : undefined),
+        name: selfName,
+    };
     // 请求卡片的「同意 / 拒绝」：发调用要看当下的 Bot 和通道，记 ref 不记在 memo 依赖里
     const botRef = useRef({ id: target.bot_id, name: selfName });
     botRef.current = { id: target.bot_id, name: selfName };
     const callChannelRef = useRef(callChannel);
     callChannelRef.current = callChannel;
-    const targetRef = useRef(target); targetRef.current = target;
+    const targetRef = useRef(target);
+    targetRef.current = target;
     const { send: sendCall } = useDebugCall();
 
     const activeTab = useActiveDebugTab();
     const spec = useDebugActionSpec(target, activeTab?.action ? activeTab.action : null);
-    const fields = useMemo(() => (spec.data ? buildFormModel(spec.data.params_schema).fields : NO_FIELDS), [spec.data]);
+    const fields = useMemo(
+        () => (spec.data ? buildFormModel(spec.data.params_schema).fields : NO_FIELDS),
+        [spec.data],
+    );
     const tabRef = useRef(activeTab);
     tabRef.current = activeTab;
     const fieldsRef = useRef(fields);
@@ -238,10 +278,16 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     const expanded = useRef(new Set<string>());
 
     const api = useMemo<ChatViewApi>(() => {
-        const media = createChatMediaService((_botId, action, params) => sendCall(null, {
-            bot_id: botRef.current.id, channel: callChannelRef.current,
-            action, params, timeout_ms: 30_000, origin: 'picker',
-        }));
+        const media = createChatMediaService((_botId, action, params) =>
+            sendCall(null, {
+                bot_id: botRef.current.id,
+                channel: callChannelRef.current,
+                action,
+                params,
+                timeout_ms: 30_000,
+                origin: 'picker',
+            }),
+        );
         const previewFill = (item: ChatItem): FillPlan => {
             const tab = tabRef.current;
             if (!tab) return { ok: false, reason: '中间还没有打开请求标签' };
@@ -308,16 +354,24 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     }, [openExternal, sendCall]);
 
     // ---- 输入框发往哪、回复谁
-    const composerSessionKey = activeSession !== 'all' ? activeSession : (sendSession ?? replyTo?.session ?? null);
+    const composerSessionKey =
+        activeSession !== 'all' ? activeSession : (sendSession ?? replyTo?.session ?? null);
     const parsedSession = composerSessionKey ? parseSessionKey(composerSessionKey) : null;
     const composerName = composerSessionKey
         ? (chat.sessions[composerSessionKey]?.name ??
-          (parsedSession?.type === 'group' ? `群 ${parsedSession.id}` : String(parsedSession?.id ?? '')))
+          (parsedSession?.type === 'group'
+              ? `群 ${parsedSession.id}`
+              : String(parsedSession?.id ?? '')))
         : '';
     const composerTo = useMemo<ComposerTarget | null>(
         () =>
             composerSessionKey && parsedSession
-                ? { session: composerSessionKey, type: parsedSession.type, id: parsedSession.id, name: composerName }
+                ? {
+                      session: composerSessionKey,
+                      type: parsedSession.type,
+                      id: parsedSession.id,
+                      name: composerName,
+                  }
                 : null,
         // parsedSession 由 composerSessionKey 决定
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,7 +380,11 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     const reply = useMemo<ComposerReply | null>(
         () =>
             replyTo && replyTo.messageId !== undefined && replyTo.session === composerSessionKey
-                ? { messageId: replyTo.messageId, senderName: replyTo.senderName, preview: replyTo.preview }
+                ? {
+                      messageId: replyTo.messageId,
+                      senderName: replyTo.senderName,
+                      preview: replyTo.preview,
+                  }
                 : null,
         [replyTo, composerSessionKey],
     );
@@ -344,12 +402,23 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     // ---- 接收（「重新接收」是用户的明确意图，走能解除手动停止标记的那条路）
     const stopReceiving = useCallback(() => debugEventStore.stopReceiving(botId), [botId]);
     const restartReceiving = useCallback(
-        () => debugEventStore.restartReceiving(botId, eventsChannel, target.qq_id > 0 ? target.qq_id : undefined),
+        () =>
+            debugEventStore.restartReceiving(
+                botId,
+                eventsChannel,
+                target.qq_id > 0 ? target.qq_id : undefined,
+            ),
         [botId, eventsChannel, target.qq_id],
     );
 
-    const setView = useCallback((v: DebugChatView) => debugWorkspaceStore.setLayout({ right_view: v }), []);
-    const selectSession = useCallback((key: SessionKey | 'all') => debugEventStore.setActiveSession(botId, key), [botId]);
+    const setView = useCallback(
+        (v: DebugChatView) => debugWorkspaceStore.setLayout({ right_view: v }),
+        [],
+    );
+    const selectSession = useCallback(
+        (key: SessionKey | 'all') => debugEventStore.setActiveSession(botId, key),
+        [botId],
+    );
 
     const resetToken = `${activeSession}|${resumes}|${clears}`;
     const filterToken = `${Object.values(kinds).join('')}|${showHeartbeat}|${deferredSearch}`;
@@ -374,7 +443,12 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 </EmptyNote>
             );
         } else if (!running) {
-            empty = <EmptyNote title="Bot 没在运行" hint="启动之后，收到的消息、通知和调用会出现在这里。" />;
+            empty = (
+                <EmptyNote
+                    title="Bot 没在运行"
+                    hint="启动之后，收到的消息、通知和调用会出现在这里。"
+                />
+            );
         } else if (stopped && receiver.state?.state === 'stopped') {
             empty = (
                 <EmptyNote title="接收已停止" hint={receiver.state.reason || undefined}>
@@ -385,11 +459,18 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 </EmptyNote>
             );
         } else {
-            empty = <EmptyNote title="还没有事件" hint="群里说句话，或者在中间发个请求试试；新事件会从下面冒出来。" />;
+            empty = (
+                <EmptyNote
+                    title="还没有事件"
+                    hint="群里说句话，或者在中间发个请求试试；新事件会从下面冒出来。"
+                />
+            );
         }
     }
 
-    const pausedBar = frozen ? <PausedPill pending={Math.max(0, chat.lastSeq - frozen.lastSeq)} onResume={togglePause} /> : null;
+    const pausedBar = frozen ? (
+        <PausedPill pending={Math.max(0, chat.lastSeq - frozen.lastSeq)} onResume={togglePause} />
+    ) : null;
 
     return (
         <ChatViewContext.Provider value={api}>
@@ -414,7 +495,11 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                     onStopReceiving={stopReceiving}
                     onRestartReceiving={restartReceiving}
                 />
-                <SessionStrip sessions={chat.sessions} active={activeSession} onSelect={selectSession} />
+                <SessionStrip
+                    sessions={chat.sessions}
+                    active={activeSession}
+                    onSelect={selectSession}
+                />
                 {view === 'chat' ? (
                     <ChatTimeline
                         botId={botId}
@@ -458,12 +543,26 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 )}
             </div>
             <EventDetailPopover target={detail} onClose={() => setDetail(null)} />
-            {lightboxUsed && <ImageLightbox url={lightbox} onClose={() => setLightbox(null)} onOpenLink={openExternal} />}
+            {lightboxUsed && (
+                <ImageLightbox
+                    url={lightbox}
+                    onClose={() => setLightbox(null)}
+                    onOpenLink={openExternal}
+                />
+            )}
         </ChatViewContext.Provider>
     );
 }
 
-function EmptyNote({ title, hint, children }: { title: string; hint?: string; children?: ReactNode }) {
+function EmptyNote({
+    title,
+    hint,
+    children,
+}: {
+    title: string;
+    hint?: string;
+    children?: ReactNode;
+}) {
     return (
         <div className="flex max-w-[18rem] flex-col items-center gap-2 text-center">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-inset text-text-tertiary">
@@ -476,7 +575,15 @@ function EmptyNote({ title, hint, children }: { title: string; hint?: string; ch
     );
 }
 
-function ImageLightbox({ url, onClose, onOpenLink }: { url: string | null; onClose: () => void; onOpenLink: (url: string) => void }) {
+function ImageLightbox({
+    url,
+    onClose,
+    onOpenLink,
+}: {
+    url: string | null;
+    onClose: () => void;
+    onOpenLink: (url: string) => void;
+}) {
     const web = !!url && /^https?:/i.test(url);
     return (
         <Dialog open={url !== null} onOpenChange={(open) => !open && onClose()}>
@@ -492,7 +599,13 @@ function ImageLightbox({ url, onClose, onOpenLink }: { url: string | null; onClo
                         />
                         {web && (
                             <div className="flex gap-2">
-                                <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(url).catch(() => {})}>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() =>
+                                        void navigator.clipboard?.writeText(url).catch(() => {})
+                                    }
+                                >
                                     复制图片地址
                                 </Button>
                                 <Button size="sm" variant="ghost" onClick={() => onOpenLink(url)}>

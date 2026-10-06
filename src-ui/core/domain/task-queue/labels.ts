@@ -65,8 +65,7 @@ export function dockerInstallTitle(hostLabel: string): string {
 
 export function dockerDeployTitle(hostLabel: string, flavor?: string): string {
     const label = hostLabel?.trim() || '远程主机';
-    const fw =
-        flavor === 'napcat' ? 'NapCat' : flavor === 'snowluma' ? 'SnowLuma' : flavor?.trim();
+    const fw = flavor === 'napcat' ? 'NapCat' : flavor === 'snowluma' ? 'SnowLuma' : flavor?.trim();
     if (fw) return `拉取镜像 · ${fw} · ${label}`;
     return `拉取镜像 · ${label}`;
 }
@@ -75,7 +74,13 @@ export function appPluginTitle(action: string, pluginName: string, fallback: str
     const trimmed = fallback?.trim();
     if (trimmed) return trimmed;
     const verb =
-        action === 'install' ? '安装' : action === 'update' ? '更新' : action === 'uninstall' ? '卸载' : action;
+        action === 'install'
+            ? '安装'
+            : action === 'update'
+              ? '更新'
+              : action === 'uninstall'
+                ? '卸载'
+                : action;
     const name = pluginName?.trim();
     if (name) return `${verb} ${name}`;
     return verb;

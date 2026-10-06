@@ -1,12 +1,33 @@
 // 会话规则按会话分组，六个上游认的键各自有结构化编辑；配置档案这里只建 / 删，内容和绑定去 WebUI。
 
 import { useMemo, useState } from 'react';
-import { ChevronRight, ExternalLink, FileSliders, MessagesSquare, Plus, SlidersHorizontal, Trash2, Users } from 'lucide-react';
-import { Badge, Button, Card, FormSection, Select, Switch, SyntaxTextEditor, TextField } from '../../../../shared/ui';
+import {
+    ChevronRight,
+    ExternalLink,
+    FileSliders,
+    MessagesSquare,
+    Plus,
+    SlidersHorizontal,
+    Trash2,
+    Users,
+} from 'lucide-react';
+import {
+    Badge,
+    Button,
+    Card,
+    FormSection,
+    Select,
+    Switch,
+    SyntaxTextEditor,
+    TextField,
+} from '../../../../shared/ui';
 import { ConfigForm } from '../karin/configLayout';
 import { AstrBotRuntimeGate, dashboardReady } from './AstrBotRuntimeGate';
 import { ConfirmDelete, EmptyHint, EntityRow, FormDialog } from './parts';
-import { useAstrBotAbconfs, useAstrBotSessionRules } from '../../../../hooks/apps/useAstrBotDashboard';
+import {
+    useAstrBotAbconfs,
+    useAstrBotSessionRules,
+} from '../../../../hooks/apps/useAstrBotDashboard';
 import {
     ASTRBOT_SESSION_RULE_KEYS,
     enabledChatModels,
@@ -55,10 +76,18 @@ function badJson(text: string): boolean {
 }
 
 /** `aiocqhttp:GroupMessage:123456` → 平台 / 类型 / 会话号 */
-function parseUmo(umo: string): { platform: string; kind: 'group' | 'friend' | 'other'; id: string } {
+function parseUmo(umo: string): {
+    platform: string;
+    kind: 'group' | 'friend' | 'other';
+    id: string;
+} {
     const [platform = '', type = '', ...rest] = umo.split(':');
     const t = type.toLowerCase();
-    const kind = t.includes('group') ? 'group' : t.includes('friend') || t.includes('private') ? 'friend' : 'other';
+    const kind = t.includes('group')
+        ? 'group'
+        : t.includes('friend') || t.includes('private')
+          ? 'friend'
+          : 'other';
     return { platform, kind, id: rest.join(':') };
 }
 
@@ -122,7 +151,11 @@ export const AstrBotRulesTab: React.FC<{
     const openCreate = (umo = '') =>
         setDraft({
             mode: 'create',
-            rule: { umo, rule_key: 'session_service_config', rule_json: DEFAULT_JSON.session_service_config },
+            rule: {
+                umo,
+                rule_key: 'session_service_config',
+                rule_json: DEFAULT_JSON.session_service_config,
+            },
         });
 
     const addButton = (
@@ -152,7 +185,11 @@ export const AstrBotRulesTab: React.FC<{
                 {sessions.length === 0 ? (
                     <EmptyHint
                         icon={SlidersHorizontal}
-                        title={ready ? '还没有会话规则，所有会话都用通用配置' : '连上控制台后可以管理会话规则'}
+                        title={
+                            ready
+                                ? '还没有会话规则，所有会话都用通用配置'
+                                : '连上控制台后可以管理会话规则'
+                        }
                         action={ready ? addButton : undefined}
                     />
                 ) : (
@@ -161,7 +198,9 @@ export const AstrBotRulesTab: React.FC<{
                             const u = parseUmo(umo);
                             const Icon = u.kind === 'group' ? Users : MessagesSquare;
                             const usedKeys = new Set(items.map((r) => r.rule_key));
-                            const canAddMore = ASTRBOT_SESSION_RULE_KEYS.some((k) => !usedKeys.has(k));
+                            const canAddMore = ASTRBOT_SESSION_RULE_KEYS.some(
+                                (k) => !usedKeys.has(k),
+                            );
                             return (
                                 <Card key={umo} variant="outlined" padding="none">
                                     <div className="flex items-center gap-3 px-4 py-2.5">
@@ -169,23 +208,39 @@ export const AstrBotRulesTab: React.FC<{
                                             <Icon size={15} />
                                         </span>
                                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                                            <p className="truncate font-mono text-[13px] font-medium text-text" title={umo}>
+                                            <p
+                                                className="truncate font-mono text-[13px] font-medium text-text"
+                                                title={umo}
+                                            >
                                                 {u.id || umo}
                                             </p>
                                             {u.kind !== 'other' && (
-                                                <Badge tone="neutral">{u.kind === 'group' ? '群' : '私聊'}</Badge>
+                                                <Badge tone="neutral">
+                                                    {u.kind === 'group' ? '群' : '私聊'}
+                                                </Badge>
                                             )}
-                                            {u.platform && <Badge tone="info" className="font-mono">{u.platform}</Badge>}
+                                            {u.platform && (
+                                                <Badge tone="info" className="font-mono">
+                                                    {u.platform}
+                                                </Badge>
+                                            )}
                                         </div>
                                         <Button
                                             size="sm"
                                             variant="ghost"
                                             disabled={!ready || !canAddMore}
                                             onClick={() => {
-                                                const key = ASTRBOT_SESSION_RULE_KEYS.find((k) => !usedKeys.has(k)) ?? 'session_service_config';
+                                                const key =
+                                                    ASTRBOT_SESSION_RULE_KEYS.find(
+                                                        (k) => !usedKeys.has(k),
+                                                    ) ?? 'session_service_config';
                                                 setDraft({
                                                     mode: 'create',
-                                                    rule: { umo, rule_key: key, rule_json: DEFAULT_JSON[key] },
+                                                    rule: {
+                                                        umo,
+                                                        rule_key: key,
+                                                        rule_json: DEFAULT_JSON[key],
+                                                    },
                                                 });
                                             }}
                                         >
@@ -194,19 +249,31 @@ export const AstrBotRulesTab: React.FC<{
                                     </div>
                                     <div className="flex flex-col divide-y divide-border-subtle/70 border-t border-border-subtle">
                                         {items.map((r) => (
-                                            <div key={r.rule_key} className="group flex items-center gap-3 px-4 py-2 transition-colors hover:bg-inset/30">
+                                            <div
+                                                key={r.rule_key}
+                                                className="group flex items-center gap-3 px-4 py-2 transition-colors hover:bg-inset/30"
+                                            >
                                                 <button
                                                     type="button"
                                                     className="min-w-0 flex-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-default"
                                                     disabled={!ready}
-                                                    onClick={() => setDraft({ mode: 'edit', rule: r })}
+                                                    onClick={() =>
+                                                        setDraft({ mode: 'edit', rule: r })
+                                                    }
                                                 >
                                                     <span className="block text-[13px] text-text">
-                                                        {isKnownSessionRuleKey(r.rule_key) ? RULE_LABEL[r.rule_key] : (
-                                                            <span className="font-mono">{r.rule_key}</span>
+                                                        {isKnownSessionRuleKey(r.rule_key) ? (
+                                                            RULE_LABEL[r.rule_key]
+                                                        ) : (
+                                                            <span className="font-mono">
+                                                                {r.rule_key}
+                                                            </span>
                                                         )}
                                                     </span>
-                                                    <span className="block truncate font-mono text-xs text-text-tertiary" title={r.rule_json}>
+                                                    <span
+                                                        className="block truncate font-mono text-xs text-text-tertiary"
+                                                        title={r.rule_json}
+                                                    >
                                                         {summarize(r)}
                                                     </span>
                                                 </button>
@@ -221,7 +288,10 @@ export const AstrBotRulesTab: React.FC<{
                                                     >
                                                         <Trash2 size={13} />
                                                     </Button>
-                                                    <ChevronRight size={14} className="ml-1 text-text-disabled transition-colors group-hover:text-text-secondary" />
+                                                    <ChevronRight
+                                                        size={14}
+                                                        className="ml-1 text-text-disabled transition-colors group-hover:text-text-secondary"
+                                                    />
                                                 </div>
                                             </div>
                                         ))}
@@ -238,10 +308,20 @@ export const AstrBotRulesTab: React.FC<{
                 description="桌面端只编辑默认档案。其它档案的内容、以及哪个会话用哪份档案，在 WebUI 里改"
                 actions={
                     <>
-                        <Button size="sm" variant="ghost" disabled={!ready} onClick={() => onOpenWebUi('/config')}>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!ready}
+                            onClick={() => onOpenWebUi('/config')}
+                        >
                             <ExternalLink size={12} /> WebUI
                         </Button>
-                        <Button size="sm" variant="ghost" disabled={!ready} onClick={() => setName('')}>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!ready}
+                            onClick={() => setName('')}
+                        >
                             <Plus size={12} /> 新建
                         </Button>
                     </>
@@ -263,7 +343,9 @@ export const AstrBotRulesTab: React.FC<{
                                     a.id === 'default' ? (
                                         <Badge tone="brand">桌面端在编辑</Badge>
                                     ) : (
-                                        <Badge tone="neutral" className="font-mono">{a.id}</Badge>
+                                        <Badge tone="neutral" className="font-mono">
+                                            {a.id}
+                                        </Badge>
                                     )
                                 }
                                 actions={
@@ -365,12 +447,16 @@ const RuleDialog: React.FC<{
     const rule = draft?.rule;
     const creating = draft?.mode === 'create';
     const umos = useMemo(() => [...new Set(existing.map((r) => r.umo))], [existing]);
-    const usedKeys = new Set(existing.filter((r) => r.umo === rule?.umo.trim()).map((r) => r.rule_key));
+    const usedKeys = new Set(
+        existing.filter((r) => r.umo === rule?.umo.trim()).map((r) => r.rule_key),
+    );
     const knownKey = !!rule && isKnownSessionRuleKey(rule.rule_key);
-    const structured = knownKey && rule.rule_key !== 'kb_config' && rule.rule_key !== 'session_plugin_config';
+    const structured =
+        knownKey && rule.rule_key !== 'kb_config' && rule.rule_key !== 'session_plugin_config';
     const invalid = !!rule && !structured && badJson(rule.rule_json);
     const duplicate = creating && !!rule && usedKeys.has(rule.rule_key);
-    const canSave = !!rule && !!rule.umo.trim() && !!rule.rule_key && !invalid && !duplicate && !busy;
+    const canSave =
+        !!rule && !!rule.umo.trim() && !!rule.rule_key && !invalid && !duplicate && !busy;
 
     const keyItems = ASTRBOT_SESSION_RULE_KEYS.map((k) => ({
         value: k as string,
@@ -397,11 +483,17 @@ const RuleDialog: React.FC<{
                 className="font-mono"
                 placeholder="aiocqhttp:GroupMessage:123456"
                 list="astrbot-rule-umos"
-                hint={creating ? '平台:消息类型:会话号；群是 GroupMessage，私聊是 FriendMessage' : undefined}
+                hint={
+                    creating
+                        ? '平台:消息类型:会话号；群是 GroupMessage，私聊是 FriendMessage'
+                        : undefined
+                }
                 onValueChange={(umo) => onChange({ ...rule, umo })}
             />
             <datalist id="astrbot-rule-umos">
-                {umos.map((u) => <option key={u} value={u} />)}
+                {umos.map((u) => (
+                    <option key={u} value={u} />
+                ))}
             </datalist>
             <Select
                 label="规则"
@@ -417,7 +509,11 @@ const RuleDialog: React.FC<{
                     })
                 }
             />
-            <RuleValueEditor rule={rule} config={config} onChange={(rule_json) => onChange({ ...rule, rule_json })} />
+            <RuleValueEditor
+                rule={rule}
+                config={config}
+                onChange={(rule_json) => onChange({ ...rule, rule_json })}
+            />
         </FormDialog>
     );
 };
@@ -433,9 +529,21 @@ const RuleValueEditor: React.FC<{
         return (
             <div className="flex flex-col gap-3 rounded-md border border-border-subtle bg-inset/40 p-3">
                 <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                    <Switch label="会话" checked={c.session_enabled} onCheckedChange={(v) => patch({ session_enabled: v })} />
-                    <Switch label="大模型" checked={c.llm_enabled} onCheckedChange={(v) => patch({ llm_enabled: v })} />
-                    <Switch label="语音合成" checked={c.tts_enabled} onCheckedChange={(v) => patch({ tts_enabled: v })} />
+                    <Switch
+                        label="会话"
+                        checked={c.session_enabled}
+                        onCheckedChange={(v) => patch({ session_enabled: v })}
+                    />
+                    <Switch
+                        label="大模型"
+                        checked={c.llm_enabled}
+                        onCheckedChange={(v) => patch({ llm_enabled: v })}
+                    />
+                    <Switch
+                        label="语音合成"
+                        checked={c.tts_enabled}
+                        onCheckedChange={(v) => patch({ tts_enabled: v })}
+                    />
                 </div>
                 <TextField
                     label="备注名"
@@ -457,11 +565,14 @@ const RuleValueEditor: React.FC<{
                 ? enabledChatModels(config)
                 : modelsOfType(
                       config,
-                      rule.rule_key === 'provider_perf_speech_to_text' ? 'speech_to_text' : 'text_to_speech',
+                      rule.rule_key === 'provider_perf_speech_to_text'
+                          ? 'speech_to_text'
+                          : 'text_to_speech',
                   );
         const current = parseJsonString(rule.rule_json);
         const items = pool.map((m) => ({ value: m.id, label: m.model || m.id }));
-        if (current && !items.some((i) => i.value === current)) items.unshift({ value: current, label: current });
+        if (current && !items.some((i) => i.value === current))
+            items.unshift({ value: current, label: current });
         return (
             <Select
                 label="用哪个"

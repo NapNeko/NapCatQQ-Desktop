@@ -28,7 +28,11 @@ export interface ExportChannel {
     tokenHint: string | null;
 }
 
-const placeholder = (label: string, reason: string, tokenHint: string | null = null): ExportChannel => ({
+const placeholder = (
+    label: string,
+    reason: string,
+    tokenHint: string | null = null,
+): ExportChannel => ({
     label,
     baseUrl: PLACEHOLDER_BASE,
     placeholderReason: reason,
@@ -52,15 +56,24 @@ function httpBaseOf(endpoint: string): string {
  * 片段按哪条通道生成。`resolved` 是「自动」落定后真正要用的通道（null = 现在没有可用的）；
  * `info` 是通道列表里那一项（找不到说明配置已经改了）。
  */
-export function exportChannelOf(resolved: DebugChannelId | null, info: DebugChannelInfo | null): ExportChannel {
+export function exportChannelOf(
+    resolved: DebugChannelId | null,
+    info: DebugChannelInfo | null,
+): ExportChannel {
     if (resolved === null) {
-        return placeholder('（没有可用通道）', '现在没有可用的调用通道；地址是占位，换成你的 HTTP 服务地址后再用');
+        return placeholder(
+            '（没有可用通道）',
+            '现在没有可用的调用通道；地址是占位，换成你的 HTTP 服务地址后再用',
+        );
     }
     const hint = info?.token_hint ?? null;
     switch (resolved.kind) {
         case 'auto':
             // 落定前被拦在 null 分支了；真走到这里说明数据前后不一致，同样按占位处理
-            return placeholder('自动', '现在没有可用的调用通道；地址是占位，换成你的 HTTP 服务地址后再用');
+            return placeholder(
+                '自动',
+                '现在没有可用的调用通道；地址是占位，换成你的 HTTP 服务地址后再用',
+            );
         case 'internal':
             return placeholder(
                 '内部通道',
@@ -80,15 +93,25 @@ export function exportChannelOf(resolved: DebugChannelId | null, info: DebugChan
                 return {
                     label,
                     baseUrl: `http://127.0.0.1:${info.status.local_port}${tunneledPath(info.endpoint)}`,
-                    placeholderReason: '通道走 SSH 隧道：地址是此刻的本地转发口，隧道重开后端口可能变',
+                    placeholderReason:
+                        '通道走 SSH 隧道：地址是此刻的本地转发口，隧道重开后端口可能变',
                     tokenHint: hint,
                 };
             }
             // 直连的：endpoint 就是 host:port/path
             if (info?.endpoint && !info.endpoint.includes('→')) {
-                return { label, baseUrl: httpBaseOf(info.endpoint), placeholderReason: null, tokenHint: hint };
+                return {
+                    label,
+                    baseUrl: httpBaseOf(info.endpoint),
+                    placeholderReason: null,
+                    tokenHint: hint,
+                };
             }
-            return placeholder(label, '这条 HTTP 通道现在拿不到地址；地址是占位，换成你的 HTTP 服务地址', hint);
+            return placeholder(
+                label,
+                '这条 HTTP 通道现在拿不到地址；地址是占位，换成你的 HTTP 服务地址',
+                hint,
+            );
         }
     }
 }
@@ -141,7 +164,11 @@ function jsSnippet(url: string, bearer: string | null, params: Record<string, un
     return lines.join('\n');
 }
 
-function pythonSnippet(url: string, bearer: string | null, params: Record<string, unknown>): string {
+function pythonSnippet(
+    url: string,
+    bearer: string | null,
+    params: Record<string, unknown>,
+): string {
     // 紧凑 JSON 塞进单引号字面量：先保反斜杠（JSON 里的 \n 不能被 Python 吃掉），再转义单引号
     const compact = JSON.stringify(params).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const auth = bearer ? `,\n    headers={"Authorization": "Bearer ${bearer}"}` : '';

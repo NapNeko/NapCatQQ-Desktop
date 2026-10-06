@@ -37,8 +37,26 @@ const FACES: [string, string[]][] = [
     ['🌚', ['阴阳怪气']],
     ['🫠', ['融化', '摆烂']],
 ];
-const COLORS = ['#FFE4D6', '#FDE2F3', '#E3F2FD', '#E8F5E9', '#FFF8E1', '#EDE7F6', '#FCE4EC', '#E0F7FA'];
-const STATUS_CYCLE: MaiBotEmojiStatus[] = ['adopted', 'adopted', 'adopted', 'known', 'known', 'adopted', 'unknown', 'discarded'];
+const COLORS = [
+    '#FFE4D6',
+    '#FDE2F3',
+    '#E3F2FD',
+    '#E8F5E9',
+    '#FFF8E1',
+    '#EDE7F6',
+    '#FCE4EC',
+    '#E0F7FA',
+];
+const STATUS_CYCLE: MaiBotEmojiStatus[] = [
+    'adopted',
+    'adopted',
+    'adopted',
+    'known',
+    'known',
+    'adopted',
+    'unknown',
+    'discarded',
+];
 
 function svg(face: string, bg: string, px: number): string {
     const s = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 100 100"><rect width="100" height="100" rx="16" fill="${bg}"/><text x="50" y="57" font-size="56" text-anchor="middle" dominant-baseline="middle">${face}</text></svg>`;
@@ -78,9 +96,15 @@ function store(inst: AppInstance): Store {
 }
 
 const strip = ({ face: _f, color: _c, ...e }: Row): MaiBotEmoji => e;
-const done = (affected: number, message: string): Promise<MaiBotResourceDone> => withMockDelay({ affected, message });
+const done = (affected: number, message: string): Promise<MaiBotResourceDone> =>
+    withMockDelay({ affected, message });
 
-function move(s: Store, ids: number[], to: (r: Row) => MaiBotEmojiStatus, verb: string): Promise<MaiBotResourceDone> {
+function move(
+    s: Store,
+    ids: number[],
+    to: (r: Row) => MaiBotEmojiStatus,
+    verb: string,
+): Promise<MaiBotResourceDone> {
     const now = Date.now() / 1000;
     s.rows = s.rows.map((r) => {
         if (!ids.includes(r.id)) return r;
@@ -106,13 +130,22 @@ export const mockMaiBotEmojis = {
                 return (b.found_at ?? 0) - (a.found_at ?? 0);
             });
         const start = (Math.max(1, q.page) - 1) * q.page_size;
-        return withMockDelay({ total: rows.length, items: rows.slice(start, start + q.page_size).map(strip) });
+        return withMockDelay({
+            total: rows.length,
+            items: rows.slice(start, start + q.page_size).map(strip),
+        });
     },
 
     overview(inst: AppInstance): Promise<MaiBotEmojiOverview> {
         const s = store(inst);
         const n = (st: MaiBotEmojiStatus) => s.rows.filter((r) => r.status === st).length;
-        return withMockDelay({ total: s.rows.length, adopted: n('adopted'), known: n('known'), unknown: n('unknown'), discarded: n('discarded') });
+        return withMockDelay({
+            total: s.rows.length,
+            adopted: n('adopted'),
+            known: n('known'),
+            unknown: n('unknown'),
+            discarded: n('discarded'),
+        });
     },
 
     action(inst: AppInstance, a: MaiBotEmojiAction): Promise<MaiBotResourceDone> {
@@ -122,7 +155,16 @@ export const mockMaiBotEmojis = {
                 const tags = normalizeEmojiTags(a.tags);
                 s.rows = s.rows.map((r) =>
                     r.id === a.id
-                        ? { ...r, tags, status: r.status === 'known' || r.status === 'unknown' ? (tags.length ? 'known' : 'unknown') : r.status }
+                        ? {
+                              ...r,
+                              tags,
+                              status:
+                                  r.status === 'known' || r.status === 'unknown'
+                                      ? tags.length
+                                          ? 'known'
+                                          : 'unknown'
+                                      : r.status,
+                          }
                         : r,
                 );
                 return done(1, '标签改好了');
@@ -137,7 +179,10 @@ export const mockMaiBotEmojis = {
                 return move(s, a.ids, (r) => (r.tags.length ? 'known' : 'unknown'), '捡回');
             case 'delete':
                 s.rows = s.rows.filter((r) => !a.ids.includes(r.id));
-                return done(a.ids.length, a.ids.length > 1 ? `删掉了 ${a.ids.length} 张` : '删掉了');
+                return done(
+                    a.ids.length,
+                    a.ids.length > 1 ? `删掉了 ${a.ids.length} 张` : '删掉了',
+                );
         }
     },
 
@@ -154,7 +199,10 @@ export const mockMaiBotEmojis = {
         const result: MaiBotEmojiUploadDone = { uploaded: 0, existed: 0, failed: [] };
         for (const p of up.paths) {
             if (!isImagePath(p)) {
-                result.failed.push({ name: baseName(p), reason: '不是 PNG / JPG / GIF / WebP 图片' });
+                result.failed.push({
+                    name: baseName(p),
+                    reason: '不是 PNG / JPG / GIF / WebP 图片',
+                });
                 continue;
             }
             const [face] = FACES[s.nextId % FACES.length];
@@ -177,7 +225,11 @@ export const mockMaiBotEmojis = {
     },
 
     pickFiles(): Promise<string[]> {
-        return withMockDelay(['C:/Users/me/Pictures/表情/开心.gif', 'C:/Users/me/Pictures/表情/无语.png', 'C:/Users/me/Pictures/表情/说明.txt']);
+        return withMockDelay([
+            'C:/Users/me/Pictures/表情/开心.gif',
+            'C:/Users/me/Pictures/表情/无语.png',
+            'C:/Users/me/Pictures/表情/说明.txt',
+        ]);
     },
 
     localImages(paths: string[]): Promise<MaiBotLocalImage[]> {
@@ -185,8 +237,18 @@ export const mockMaiBotEmojis = {
             paths.map((path, i) => {
                 const [face] = FACES[(i * 5) % FACES.length];
                 return isImagePath(path)
-                    ? { path, name: baseName(path), size: 24_576 + i * 3_100, preview: svg(face, COLORS[i % COLORS.length], 160) }
-                    : { path, name: baseName(path), size: 812, problem: '不是 PNG / JPG / GIF / WebP 图片' };
+                    ? {
+                          path,
+                          name: baseName(path),
+                          size: 24_576 + i * 3_100,
+                          preview: svg(face, COLORS[i % COLORS.length], 160),
+                      }
+                    : {
+                          path,
+                          name: baseName(path),
+                          size: 812,
+                          problem: '不是 PNG / JPG / GIF / WebP 图片',
+                      };
             }),
         );
     },

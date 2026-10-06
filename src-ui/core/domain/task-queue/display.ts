@@ -143,7 +143,10 @@ export function kindLabel(kind: TaskQueueItem['kind']): string {
     }
 }
 
-export function getTaskEndedAt(progress: TaskQueueItem['progress'], itemEndedAt?: number): number | undefined {
+export function getTaskEndedAt(
+    progress: TaskQueueItem['progress'],
+    itemEndedAt?: number,
+): number | undefined {
     if (itemEndedAt !== undefined) return itemEndedAt;
     if (!progress) return undefined;
     if (
@@ -170,7 +173,11 @@ export function formatElapsedLong(startedAt: number, endedAt?: number, now = Dat
 }
 
 /** 列表行：紧凑 mm:ss */
-export function formatElapsedCompact(startedAt: number, endedAt?: number, now = Date.now()): string {
+export function formatElapsedCompact(
+    startedAt: number,
+    endedAt?: number,
+    now = Date.now(),
+): string {
     if (startedAt <= 0) return '';
     const endTime = endedAt ?? now;
     const sec = Math.max(0, Math.floor((endTime - startedAt) / 1000));

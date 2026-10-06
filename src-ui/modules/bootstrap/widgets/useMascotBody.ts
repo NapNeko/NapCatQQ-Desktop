@@ -22,11 +22,11 @@ export interface MascotBody {
 
 const NOOP_BODY: MascotBody = {
     move: () => null,
-    hop: () => { },
-    tilt: () => { },
-    nod: () => { },
-    liftCat: () => { },
-    slump: () => { },
+    hop: () => {},
+    tilt: () => {},
+    nod: () => {},
+    liftCat: () => {},
+    slump: () => {},
 };
 
 type Parts = Record<MascotLayer | 'figure', SVGGElement | null>;
@@ -119,10 +119,38 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
         // 头和怀里的猫比身体慢半拍（起跳被甩下、落地再沉一下），影子随高度缩小，地上的猫晚半拍跟着蹦。
         const hop = () =>
             play((p, tl) => {
-                tl.to(p.figure, { scaleY: 0.94, scaleX: 1.03, duration: s(0.14), ease: 'power2.out', svgOrigin: MASCOT_PIVOTS.feet }, 0)
-                    .to(p.figure, { y: -70, scaleY: 1.03, scaleX: 0.985, duration: s(0.28), ease: 'power2.out' }, s(0.14))
-                    .to(p.figure, { y: 0, scaleY: 0.95, scaleX: 1.04, duration: s(0.26), ease: 'power2.in' }, s(0.42))
-                    .to(p.figure, { scaleY: 1, scaleX: 1, duration: s(0.55), ease: m.ease.release }, s(0.68))
+                tl.to(
+                    p.figure,
+                    {
+                        scaleY: 0.94,
+                        scaleX: 1.03,
+                        duration: s(0.14),
+                        ease: 'power2.out',
+                        svgOrigin: MASCOT_PIVOTS.feet,
+                    },
+                    0,
+                )
+                    .to(
+                        p.figure,
+                        {
+                            y: -70,
+                            scaleY: 1.03,
+                            scaleX: 0.985,
+                            duration: s(0.28),
+                            ease: 'power2.out',
+                        },
+                        s(0.14),
+                    )
+                    .to(
+                        p.figure,
+                        { y: 0, scaleY: 0.95, scaleX: 1.04, duration: s(0.26), ease: 'power2.in' },
+                        s(0.42),
+                    )
+                    .to(
+                        p.figure,
+                        { scaleY: 1, scaleX: 1, duration: s(0.55), ease: m.ease.release },
+                        s(0.68),
+                    )
                     .to(p.head, { y: 10, duration: s(0.14), ease: 'power1.out' }, s(0.14))
                     .to(p.head, { y: -6, duration: s(0.2), ease: 'power1.inOut' }, s(0.28))
                     .to(p.head, { y: 7, duration: s(0.12), ease: 'power1.out' }, s(0.62))
@@ -136,29 +164,59 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                 if (p.ground) {
                     tl.to(
                         p.ground,
-                        { scaleX: 0.86, scaleY: 0.8, opacity: 0.6, duration: s(0.28), ease: 'power2.out', svgOrigin: MASCOT_PIVOTS.shadow },
+                        {
+                            scaleX: 0.86,
+                            scaleY: 0.8,
+                            opacity: 0.6,
+                            duration: s(0.28),
+                            ease: 'power2.out',
+                            svgOrigin: MASCOT_PIVOTS.shadow,
+                        },
                         s(0.14),
-                    ).to(p.ground, { scaleX: 1, scaleY: 1, opacity: 1, duration: s(0.26), ease: 'power2.in' }, s(0.42));
+                    ).to(
+                        p.ground,
+                        { scaleX: 1, scaleY: 1, opacity: 1, duration: s(0.26), ease: 'power2.in' },
+                        s(0.42),
+                    );
                 }
                 if (p.floorCat) {
                     tl.to(
                         p.floorCat,
-                        { y: -34, scaleY: 1.06, duration: s(0.22), ease: 'power2.out', svgOrigin: MASCOT_PIVOTS.floorCat },
+                        {
+                            y: -34,
+                            scaleY: 1.06,
+                            duration: s(0.22),
+                            ease: 'power2.out',
+                            svgOrigin: MASCOT_PIVOTS.floorCat,
+                        },
                         s(0.5),
                     )
-                        .to(p.floorCat, { y: 0, scaleY: 0.95, duration: s(0.2), ease: 'power2.in' }, s(0.72))
-                        .to(p.floorCat, { scaleY: 1, duration: s(0.4), ease: m.ease.release }, s(0.92));
+                        .to(
+                            p.floorCat,
+                            { y: 0, scaleY: 0.95, duration: s(0.2), ease: 'power2.in' },
+                            s(0.72),
+                        )
+                        .to(
+                            p.floorCat,
+                            { scaleY: 1, duration: s(0.4), ease: m.ease.release },
+                            s(0.92),
+                        );
                 }
             });
 
         const tilt = (dir: 1 | -1 = Math.random() < 0.5 ? -1 : 1) =>
             play((p, tl) => {
                 const hold = s(0.32) + 0.7;
-                tl.to(p.head, { rotation: 5 * dir, duration: s(0.32), ease: m.ease.pop, svgOrigin: MASCOT_PIVOTS.neck }, 0).to(
+                tl.to(
                     p.head,
-                    { rotation: 0, duration: s(0.45), ease: m.ease.release },
-                    hold,
-                );
+                    {
+                        rotation: 5 * dir,
+                        duration: s(0.32),
+                        ease: m.ease.pop,
+                        svgOrigin: MASCOT_PIVOTS.neck,
+                    },
+                    0,
+                ).to(p.head, { rotation: 0, duration: s(0.45), ease: m.ease.release }, hold);
                 if (p.heldCat) {
                     tl.to(p.heldCat, { y: -4, duration: s(0.32), ease: m.ease.pop }, 0).to(
                         p.heldCat,
@@ -178,7 +236,18 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                     yoyo: true,
                     repeat: 3,
                     svgOrigin: MASCOT_PIVOTS.neck,
-                }).to(p.figure, { scaleY: 0.99, duration: s(0.3), ease: 'sine.inOut', yoyo: true, repeat: 1, svgOrigin: MASCOT_PIVOTS.feet }, 0);
+                }).to(
+                    p.figure,
+                    {
+                        scaleY: 0.99,
+                        duration: s(0.3),
+                        ease: 'sine.inOut',
+                        yoyo: true,
+                        repeat: 1,
+                        svgOrigin: MASCOT_PIVOTS.feet,
+                    },
+                    0,
+                );
             });
 
         // 举猫：猫抬高一点，她低头看猫。没有怀里猫的层就退化成点头。
@@ -189,10 +258,38 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                     return;
                 }
                 const hold = s(0.35) + 0.75;
-                tl.to(p.heldCat, { y: -16, rotation: -4, duration: s(0.3), ease: m.ease.pop, svgOrigin: MASCOT_PIVOTS.heldCat }, 0)
-                    .to(p.head, { rotation: -4, y: 3, duration: s(0.3), ease: m.ease.pop, svgOrigin: MASCOT_PIVOTS.neck }, s(0.05))
-                    .to(p.heldCat, { y: 0, rotation: 0, duration: s(0.5), ease: m.ease.release }, hold)
-                    .to(p.head, { rotation: 0, y: 0, duration: s(0.5), ease: m.ease.release }, hold);
+                tl.to(
+                    p.heldCat,
+                    {
+                        y: -16,
+                        rotation: -4,
+                        duration: s(0.3),
+                        ease: m.ease.pop,
+                        svgOrigin: MASCOT_PIVOTS.heldCat,
+                    },
+                    0,
+                )
+                    .to(
+                        p.head,
+                        {
+                            rotation: -4,
+                            y: 3,
+                            duration: s(0.3),
+                            ease: m.ease.pop,
+                            svgOrigin: MASCOT_PIVOTS.neck,
+                        },
+                        s(0.05),
+                    )
+                    .to(
+                        p.heldCat,
+                        { y: 0, rotation: 0, duration: s(0.5), ease: m.ease.release },
+                        hold,
+                    )
+                    .to(
+                        p.head,
+                        { rotation: 0, y: 0, duration: s(0.5), ease: m.ease.release },
+                        hold,
+                    );
             });
 
         const table: Record<MascotMove, () => void> = { hop, tilt: () => tilt(), nod, liftCat };
@@ -221,11 +318,29 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                 setBreathing(breathingRef.current, false);
                 if (on) {
                     // 顺时针转：左边（头发贴着猫耳那侧）往上抬，不会被窗口切到；垂头感靠 y 给
-                    gsap.to(p.head, { rotation: 4, y: 9, duration: s(0.9), ease: 'power2.inOut', svgOrigin: MASCOT_PIVOTS.neck });
-                    gsap.to(p.figure, { scaleY: 0.985, duration: s(0.9), ease: 'power2.inOut', svgOrigin: MASCOT_PIVOTS.feet });
-                    if (p.heldCat) gsap.to(p.heldCat, { y: 5, duration: s(0.9), ease: 'power2.inOut' });
+                    gsap.to(p.head, {
+                        rotation: 4,
+                        y: 9,
+                        duration: s(0.9),
+                        ease: 'power2.inOut',
+                        svgOrigin: MASCOT_PIVOTS.neck,
+                    });
+                    gsap.to(p.figure, {
+                        scaleY: 0.985,
+                        duration: s(0.9),
+                        ease: 'power2.inOut',
+                        svgOrigin: MASCOT_PIVOTS.feet,
+                    });
+                    if (p.heldCat)
+                        gsap.to(p.heldCat, { y: 5, duration: s(0.9), ease: 'power2.inOut' });
                 } else {
-                    gsap.to(p.head, { rotation: 0, y: 0, duration: s(0.3), ease: m.ease.release, svgOrigin: MASCOT_PIVOTS.neck });
+                    gsap.to(p.head, {
+                        rotation: 0,
+                        y: 0,
+                        duration: s(0.3),
+                        ease: m.ease.release,
+                        svgOrigin: MASCOT_PIVOTS.neck,
+                    });
                     gsap.to(p.figure, {
                         scaleY: 1,
                         duration: s(0.3),
@@ -233,7 +348,8 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                         svgOrigin: MASCOT_PIVOTS.feet,
                         onComplete: resumeBreath,
                     });
-                    if (p.heldCat) gsap.to(p.heldCat, { y: 0, duration: s(0.3), ease: m.ease.release });
+                    if (p.heldCat)
+                        gsap.to(p.heldCat, { y: 0, duration: s(0.3), ease: m.ease.release });
                 }
             },
         };

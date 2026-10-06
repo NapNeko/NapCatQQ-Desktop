@@ -5,7 +5,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../shared/ui';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '../../shared/ui';
 import { dangerConsequence } from '../../core/domain/debug/dangerCopy';
 
 const skipped = new Set<string>();

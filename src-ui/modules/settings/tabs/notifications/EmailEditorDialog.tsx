@@ -89,9 +89,7 @@ export function EmailEditorDialog({
             <DialogContent size="md" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>配置邮件通知</DialogTitle>
-                    <DialogDescription>
-                        填完后回设置页保存。
-                    </DialogDescription>
+                    <DialogDescription>填完后回设置页保存。</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-5 py-1">
                     <DialogField label="常用邮箱">
@@ -100,9 +98,7 @@ export function EmailEditorDialog({
                             placeholder="选择服务商，或手动填写"
                             onValueChange={(label) => {
                                 onPresetChange(label);
-                                const found = EMAIL_PRESETS.find(
-                                    (item) => item.label === label,
-                                );
+                                const found = EMAIL_PRESETS.find((item) => item.label === label);
                                 if (!found) return;
                                 onDraftChange({
                                     emailSmtpServer: found.server,
@@ -123,9 +119,7 @@ export function EmailEditorDialog({
                                 spellCheck={false}
                                 value={draft.emailSender}
                                 placeholder="you@example.com"
-                                onValueChange={(emailSender) =>
-                                    onDraftChange({ emailSender })
-                                }
+                                onValueChange={(emailSender) => onDraftChange({ emailSender })}
                             />
                         </DialogField>
                         <DialogField label="收件邮箱">
@@ -136,9 +130,7 @@ export function EmailEditorDialog({
                                 spellCheck={false}
                                 value={draft.emailReceiver}
                                 placeholder="alert@example.com"
-                                onValueChange={(emailReceiver) =>
-                                    onDraftChange({ emailReceiver })
-                                }
+                                onValueChange={(emailReceiver) => onDraftChange({ emailReceiver })}
                             />
                         </DialogField>
                     </div>
@@ -151,9 +143,7 @@ export function EmailEditorDialog({
                             name="email-token"
                             value={draft.emailToken}
                             placeholder="输入授权码"
-                            onValueChange={(emailToken) =>
-                                onDraftChange({ emailToken })
-                            }
+                            onValueChange={(emailToken) => onDraftChange({ emailToken })}
                         />
                     </DialogField>
 
@@ -180,10 +170,7 @@ export function EmailEditorDialog({
                                     onDraftChange({
                                         emailSmtpPort: Math.max(
                                             1,
-                                            Math.min(
-                                                65535,
-                                                Math.round(value || 1),
-                                            ),
+                                            Math.min(65535, Math.round(value || 1)),
                                         ),
                                     })
                                 }
@@ -194,9 +181,7 @@ export function EmailEditorDialog({
                     <DialogField label="连接加密">
                         <Select
                             value={draft.emailEncryption || 'SSL'}
-                            onValueChange={(emailEncryption) =>
-                                onDraftChange({ emailEncryption })
-                            }
+                            onValueChange={(emailEncryption) => onDraftChange({ emailEncryption })}
                             items={[...ENCRYPTION_ITEMS]}
                         />
                     </DialogField>

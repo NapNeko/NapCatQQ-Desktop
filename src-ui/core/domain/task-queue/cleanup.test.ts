@@ -52,9 +52,7 @@ describe('trimTerminalTasksInRecord', () => {
             const id = `r-${String(i).padStart(4, '0')}`;
             tasks[id] = { status: 'running' };
         }
-        const terminalCount = Object.values(tasks).filter(
-            (t) => t.status === 'success',
-        ).length;
+        const terminalCount = Object.values(tasks).filter((t) => t.status === 'success').length;
         expect(terminalCount).toBeGreaterThan(max);
 
         const { tasks: next, removedIds } = trimTerminalTasksInRecord(
@@ -62,13 +60,9 @@ describe('trimTerminalTasksInRecord', () => {
             (t) => t.status === 'success',
             max,
         );
-        const remainingTerminal = Object.values(next).filter(
-            (t) => t.status === 'success',
-        ).length;
+        const remainingTerminal = Object.values(next).filter((t) => t.status === 'success').length;
         expect(remainingTerminal).toBe(max);
         expect(removedIds.length).toBe(terminalCount - max);
-        expect(
-            Object.keys(next).some((id) => tasks[id].status === 'running'),
-        ).toBe(true);
+        expect(Object.keys(next).some((id) => tasks[id].status === 'running')).toBe(true);
     });
 });

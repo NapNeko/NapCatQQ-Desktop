@@ -49,14 +49,21 @@ export const KoishiConnectionTab: React.FC<{
                 title="对接协议 Bot"
                 description="Bot 作 WebSocket 客户端反向连到 Koishi；Koishi 按请求头里的 QQ 号认 Bot"
                 actions={
-                    <Button size="sm" variant={linked ? 'secondary' : 'primary'} onClick={onOpenLink}>
+                    <Button
+                        size="sm"
+                        variant={linked ? 'secondary' : 'primary'}
+                        onClick={onOpenLink}
+                    >
                         <Link2 size={13} />
                         {linked ? '换一个 Bot' : '对接'}
                     </Button>
                 }
             >
                 <ul className="flex flex-col divide-y divide-border-subtle/70">
-                    <Row ok={linked} title={linked ? `已对接 Bot ${instance.link?.bot_id}` : '还没对接'}>
+                    <Row
+                        ok={linked}
+                        title={linked ? `已对接 Bot ${instance.link?.bot_id}` : '还没对接'}
+                    >
                         {linked
                             ? 'Bot 侧的连接名是 ncd-app 开头的那条，在 Bot 的网络配置里能看到'
                             : '对接时桌面端同时写 Bot 侧的连接和 Koishi 侧的适配器条目'}
@@ -88,10 +95,14 @@ export const KoishiConnectionTab: React.FC<{
                 </ul>
             </FormSection>
 
-            <FormSection title="Bot 连过来的地址" description="跨机器对接时桌面端会换成 SSH 隧道的口，这里显示的是 Koishi 本机上的">
+            <FormSection
+                title="Bot 连过来的地址"
+                description="跨机器对接时桌面端会换成 SSH 隧道的口，这里显示的是 Koishi 本机上的"
+            >
                 <CopyCodeBlock command={url} />
                 <p className={cn('text-2xs text-text-tertiary')}>
-                    路径 {KOISHI_REVERSE_WS_PATH} 是桌面端独占的；自己另接的 OneBot 账号用默认的 /onebot，互不影响
+                    路径 {KOISHI_REVERSE_WS_PATH} 是桌面端独占的；自己另接的 OneBot 账号用默认的
+                    /onebot，互不影响
                 </p>
             </FormSection>
         </ConfigForm>

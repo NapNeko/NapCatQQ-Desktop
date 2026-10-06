@@ -100,7 +100,8 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
         animsRef.current = [];
         const track = trackRef.current;
         const dot = dotRef.current;
-        if (!scrollFrom || !track || !dot || typeof track.animate !== 'function' || innerW <= 0) return;
+        if (!scrollFrom || !track || !dot || typeof track.animate !== 'function' || innerW <= 0)
+            return;
 
         const timing: KeyframeAnimationOptions = { duration, fill: 'forwards' };
         const fromY = valueY(scrollFrom[scrollFrom.length - 1], innerH);
@@ -164,7 +165,14 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
     let hoverInfo: ReturnType<typeof pickHover> = null;
     if (hovering && slots > 0) {
         const live = scrollFrom
-            ? scrollPoints(scrollFrom, incoming, scrollProgress(startedAt, duration), slots, innerW, innerH)
+            ? scrollPoints(
+                  scrollFrom,
+                  incoming,
+                  scrollProgress(startedAt, duration),
+                  slots,
+                  innerW,
+                  innerH,
+              )
             : { values, points };
         hoverInfo = pickHover(clipDisplayPoints(live.points, 0, innerW), live.values, hoverX);
     }
@@ -178,7 +186,9 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                 <div className="flex items-center gap-2">
                     <div
                         className="grid h-7 w-7 place-items-center rounded-sm"
-                        style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 14%, transparent)` }}
+                        style={{
+                            backgroundColor: `color-mix(in srgb, ${accentColor} 14%, transparent)`,
+                        }}
                     >
                         <Icon size={14} strokeWidth={2} style={{ color: accentColor }} />
                     </div>
@@ -242,13 +252,28 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                             className="pointer-events-none absolute top-0 overflow-hidden"
                             style={{ left: PADDING.left, width: innerW, height: size.h }}
                         >
-                            <div ref={trackRef} className="absolute left-0 top-0 will-change-transform">
+                            <div
+                                ref={trackRef}
+                                className="absolute left-0 top-0 will-change-transform"
+                            >
                                 <svg width={innerW + stepX} height={size.h} className="block">
                                     <defs>
                                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={accentColor} stopOpacity={0.36} />
-                                            <stop offset="45%" stopColor={accentColor} stopOpacity={0.12} />
-                                            <stop offset="100%" stopColor={accentColor} stopOpacity={0.00} />
+                                            <stop
+                                                offset="0%"
+                                                stopColor={accentColor}
+                                                stopOpacity={0.36}
+                                            />
+                                            <stop
+                                                offset="45%"
+                                                stopColor={accentColor}
+                                                stopOpacity={0.12}
+                                            />
+                                            <stop
+                                                offset="100%"
+                                                stopColor={accentColor}
+                                                stopOpacity={0.0}
+                                            />
                                         </linearGradient>
 
                                         {/* 发光滤镜用 userSpaceOnUse：水平直线的包围盒高度为 0，按对象算区域整条线会被裁没 */}
@@ -271,7 +296,9 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                                     </defs>
 
                                     <g transform={`translate(0, ${PADDING.top})`}>
-                                        {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
+                                        {areaPath && (
+                                            <path d={areaPath} fill={`url(#${gradientId})`} />
+                                        )}
                                         {linePath && (
                                             <path
                                                 d={linePath}
@@ -302,7 +329,9 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                         >
                             <span
                                 className={`absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full${motionEnabled ? ' animate-pulse' : ''}`}
-                                style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 25%, transparent)` }}
+                                style={{
+                                    backgroundColor: `color-mix(in srgb, ${accentColor} 25%, transparent)`,
+                                }}
                             />
                             <span
                                 className="absolute rounded-full"
@@ -369,7 +398,13 @@ const HoverIndicator: React.FC<{
                 stroke="var(--surface-card)"
                 strokeWidth={2}
             />
-            <PillLabel x={point.x} y={pillY} height={pillHeight} color={accentColor} text={valueText} />
+            <PillLabel
+                x={point.x}
+                y={pillY}
+                height={pillHeight}
+                color={accentColor}
+                text={valueText}
+            />
         </g>
     );
 };

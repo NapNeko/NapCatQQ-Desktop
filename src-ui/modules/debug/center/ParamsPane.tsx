@@ -86,7 +86,13 @@ export const ParamsPane = memo(function ParamsPane({
 
     // 切到 JSON 视图之后（这一帧它才显示出来）再跳行，不然滚动量是按隐藏时的尺寸算的
     useEffect(() => {
-        if (!revealAt || revealAt.nonce === consumedReveal.current || effectiveView !== 'json' || sub !== 'params') return;
+        if (
+            !revealAt ||
+            revealAt.nonce === consumedReveal.current ||
+            effectiveView !== 'json' ||
+            sub !== 'params'
+        )
+            return;
         const frame = requestAnimationFrame(() => {
             consumedReveal.current = revealAt.nonce;
             editorRef.current?.revealLine(revealAt.line);
@@ -95,7 +101,12 @@ export const ParamsPane = memo(function ParamsPane({
     }, [revealAt, effectiveView, sub]);
 
     useEffect(() => {
-        if (!focusRequest || focusRequest.nonce === consumedFocus.current || sub !== 'params' || effectiveView !== 'form') {
+        if (
+            !focusRequest ||
+            focusRequest.nonce === consumedFocus.current ||
+            sub !== 'params' ||
+            effectiveView !== 'form'
+        ) {
             return;
         }
         const frame = requestAnimationFrame(() => {
@@ -103,7 +114,9 @@ export const ParamsPane = memo(function ParamsPane({
             const host = document.getElementById(fieldInputId(tab.id, focusRequest.name));
             const el = host?.matches('input, textarea, button, [role="combobox"]')
                 ? host
-                : host?.querySelector<HTMLElement>('input, textarea, button, [contenteditable="true"]');
+                : host?.querySelector<HTMLElement>(
+                      'input, textarea, button, [contenteditable="true"]',
+                  );
             host?.closest('[data-param]')?.scrollIntoView({ block: 'nearest' });
             (el as HTMLElement | null | undefined)?.focus();
         });
@@ -141,7 +154,12 @@ export const ParamsPane = memo(function ParamsPane({
                                 </>
                             ),
                             disabled: !spec && !specLoading,
-                            title: spec || specLoading ? undefined : action ? '目录里没有这个接口的说明' : '先填接口名',
+                            title:
+                                spec || specLoading
+                                    ? undefined
+                                    : action
+                                      ? '目录里没有这个接口的说明'
+                                      : '先填接口名',
                         },
                     ]}
                 />
@@ -149,7 +167,13 @@ export const ParamsPane = memo(function ParamsPane({
                 {sub === 'params' && (
                     <>
                         {effectiveView === 'json' && (
-                            <IconTip icon={AlignLeft} label="格式化 JSON" size="sm" disabled={!parsed.ok} onClick={format} />
+                            <IconTip
+                                icon={AlignLeft}
+                                label="格式化 JSON"
+                                size="sm"
+                                disabled={!parsed.ok}
+                                onClick={format}
+                            />
                         )}
                         <Segmented<ParamsView>
                             label="参数的写法"
@@ -160,7 +184,9 @@ export const ParamsPane = memo(function ParamsPane({
                                     value: 'form',
                                     label: '表单',
                                     disabled: !formAvailable,
-                                    title: formAvailable ? undefined : '目录里没有这个接口的参数说明，只能写 JSON',
+                                    title: formAvailable
+                                        ? undefined
+                                        : '目录里没有这个接口的参数说明，只能写 JSON',
                                 },
                                 { value: 'json', label: 'JSON' },
                             ]}
@@ -169,9 +195,19 @@ export const ParamsPane = memo(function ParamsPane({
                 )}
             </div>
 
-            <div className={cn('relative flex min-h-0 flex-1 flex-col', sub !== 'params' && 'hidden')}>
+            <div
+                className={cn(
+                    'relative flex min-h-0 flex-1 flex-col',
+                    sub !== 'params' && 'hidden',
+                )}
+            >
                 {/* 表单 */}
-                <div className={cn('relative flex min-h-0 flex-1 flex-col', effectiveView !== 'form' && 'hidden')}>
+                <div
+                    className={cn(
+                        'relative flex min-h-0 flex-1 flex-col',
+                        effectiveView !== 'form' && 'hidden',
+                    )}
+                >
                     <div
                         ref={formScrollRef}
                         className={cn(
@@ -190,10 +226,15 @@ export const ParamsPane = memo(function ParamsPane({
                                 issues={parsed.ok ? issues : []}
                                 target={target}
                                 onSubmit={onSubmit}
-                                onEditInJson={(key) => revealInJson(lineOfKey(tab.params_text, key) ?? 1)}
+                                onEditInJson={(key) =>
+                                    revealInJson(lineOfKey(tab.params_text, key) ?? 1)
+                                }
                             />
                         ) : specLoading ? (
-                            <div className="flex items-center gap-2 px-3 py-4 text-xs text-text-tertiary" role="status">
+                            <div
+                                className="flex items-center gap-2 px-3 py-4 text-xs text-text-tertiary"
+                                role="status"
+                            >
                                 <Spinner size="xs" />
                                 正在读取接口说明，读到就出表单；也可以先切到 JSON 写
                             </div>
@@ -202,13 +243,25 @@ export const ParamsPane = memo(function ParamsPane({
                     {!parsed.ok && (
                         <div className="absolute inset-x-3 top-3 flex justify-center" role="alert">
                             <div className="flex max-w-md items-start gap-2.5 rounded-md border border-warning/40 bg-elevated px-3 py-2.5 shadow-popover">
-                                <AlertTriangle size={15} strokeWidth={2.2} aria-hidden className="mt-0.5 shrink-0 text-warning" />
+                                <AlertTriangle
+                                    size={15}
+                                    strokeWidth={2.2}
+                                    aria-hidden
+                                    className="mt-0.5 shrink-0 text-warning"
+                                />
                                 <div className="min-w-0 space-y-1">
                                     <p className="text-[13px] font-medium text-text">
                                         JSON 第 {parsed.line} 行有错，改好后表单恢复
                                     </p>
-                                    <p className="break-words text-2xs text-text-tertiary">{parsed.message}</p>
-                                    <Button size="sm" variant="secondary" className="mt-1" onClick={() => revealInJson(parsed.line)}>
+                                    <p className="break-words text-2xs text-text-tertiary">
+                                        {parsed.message}
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="mt-1"
+                                        onClick={() => revealInJson(parsed.line)}
+                                    >
                                         去 JSON 修改
                                         <ArrowRight size={12} aria-hidden />
                                     </Button>
@@ -219,10 +272,17 @@ export const ParamsPane = memo(function ParamsPane({
                 </div>
 
                 {/* JSON */}
-                <div className={cn('flex min-h-0 flex-1 flex-col gap-1.5 p-2', effectiveView !== 'json' && 'hidden')}>
+                <div
+                    className={cn(
+                        'flex min-h-0 flex-1 flex-col gap-1.5 p-2',
+                        effectiveView !== 'json' && 'hidden',
+                    )}
+                >
                     {!formAvailable && action && !specLoading && (
                         <p className="shrink-0 px-1 text-2xs text-text-tertiary">
-                            目录里没有 <code className="font-mono text-text-secondary">{action}</code>，没有表单和校验，照样可以发。
+                            目录里没有{' '}
+                            <code className="font-mono text-text-secondary">{action}</code>
+                            ，没有表单和校验，照样可以发。
                         </p>
                     )}
                     <JsonCodeEditor
@@ -234,7 +294,12 @@ export const ParamsPane = memo(function ParamsPane({
                         handleRef={editorRef as RefObject<JsonCodeEditorHandle>}
                     />
                     {/* 不设 live region：敲一个字就读一遍错误太吵；出错时编辑器本身有诊断标记 */}
-                    <p className={cn('shrink-0 truncate px-1 text-2xs', parsed.ok ? 'text-text-tertiary' : 'text-danger')}>
+                    <p
+                        className={cn(
+                            'shrink-0 truncate px-1 text-2xs',
+                            parsed.ok ? 'text-text-tertiary' : 'text-danger',
+                        )}
+                    >
                         {parsed.ok
                             ? `Ctrl+Space 补全参数名 · ${MOD_KEY_LABEL}+Enter 发送`
                             : `第 ${parsed.line} 行第 ${parsed.column} 列：${parsed.message}`}
@@ -243,7 +308,10 @@ export const ParamsPane = memo(function ParamsPane({
             </div>
 
             {sub === 'docs' && !spec && specLoading && (
-                <div className="flex items-center gap-2 px-3 py-4 text-xs text-text-tertiary" role="status">
+                <div
+                    className="flex items-center gap-2 px-3 py-4 text-xs text-text-tertiary"
+                    role="status"
+                >
                     <Spinner size="xs" />
                     正在读取接口说明…
                 </div>

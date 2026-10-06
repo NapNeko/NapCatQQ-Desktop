@@ -50,7 +50,11 @@ export const MaiBotOverviewTab: React.FC<{
         {
             key: 'chat',
             ok: chatOk,
-            label: !chat ? '适配器缺失' : chatOk ? `回复：${maibotChatScope(chat)}` : '还没放行群聊',
+            label: !chat
+                ? '适配器缺失'
+                : chatOk
+                  ? `回复：${maibotChatScope(chat)}`
+                  : '还没放行群聊',
         },
         { key: 'run', ok: running, label: running ? '运行中' : '已停止' },
     ];
@@ -117,10 +121,18 @@ export const MaiBotOverviewTab: React.FC<{
                 <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
                     <div className="min-w-0 flex-1">
                         <h2 className="flex items-center gap-3 font-display text-[19px] font-semibold leading-snug text-text">
-                            <span className={cn('h-2 w-2 shrink-0 rounded-full ring-4', TONE_DOT[tone])} aria-hidden />
+                            <span
+                                className={cn(
+                                    'h-2 w-2 shrink-0 rounded-full ring-4',
+                                    TONE_DOT[tone],
+                                )}
+                                aria-hidden
+                            />
                             {title}
                         </h2>
-                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">{sub}</p>
+                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">
+                            {sub}
+                        </p>
                     </div>
                     {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
                 </div>
@@ -130,13 +142,20 @@ export const MaiBotOverviewTab: React.FC<{
                             key={c.key}
                             className={cn(
                                 'inline-flex items-center gap-1.5 text-xs',
-                                c.ok ? 'text-text-secondary' : c.key === next ? 'font-medium text-text' : 'text-text-tertiary',
+                                c.ok
+                                    ? 'text-text-secondary'
+                                    : c.key === next
+                                      ? 'font-medium text-text'
+                                      : 'text-text-tertiary',
                             )}
                         >
                             {c.ok ? (
                                 <CheckCircle2 size={14} className="text-success" />
                             ) : (
-                                <Circle size={14} className={c.key === next ? 'text-brand' : 'text-text-disabled'} />
+                                <Circle
+                                    size={14}
+                                    className={c.key === next ? 'text-brand' : 'text-text-disabled'}
+                                />
                             )}
                             {c.label}
                         </li>
@@ -146,11 +165,20 @@ export const MaiBotOverviewTab: React.FC<{
 
             <MaiBotRuntimeCard instance={instance} onOpenChat={() => onGoTab('trychat')} />
 
-            <Card padding="none" className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <Card
+                padding="none"
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+            >
                 <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-text-secondary">
-                    记忆图谱、学到的表达方式、表情包库在 MaiBot 自己的 WebUI 里看。登录 token 在「连接」页，打开时会自动复制。
+                    记忆图谱、学到的表达方式、表情包库在 MaiBot 自己的 WebUI 里看。登录 token
+                    在「连接」页，打开时会自动复制。
                 </p>
-                <Button size="sm" variant="secondary" disabled={!running} onClick={() => onOpenWebUi()}>
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!running}
+                    onClick={() => onOpenWebUi()}
+                >
                     <ExternalLink size={13} />
                     {running ? '打开 WebUI' : '启动后可打开 WebUI'}
                 </Button>

@@ -50,7 +50,10 @@ export function useFlip(containerRef: RefObject<HTMLElement | null>, version: un
             }
             const dy = old - top;
             if (Math.abs(dy) < 0.5 || Math.abs(dy) > MAX_TRAVEL_PX) return;
-            el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration, easing });
+            el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], {
+                duration,
+                easing,
+            });
         });
         // 只在列表数据换了的那次渲染后播
         // eslint-disable-next-line react-hooks/exhaustive-deps

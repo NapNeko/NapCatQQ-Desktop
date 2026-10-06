@@ -9,7 +9,11 @@ import {
 } from './astrbotConfig';
 import type { AstrBotInstanceConfig, AstrBotProviderSource } from '../../ipc/types';
 
-function source(id: string, providerType = 'chat_completion', enable = true): AstrBotProviderSource {
+function source(
+    id: string,
+    providerType = 'chat_completion',
+    enable = true,
+): AstrBotProviderSource {
     return {
         id,
         provider: 'openai',
@@ -23,7 +27,11 @@ function source(id: string, providerType = 'chat_completion', enable = true): As
     };
 }
 
-function withChatModel(cfg: AstrBotInstanceConfig, sourceId = 'ds', model = 'deepseek-chat'): AstrBotInstanceConfig {
+function withChatModel(
+    cfg: AstrBotInstanceConfig,
+    sourceId = 'ds',
+    model = 'deepseek-chat',
+): AstrBotInstanceConfig {
     return {
         ...cfg,
         sources: [...cfg.sources, source(sourceId)],
@@ -44,7 +52,12 @@ function withChatModel(cfg: AstrBotInstanceConfig, sourceId = 'ds', model = 'dee
 describe('astrbotSetup', () => {
     it('fresh instance needs a link and a chat source', () => {
         const s = astrbotSetup(astrbotDefaultConfig(6199), false);
-        expect(s).toEqual({ linkDone: false, llmIssue: 'no_source', chatSourceIndex: -1, ready: false });
+        expect(s).toEqual({
+            linkDone: false,
+            llmIssue: 'no_source',
+            chatSourceIndex: -1,
+            ready: false,
+        });
     });
 
     it('other platforms count as connected', () => {
@@ -58,7 +71,10 @@ describe('astrbotSetup', () => {
     });
 
     it('chat source without usable model points at that source', () => {
-        const cfg = { ...astrbotDefaultConfig(6199), sources: [source('emb', 'embedding'), source('ds')] };
+        const cfg = {
+            ...astrbotDefaultConfig(6199),
+            sources: [source('emb', 'embedding'), source('ds')],
+        };
         const s = astrbotSetup(cfg, true);
         expect(s.llmIssue).toBe('no_model');
         expect(s.chatSourceIndex).toBe(1);
@@ -73,19 +89,29 @@ describe('astrbotSetup', () => {
     });
 
     it('usable model but no default', () => {
-        expect(astrbotSetup(withChatModel(astrbotDefaultConfig(6199)), true).llmIssue).toBe('no_default');
+        expect(astrbotSetup(withChatModel(astrbotDefaultConfig(6199)), true).llmIssue).toBe(
+            'no_default',
+        );
     });
 
     it('llm switch off comes after the model checks', () => {
         const base = withChatModel(astrbotDefaultConfig(6199));
-        const cfg = { ...base, ai: { ...base.ai, default_provider_id: 'ds/deepseek-chat', enable: false } };
+        const cfg = {
+            ...base,
+            ai: { ...base.ai, default_provider_id: 'ds/deepseek-chat', enable: false },
+        };
         expect(astrbotSetup(cfg, true).llmIssue).toBe('llm_off');
     });
 
     it('ready when linked and a default chat model is on', () => {
         const base = withChatModel(astrbotDefaultConfig(6199));
         const cfg = { ...base, ai: { ...base.ai, default_provider_id: 'ds/deepseek-chat' } };
-        expect(astrbotSetup(cfg, true)).toEqual({ linkDone: true, llmIssue: null, chatSourceIndex: 0, ready: true });
+        expect(astrbotSetup(cfg, true)).toEqual({
+            linkDone: true,
+            llmIssue: null,
+            chatSourceIndex: 0,
+            ready: true,
+        });
         expect(astrbotSetup(cfg, false).ready).toBe(false);
     });
 });
@@ -93,7 +119,11 @@ describe('astrbotSetup', () => {
 describe('astrbotWakeHint', () => {
     const withGates = (patch: Partial<AstrBotInstanceConfig['gates']>, llmPrefix = '') => {
         const cfg = astrbotDefaultConfig(6199);
-        return { ...cfg, gates: { ...cfg.gates, ...patch }, ai: { ...cfg.ai, wake_prefix: llmPrefix } };
+        return {
+            ...cfg,
+            gates: { ...cfg.gates, ...patch },
+            ai: { ...cfg.ai, wake_prefix: llmPrefix },
+        };
     };
 
     it('default: @ or slash in groups, no prefix in private chat', () => {
@@ -117,16 +147,19 @@ describe('astrbotWakeHint', () => {
     });
 
     it('private chat that needs a prefix', () => {
-        expect(astrbotWakeHint(withGates({ friend_message_needs_wake_prefix: true })).sentence).toBe(
-            '群里 @它 或用「/」开头发消息，私聊也要带前缀',
-        );
         expect(
-            astrbotWakeHint(withGates({ wake_prefix: [], friend_message_needs_wake_prefix: true })).sentence,
+            astrbotWakeHint(withGates({ friend_message_needs_wake_prefix: true })).sentence,
+        ).toBe('群里 @它 或用「/」开头发消息，私聊也要带前缀');
+        expect(
+            astrbotWakeHint(withGates({ wake_prefix: [], friend_message_needs_wake_prefix: true }))
+                .sentence,
         ).toBe('群里 @它 发消息，私聊没法唤醒');
     });
 
     it('an empty prefix wakes on every message', () => {
-        const h = astrbotWakeHint(withGates({ wake_prefix: ['', '/'], friend_message_needs_wake_prefix: true }));
+        const h = astrbotWakeHint(
+            withGates({ wake_prefix: ['', '/'], friend_message_needs_wake_prefix: true }),
+        );
         expect(h.sentence).toBe('群里每条消息都会叫醒它，私聊直接发');
         expect(h.short).toBe('每条消息');
     });
@@ -160,7 +193,10 @@ describe('astrbotConfigWarnings', () => {
         const cfg = astrbotDefaultConfig(6199);
         const on = { ...cfg, subagent: { ...cfg.subagent, main_enable: true } };
         expect(astrbotConfigWarnings(on).map((x) => x.key)).toEqual(['subagent-empty']);
-        const half = { ...on, subagent: { ...on.subagent, agents: [{ provider_id: 'ds/x', persona_id: '' }] } };
+        const half = {
+            ...on,
+            subagent: { ...on.subagent, agents: [{ provider_id: 'ds/x', persona_id: '' }] },
+        };
         const w = astrbotConfigWarnings(half);
         expect(w.map((x) => [x.key, x.area])).toEqual([['subagent-incomplete', 'subagent']]);
         expect(w[0].text).toContain('1 个');
@@ -206,7 +242,9 @@ describe('astrbotConfig', () => {
                 max_context_tokens: 0,
             },
         ];
-        expect(validateAstrBotConfig(orphan).some((i) => i.path === 'models/0/provider_source_id')).toBe(true);
+        expect(
+            validateAstrBotConfig(orphan).some((i) => i.path === 'models/0/provider_source_id'),
+        ).toBe(true);
     });
 
     it('rejects OneBot port colliding with WebUI', () => {

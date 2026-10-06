@@ -84,7 +84,12 @@ const COPY = {
     }),
 } satisfies { [K in DebugError['kind']]: (e: Extract<DebugError, { kind: K }>) => ErrorCopy };
 
-export function debugErrorCopy(e: DebugError): { title: string; detail?: string; channelIssue: boolean; exits?: ChannelExit[] } {
+export function debugErrorCopy(e: DebugError): {
+    title: string;
+    detail?: string;
+    channelIssue: boolean;
+    exits?: ChannelExit[];
+} {
     // 表按 kind 索引，这里的类型断言只是因为 TS 没法把「同一个 kind 的键配同一个 kind 的载荷」这层关系带过索引
     const build = COPY[e.kind] as (err: DebugError) => ErrorCopy;
     return build(e);

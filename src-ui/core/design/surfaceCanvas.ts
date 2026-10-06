@@ -25,8 +25,10 @@ export function syncRootChromeBackground(): void {
 export function isDarkSurfaceCanvas(): boolean {
     const bg = readSurfaceCanvasColor();
     if (!bg.startsWith('#') || bg.length < 7) {
-        return typeof window !== 'undefined' &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches;
+        return (
+            typeof window !== 'undefined' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches
+        );
     }
     const hex = bg.slice(1);
     const r = parseInt(hex.slice(0, 2), 16);

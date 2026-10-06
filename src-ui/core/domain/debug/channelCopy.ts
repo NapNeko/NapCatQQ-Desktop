@@ -18,11 +18,16 @@ const STATUS_COPY = {
     unreachable: (s) => ({ text: `连不上（${s.reason}）`, tone: 'danger' }),
     auth_failed: (s) => ({ text: `token 错误（${s.status}）`, tone: 'danger' }),
     // 「太老」只靠探测判断，不比版本号，文案统一告诉用户怎么办
-    upstream_too_old: () => ({ text: '上游版本太老，升级到最新版 NapCat / SnowLuma 后可用', tone: 'warning' }),
+    upstream_too_old: () => ({
+        text: '上游版本太老，升级到最新版 NapCat / SnowLuma 后可用',
+        tone: 'warning',
+    }),
     bot_not_running: () => ({ text: 'Bot 未运行', tone: 'warning' }),
     not_logged_in: () => ({ text: 'QQ 未登录', tone: 'warning' }),
     unsupported: (s) => ({ text: `不支持（${s.reason}）`, tone: 'neutral' }),
-} satisfies { [K in DebugChannelStatus['kind']]: (s: Extract<DebugChannelStatus, { kind: K }>) => StatusCopy };
+} satisfies {
+    [K in DebugChannelStatus['kind']]: (s: Extract<DebugChannelStatus, { kind: K }>) => StatusCopy;
+};
 
 export function channelStatusCopy(s: DebugChannelStatus): { text: string; tone: Tone } {
     const build = STATUS_COPY[s.kind] as (status: DebugChannelStatus) => StatusCopy;

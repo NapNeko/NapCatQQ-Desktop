@@ -21,11 +21,11 @@ export interface MascotFace {
 }
 
 const NOOP_FACE: MascotFace = {
-    lookAt: () => { },
-    squint: () => { },
-    widen: () => { },
-    dizzy: () => { },
-    doze: () => { },
+    lookAt: () => {},
+    squint: () => {},
+    widen: () => {},
+    dizzy: () => {},
+    doze: () => {},
 };
 
 const EYE_ORIGIN = { transformOrigin: '50% 50%' } as const;
@@ -65,7 +65,13 @@ export function useMascotFace(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
         if (rig.eyes.length === 0) return;
         rigRef.current = rig;
 
-        const all = [...rig.eyes, ...rig.cheeks, ...rig.heldCatEyes, ...rig.floorCatEyes, ...rig.bow];
+        const all = [
+            ...rig.eyes,
+            ...rig.cheeks,
+            ...rig.heldCatEyes,
+            ...rig.floorCatEyes,
+            ...rig.bow,
+        ];
         gsap.set(all, EYE_ORIGIN);
 
         const blinks = [blinkLoop(rig.eyes, 2.6, 5.4)];
@@ -123,9 +129,21 @@ export function useMascotFace(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
             squint: () =>
                 expression((rig, tl) => {
                     tl.to(rig.eyes, { scaleY: 0.3, duration: 0.12 / speed, ease: 'power2.in' })
-                        .to(rig.cheeks, { scale: 1.55, duration: 0.18 / speed, ease: m.ease.pop }, 0)
-                        .to(rig.eyes, { scaleY: 1, duration: 0.32 / speed, ease: m.ease.release }, '+=0.55')
-                        .to(rig.cheeks, { scale: 1, duration: 0.4 / speed, ease: 'power2.out' }, '<');
+                        .to(
+                            rig.cheeks,
+                            { scale: 1.55, duration: 0.18 / speed, ease: m.ease.pop },
+                            0,
+                        )
+                        .to(
+                            rig.eyes,
+                            { scaleY: 1, duration: 0.32 / speed, ease: m.ease.release },
+                            '+=0.55',
+                        )
+                        .to(
+                            rig.cheeks,
+                            { scale: 1, duration: 0.4 / speed, ease: 'power2.out' },
+                            '<',
+                        );
                 }),
             widen: () =>
                 expression((rig, tl) => {
@@ -141,11 +159,26 @@ export function useMascotFace(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                         .to(rig.cheeks, { scale: 1.9, duration: 0.25 / speed, ease: m.ease.pop }, 0)
                         .to(
                             rig.eyes,
-                            { rotate: 10, duration: 0.22 / speed, ease: 'sine.inOut', yoyo: true, repeat: 7 },
+                            {
+                                rotate: 10,
+                                duration: 0.22 / speed,
+                                ease: 'sine.inOut',
+                                yoyo: true,
+                                repeat: 7,
+                            },
                             0.1,
                         )
-                        .to(rig.eyes, { rotate: 0, scaleY: 1, duration: 0.4 / speed, ease: m.ease.release })
-                        .to(rig.cheeks, { scale: 1, duration: 0.6 / speed, ease: 'power2.out' }, '<');
+                        .to(rig.eyes, {
+                            rotate: 0,
+                            scaleY: 1,
+                            duration: 0.4 / speed,
+                            ease: m.ease.release,
+                        })
+                        .to(
+                            rig.cheeks,
+                            { scale: 1, duration: 0.6 / speed, ease: 'power2.out' },
+                            '<',
+                        );
                 }),
             doze: (on) => {
                 const rig = rigRef.current;
@@ -156,7 +189,12 @@ export function useMascotFace(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                 exprRef.current = null;
                 if (on) {
                     blinksRef.current.forEach((tl) => tl.pause());
-                    gsap.to(eyes, { scaleY: 0.08, duration: 0.6 / speed, ease: 'power2.inOut', ...EYE_ORIGIN });
+                    gsap.to(eyes, {
+                        scaleY: 0.08,
+                        duration: 0.6 / speed,
+                        ease: 'power2.inOut',
+                        ...EYE_ORIGIN,
+                    });
                 } else {
                     gsap.to(eyes, {
                         scaleY: 1,

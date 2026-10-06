@@ -25,7 +25,9 @@ describe('describeAutoRestartSchedule', () => {
 
     it('间隔模式按单位描述', () => {
         expect(describeAutoRestartSchedule(base)).toBe('每 6小时');
-        expect(describeAutoRestartSchedule({ ...base, time_unit: 'd', duration: 1 })).toBe('每 1天');
+        expect(describeAutoRestartSchedule({ ...base, time_unit: 'd', duration: 1 })).toBe(
+            '每 1天',
+        );
     });
 
     it('cron 模式能识别的形状说人话，否则回落到表达式', () => {
@@ -35,7 +37,9 @@ describe('describeAutoRestartSchedule', () => {
         expect(describeAutoRestartSchedule({ ...base, mode: 'cron', cron: '*/30 * * * *' })).toBe(
             'cron */30 * * * *',
         );
-        expect(describeAutoRestartSchedule({ ...base, mode: 'cron', cron: '' })).toBe('cron 未填写');
+        expect(describeAutoRestartSchedule({ ...base, mode: 'cron', cron: '' })).toBe(
+            'cron 未填写',
+        );
     });
 });
 
@@ -54,7 +58,12 @@ describe('recipeFromCron / cronFromRecipe', () => {
     });
 
     it('周字段接受 7 与英文名，并归一到 0-6', () => {
-        expect(recipeFromCron('0 4 * * 7')).toEqual({ kind: 'weekly', weekday: 0, hour: 4, minute: 0 });
+        expect(recipeFromCron('0 4 * * 7')).toEqual({
+            kind: 'weekly',
+            weekday: 0,
+            hour: 4,
+            minute: 0,
+        });
         expect(recipeFromCron('0 4 * * fri')).toEqual({
             kind: 'weekly',
             weekday: 5,
@@ -89,7 +98,9 @@ describe('describeCronRecipe', () => {
         expect(describeCronRecipe({ kind: 'monthly', day: 15, hour: 0, minute: 30 })).toBe(
             '每月 15 日 00:30',
         );
-        expect(describeCronRecipe({ kind: 'custom', expr: '*/5 * * * *' })).toBe('cron */5 * * * *');
+        expect(describeCronRecipe({ kind: 'custom', expr: '*/5 * * * *' })).toBe(
+            'cron */5 * * * *',
+        );
     });
 });
 

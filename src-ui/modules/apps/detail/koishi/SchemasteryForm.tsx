@@ -35,7 +35,8 @@ import { FieldLabel, fieldText, splitDescription } from './schemaLabel';
 
 type Obj = Record<string, unknown>;
 
-const asObj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
+const asObj = (v: unknown): Obj =>
+    v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {};
 
 /** 改一个键；undefined = 删键（回到默认） */
 function withKey(obj: Obj, key: string, next: unknown): Obj {
@@ -59,20 +60,49 @@ interface FieldProps {
 }
 
 /** 一个字段：按类型挑控件 */
-export function SchemaField({ name, node, value, onChange, disabled, resettable = true }: FieldProps) {
+export function SchemaField({
+    name,
+    node,
+    value,
+    onChange,
+    disabled,
+    resettable = true,
+}: FieldProps) {
     if (isHidden(node)) return null;
     const shown = effectiveValue(node, value);
     const canReset = resettable && value !== undefined && node.meta.default !== undefined;
-    const label = <FieldLabel name={name} node={node} disabled={disabled} onReset={canReset ? () => onChange(undefined) : undefined} />;
+    const label = (
+        <FieldLabel
+            name={name}
+            node={node}
+            disabled={disabled}
+            onReset={canReset ? () => onChange(undefined) : undefined}
+        />
+    );
     const { hint } = fieldText(name, node);
 
-    if (!renderable(node)) return <JsonField name={name} node={node} value={value} onChange={onChange} disabled={disabled} />;
+    if (!renderable(node))
+        return (
+            <JsonField
+                name={name}
+                node={node}
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
+            />
+        );
 
     switch (node.type) {
         case 'boolean':
             return (
                 <div className="flex min-h-[58px] items-center rounded-md border border-border-subtle/70 bg-surface px-3 py-2.5">
-                    <Switch label={label} hint={hint} checked={shown === true} disabled={disabled} onCheckedChange={onChange} />
+                    <Switch
+                        label={label}
+                        hint={hint}
+                        checked={shown === true}
+                        disabled={disabled}
+                        onCheckedChange={onChange}
+                    />
                 </div>
             );
         case 'number':
@@ -96,10 +126,23 @@ export function SchemaField({ name, node, value, onChange, disabled, resettable 
             );
         }
         case 'const':
-            return <TextField label={label} hint={hint} value={String(node.value ?? '')} disabled readOnly />;
+            return (
+                <TextField
+                    label={label}
+                    hint={hint}
+                    value={String(node.value ?? '')}
+                    disabled
+                    readOnly
+                />
+            );
         case 'string':
         case 'date': {
-            const text = typeof shown === 'string' ? shown : shown === undefined || shown === null ? '' : String(shown);
+            const text =
+                typeof shown === 'string'
+                    ? shown
+                    : shown === undefined || shown === null
+                      ? ''
+                      : String(shown);
             if (node.meta.role === 'textarea') {
                 return (
                     <TextAreaField
@@ -119,29 +162,75 @@ export function SchemaField({ name, node, value, onChange, disabled, resettable 
                     hint={hint}
                     value={text}
                     type={node.meta.role === 'secret' ? 'password' : 'text'}
-                    placeholder={node.meta.default !== undefined && node.meta.default !== '' ? String(node.meta.default) : undefined}
+                    placeholder={
+                        node.meta.default !== undefined && node.meta.default !== ''
+                            ? String(node.meta.default)
+                            : undefined
+                    }
                     disabled={disabled}
                     onValueChange={(v) => onChange(v === '' && !node.meta.required ? undefined : v)}
                 />
             );
         }
         case 'union':
-            return <UnionField name={name} node={node} value={value} onChange={onChange} disabled={disabled} canReset={canReset} />;
+            return (
+                <UnionField
+                    name={name}
+                    node={node}
+                    value={value}
+                    onChange={onChange}
+                    disabled={disabled}
+                    canReset={canReset}
+                />
+            );
         case 'object':
         case 'intersect':
             return (
-                <NestedCard name={name} node={node} onReset={canReset ? () => onChange(undefined) : undefined} disabled={disabled}>
-                    <SchemaObject node={node} value={asObj(shown)} onChange={onChange} disabled={disabled} />
+                <NestedCard
+                    name={name}
+                    node={node}
+                    onReset={canReset ? () => onChange(undefined) : undefined}
+                    disabled={disabled}
+                >
+                    <SchemaObject
+                        node={node}
+                        value={asObj(shown)}
+                        onChange={onChange}
+                        disabled={disabled}
+                    />
                 </NestedCard>
             );
         case 'array':
-            return <ArrayField name={name} node={node} value={shown} onChange={onChange} disabled={disabled} canReset={canReset} />;
+            return (
+                <ArrayField
+                    name={name}
+                    node={node}
+                    value={shown}
+                    onChange={onChange}
+                    disabled={disabled}
+                    canReset={canReset}
+                />
+            );
         case 'dict':
-            return <DictField name={name} node={node} value={shown} onChange={onChange} disabled={disabled} canReset={canReset} />;
+            return (
+                <DictField
+                    name={name}
+                    node={node}
+                    value={shown}
+                    onChange={onChange}
+                    disabled={disabled}
+                    canReset={canReset}
+                />
+            );
         case 'tuple': {
             const arr = Array.isArray(shown) ? shown : [];
             return (
-                <NestedCard name={name} node={node} onReset={canReset ? () => onChange(undefined) : undefined} disabled={disabled}>
+                <NestedCard
+                    name={name}
+                    node={node}
+                    onReset={canReset ? () => onChange(undefined) : undefined}
+                    disabled={disabled}
+                >
                     <div className="grid gap-3 sm:grid-cols-2">
                         {(node.list ?? []).map((item, i) => (
                             <SchemaField
@@ -164,10 +253,24 @@ export function SchemaField({ name, node, value, onChange, disabled, resettable 
         }
         case 'transform':
             return node.inner ? (
-                <SchemaField name={name} node={node.inner} value={value} onChange={onChange} disabled={disabled} />
+                <SchemaField
+                    name={name}
+                    node={node.inner}
+                    value={value}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
             ) : null;
         default:
-            return <JsonField name={name} node={node} value={value} onChange={onChange} disabled={disabled} />;
+            return (
+                <JsonField
+                    name={name}
+                    node={node}
+                    value={value}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
+            );
     }
 }
 
@@ -192,7 +295,12 @@ function NestedCard({
     const [open, setOpen] = useState(!node.meta.collapse);
     const { hint } = fieldText(name, node);
     return (
-        <div className={cn('flex min-w-0 flex-col rounded-lg border border-border-subtle bg-surface/60', WIDE)}>
+        <div
+            className={cn(
+                'flex min-w-0 flex-col rounded-lg border border-border-subtle bg-surface/60',
+                WIDE,
+            )}
+        >
             <div className="flex min-h-[44px] items-center gap-2 px-3.5 py-2">
                 <button
                     type="button"
@@ -202,7 +310,10 @@ function NestedCard({
                 >
                     <ChevronRight
                         size={14}
-                        className={cn('shrink-0 text-text-tertiary transition-transform duration-200', open && 'rotate-90')}
+                        className={cn(
+                            'shrink-0 text-text-tertiary transition-transform duration-200',
+                            open && 'rotate-90',
+                        )}
                     />
                     <FieldLabel name={name} node={node} />
                     {count !== undefined && (
@@ -220,7 +331,11 @@ function NestedCard({
                     )}
                 </div>
             </div>
-            {hint && <p className="-mt-1 px-3.5 pb-2 pl-9 text-2xs leading-relaxed text-text-tertiary">{hint}</p>}
+            {hint && (
+                <p className="-mt-1 px-3.5 pb-2 pl-9 text-2xs leading-relaxed text-text-tertiary">
+                    {hint}
+                </p>
+            )}
             {open && <div className="border-t border-border-subtle/70 px-3.5 py-3">{children}</div>}
         </div>
     );
@@ -255,7 +370,13 @@ function FieldGrid({
         <div className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
             {fields.map((f, i) =>
                 f.key === '' ? (
-                    <InlineUnion key={`u${i}`} node={f.node} value={value} onChange={onChange} disabled={disabled} />
+                    <InlineUnion
+                        key={`u${i}`}
+                        node={f.node}
+                        value={value}
+                        onChange={onChange}
+                        disabled={disabled}
+                    />
                 ) : (
                     <SchemaField
                         key={f.key}
@@ -286,11 +407,19 @@ export function SchemaObject({
     sections?: boolean;
 }) {
     if (!sections) {
-        const parts = objectSections(node).map(unwrapSection).filter((s) => s.fields.length > 0);
+        const parts = objectSections(node)
+            .map(unwrapSection)
+            .filter((s) => s.fields.length > 0);
         return (
             <div className="flex flex-col gap-4">
                 {parts.map((s, i) => (
-                    <FieldGrid key={i} fields={s.fields} value={value} onChange={onChange} disabled={disabled} />
+                    <FieldGrid
+                        key={i}
+                        fields={s.fields}
+                        value={value}
+                        onChange={onChange}
+                        disabled={disabled}
+                    />
                 ))}
             </div>
         );
@@ -303,14 +432,22 @@ export function SchemaObject({
             {parts.map((s, i) => {
                 const inner = s.inner;
                 return (
-                    <FormSection key={i} title={s.title || (parts.length === 1 ? '设置' : i === 0 ? '基础设置' : '其它')} layout="none">
+                    <FormSection
+                        key={i}
+                        title={
+                            s.title || (parts.length === 1 ? '设置' : i === 0 ? '基础设置' : '其它')
+                        }
+                        layout="none"
+                    >
                         {inner ? (
                             <FieldGrid
                                 fields={objectFields(inner.node)
                                     .filter((f) => !isHidden(f.node))
                                     .concat(
                                         inner.node.type === 'intersect'
-                                            ? objectSections(inner.node).flatMap((x) => x.fields.filter((f) => f.key === ''))
+                                            ? objectSections(inner.node).flatMap((x) =>
+                                                  x.fields.filter((f) => f.key === ''),
+                                              )
                                             : [],
                                     )}
                                 value={asObj(effectiveValue(inner.node, value[inner.key]))}
@@ -318,7 +455,12 @@ export function SchemaObject({
                                 disabled={disabled}
                             />
                         ) : (
-                            <FieldGrid fields={s.fields} value={value} onChange={onChange} disabled={disabled} />
+                            <FieldGrid
+                                fields={s.fields}
+                                value={value}
+                                onChange={onChange}
+                                disabled={disabled}
+                            />
                         )}
                     </FormSection>
                 );
@@ -356,7 +498,10 @@ function InlineUnion({
                 <Select
                     label={
                         <span className="flex items-center gap-1.5">
-                            连接方式<span className="font-mono text-2xs font-normal text-text-disabled">{shape.key}</span>
+                            连接方式
+                            <span className="font-mono text-2xs font-normal text-text-disabled">
+                                {shape.key}
+                            </span>
                         </span>
                     }
                     hint={describe(node) || undefined}
@@ -370,7 +515,12 @@ function InlineUnion({
                 />
             </div>
             {branch && (
-                <SchemaObject node={stripKey(branch.node, shape.key)} value={value} onChange={onChange} disabled={disabled} />
+                <SchemaObject
+                    node={stripKey(branch.node, shape.key)}
+                    value={value}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
             )}
         </div>
     );
@@ -383,7 +533,8 @@ function stripKey(node: SNode, key: string): SNode {
         delete dict[key];
         return { ...node, dict };
     }
-    if (node.type === 'intersect') return { ...node, list: (node.list ?? []).map((n) => stripKey(n, key)) };
+    if (node.type === 'intersect')
+        return { ...node, list: (node.list ?? []).map((n) => stripKey(n, key)) };
     return node;
 }
 
@@ -401,7 +552,10 @@ function expandUnions(sections: Section[], value: Obj): Section[] {
         if (!shape || shape.kind !== 'tagged' || !keys.has(shape.key)) return [s];
         const branch = shape.branches[taggedBranch(shape, value)];
         if (!branch) return [];
-        return objectSections(stripKey(branch.node, shape.key)).map((b) => ({ ...b, title: b.title || s.title }));
+        return objectSections(stripKey(branch.node, shape.key)).map((b) => ({
+            ...b,
+            title: b.title || s.title,
+        }));
     });
 }
 
@@ -452,16 +606,38 @@ function UnionField({
     if (shape.kind === 'tagged') {
         return (
             <NestedCard name={name} node={node} onReset={reset} disabled={disabled}>
-                <InlineUnion node={node} value={asObj(shown)} onChange={onChange} disabled={disabled} />
+                <InlineUnion
+                    node={node}
+                    value={asObj(shown)}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
             </NestedCard>
         );
     }
     const branches = shape.branches.filter((b) => renderable(b));
-    if (branches.length === 0) return <JsonField name={name} node={node} value={value} onChange={onChange} disabled={disabled} />;
+    if (branches.length === 0)
+        return (
+            <JsonField
+                name={name}
+                node={node}
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
+            />
+        );
     const branch = branches[mixedBranch(branches, shown)] ?? branches[0];
     // 联合自己的说明、默认值、必填挂到选中的分支上显示
     const merged: SNode = { ...branch, meta: { ...branch.meta, ...node.meta } };
-    return <SchemaField name={name} node={merged} value={value} onChange={onChange} disabled={disabled} />;
+    return (
+        <SchemaField
+            name={name}
+            node={merged}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+        />
+    );
 }
 
 function ItemRemove({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
@@ -501,7 +677,9 @@ function ArrayField({
     if (inner.type === 'string') {
         // 空串是有意义的一项（Koishi 的指令前缀默认 [''] = 不带前缀也能触发），标签输入画不出空标签，单独说明、原样留着
         const hasEmpty = list.some((x) => x === '');
-        const hint = [fieldText(name, node).hint, hasEmpty ? '另含一个空值（不带前缀也算）' : ''].filter(Boolean).join(' ');
+        const hint = [fieldText(name, node).hint, hasEmpty ? '另含一个空值（不带前缀也算）' : '']
+            .filter(Boolean)
+            .join(' ');
         return (
             <StringListField
                 className={WIDE}
@@ -514,20 +692,34 @@ function ArrayField({
         );
     }
     const add = (
-        <Button size="sm" variant="secondary" disabled={disabled} onClick={() => onChange([...list, blankOf(inner)])}>
+        <Button
+            size="sm"
+            variant="secondary"
+            disabled={disabled}
+            onClick={() => onChange([...list, blankOf(inner)])}
+        >
             <Plus size={13} />
             加一项
         </Button>
     );
     return (
-        <NestedCard name={name} node={node} onReset={reset} disabled={disabled} actions={add} count={list.length}>
+        <NestedCard
+            name={name}
+            node={node}
+            onReset={reset}
+            disabled={disabled}
+            actions={add}
+            count={list.length}
+        >
             {list.length === 0 ? (
                 <p className="py-1 text-xs text-text-tertiary">还没有，点「加一项」</p>
             ) : (
                 <ul className="flex flex-col divide-y divide-border-subtle/70">
                     {list.map((item, i) => (
                         <li key={i} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                            <span className="mt-7 w-5 shrink-0 text-right text-2xs tabular-nums text-text-disabled">{i + 1}</span>
+                            <span className="mt-7 w-5 shrink-0 text-right text-2xs tabular-nums text-text-disabled">
+                                {i + 1}
+                            </span>
                             <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
                                 {isObjectLike(inner) ? (
                                     <div className={WIDE}>
@@ -535,7 +727,9 @@ function ArrayField({
                                             node={inner}
                                             value={asObj(item)}
                                             disabled={disabled}
-                                            onChange={(v) => onChange(list.map((x, j) => (j === i ? v : x)))}
+                                            onChange={(v) =>
+                                                onChange(list.map((x, j) => (j === i ? v : x)))
+                                            }
                                         />
                                     </div>
                                 ) : (
@@ -545,11 +739,16 @@ function ArrayField({
                                         value={item}
                                         resettable={false}
                                         disabled={disabled}
-                                        onChange={(v) => onChange(list.map((x, j) => (j === i ? v : x)))}
+                                        onChange={(v) =>
+                                            onChange(list.map((x, j) => (j === i ? v : x)))
+                                        }
                                     />
                                 )}
                             </div>
-                            <ItemRemove disabled={disabled} onClick={() => onChange(list.filter((_, j) => j !== i))} />
+                            <ItemRemove
+                                disabled={disabled}
+                                onClick={() => onChange(list.filter((_, j) => j !== i))}
+                            />
                         </li>
                     ))}
                 </ul>
@@ -559,7 +758,15 @@ function ArrayField({
 }
 
 /** 字典的键：边打边改会让整行换 key 重挂、丢焦点，所以失焦再改名 */
-function DictKeyInput({ value, onCommit, disabled }: { value: string; onCommit: (next: string) => void; disabled?: boolean }) {
+function DictKeyInput({
+    value,
+    onCommit,
+    disabled,
+}: {
+    value: string;
+    onCommit: (next: string) => void;
+    disabled?: boolean;
+}) {
     const [draft, setDraft] = useState(value);
     return (
         <TextField
@@ -615,7 +822,11 @@ function DictField({
                 {entries.map(([k, v]) => (
                     <li key={k} className="flex items-start gap-3 py-3 first:pt-0">
                         <div className="w-44 shrink-0">
-                            <DictKeyInput value={k} disabled={disabled} onCommit={(to) => rename(k, to)} />
+                            <DictKeyInput
+                                value={k}
+                                disabled={disabled}
+                                onCommit={(to) => rename(k, to)}
+                            />
                         </div>
                         <div className="grid min-w-0 flex-1 gap-3">
                             {isObjectLike(inner) ? (
@@ -636,13 +847,26 @@ function DictField({
                                 />
                             )}
                         </div>
-                        <ItemRemove disabled={disabled} onClick={() => onChange(withKey(obj, k, undefined))} />
+                        <ItemRemove
+                            disabled={disabled}
+                            onClick={() => onChange(withKey(obj, k, undefined))}
+                        />
                     </li>
                 ))}
             </ul>
-            <div className={cn('flex items-center gap-2', entries.length > 0 && 'mt-3 border-t border-border-subtle/70 pt-3')}>
+            <div
+                className={cn(
+                    'flex items-center gap-2',
+                    entries.length > 0 && 'mt-3 border-t border-border-subtle/70 pt-3',
+                )}
+            >
                 <div className="w-44">
-                    <TextField value={draftKey} placeholder="新的键" disabled={disabled} onValueChange={setDraftKey} />
+                    <TextField
+                        value={draftKey}
+                        placeholder="新的键"
+                        disabled={disabled}
+                        onValueChange={setDraftKey}
+                    />
                 </div>
                 <Button
                     size="sm"
@@ -675,7 +899,9 @@ function JsonField({
     onChange: (next: unknown) => void;
     disabled?: boolean;
 }) {
-    const [text, setText] = useState(() => (value === undefined ? '' : JSON.stringify(value, null, 2)));
+    const [text, setText] = useState(() =>
+        value === undefined ? '' : JSON.stringify(value, null, 2),
+    );
     const [error, setError] = useState<string | null>(null);
     const { hint } = fieldText(name, node);
     return (
@@ -730,13 +956,31 @@ export function SchemasteryForm({
     if (!isObjectLike(schema)) {
         return (
             <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                <SchemaField name="值" node={schema} value={value} onChange={(v) => onChange(asObj(v))} disabled={disabled} />
+                <SchemaField
+                    name="值"
+                    node={schema}
+                    value={value}
+                    onChange={(v) => onChange(asObj(v))}
+                    disabled={disabled}
+                />
             </div>
         );
     }
-    const any = objectSections(schema).some((s) => s.fields.some((f) => f.key === '' || !isHidden(f.node)));
+    const any = objectSections(schema).some((s) =>
+        s.fields.some((f) => f.key === '' || !isHidden(f.node)),
+    );
     if (!any) {
-        return <p className="py-2 text-[13px] text-text-tertiary">这个插件没有可配置的项，开关就行</p>;
+        return (
+            <p className="py-2 text-[13px] text-text-tertiary">这个插件没有可配置的项，开关就行</p>
+        );
     }
-    return <SchemaObject node={schema} value={value} onChange={onChange} disabled={disabled} sections={sections} />;
+    return (
+        <SchemaObject
+            node={schema}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+            sections={sections}
+        />
+    );
 }

@@ -11,24 +11,37 @@ const MESSAGE_ROWS: ReadonlyArray<{ mine: boolean; width: number }> = [
 ];
 
 export function ConversationSkeleton() {
-    return <div className="native-chat-skel-list" role="status" aria-label="正在读取会话">
-        {CONVERSATION_ROWS.map((width, index) => (
-            <div className="native-chat-skel" key={index} aria-hidden>
-                <span className="native-chat-skel-avatar is-list" />
-                <div className="min-w-0 flex-1">
-                    <span className="native-chat-skel-bar" style={{ width: `${width}%` }} />
-                    <span className="native-chat-skel-bar mt-2" style={{ width: `${Math.round(width * 0.62)}%` }} />
+    return (
+        <div className="native-chat-skel-list" role="status" aria-label="正在读取会话">
+            {CONVERSATION_ROWS.map((width, index) => (
+                <div className="native-chat-skel" key={index} aria-hidden>
+                    <span className="native-chat-skel-avatar is-list" />
+                    <div className="min-w-0 flex-1">
+                        <span className="native-chat-skel-bar" style={{ width: `${width}%` }} />
+                        <span
+                            className="native-chat-skel-bar mt-2"
+                            style={{ width: `${Math.round(width * 0.62)}%` }}
+                        />
+                    </div>
                 </div>
-            </div>))}
-    </div>;
+            ))}
+        </div>
+    );
 }
 
 export function MessageSkeleton() {
-    return <div className="native-chat-skel-timeline" role="status" aria-label="正在读取消息">
-        {MESSAGE_ROWS.map((row, index) => (
-            <div className={cn('native-chat-skel', row.mine && 'is-mine')} key={index} aria-hidden>
-                <span className="native-chat-skel-avatar" />
-                <span className="native-chat-skel-bubble" style={{ width: `${row.width}%` }} />
-            </div>))}
-    </div>;
+    return (
+        <div className="native-chat-skel-timeline" role="status" aria-label="正在读取消息">
+            {MESSAGE_ROWS.map((row, index) => (
+                <div
+                    className={cn('native-chat-skel', row.mine && 'is-mine')}
+                    key={index}
+                    aria-hidden
+                >
+                    <span className="native-chat-skel-avatar" />
+                    <span className="native-chat-skel-bubble" style={{ width: `${row.width}%` }} />
+                </div>
+            ))}
+        </div>
+    );
 }

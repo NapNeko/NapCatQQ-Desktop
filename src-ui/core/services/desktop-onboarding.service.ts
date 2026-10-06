@@ -22,10 +22,7 @@ const MOCK_PAYLOAD: DesktopOnboardingPayload = {
     schemaVersion: 1,
 };
 
-function mockWith(
-    status: OnboardingStatus,
-    shouldPromptChoice: boolean,
-): DesktopOnboardingPayload {
+function mockWith(status: OnboardingStatus, shouldPromptChoice: boolean): DesktopOnboardingPayload {
     const now = new Date().toISOString();
     return {
         schemaVersion: 1,

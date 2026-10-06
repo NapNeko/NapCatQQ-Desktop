@@ -9,7 +9,11 @@ import { createStore } from '../utils/createStore';
 import { onebotDebugService } from '../../core/services/onebot-debug.service';
 import { errorText } from '../../core/domain/errors';
 import { newRequestId } from '../../core/domain/debug/ids';
-import { EXPLICIT_WIDTH_VERSION, UNSET_COLUMN_WIDTH, upgradeLayoutWidths } from '../../core/domain/debug/workbenchLayout';
+import {
+    EXPLICIT_WIDTH_VERSION,
+    UNSET_COLUMN_WIDTH,
+    upgradeLayoutWidths,
+} from '../../core/domain/debug/workbenchLayout';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 import type { DebugChannelChoice } from '../../core/ipc/generated/debug/DebugChannelChoice';
@@ -162,7 +166,11 @@ function updateWs(op: WsOp): void {
     if (s.loaded) markDirty();
 }
 
-function mapTab(ws: DebugWorkspace, id: string, fn: (t: DebugRequestDraft) => DebugRequestDraft): DebugWorkspace {
+function mapTab(
+    ws: DebugWorkspace,
+    id: string,
+    fn: (t: DebugRequestDraft) => DebugRequestDraft,
+): DebugWorkspace {
     let changed = false;
     const tabs = ws.tabs.map((t) => {
         if (t.id !== id) return t;
@@ -304,7 +312,9 @@ function openAction(name: string, opts: { newTab?: boolean; paramsText?: string 
         // 载入前的改动重放时，原来的标签可能已经不在了，那就当新开
         if (replace && ws.tabs.some((t) => t.id === id)) {
             const mapped = mapTab(ws, id, (t) =>
-                t.action === name && t.params_text === text ? t : { ...t, action: name, params_text: text },
+                t.action === name && t.params_text === text
+                    ? t
+                    : { ...t, action: name, params_text: text },
             );
             return mapped.active_tab === id ? mapped : { ...mapped, active_tab: id };
         }
@@ -319,7 +329,9 @@ function openAction(name: string, opts: { newTab?: boolean; paramsText?: string 
 
 function newTab(): string {
     const id = newRequestId();
-    updateWs((ws) => addTab(ws, { id, action: '', params_text: '{}', timeout_ms: null, channel: null }));
+    updateWs((ws) =>
+        addTab(ws, { id, action: '', params_text: '{}', timeout_ms: null, channel: null }),
+    );
     return id;
 }
 
@@ -330,9 +342,14 @@ function closeTab(id: string): void {
         const tab = ws.tabs[idx];
         const tabs = ws.tabs.filter((t) => t.id !== id);
         // 关的是当前标签就激活右邻，没有右邻就左邻
-        const active = ws.active_tab === id ? (tabs[Math.min(idx, tabs.length - 1)]?.id ?? null) : ws.active_tab;
+        const active =
+            ws.active_tab === id
+                ? (tabs[Math.min(idx, tabs.length - 1)]?.id ?? null)
+                : ws.active_tab;
         // 空白标签没有东西可恢复，不占「最近关闭」的名额
-        const closed = blank(tab) ? ws.closed_tabs : [tab, ...ws.closed_tabs].slice(0, MAX_CLOSED_TABS);
+        const closed = blank(tab)
+            ? ws.closed_tabs
+            : [tab, ...ws.closed_tabs].slice(0, MAX_CLOSED_TABS);
         return { ...ws, tabs, active_tab: active, closed_tabs: closed };
     });
     dropRun(id);
@@ -354,12 +371,16 @@ function reopenClosed(): string | null {
 }
 
 function setActive(id: string): void {
-    updateWs((ws) => (ws.active_tab === id || !ws.tabs.some((t) => t.id === id) ? ws : { ...ws, active_tab: id }));
+    updateWs((ws) =>
+        ws.active_tab === id || !ws.tabs.some((t) => t.id === id) ? ws : { ...ws, active_tab: id },
+    );
 }
 
 /** `initial` 表示这是编辑器按动作说明填进去的初始文本，不算用户改过 */
 function setParamsText(id: string, text: string, opts: { initial?: boolean } = {}): void {
-    updateWs((ws) => mapTab(ws, id, (t) => (t.params_text === text ? t : { ...t, params_text: text })));
+    updateWs((ws) =>
+        mapTab(ws, id, (t) => (t.params_text === text ? t : { ...t, params_text: text })),
+    );
     if (opts.initial) pristineText.set(id, text);
 }
 
@@ -374,7 +395,9 @@ function setTabAction(id: string, action: string, opts: { paramsText?: string } 
     updateWs((ws) =>
         mapTab(ws, id, (t) => {
             const text = opts.paramsText ?? t.params_text;
-            return t.action === action && t.params_text === text ? t : { ...t, action, params_text: text };
+            return t.action === action && t.params_text === text
+                ? t
+                : { ...t, action, params_text: text };
         }),
     );
     if (before.action !== action) {
@@ -392,7 +415,9 @@ function setTabChannel(id: string, channel: DebugChannelId | null): void {
         mapTab(ws, id, (t) => {
             const same =
                 t.channel === channel ||
-                (t.channel !== null && channel !== null && channelIdKey(t.channel) === channelIdKey(channel));
+                (t.channel !== null &&
+                    channel !== null &&
+                    channelIdKey(t.channel) === channelIdKey(channel));
             return same ? t : { ...t, channel };
         }),
     );
@@ -433,7 +458,13 @@ function pushRecent(name: string): void {
     updateWs((ws) =>
         ws.recent_actions[0] === name
             ? ws
-            : { ...ws, recent_actions: [name, ...ws.recent_actions.filter((n) => n !== name)].slice(0, MAX_RECENT_ACTIONS) },
+            : {
+                  ...ws,
+                  recent_actions: [name, ...ws.recent_actions.filter((n) => n !== name)].slice(
+                      0,
+                      MAX_RECENT_ACTIONS,
+                  ),
+              },
     );
 }
 
@@ -522,7 +553,8 @@ export const useTabRun = (tabId: string | null): TabRun | undefined =>
 
 export const useDebugLayout = (): DebugLayout => useDebugWorkspaceSelector((s) => s.ws.layout);
 
-export const useSelectedDebugBot = (): string | null => useDebugWorkspaceSelector((s) => s.ws.selected_bot);
+export const useSelectedDebugBot = (): string | null =>
+    useDebugWorkspaceSelector((s) => s.ws.selected_bot);
 
 export const useDebugChannelChoice = (botId: string | null): DebugChannelChoice | undefined =>
     useDebugWorkspaceSelector((s) => (botId === null ? undefined : s.ws.channel_choice[botId]));

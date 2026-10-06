@@ -58,7 +58,9 @@ function savedRows(
     if (!collections) return [];
     const view = collectionsView(collections);
     const ordered: Array<{ request: DebugSavedRequest; folderName: string | null }> = [];
-    for (const f of view.folders) for (const r of view.children.get(f.id) ?? []) ordered.push({ request: r, folderName: f.name });
+    for (const f of view.folders)
+        for (const r of view.children.get(f.id) ?? [])
+            ordered.push({ request: r, folderName: f.name });
     for (const r of view.root) ordered.push({ request: r, folderName: null });
     return ordered
         .filter(({ request }) => match(request))
@@ -71,7 +73,12 @@ function savedRows(
         }));
 }
 
-export function buildPaletteRows({ actions, collections, query, recent }: PaletteInput): PaletteRow[] {
+export function buildPaletteRows({
+    actions,
+    collections,
+    query,
+    recent,
+}: PaletteInput): PaletteRow[] {
     const list = [...actions];
     const byName = new Map<string, DebugActionSummary>();
     for (const a of list) {
@@ -104,7 +111,11 @@ export function buildPaletteRows({ actions, collections, query, recent }: Palett
             rows.push({ kind: 'header', key: 'h:saved', label: `收藏 · ${saved.length}` });
             rows.push(...saved.slice(0, PALETTE_SAVED_LIMIT));
             if (saved.length > PALETTE_SAVED_LIMIT) {
-                rows.push({ kind: 'more', key: 'm:saved', text: `还有 ${saved.length - PALETTE_SAVED_LIMIT} 个收藏，输入名字缩小范围` });
+                rows.push({
+                    kind: 'more',
+                    key: 'm:saved',
+                    text: `还有 ${saved.length - PALETTE_SAVED_LIMIT} 个收藏，输入名字缩小范围`,
+                });
             }
         }
         if (list.length > 0) {
@@ -120,10 +131,17 @@ export function buildPaletteRows({ actions, collections, query, recent }: Palett
     const matched = searchActions(list, q, [...recent]);
     const exact = byName.has(q) || list.some((a) => a.name.toLowerCase() === lower);
     // 搜到了东西时，只有看着像完整接口名（带下划线、点开头）的才另给一行，敲「group」这种片段不必多一行噪音
-    const wantFree = !exact && ACTION_NAME.test(q) && (matched.length === 0 || q.includes('_') || q.startsWith('.'));
+    const wantFree =
+        !exact &&
+        ACTION_NAME.test(q) &&
+        (matched.length === 0 || q.includes('_') || q.startsWith('.'));
     const free: PaletteRow | null = wantFree ? { kind: 'free', key: `f:${q}`, name: q } : null;
     if (matched.length > 0 || free) {
-        rows.push({ kind: 'header', key: 'h:actions', label: matched.length > 0 ? `接口 · ${matched.length}` : '接口' });
+        rows.push({
+            kind: 'header',
+            key: 'h:actions',
+            label: matched.length > 0 ? `接口 · ${matched.length}` : '接口',
+        });
         // 一个都没搜到时「打开目录外的接口」就是第一行，回车直接用；搜到了就放在最后，不抢最像的那个
         if (free && matched.length === 0) rows.push(free);
         for (const a of matched) rows.push(actionRow(a, 'q'));
@@ -141,7 +159,11 @@ export function buildPaletteRows({ actions, collections, query, recent }: Palett
         rows.push({ kind: 'header', key: 'h:saved', label: `收藏 · ${saved.length}` });
         rows.push(...saved.slice(0, SAVED_MATCH_LIMIT));
         if (saved.length > SAVED_MATCH_LIMIT) {
-            rows.push({ kind: 'more', key: 'm:saved', text: `还有 ${saved.length - SAVED_MATCH_LIMIT} 个，多输几个字` });
+            rows.push({
+                kind: 'more',
+                key: 'm:saved',
+                text: `还有 ${saved.length - SAVED_MATCH_LIMIT} 个，多输几个字`,
+            });
         }
     }
     return rows;

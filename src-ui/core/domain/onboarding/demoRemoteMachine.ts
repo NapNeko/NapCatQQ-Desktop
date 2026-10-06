@@ -40,43 +40,15 @@ export function buildDemoRemoteMachine(): MachineView {
             state: 'connected',
         },
         framework: [
+            notInstalled(info('napcat', 'NapCat', '远端协议端，依赖 QQ', 'framework')),
             notInstalled(
-                info(
-                    'napcat',
-                    'NapCat',
-                    '远端协议端，依赖 QQ',
-                    'framework',
-                ),
-            ),
-            notInstalled(
-                info(
-                    'snowluma',
-                    'SnowLuma',
-                    '远端带 QQ 窗口，依赖 QQ + Node + noVNC',
-                    'framework',
-                ),
+                info('snowluma', 'SnowLuma', '远端带 QQ 窗口，依赖 QQ + Node + noVNC', 'framework'),
             ),
         ],
         runtimeDep: [
-            notInstalled(
-                info('qq', 'QQ', 'NC / SL 都用（Linux QQ）', 'runtime_dep'),
-            ),
-            notInstalled(
-                info(
-                    'nodejs',
-                    'Node.js',
-                    '仅 SnowLuma 需要',
-                    'runtime_dep',
-                ),
-            ),
-            notInstalled(
-                info(
-                    'novnc',
-                    'noVNC',
-                    '远端 SnowLuma 看 QQ 窗口用',
-                    'runtime_dep',
-                ),
-            ),
+            notInstalled(info('qq', 'QQ', 'NC / SL 都用（Linux QQ）', 'runtime_dep')),
+            notInstalled(info('nodejs', 'Node.js', '仅 SnowLuma 需要', 'runtime_dep')),
+            notInstalled(info('novnc', 'noVNC', '远端 SnowLuma 看 QQ 窗口用', 'runtime_dep')),
         ],
         selfApp: [],
     };

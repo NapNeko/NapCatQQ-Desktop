@@ -15,7 +15,16 @@ import {
     Trash2,
     Unlink,
 } from 'lucide-react';
-import { Badge, Button, Popover, PopoverClose, PopoverContent, PopoverTrigger, Spinner, Switch } from '../../../shared/ui';
+import {
+    Badge,
+    Button,
+    Popover,
+    PopoverClose,
+    PopoverContent,
+    PopoverTrigger,
+    Spinner,
+    Switch,
+} from '../../../shared/ui';
 import { openTerminal } from '../../../hooks/terminal/terminalStore';
 import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
@@ -23,7 +32,10 @@ import { cn } from '../../../shared/utils/cn';
 import { hasAppUpdate } from '../../../core/domain/apps/appVersions';
 import type { AppInstance, AppInstanceState } from '../../../core/ipc/types';
 
-const STATE_LOOK: Record<AppInstanceState, { label: string; tone: 'success' | 'warning' | 'neutral' }> = {
+const STATE_LOOK: Record<
+    AppInstanceState,
+    { label: string; tone: 'success' | 'warning' | 'neutral' }
+> = {
     running: { label: '运行中', tone: 'success' },
     installing: { label: '安装中', tone: 'warning' },
     installed: { label: '未启动', tone: 'neutral' },
@@ -112,7 +124,9 @@ export const DetailHeader: React.FC<{
                 </Button>
                 <div className="flex min-w-0 flex-col gap-0.5">
                     <div className="flex min-w-0 items-center gap-2">
-                        <h1 className="truncate font-display text-md font-semibold text-text">{instance.display_name}</h1>
+                        <h1 className="truncate font-display text-md font-semibold text-text">
+                            {instance.display_name}
+                        </h1>
                         <Badge tone={look.tone} appearance="soft" className="shrink-0">
                             {look.label}
                         </Badge>
@@ -120,7 +134,10 @@ export const DetailHeader: React.FC<{
                     <p className="truncate text-xs text-text-tertiary" title={instance.install_dir}>
                         {identity}
                         {updatable && (
-                            <span className="ml-1.5 text-warning" title={`上游最新正式版 ${latestVersion}`}>
+                            <span
+                                className="ml-1.5 text-warning"
+                                title={`上游最新正式版 ${latestVersion}`}
+                            >
                                 最新 {latestVersion}
                             </span>
                         )}
@@ -148,7 +165,9 @@ export const DetailHeader: React.FC<{
                         size="sm"
                         variant="ghost"
                         title="在实例目录里开终端，node / uv / .venv 都接好了"
-                        onClick={() => void openTerminal({ kind: 'app_instance', instance_id: instance.id })}
+                        onClick={() =>
+                            void openTerminal({ kind: 'app_instance', instance_id: instance.id })
+                        }
                     >
                         <ActionMotionIcon icon={SquareTerminal} size={13} />
                         终端
@@ -191,14 +210,28 @@ export const DetailHeader: React.FC<{
                                 <div className="my-1 h-px bg-border-subtle" />
                             </>
                         )}
-                        {installed && <MoreItem icon={Link2} label={instance.link ? '改绑' : '对接'} onClick={onLink} />}
-                        {instance.link && <MoreItem icon={Unlink} label="解除对接" onClick={onUnlink} />}
-                        {canWebUi && <MoreItem icon={ExternalLink} label="打开 WebUI" onClick={onWebUi} />}
+                        {installed && (
+                            <MoreItem
+                                icon={Link2}
+                                label={instance.link ? '改绑' : '对接'}
+                                onClick={onLink}
+                            />
+                        )}
+                        {instance.link && (
+                            <MoreItem icon={Unlink} label="解除对接" onClick={onUnlink} />
+                        )}
+                        {canWebUi && (
+                            <MoreItem icon={ExternalLink} label="打开 WebUI" onClick={onWebUi} />
+                        )}
                         <MoreItem icon={RefreshCw} label="重新探测" onClick={onRefresh} />
                         {onReinstall && (
                             <MoreItem
                                 icon={Download}
-                                label={hasUpdate ? `重装 / 换版本（可更新到 ${latestVersion}）` : '重装 / 换版本'}
+                                label={
+                                    hasUpdate
+                                        ? `重装 / 换版本（可更新到 ${latestVersion}）`
+                                        : '重装 / 换版本'
+                                }
                                 onClick={onReinstall}
                             />
                         )}
@@ -245,7 +278,13 @@ const MoreItem: React.FC<{
             )}
             onClick={onClick}
         >
-            <Icon size={14} className={cn('shrink-0', tone === 'danger' ? 'text-danger' : 'text-text-secondary')} />
+            <Icon
+                size={14}
+                className={cn(
+                    'shrink-0',
+                    tone === 'danger' ? 'text-danger' : 'text-text-secondary',
+                )}
+            />
             {label}
         </button>
     </PopoverClose>

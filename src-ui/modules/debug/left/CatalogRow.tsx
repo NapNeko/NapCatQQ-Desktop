@@ -92,20 +92,41 @@ export const CatalogActionRow = memo(function CatalogActionRow({
                                     current ? 'opacity-100' : 'opacity-0',
                                 )}
                             />
-                            <span aria-hidden className={cn('h-[7px] w-[7px] shrink-0 rounded-full', SAFETY_DOT_CLASS[action.safety])} />
+                            <span
+                                aria-hidden
+                                className={cn(
+                                    'h-[7px] w-[7px] shrink-0 rounded-full',
+                                    SAFETY_DOT_CLASS[action.safety],
+                                )}
+                            />
                             {/* 列表只放主名（简介剥掉参数括注；没有简介退回字段名），字段名和完整简介在悬停提示、右键菜单里 */}
                             {action.summary ? (
-                                <span className="min-w-0 flex-1 truncate text-[12px] text-text">{catalogRowLabel(action)}</span>
+                                <span className="min-w-0 flex-1 truncate text-[12px] text-text">
+                                    {catalogRowLabel(action)}
+                                </span>
                             ) : (
-                                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">{action.name}</span>
+                                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">
+                                    {action.name}
+                                </span>
                             )}
-                            {only && <span className={cn(CHIP, 'bg-info-soft text-info')}>{only}</span>}
-                            {action.param_diff && <span className={cn(CHIP, 'bg-warning-soft text-warning')}>参数不同</span>}
-                            {action.stream && <span className={cn(CHIP, 'bg-brand-soft text-brand')}>流式</span>}
+                            {only && (
+                                <span className={cn(CHIP, 'bg-info-soft text-info')}>{only}</span>
+                            )}
+                            {action.param_diff && (
+                                <span className={cn(CHIP, 'bg-warning-soft text-warning')}>
+                                    参数不同
+                                </span>
+                            )}
+                            {action.stream && (
+                                <span className={cn(CHIP, 'bg-brand-soft text-brand')}>流式</span>
+                            )}
                         </div>
                     </TooltipTrigger>
                 </ContextMenuTrigger>
-                <TooltipContent side="right" className="max-w-[280px] whitespace-normal py-1.5 leading-relaxed">
+                <TooltipContent
+                    side="right"
+                    className="max-w-[280px] whitespace-normal py-1.5 leading-relaxed"
+                >
                     <span className="block font-mono">{action.name}</span>
                     {tip.map((line) => (
                         <span key={line} className="block opacity-80">
@@ -115,7 +136,9 @@ export const CatalogActionRow = memo(function CatalogActionRow({
                 </TooltipContent>
             </Tooltip>
             <ContextMenuContent className="w-48">
-                <ContextMenuLabel className="truncate font-mono text-2xs">{action.name}</ContextMenuLabel>
+                <ContextMenuLabel className="truncate font-mono text-2xs">
+                    {action.name}
+                </ContextMenuLabel>
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={() => onOpen(action.name, false)}>
                     <ExternalLink size={13} />
@@ -175,7 +198,11 @@ export const CatalogHeaderRow = memo(function CatalogHeaderRow({
         >
             <ExpandChevron open={open} size={13} />
             <span className="min-w-0 truncate">{label}</span>
-            {count !== null && <span className="ml-auto shrink-0 text-[10px] tabular-nums text-text-tertiary">{count}</span>}
+            {count !== null && (
+                <span className="ml-auto shrink-0 text-[10px] tabular-nums text-text-tertiary">
+                    {count}
+                </span>
+            )}
         </div>
     );
 });

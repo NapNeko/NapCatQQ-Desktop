@@ -29,10 +29,7 @@ const remoteFiles = new Map<string, RemoteFileEntry[]>([
             { name: 'my-bot', is_dir: true, size: 0 },
         ],
     ],
-    [
-        '/root/game-qqbot',
-        [{ name: 'bot-xiuxian', is_dir: true, size: 0 }],
-    ],
+    ['/root/game-qqbot', [{ name: 'bot-xiuxian', is_dir: true, size: 0 }]],
     [
         '/root/game-qqbot/bot-xiuxian',
         [
@@ -48,10 +45,7 @@ const remoteFiles = new Map<string, RemoteFileEntry[]>([
             { name: 'pyproject.toml', is_dir: false, size: 512 },
         ],
     ],
-    [
-        '/home',
-        [{ name: 'ubuntu', is_dir: true, size: 0 }],
-    ],
+    ['/home', [{ name: 'ubuntu', is_dir: true, size: 0 }]],
     [
         '/config',
         [
@@ -61,7 +55,9 @@ const remoteFiles = new Map<string, RemoteFileEntry[]>([
     ],
 ]);
 
-export function mockConnectRemote(req: ConnectRemoteHostRequest): Promise<RemoteHostConnectionInfo> {
+export function mockConnectRemote(
+    req: ConnectRemoteHostRequest,
+): Promise<RemoteHostConnectionInfo> {
     return new Promise((resolve) => {
         setTimeout(() => {
             const info: RemoteHostConnectionInfo = {

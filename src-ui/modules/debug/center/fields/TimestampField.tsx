@@ -6,7 +6,15 @@ import { FIELD_INPUT_CLASS, fieldBorder } from '../centerParts';
 import { localInputToSeconds, secondsToLocalInput, valueText } from '../viewHelpers';
 import { useTextDraft, type FieldProps } from './fieldKit';
 
-export function TimestampField({ field, value, onChange, invalid, inputId, describedBy, disabled }: FieldProps) {
+export function TimestampField({
+    field,
+    value,
+    onChange,
+    invalid,
+    inputId,
+    describedBy,
+    disabled,
+}: FieldProps) {
     const [text, setText] = useTextDraft(value, valueText, (t) => coerceInput(field, t), onChange);
     const local = secondsToLocalInput(value);
     return (
@@ -21,7 +29,11 @@ export function TimestampField({ field, value, onChange, invalid, inputId, descr
                     const s = localInputToSeconds(e.target.value);
                     setText(s === null ? '' : String(s));
                 }}
-                className={cn(FIELD_INPUT_CLASS, fieldBorder(invalid), 'px-2 text-[13px] tabular-nums')}
+                className={cn(
+                    FIELD_INPUT_CLASS,
+                    fieldBorder(invalid),
+                    'px-2 text-[13px] tabular-nums',
+                )}
             />
             <input
                 id={inputId}
@@ -34,7 +46,11 @@ export function TimestampField({ field, value, onChange, invalid, inputId, descr
                 aria-invalid={invalid || undefined}
                 aria-describedby={describedBy}
                 autoComplete="off"
-                className={cn(FIELD_INPUT_CLASS, fieldBorder(invalid), 'font-mono text-[13px] tabular-nums')}
+                className={cn(
+                    FIELD_INPUT_CLASS,
+                    fieldBorder(invalid),
+                    'font-mono text-[13px] tabular-nums',
+                )}
             />
         </div>
     );

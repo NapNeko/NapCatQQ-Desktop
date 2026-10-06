@@ -36,8 +36,9 @@ const inputVariants = cva(
 );
 
 export interface TextFieldProps
-    extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'size'>,
-    VariantProps<typeof inputVariants> {
+    extends
+        Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'size'>,
+        VariantProps<typeof inputVariants> {
     label?: ReactNode;
     /** 字段下灰色辅助说明,被 error 覆盖。 */
     hint?: ReactNode;
@@ -49,10 +50,7 @@ export interface TextFieldProps
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
-    (
-        { label, hint, error, required, onValueChange, className, id, ...rest },
-        ref,
-    ) => {
+    ({ label, hint, error, required, onValueChange, className, id, ...rest }, ref) => {
         const invalid = !!error;
         // useId fallback:调用方没给 id/name 时也保证 label↔input↔描述能关联,
         // 满足可访问名称要求(屏幕阅读器、自动化测试都依赖这层关联)。
@@ -79,10 +77,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
         return (
             <div className={cn('flex flex-col gap-1.5', className)}>
                 {label && (
-                    <label
-                        htmlFor={fieldId}
-                        className="text-xs font-medium text-text-secondary"
-                    >
+                    <label htmlFor={fieldId} className="text-xs font-medium text-text-secondary">
                         {label}
                         {required && <span className="ml-0.5 text-danger">*</span>}
                     </label>

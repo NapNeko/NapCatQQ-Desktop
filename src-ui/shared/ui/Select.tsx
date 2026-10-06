@@ -65,10 +65,7 @@ function SelectInner<V extends string>(
     return (
         <div className={cn('flex flex-col gap-1.5', className)}>
             {label && (
-                <label
-                    htmlFor={fieldId}
-                    className="text-xs font-medium text-text-secondary"
-                >
+                <label htmlFor={fieldId} className="text-xs font-medium text-text-secondary">
                     {label}
                     {required && <span className="ml-0.5 text-danger">*</span>}
                 </label>
@@ -125,7 +122,11 @@ function SelectInner<V extends string>(
                             // 时立刻给 data-side。读不到时退化为顶部展开。
                             const side = node.getAttribute('data-side') ?? 'bottom';
                             const origin =
-                                side === 'top' ? '50% 100%' : side === 'bottom' ? '50% 0%' : '50% 50%';
+                                side === 'top'
+                                    ? '50% 100%'
+                                    : side === 'bottom'
+                                      ? '50% 0%'
+                                      : '50% 50%';
                             const dur = m.duration('fast');
                             gsap.set(node, { transformOrigin: origin });
                             // duration 异常为 0 时 fromTo 可能不跑完，直接落到可见终态。
@@ -164,11 +165,7 @@ function SelectInner<V extends string>(
                         )}
                         // 关动效 / reduced-motion：不写 hidden，不依赖 GSAP。
                         // 开动效：先 hidden，由上面 ref 回调 fromTo 露出。
-                        style={
-                            m.enabled
-                                ? { visibility: 'hidden', opacity: 0 }
-                                : undefined
-                        }
+                        style={m.enabled ? { visibility: 'hidden', opacity: 0 } : undefined}
                     >
                         <RadixSelect.ScrollUpButton className="flex h-6 shrink-0 cursor-default items-center justify-center bg-elevated text-text-tertiary">
                             <ChevronUp size={14} />

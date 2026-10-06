@@ -12,7 +12,13 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { ClipboardAddon, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { createKeywordHighlighter } from '../../core/domain/terminal/highlight';
-import { parseOsc133, parseOsc633, parseOsc7, parseOsc9, type ShellMark } from '../../core/domain/terminal/osc';
+import {
+    parseOsc133,
+    parseOsc633,
+    parseOsc7,
+    parseOsc9,
+    type ShellMark,
+} from '../../core/domain/terminal/osc';
 import { appendTail, isSudoPrompt, lastLine } from '../../core/domain/terminal/sudoPrompt';
 import { targetKey } from '../../core/domain/terminal/commands';
 import { isDarkColor } from '../../core/domain/terminal/palette';
@@ -105,7 +111,10 @@ export class TerminalRuntime {
             smoothScrollDuration: 0,
             fastScrollSensitivity: 5,
             scrollOnUserInput: true,
-            windowsPty: info.host_os === 'windows' ? { backend: 'conpty', buildNumber: windowsBuild } : undefined,
+            windowsPty:
+                info.host_os === 'windows'
+                    ? { backend: 'conpty', buildNumber: windowsBuild }
+                    : undefined,
         });
         this.term.loadAddon(this.fit);
         this.term.loadAddon(this.search);
@@ -119,7 +128,8 @@ export class TerminalRuntime {
         // OSC 52：远端 vim / tmux 复制的东西写进本机剪贴板；不让远端程序读本机剪贴板
         const clipboard: IClipboardProvider = {
             readText: () => '',
-            writeText: (_selection, text) => navigator.clipboard.writeText(text).catch(() => undefined),
+            writeText: (_selection, text) =>
+                navigator.clipboard.writeText(text).catch(() => undefined),
         };
         this.term.loadAddon(new ClipboardAddon(undefined, clipboard));
 
@@ -132,7 +142,8 @@ export class TerminalRuntime {
             this.term.onData((data) => this.input(data)),
             this.term.onBinary((data) => this.input(data)),
             this.term.onSelectionChange(() => {
-                if (terminalPrefs.get().copyOnSelect && this.term.hasSelection()) this.copySelection(false);
+                if (terminalPrefs.get().copyOnSelect && this.term.hasSelection())
+                    this.copySelection(false);
             }),
         );
         this.term.attachCustomKeyEventHandler((ev) => this.key(ev));
@@ -215,7 +226,8 @@ export class TerminalRuntime {
     }
 
     setWindowsBuild(build: number) {
-        if (this.info.host_os === 'windows') this.term.options.windowsPty = { backend: 'conpty', buildNumber: build };
+        if (this.info.host_os === 'windows')
+            this.term.options.windowsPty = { backend: 'conpty', buildNumber: build };
     }
 
     /** 往输入行里填（常用命令、最近命令、拖进来的路径），不带回车 */
@@ -257,23 +269,41 @@ export class TerminalRuntime {
         terminalIo.clearHistory(this.id);
     }
 
-    find(query: string, direction: 'next' | 'prev', options: { caseSensitive: boolean; regex: boolean; wholeWord: boolean }): boolean {
+    find(
+        query: string,
+        direction: 'next' | 'prev',
+        options: { caseSensitive: boolean; regex: boolean; wholeWord: boolean },
+    ): boolean {
         if (!query) {
             this.search.clearDecorations();
             return false;
         }
         const decorations = this.darkTheme
-            ? { matchBackground: '#5a3446', activeMatchBackground: '#9c4f6e', matchOverviewRuler: '#c76a8e', activeMatchColorOverviewRuler: '#f58fb6' }
-            : { matchBackground: '#fde2ec', activeMatchBackground: '#f9a3c5', matchOverviewRuler: '#e070a0', activeMatchColorOverviewRuler: '#c76a8e' };
+            ? {
+                  matchBackground: '#5a3446',
+                  activeMatchBackground: '#9c4f6e',
+                  matchOverviewRuler: '#c76a8e',
+                  activeMatchColorOverviewRuler: '#f58fb6',
+              }
+            : {
+                  matchBackground: '#fde2ec',
+                  activeMatchBackground: '#f9a3c5',
+                  matchOverviewRuler: '#e070a0',
+                  activeMatchColorOverviewRuler: '#c76a8e',
+              };
         const opts = { ...options, decorations, incremental: direction === 'next' };
-        return direction === 'next' ? this.search.findNext(query, opts) : this.search.findPrevious(query, opts);
+        return direction === 'next'
+            ? this.search.findNext(query, opts)
+            : this.search.findPrevious(query, opts);
     }
 
     clearSearch() {
         this.search.clearDecorations();
     }
 
-    onSearchResults(listener: (result: { resultIndex: number; resultCount: number }) => void): IDisposable {
+    onSearchResults(
+        listener: (result: { resultIndex: number; resultCount: number }) => void,
+    ): IDisposable {
         return this.search.onDidChangeResults(listener);
     }
 
@@ -283,7 +313,9 @@ export class TerminalRuntime {
         const lines = this.marks
             .filter((m) => !m.marker.isDisposed)
             .map((m) => m.marker.line)
-            .concat(this.promptMarker && !this.promptMarker.isDisposed ? [this.promptMarker.line] : []);
+            .concat(
+                this.promptMarker && !this.promptMarker.isDisposed ? [this.promptMarker.line] : [],
+            );
         const target =
             direction < 0
                 ? Math.max(...lines.filter((l) => l < top), -1)
@@ -330,7 +362,10 @@ export class TerminalRuntime {
         this.term.write(shown, () => this.ack(bytes.length));
         this.tail = appendTail(this.tail, text);
         if (this.info.features.sudo_fill) {
-            terminalStore.setSudoPrompt(this.id, isSudoPrompt(lastLine(this.tail), this.runningCommand));
+            terminalStore.setSudoPrompt(
+                this.id,
+                isSudoPrompt(lastLine(this.tail), this.runningCommand),
+            );
         }
         if (!terminalStore.isVisible(this.id)) terminalStore.setActivity(this.id, 'output');
     }
@@ -403,7 +438,10 @@ export class TerminalRuntime {
                 terminalStore.setCwd(this.id, mark.path);
                 break;
             case 'progress':
-                terminalStore.setProgress(this.id, mark.state === 0 ? null : { state: mark.state, value: mark.value });
+                terminalStore.setProgress(
+                    this.id,
+                    mark.state === 0 ? null : { state: mark.state, value: mark.value },
+                );
                 break;
             case 'prompt_end':
                 break;

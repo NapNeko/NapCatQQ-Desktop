@@ -2,7 +2,11 @@
 // 运行指标的采集时间、麦麦资源页、概览通知的写法不一样（输入单位不同，多久以后改显示日期也不同），各自留着。
 
 /** 毫秒时间戳换成相对时间。给了 maxDays 就只说这么多天以内的，更早的返回 null，调用方干脆不显示 */
-export function relativeTimeFromMs(ms: number, maxDays?: number, nowMs = Date.now()): string | null {
+export function relativeTimeFromMs(
+    ms: number,
+    maxDays?: number,
+    nowMs = Date.now(),
+): string | null {
     const diffSec = Math.max(0, Math.floor((nowMs - ms) / 1000));
     if (diffSec < 5) return '刚刚';
     if (diffSec < 60) return `${diffSec} 秒前`;

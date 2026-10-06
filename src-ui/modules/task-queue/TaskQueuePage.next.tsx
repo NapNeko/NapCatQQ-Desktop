@@ -128,8 +128,9 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
                     </div>
                     {activeCount > 0 && (
                         <span className="text-[11px] text-text-tertiary">
-                            <span className="font-medium tabular-nums text-brand">{activeCount}</span>
-                            {' '}
+                            <span className="font-medium tabular-nums text-brand">
+                                {activeCount}
+                            </span>{' '}
                             条进行中
                         </span>
                     )}
@@ -143,72 +144,72 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
                     showDocker={showDocker}
                 />
             ) : (
-            <div
-                className={cn(
-                    'flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle',
-                    'bg-[color-mix(in_srgb,var(--surface-canvas)_82%,var(--surface-inset)_18%)]',
-                )}
-            >
-                {filtered.length === 0 ? (
-                    <TaskQueueEmptyState variant="no-filter-match" />
-                ) : (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
-                        <aside className="flex min-h-0 flex-col border-b border-border-subtle lg:border-b-0 lg:border-r">
-                            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-subtle/70 px-3 py-2.5">
-                                <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
-                                    任务列表
-                                </span>
-                                <div className="flex items-center gap-1.5">
-                                    {activeCount > 0 && (
-                                        <span className="rounded-pill bg-brand-soft px-2 py-0.5 text-[10px] font-medium text-brand">
-                                            {activeCount} 进行中
-                                        </span>
-                                    )}
-                                    {counts.done > 0 && (
-                                        <button
-                                            type="button"
-                                            aria-label="清理已结束任务"
-                                            title="清理已结束"
-                                            onClick={handleClearFinished}
-                                            className={cn(
-                                                'inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors',
-                                                'hover:bg-danger-soft hover:text-danger',
-                                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                                            )}
-                                        >
-                                            <Trash2 size={13} strokeWidth={2} />
-                                        </button>
-                                    )}
+                <div
+                    className={cn(
+                        'flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle',
+                        'bg-[color-mix(in_srgb,var(--surface-canvas)_82%,var(--surface-inset)_18%)]',
+                    )}
+                >
+                    {filtered.length === 0 ? (
+                        <TaskQueueEmptyState variant="no-filter-match" />
+                    ) : (
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
+                            <aside className="flex min-h-0 flex-col border-b border-border-subtle lg:border-b-0 lg:border-r">
+                                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-subtle/70 px-3 py-2.5">
+                                    <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+                                        任务列表
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                        {activeCount > 0 && (
+                                            <span className="rounded-pill bg-brand-soft px-2 py-0.5 text-[10px] font-medium text-brand">
+                                                {activeCount} 进行中
+                                            </span>
+                                        )}
+                                        {counts.done > 0 && (
+                                            <button
+                                                type="button"
+                                                aria-label="清理已结束任务"
+                                                title="清理已结束"
+                                                onClick={handleClearFinished}
+                                                className={cn(
+                                                    'inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors',
+                                                    'hover:bg-danger-soft hover:text-danger',
+                                                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
+                                                )}
+                                            >
+                                                <Trash2 size={13} strokeWidth={2} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto p-2">
-                                <ul className="flex flex-col gap-0.5" role="list">
-                                    {filtered.map((item) => (
-                                        <li key={item.id}>
-                                            <TaskQueueListItem
-                                                item={item}
-                                                selected={item.id === selectedId}
-                                                onSelect={() => setSelectedId(item.id)}
-                                                onDelete={() => handleDeleteTask(item.id)}
-                                            />
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </aside>
+                                <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto p-2">
+                                    <ul className="flex flex-col gap-0.5" role="list">
+                                        {filtered.map((item) => (
+                                            <li key={item.id}>
+                                                <TaskQueueListItem
+                                                    item={item}
+                                                    selected={item.id === selectedId}
+                                                    onSelect={() => setSelectedId(item.id)}
+                                                    onDelete={() => handleDeleteTask(item.id)}
+                                                />
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </aside>
 
-                        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                            {selected ? (
-                                <TaskDetailPanel item={selected} />
-                            ) : (
-                                <div className="flex flex-1 items-center justify-center p-8 text-[13px] text-text-secondary">
-                                    从左侧选择一条任务查看详情
-                                </div>
-                            )}
-                        </section>
-                    </div>
-                )}
-            </div>
+                            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                                {selected ? (
+                                    <TaskDetailPanel item={selected} />
+                                ) : (
+                                    <div className="flex flex-1 items-center justify-center p-8 text-[13px] text-text-secondary">
+                                        从左侧选择一条任务查看详情
+                                    </div>
+                                )}
+                            </section>
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

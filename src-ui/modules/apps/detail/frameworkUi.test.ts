@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildDetailNav, resolveFrameworkUi, type FrameworkUiModule } from './frameworkUi';
 
-const navValues = (ui: FrameworkUiModule | undefined) => (ui?.nav ?? []).flatMap((g) => g.items.map((t) => t.value));
+const navValues = (ui: FrameworkUiModule | undefined) =>
+    (ui?.nav ?? []).flatMap((g) => g.items.map((t) => t.value));
 
 describe('resolveFrameworkUi', () => {
     it('unknown framework has no module (raw + log only)', () => {
@@ -52,7 +53,16 @@ describe('resolveFrameworkUi', () => {
             'connections',
         ]);
         // 概览、人格、知识库也能就地改配置，保存条要在；只有插件页不是
-        for (const t of ['overview', 'connections', 'models', 'talk', 'persona', 'kb', 'subagent', 'rules']) {
+        for (const t of [
+            'overview',
+            'connections',
+            'models',
+            'talk',
+            'persona',
+            'kb',
+            'subagent',
+            'rules',
+        ]) {
             expect(ui?.typedTabs.has(t)).toBe(true);
         }
         expect(ui?.typedTabs.has('plugins')).toBe(false);
@@ -72,7 +82,14 @@ describe('resolveFrameworkUi', () => {
         const ui = resolveFrameworkUi('maibot');
         expect(ui).toBeDefined();
         expect(ui?.defaultTab).toBe('overview');
-        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'ai', 'message', 'resource', 'extend', 'instance']);
+        expect(ui?.nav.map((g) => g.id)).toEqual([
+            'home',
+            'ai',
+            'message',
+            'resource',
+            'extend',
+            'instance',
+        ]);
         const tabs = navValues(ui);
         expect(tabs).toEqual([
             'overview',
@@ -97,12 +114,23 @@ describe('resolveFrameworkUi', () => {
             'advanced',
         ]);
         // 插件商店、提示词、资源页这些自己落盘，铺满内容区、不挂保存条；其余都是配置页
-        const ownSave = ['trychat', 'plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons', 'knowledge', 'behavior'];
+        const ownSave = [
+            'trychat',
+            'plugins',
+            'prompts',
+            'emoji',
+            'expressions',
+            'jargon',
+            'persons',
+            'knowledge',
+            'behavior',
+        ];
         for (const t of ownSave) {
             expect(ui?.fillPaneTabs.has(t)).toBe(true);
             expect(ui?.typedTabs.has(t)).toBe(false);
         }
-        for (const t of tabs.filter((x) => !ownSave.includes(x))) expect(ui?.typedTabs.has(t)).toBe(true);
+        for (const t of tabs.filter((x) => !ownSave.includes(x)))
+            expect(ui?.typedTabs.has(t)).toBe(true);
         expect(ui?.tabForIssue('adapter/chat/group_list')).toBe('chat');
         expect(ui?.tabForIssue('bot/webui/port')).toBe('connection');
         expect(ui?.tabForIssue('bot/maim_message/ws_server_port')).toBe('connection');
@@ -120,7 +148,11 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('bot/mcp/servers/0/command')).toBe('mcp');
         expect(ui?.tabForIssue('bot/log/log_level')).toBe('advanced');
         // 原始文件、日志由外壳挂到「实例」组末尾
-        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['connection', 'advanced', 'raw', 'log']);
+        expect(
+            buildDetailNav(ui)
+                .at(-1)
+                ?.items.map((t) => t.value),
+        ).toEqual(['connection', 'advanced', 'raw', 'log']);
     });
 
     it('karin nav groups and issue routing', () => {
@@ -128,7 +160,14 @@ describe('resolveFrameworkUi', () => {
         expect(ui).toBeDefined();
         expect(ui?.defaultTab).toBe('basic');
         expect(ui?.nav.map((g) => g.id)).toEqual(['config', 'extend', 'instance']);
-        expect(navValues(ui)).toEqual(['basic', 'permissions', 'rules', 'render', 'plugins', 'connections']);
+        expect(navValues(ui)).toEqual([
+            'basic',
+            'permissions',
+            'rules',
+            'render',
+            'plugins',
+            'connections',
+        ]);
         expect(ui?.typedTabs.has('connections')).toBe(true);
         expect(ui?.typedTabs.has('plugins')).toBe(false);
         expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
@@ -158,7 +197,11 @@ describe('resolveFrameworkUi', () => {
         // overflow-hidden 并指望页面自己滚，而它们不滚——长内容直接被裁掉（实测「提示词」页滑不动）。
         for (const t of navValues(ui)) expect(ui?.fillPaneTabs.has(t)).toBe(false);
         // 原始文件、日志由外壳追加
-        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['raw', 'log']);
+        expect(
+            buildDetailNav(ui)
+                .at(-1)
+                ?.items.map((t) => t.value),
+        ).toEqual(['raw', 'log']);
     });
 
     it('nonebot2 nav groups and issue routing', () => {
@@ -198,7 +241,10 @@ describe('buildDetailNav', () => {
     });
 
     it('creates the instance group when a framework has none', () => {
-        const ui = { ...resolveFrameworkUi('karin')!, nav: [{ id: 'x', items: [{ value: 'a', label: 'A' }] }] };
+        const ui = {
+            ...resolveFrameworkUi('karin')!,
+            nav: [{ id: 'x', items: [{ value: 'a', label: 'A' }] }],
+        };
         expect(buildDetailNav(ui).map((g) => g.id)).toEqual(['x', 'instance']);
     });
 });

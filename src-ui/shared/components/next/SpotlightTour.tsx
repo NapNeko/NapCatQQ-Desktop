@@ -535,9 +535,7 @@ export function SpotlightTour({
                             }}
                         >
                             {isLast ? '完成' : '下一步'}
-                            {!isLast ? (
-                                <ArrowRight size={14} strokeWidth={2} />
-                            ) : null}
+                            {!isLast ? <ArrowRight size={14} strokeWidth={2} /> : null}
                         </Button>
                     </div>
                 </div>
@@ -546,4 +544,3 @@ export function SpotlightTour({
         document.body,
     );
 }
-

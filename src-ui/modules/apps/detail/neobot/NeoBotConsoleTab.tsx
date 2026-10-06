@@ -34,16 +34,12 @@ export const NeoBotConsoleTab: React.FC<{
                     <div className="min-w-0">
                         <h3 className="text-sm font-semibold text-text">NeoBot 自带完整面板</h3>
                         <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                            桌面端管安装、对接 QQ、启停与看日志；模型、提示词、记忆、插件、统计这些在面板里。
+                            桌面端管安装、对接
+                            QQ、启停与看日志；模型、提示词、记忆、插件、统计这些在面板里。
                             下面是面板的能力地图，标「仅控制台」的需要到面板操作。
                         </p>
                     </div>
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={installing}
-                        onClick={onOpenWebUi}
-                    >
+                    <Button variant="primary" size="sm" disabled={installing} onClick={onOpenWebUi}>
                         打开控制台
                     </Button>
                 </div>
@@ -59,10 +55,10 @@ export const NeoBotConsoleTab: React.FC<{
             <PanelCredentialCard instance={instance} onOpenWebUi={onOpenWebUi} />
 
             <p className="text-xs text-text-tertiary">
-                面板共 <span className="font-medium text-text-secondary">{stats.total}</span> 项能力：
-                桌面端已有 <span className="text-brand">{stats.byState.desktop}</span>、
-                部分 <span className="text-warning">{stats.byState.partial}</span>、
-                仅控制台 <span className="text-text-secondary">{stats.byState.consoleOnly}</span>
+                面板共 <span className="font-medium text-text-secondary">{stats.total}</span>{' '}
+                项能力： 桌面端已有 <span className="text-brand">{stats.byState.desktop}</span>、
+                部分 <span className="text-warning">{stats.byState.partial}</span>、 仅控制台{' '}
+                <span className="text-text-secondary">{stats.byState.consoleOnly}</span>
             </p>
 
             {NEOBOT_CONSOLE_FEATURES.map((group) => (
@@ -77,8 +73,12 @@ export const NeoBotConsoleTab: React.FC<{
                                 className="rounded-sm border border-border-subtle bg-inset/40 px-3 py-2"
                             >
                                 <div className="flex items-baseline justify-between gap-2">
-                                    <span className="text-xs font-medium text-text">{item.name}</span>
-                                    <span className={cn('shrink-0 text-2xs', stateTone(item.state))}>
+                                    <span className="text-xs font-medium text-text">
+                                        {item.name}
+                                    </span>
+                                    <span
+                                        className={cn('shrink-0 text-2xs', stateTone(item.state))}
+                                    >
                                         {CONSOLE_STATE_LABEL[item.state]}
                                     </span>
                                 </div>

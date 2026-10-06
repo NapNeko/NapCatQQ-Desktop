@@ -14,8 +14,10 @@ import gsap from 'gsap';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
 
-export interface SwitchProps
-    extends Omit<React.ComponentPropsWithoutRef<typeof RadixSwitch.Root>, 'onCheckedChange' | 'checked'> {
+export interface SwitchProps extends Omit<
+    React.ComponentPropsWithoutRef<typeof RadixSwitch.Root>,
+    'onCheckedChange' | 'checked'
+> {
     label?: ReactNode;
     hint?: ReactNode;
     onCheckedChange?: (checked: boolean) => void;
@@ -81,9 +83,7 @@ export const Switch = forwardRef<React.ElementRef<typeof RadixSwitch.Root>, Swit
                 <RadixSwitch.Thumb asChild>
                     <span
                         ref={thumbRef}
-                        className={cn(
-                            'block h-4 w-4 rounded-full bg-white shadow-sm',
-                        )}
+                        className={cn('block h-4 w-4 rounded-full bg-white shadow-sm')}
                         // GSAP 用 transform,初始位置由 useLayoutEffect 设置。
                         style={{ marginLeft: 2 }}
                     />

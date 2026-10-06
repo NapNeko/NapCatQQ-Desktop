@@ -211,18 +211,9 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
             flavor: DockerFlavor;
             taskId: string;
             mirror?: string | null;
-        }) =>
-            dockerService.pullFrameworkImage(
-                args.hostId,
-                args.flavor,
-                args.taskId,
-                args.mirror,
-            ),
+        }) => dockerService.pullFrameworkImage(args.hostId, args.flavor, args.taskId, args.mirror),
         onSuccess: (_result, args) => {
-            queryClient.setQueryData(
-                ['docker', 'imageReady', args.hostId, args.flavor],
-                true,
-            );
+            queryClient.setQueryData(['docker', 'imageReady', args.hostId, args.flavor], true);
             invalidate();
         },
     });

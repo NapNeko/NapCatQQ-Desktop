@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { DebugActionCategory } from '../../ipc/generated/debug/DebugActionCategory';
 import type { DebugActionSummary } from '../../ipc/generated/debug/DebugActionSummary';
-import { CATEGORY_LABEL, CATEGORY_ORDER, catalogRowLabel, groupActions, searchActions } from './catalogView';
+import {
+    CATEGORY_LABEL,
+    CATEGORY_ORDER,
+    catalogRowLabel,
+    groupActions,
+    searchActions,
+} from './catalogView';
 
 const action = (name: string, over: Partial<DebugActionSummary> = {}): DebugActionSummary => ({
     name,
@@ -84,7 +90,11 @@ describe('groupActions', () => {
 
     it('下划线开头的内部接口排在组末尾', () => {
         const list = [action('_del_group_notice'), action('zzz_last'), action('aaa_first')];
-        expect(names(groupActions(list).groups[0]!.actions)).toEqual(['aaa_first', 'zzz_last', '_del_group_notice']);
+        expect(names(groupActions(list).groups[0]!.actions)).toEqual([
+            'aaa_first',
+            'zzz_last',
+            '_del_group_notice',
+        ]);
     });
 
     it('空列表', () => {
@@ -111,14 +121,23 @@ describe('searchActions', () => {
 
     it('打分：名字完全一致 > 前缀 > 别名完全一致 > 名字包含 > 简介包含', () => {
         // send：完全一致 100；send_group_msg / send_msg 前缀 80；其余里 set_qq_profile 只有简介含 send
-        expect(names(searchActions(list, 'send', []))).toEqual(['send', 'send_group_msg', 'send_msg', 'set_qq_profile']);
+        expect(names(searchActions(list, 'send', []))).toEqual([
+            'send',
+            'send_group_msg',
+            'send_msg',
+            'set_qq_profile',
+        ]);
 
         const alias = [
             action('zzz_action', { aliases: ['hist'] }),
             action('my_hist_thing'),
             action('other', { summary: '含 hist 的简介' }),
         ];
-        expect(names(searchActions(alias, 'hist', []))).toEqual(['zzz_action', 'my_hist_thing', 'other']);
+        expect(names(searchActions(alias, 'hist', []))).toEqual([
+            'zzz_action',
+            'my_hist_thing',
+            'other',
+        ]);
     });
 
     it('大小写不敏感，前后空白忽略', () => {
@@ -153,7 +172,12 @@ describe('searchActions', () => {
 
     it('同分时最近用的靠前（新的在前），再同分按名字', () => {
         const same = [action('x_msg_a'), action('x_msg_b'), action('x_msg_c'), action('x_msg_d')];
-        expect(names(searchActions(same, 'msg', ['x_msg_c', 'x_msg_b']))).toEqual(['x_msg_c', 'x_msg_b', 'x_msg_a', 'x_msg_d']);
+        expect(names(searchActions(same, 'msg', ['x_msg_c', 'x_msg_b']))).toEqual([
+            'x_msg_c',
+            'x_msg_b',
+            'x_msg_a',
+            'x_msg_d',
+        ]);
     });
 
     it('空查询：最近用过的在前（最近的最前），其余按名字', () => {
@@ -181,25 +205,49 @@ describe('searchActions', () => {
 
 describe('catalogRowLabel', () => {
     it('剥掉中文括注', () => {
-        expect(catalogRowLabel(action('get_forward_msg', { summary: '获取合并转发消息（id 或 message_id）' }))).toBe('获取合并转发消息');
-        expect(catalogRowLabel(action('ocr_image', { summary: 'OCR 图片（服务端，需图片 URL 或已缓存的图片 file_id）' }))).toBe('OCR 图片');
+        expect(
+            catalogRowLabel(
+                action('get_forward_msg', { summary: '获取合并转发消息（id 或 message_id）' }),
+            ),
+        ).toBe('获取合并转发消息');
+        expect(
+            catalogRowLabel(
+                action('ocr_image', {
+                    summary: 'OCR 图片（服务端，需图片 URL 或已缓存的图片 file_id）',
+                }),
+            ),
+        ).toBe('OCR 图片');
     });
 
     it('剥掉半角括注', () => {
-        expect(catalogRowLabel(action('mark_msg_as_read', { summary: '标记消息已读 (Go-CQHTTP)' }))).toBe('标记消息已读');
+        expect(
+            catalogRowLabel(action('mark_msg_as_read', { summary: '标记消息已读 (Go-CQHTTP)' })),
+        ).toBe('标记消息已读');
     });
 
     it('剥掉分号后的补充', () => {
-        expect(catalogRowLabel(action('get_record', { summary: '获取语音信息；传 out_format 则服务端转码并附带 base64' }))).toBe('获取语音信息');
+        expect(
+            catalogRowLabel(
+                action('get_record', {
+                    summary: '获取语音信息；传 out_format 则服务端转码并附带 base64',
+                }),
+            ),
+        ).toBe('获取语音信息');
     });
 
     it('普通简介原样返回', () => {
-        expect(catalogRowLabel(action('get_group_list', { summary: '获取群列表' }))).toBe('获取群列表');
-        expect(catalogRowLabel(action('send_ark_share', { summary: '分享用户/群 Ark 卡片' }))).toBe('分享用户/群 Ark 卡片');
+        expect(catalogRowLabel(action('get_group_list', { summary: '获取群列表' }))).toBe(
+            '获取群列表',
+        );
+        expect(catalogRowLabel(action('send_ark_share', { summary: '分享用户/群 Ark 卡片' }))).toBe(
+            '分享用户/群 Ark 卡片',
+        );
     });
 
     it('没有简介、或整个简介就是一条注释时退回字段名', () => {
         expect(catalogRowLabel(action('get_msg'))).toBe('get_msg');
-        expect(catalogRowLabel(action('_get_model_show', { summary: '（占位）' }))).toBe('_get_model_show');
+        expect(catalogRowLabel(action('_get_model_show', { summary: '（占位）' }))).toBe(
+            '_get_model_show',
+        );
     });
 });

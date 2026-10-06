@@ -23,7 +23,9 @@ const SEC: UiNode = {
     },
 };
 
-const ctx = (opts: { errors?: Record<string, string>; skip?: string[]; advanced?: string[] } = {}): SchemaCtx => ({
+const ctx = (
+    opts: { errors?: Record<string, string>; skip?: string[]; advanced?: string[] } = {},
+): SchemaCtx => ({
     value: {},
     onChange: () => {},
     errors: opts.errors ?? {},
@@ -36,7 +38,10 @@ const ctx = (opts: { errors?: Record<string, string>; skip?: string[]; advanced?
 describe('hasAdvanced', () => {
     it('sees advanced fields, advanced list items and advanced sub groups', () => {
         expect(hasAdvanced(ctx(), ['sec'], SEC)).toBe(true);
-        const itemOnly: UiNode = { fields: [{ name: 'rules', type: 'array' }], nested: { rules: SEC.nested!.rules } };
+        const itemOnly: UiNode = {
+            fields: [{ name: 'rules', type: 'array' }],
+            nested: { rules: SEC.nested!.rules },
+        };
         expect(hasAdvanced(ctx(), ['sec'], itemOnly)).toBe(true);
     });
 
@@ -48,7 +53,9 @@ describe('hasAdvanced', () => {
             ],
         };
         expect(hasAdvanced(ctx({ skip: ['sec.port'] }), ['sec'], node)).toBe(false);
-        expect(hasAdvanced(ctx({ skip: ['sec.port'], advanced: ['sec.name'] }), ['sec'], node)).toBe(true);
+        expect(
+            hasAdvanced(ctx({ skip: ['sec.port'], advanced: ['sec.name'] }), ['sec'], node),
+        ).toBe(true);
     });
 });
 

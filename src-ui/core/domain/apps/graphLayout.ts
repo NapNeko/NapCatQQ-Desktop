@@ -117,9 +117,21 @@ export function boundsOf(points: Iterable<Point>): Bounds {
 }
 
 /** 把整张图放进 width × height（留 padding），给平移和缩放的起点 */
-export function fitView(b: Bounds, width: number, height: number, padding = 48): { x: number; y: number; k: number } {
+export function fitView(
+    b: Bounds,
+    width: number,
+    height: number,
+    padding = 48,
+): { x: number; y: number; k: number } {
     const w = Math.max(1, b.maxX - b.minX);
     const h = Math.max(1, b.maxY - b.minY);
-    const k = Math.min(2, Math.max(0.1, Math.min((width - padding * 2) / w, (height - padding * 2) / h)));
-    return { k, x: width / 2 - ((b.minX + b.maxX) / 2) * k, y: height / 2 - ((b.minY + b.maxY) / 2) * k };
+    const k = Math.min(
+        2,
+        Math.max(0.1, Math.min((width - padding * 2) / w, (height - padding * 2) / h)),
+    );
+    return {
+        k,
+        x: width / 2 - ((b.minX + b.maxX) / 2) * k,
+        y: height / 2 - ((b.minY + b.maxY) / 2) * k,
+    };
 }

@@ -1,6 +1,13 @@
 // 高级 Tab：按底座显隐；全局 WebUI 仅 SnowLuma。
 
-import { Switch, Select, TextField, NumberField, Checkbox, FormSection } from '../../../../shared/ui';
+import {
+    Switch,
+    Select,
+    TextField,
+    NumberField,
+    Checkbox,
+    FormSection,
+} from '../../../../shared/ui';
 import type { AdvancedConfig } from '../../../../core/ipc/generated/domain/AdvancedConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { LogLevel } from '../../../../core/ipc/generated/domain/LogLevel';
@@ -88,10 +95,7 @@ export function AdvancedTab({
             )}
 
             {isSnowLuma && (
-                <FormSection
-                    title="WebUI 密码接管"
-                    description="仅远端 Native"
-                >
+                <FormSection title="WebUI 密码接管" description="仅远端 Native">
                     <Switch
                         label="启动时覆盖 WebUI 密码"
                         hint="填了固定密码就用固定的，否则生成新的；原密码立即失效。关闭则不改远端配置。"
@@ -212,7 +216,10 @@ export function AdvancedTab({
                         </div>
                     </FormSection>
 
-                    <FormSection title="封包后端 (PacketBackend)" description="除非接入独立封包服务，一般保持 auto">
+                    <FormSection
+                        title="封包后端 (PacketBackend)"
+                        description="除非接入独立封包服务，一般保持 auto"
+                    >
                         <Select
                             label="后端模式"
                             items={PACKET_BACKEND_ITEMS}

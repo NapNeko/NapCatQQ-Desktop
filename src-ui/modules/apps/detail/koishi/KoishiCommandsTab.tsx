@@ -21,7 +21,11 @@ export const KoishiCommandsTab: React.FC<{ instance: AppInstance }> = ({ instanc
         const list = commands.data ?? [];
         const q = query.trim().toLowerCase();
         if (!q) return list;
-        return list.filter((c) => c.name.toLowerCase().includes(q) || c.aliases.some((a) => a.toLowerCase().includes(q)));
+        return list.filter(
+            (c) =>
+                c.name.toLowerCase().includes(q) ||
+                c.aliases.some((a) => a.toLowerCase().includes(q)),
+        );
     }, [commands.data, query]);
 
     const childOf = useMemo(() => {
@@ -78,7 +82,14 @@ function Empty({ text, error }: { text: string; error?: boolean }) {
             <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-inset text-text-tertiary">
                 <TerminalSquare size={20} />
             </span>
-            <p className={cn('max-w-md text-xs leading-relaxed', error ? 'text-danger' : 'text-text-tertiary')}>{text}</p>
+            <p
+                className={cn(
+                    'max-w-md text-xs leading-relaxed',
+                    error ? 'text-danger' : 'text-text-tertiary',
+                )}
+            >
+                {text}
+            </p>
         </div>
     );
 }
@@ -138,11 +149,16 @@ function Row({
             >
                 <ChevronRight
                     size={14}
-                    className={cn('shrink-0 text-text-tertiary transition-transform duration-200', open && 'rotate-90')}
+                    className={cn(
+                        'shrink-0 text-text-tertiary transition-transform duration-200',
+                        open && 'rotate-90',
+                    )}
                 />
                 <span className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="font-mono text-[13px] font-medium text-text">
-                        {parent && <CornerDownRight size={11} className="mr-1 inline text-text-disabled" />}
+                        {parent && (
+                            <CornerDownRight size={11} className="mr-1 inline text-text-disabled" />
+                        )}
                         {row.name}
                     </span>
                     {row.aliases.length > 0 && (
@@ -199,7 +215,12 @@ function Row({
                         />
                     </div>
                     <div className="mt-4 flex items-center gap-2">
-                        <Button size="sm" variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={!dirty || saving}
+                            onClick={() => void save()}
+                        >
                             {saving ? '保存中…' : '保存'}
                         </Button>
                         <Button

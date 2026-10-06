@@ -37,7 +37,14 @@ export const configTransferService = {
             return {
                 source_path: sourcePath,
                 source_kind: 'directory',
-                files_found: ['应用设置', '应用实例与关联', '聊天账号偏好', 'API 调试工作区', 'API 调试收藏', '界面与终端偏好'],
+                files_found: [
+                    '应用设置',
+                    '应用实例与关联',
+                    '聊天账号偏好',
+                    'API 调试工作区',
+                    'API 调试收藏',
+                    '界面与终端偏好',
+                ],
                 warnings: [],
                 can_import: true,
             };
@@ -51,21 +58,29 @@ export const configTransferService = {
         }
         const result = await invoke<ConfigImportResult>('import_config', { sourcePath });
         if (result.frontend_preferences) {
-            try { restoreFrontendPreferences(result.frontend_preferences); }
-            catch (error) {
-                return { ...result, frontendPreferencesError: error instanceof Error ? error.message : String(error) };
+            try {
+                restoreFrontendPreferences(result.frontend_preferences);
+            } catch (error) {
+                return {
+                    ...result,
+                    frontendPreferencesError:
+                        error instanceof Error ? error.message : String(error),
+                };
             }
         }
         return result;
     },
 
-    restorePreferences: (snapshot: ConfigFrontendPreferences): void => restoreFrontendPreferences(snapshot),
+    restorePreferences: (snapshot: ConfigFrontendPreferences): void =>
+        restoreFrontendPreferences(snapshot),
 
-    pendingFrameworkConfigs: async (): Promise<string[]> => isTauri
-        ? invoke<string[]>('list_pending_framework_config_restores') : [],
+    pendingFrameworkConfigs: async (): Promise<string[]> =>
+        isTauri ? invoke<string[]>('list_pending_framework_config_restores') : [],
 
-    retryFrameworkConfigs: async (): Promise<ConfigImportResult> => isTauri
-        ? invoke<ConfigImportResult>('retry_framework_config_restore') : { files: [], skipped: [], framework_pending: [] },
+    retryFrameworkConfigs: async (): Promise<ConfigImportResult> =>
+        isTauri
+            ? invoke<ConfigImportResult>('retry_framework_config_restore')
+            : { files: [], skipped: [], framework_pending: [] },
 
     onImported: (callback: (files: ConfigImportResult['files']) => void): Promise<() => void> => {
         if (!isTauri) return Promise.resolve(() => {});
@@ -74,6 +89,5 @@ export const configTransferService = {
 
     pickZipSource: async (): Promise<string | null> => pickZipFile('选择配置 ZIP 包'),
 
-    pickDirectorySource: async (): Promise<string | null> =>
-        pickDirectory('选择配置文件夹'),
+    pickDirectorySource: async (): Promise<string | null> => pickDirectory('选择配置文件夹'),
 };

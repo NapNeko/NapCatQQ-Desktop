@@ -17,10 +17,26 @@ import {
     type ReactNode,
     type RefObject,
 } from 'react';
-import { AlertTriangle, Bot, FlaskConical, PanelLeftClose, PowerOff, RefreshCw, Search, X } from 'lucide-react';
+import {
+    AlertTriangle,
+    Bot,
+    FlaskConical,
+    PanelLeftClose,
+    PowerOff,
+    RefreshCw,
+    Search,
+    X,
+} from 'lucide-react';
 import gsap from 'gsap';
 import { cn } from '../../shared/utils/cn';
-import { Button, PagePlaceholder, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../shared/ui';
+import {
+    Button,
+    PagePlaceholder,
+    Spinner,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '../../shared/ui';
 import { ActionMotionIcon, GsapPresence, type EnterFn, type ExitFn } from '../../shared/ui/motion';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import {
@@ -32,7 +48,11 @@ import {
     useSelectedDebugBot,
 } from '../../hooks/debug/debugWorkspaceStore';
 import { debugEventStore } from '../../hooks/debug/debugEventStore';
-import { consumePendingDebugBot, getPendingDebugBot, usePendingDebugBot } from '../../hooks/debug/debugNav';
+import {
+    consumePendingDebugBot,
+    getPendingDebugBot,
+    usePendingDebugBot,
+} from '../../hooks/debug/debugNav';
 import { useDebugTargets } from '../../hooks/debug/useDebugTargets';
 import { useDebugChannels } from '../../hooks/debug/useDebugChannels';
 import { useDebugStorageNotices } from '../../hooks/debug/useDebugStorageNotices';
@@ -49,11 +69,23 @@ import type { DebugChannelChoice } from '../../core/ipc/generated/debug/DebugCha
 import type { DebugChannelId } from '../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugStorageNotice } from '../../core/ipc/generated/debug/DebugStorageNotice';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
-import { COLUMN_HEADER_CLASS, ColumnFrame, ColumnRail, ColumnSplitter, useSlideAfterShift } from './ColumnFrame';
+import {
+    COLUMN_HEADER_CLASS,
+    ColumnFrame,
+    ColumnRail,
+    ColumnSplitter,
+    useSlideAfterShift,
+} from './ColumnFrame';
 import { CommandPalette } from './CommandPalette';
 import { TopBar } from './TopBar';
 import { useDebugShortcuts } from './debugShortcuts';
-import { LEFT_PANELS, revealLeftSearch, setLeftSearchOpen, useLeftSearch, type DebugLeftPanel } from './leftPanels';
+import {
+    LEFT_PANELS,
+    revealLeftSearch,
+    setLeftSearchOpen,
+    useLeftSearch,
+    type DebugLeftPanel,
+} from './leftPanels';
 import { LeftColumn } from './left/LeftColumn';
 import { CenterColumn } from './center/CenterColumn';
 import { RightColumn } from './right/RightColumn';
@@ -175,7 +207,10 @@ export function DebugConsolePage({ onNavigate }: DebugConsolePageProps) {
     const openPalette = useCallback(() => setPaletteOpen(true), []);
 
     const selectBot = useCallback((id: string) => debugWorkspaceStore.selectBot(id), []);
-    const manageBots = useMemo(() => (onNavigate ? () => onNavigate('bots') : undefined), [onNavigate]);
+    const manageBots = useMemo(
+        () => (onNavigate ? () => onNavigate('bots') : undefined),
+        [onNavigate],
+    );
 
     const hasTargets = !!targets && targets.length > 0;
     const ready = loaded && hasTargets;
@@ -202,7 +237,9 @@ export function DebugConsolePage({ onNavigate }: DebugConsolePageProps) {
             <PagePlaceholder>
                 <EmptyIcon tone="danger" />
                 <p className="font-display text-md font-semibold text-text">读不到 Bot 列表</p>
-                <p className="max-w-sm text-xs text-text-secondary">{targetsQuery.error?.message}</p>
+                <p className="max-w-sm text-xs text-text-secondary">
+                    {targetsQuery.error?.message}
+                </p>
                 <Button size="sm" variant="secondary" onClick={() => void targetsQuery.refetch()}>
                     <RefreshCw size={13} aria-hidden />
                     重试
@@ -215,7 +252,8 @@ export function DebugConsolePage({ onNavigate }: DebugConsolePageProps) {
                 <EmptyIcon tone="brand" />
                 <p className="font-display text-md font-semibold text-text">还没有 Bot</p>
                 <p className="max-w-sm text-xs leading-relaxed text-text-secondary">
-                    调试台对着 Bot 发请求、看事件。先到「机器人」页添加一个 NapCat 或 SnowLuma 的 Bot 并启动，再回来这里。
+                    调试台对着 Bot 发请求、看事件。先到「机器人」页添加一个 NapCat 或 SnowLuma 的
+                    Bot 并启动，再回来这里。
                 </p>
                 {onNavigate && (
                     <Button size="sm" variant="primary" onClick={() => onNavigate('bots')}>
@@ -273,8 +311,12 @@ export function DebugConsolePage({ onNavigate }: DebugConsolePageProps) {
                 />
             ) : (
                 <header className="shrink-0 pt-2">
-                    <p className="text-2xs uppercase leading-none tracking-widest text-text-tertiary">debug</p>
-                    <h1 className="mt-1 font-display text-xl font-semibold leading-none text-text">调试台</h1>
+                    <p className="text-2xs uppercase leading-none tracking-widest text-text-tertiary">
+                        debug
+                    </p>
+                    <h1 className="mt-1 font-display text-xl font-semibold leading-none text-text">
+                        调试台
+                    </h1>
                 </header>
             )}
             <StorageNotices />
@@ -289,7 +331,10 @@ export default DebugConsolePage;
 function cycleTab(dir: 1 | -1): void {
     const { tabs, active_tab } = debugWorkspaceStore.getSnapshot().ws;
     if (tabs.length < 2) return;
-    const idx = Math.max(0, tabs.findIndex((t) => t.id === active_tab));
+    const idx = Math.max(
+        0,
+        tabs.findIndex((t) => t.id === active_tab),
+    );
     const next = tabs[(idx + dir + tabs.length) % tabs.length];
     if (next) debugWorkspaceStore.setActive(next.id);
 }
@@ -333,11 +378,17 @@ function StorageNotices() {
             role="status"
             className="flex shrink-0 items-start gap-2.5 rounded-md border border-warning/30 bg-warning-soft/60 px-3 py-2"
         >
-            <AlertTriangle size={14} strokeWidth={2.2} aria-hidden className="mt-0.5 shrink-0 text-warning" />
+            <AlertTriangle
+                size={14}
+                strokeWidth={2.2}
+                aria-hidden
+                className="mt-0.5 shrink-0 text-warning"
+            />
             <div className="min-w-0 flex-1 space-y-0.5 text-xs text-text-secondary">
                 {notices.map((n: DebugStorageNotice) => (
                     <p key={n.file} className="break-words">
-                        {STORAGE_FILE_LABEL[n.file] ?? n.file}读不出来（{n.reason}），这次从空白开始；原文件挪到了
+                        {STORAGE_FILE_LABEL[n.file] ?? n.file}读不出来（{n.reason}
+                        ），这次从空白开始；原文件挪到了
                         <span className="mx-1 font-mono text-[11px] text-text">{n.moved_to}</span>
                     </p>
                 ))}
@@ -408,7 +459,12 @@ const Workbench = memo(function Workbench({
 }: WorkbenchProps) {
     const [rowEl, setRowEl] = useState<HTMLDivElement | null>(null);
     const available = useElementWidth(rowEl);
-    const layout = { left_collapsed: leftCollapsed, right_collapsed: rightCollapsed, left_width: leftWidth, right_width: rightWidth };
+    const layout = {
+        left_collapsed: leftCollapsed,
+        right_collapsed: rightCollapsed,
+        left_width: leftWidth,
+        right_width: rightWidth,
+    };
     const resolved = resolveColumns(layout, available);
     const leftRef = useRef<HTMLElement>(null);
     const rightRef = useRef<HTMLElement>(null);
@@ -436,7 +492,9 @@ const Workbench = memo(function Workbench({
         focusAfterToggle.current = false;
         const next = leftCollapsed
             ? rowEl.querySelector<HTMLElement>('[data-rail-expand]')
-            : rowEl.querySelector<HTMLElement>(`[aria-label="${LEFT_TABS_LABEL}"] [role="tab"][aria-selected="true"]`);
+            : rowEl.querySelector<HTMLElement>(
+                  `[aria-label="${LEFT_TABS_LABEL}"] [role="tab"][aria-selected="true"]`,
+              );
         next?.focus();
     }, [leftCollapsed, rowEl]);
 
@@ -461,13 +519,19 @@ const Workbench = memo(function Workbench({
                     <TooltipTrigger asChild>
                         <button
                             type="button"
-                            onClick={() => (searchOpen ? setLeftSearchOpen(panel, false) : revealLeftSearch(panel))}
+                            onClick={() =>
+                                searchOpen
+                                    ? setLeftSearchOpen(panel, false)
+                                    : revealLeftSearch(panel)
+                            }
                             aria-label={searchLabel}
                             aria-pressed={searchOpen}
                             className={cn(
                                 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                                searchOpen ? 'bg-brand-soft text-brand' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                                searchOpen
+                                    ? 'bg-brand-soft text-brand'
+                                    : 'text-text-tertiary hover:bg-inset hover:text-text',
                             )}
                         >
                             <ActionMotionIcon icon={Search} size={15} strokeWidth={2} />
@@ -495,7 +559,12 @@ const Workbench = memo(function Workbench({
     const rightNotice =
         target && !target.running ? (
             <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle/70 bg-warning-soft/40 px-3 py-2 text-2xs text-text-secondary">
-                <PowerOff size={12} strokeWidth={2.2} aria-hidden className="shrink-0 text-warning" />
+                <PowerOff
+                    size={12}
+                    strokeWidth={2.2}
+                    aria-hidden
+                    className="shrink-0 text-warning"
+                />
                 <span>Bot 没在运行，启动后会自动开始接收</span>
             </div>
         ) : null;
@@ -538,12 +607,19 @@ const Workbench = memo(function Workbench({
                         getBounds={() => dragBounds('left', available, resolved)}
                         onPreview={previewWidth(leftRef)}
                         onCommit={(w) => debugWorkspaceStore.setLayout({ left_width: w })}
-                        onReset={() => debugWorkspaceStore.setLayout({ left_width: UNSET_COLUMN_WIDTH })}
+                        onReset={() =>
+                            debugWorkspaceStore.setLayout({ left_width: UNSET_COLUMN_WIDTH })
+                        }
                     />
                 </>
             )}
 
-            <ColumnFrame ref={centerRef} title="请求与响应" errorTitle="请求区出错了" className="bg-surface">
+            <ColumnFrame
+                ref={centerRef}
+                title="请求与响应"
+                errorTitle="请求区出错了"
+                className="bg-surface"
+            >
                 <CenterColumn
                     target={target}
                     callChannel={callChannel}
@@ -555,8 +631,15 @@ const Workbench = memo(function Workbench({
 
             {/* 右栏收起也播动画：GsapPresence 等退场播完再真卸载；展开只在用户刚点过（rightAppear）时播，
                 进页面的首帧不播——整页已经有路由切换动画 */}
-            <GsapPresence visible={!rightCollapsed} onEnter={rightAppear ? enterRightColumn : undefined} onExit={exitRightColumn}>
-                <div className="flex min-h-0 min-w-0 shrink-0" style={{ visibility: 'hidden', opacity: 0 }}>
+            <GsapPresence
+                visible={!rightCollapsed}
+                onEnter={rightAppear ? enterRightColumn : undefined}
+                onExit={exitRightColumn}
+            >
+                <div
+                    className="flex min-h-0 min-w-0 shrink-0"
+                    style={{ visibility: 'hidden', opacity: 0 }}
+                >
                     <ColumnSplitter
                         side="right"
                         label="调整右栏宽度"
@@ -564,7 +647,9 @@ const Workbench = memo(function Workbench({
                         getBounds={() => dragBounds('right', available, resolved)}
                         onPreview={previewWidth(rightRef)}
                         onCommit={(w) => debugWorkspaceStore.setLayout({ right_width: w })}
-                        onReset={() => debugWorkspaceStore.setLayout({ right_width: UNSET_COLUMN_WIDTH })}
+                        onReset={() =>
+                            debugWorkspaceStore.setLayout({ right_width: UNSET_COLUMN_WIDTH })
+                        }
                     />
                     <ColumnFrame
                         ref={rightRef}
@@ -585,17 +670,30 @@ const LEFT_TABS_LABEL = '左栏面板';
 
 // 右栏的进退场：横向滑一段 + 淡入淡出（只动 transform / autoAlpha，宽度始终瞬间到位）
 const enterRightColumn: EnterFn = (el, env) =>
-    gsap.fromTo(el, { autoAlpha: 0, x: 24 }, { autoAlpha: 1, x: 0, duration: env.duration('base'), ease: env.ease.enter });
+    gsap.fromTo(
+        el,
+        { autoAlpha: 0, x: 24 },
+        { autoAlpha: 1, x: 0, duration: env.duration('base'), ease: env.ease.enter },
+    );
 const exitRightColumn: ExitFn = (el, env) =>
     gsap.to(el, { autoAlpha: 0, x: 24, duration: env.duration('fast'), ease: env.ease.exit });
 
-function LeftPanelTabs({ active, onChange }: { active: DebugLeftPanel; onChange: (p: DebugLeftPanel) => void }) {
+function LeftPanelTabs({
+    active,
+    onChange,
+}: {
+    active: DebugLeftPanel;
+    onChange: (p: DebugLeftPanel) => void;
+}) {
     const refs = useRef<Partial<Record<DebugLeftPanel, HTMLButtonElement | null>>>({});
     const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
         e.preventDefault();
         const idx = LEFT_PANELS.findIndex((p) => p.id === active);
-        const next = LEFT_PANELS[(idx + (e.key === 'ArrowRight' ? 1 : -1) + LEFT_PANELS.length) % LEFT_PANELS.length];
+        const next =
+            LEFT_PANELS[
+                (idx + (e.key === 'ArrowRight' ? 1 : -1) + LEFT_PANELS.length) % LEFT_PANELS.length
+            ];
         onChange(next.id);
         refs.current[next.id]?.focus();
     };
@@ -631,8 +729,15 @@ function LeftPanelTabs({ active, onChange }: { active: DebugLeftPanel; onChange:
                                         : 'text-text-tertiary hover:bg-elevated/35 hover:text-text',
                                 )}
                             >
-                                <Icon size={12} strokeWidth={2.2} aria-hidden className="shrink-0" />
-                                <span className="truncate @max-[168px]/lefttabs:sr-only">{p.label}</span>
+                                <Icon
+                                    size={12}
+                                    strokeWidth={2.2}
+                                    aria-hidden
+                                    className="shrink-0"
+                                />
+                                <span className="truncate @max-[168px]/lefttabs:sr-only">
+                                    {p.label}
+                                </span>
                             </button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom">{p.hint}</TooltipContent>

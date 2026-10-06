@@ -144,19 +144,113 @@ export type AstrBotSourcePreset = {
 
 // id / type / provider / api_base 抄自 AstrBot `astrbot/core/config/default.py` 的模板，别凭记忆改。
 export const ASTRBOT_SOURCE_PRESETS: readonly AstrBotSourcePreset[] = [
-    { id: 'openai', label: 'OpenAI', provider: 'openai', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'https://api.openai.com/v1' },
-    { id: 'deepseek', label: 'DeepSeek', provider: 'deepseek', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'https://api.deepseek.com/v1' },
-    { id: 'moonshot', label: 'Moonshot / Kimi', provider: 'moonshot', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'https://api.moonshot.cn/v1' },
-    { id: 'zhipu', label: '智谱 GLM', provider: 'zhipu', type: 'zhipu_chat_completion', provider_type: 'chat_completion', api_base: 'https://open.bigmodel.cn/api/paas/v4/' },
-    { id: 'siliconflow', label: '硅基流动', provider: 'siliconflow', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'https://api.siliconflow.cn/v1' },
-    { id: 'google_gemini_openai', label: 'Gemini（OpenAI 兼容）', provider: 'google', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'https://generativelanguage.googleapis.com/v1beta/openai/' },
-    { id: 'anthropic', label: 'Anthropic', provider: 'anthropic', type: 'anthropic_chat_completion', provider_type: 'chat_completion', api_base: 'https://api.anthropic.com' },
-    { id: 'openrouter', label: 'OpenRouter', provider: 'openrouter', type: 'openrouter_chat_completion', provider_type: 'chat_completion', api_base: 'https://openrouter.ai/api/v1' },
-    { id: 'ollama', label: 'Ollama（本机）', provider: 'ollama', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'http://127.0.0.1:11434/v1', local: true },
-    { id: 'lm_studio', label: 'LM Studio（本机）', provider: 'lm_studio', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: 'http://127.0.0.1:1234/v1', local: true },
-    { id: 'custom', label: '自定义 OpenAI 兼容接口', provider: 'openai', type: 'openai_chat_completion', provider_type: 'chat_completion', api_base: '' },
-    { id: 'openai_embedding', label: 'OpenAI Embedding', provider: 'openai', type: 'openai_embedding', provider_type: 'embedding', api_base: 'https://api.openai.com/v1' },
-    { id: 'ollama_embedding', label: 'Ollama Embedding（本机）', provider: 'ollama', type: 'ollama_embedding', provider_type: 'embedding', api_base: 'http://127.0.0.1:11434', local: true },
+    {
+        id: 'openai',
+        label: 'OpenAI',
+        provider: 'openai',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://api.openai.com/v1',
+    },
+    {
+        id: 'deepseek',
+        label: 'DeepSeek',
+        provider: 'deepseek',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://api.deepseek.com/v1',
+    },
+    {
+        id: 'moonshot',
+        label: 'Moonshot / Kimi',
+        provider: 'moonshot',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://api.moonshot.cn/v1',
+    },
+    {
+        id: 'zhipu',
+        label: '智谱 GLM',
+        provider: 'zhipu',
+        type: 'zhipu_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://open.bigmodel.cn/api/paas/v4/',
+    },
+    {
+        id: 'siliconflow',
+        label: '硅基流动',
+        provider: 'siliconflow',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://api.siliconflow.cn/v1',
+    },
+    {
+        id: 'google_gemini_openai',
+        label: 'Gemini（OpenAI 兼容）',
+        provider: 'google',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    },
+    {
+        id: 'anthropic',
+        label: 'Anthropic',
+        provider: 'anthropic',
+        type: 'anthropic_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://api.anthropic.com',
+    },
+    {
+        id: 'openrouter',
+        label: 'OpenRouter',
+        provider: 'openrouter',
+        type: 'openrouter_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'https://openrouter.ai/api/v1',
+    },
+    {
+        id: 'ollama',
+        label: 'Ollama（本机）',
+        provider: 'ollama',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'http://127.0.0.1:11434/v1',
+        local: true,
+    },
+    {
+        id: 'lm_studio',
+        label: 'LM Studio（本机）',
+        provider: 'lm_studio',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: 'http://127.0.0.1:1234/v1',
+        local: true,
+    },
+    {
+        id: 'custom',
+        label: '自定义 OpenAI 兼容接口',
+        provider: 'openai',
+        type: 'openai_chat_completion',
+        provider_type: 'chat_completion',
+        api_base: '',
+    },
+    {
+        id: 'openai_embedding',
+        label: 'OpenAI Embedding',
+        provider: 'openai',
+        type: 'openai_embedding',
+        provider_type: 'embedding',
+        api_base: 'https://api.openai.com/v1',
+    },
+    {
+        id: 'ollama_embedding',
+        label: 'Ollama Embedding（本机）',
+        provider: 'ollama',
+        type: 'ollama_embedding',
+        provider_type: 'embedding',
+        api_base: 'http://127.0.0.1:11434',
+        local: true,
+    },
 ];
 
 /** 在已有 id 集合里挑一个不撞的：`deepseek` → `deepseek-2` → `deepseek-3` */
@@ -173,7 +267,10 @@ export function newSourceFromPreset(
     existing: readonly AstrBotProviderSource[],
 ): AstrBotProviderSource {
     return {
-        id: uniqueId(preset.id, existing.map((s) => s.id)),
+        id: uniqueId(
+            preset.id,
+            existing.map((s) => s.id),
+        ),
         provider: preset.provider,
         type: preset.type,
         provider_type: preset.provider_type,
@@ -187,7 +284,10 @@ export function newSourceFromPreset(
 
 export function presetLabel(src: AstrBotProviderSource): string | undefined {
     return ASTRBOT_SOURCE_PRESETS.find(
-        (p) => p.type === src.type && p.provider === src.provider && p.provider_type === src.provider_type,
+        (p) =>
+            p.type === src.type &&
+            p.provider === src.provider &&
+            p.provider_type === src.provider_type,
     )?.label;
 }
 
@@ -260,7 +360,10 @@ export function validateAstrBotConfig(cfg: AstrBotInstanceConfig): AppConfigIssu
             seenModel.add(m.id);
         }
         if (m.provider_source_id && !sourceIds.has(m.provider_source_id)) {
-            out.push({ path: `models/${i}/provider_source_id`, message: '模型引用了不存在的提供商' });
+            out.push({
+                path: `models/${i}/provider_source_id`,
+                message: '模型引用了不存在的提供商',
+            });
         }
     });
     return out;
@@ -274,7 +377,10 @@ export const ASTRBOT_CONFIG_FORM: ConfigFormSpec<'astrbot'> = {
     confId: 'default',
 };
 
-export function astrbotLinkInputsChanged(a: AstrBotInstanceConfig, b: AstrBotInstanceConfig): boolean {
+export function astrbotLinkInputsChanged(
+    a: AstrBotInstanceConfig,
+    b: AstrBotInstanceConfig,
+): boolean {
     return (
         a.onebot.ws_reverse_port !== b.onebot.ws_reverse_port ||
         a.onebot.ws_reverse_token !== b.onebot.ws_reverse_token
@@ -294,7 +400,10 @@ export function embeddingSources(cfg: AstrBotInstanceConfig): AstrBotProviderSou
 }
 
 /** 某一用途（speech_to_text / text_to_speech …）下所有启用的模型 */
-export function modelsOfType(cfg: AstrBotInstanceConfig, providerType: string): AstrBotProviderModel[] {
+export function modelsOfType(
+    cfg: AstrBotInstanceConfig,
+    providerType: string,
+): AstrBotProviderModel[] {
     const sources = new Map(cfg.sources.map((s) => [s.id, s]));
     return cfg.models.filter((m) => {
         const src = sources.get(m.provider_source_id);
@@ -404,7 +513,9 @@ export function astrbotWakeHint(cfg: AstrBotInstanceConfig): { sentence: string;
             : prefixes.length
               ? '私聊也要带前缀'
               : '私聊没法唤醒';
-    const llmPrefix = cfg.ai.wake_prefix.trim() ? `；走大模型还要再带「${cfg.ai.wake_prefix}」` : '';
+    const llmPrefix = cfg.ai.wake_prefix.trim()
+        ? `；走大模型还要再带「${cfg.ai.wake_prefix}」`
+        : '';
     return { sentence: `${group}，${friend}${llmPrefix}`, short };
 }
 
@@ -425,7 +536,11 @@ export function astrbotConfigWarnings(cfg: AstrBotInstanceConfig): AstrBotConfig
         if (sub.agents.length === 0) {
             out.push({ key: 'subagent-empty', text: '子代理开着，但一个都没加', area: 'subagent' });
         } else if (half > 0) {
-            out.push({ key: 'subagent-incomplete', text: `${half} 个子代理没配全`, area: 'subagent' });
+            out.push({
+                key: 'subagent-incomplete',
+                text: `${half} 个子代理没配全`,
+                area: 'subagent',
+            });
         }
     }
     return out;

@@ -10,9 +10,7 @@ import {
     dockerSaveBlockReason,
 } from '../../core/domain/bot/docker-start-gate';
 
-export function useBotDockerStartGate(
-    configByBot: Record<string, BotConfig | undefined | null>,
-): {
+export function useBotDockerStartGate(configByBot: Record<string, BotConfig | undefined | null>): {
     startBlock: (botId: string) => string | null;
     saveBlock: (config: BotConfig) => string | null;
 } {
@@ -26,8 +24,7 @@ export function useBotDockerStartGate(
         return [...set];
     }, [configByBot]);
 
-    const { statusByHost, probingByHost, imageReadyByHost } =
-        useDockerHosts(hostIds);
+    const { statusByHost, probingByHost, imageReadyByHost } = useDockerHosts(hostIds);
 
     const gateArgs = useCallback(
         (config: BotConfig) => {

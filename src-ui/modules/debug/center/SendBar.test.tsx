@@ -27,12 +27,16 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
     onebotDebugService: new Proxy(
         {},
         {
-            get: (_t, key: string) => (...args: unknown[]) =>
-                (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
+            get:
+                (_t, key: string) =>
+                (...args: unknown[]) =>
+                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
         },
     ),
 }));
-vi.mock('../../../core/services/domain-event-hub', () => ({ subscribeDomainEvents: () => () => {} }));
+vi.mock('../../../core/services/domain-event-hub', () => ({
+    subscribeDomainEvents: () => () => {},
+}));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 import { TooltipProvider } from '../../../shared/ui';
@@ -139,13 +143,20 @@ async function renderColumn(action: string, params_text: string) {
         </QueryClientProvider>
     );
     return render(
-        <CenterColumn target={BOT} callChannel={{ kind: 'auto' }} onOpenPalette={vi.fn()} onRevealCallChannel={vi.fn()} />,
+        <CenterColumn
+            target={BOT}
+            callChannel={{ kind: 'auto' }}
+            onOpenPalette={vi.fn()}
+            onRevealCallChannel={vi.fn()}
+        />,
         { wrapper },
     );
 }
 
 function editorCalls(): DebugCallRequest[] {
-    return service.call.mock.calls.map((c) => c[0] as DebugCallRequest).filter((r) => r.origin === 'editor');
+    return service.call.mock.calls
+        .map((c) => c[0] as DebugCallRequest)
+        .filter((r) => r.origin === 'editor');
 }
 
 // jsdom 里元素尺寸都是 0，虚拟列表一行都不画：给 JSON 树一个 440px 的视口
@@ -155,7 +166,12 @@ beforeAll(() => {
     Element.prototype.releasePointerCapture ??= () => {};
     Element.prototype.setPointerCapture ??= () => {};
     Element.prototype.scrollIntoView ??= () => {};
-    Range.prototype.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+    Range.prototype.getClientRects ??= () =>
+        ({
+            length: 0,
+            item: () => null,
+            [Symbol.iterator]: [][Symbol.iterator],
+        }) as unknown as DOMRectList;
     Range.prototype.getBoundingClientRect ??= () => new DOMRect();
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
         configurable: true,
@@ -183,8 +199,15 @@ beforeEach(() => {
         auto_call: { kind: 'internal' },
         auto_events: { kind: 'internal' },
     });
-    service.catalog.mockResolvedValue({ backend: 'napcat', source: 'live', snapshot_version: 't', actions: [] });
-    service.describe.mockImplementation(async (_b: string, _k: string, name: string) => SPECS[name] ?? null);
+    service.catalog.mockResolvedValue({
+        backend: 'napcat',
+        source: 'live',
+        snapshot_version: 't',
+        actions: [],
+    });
+    service.describe.mockImplementation(
+        async (_b: string, _k: string, name: string) => SPECS[name] ?? null,
+    );
     service.collections.mockResolvedValue({ version: 1, folders: [], requests: [] });
     service.cancel.mockResolvedValue(undefined);
     service.call.mockImplementation(async (req: DebugCallRequest) => okResponse(req, []));
@@ -292,7 +315,11 @@ describe('连发只显示最后一次', () => {
         const send = await screen.findByRole('button', { name: /^发送/ });
         await waitFor(() => expect(send).toBeEnabled());
 
-        const idleEsc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        const idleEsc = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        });
         window.dispatchEvent(idleEsc);
         expect(idleEsc.defaultPrevented).toBe(false);
 
@@ -334,7 +361,12 @@ describe('确认框和新开的标签', () => {
         const ui = (target: DebugTarget) => (
             <QueryClientProvider client={client}>
                 <TooltipProvider>
-                    <CenterColumn target={target} callChannel={{ kind: 'auto' }} onOpenPalette={vi.fn()} onRevealCallChannel={vi.fn()} />
+                    <CenterColumn
+                        target={target}
+                        callChannel={{ kind: 'auto' }}
+                        onOpenPalette={vi.fn()}
+                        onRevealCallChannel={vi.fn()}
+                    />
                 </TooltipProvider>
             </QueryClientProvider>
         );
@@ -353,14 +385,18 @@ describe('确认框和新开的标签', () => {
 
     it('「用它新开」打开的标签算改过的：带着参数，之后从目录点别的接口会另开而不是顶掉它', async () => {
         const user = userEvent.setup();
-        service.call.mockImplementation(async (req: DebugCallRequest) => okResponse(req, { user_id: 10001, nickname: 'x' }));
+        service.call.mockImplementation(async (req: DebugCallRequest) =>
+            okResponse(req, { user_id: 10001, nickname: 'x' }),
+        );
         await renderColumn('get_login_info', '{}');
         const send = await screen.findByRole('button', { name: /^发送/ });
         await waitFor(() => expect(send).toBeEnabled());
         await user.click(send);
 
         const row = await waitFor(() => {
-            const r = screen.getAllByRole('treeitem').find((el) => el.textContent?.startsWith('user_id'));
+            const r = screen
+                .getAllByRole('treeitem')
+                .find((el) => el.textContent?.startsWith('user_id'));
             if (!r) throw new Error('回包还没画出来');
             return r;
         });
@@ -373,8 +409,14 @@ describe('确认框和新开的标签', () => {
         expect(opened.action).toBe('get_stranger_info');
         expect(JSON.parse(opened.params_text)).toEqual({ user_id: 10001 });
         // 说明读到后不会被当成空标签重新填
-        await waitFor(() => expect(screen.getByRole('combobox', { name: '接口名' })).toHaveValue('get_stranger_info'));
-        expect(JSON.parse(ws().tabs.find((t) => t.id === opened.id)!.params_text)).toEqual({ user_id: 10001 });
+        await waitFor(() =>
+            expect(screen.getByRole('combobox', { name: '接口名' })).toHaveValue(
+                'get_stranger_info',
+            ),
+        );
+        expect(JSON.parse(ws().tabs.find((t) => t.id === opened.id)!.params_text)).toEqual({
+            user_id: 10001,
+        });
         // 标签上带「改过」的点
         expect(await screen.findByLabelText('参数改过')).toBeInTheDocument();
 
@@ -414,8 +456,8 @@ describe('读屏播报', () => {
 
         await user.click(send);
         await waitFor(() => {
-            const region = [...container.querySelectorAll('span.sr-only[role="status"]')].find((el) =>
-                el.textContent?.includes('成功，retcode 0'),
+            const region = [...container.querySelectorAll('span.sr-only[role="status"]')].find(
+                (el) => el.textContent?.includes('成功，retcode 0'),
             );
             expect(region).toBeDefined();
             expect(before).toContain(region);
@@ -463,13 +505,18 @@ describe('读屏播报', () => {
             </QueryClientProvider>
         );
         const { container, rerender } = render(ui(true));
-        const regions = () => [...container.querySelectorAll('span.sr-only[role="status"]')].map((el) => el.textContent ?? '');
+        const regions = () =>
+            [...container.querySelectorAll('span.sr-only[role="status"]')].map(
+                (el) => el.textContent ?? '',
+            );
         const tabId = () => debugWorkspaceStore.getSnapshot().ws.active_tab!;
         await screen.findByRole('button', { name: /^发送/ });
         act(() => debugWorkspaceStore.setParamsText(tabId(), '{,'));
         await screen.findByText('JSON 有错，改好再发');
         fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
-        await waitFor(() => expect(regions().some((t) => t.startsWith('发不了：JSON 有错'))).toBe(true));
+        await waitFor(() =>
+            expect(regions().some((t) => t.startsWith('发不了：JSON 有错'))).toBe(true),
+        );
 
         // 改好了、Bot 又停了：原因变了，但没有再按，播报区不该冒出新的一句
         act(() => debugWorkspaceStore.setParamsText(tabId(), '{}'));
@@ -479,7 +526,9 @@ describe('读屏播报', () => {
         expect(regions().some((t) => t.includes('发不了'))).toBe(false);
 
         fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
-        await waitFor(() => expect(regions().some((t) => t.startsWith('发不了：Bot 没在运行'))).toBe(true));
+        await waitFor(() =>
+            expect(regions().some((t) => t.startsWith('发不了：Bot 没在运行'))).toBe(true),
+        );
     });
 });
 
@@ -489,7 +538,12 @@ describe('超大回包', () => {
         service.call.mockImplementation(async (req: DebugCallRequest) => {
             const res = okResponse(req, null);
             if (res.result.kind === 'ok') {
-                res.result.outcome = { ...res.result.outcome, truncated: true, raw: '{"status":"ok","data":[', size_bytes: 6 * 1024 * 1024 };
+                res.result.outcome = {
+                    ...res.result.outcome,
+                    truncated: true,
+                    raw: '{"status":"ok","data":[',
+                    size_bytes: 6 * 1024 * 1024,
+                };
             }
             return res;
         });
@@ -502,6 +556,9 @@ describe('超大回包', () => {
         await user.click(screen.getByRole('button', { name: '另存完整内容' }));
         const requestId = (service.call.mock.calls[0]?.[0] as DebugCallRequest).request_id;
         await waitFor(() => expect(service.saveResponseFile).toHaveBeenCalledTimes(1));
-        expect(service.saveResponseFile).toHaveBeenCalledWith(requestId, expect.stringMatching(/^get_login_info-\d{8}-\d{6}\.json$/));
+        expect(service.saveResponseFile).toHaveBeenCalledWith(
+            requestId,
+            expect.stringMatching(/^get_login_info-\d{8}-\d{6}\.json$/),
+        );
     });
 });

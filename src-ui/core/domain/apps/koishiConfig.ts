@@ -72,7 +72,11 @@ export function replaceAt(
 }
 
 /** 往某个分组（空路径 = 根）的末尾加节点 */
-export function appendTo(cfg: KoishiInstanceConfig, groupPath: NodePath, node: KoishiPluginNode): KoishiInstanceConfig {
+export function appendTo(
+    cfg: KoishiInstanceConfig,
+    groupPath: NodePath,
+    node: KoishiPluginNode,
+): KoishiInstanceConfig {
     if (groupPath.length === 0) return { ...cfg, plugins: [...cfg.plugins, node] };
     return replaceAt(cfg, groupPath, (g) => ({ ...g, children: [...g.children, node] }));
 }
@@ -94,10 +98,18 @@ export function groupPathOf(cfg: KoishiInstanceConfig, ident: string): number[] 
 }
 
 /** 挪到另一个分组（按标识认，空串 = 根）的末尾；不能挪进自己或自己的子分组 */
-export function moveTo(cfg: KoishiInstanceConfig, from: NodePath, groupIdent: string): KoishiInstanceConfig {
+export function moveTo(
+    cfg: KoishiInstanceConfig,
+    from: NodePath,
+    groupIdent: string,
+): KoishiInstanceConfig {
     const node = nodeAt(cfg, from);
     if (!node) return cfg;
-    if (isGroup(node) && (node.ident === groupIdent || walk(node.children).some((c) => isGroup(c) && c.ident === groupIdent))) {
+    if (
+        isGroup(node) &&
+        (node.ident === groupIdent ||
+            walk(node.children).some((c) => isGroup(c) && c.ident === groupIdent))
+    ) {
         return cfg;
     }
     // 先删再按标识重新找目标：删掉后目标分组的下标可能前移
@@ -132,7 +144,11 @@ export function groupChoices(cfg: KoishiInstanceConfig): { ident: string; label:
 }
 
 export function usedIdents(cfg: KoishiInstanceConfig): Set<string> {
-    return new Set(walk(cfg.plugins).map((n) => n.ident).filter(Boolean));
+    return new Set(
+        walk(cfg.plugins)
+            .map((n) => n.ident)
+            .filter(Boolean),
+    );
 }
 
 /** 上游的 `Math.random().toString(36).slice(2, 8)`：6 位小写字母数字，全树不重复 */
@@ -145,7 +161,11 @@ export function freshIdent(cfg: KoishiInstanceConfig, random: () => number = Mat
     }
 }
 
-export function newPlugin(cfg: KoishiInstanceConfig, name: string, enabled = false): KoishiPluginNode {
+export function newPlugin(
+    cfg: KoishiInstanceConfig,
+    name: string,
+    enabled = false,
+): KoishiPluginNode {
     return { name, ident: freshIdent(cfg), enabled, meta: {}, config: {}, children: [] };
 }
 
@@ -160,10 +180,17 @@ export function cloneNode(cfg: KoishiInstanceConfig, node: KoishiPluginNode): Ko
 }
 
 function serverNode(cfg: KoishiInstanceConfig): KoishiPluginNode | undefined {
-    return effective(cfg.plugins).find((n) => n.name === 'server') ?? walk(cfg.plugins).find((n) => n.name === 'server');
+    return (
+        effective(cfg.plugins).find((n) => n.name === 'server') ??
+        walk(cfg.plugins).find((n) => n.name === 'server')
+    );
 }
 
-export function koishiServer(cfg: KoishiInstanceConfig): { port: number; host: string; selfUrl: string } {
+export function koishiServer(cfg: KoishiInstanceConfig): {
+    port: number;
+    host: string;
+    selfUrl: string;
+} {
     const c = serverNode(cfg)?.config ?? {};
     return {
         port: typeof c.port === 'number' ? c.port : KOISHI_DEFAULT_PORT,
@@ -218,17 +245,22 @@ export function validateKoishiConfig(cfg: KoishiInstanceConfig): AppConfigIssue[
             const name = n.name.trim();
             if (!name) issues.push({ path: `${here}/name`, message: '插件名不能为空' });
             else if (name.includes(':') || name.startsWith('~') || name.startsWith('$')) {
-                issues.push({ path: `${here}/name`, message: '插件名不能含冒号，也不能以 ~ / $ 开头' });
+                issues.push({
+                    path: `${here}/name`,
+                    message: '插件名不能含冒号，也不能以 ~ / $ 开头',
+                });
             }
             if (n.ident.includes(':') || n.ident.includes('~')) {
                 issues.push({ path: `${here}/ident`, message: '标识不能含冒号或 ~' });
             }
             if (n.ident) {
-                if (seen.has(n.ident)) issues.push({ path: `${here}/ident`, message: `标识 ${n.ident} 重复了` });
+                if (seen.has(n.ident))
+                    issues.push({ path: `${here}/ident`, message: `标识 ${n.ident} 重复了` });
                 seen.add(n.ident);
             }
             const key = nodeKey(n);
-            if (keys.has(key)) issues.push({ path: `${here}/name`, message: `同一分组里 ${key} 出现了两次` });
+            if (keys.has(key))
+                issues.push({ path: `${here}/name`, message: `同一分组里 ${key} 出现了两次` });
             keys.add(key);
             if (isGroup(n)) check(n.children, `${here}/children`);
         });
@@ -255,5 +287,9 @@ export const KOISHI_CONFIG_FORM: ConfigFormSpec<'koishi'> = {
     framework: 'koishi',
     validate: validateKoishiConfig,
     saveHint: (r, running) =>
-        running ? (r.port_changed ? '已在运行中的 Koishi 里生效，控制台换到了新端口' : '已在运行中的 Koishi 里生效') : null,
+        running
+            ? r.port_changed
+                ? '已在运行中的 Koishi 里生效，控制台换到了新端口'
+                : '已在运行中的 Koishi 里生效'
+            : null,
 };

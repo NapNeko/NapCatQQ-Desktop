@@ -3,10 +3,7 @@
 
 import type { BotActorSnapshot } from '../../ipc/generated/BotActorSnapshot';
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
-import {
-    isRuntimeTargetLocal,
-    remoteHostIdFromRuntimeTarget,
-} from '../bot/runtime-target';
+import { isRuntimeTargetLocal, remoteHostIdFromRuntimeTarget } from '../bot/runtime-target';
 
 /** Starting / Running / Stopping — 与 Rust BotActorState::is_active 对齐 */
 export function isBotActorActive(state: string): boolean {

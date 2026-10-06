@@ -2,22 +2,18 @@
 //   import { Button, Card, Badge } from '@/shared/ui';
 
 export { Button, type ButtonProps } from './Button';
-export {
-    Card,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-    CardFooter,
-    type CardProps,
-} from './Card';
+export { Card, CardHeader, CardTitle, CardDescription, CardFooter, type CardProps } from './Card';
 export { Badge, BadgeDot, type BadgeProps } from './Badge';
-export { Tabs, TabsList, TabsTrigger, TabsContent, TabsSideList, TabsSideTrigger, type TabsSideDot } from './Tabs';
 export {
-    TooltipProvider,
-    Tooltip,
-    TooltipTrigger,
-    TooltipContent,
-} from './Tooltip';
+    Tabs,
+    TabsList,
+    TabsTrigger,
+    TabsContent,
+    TabsSideList,
+    TabsSideTrigger,
+    type TabsSideDot,
+} from './Tabs';
+export { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from './Tooltip';
 export {
     Dialog,
     DialogTrigger,
@@ -51,13 +47,7 @@ export {
 } from './KeyValueListEditor';
 export { PagePlaceholder, type PagePlaceholderProps } from './PagePlaceholder';
 export { SimpleMarkdown, type SimpleMarkdownProps } from './SimpleMarkdown';
-export {
-    Popover,
-    PopoverTrigger,
-    PopoverContent,
-    PopoverClose,
-    PopoverAnchor,
-} from './Popover';
+export { Popover, PopoverTrigger, PopoverContent, PopoverClose, PopoverAnchor } from './Popover';
 export {
     TimePicker,
     formatTimeValue,

@@ -11,11 +11,7 @@
 //
 // 纯函数 + 无 IPC / 无 React。
 
-import type {
-    LocalVersionSnapshot,
-    ReleaseInfo,
-    ReleaseSnapshot,
-} from '../../ipc/types';
+import type { LocalVersionSnapshot, ReleaseInfo, ReleaseSnapshot } from '../../ipc/types';
 
 /// UI 友好的 ReleaseInfo：bigint 已转 number。
 export interface ReleaseInfoView {
@@ -85,9 +81,7 @@ export function normalizeReleaseSnapshot(
 export function normalizeComponentVersion(version: string): string {
     const trimmed = version.trim();
     if (!trimmed) return '';
-    const token = trimmed.includes(' ')
-        ? (trimmed.split(/\s+/).pop() ?? trimmed)
-        : trimmed;
+    const token = trimmed.includes(' ') ? (trimmed.split(/\s+/).pop() ?? trimmed) : trimmed;
     return token.replace(/^watch-/i, '').replace(/^[vV]/, '');
 }
 

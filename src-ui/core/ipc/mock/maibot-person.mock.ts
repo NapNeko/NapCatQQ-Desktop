@@ -57,7 +57,10 @@ function store(inst: AppInstance): Store {
             // 开头补 0：真 QQ 号不会以 0 开头，预览里不会去拉陌生人的头像
             user_id: `0${uid}`,
             nickname,
-            group_cards: GROUPS.slice(0, i % 3).map((g, j) => ({ group_id: `${123450 + j}`, card: `${name || nickname}@${g.slice(0, 2)}` })),
+            group_cards: GROUPS.slice(0, i % 3).map((g, j) => ({
+                group_id: `${123450 + j}`,
+                card: `${name || nickname}@${g.slice(0, 2)}`,
+            })),
             is_known: !!name,
             first_seen: now - 86400 * (40 - i),
             last_seen: now - 3600 * (i * 5 + 1),
@@ -68,7 +71,8 @@ function store(inst: AppInstance): Store {
     return s;
 }
 
-const done = (affected: number, message: string): Promise<MaiBotResourceDone> => withMockDelay({ affected, message });
+const done = (affected: number, message: string): Promise<MaiBotResourceDone> =>
+    withMockDelay({ affected, message });
 
 export const mockMaiBotPersons = {
     list(inst: AppInstance, q: MaiBotPersonQuery): Promise<MaiBotPersonPage> {
@@ -95,13 +99,22 @@ export const mockMaiBotPersons = {
             case 'update':
                 s.people = s.people.map((p) =>
                     p.person_id === a.person_id
-                        ? { ...p, name: a.name.trim(), name_reason: a.name_reason.trim(), is_known: a.is_known, last_seen: Date.now() / 1000 }
+                        ? {
+                              ...p,
+                              name: a.name.trim(),
+                              name_reason: a.name_reason.trim(),
+                              is_known: a.is_known,
+                              last_seen: Date.now() / 1000,
+                          }
                         : p,
                 );
                 return done(1, '改好了');
             case 'delete':
                 s.people = s.people.filter((p) => !a.person_ids.includes(p.person_id));
-                return done(a.person_ids.length, a.person_ids.length > 1 ? `删掉了 ${a.person_ids.length} 个人` : '删掉了');
+                return done(
+                    a.person_ids.length,
+                    a.person_ids.length > 1 ? `删掉了 ${a.person_ids.length} 个人` : '删掉了',
+                );
         }
     },
 };

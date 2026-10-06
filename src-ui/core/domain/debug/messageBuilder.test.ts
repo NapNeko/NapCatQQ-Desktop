@@ -51,7 +51,11 @@ describe('messageBuilder', () => {
 
     it('组装发送内容 = 解析 + 回复归一', () => {
         const entry: ComposerEntry = { text: '好', mentions: [], rich: [img('f')] };
-        expect(assembleMessage(entry, 9)).toEqual([{ type: 'reply', data: { id: '9' } }, img('f'), { type: 'text', data: { text: '好' } }]);
+        expect(assembleMessage(entry, 9)).toEqual([
+            { type: 'reply', data: { id: '9' } },
+            img('f'),
+            { type: 'text', data: { text: '好' } },
+        ]);
     });
 
     it('能发的判定：光有回复或空白不算，图片单独可发', () => {
@@ -124,13 +128,17 @@ describe('messageBuilder', () => {
         expect(segmentIssue({ type: 'text', data: { text: '  ' } })).toBe('文字是空的');
         expect(segmentIssue({ type: 'text', data: { text: '好' } })).toBeNull();
         expect(segmentIssue({ type: 'at', data: { qq: '' } })).toBe('还没填 QQ 号');
-        expect(segmentIssue({ type: 'at', data: { qq: 'abc' } })).toBe('QQ 号只能是数字，全体填 all');
+        expect(segmentIssue({ type: 'at', data: { qq: 'abc' } })).toBe(
+            'QQ 号只能是数字，全体填 all',
+        );
         expect(segmentIssue({ type: 'at', data: { qq: 'all' } })).toBeNull();
         expect(segmentIssue({ type: 'face', data: { id: 'x' } })).toBe('表情 id 是数字');
         expect(segmentIssue({ type: 'face', data: { id: '14' } })).toBeNull();
         expect(segmentIssue(img(''))).toBe('还没填地址（URL / base64 / 路径）');
         expect(segmentIssue({ type: 'reply', data: { id: '-3' } })).toBeNull();
-        expect(segmentIssue({ type: 'poke', data: { type: '126', id: 'x' } })).toBe('类型和 id 都是数字');
+        expect(segmentIssue({ type: 'poke', data: { type: '126', id: 'x' } })).toBe(
+            '类型和 id 都是数字',
+        );
         expect(segmentIssue({ type: 'json', data: { data: '{bad' } })).toBe('不是合法的 JSON');
         expect(segmentIssue({ type: 'json', data: { data: '{"a":1}' } })).toBeNull();
         expect(segmentIssue({ type: 'xml', data: { data: '  ' } })).toBe('卡片 XML 是空的');

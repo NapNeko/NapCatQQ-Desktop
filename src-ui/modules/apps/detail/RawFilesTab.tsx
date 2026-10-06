@@ -167,7 +167,9 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                                         : 'text-text-secondary hover:bg-inset hover:text-text',
                                 )}
                             >
-                                <span className="min-w-0 truncate font-mono text-[12px]">{d.label}</span>
+                                <span className="min-w-0 truncate font-mono text-[12px]">
+                                    {d.label}
+                                </span>
                                 <span className="shrink-0 text-2xs text-text-tertiary">
                                     {FORMAT_LABEL[d.format]}
                                     {d.hot_reload ? '' : ' · 重启'}
@@ -231,42 +233,58 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                         </pre>
                     </>
                 ) : (
-                <>
-                <div className="flex shrink-0 items-center justify-between gap-3">
-                    <p
-                        className="min-w-0 truncate font-mono text-[11px] text-text-tertiary"
-                        title={`${instance.install_dir}/${activeDoc?.rel_path ?? ''}`}
-                    >
-                        {activeDoc?.rel_path}
-                        {text.doc?.revision === 'missing' ? ' · 保存时创建' : ''}
-                    </p>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                        <span className="text-2xs text-text-tertiary">
-                            {dirty ? '未保存' : text.doc ? `版本 ${text.doc.revision}` : ''}
-                        </span>
-                        <Button size="sm" variant="ghost" onClick={() => void reload()} disabled={text.isLoading || text.isWriting}>
-                            <ActionMotionIcon icon={RefreshCw} size={13} />
-                            重载
-                        </Button>
-                        <Button size="sm" variant="primary" onClick={() => void save()} disabled={!dirty || text.isWriting}>
-                            {text.isWriting ? <Spinner size="xs" /> : <ActionMotionIcon icon={Save} size={13} />}
-                            保存
-                        </Button>
-                    </div>
-                </div>
-                {syntaxError && <p className="shrink-0 text-xs text-danger">{syntaxError}</p>}
-                <SyntaxTextEditor
-                    mode={activeDoc ? editorMode(activeDoc.format) : 'plain'}
-                    value={draft}
-                    invalid={!!syntaxError}
-                    disabled={text.isLoading || !text.doc}
-                    aria-label={activeDoc?.rel_path ?? '配置文件'}
-                    onChange={(next) => {
-                        setDraft(next);
-                        if (syntaxError) setSyntaxError(null);
-                    }}
-                />
-                </>
+                    <>
+                        <div className="flex shrink-0 items-center justify-between gap-3">
+                            <p
+                                className="min-w-0 truncate font-mono text-[11px] text-text-tertiary"
+                                title={`${instance.install_dir}/${activeDoc?.rel_path ?? ''}`}
+                            >
+                                {activeDoc?.rel_path}
+                                {text.doc?.revision === 'missing' ? ' · 保存时创建' : ''}
+                            </p>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                                <span className="text-2xs text-text-tertiary">
+                                    {dirty ? '未保存' : text.doc ? `版本 ${text.doc.revision}` : ''}
+                                </span>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => void reload()}
+                                    disabled={text.isLoading || text.isWriting}
+                                >
+                                    <ActionMotionIcon icon={RefreshCw} size={13} />
+                                    重载
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="primary"
+                                    onClick={() => void save()}
+                                    disabled={!dirty || text.isWriting}
+                                >
+                                    {text.isWriting ? (
+                                        <Spinner size="xs" />
+                                    ) : (
+                                        <ActionMotionIcon icon={Save} size={13} />
+                                    )}
+                                    保存
+                                </Button>
+                            </div>
+                        </div>
+                        {syntaxError && (
+                            <p className="shrink-0 text-xs text-danger">{syntaxError}</p>
+                        )}
+                        <SyntaxTextEditor
+                            mode={activeDoc ? editorMode(activeDoc.format) : 'plain'}
+                            value={draft}
+                            invalid={!!syntaxError}
+                            disabled={text.isLoading || !text.doc}
+                            aria-label={activeDoc?.rel_path ?? '配置文件'}
+                            onChange={(next) => {
+                                setDraft(next);
+                                if (syntaxError) setSyntaxError(null);
+                            }}
+                        />
+                    </>
                 )}
             </section>
 

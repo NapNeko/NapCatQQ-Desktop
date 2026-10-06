@@ -47,8 +47,7 @@ function spawnFromCorner(
     const originX = corner === 'bottom-left' ? 32 : canvasW - 32;
     const originY = canvasH + 16;
     // 更竖直、更猛：角度贴近正上方，扇形略收
-    const centerAngle =
-        corner === 'bottom-left' ? -Math.PI / 2 + 0.22 : -Math.PI / 2 - 0.22;
+    const centerAngle = corner === 'bottom-left' ? -Math.PI / 2 + 0.22 : -Math.PI / 2 - 0.22;
     const spread = 0.72;
 
     for (let i = 0; i < count; i++) {
@@ -193,11 +192,7 @@ export function SplashConfetti({ onDone }: SplashConfettiProps) {
     if (!enabled || level === 'elegant') return null;
 
     return (
-        <canvas
-            ref={canvasRef}
-            className="pointer-events-none fixed inset-0 z-[180]"
-            aria-hidden
-        />
+        <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[180]" aria-hidden />
     );
 }
 

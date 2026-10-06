@@ -21,7 +21,8 @@ const SCOPES: ReadonlyArray<{
 
 export const KarinPermissionsTab: React.FC<KarinTabProps> = ({ config, onChange, disabled }) => {
     const core = config.config;
-    const set = (patch: Partial<KarinCoreConfig>) => onChange({ ...config, config: { ...core, ...patch } });
+    const set = (patch: Partial<KarinCoreConfig>) =>
+        onChange({ ...config, config: { ...core, ...patch } });
     const setScope = (key: (typeof SCOPES)[number]['key'], patch: Partial<KarinEventScope>) =>
         set({ [key]: { ...core[key], ...patch } } as Partial<KarinCoreConfig>);
 
@@ -92,30 +93,43 @@ export const KarinPermissionsTab: React.FC<KarinTabProps> = ({ config, onChange,
                                     />
                                 </div>
                                 <ExpandPresence visible={expanded}>
-                                    <div className={cn('border-t border-border-subtle/70 px-3 py-3', CONFIG_PAIR)}>
+                                    <div
+                                        className={cn(
+                                            'border-t border-border-subtle/70 px-3 py-3',
+                                            CONFIG_PAIR,
+                                        )}
+                                    >
                                         <StringListField
                                             label="白名单"
                                             value={scope.enable_list}
                                             disabled={disabled || !scope.enable}
-                                            onChange={(enable_list) => setScope(s.key, { enable_list })}
+                                            onChange={(enable_list) =>
+                                                setScope(s.key, { enable_list })
+                                            }
                                         />
                                         <StringListField
                                             label="黑名单"
                                             value={scope.disable_list}
                                             disabled={disabled || !scope.enable}
-                                            onChange={(disable_list) => setScope(s.key, { disable_list })}
+                                            onChange={(disable_list) =>
+                                                setScope(s.key, { disable_list })
+                                            }
                                         />
                                         <StringListField
                                             label="日志白名单"
                                             value={scope.log_enable_list}
                                             disabled={disabled || !scope.enable}
-                                            onChange={(log_enable_list) => setScope(s.key, { log_enable_list })}
+                                            onChange={(log_enable_list) =>
+                                                setScope(s.key, { log_enable_list })
+                                            }
                                         />
                                         <StringListField
                                             label="日志黑名单"
                                             value={scope.log_disable_list}
                                             disabled={disabled || !scope.enable}
-                                            onChange={(log_disable_list) => setScope(s.key, { log_disable_list })}
+                                            onChange={(log_disable_list) =>
+                                                setScope(s.key, { log_disable_list })
+                                            }
                                         />
                                     </div>
                                 </ExpandPresence>

@@ -5,7 +5,11 @@
 import { useState } from 'react';
 import { FolderOpen, X } from 'lucide-react';
 import { onebotDebugService } from '../../../../core/services/onebot-debug.service';
-import { LOCAL_FILE_PREFIX, isLocalFileToken, localFileTokenFor } from '../../../../core/domain/debug/streamActions';
+import {
+    LOCAL_FILE_PREFIX,
+    isLocalFileToken,
+    localFileTokenFor,
+} from '../../../../core/domain/debug/streamActions';
 import { errorText } from '../../../../core/domain/errors';
 import { pushErrorBar } from '../../../../hooks/ui/pushErrorBar';
 import { cn } from '../../../../shared/utils/cn';
@@ -31,8 +35,15 @@ export function FileField(props: FieldProps) {
                 <span className="min-w-0 flex-1 truncate font-mono text-[13px]" title={path}>
                     {name}
                 </span>
-                <span className="shrink-0 rounded-xs bg-brand-soft px-1 text-[10px] leading-4 text-brand">本机</span>
-                <IconTip icon={X} label="去掉本机文件，改回手填" size="sm" onClick={() => onChange(undefined)} />
+                <span className="shrink-0 rounded-xs bg-brand-soft px-1 text-[10px] leading-4 text-brand">
+                    本机
+                </span>
+                <IconTip
+                    icon={X}
+                    label="去掉本机文件，改回手填"
+                    size="sm"
+                    onClick={() => onChange(undefined)}
+                />
             </div>
         );
     }

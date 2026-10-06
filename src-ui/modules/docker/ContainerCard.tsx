@@ -29,15 +29,14 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
     const PORTS_SHOWN = 2;
     const shownPorts = ports.slice(0, PORTS_SHOWN);
     const extraPorts = ports.length - shownPorts.length;
-    const statusLine =
-        container.status.trim() !== '' ? container.status : '暂无 Docker 状态文案';
+    const statusLine = container.status.trim() !== '' ? container.status : '暂无 Docker 状态文案';
 
     return (
         <article
             className={cn(
                 'relative isolate flex h-full w-full min-w-0 flex-col overflow-hidden ' +
-                'rounded-md border border-border-subtle bg-surface shadow-card ' +
-                'transition-[box-shadow] duration-200 hover:shadow-popover',
+                    'rounded-md border border-border-subtle bg-surface shadow-card ' +
+                    'transition-[box-shadow] duration-200 hover:shadow-popover',
             )}
         >
             <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pb-2 pt-3">

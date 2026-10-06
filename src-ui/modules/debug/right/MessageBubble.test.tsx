@@ -51,7 +51,9 @@ afterEach(() => {
     contentHeight = 200;
 });
 
-const wrapper = ({ children }: { children: ReactNode }) => <TooltipProvider>{children}</TooltipProvider>;
+const wrapper = ({ children }: { children: ReactNode }) => (
+    <TooltipProvider>{children}</TooltipProvider>
+);
 
 function item(text: string): MessageItem {
     return {
@@ -71,9 +73,17 @@ function item(text: string): MessageItem {
 
 describe('MessageBubble', () => {
     it('栏变窄、长消息超过 12 行时才出「展开」', () => {
-        render(<MessageBubble item={item('长'.repeat(200))} continued={false} selected={false} showSessionName={false} />, {
-            wrapper,
-        });
+        render(
+            <MessageBubble
+                item={item('长'.repeat(200))}
+                continued={false}
+                selected={false}
+                showSessionName={false}
+            />,
+            {
+                wrapper,
+            },
+        );
         // 宽的时候放得下
         expect(screen.queryByRole('button', { name: '展开' })).not.toBeInTheDocument();
 
@@ -88,30 +98,74 @@ describe('MessageBubble', () => {
             ...item('转一下'),
             direction: 'out',
             senderName: '我',
-            call: { action: 'send_msg', requestId: 'r1', ok: true, retcode: 0, elapsedMs: 88, error: null, channel: { kind: 'internal' } },
+            call: {
+                action: 'send_msg',
+                requestId: 'r1',
+                ok: true,
+                retcode: 0,
+                elapsedMs: 88,
+                error: null,
+                channel: { kind: 'internal' },
+            },
         };
-        const { rerender } = render(<MessageBubble item={sent} continued={false} selected={false} showSessionName={false} />, {
-            wrapper,
-        });
+        const { rerender } = render(
+            <MessageBubble
+                item={sent}
+                continued={false}
+                selected={false}
+                showSessionName={false}
+            />,
+            {
+                wrapper,
+            },
+        );
         expect(screen.getByText('↗ send_msg · ✓ 88ms · 内部通道')).toBeInTheDocument();
 
         const failed: MessageItem = {
             ...sent,
-            call: { ...sent.call!, action: 'send_group_msg', ok: false, retcode: 1200, wording: '消息内容为空' },
+            call: {
+                ...sent.call!,
+                action: 'send_group_msg',
+                ok: false,
+                retcode: 1200,
+                wording: '消息内容为空',
+            },
         };
-        rerender(<MessageBubble item={failed} continued={false} selected={false} showSessionName={false} />);
+        rerender(
+            <MessageBubble
+                item={failed}
+                continued={false}
+                selected={false}
+                showSessionName={false}
+            />,
+        );
         const line = screen.getByText('↗ send_group_msg · ✗ retcode 1200 · 消息内容为空');
         expect(line).toHaveAttribute('title', '上游执行出错：具体原因看返回里的 message / wording');
     });
 
     it('每条消息是一个 article；选中的带 aria-current', () => {
         const { rerender } = render(
-            <MessageBubble item={item('你好')} continued={false} selected={false} showSessionName={false} />,
+            <MessageBubble
+                item={item('你好')}
+                continued={false}
+                selected={false}
+                showSessionName={false}
+            />,
             { wrapper },
         );
         const row = screen.getByRole('article', { name: /小明：你好/ });
         expect(row).not.toHaveAttribute('aria-current');
-        rerender(<MessageBubble item={item('你好')} continued={false} selected showSessionName={false} />);
-        expect(screen.getByRole('article', { name: /已选中/ })).toHaveAttribute('aria-current', 'true');
+        rerender(
+            <MessageBubble
+                item={item('你好')}
+                continued={false}
+                selected
+                showSessionName={false}
+            />,
+        );
+        expect(screen.getByRole('article', { name: /已选中/ })).toHaveAttribute(
+            'aria-current',
+            'true',
+        );
     });
 });

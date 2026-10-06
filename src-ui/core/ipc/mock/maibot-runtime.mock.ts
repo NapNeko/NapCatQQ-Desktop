@@ -67,18 +67,48 @@ export const mockMaiBotRuntime = {
         requireRunning(inst);
         const now = Date.now() / 1000;
         return withMockDelay([
-            { session_id: 's1', display_name: '麦麦测试群', chat_type: 'group', target_id: '123456789', platform: 'qq', message_count: 318, last_active_at: now - 120 },
-            { session_id: 's2', display_name: '摸鱼小分队', chat_type: 'group', target_id: '987654321', platform: 'qq', message_count: 64, last_active_at: now - 7200 },
-            { session_id: 's3', display_name: '小明', chat_type: 'private', target_id: '10001', platform: 'qq', message_count: 12, last_active_at: now - 86_400 },
+            {
+                session_id: 's1',
+                display_name: '麦麦测试群',
+                chat_type: 'group',
+                target_id: '123456789',
+                platform: 'qq',
+                message_count: 318,
+                last_active_at: now - 120,
+            },
+            {
+                session_id: 's2',
+                display_name: '摸鱼小分队',
+                chat_type: 'group',
+                target_id: '987654321',
+                platform: 'qq',
+                message_count: 64,
+                last_active_at: now - 7200,
+            },
+            {
+                session_id: 's3',
+                display_name: '小明',
+                chat_type: 'private',
+                target_id: '10001',
+                platform: 'qq',
+                message_count: 12,
+                last_active_at: now - 86_400,
+            },
         ]);
     },
 
     providerModels(inst: AppInstance, p: MaiBotAPIProvider): Promise<MaiBotProviderModel[]> {
         requireRunning(inst);
-        if (p.auth_type !== 'none' && (!p.api_key.trim() || p.api_key.trim() === MAIBOT_PLACEHOLDER_API_KEY)) {
+        if (
+            p.auth_type !== 'none' &&
+            (!p.api_key.trim() || p.api_key.trim() === MAIBOT_PLACEHOLDER_API_KEY)
+        ) {
             throw makeAppConfigError('other', 'API Key 无效或已过期');
         }
-        const ids = MODELS_BY_HOST.find(([re]) => re.test(p.base_url))?.[1] ?? ['gpt-4o-mini', 'gpt-4.1'];
+        const ids = MODELS_BY_HOST.find(([re]) => re.test(p.base_url))?.[1] ?? [
+            'gpt-4o-mini',
+            'gpt-4.1',
+        ];
         return withMockDelay(ids.map((id) => ({ id, name: id })));
     },
 

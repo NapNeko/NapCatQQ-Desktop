@@ -86,18 +86,26 @@ export const KarinConnectionsTab: React.FC<KarinTabProps> = ({
         } else if (next.kind === 'forwardWs') {
             const list = config.adapter.onebot.ws_client.slice();
             if (editing?.type === 'create') list.push(next.row);
-            else if (editing?.type === 'edit' && editing.kind === 'forwardWs') list[editing.idx] = next.row;
+            else if (editing?.type === 'edit' && editing.kind === 'forwardWs')
+                list[editing.idx] = next.row;
             onChange({
                 ...config,
-                adapter: { ...config.adapter, onebot: { ...config.adapter.onebot, ws_client: list } },
+                adapter: {
+                    ...config.adapter,
+                    onebot: { ...config.adapter.onebot, ws_client: list },
+                },
             });
         } else {
             const list = config.adapter.onebot.http_server.slice();
             if (editing?.type === 'create') list.push(next.row);
-            else if (editing?.type === 'edit' && editing.kind === 'onebotHttp') list[editing.idx] = next.row;
+            else if (editing?.type === 'edit' && editing.kind === 'onebotHttp')
+                list[editing.idx] = next.row;
             onChange({
                 ...config,
-                adapter: { ...config.adapter, onebot: { ...config.adapter.onebot, http_server: list } },
+                adapter: {
+                    ...config.adapter,
+                    onebot: { ...config.adapter.onebot, http_server: list },
+                },
             });
         }
         setEditing(null);
@@ -106,13 +114,17 @@ export const KarinConnectionsTab: React.FC<KarinTabProps> = ({
     const confirmDelete = () => {
         if (!deleteTarget) return;
         if (deleteTarget.kind === 'forwardWs') {
-            const ws_client = config.adapter.onebot.ws_client.filter((_, i) => i !== deleteTarget.idx);
+            const ws_client = config.adapter.onebot.ws_client.filter(
+                (_, i) => i !== deleteTarget.idx,
+            );
             onChange({
                 ...config,
                 adapter: { ...config.adapter, onebot: { ...config.adapter.onebot, ws_client } },
             });
         } else {
-            const http_server = config.adapter.onebot.http_server.filter((_, i) => i !== deleteTarget.idx);
+            const http_server = config.adapter.onebot.http_server.filter(
+                (_, i) => i !== deleteTarget.idx,
+            );
             onChange({
                 ...config,
                 adapter: { ...config.adapter, onebot: { ...config.adapter.onebot, http_server } },
@@ -180,7 +192,8 @@ export const KarinConnectionsTab: React.FC<KarinTabProps> = ({
                         <>
                             <DialogHeader>
                                 <DialogTitle>
-                                    {editingMount.type === 'create' ? '新增' : '编辑'} {kindTitle(editingMount.kind)}
+                                    {editingMount.type === 'create' ? '新增' : '编辑'}{' '}
+                                    {kindTitle(editingMount.kind)}
                                 </DialogTitle>
                             </DialogHeader>
                             <KarinConnectionEditor
@@ -217,7 +230,10 @@ export const KarinConnectionsTab: React.FC<KarinTabProps> = ({
     );
 };
 
-function draftFromEditing(config: KarinInstanceConfigLike, editing: Exclude<Editing, null>): KarinConnDraft {
+function draftFromEditing(
+    config: KarinInstanceConfigLike,
+    editing: Exclude<Editing, null>,
+): KarinConnDraft {
     if (editing.kind === 'webui') {
         return {
             kind: 'webui',
@@ -278,10 +294,16 @@ function ConnectionRow({
                     className="flex min-w-0 flex-1 flex-col gap-1 text-left cursor-pointer select-none disabled:cursor-not-allowed"
                 >
                     <div className="flex min-w-0 items-center gap-2">
-                        <Badge tone="info" appearance="soft" className="shrink-0 font-mono text-[11px]">
+                        <Badge
+                            tone="info"
+                            appearance="soft"
+                            className="shrink-0 font-mono text-[11px]"
+                        >
                             {KIND_BADGE[row.kind]}
                         </Badge>
-                        <span className="truncate text-sm font-semibold text-text">{row.title}</span>
+                        <span className="truncate text-sm font-semibold text-text">
+                            {row.title}
+                        </span>
                         {row.kind === 'reverseWs' && row.linked && (
                             <Badge tone="brand" appearance="soft" className="shrink-0">
                                 对接
@@ -316,7 +338,13 @@ function ConnectionRow({
                 <div className="flex shrink-0 items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={disabled} onClick={onStartEdit}>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                disabled={disabled}
+                                onClick={onStartEdit}
+                            >
                                 <ActionMotionIcon icon={Pencil} size={13} strokeWidth={2.2} />
                             </Button>
                         </TooltipTrigger>
@@ -370,7 +398,12 @@ function AddBarPortal({
                         disabled={disabled}
                         onClick={() => onPick(meta.kind)}
                     >
-                        <ActionMotionIcon icon={Plus} size={12} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
+                        <ActionMotionIcon
+                            icon={Plus}
+                            size={12}
+                            strokeWidth={2.4}
+                            motion={EMPHASIS_MOTION}
+                        />
                         <span>{meta.title}</span>
                     </Button>
                 ))}

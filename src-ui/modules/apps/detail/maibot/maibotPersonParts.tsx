@@ -34,7 +34,10 @@ export const personLabel = (p: MaiBotPerson) => p.name || p.nickname || p.user_i
  * QQ 系的账号拉 qlogo 头像（和机器人卡片同一个源）；号码得像真 QQ 号，不以 0 开头。
  * 别的平台、拉不到的用首字
  */
-export const PersonAvatar: React.FC<{ person: MaiBotPerson; size?: 'sm' | 'lg' }> = ({ person, size = 'sm' }) => {
+export const PersonAvatar: React.FC<{ person: MaiBotPerson; size?: 'sm' | 'lg' }> = ({
+    person,
+    size = 'sm',
+}) => {
     const [failed, setFailed] = useState(false);
     const qq = QQ_LIKE.has(person.platform.toLowerCase()) && /^[1-9]\d{4,11}$/.test(person.user_id);
     const initial = (personLabel(person).trim().charAt(0) || '?').toUpperCase();
@@ -74,15 +77,26 @@ export const PersonRow: React.FC<{
     <div
         className={cn(
             'group flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors',
-            selected ? 'border-brand/40 bg-brand-soft/30' : 'border-border-subtle bg-surface hover:border-border',
+            selected
+                ? 'border-brand/40 bg-brand-soft/30'
+                : 'border-border-subtle bg-surface hover:border-border',
         )}
     >
         <RowCheck checked={selected} onPick={onPick} />
-        <button type="button" onClick={onEdit} className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none">
+        <button
+            type="button"
+            onClick={onEdit}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none"
+        >
             <PersonAvatar person={p} />
             <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
-                    <span className={cn('truncate text-[13.5px] font-medium', p.is_known ? 'text-text' : 'text-text-secondary')}>
+                    <span
+                        className={cn(
+                            'truncate text-[13.5px] font-medium',
+                            p.is_known ? 'text-text' : 'text-text-secondary',
+                        )}
+                    >
                         {personLabel(p)}
                     </span>
                     {p.name && p.nickname && p.nickname !== p.name && (
@@ -95,7 +109,10 @@ export const PersonRow: React.FC<{
                     )}
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-text-tertiary">
-                    {p.name_reason || (p.group_cards.length > 0 ? `群名片：${p.group_cards.map((g) => g.card).join('、')}` : NBSP)}
+                    {p.name_reason ||
+                        (p.group_cards.length > 0
+                            ? `群名片：${p.group_cards.map((g) => g.card).join('、')}`
+                            : NBSP)}
                 </span>
             </span>
         </button>
@@ -106,7 +123,13 @@ export const PersonRow: React.FC<{
             <span className="block">{p.last_seen ? `${relativeTime(p.last_seen)}见过` : ''}</span>
         </span>
         <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="编辑" onClick={onEdit}>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label="编辑"
+                onClick={onEdit}
+            >
                 <Pencil size={13} />
             </Button>
             <Button
@@ -123,7 +146,12 @@ export const PersonRow: React.FC<{
     </div>
 );
 
-export type PersonDraft = { person: MaiBotPerson; name: string; name_reason: string; is_known: boolean };
+export type PersonDraft = {
+    person: MaiBotPerson;
+    name: string;
+    name_reason: string;
+    is_known: boolean;
+};
 
 export const PersonDialog: React.FC<{
     draft: PersonDraft | null;
@@ -153,7 +181,10 @@ export const PersonDialog: React.FC<{
                         {p.platform} {p.user_id}
                     </p>
                     <p className="mt-0.5">
-                        {[p.first_seen && `首次 ${relativeTime(p.first_seen)}`, p.last_seen && `最近 ${relativeTime(p.last_seen)}`]
+                        {[
+                            p.first_seen && `首次 ${relativeTime(p.first_seen)}`,
+                            p.last_seen && `最近 ${relativeTime(p.last_seen)}`,
+                        ]
                             .filter(Boolean)
                             .join(' · ')}
                     </p>
@@ -183,9 +214,14 @@ export const PersonDialog: React.FC<{
                     <span className="text-xs font-medium text-text-secondary">群名片</span>
                     <div className="flex flex-wrap gap-1.5">
                         {p.group_cards.map((g) => (
-                            <span key={`${g.group_id}:${g.card}`} className="rounded-pill bg-inset px-2 py-0.5 text-xs text-text-secondary">
+                            <span
+                                key={`${g.group_id}:${g.card}`}
+                                className="rounded-pill bg-inset px-2 py-0.5 text-xs text-text-secondary"
+                            >
                                 {g.card}
-                                <span className="ml-1 font-mono text-2xs text-text-tertiary">{g.group_id}</span>
+                                <span className="ml-1 font-mono text-2xs text-text-tertiary">
+                                    {g.group_id}
+                                </span>
                             </span>
                         ))}
                     </div>

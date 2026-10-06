@@ -20,7 +20,11 @@ export function shouldRemember(command: string): boolean {
 }
 
 /** 放到最前面；同一条只留一份 */
-export function pushRecent(list: readonly string[], command: string, limit = RECENT_LIMIT): string[] {
+export function pushRecent(
+    list: readonly string[],
+    command: string,
+    limit = RECENT_LIMIT,
+): string[] {
     const trimmed = command.trim();
     const next = [trimmed, ...list.filter((c) => c !== trimmed)];
     return next.length > limit ? next.slice(0, limit) : next;
