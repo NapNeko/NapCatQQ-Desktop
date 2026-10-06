@@ -2,8 +2,8 @@
 //
 // 级别从高到低：活跃 → 不可见（页面进 hidden，rAF 和动画停）→ 休眠（MemoryUsageTargetLevel
 // = Low，WebView2 主动丢缓存）。藏起来的窗口直接降到休眠；开着但没焦点的窗口按角色决定
-// 要不要过一段时间降休眠。挂起和回收不在这里：回收是各窗口自己的销毁逻辑（轻量模式、
-// 托盘面板定时销毁），挂起等验证完再加。
+// 要不要过一段时间降休眠。挂起和回收不在这里：回收是各窗口自己的销毁逻辑（轻量模式），
+// 挂起等验证完再加。
 
 use std::time::{Duration, Instant};
 
@@ -11,8 +11,6 @@ use std::time::{Duration, Instant};
 pub(crate) enum WebviewRole {
     Main,
     ChatPopout,
-    TrayPanel,
-    ChatTrayPanel,
     DebugPopout,
     Other,
 }
@@ -22,10 +20,7 @@ impl WebviewRole {
         match label {
             crate::lightweight::MAIN_WINDOW_LABEL => Self::Main,
             crate::chat_window::CHAT_WINDOW_LABEL => Self::ChatPopout,
-            crate::tray_panel::TRAY_PANEL_LABEL => Self::TrayPanel,
             crate::commands::window::DEBUG_WINDOW_LABEL => Self::DebugPopout,
-            // 账号托盘面板的 label 留在它自己的模块里，按前缀认，免得这里反向依赖
-            l if l.starts_with("chat-tray") => Self::ChatTrayPanel,
             _ => Self::Other,
         }
     }
@@ -34,7 +29,7 @@ impl WebviewRole {
     /// 失焦就是用户去用别的程序了，正是 Low 的本意。渲染进程的 GC 堆平时空着一大半
     /// （实测首页 30 MB 里活对象只有 3.5 MB），Low 会把这些和脚本缓存一起还回去；页面几乎
     /// 没有大图，回来时重建的代价很小。聊天窗常开在一边当消息框，降得早一些；主窗和调试台
-    /// 失焦常是切出去看一眼就回来，多等一会儿。托盘面板一失焦就藏起来了，走 Hide。
+    /// 失焦常是切出去看一眼就回来，多等一会儿。
     pub(crate) fn idle_dormant_after(self) -> Option<Duration> {
         match self {
             Self::ChatPopout => Some(Duration::from_secs(60)),
@@ -78,7 +73,12 @@ impl Entry {
     }
 }
 
-pub(crate) fn step(role: WebviewRole, entry: &mut Entry, event: Event, _now: Instant) -> Vec<Action> {
+pub(crate) fn step(
+    role: WebviewRole,
+    entry: &mut Entry,
+    event: Event,
+    _now: Instant,
+) -> Vec<Action> {
     let mut actions = Vec::new();
     match event {
         Event::Hide => {
@@ -109,11 +109,15 @@ pub(crate) fn step(role: WebviewRole, entry: &mut Entry, event: Event, _now: Ins
         }
         Event::Focus(false) => {
             entry.focused = false;
-            if !entry.hidden && !entry.dormant
+            if !entry.hidden
+                && !entry.dormant
                 && let Some(after) = role.idle_dormant_after()
             {
                 entry.generation += 1;
-                actions.push(Action::ScheduleTick { after, generation: entry.generation });
+                actions.push(Action::ScheduleTick {
+                    after,
+                    generation: entry.generation,
+                });
             }
         }
         Event::Tick(generation) => {
@@ -148,24 +152,36 @@ mod tests {
     #[test]
     fn hide_goes_straight_to_dormant_and_show_wakes_up_once() {
         let mut e = Entry::default();
-        assert_eq!(run(WebviewRole::Main, &mut e, Event::Hide), vec![Action::SetVisible(false), Action::SetDormant(true)]);
+        assert_eq!(
+            run(WebviewRole::Main, &mut e, Event::Hide),
+            vec![Action::SetVisible(false), Action::SetDormant(true)]
+        );
         // 重复藏不重复下发
         assert!(run(WebviewRole::Main, &mut e, Event::Hide).is_empty());
-        assert_eq!(run(WebviewRole::Main, &mut e, Event::Show), vec![Action::SetDormant(false), Action::SetVisible(true)]);
+        assert_eq!(
+            run(WebviewRole::Main, &mut e, Event::Show),
+            vec![Action::SetDormant(false), Action::SetVisible(true)]
+        );
         assert!(!e.is_hidden() && !e.is_dormant());
     }
 
     #[test]
     fn show_always_restores_visibility_even_when_state_thinks_visible() {
         let mut e = Entry::default();
-        assert_eq!(run(WebviewRole::TrayPanel, &mut e, Event::Show), vec![Action::SetVisible(true)]);
+        assert_eq!(
+            run(WebviewRole::Other, &mut e, Event::Show),
+            vec![Action::SetVisible(true)]
+        );
     }
 
     #[test]
     fn focus_recovers_a_window_shown_behind_the_schedulers_back() {
         let mut e = Entry::default();
         run(WebviewRole::Main, &mut e, Event::Hide);
-        assert_eq!(run(WebviewRole::Main, &mut e, Event::Focus(true)), vec![Action::SetDormant(false), Action::SetVisible(true)]);
+        assert_eq!(
+            run(WebviewRole::Main, &mut e, Event::Focus(true)),
+            vec![Action::SetDormant(false), Action::SetVisible(true)]
+        );
         // 正常可见时拿焦点什么都不做
         assert!(run(WebviewRole::Main, &mut e, Event::Focus(true)).is_empty());
     }
@@ -180,23 +196,41 @@ mod tests {
         assert_eq!(after, Duration::from_secs(60));
 
         run(WebviewRole::ChatPopout, &mut e, Event::Focus(true));
-        assert!(run(WebviewRole::ChatPopout, &mut e, Event::Tick(generation)).is_empty(), "中途拿过焦点，旧计时作废");
+        assert!(
+            run(WebviewRole::ChatPopout, &mut e, Event::Tick(generation)).is_empty(),
+            "中途拿过焦点，旧计时作废"
+        );
 
         let actions = run(WebviewRole::ChatPopout, &mut e, Event::Focus(false));
         let Some(Action::ScheduleTick { generation, .. }) = actions.first().copied() else {
             panic!("再次失焦应重新计时");
         };
-        assert_eq!(run(WebviewRole::ChatPopout, &mut e, Event::Tick(generation)), vec![Action::SetDormant(true)]);
-        assert_eq!(run(WebviewRole::ChatPopout, &mut e, Event::Focus(true)), vec![Action::SetDormant(false)]);
+        assert_eq!(
+            run(WebviewRole::ChatPopout, &mut e, Event::Tick(generation)),
+            vec![Action::SetDormant(true)]
+        );
+        assert_eq!(
+            run(WebviewRole::ChatPopout, &mut e, Event::Focus(true)),
+            vec![Action::SetDormant(false)]
+        );
     }
 
     #[test]
     fn main_window_waits_longer_than_chat_before_going_dormant() {
         let mut e = Entry::default();
         let actions = run(WebviewRole::Main, &mut e, Event::Focus(false));
-        assert!(matches!(actions.as_slice(), [Action::ScheduleTick { after, .. }] if *after == Duration::from_secs(120)));
-        // 托盘面板失焦即藏，不另外计时
-        assert!(run(WebviewRole::TrayPanel, &mut Entry::default(), Event::Focus(false)).is_empty());
+        assert!(
+            matches!(actions.as_slice(), [Action::ScheduleTick { after, .. }] if *after == Duration::from_secs(120))
+        );
+        // 没登记角色的窗口失焦不另外计时
+        assert!(
+            run(
+                WebviewRole::Other,
+                &mut Entry::default(),
+                Event::Focus(false)
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -213,9 +247,17 @@ mod tests {
     #[test]
     fn roles_follow_window_labels() {
         assert_eq!(WebviewRole::from_label("main"), WebviewRole::Main);
-        assert_eq!(WebviewRole::from_label(crate::chat_window::CHAT_WINDOW_LABEL), WebviewRole::ChatPopout);
-        assert_eq!(WebviewRole::from_label("tray-panel"), WebviewRole::TrayPanel);
-        assert_eq!(WebviewRole::from_label("debug-console"), WebviewRole::DebugPopout);
-        assert_eq!(WebviewRole::from_label("something-else"), WebviewRole::Other);
+        assert_eq!(
+            WebviewRole::from_label(crate::chat_window::CHAT_WINDOW_LABEL),
+            WebviewRole::ChatPopout
+        );
+        assert_eq!(
+            WebviewRole::from_label("debug-console"),
+            WebviewRole::DebugPopout
+        );
+        assert_eq!(
+            WebviewRole::from_label("something-else"),
+            WebviewRole::Other
+        );
     }
 }

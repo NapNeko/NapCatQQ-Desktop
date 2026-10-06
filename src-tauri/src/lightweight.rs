@@ -39,12 +39,8 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         window.destroy().map_err(|e| e.to_string())?;
     }
-    if let Some(tray_window) = app.get_webview_window(crate::tray_panel::TRAY_PANEL_LABEL) {
-        let _ = tray_window.destroy();
-    }
     // 控制台回收不能连带销毁仍在使用的聊天窗口。
-    if let Some(debug_window) =
-        app.get_webview_window(crate::commands::window::DEBUG_WINDOW_LABEL)
+    if let Some(debug_window) = app.get_webview_window(crate::commands::window::DEBUG_WINDOW_LABEL)
     {
         let _ = debug_window.destroy();
     }
@@ -53,11 +49,7 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
         let _ = crate::tray_summary::refresh_tray_tooltip(&app2).await;
     });
-    crate::desktop_log::write_session_line(
-        "INFO",
-        "ncd::lightweight",
-        "控制台界面已回收",
-    );
+    crate::desktop_log::write_session_line("INFO", "ncd::lightweight", "控制台界面已回收");
     Ok(())
 }
 

@@ -12,12 +12,10 @@ import { invoke, isTauri, listen } from '../ipc/transport';
 const WINDOW_EVENT = {
     requestClose: 'desktop-request-close',
     exitBlocked: 'desktop-exit-blocked',
-    trayPanelShow: 'tray_panel_show',
     debugPopoutClosed: 'debug-popout-closed',
     chatWindowRequest: 'chat-window-request',
     chatAccountSelected: 'chat-account-selected',
     chatEmbedRequested: 'chat-embed-requested',
-    chatTrayPanelChanged: 'chat-tray-panel-changed',
 } as const;
 
 const WINDOW_SIGNAL: WindowSignal = { v: 1 };
@@ -109,7 +107,7 @@ export const windowControlService = {
 
     onResize: async (cb: (isMaximized: boolean) => void): Promise<() => void> => {
         const w = await getWindow();
-        if (!w) return () => {};
+        if (!w) return () => { };
         try {
             const { listen } = await import('@tauri-apps/api/event');
             const unlisten = await listen('tauri://resize', async () => {
@@ -122,17 +120,13 @@ export const windowControlService = {
             return unlisten;
         } catch (err) {
             console.error('初始化标题栏窗口状态失败:', err);
-            return () => {};
+            return () => { };
         }
     },
 };
 
 export const trayService = {
     showMainWindow: (): Promise<void> => invoke<void>('window_show'),
-    /** 托盘面板按内容高度调窗 */
-    resizePanel: (height: number): Promise<void> => invoke<void>('tray_panel_resize', { height }),
-    enterLightweight: (): Promise<void> => invoke<void>('tray_panel_enter_lightweight'),
-    quit: (): Promise<void> => invoke<void>('tray_panel_quit'),
 };
 
 export const windowEventService = {
@@ -144,17 +138,6 @@ export const windowEventService = {
     onExitBlocked: (cb: (payload: DesktopExitBlocked) => void): Promise<() => void> =>
         listen<DesktopExitBlocked>(WINDOW_EVENT.exitBlocked, cb),
 
-    /** 托盘面板每次展开前后端发给面板窗口；拿不到窗口 API 时返回空退订。 */
-    onTrayPanelShow: async (cb: (signal: WindowSignal) => void): Promise<() => void> => {
-        try {
-            const { getCurrentWindow } = await import('@tauri-apps/api/window');
-            const win = getCurrentWindow();
-            return await win.listen<WindowSignal>(WINDOW_EVENT.trayPanelShow, (e) => cb(e.payload));
-        } catch {
-            return () => {};
-        }
-    },
-
     /** 调试台弹出窗被销毁后端发给主窗：据此作废调试台的内存状态。弹不出窗口的环境返回空退订。 */
     onDebugPopoutClosed: async (cb: (signal: WindowSignal) => void): Promise<() => void> => {
         try {
@@ -164,7 +147,7 @@ export const windowEventService = {
                 cb(e.payload),
             );
         } catch {
-            return () => {};
+            return () => { };
         }
     },
 };

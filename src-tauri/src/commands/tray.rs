@@ -1,5 +1,5 @@
 // 系统托盘与主窗口显隐/退出收口
-// 左键显示主窗口,右键弹自绘托盘面板(tray_panel.rs),取代旧原生菜单
+// 左键显示主窗口,右键弹原生托盘面板(tray_panel_native.rs)
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -22,8 +22,6 @@ fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
 /// 显示并前置主窗口(从托盘或隐藏状态恢复;轻量模式下重建 WebView)
 #[tauri::command]
 pub async fn window_show(app: AppHandle) -> Result<(), String> {
-    // 托盘面板在这边收起:面板的 capability 不给窗口 hide,主窗没抢到焦点时面板就一直浮着
-    crate::tray_panel::hide_tray_panel(&app);
     let state = app.state::<AppState>();
     state.lightweight_scheduler.cancel_pending().await;
     if crate::lightweight::is_lightweight_mode() || app.get_webview_window("main").is_none() {
@@ -59,7 +57,7 @@ pub async fn window_hide_to_tray(app: AppHandle) -> Result<(), String> {
     hide_main_window_to_tray(app).await
 }
 
-/// 在 setup 中注册托盘(幂等)。不再附原生菜单,右键走自绘面板;面板窗口在退出轻量模式后补建。
+/// 在 setup 中注册托盘(幂等)。不附系统菜单,右键走原生面板。
 pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     if TRAY_ATTACHED.swap(true, Ordering::SeqCst) {
         return Ok(());
@@ -84,18 +82,13 @@ pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 退出前校验:有本机 Bot 在跑则拦截并拉起主窗;否则停 Bot、关 runtime、退出进程。
-/// 供自绘托盘面板的「退出」按钮调用(面板先隐藏,再走与旧托盘退出一致的流程)。
-#[tauri::command]
+/// 托盘面板「退出」:有本机 Bot 在跑则拦截并拉起主窗;否则停 Bot、关 runtime、退出进程。
 pub async fn tray_panel_quit(app: AppHandle) -> Result<(), String> {
-    crate::tray_panel::hide_tray_panel(&app);
     quit_from_tray(app).await
 }
 
-/// 自绘托盘面板的「释放界面内存」:先收起面板再进轻量模式销毁主 WebView。
-#[tauri::command]
+/// 托盘面板「释放界面内存」:进轻量模式销毁主 WebView。
 pub async fn tray_panel_enter_lightweight(app: AppHandle) -> Result<(), String> {
-    crate::tray_panel::hide_tray_panel(&app);
     crate::chat_window::release_control_panel(&app).await
 }
 
