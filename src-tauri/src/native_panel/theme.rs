@@ -1,7 +1,4 @@
-// 面板配色和圆角：对齐 src-ui 的 design token。
-//
-// 默认是主窗口打开前（托盘是唯一入口时）的兜底：灯 / 暗两套内置色随系统明暗走。
-// 主窗口起来后把解析完的颜色推过来（`native_panel::sync_palette`），社区主题也生效。
+// 面板配色和圆角：按 app-settings 的 theme / radiusStyle 选 tokens.css 里对应的一套，WebView 版也是这么取的。
 
 use std::sync::Mutex;
 
@@ -17,14 +14,27 @@ pub struct Rgba {
 }
 
 impl Rgba {
-    pub const TRANSPARENT: Self = Self { r: 0.0, g: 0.0, b: 0.0, a: 0.0 };
+    pub const TRANSPARENT: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
 
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { r: r as f32 / 255.0, g: g as f32 / 255.0, b: b as f32 / 255.0, a: 1.0 }
+        Self {
+            r: r as f32 / 255.0,
+            g: g as f32 / 255.0,
+            b: b as f32 / 255.0,
+            a: 1.0,
+        }
     }
 
     pub const fn alpha(self, a: f32) -> Self {
-        Self { a: self.a * a, ..self }
+        Self {
+            a: self.a * a,
+            ..self
+        }
     }
 
     /// srgb 里按比例混色（绘制浅色淡淡的状态背景用）
@@ -62,6 +72,7 @@ pub struct TrayPanelPalette {
 }
 
 /// 面板用的全套颜色，都来自 token；新主题切换时整组换掉。
+/// radius_sm / radius_md 已经乘过 radiusStyle 的系数（tailwind 的 rounded-sm / rounded-md）。
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     pub elevated: Rgba,
@@ -116,7 +127,113 @@ const DARK: Theme = Theme {
     radius_md: 12.0,
 };
 
+// Catppuccin 四套，值逐个抄 tokens.css 对应的 :root[data-theme=...] 块；
+// 深色三套的 brand-soft 是 color-mix(brand 16%, surface-card)，这里存算好的结果。
+const LATTE: Theme = Theme {
+    elevated: Rgba::rgb(0xff, 0xff, 0xff),
+    muted: Rgba::rgb(0xcc, 0xd0, 0xda),
+    text: Rgba::rgb(0x4c, 0x4f, 0x69),
+    text_secondary: Rgba::rgb(0x5c, 0x5f, 0x77),
+    text_tertiary: Rgba::rgb(0x6c, 0x6f, 0x85),
+    text_disabled: Rgba::rgb(0x9c, 0xa0, 0xb0),
+    brand: Rgba::rgb(0x88, 0x39, 0xef),
+    brand_soft: Rgba::rgb(0xed, 0xe4, 0xff),
+    success: Rgba::rgb(0x40, 0xa0, 0x2b),
+    danger: Rgba::rgb(0xd2, 0x0f, 0x39),
+    danger_bg: Rgba::rgb(0xd2, 0x0f, 0x39).alpha(0.12),
+    border_subtle: Rgba::rgb(0x4c, 0x4f, 0x69).alpha(0.06),
+    radius_sm: 8.0,
+    radius_md: 12.0,
+};
+
+const FRAPPE: Theme = Theme {
+    elevated: Rgba::rgb(0x41, 0x45, 0x59),
+    muted: Rgba::rgb(0x41, 0x45, 0x59),
+    text: Rgba::rgb(0xc6, 0xd0, 0xf5),
+    text_secondary: Rgba::rgb(0xb5, 0xbf, 0xe2),
+    text_tertiary: Rgba::rgb(0xa5, 0xad, 0xce),
+    text_disabled: Rgba::rgb(0x73, 0x79, 0x94),
+    brand: Rgba::rgb(0xca, 0x9e, 0xe6),
+    brand_soft: Rgba::rgb(0x43, 0x3e, 0x57),
+    success: Rgba::rgb(0xa6, 0xd1, 0x89),
+    danger: Rgba::rgb(0xe7, 0x82, 0x84),
+    danger_bg: Rgba::rgb(0xe7, 0x82, 0x84).alpha(0.14),
+    border_subtle: Rgba::rgb(0xc6, 0xd0, 0xf5).alpha(0.08),
+    radius_sm: 8.0,
+    radius_md: 12.0,
+};
+
+const MACCHIATO: Theme = Theme {
+    elevated: Rgba::rgb(0x36, 0x3a, 0x4f),
+    muted: Rgba::rgb(0x36, 0x3a, 0x4f),
+    text: Rgba::rgb(0xca, 0xd3, 0xf5),
+    text_secondary: Rgba::rgb(0xb8, 0xc0, 0xe0),
+    text_tertiary: Rgba::rgb(0xa5, 0xad, 0xcb),
+    text_disabled: Rgba::rgb(0x6e, 0x73, 0x8d),
+    brand: Rgba::rgb(0xc6, 0xa0, 0xf6),
+    brand_soft: Rgba::rgb(0x39, 0x34, 0x50),
+    success: Rgba::rgb(0xa6, 0xda, 0x95),
+    danger: Rgba::rgb(0xed, 0x87, 0x96),
+    danger_bg: Rgba::rgb(0xed, 0x87, 0x96).alpha(0.14),
+    border_subtle: Rgba::rgb(0xca, 0xd3, 0xf5).alpha(0.08),
+    radius_sm: 8.0,
+    radius_md: 12.0,
+};
+
+const MOCHA: Theme = Theme {
+    elevated: Rgba::rgb(0x31, 0x32, 0x44),
+    muted: Rgba::rgb(0x31, 0x32, 0x44),
+    text: Rgba::rgb(0xcd, 0xd6, 0xf4),
+    text_secondary: Rgba::rgb(0xba, 0xc2, 0xde),
+    text_tertiary: Rgba::rgb(0xa6, 0xad, 0xc8),
+    text_disabled: Rgba::rgb(0x6c, 0x70, 0x86),
+    brand: Rgba::rgb(0xcb, 0xa6, 0xf7),
+    brand_soft: Rgba::rgb(0x35, 0x2f, 0x47),
+    success: Rgba::rgb(0xa6, 0xe3, 0xa1),
+    danger: Rgba::rgb(0xf3, 0x8b, 0xa8),
+    danger_bg: Rgba::rgb(0xf3, 0x8b, 0xa8).alpha(0.14),
+    border_subtle: Rgba::rgb(0xcd, 0xd6, 0xf4).alpha(0.08),
+    radius_sm: 8.0,
+    radius_md: 12.0,
+};
+
 static PALETTE: Mutex<Option<Theme>> = Mutex::new(None);
+
+/// app-settings.json 里的 uiPreferences.theme / radiusStyle，打开面板时由业务层读一次塞进来。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UiPreferences {
+    pub theme: String,
+    pub radius_style: String,
+}
+
+static PREFERENCES: Mutex<Option<UiPreferences>> = Mutex::new(None);
+
+pub fn set_ui_preferences(prefs: UiPreferences) {
+    *PREFERENCES.lock().unwrap_or_else(|p| p.into_inner()) = Some(prefs);
+}
+
+/// 对齐 src-ui/core/design/radius.ts 的 RADIUS_SCALE。
+fn radius_scale(style: &str) -> f32 {
+    match style {
+        "square" => 0.5,
+        "round" => 1.5,
+        _ => 1.0,
+    }
+}
+
+/// 主题 id → 内置色板。社区主题、auto 和没读到配置时跟系统明暗，和 tokens.css 的默认分支一致。
+fn builtin(theme_id: &str) -> Theme {
+    match theme_id {
+        "light" => LIGHT,
+        "dark" => DARK,
+        "latte" => LATTE,
+        "frappe" => FRAPPE,
+        "macchiato" => MACCHIATO,
+        "mocha" => MOCHA,
+        _ if system_dark() => DARK,
+        _ => LIGHT,
+    }
+}
 
 /// 解析 CSS 颜色：#rgb / #rrggbb / rgb / rgba / 以及 color-mix(in srgb, X n%, X) 这类两色混合。
 /// 数量对不上就返回 None，写错色值时直接落兜底色。
@@ -125,33 +242,54 @@ pub fn parse_color(value: &str) -> Option<Rgba> {
     fn digit(s: u8) -> Option<f32> {
         (s as char).to_digit(16).map(|v| v as f32 / 15.0)
     }
-    fn pair(pair: &str) -> Option<f32> {
+    fn pair(hex: &str, at: usize) -> Option<f32> {
+        // get 而不是切片：非 ASCII 输入切在字符中间时返回 None，不 panic
+        let pair = hex.get(at..at + 2)?;
         u8::from_str_radix(pair, 16).ok().map(|v| v as f32 / 255.0)
     }
     if let Some(hex) = v.strip_prefix('#') {
-        return match hex.len() {
-            3 => Some(Rgba {
-                r: digit(hex.as_bytes()[0])?,
-                g: digit(hex.as_bytes()[1])?,
-                b: digit(hex.as_bytes()[2])?,
+        return match *hex.as_bytes() {
+            [r, g, b] => Some(Rgba {
+                r: digit(r)?,
+                g: digit(g)?,
+                b: digit(b)?,
                 a: 1.0,
             }),
-            6 => Some(Rgba { r: pair(&hex[0..2])?, g: pair(&hex[2..4])?, b: pair(&hex[4..6])?, a: 1.0 }),
+            [_, _, _, _, _, _] => Some(Rgba {
+                r: pair(hex, 0)?,
+                g: pair(hex, 2)?,
+                b: pair(hex, 4)?,
+                a: 1.0,
+            }),
             _ => None,
         };
     }
-    if let Some(inner) = v.strip_prefix("color-mix(in srgb,").and_then(|s| s.strip_suffix(')')) {
+    if let Some(inner) = v
+        .strip_prefix("color-mix(in srgb,")
+        .and_then(|s| s.strip_suffix(')'))
+    {
         // getComputedStyle 里 dark 的 color-mix 已经算成 rgba()，但 color-mix 也会原样带出来
         let mut parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
         let second = parts.pop()?;
         let first = parts.pop()?;
         // 「X n%」和「X」都算；X 本身可以是 rgb(...)
         let (left, amount) = match first.rsplit_once(' ') {
-            Some((color_part, percent_part)) => (color_part.trim(), percent_part.trim_end_matches('%').parse::<f32>().ok()? / 100.0),
+            Some((color_part, percent_part)) => (
+                color_part.trim(),
+                percent_part.trim_end_matches('%').parse::<f32>().ok()? / 100.0,
+            ),
             None => (first.trim(), 0.5),
         };
-        let base = if second.trim().eq_ignore_ascii_case("transparent") { Rgba::TRANSPARENT } else { parse_color(second.trim())? };
-        let top = if left.is_empty() { Rgba::TRANSPARENT } else { parse_color(left)? };
+        let base = if second.trim().eq_ignore_ascii_case("transparent") {
+            Rgba::TRANSPARENT
+        } else {
+            parse_color(second.trim())?
+        };
+        let top = if left.is_empty() {
+            Rgba::TRANSPARENT
+        } else {
+            parse_color(left)?
+        };
         // 和 CSS 一致：两侧 alpha 都作用在各自的贡献里
         return Some(Rgba {
             r: top.r * (amount * top.a) + base.r * ((1.0 - amount) * base.a),
@@ -161,13 +299,25 @@ pub fn parse_color(value: &str) -> Option<Rgba> {
         });
     }
     if v.starts_with("rgb") {
-        let inner = v[v.find('(')? + 1..v.rfind(')')?].replace('/', " ");
+        let inner = v.get(v.find('(')? + 1..v.rfind(')')?)?.replace('/', " ");
         let mut iter = inner.split([' ', ',']).filter(|p| !p.is_empty());
-        let ch = |s: &str| s.trim_end_matches('%').parse::<f32>().ok().map(|v| if s.ends_with('%') { v * 2.55 } else { v } / 255.0);
+        let ch = |s: &str| {
+            s.trim_end_matches('%')
+                .parse::<f32>()
+                .ok()
+                .map(|v| if s.ends_with('%') { v * 2.55 } else { v } / 255.0)
+        };
         let r = ch(iter.next()?)?;
         let g = ch(iter.next()?)?;
         let b = ch(iter.next()?)?;
-        let a = iter.next().and_then(|s| ch(s)).unwrap_or(1.0);
+        // alpha 是 0..1 的小数或百分比，不按 0..255 折算
+        let a = iter
+            .next()
+            .and_then(|s| match s.strip_suffix('%') {
+                Some(p) => p.parse::<f32>().ok().map(|v| v / 100.0),
+                None => s.parse::<f32>().ok(),
+            })
+            .unwrap_or(1.0);
         return Some(Rgba { r, g, b, a });
     }
     None
@@ -177,15 +327,37 @@ fn system_dark() -> bool {
     crate::windows_ui::system_prefers_dark()
 }
 
-/// 当前面板主题：主窗口推过用推的，否则按系统明暗。
+/// 当前面板主题：主窗口推过配色就用推的，否则按 app-settings 的主题选内置色板；圆角按 radiusStyle 缩放。
 pub fn theme() -> Theme {
-    PALETTE.lock().unwrap_or_else(|p| p.into_inner()).unwrap_or(if system_dark() { DARK } else { LIGHT })
+    let prefs = PREFERENCES
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+        .unwrap_or_default();
+    let pushed = *PALETTE.lock().unwrap_or_else(|p| p.into_inner());
+    let mut theme = pushed.unwrap_or_else(|| builtin(&prefs.theme));
+    if pushed.is_none() {
+        let k = radius_scale(&prefs.radius_style);
+        theme.radius_sm *= k;
+        theme.radius_md *= k;
+    }
+    theme
+}
+
+impl Theme {
+    /// 底色亮度低于一半算深色，DWM 边框跟着切。
+    pub fn is_dark(&self) -> bool {
+        let c = self.elevated;
+        0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b < 0.5
+    }
 }
 
 /// 主窗口每帧不需要；主题变化或主窗就绪时推一次。
 pub fn sync_palette(palette: &TrayPanelPalette) {
     let base = theme();
-    let pick = |value: &Option<String>, fallback: Rgba| value.as_deref().and_then(parse_color).unwrap_or(fallback);
+    let pick = |value: &Option<String>, fallback: Rgba| {
+        value.as_deref().and_then(parse_color).unwrap_or(fallback)
+    };
     let theme = Theme {
         elevated: pick(&palette.elevated, base.elevated),
         muted: pick(&palette.muted, base.muted),
@@ -227,8 +399,28 @@ mod tests {
     }
 
     #[test]
+    fn malformed_colors_do_not_panic() {
+        assert_eq!(parse_color("#é1"), None);
+        assert_eq!(parse_color("#a\u{e9}123"), None);
+        assert_eq!(parse_color("rgb)1,2,3("), None);
+        assert_eq!(parse_color("rgba(1, 2, 3, 50%)").map(|c| c.a), Some(0.5));
+    }
+
+    #[test]
+    fn builtin_themes_follow_preferences() {
+        assert_eq!(builtin("latte").elevated, Rgba::rgb(0xff, 0xff, 0xff));
+        assert!(!builtin("latte").is_dark());
+        assert!(builtin("mocha").is_dark());
+        assert_eq!(radius_scale("square"), 0.5);
+        assert_eq!(radius_scale("whatever"), 1.0);
+    }
+
+    #[test]
     fn palette_fill_from_push() {
-        sync_palette(&TrayPanelPalette { brand: Some("#123456".into()), ..Default::default() });
+        sync_palette(&TrayPanelPalette {
+            brand: Some("#123456".into()),
+            ..Default::default()
+        });
         let t = theme();
         assert_eq!(t.brand, Rgba::rgb(0x12, 0x34, 0x56));
     }

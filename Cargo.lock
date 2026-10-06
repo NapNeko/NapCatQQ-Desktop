@@ -3603,6 +3603,7 @@ dependencies = [
  "uuid",
  "webview2-com",
  "windows 0.61.3",
+ "windows-numerics",
  "winreg 0.52.0",
  "zip",
 ]

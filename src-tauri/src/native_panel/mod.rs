@@ -5,6 +5,10 @@
 
 pub mod gfx;
 pub mod icons;
+pub mod parts;
+#[cfg(test)]
+pub mod shots;
+mod sys;
 pub mod theme;
 pub mod window;
 

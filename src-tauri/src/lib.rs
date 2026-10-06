@@ -13,8 +13,14 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub mod autostart;
+#[cfg(windows)]
+pub mod avatar_cache;
 pub mod bootstrap;
 pub mod bot_host_resolver;
+pub mod chat_tray;
+#[cfg(windows)]
+pub mod chat_tray_panel_native;
+pub mod chat_window;
 pub mod clipboard;
 pub mod commands;
 pub mod desktop_consent;
@@ -25,30 +31,27 @@ pub mod desktop_onboarding;
 pub mod desktop_update;
 pub mod legacy_install_cleanup;
 pub mod lightweight;
-pub mod chat_window;
-pub mod chat_tray;
-mod chat_tray_panel;
 pub mod lightweight_scheduler;
+#[cfg(windows)]
+pub mod native_panel;
 pub mod onebot_endpoint_resolver;
 pub mod product_registry;
 pub mod runtime;
 pub mod single_instance;
 pub mod snowluma_offline_listener;
-pub mod tray_icon;
 #[cfg(windows)]
-pub mod native_panel;
+pub mod tray_avatars;
+pub mod tray_icon;
+pub mod tray_panel;
 #[cfg(windows)]
 pub mod tray_panel_native;
-#[cfg(windows)]
-pub mod chat_tray_panel_native;
-#[cfg(windows)]
-pub mod windows_ui;
-pub mod tray_panel;
 pub mod tray_summary;
 pub mod webview_scheduler;
 pub mod window_events;
 pub mod window_icon;
 pub mod windows_toast;
+#[cfg(windows)]
+pub mod windows_ui;
 
 pub use bootstrap::{build_snapshot, build_snapshot_for_data_root};
 
@@ -89,6 +92,28 @@ pub struct AppState {
     pub(crate) chat: Arc<ncd_runtime::chat::ChatManager>,
     /// 调试台对外（本机 agent）的 MCP 服务；默认关，随设置的 `mcp.enabled` 起停
     pub(crate) mcp: Arc<ncd_mcp::McpServer>,
+}
+
+/// 开发验证用：把原生主托盘摆到指定屏幕坐标。只在 debug 构建里有。
+#[cfg(all(windows, debug_assertions))]
+#[tauri::command]
+fn debug_native_tray_at(app: tauri::AppHandle, x: i32, y: i32) -> Result<(), String> {
+    crate::tray_panel_native::open(&app, (x, y));
+    Ok(())
+}
+
+/// 开发验证用：把原生账号托盘（菜单）摆到指定屏幕坐标。只在 debug 构建里有。
+#[cfg(all(windows, debug_assertions))]
+#[tauri::command]
+fn debug_native_chat_tray_at(
+    app: tauri::AppHandle,
+    bot: String,
+    qq: String,
+    x: i32,
+    y: i32,
+) -> Result<(), String> {
+    crate::chat_tray_panel_native::show(&app, bot, qq, (x, y), true);
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -482,7 +507,6 @@ pub fn run() {
         .manage(chat_window::ChatWindowCoordinator::default())
         .manage(chat_tray::ChatTrayState::default())
         .manage(webview_scheduler::WebviewScheduler::default())
-        .manage(chat_tray_panel::ChatTrayPanelState::default())
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started
                 && let Some(state) = webview.try_state::<AppState>()
@@ -490,9 +514,15 @@ pub fn run() {
                 state
                     .onebot_debug
                     .page_loading(webview.label(), std::time::Instant::now());
-                state.chat.page_loading(webview.label(), std::time::Instant::now());
-                let chat = Arc::clone(&state.chat); let page = webview.label().to_owned(); let before = std::time::Instant::now();
-                tauri::async_runtime::spawn(async move { chat.release_page_before(&page, before).await; });
+                state
+                    .chat
+                    .page_loading(webview.label(), std::time::Instant::now());
+                let chat = Arc::clone(&state.chat);
+                let page = webview.label().to_owned();
+                let before = std::time::Instant::now();
+                tauri::async_runtime::spawn(async move {
+                    chat.release_page_before(&page, before).await;
+                });
             }
         })
         .setup(move |app| {
@@ -542,7 +572,10 @@ pub fn run() {
                     }
                     // Bot 状态变化时，开着的原生托盘面板跟着刷一轮
                     use ncd_domain::domain_event::DomainEventKind as EK;
-                    if matches!(event.kind(), EK::BotStateChanged | EK::BotStatusChanged | EK::BotProcessExited) {
+                    if matches!(
+                        event.kind(),
+                        EK::BotStateChanged | EK::BotStatusChanged | EK::BotProcessExited
+                    ) {
                         #[cfg(windows)]
                         tray_panel_native::refresh_if_visible(&handle);
                         #[cfg(windows)]
@@ -602,8 +635,12 @@ pub fn run() {
             // 两个任务只拿 Weak，管理器丢了就自己退出
             let onebot_debug_bus: Arc<dyn EventBus> = Arc::new(event_bus.clone());
             let chat_bus: Arc<dyn EventBus> = Arc::new(event_bus.clone());
-            tauri::async_runtime::spawn(async move { chat_listener.listen(chat_bus).await; });
-            tauri::async_runtime::spawn(async move { chat_sweeper.sweep().await; });
+            tauri::async_runtime::spawn(async move {
+                chat_listener.listen(chat_bus).await;
+            });
+            tauri::async_runtime::spawn(async move {
+                chat_sweeper.sweep().await;
+            });
             tauri::async_runtime::spawn(async move {
                 onebot_debug_listener
                     .run_bot_event_listener(onebot_debug_bus)
@@ -752,17 +789,21 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Focused(false)) {
-                window.state::<AppState>().chat.clear_reading(window.label());
+                window
+                    .state::<AppState>()
+                    .chat
+                    .clear_reading(window.label());
             }
             // 焦点进出决定 WebView 休眠；拿焦点时也兜底放出漏了恢复的 WebView
             webview_scheduler::handle_window_event(window, event);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == chat_tray_panel::LABEL { return; }
                 if window.label() == chat_window::CHAT_WINDOW_LABEL {
                     api.prevent_close();
                     let app = window.app_handle().clone();
                     tauri::async_runtime::spawn(async move {
-                        if let Err(e) = chat_window::close_chat_window(app, false).await { tracing::warn!("close chat: {e}"); }
+                        if let Err(e) = chat_window::close_chat_window(app, false).await {
+                            tracing::warn!("close chat: {e}");
+                        }
                     });
                     return;
                 }
@@ -795,7 +836,9 @@ pub fn run() {
                 let page = window.label().to_owned();
                 let before = std::time::Instant::now();
                 chat.clear_reading(&page);
-                tauri::async_runtime::spawn(async move { chat.release_page_before(&page, before).await; });
+                tauri::async_runtime::spawn(async move {
+                    chat.release_page_before(&page, before).await;
+                });
                 if window.label() == commands::window::DEBUG_WINDOW_LABEL {
                     let _ = window.app_handle().emit_to(
                         lightweight::MAIN_WINDOW_LABEL,
@@ -1048,9 +1091,6 @@ pub fn run() {
             commands::docker::ops::docker_compose_down,
             commands::tray::window_show,
             commands::tray::window_hide_to_tray,
-            commands::tray::tray_panel_quit,
-            commands::tray::tray_panel_enter_lightweight,
-            tray_panel::tray_panel_resize,
             commands::exit::prepare_exit_desktop,
             commands::exit::request_exit_app,
             commands::window::show_main_window,
@@ -1108,10 +1148,10 @@ pub fn run() {
             chat_window::chat_window_state,
             chat_window::chat_window_handoff_ready,
             chat_window::chat_take_tray_navigation,
-            chat_tray_panel::chat_tray_panel_data,
-            chat_tray_panel::chat_tray_panel_ready,
-            chat_tray_panel::chat_tray_panel_hide,
-            chat_tray_panel::chat_tray_panel_action,
+            #[cfg(all(windows, debug_assertions))]
+            debug_native_tray_at,
+            #[cfg(all(windows, debug_assertions))]
+            debug_native_chat_tray_at,
             commands::onebot_debug::onebot_debug_channels,
             commands::onebot_debug::onebot_debug_test_channel,
             commands::onebot_debug::onebot_debug_catalog,

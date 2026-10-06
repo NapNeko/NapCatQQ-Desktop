@@ -2,6 +2,7 @@
 // 故意不进 native_panel：主窗口用 WebView2 时也可能要系统明暗。
 
 #[cfg(windows)]
+#[expect(unsafe_code, reason = "RegGetValueW 的 out 缓冲区是裸指针")]
 pub fn system_prefers_dark() -> bool {
     use windows::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, RegGetValueW};
     use windows::core::w;
@@ -25,33 +26,46 @@ pub fn system_prefers_dark() -> bool {
     status.is_ok() && data == 0
 }
 
-/// (left, top, width, height)，dip 坐标。找不到时给 1280×800 的兜底。
 #[cfg(windows)]
-pub fn monitor_work_area(x: f64, y: f64) -> (f64, f64, f64, f64) {
-    use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MONITORINFO, MONITOR_DEFAULTTONEAREST, MonitorFromPoint,
-    };
-
-    // SAFETY: 读取显示器信息，结构体足够大。
+#[expect(unsafe_code, reason = "MonitorFromPoint 是 Win32 FFI")]
+fn monitor_at(x: i32, y: i32) -> windows::Win32::Graphics::Gdi::HMONITOR {
+    use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
+    // SAFETY: 参数都是值；DEFAULTTONEAREST 保证总能拿到一个显示器。
     unsafe {
-        let monitor = MonitorFromPoint(windows::Win32::Foundation::POINT { x: x as i32, y: y as i32 }, MONITOR_DEFAULTTONEAREST);
-        let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
-        if GetMonitorInfoW(monitor, &mut info).as_bool() {
-            let scale = monitor_dpi_scale(monitor);
-            let r = info.rcWork;
-            return (
-                r.left as f64 / scale,
-                r.top as f64 / scale,
-                (r.right - r.left) as f64 / scale,
-                (r.bottom - r.top) as f64 / scale,
-            );
-        }
-        (0.0, 0.0, 1280.0, 800.0)
+        MonitorFromPoint(
+            windows::Win32::Foundation::POINT { x, y },
+            MONITOR_DEFAULTTONEAREST,
+        )
     }
+}
+
+/// 屏幕物理坐标 (x, y) 所在显示器的工作区，(left, top, width, height) 物理像素。
+/// 取不到时给 1280×800 的兜底。
+#[cfg(windows)]
+#[expect(unsafe_code, reason = "GetMonitorInfoW 是 Win32 FFI")]
+pub fn monitor_work_area_px(x: i32, y: i32) -> (i32, i32, i32, i32) {
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITORINFO};
+    let mut info = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: info 是局部结构体，cbSize 已填。
+    if unsafe { GetMonitorInfoW(monitor_at(x, y), &mut info) }.as_bool() {
+        let r = info.rcWork;
+        return (r.left, r.top, r.right - r.left, r.bottom - r.top);
+    }
+    (0, 0, 1280, 800)
+}
+
+/// 屏幕物理坐标 (x, y) 所在显示器的缩放。
+#[cfg(windows)]
+pub fn monitor_dpi_scale_at(x: i32, y: i32) -> f64 {
+    monitor_dpi_scale(monitor_at(x, y))
 }
 
 /// 屏幕的 dip / 像素比；面板定位、内联缓存用。
 #[cfg(windows)]
+#[expect(unsafe_code, reason = "GetDpiForMonitor 是 Win32 FFI")]
 pub fn monitor_dpi_scale(monitor: windows::Win32::Graphics::Gdi::HMONITOR) -> f64 {
     use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
     let mut x = 0u32;

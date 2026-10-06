@@ -1,29 +1,34 @@
-// Direct2D / DirectWrite 绘制层：工厂、字体、文字排版和画布原语。
-//
-// 坐标一律是 DIP（CSS 像素），渲染目标的 DPI 设成 96 × 缩放，D2D 自己换算到设备像素。
-// 1px 的线和描边要落在设备像素上才不发虚，所以画线的地方先按缩放取整。
+// Direct2D / DirectWrite 绘制层：坐标是 DIP，渲染目标 DPI = 96 × 缩放。
+#![expect(
+    unsafe_code,
+    reason = "D2D/DWrite 的 COM 方法全是 unsafe fn，对外只给安全的 Canvas / TextSystem"
+)]
+#![warn(clippy::undocumented_unsafe_blocks)]
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use windows::Win32::Graphics::Direct2D::Common::D2D1_BEZIER_SEGMENT;
 use windows::Win32::Graphics::Direct2D::Common::{
-    D2D_RECT_F, D2D_SIZE_F, D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_FIGURE_BEGIN_FILLED,
-    D2D1_FIGURE_END_CLOSED, D2D1_FIGURE_END_OPEN, D2D1_GRADIENT_STOP, D2D1_PIXEL_FORMAT,
+    D2D_RECT_F, D2D_SIZE_F, D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F,
+    D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED, D2D1_FIGURE_END_OPEN, D2D1_GRADIENT_STOP,
+    D2D1_PIXEL_FORMAT,
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_LARGE, D2D1_ARC_SIZE_SMALL,
-    D2D1_BITMAP_PROPERTIES, D2D1_CAP_STYLE_ROUND, D2D1_DASH_STYLE_SOLID, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
-    D2D1_ELLIPSE, D2D1_EXTEND_MODE_CLAMP, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_GAMMA_2_2, D2D1_LINE_JOIN_ROUND,
+    D2D1_BITMAP_PROPERTIES, D2D1_CAP_STYLE_ROUND, D2D1_DASH_STYLE_SOLID,
+    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT, D2D1_ELLIPSE, D2D1_EXTEND_MODE_CLAMP,
+    D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_GAMMA_2_2, D2D1_LINE_JOIN_ROUND,
     D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_ROUNDED_RECT, D2D1_STROKE_STYLE_PROPERTIES1,
-    D2D1_STROKE_TRANSFORM_TYPE_NORMAL, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
-    D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory1, ID2D1PathGeometry, ID2D1PathGeometry1, ID2D1RenderTarget,
-    ID2D1SolidColorBrush, ID2D1StrokeStyle1,
+    D2D1_STROKE_TRANSFORM_TYPE_NORMAL, D2D1_SWEEP_DIRECTION_CLOCKWISE,
+    D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory1,
+    ID2D1PathGeometry1, ID2D1RenderTarget, ID2D1SolidColorBrush, ID2D1StrokeStyle1,
 };
-use windows::Win32::Graphics::Direct2D::Common::D2D1_BEZIER_SEGMENT;
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_CONTAINER_TYPE_WOFF2, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_METRICS, DWRITE_FONT_STRETCH_NORMAL,
-    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_LINE_SPACING_METHOD_UNIFORM,
-    DWRITE_TEXT_METRICS, DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_UNICODE_RANGE,
+    DWRITE_CONTAINER_TYPE_WOFF2, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_METRICS,
+    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT,
+    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_LINE_SPACING_METHOD_UNIFORM, DWRITE_TEXT_METRICS,
+    DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_UNICODE_RANGE,
     DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory, IDWriteFactory5, IDWriteFontCollection1,
     IDWriteFontFallback, IDWriteTextFormat, IDWriteTextFormat1, IDWriteTextLayout,
 };
@@ -32,13 +37,20 @@ use windows::core::{HSTRING, Interface, Result, w};
 use windows_numerics::{Matrix3x2, Vector2};
 
 use super::icons::{self, Icon};
+use super::sys::{ClipGuard, DrawGuard, TransformGuard};
 use super::theme::Rgba;
 
 const INTER: &[u8] = include_bytes!("../../assets/fonts/inter-latin-wght-normal.woff2");
 const MONO: &[u8] = include_bytes!("../../assets/fonts/jetbrains-mono-latin-wght-normal.woff2");
 
 /// 和 tokens.css 的 --font-cjk-sans 同序；没装的跳过，最后落到系统回退。
-const CJK_STACK: [&str; 5] = ["HarmonyOS Sans SC", "MiSans VF", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei"];
+const CJK_STACK: [&str; 5] = [
+    "HarmonyOS Sans SC",
+    "MiSans VF",
+    "PingFang SC",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Rect {
@@ -62,10 +74,20 @@ impl Rect {
         x >= self.x && x < self.right() && y >= self.y && y < self.bottom()
     }
     pub fn inset(&self, dx: f32, dy: f32) -> Self {
-        Self::new(self.x + dx, self.y + dy, self.w - 2.0 * dx, self.h - 2.0 * dy)
+        Self::new(
+            self.x + dx,
+            self.y + dy,
+            self.w - 2.0 * dx,
+            self.h - 2.0 * dy,
+        )
     }
     fn d2d(&self) -> D2D_RECT_F {
-        D2D_RECT_F { left: self.x, top: self.y, right: self.right(), bottom: self.bottom() }
+        D2D_RECT_F {
+            left: self.x,
+            top: self.y,
+            right: self.right(),
+            bottom: self.bottom(),
+        }
     }
 }
 
@@ -86,14 +108,26 @@ pub struct TextStyle {
 
 impl TextStyle {
     pub const fn sans(size: f32, weight: u16, line_height: f32) -> Self {
-        Self { family: Family::Sans, size, weight, line_height }
+        Self {
+            family: Family::Sans,
+            size,
+            weight,
+            line_height,
+        }
     }
     pub const fn mono(size: f32, weight: u16, line_height: f32) -> Self {
-        Self { family: Family::Mono, size, weight, line_height }
+        Self {
+            family: Family::Mono,
+            size,
+            weight,
+            line_height,
+        }
     }
 }
 
 /// 排好的一行字。宽度是实际字宽（截断后不超过给定的最大宽度），高度就是行高。
+/// Clone 只是给排版对象 AddRef。
+#[derive(Clone)]
 pub struct TextBox {
     pub layout: IDWriteTextLayout,
     pub width: f32,
@@ -119,7 +153,10 @@ pub struct TextSystem {
 
 impl TextSystem {
     fn new() -> Result<Self> {
-        // SAFETY: 以下都是 DirectWrite 的 COM 调用，参数是本函数里活着的局部值。
+        // SAFETY: DirectWrite COM 调用，参数是本函数里活着的局部值。裸指针有三处：
+        // UnpackFontFile 读的是 'static 的 include_bytes；ReadFileFragment 给的 start 只在
+        // ReleaseFileFragment 之前用，CreateInMemoryFontFileReference 传 owner = None 让加载器拷走数据，
+        // 中间没有 `?` 提前返回漏掉 Release；AddMapping 的 pointers 指向 names 里的 HSTRING，names 活到调用之后。
         unsafe {
             let dwrite: IDWriteFactory5 = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
             let loader = dwrite.CreateInMemoryFontFileLoader()?;
@@ -127,12 +164,17 @@ impl TextSystem {
             let builder = dwrite.CreateFontSetBuilder()?;
             for woff2 in [INTER, MONO] {
                 // DirectWrite 不直接认 woff2，先解成 OpenType；owner 传空时加载器自己拷一份数据
-                let stream = dwrite.UnpackFontFile(DWRITE_CONTAINER_TYPE_WOFF2, woff2.as_ptr().cast(), woff2.len() as u32)?;
+                let stream = dwrite.UnpackFontFile(
+                    DWRITE_CONTAINER_TYPE_WOFF2,
+                    woff2.as_ptr().cast(),
+                    woff2.len() as u32,
+                )?;
                 let size = stream.GetFileSize()?;
                 let mut start = std::ptr::null_mut();
                 let mut context = std::ptr::null_mut();
                 stream.ReadFileFragment(&mut start, 0, size, &mut context)?;
-                let file = loader.CreateInMemoryFontFileReference(&dwrite, start, size as u32, None);
+                let file =
+                    loader.CreateInMemoryFontFileReference(&dwrite, start, size as u32, None);
                 stream.ReleaseFileFragment(context);
                 builder.AddFontFile(&file?)?;
             }
@@ -144,16 +186,31 @@ impl TextSystem {
             let builder = dwrite.CreateFontFallbackBuilder()?;
             let names: Vec<HSTRING> = CJK_STACK.iter().map(|n| HSTRING::from(*n)).collect();
             let pointers: Vec<*const u16> = names.iter().map(|n| n.as_ptr()).collect();
-            let all = [DWRITE_UNICODE_RANGE { first: 0, last: 0x10FFFF }];
+            let all = [DWRITE_UNICODE_RANGE {
+                first: 0,
+                last: 0x10FFFF,
+            }];
             builder.AddMapping(&all, &pointers, None, None, None, 1.0)?;
             builder.AddMappings(&dwrite.GetSystemFontFallback()?)?;
             let fallback = builder.CreateFontFallback()?;
-            Ok(Self { dwrite, collection, fallback, sans, mono, formats: RefCell::new(HashMap::new()) })
+            Ok(Self {
+                dwrite,
+                collection,
+                fallback,
+                sans,
+                mono,
+                formats: RefCell::new(HashMap::new()),
+            })
         }
     }
 
     fn format(&self, style: TextStyle) -> Result<IDWriteTextFormat> {
-        let key = (style.family as u8, style.size.to_bits(), style.weight, style.line_height.to_bits());
+        let key = (
+            style.family as u8,
+            style.size.to_bits(),
+            style.weight,
+            style.line_height.to_bits(),
+        );
         if let Some(format) = self.formats.borrow().get(&key) {
             return Ok(format.clone());
         }
@@ -172,14 +229,24 @@ impl TextSystem {
                 style.size,
                 w!("zh-CN"),
             )?;
-            format.cast::<IDWriteTextFormat1>()?.SetFontFallback(&self.fallback)?;
+            format
+                .cast::<IDWriteTextFormat1>()?
+                .SetFontFallback(&self.fallback)?;
             format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
             // CSS 行盒：内容区（上伸 + 下伸）在行高里上下居中，基线在内容区顶端往下一个上伸
             let content = (face.ascent + face.descent) * style.size;
             let baseline = (style.line_height - content) / 2.0 + face.ascent * style.size;
-            format.SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, style.line_height, baseline)?;
+            format.SetLineSpacing(
+                DWRITE_LINE_SPACING_METHOD_UNIFORM,
+                style.line_height,
+                baseline,
+            )?;
             let sign = self.dwrite.CreateEllipsisTrimmingSign(&format)?;
-            let trimming = DWRITE_TRIMMING { granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER, delimiter: 0, delimiterCount: 0 };
+            let trimming = DWRITE_TRIMMING {
+                granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                delimiter: 0,
+                delimiterCount: 0,
+            };
             format.SetTrimming(&trimming, &sign)?;
             format
         };
@@ -193,10 +260,19 @@ impl TextSystem {
         let wide: Vec<u16> = text.encode_utf16().collect();
         // SAFETY: DirectWrite COM 调用，wide 活到调用结束。
         unsafe {
-            let layout = self.dwrite.CreateTextLayout(&wide, &format, max_width.max(0.0), style.line_height)?;
+            let layout = self.dwrite.CreateTextLayout(
+                &wide,
+                &format,
+                max_width.max(0.0),
+                style.line_height,
+            )?;
             let mut metrics = DWRITE_TEXT_METRICS::default();
             layout.GetMetrics(&mut metrics)?;
-            Ok(TextBox { layout, width: metrics.widthIncludingTrailingWhitespace.min(max_width), height: style.line_height })
+            Ok(TextBox {
+                layout,
+                width: metrics.widthIncludingTrailingWhitespace.min(max_width),
+                height: style.line_height,
+            })
         }
     }
 }
@@ -220,10 +296,17 @@ fn face(collection: &IDWriteFontCollection1, names: &[&str]) -> Result<FontFace>
             let mut metrics = DWRITE_FONT_METRICS::default();
             font.GetMetrics(&mut metrics);
             let em = f32::from(metrics.designUnitsPerEm);
-            return Ok(FontFace { family, ascent: f32::from(metrics.ascent) / em, descent: f32::from(metrics.descent) / em });
+            return Ok(FontFace {
+                family,
+                ascent: f32::from(metrics.ascent) / em,
+                descent: f32::from(metrics.descent) / em,
+            });
         }
     }
-    Err(windows::core::Error::new(windows::Win32::Foundation::E_FAIL, format!("内置字体缺少 {names:?}")))
+    Err(windows::core::Error::new(
+        windows::Win32::Foundation::E_FAIL,
+        format!("内置字体缺少 {names:?}"),
+    ))
 }
 
 /// 和渲染目标无关的资源：D2D 工厂、图标几何、圆头描边样式、文字系统。整条 UI 线程一份。
@@ -236,6 +319,13 @@ pub struct Shared {
 
 thread_local! {
     static SHARED: RefCell<Option<std::rc::Rc<Shared>>> = const { RefCell::new(None) };
+}
+
+/// 面板都销毁后放掉 D2D / DirectWrite（字体回退、字形缓存占好几 MB），下次用时重建。
+/// 还有画布持着 Rc 时只是摘掉本线程这份引用，画布释放时一起走。
+pub fn release_shared() {
+    let shared = SHARED.with(|slot| slot.borrow_mut().take());
+    drop(shared);
 }
 
 /// 取本线程的共享资源，第一次用时创建。
@@ -258,7 +348,12 @@ pub fn shared() -> Result<std::rc::Rc<Shared>> {
                 transformType: D2D1_STROKE_TRANSFORM_TYPE_NORMAL,
             };
             let round_stroke = d2d.CreateStrokeStyle(&props, None)?;
-            std::rc::Rc::new(Shared { d2d, text: TextSystem::new()?, round_stroke, icons: RefCell::new(HashMap::new()) })
+            std::rc::Rc::new(Shared {
+                d2d,
+                text: TextSystem::new()?,
+                round_stroke,
+                icons: RefCell::new(HashMap::new()),
+            })
         };
         *slot.borrow_mut() = Some(shared.clone());
         Ok(shared)
@@ -294,13 +389,34 @@ fn build_path(factory: &ID2D1Factory1, paths: &[&str]) -> Result<ID2D1PathGeomet
                         open = true;
                     }
                     icons::Seg::Line(p) => sink.AddLine(v(p)),
-                    icons::Seg::Cubic(a, b, c) => sink.AddBezier(&D2D1_BEZIER_SEGMENT { point1: v(a), point2: v(b), point3: v(c) }),
-                    icons::Seg::Arc { to, r, rotation, large, sweep } => sink.AddArc(&D2D1_ARC_SEGMENT {
+                    icons::Seg::Cubic(a, b, c) => sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: v(a),
+                        point2: v(b),
+                        point3: v(c),
+                    }),
+                    icons::Seg::Arc {
+                        to,
+                        r,
+                        rotation,
+                        large,
+                        sweep,
+                    } => sink.AddArc(&D2D1_ARC_SEGMENT {
                         point: v(to),
-                        size: D2D_SIZE_F { width: r.0, height: r.1 },
+                        size: D2D_SIZE_F {
+                            width: r.0,
+                            height: r.1,
+                        },
                         rotationAngle: rotation,
-                        sweepDirection: if sweep { D2D1_SWEEP_DIRECTION_CLOCKWISE } else { D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE },
-                        arcSize: if large { D2D1_ARC_SIZE_LARGE } else { D2D1_ARC_SIZE_SMALL },
+                        sweepDirection: if sweep {
+                            D2D1_SWEEP_DIRECTION_CLOCKWISE
+                        } else {
+                            D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE
+                        },
+                        arcSize: if large {
+                            D2D1_ARC_SIZE_LARGE
+                        } else {
+                            D2D1_ARC_SIZE_SMALL
+                        },
                     }),
                     icons::Seg::Close => {
                         if open {
@@ -324,7 +440,12 @@ fn v(p: (f32, f32)) -> Vector2 {
 }
 
 fn color(c: Rgba) -> D2D1_COLOR_F {
-    D2D1_COLOR_F { r: c.r, g: c.g, b: c.b, a: c.a }
+    D2D1_COLOR_F {
+        r: c.r,
+        g: c.g,
+        b: c.b,
+        a: c.a,
+    }
 }
 
 /// 解码好的图片（头像），straight alpha 的 RGBA。
@@ -334,28 +455,38 @@ pub struct Image {
     pub rgba: Vec<u8>,
 }
 
+/// (图片指针, 目标设备像素宽, 高) → 预缩放好的位图；Weak 判断图片还活着、指针没被复用。
+type BitmapCache = HashMap<(usize, u32, u32), (std::rc::Weak<Image>, ID2D1Bitmap)>;
+
 /// 绑定在某个渲染目标上的画布。图片位图跟着渲染目标走，换目标时整个丢掉重建。
 pub struct Canvas {
     rt: ID2D1RenderTarget,
     shared: std::rc::Rc<Shared>,
     brush: ID2D1SolidColorBrush,
-    bitmaps: RefCell<HashMap<usize, (std::rc::Weak<Image>, ID2D1Bitmap)>>,
+    bitmaps: RefCell<BitmapCache>,
     pub scale: f32,
 }
 
 impl Canvas {
     pub fn new(rt: ID2D1RenderTarget, shared: std::rc::Rc<Shared>, scale: f32) -> Result<Self> {
-        // SAFETY: D2D COM 调用，rt 由调用方保证有效。
+        // SAFETY: rt 是本函数拥有的活 COM 引用；SetDpi / SetAntialiasMode / CreateSolidColorBrush 只读写它自己的状态。
         let brush = unsafe {
             rt.SetDpi(96.0 * scale, 96.0 * scale);
             rt.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
             rt.CreateSolidColorBrush(&color(Rgba::TRANSPARENT), None)?
         };
-        Ok(Self { rt, shared, brush, bitmaps: RefCell::new(HashMap::new()), scale })
+        Ok(Self {
+            rt,
+            shared,
+            brush,
+            bitmaps: RefCell::new(HashMap::new()),
+            scale,
+        })
     }
 
-    pub fn target(&self) -> &ID2D1RenderTarget {
-        &self.rt
+    /// 开始一帧；守卫的 finish 拿 EndDraw 结果，提前返回时 Drop 补 EndDraw。
+    pub fn begin_draw(&self) -> DrawGuard<'_> {
+        DrawGuard::begin(&self.rt)
     }
 
     pub fn set_scale(&mut self, scale: f32) {
@@ -401,7 +532,11 @@ impl Canvas {
         }
         let r = self.snap_rect(r);
         let radius = radius.min(r.w / 2.0).min(r.h / 2.0);
-        let rr = D2D1_ROUNDED_RECT { rect: r.d2d(), radiusX: radius, radiusY: radius };
+        let rr = D2D1_ROUNDED_RECT {
+            rect: r.d2d(),
+            radiusX: radius,
+            radiusY: radius,
+        };
         // SAFETY: D2D 绘制调用，参数是栈上的值。
         unsafe { self.rt.FillRoundedRectangle(&rr, self.paint(c)) };
     }
@@ -416,12 +551,16 @@ impl Canvas {
         let half = px / 2.0;
         let outer = Rect::new(r.x - half, r.y - half, r.w + px, r.h + px);
         let radius = radius.min(r.w / 2.0).min(r.h / 2.0) + half;
-        let rr = D2D1_ROUNDED_RECT { rect: outer.d2d(), radiusX: radius, radiusY: radius };
+        let rr = D2D1_ROUNDED_RECT {
+            rect: outer.d2d(),
+            radiusX: radius,
+            radiusY: radius,
+        };
         // SAFETY: D2D 绘制调用，参数是栈上的值。
         unsafe { self.rt.DrawRoundedRectangle(&rr, self.paint(c), px, None) };
     }
 
-    /// 1px 横线（border-top），按设备像素对齐。
+    /// 1px 横线（border-top），按设备像素对齐。1px 的线落在设备像素上才不发虚。
     pub fn hline(&self, x: f32, right: f32, y: f32, c: Rgba) {
         let px = (self.scale.floor().max(1.0)) / self.scale;
         let y = self.snap(y);
@@ -432,7 +571,11 @@ impl Canvas {
         if c.a <= 0.0 {
             return;
         }
-        let e = D2D1_ELLIPSE { point: v((cx, cy)), radiusX: radius, radiusY: radius };
+        let e = D2D1_ELLIPSE {
+            point: v((cx, cy)),
+            radiusX: radius,
+            radiusY: radius,
+        };
         // SAFETY: D2D 绘制调用，参数是栈上的值。
         unsafe { self.rt.FillEllipse(&e, self.paint(c)) };
     }
@@ -440,30 +583,57 @@ impl Canvas {
     pub fn text(&self, text: &TextBox, x: f32, y: f32, c: Rgba) {
         // SAFETY: D2D 绘制调用，排版对象活到调用结束。
         unsafe {
-            self.rt.DrawTextLayout(v((x, y)), &text.layout, self.paint(c), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+            self.rt.DrawTextLayout(
+                v((x, y)),
+                &text.layout,
+                self.paint(c),
+                D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
+            );
         }
     }
 
     /// lucide 图标：24 单位的画板缩放到 `size`，描边宽度按画板单位给（和 lucide 的 strokeWidth 一致）。
+    #[expect(clippy::too_many_arguments, reason = "绘制原语按坐标、样式平铺传参")]
     pub fn icon(&self, icon: Icon, x: f32, y: f32, size: f32, stroke: f32, c: Rgba, filled: bool) {
-        let Ok(geometry) = self.shared.icon(icon) else { return };
+        let Ok(geometry) = self.shared.icon(icon) else {
+            return;
+        };
         let k = size / 24.0;
-        let transform = Matrix3x2 { M11: k, M12: 0.0, M21: 0.0, M22: k, M31: x, M32: y };
-        // SAFETY: D2D 绘制调用，变换在调用后复位。
+        let transform = Matrix3x2 {
+            M11: k,
+            M12: 0.0,
+            M21: 0.0,
+            M22: k,
+            M31: x,
+            M32: y,
+        };
+        let _transform = TransformGuard::set(&self.rt, &transform);
+        let brush = self.paint(c);
+        // SAFETY: D2D 绘制调用，几何、画刷、描边样式都是活着的 COM 引用。
         unsafe {
-            self.rt.SetTransform(&transform);
-            let brush = self.paint(c);
             if filled {
                 self.rt.FillGeometry(&geometry, brush, None);
             }
-            self.rt.DrawGeometry(&geometry, brush, stroke, &self.shared.round_stroke);
-            self.rt.SetTransform(&Matrix3x2::identity());
+            self.rt
+                .DrawGeometry(&geometry, brush, stroke, &self.shared.round_stroke);
         }
     }
 
     /// 旋转着画（加载圈）：绕图标中心转 `degrees`。
-    pub fn icon_rotated(&self, icon: Icon, x: f32, y: f32, size: f32, stroke: f32, c: Rgba, degrees: f32) {
-        let Ok(geometry) = self.shared.icon(icon) else { return };
+    #[expect(clippy::too_many_arguments, reason = "绘制原语按坐标、样式平铺传参")]
+    pub fn icon_rotated(
+        &self,
+        icon: Icon,
+        x: f32,
+        y: f32,
+        size: f32,
+        stroke: f32,
+        c: Rgba,
+        degrees: f32,
+    ) {
+        let Ok(geometry) = self.shared.icon(icon) else {
+            return;
+        };
         let k = size / 24.0;
         let (s, cos) = degrees.to_radians().sin_cos();
         let (cx, cy) = (x + size / 2.0, y + size / 2.0);
@@ -476,74 +646,140 @@ impl Canvas {
             M31: cx - (12.0 * k * cos - 12.0 * k * s),
             M32: cy - (12.0 * k * s + 12.0 * k * cos),
         };
-        // SAFETY: D2D 绘制调用，变换在调用后复位。
+        let _transform = TransformGuard::set(&self.rt, &m);
+        // SAFETY: D2D 绘制调用，几何、画刷、描边样式都是活着的 COM 引用。
         unsafe {
-            self.rt.SetTransform(&m);
-            self.rt.DrawGeometry(&geometry, self.paint(c), stroke, &self.shared.round_stroke);
-            self.rt.SetTransform(&Matrix3x2::identity());
+            self.rt
+                .DrawGeometry(&geometry, self.paint(c), stroke, &self.shared.round_stroke);
         }
     }
 
     /// 左上到右下的两色渐变圆角块（头像加载不到时的底色）。
     pub fn gradient_round(&self, r: Rect, radius: f32, from: Rgba, to: Rgba) {
         let r = self.snap_rect(r);
-        let stops = [D2D1_GRADIENT_STOP { position: 0.0, color: color(from) }, D2D1_GRADIENT_STOP { position: 1.0, color: color(to) }];
+        let stops = [
+            D2D1_GRADIENT_STOP {
+                position: 0.0,
+                color: color(from),
+            },
+            D2D1_GRADIENT_STOP {
+                position: 1.0,
+                color: color(to),
+            },
+        ];
         // SAFETY: D2D 资源创建与绘制，参数是栈上的值。
         unsafe {
-            let Ok(collection) = self.rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP) else { return };
-            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: v((r.x, r.y)), endPoint: v((r.right(), r.bottom())) };
-            let Ok(brush) = self.rt.CreateLinearGradientBrush(&props, None, &collection) else { return };
+            let Ok(collection) = self.rt.CreateGradientStopCollection(
+                &stops,
+                D2D1_GAMMA_2_2,
+                D2D1_EXTEND_MODE_CLAMP,
+            ) else {
+                return;
+            };
+            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
+                startPoint: v((r.x, r.y)),
+                endPoint: v((r.right(), r.bottom())),
+            };
+            let Ok(brush) = self.rt.CreateLinearGradientBrush(&props, None, &collection) else {
+                return;
+            };
             let radius = radius.min(r.w / 2.0).min(r.h / 2.0);
-            self.rt.FillRoundedRectangle(&D2D1_ROUNDED_RECT { rect: r.d2d(), radiusX: radius, radiusY: radius }, &brush);
+            self.rt.FillRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: r.d2d(),
+                    radiusX: radius,
+                    radiusY: radius,
+                },
+                &brush,
+            );
         }
     }
 
-    /// 图片铺满 `r` 并裁成圆角（object-fit: cover，按短边缩放后居中裁）。
+    /// 图片铺满 `r` 并裁成圆角（object-fit: cover）。位图预先在 CPU 上缩到目标设备像素，
+    /// 大图直接让 D2D 线性缩小会有明显混叠（256px 的 logo 画到 36px）。
     pub fn image_round(&self, image: &std::rc::Rc<Image>, r: Rect, radius: f32) {
-        let Some(bitmap) = self.bitmap(image) else { return };
         let r = self.snap_rect(r);
-        let (iw, ih) = (image.width as f32, image.height as f32);
-        let k = (r.w / iw).max(r.h / ih);
-        let (dx, dy) = (r.x + (r.w - iw * k) / 2.0, r.y + (r.h - ih * k) / 2.0);
-        // SAFETY: D2D 资源创建与绘制；位图画刷的变换把图片像素映射到目标矩形。
+        let w_px = (r.w * self.scale).round().max(1.0) as u32;
+        let h_px = (r.h * self.scale).round().max(1.0) as u32;
+        let Some(bitmap) = self.bitmap(image, w_px, h_px) else {
+            return;
+        };
+        // SAFETY: D2D 资源创建与绘制；位图 DPI = 96 × scale，1 位图像素正好是 1 设备像素，画刷只需平移。
         unsafe {
-            use windows::Win32::Graphics::Direct2D::{D2D1_BITMAP_BRUSH_PROPERTIES, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR};
+            use windows::Win32::Graphics::Direct2D::{
+                D2D1_BITMAP_BRUSH_PROPERTIES, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            };
             let props = D2D1_BITMAP_BRUSH_PROPERTIES {
                 extendModeX: D2D1_EXTEND_MODE_CLAMP,
                 extendModeY: D2D1_EXTEND_MODE_CLAMP,
                 interpolationMode: D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
             };
-            let Ok(brush) = self.rt.CreateBitmapBrush(&bitmap, Some(&props), None) else { return };
-            // 位图按 96 DPI 建的，1 位图像素 = 1 DIP，所以直接按 k 缩放
-            brush.SetTransform(&Matrix3x2 { M11: k, M12: 0.0, M21: 0.0, M22: k, M31: dx, M32: dy });
+            let Ok(brush) = self.rt.CreateBitmapBrush(&bitmap, Some(&props), None) else {
+                return;
+            };
+            brush.SetTransform(&Matrix3x2 {
+                M11: 1.0,
+                M12: 0.0,
+                M21: 0.0,
+                M22: 1.0,
+                M31: r.x,
+                M32: r.y,
+            });
             let radius = radius.min(r.w / 2.0).min(r.h / 2.0);
-            self.rt.FillRoundedRectangle(&D2D1_ROUNDED_RECT { rect: r.d2d(), radiusX: radius, radiusY: radius }, &brush);
+            self.rt.FillRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: r.d2d(),
+                    radiusX: radius,
+                    radiusY: radius,
+                },
+                &brush,
+            );
         }
     }
 
-    fn bitmap(&self, image: &std::rc::Rc<Image>) -> Option<ID2D1Bitmap> {
-        let key = std::rc::Rc::as_ptr(image) as usize;
+    fn bitmap(&self, image: &std::rc::Rc<Image>, w_px: u32, h_px: u32) -> Option<ID2D1Bitmap> {
+        let key = (std::rc::Rc::as_ptr(image) as usize, w_px, h_px);
         if let Some((weak, bitmap)) = self.bitmaps.borrow().get(&key)
-            && weak.upgrade().is_some_and(|alive| std::rc::Rc::ptr_eq(&alive, image))
+            && weak
+                .upgrade()
+                .is_some_and(|alive| std::rc::Rc::ptr_eq(&alive, image))
         {
             return Some(bitmap.clone());
         }
+        let scaled = cover_resize(image, w_px, h_px)?;
         // D2D 要预乘的 BGRA
-        let mut bgra = Vec::with_capacity(image.rgba.len());
-        for px in image.rgba.chunks_exact(4) {
-            let a = u16::from(px[3]);
-            let mul = |c: u8| ((u16::from(c) * a + 127) / 255) as u8;
-            bgra.extend_from_slice(&[mul(px[2]), mul(px[1]), mul(px[0]), px[3]]);
+        let mut bgra = Vec::with_capacity(scaled.len());
+        for px in scaled.chunks_exact(4) {
+            let &[r, g, b, a] = px else { continue };
+            let mul = |c: u8| ((u16::from(c) * u16::from(a) + 127) / 255) as u8;
+            bgra.extend_from_slice(&[mul(b), mul(g), mul(r), a]);
         }
         let props = D2D1_BITMAP_PROPERTIES {
-            pixelFormat: D2D1_PIXEL_FORMAT { format: DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },
-            dpiX: 96.0,
-            dpiY: 96.0,
+            pixelFormat: D2D1_PIXEL_FORMAT {
+                format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+            },
+            dpiX: 96.0 * self.scale,
+            dpiY: 96.0 * self.scale,
         };
-        // SAFETY: bgra 活到调用结束，pitch 与宽度一致。
+        // D2D 按 pitch × height 从指针读，像素数对不上时宁可不画，也不能越界读
+        let pitch = w_px.checked_mul(4)?;
+        let expected = (pitch as usize).checked_mul(h_px as usize)?;
+        if expected == 0 || bgra.len() != expected {
+            return None;
+        }
+        // SAFETY: bgra 活到调用结束，上面已校验长度正好是 pitch × height 字节，紧密排列无行间填充。
         let bitmap = unsafe {
             self.rt
-                .CreateBitmap(D2D_SIZE_U { width: image.width, height: image.height }, Some(bgra.as_ptr().cast()), image.width * 4, &props)
+                .CreateBitmap(
+                    D2D_SIZE_U {
+                        width: w_px,
+                        height: h_px,
+                    },
+                    Some(bgra.as_ptr().cast()),
+                    pitch,
+                    &props,
+                )
                 .ok()?
         };
         let mut cache = self.bitmaps.borrow_mut();
@@ -552,13 +788,52 @@ impl Canvas {
         Some(bitmap)
     }
 
-    pub fn clip(&self, r: Rect) {
-        // SAFETY: D2D 裁剪栈，和 unclip 成对调用。
-        unsafe { self.rt.PushAxisAlignedClip(&self.snap_rect(r).d2d(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE) };
+    /// 裁到 `r`，返回的守卫离开作用域时弹出。
+    pub fn clip(&self, r: Rect) -> ClipGuard<'_> {
+        ClipGuard::push(&self.rt, self.snap_rect(r).d2d())
     }
+}
 
-    pub fn unclip(&self) {
-        // SAFETY: 弹出 clip 压进去的裁剪。
-        unsafe { self.rt.PopAxisAlignedClip() };
+/// object-fit: cover：按目标宽高比居中裁，再 Lanczos3 缩到目标尺寸。返回非预乘 RGBA。
+fn cover_resize(image: &Image, w: u32, h: u32) -> Option<Vec<u8>> {
+    let src = image::RgbaImage::from_raw(image.width, image.height, image.rgba.clone())?;
+    let (iw, ih) = (u64::from(image.width), u64::from(image.height));
+    if iw == 0 || ih == 0 || w == 0 || h == 0 {
+        return None;
     }
+    // 交叉相乘比较宽高比，避开浮点：源比目标宽就裁左右，否则裁上下
+    let (cw, ch) = if iw * u64::from(h) > ih * u64::from(w) {
+        ((ih * u64::from(w) / u64::from(h)).max(1), ih)
+    } else {
+        (iw, (iw * u64::from(h) / u64::from(w)).max(1))
+    };
+    let (cx, cy) = ((iw - cw) / 2, (ih - ch) / 2);
+    let cropped =
+        image::imageops::crop_imm(&src, cx as u32, cy as u32, cw as u32, ch as u32).to_image();
+    if cropped.width() == w && cropped.height() == h {
+        return Some(cropped.into_raw());
+    }
+    Some(image::imageops::resize(&cropped, w, h, image::imageops::FilterType::Lanczos3).into_raw())
+}
+
+/// 离屏画一帧，返回 RGBA（不透明）。测试截图用。
+#[cfg(test)]
+pub(crate) fn render_offscreen(
+    w_px: i32,
+    h_px: i32,
+    scale: f32,
+    draw: impl FnOnce(&Canvas),
+) -> Option<Vec<u8>> {
+    let shared = shared().ok()?;
+    let factory = shared.d2d.clone();
+    let mut drawn = false;
+    let pixels = super::sys::testing::render_offscreen(&factory, w_px, h_px, scale, |rt| {
+        let Ok(canvas) = Canvas::new(rt, shared, scale) else {
+            return;
+        };
+        let frame = canvas.begin_draw();
+        draw(&canvas);
+        drawn = frame.finish().is_ok();
+    })?;
+    drawn.then_some(pixels)
 }

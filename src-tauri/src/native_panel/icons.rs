@@ -19,6 +19,7 @@ pub enum Icon {
     EyeOff,
     MessageCircle,
     Radio,
+    Users,
     X,
 }
 
@@ -54,7 +55,9 @@ pub fn paths(icon: Icon) -> &'static [&'static str] {
             "M9 21V9",
         ],
         Icon::Play => &["M6 3L20 12L6 21L6 3Z"],
-        Icon::Square => &["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2Z"],
+        Icon::Square => {
+            &["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2Z"]
+        }
         Icon::Bell => &[
             "M10.268 21a2 2 0 0 0 3.464 0",
             "M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326",
@@ -74,6 +77,12 @@ pub fn paths(icon: Icon) -> &'static [&'static str] {
             "M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5",
             "M19.1 4.9C23 8.8 23 15.1 19.1 19",
         ],
+        Icon::Users => &[
+            "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+            "M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0",
+            "M22 21v-2a4 4 0 0 0-3-3.87",
+            "M16 3.13a4 4 0 0 1 0 7.75",
+        ],
         Icon::X => &["M18 6 6 18", "m6 6 12 12"],
     }
 }
@@ -83,7 +92,13 @@ pub enum Seg {
     Move((f32, f32)),
     Line((f32, f32)),
     Cubic((f32, f32), (f32, f32), (f32, f32)),
-    Arc { to: (f32, f32), r: (f32, f32), rotation: f32, large: bool, sweep: bool },
+    Arc {
+        to: (f32, f32),
+        r: (f32, f32),
+        rotation: f32,
+        large: bool,
+        sweep: bool,
+    },
     Close,
 }
 
@@ -196,7 +211,13 @@ fn parse_inner(d: &str) -> Option<Vec<Seg>> {
                 let sweep = num(bytes, &mut pos)? != 0.0;
                 let (x, y) = (num(bytes, &mut pos)?, num(bytes, &mut pos)?);
                 cur = point(x, y);
-                out.push(Seg::Arc { to: cur, r: (rx, ry), rotation, large, sweep });
+                out.push(Seg::Arc {
+                    to: cur,
+                    r: (rx, ry),
+                    rotation,
+                    large,
+                    sweep,
+                });
             }
             _ => break,
         }
@@ -210,8 +231,9 @@ mod tests {
 
     #[test]
     fn parses_relative_line_and_close() {
+        // SVG 规定 m 之后的隐式 lineto 也按相对坐标
         let segs = parse("m2 2 20 20");
-        assert_eq!(segs, vec![Seg::Move((2.0, 2.0)), Seg::Line((20.0, 20.0))]);
+        assert_eq!(segs, vec![Seg::Move((2.0, 2.0)), Seg::Line((22.0, 22.0))]);
         let segs = parse("M6 3L20 12L6 21L6 3Z");
         assert_eq!(segs.len(), 5);
         assert!(matches!(segs.last(), Some(Seg::Close)));
@@ -221,12 +243,20 @@ mod tests {
     fn parses_compact_numbers_and_arcs() {
         let segs = parse("M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0");
         assert_eq!(segs.len(), 3);
-        let Some(Seg::Arc { to, r, large, sweep, .. }) = segs.get(1).copied() else {
+        let Some(Seg::Arc {
+            to,
+            r,
+            large,
+            sweep,
+            ..
+        }) = segs.get(1).copied()
+        else {
             panic!("第二段应是圆弧: {segs:?}");
         };
         assert_eq!(to, (22.0, 12.0));
         assert_eq!(r, (10.0, 10.0));
-        assert!(large && sweep);
+        // flag 顺序是 large-arc 再 sweep：「1 0」= 大弧、逆时针
+        assert!(large && !sweep);
     }
 
     #[test]
@@ -254,6 +284,7 @@ mod tests {
             Icon::EyeOff,
             Icon::MessageCircle,
             Icon::Radio,
+            Icon::Users,
             Icon::X,
         ] {
             for d in paths(icon) {
