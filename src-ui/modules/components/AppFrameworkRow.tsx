@@ -10,7 +10,7 @@ import { Button } from '../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { ComponentManageCard } from './ComponentEntityCard';
-import { frameworkLogo } from './frameworkLogos';
+import { componentLogoIcon } from './componentLogos';
 import type { StatusBadgeSpec } from './componentStatusPresentation';
 import type { HostInfo, MachineComponentRow } from '../../core/domain/components/types';
 import type { AppFrameworkManifest, AppInstance } from '../../core/ipc/types';
@@ -119,24 +119,12 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
         <span className="text-2xs text-text-disabled">—</span>
     );
 
-    const logo = frameworkLogo(manifest.id);
-
     return (
         <ComponentManageCard
             accent={installing ? 'brand' : 'none'}
             statusBadge={badge}
             title={manifest.display_name}
-            icon={
-                logo ? (
-                    <img
-                        src={logo}
-                        alt=""
-                        aria-hidden
-                        draggable={false}
-                        className="h-6 w-6 select-none rounded-full object-cover"
-                    />
-                ) : undefined
-            }
+            icon={componentLogoIcon(manifest.id)}
             description={manifest.description}
             titleAside={
                 manifest.repo_url ? (

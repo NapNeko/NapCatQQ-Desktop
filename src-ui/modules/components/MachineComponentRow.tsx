@@ -22,6 +22,7 @@ import {
 } from '../../core/domain/release/normalize';
 import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from '../../shared/components/progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
+import { componentLogoIcon } from './componentLogos';
 import {
     hostComponentStatusBadge,
     isExternalNodeSource,
@@ -192,6 +193,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
                             inFlight,
                         })}
                         title={info.display_name}
+                        icon={componentLogoIcon(info.id)}
                         titleAside={titleAside}
                         description={info.description || undefined}
                         meta={
