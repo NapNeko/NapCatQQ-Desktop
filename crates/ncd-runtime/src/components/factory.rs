@@ -7,10 +7,11 @@ use std::sync::Arc;
 
 use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
-    Component, ComponentId, DesktopSelfComponent, GitComponent, MINGIT_DEFAULT_VERSION,
-    NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent,
-    RedisComponent, SnowLumaComponent, UV_DEFAULT_VERSION, UvComponent, VcRedistComponent,
-    ncd_watch_asset_name, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
+    Component, ComponentId, DesktopSelfComponent, GitComponent, MANAGED_QQ_DIR_NAME,
+    MINGIT_DEFAULT_VERSION, NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent,
+    QQComponent, RedisComponent, SnowLumaComponent, UV_DEFAULT_VERSION, UvComponent,
+    VcRedistComponent, ncd_watch_asset_name, ncd_watch_release_download_url,
+    ncd_watch_release_download_url_for_tag,
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
@@ -184,11 +185,11 @@ pub fn build_component_for_host(
         }
         ComponentId::Qq => {
             if ctx.host.os() == Os::Windows {
-                // 安装包缓存目录:稳定文件名 QQNT-{version}.exe,失败保留可复用。
-                // install_base_dir 在 Windows 上只是占位(detect 走注册表),
-                // 真正生效的是 with_tmp_dir 指到的 cache
+                // 侧装根 components/QQ(启动链路 resolve_qq_install_path 同源);
+                // 安装包缓存 runtime/cache/qq,失败保留可复用
+                let qq_root = data_root_host.join("components").join(MANAGED_QQ_DIR_NAME);
                 let cache = data_root_host.join("runtime").join("cache").join("qq");
-                Arc::new(QQComponent::default_v3_2_25(cache.clone()).with_tmp_dir(cache))
+                Arc::new(QQComponent::default_v3_2_25(qq_root).with_tmp_dir(cache))
             } else {
                 Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
             }

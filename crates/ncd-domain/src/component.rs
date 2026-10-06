@@ -120,6 +120,19 @@ impl ComponentId {
     }
 }
 
+/// 本机 Bot 冷启动会拉起哪份 QQ
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum LocalQqSource {
+    /// 组件页装的那份(components/QQ),和用户自己的 QQ 互不相干
+    Managed,
+    /// 用户自己装的系统 QQ,Bot 和日常 QQ 共用一份程序
+    System,
+    /// 两样都没有,启动会报缺 QQ
+    Missing,
+}
+
 /// 依赖在哪个阶段生效
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]

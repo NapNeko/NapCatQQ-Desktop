@@ -52,8 +52,9 @@ pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
 pub use pkg_install_stream::run_pkg_command_with_progress;
 pub use qq::{
-    LinuxQqRelease, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQ_URL_SIGN_URL, QQComponent,
-    probe_linux_qq_latest, probe_windows_qq_latest,
+    LinuxQqRelease, MANAGED_QQ_DIR_NAME, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQ_REGISTRY_SUBKEY,
+    QQ_URL_SIGN_URL, QQComponent, managed_qq_current_dir, managed_qq_root, probe_linux_qq_latest,
+    probe_windows_qq_latest,
 };
 pub use qq_linux_pid::linux_qq_running_pid_script;
 pub use redis::{REDIS_WINDOWS_VERSION, RedisComponent, VALKEY_LINUX_VERSION};

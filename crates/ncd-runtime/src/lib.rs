@@ -271,6 +271,7 @@ pub use remote_bot_log_follow::RemoteBotLogFollowRegistry;
 pub use runtime_launch_plan::{
     FileSystemRuntimeLaunchPlanner, NapCatLaunchPlan, RuntimeLaunchPlan, RuntimeLaunchPlanError,
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
+    local_qq_source,
 };
 pub use secret_store_impl::SecretStoreImpl;
 pub use server_manager::{

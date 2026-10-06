@@ -102,8 +102,8 @@ pub use chat_archive::{
     CHAT_ARCHIVE_VERSION,
 };
 pub use component::{
-    ComponentId, DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, Requirement,
-    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
+    ComponentId, DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, LocalQqSource,
+    Requirement, RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
 };
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
 pub use data_root_migrate::{

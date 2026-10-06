@@ -10,7 +10,7 @@ use ncd_component::{
     RequirementPhase, RuntimeReadiness,
 };
 use ncd_deploy::StepKind;
-use ncd_domain::{NodeEnvironmentCandidate, NodeProbeResult};
+use ncd_domain::{LocalQqSource, NodeEnvironmentCandidate, NodeProbeResult};
 use ncd_host::Host;
 use ncd_runtime::{
     ComponentActionRequest, RemoteHostProbe, RemoteSelectedPaths, SnowLumaLinuxPackage,
@@ -24,6 +24,13 @@ use crate::commands::host_resolve::resolve_host_with_autoconnect;
 #[tauri::command]
 pub async fn list_components() -> Vec<ComponentInfo> {
     component_catalog()
+}
+
+/// 本机 Bot 冷启动会用组件页装的 QQ 还是用户自己的 QQ
+#[tauri::command]
+pub async fn local_qq_source(state: State<'_, AppState>) -> Result<LocalQqSource, String> {
+    let components_dir = ncd_runtime::DataPaths::new(&state.data_root).components_dir();
+    Ok(ncd_runtime::local_qq_source(&components_dir))
 }
 
 #[tauri::command]

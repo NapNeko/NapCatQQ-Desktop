@@ -3,11 +3,9 @@
 //! 跨平台:
 //! - Linux 本地/远端:rootless 安装,对齐 NapCat-Installer 官方一键脚本
 //!   下载 deb/rpm 解压到 <install_base_dir>/opt/QQ/
-//! - Windows 本地:detect 走注册表
-//!   HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT\Install 拿安装根,新版 QQNT
-//!   按版本分目录,版本号在 versions/config.json 的 curVersion;旧版是
-//!   扁平的 resources/app/package.json,安装走官方 pcConfig.json 拿 NSIS
-//!   安装包跑 installer.exe /s 静默安装
+//! - Windows 本地:侧装,不碰用户自己装的系统 QQ。安装包解包到
+//!   <install_base_dir>/versions/<curVersion>/,current.txt 记当前版本;
+//!   detect 先认侧装,没有才回落注册表里的系统 QQ(只读,不卸不改)
 //!
 //! Linux 安装路径(rootless):
 //! - $INSTALL_BASE_DIR/opt/QQ/:QQ 解压根
@@ -27,15 +25,17 @@
 //! 3. dpkg-deb -x 或 rpm2cpio | cpio -idm 解压到 <install_base_dir>
 //! 4. 删除安装包,清理临时文件
 //!
-//! Windows 安装流程:
-//! 1. HTTP GET https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json
-//! 2. 取 Windows.ntDownloadX64Url;gtimg/QQNTV2 裸链先 UrlSign 再下
-//! 3. 下载 NSIS 安装包到 data_root/runtime/cache/qq(工厂接线),文件名
-//!    QQNT-{version}.exe 不含 PID,已存在则跳过下载;切片下载走
-//!    download_with_mirrors(≥16MB 切 4 片,CDN 不支持 Range 自动退单流)
-//! 4. 跑 installer.exe /s 静默安装,elevated 走 UAC 提权并等退出码
-//! 5. 只有安装成功才删安装包;提权失败 / 安装器非 0 / 取消都保留,
-//!    下次安装直接复用不重新下载
+//! Windows 安装流程(侧装,不跑安装器、不写注册表、不要 UAC):
+//! 1. pcConfig.json 取 Windows.ntDownloadX64Url;gtimg/QQNTV2 裸链先 UrlSign
+//! 2. 下载到 data_root/runtime/cache/qq/QQNT-{version}.exe,已存在则复用
+//! 3. 安装包是 PE,payload 是内嵌的 7z(LZMA+BCJ2)。7zr 直接 x 只会命中前面
+//!    一个 28KB 的许可协议小包,所以先 `l -t#` 列出内嵌档案,取最大的 N.7z
+//!    `e -t#` 抠出来再 `x`;payload 里 Files/ 就是完整 QQNT 树
+//! 4. 读 Files/versions/config.json 的 curVersion,挪到 versions/<ver>/,写 current.txt
+//! 5. 成功才删安装包;7zr 不在就从官方 Release 下到 components/7za/
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use async_trait::async_trait;
 
@@ -68,8 +68,9 @@ pub const NCLATEST_QQ_VER_URL: &str = "https://nclatest.znin.net/get_qq_ver";
 const PIN_LINUX_QQ_VERSION: &str = "3.2.25-45758";
 const PIN_LINUX_QQ_HASH: &str = "7516007c";
 
-/// Windows QQNT 安装信息所在注册表子键(legacy PathFunc.get_qq_path)
-const QQ_REGISTRY_SUBKEY: &str = r"SOFTWARE\WOW6432Node\Tencent\QQNT";
+/// Windows QQNT 安装信息所在注册表子键(legacy PathFunc.get_qq_path)。
+/// 启动链路找系统 QQ 用的是同一个键,别在别处再写一遍字面量
+pub const QQ_REGISTRY_SUBKEY: &str = r"SOFTWARE\WOW6432Node\Tencent\QQNT";
 
 /// 包格式(rootless 模式只需要 dpkg / rpm 两种)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,8 +79,120 @@ enum PackageFormat {
     Rpm,
 }
 
-/// UAC 提权失败时给前端的固定文案(InfoBar 直接展示;包已保留,重试不重新下载)
-const QQ_ELEVATION_REQUIRED_MSG: &str = "QQ 安装需要管理员权限。UAC 提权未成功。请退出后右键本程序，选择「以管理员身份运行」，再点一次安装（安装包已保留，不会重新下载）。";
+/// 官方 7zr 单文件:只认 7z 格式,但 `-t#` 能扫出 PE 里内嵌的 7z,够解 QQ 安装包
+const SEVENZR_URL: &str = "https://github.com/ip7z/7zip/releases/download/26.02/7zr.exe";
+const SEVENZR_SHA256: &str = "56b8cc9f4971cef253644fafe54063ed7fdca551d4dee0f8c6baa81b855acd72";
+
+/// 侧装布局:<qq_root>/current.txt 一行版本号,<qq_root>/versions/<ver>/QQ.exe
+const MANAGED_CURRENT_FILE: &str = "current.txt";
+const MANAGED_VERSIONS_DIR: &str = "versions";
+/// 侧装根在 components 下的目录名;解包安装、启动找 QQ、启动前提醒都按这个拼
+pub const MANAGED_QQ_DIR_NAME: &str = "QQ";
+/// 解包暂存目录前缀;上次中断留下的同前缀目录开装前一并清掉
+const EXTRACT_STAGING_PREFIX: &str = "_extract_staging_";
+
+/// 解一次 1.2GB 的树,机械盘上也够
+const SEVENZIP_TIMEOUT: Duration = Duration::from_secs(1800);
+
+/// components 目录下的侧装 QQ 根。调用方只有 components 根时用这个,
+/// 别自己 join("QQ") —— 目录名改起来只有一处
+pub fn managed_qq_root(components_dir: &Path) -> PathBuf {
+    components_dir.join(MANAGED_QQ_DIR_NAME)
+}
+
+/// 侧装 QQ 的当前版本目录(含 QQ.exe)。current.txt 缺失或指向的目录没有 QQ.exe 都算没装
+pub fn managed_qq_current_dir(qq_root: &Path) -> Option<PathBuf> {
+    let raw = std::fs::read_to_string(qq_root.join(MANAGED_CURRENT_FILE)).ok()?;
+    let ver = raw.trim();
+    if ver.is_empty() {
+        return None;
+    }
+    let dir = qq_root
+        .join(MANAGED_VERSIONS_DIR)
+        .join(sanitize_qq_version_for_filename(ver));
+    dir.join("QQ.exe").is_file().then_some(dir)
+}
+
+/// 从 `7z l -t#` 的输出里挑最大的内嵌 7z(条目名形如 `4.7z`),那个才是 QQ 本体
+fn pick_embedded_7z_payload(listing: &str) -> Option<String> {
+    listing
+        .lines()
+        .filter_map(|line| {
+            let mut tokens = line.split_whitespace().rev();
+            let name = tokens.next()?;
+            let stem = name.strip_suffix(".7z")?;
+            if stem.is_empty() || !stem.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            let _packed = tokens.next()?;
+            let size: u64 = tokens.next()?.parse().ok()?;
+            Some((size, name.to_string()))
+        })
+        .max_by_key(|(size, _)| *size)
+        .map(|(_, name)| name)
+}
+
+/// 跑一次 7z,非 0 退出带上输出尾巴报错
+async fn run_sevenzip(
+    host: &dyn Host,
+    exe: &Path,
+    args: &[String],
+    step: &'static str,
+) -> Result<String, ActionError> {
+    let mut cmd = HostCommand::new(exe.to_string_lossy().to_string());
+    for arg in args {
+        cmd = cmd.arg(arg.clone());
+    }
+    let out = host.run_to_string(cmd.timeout(SEVENZIP_TIMEOUT)).await?;
+    if !out.success() {
+        let detail = if out.stderr.trim().is_empty() {
+            out.stdout.trim()
+        } else {
+            out.stderr.trim()
+        };
+        let tail: String = detail
+            .chars()
+            .rev()
+            .take(600)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        return Err(ActionError::install_step(
+            step,
+            format!("7z exit={:?}: {tail}", out.exit_code),
+        ));
+    }
+    Ok(out.stdout)
+}
+
+/// 删目录;被占用(QQ 还开着)时给能看懂的话
+async fn remove_managed_dir(dir: &Path) -> Result<(), ActionError> {
+    match tokio::fs::remove_dir_all(dir).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(ActionError::other(format!(
+            "删不掉 {}：{e}。这个版本的 QQ 可能还开着，先停掉用它的 Bot 再试",
+            dir.display()
+        ))),
+    }
+}
+
+/// 清掉上次中断留下的解包暂存目录,best-effort
+async fn clear_stale_staging(qq_root: &Path) {
+    let Ok(mut rd) = tokio::fs::read_dir(qq_root).await else {
+        return;
+    };
+    while let Ok(Some(entry)) = rd.next_entry().await {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(EXTRACT_STAGING_PREFIX)
+        {
+            let _ = tokio::fs::remove_dir_all(entry.path()).await;
+        }
+    }
+}
 
 /// 版本号清洗成文件名安全片段:只留 [A-Za-z0-9._-],其它变 _,空串变 unknown
 fn sanitize_qq_version_for_filename(version: &str) -> String {
@@ -109,26 +222,8 @@ fn windows_installer_cache_path(tmp_dir: &HostPath, version: &str) -> HostPath {
 }
 
 /// 缓存安装包的本地文件系统路径(Windows host 上 tokio::fs 直接可用)
-fn windows_installer_local_path(tmp_dir: &HostPath, version: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(
-        windows_installer_cache_path(tmp_dir, version).render(PathStyle::Windows),
-    )
-}
-
-/// HostError → ActionError:提权失败换成固定中文文案,其余原样转 Host 变体
-fn map_windows_install_error(err: HostError) -> ActionError {
-    match err {
-        HostError::ElevationFailed { .. } => ActionError::other(QQ_ELEVATION_REQUIRED_MSG),
-        other => other.into(),
-    }
-}
-
-/// Windows QQNT 卸载器相对安装根的固定文件名(NSIS,实测在安装根目录下)
-const WINDOWS_UNINSTALLER_NAME: &str = "Uninstall.exe";
-
-/// 安装根拼出卸载器完整路径(与 detect 的注册表 Install 值同源)
-fn windows_uninstaller_path(install_root: &HostPath) -> HostPath {
-    install_root.join(WINDOWS_UNINSTALLER_NAME)
+fn windows_installer_local_path(tmp_dir: &HostPath, version: &str) -> PathBuf {
+    PathBuf::from(windows_installer_cache_path(tmp_dir, version).render(PathStyle::Windows))
 }
 
 /// Linux QQ 一次安装解析到的发布信息
@@ -147,7 +242,7 @@ pub struct QQComponent {
     pub version: String,
     /// pin 的腾讯 CDN hash 段(如 "7516007c")
     pub url_hash_segment: String,
-    /// 安装根目录(对齐官方 $HOME/Napcat)
+    /// 安装根目录:Linux 对齐官方 $HOME/Napcat;Windows 是侧装根 components/QQ
     pub install_base_dir: HostPath,
     /// 期望 SHA256(可选,腾讯不提供官方 SHA256,通常为 None)
     pub expected_sha256: Option<String>,
@@ -816,12 +911,42 @@ impl QQComponent {
 
     // Windows 本机实装
 
-    /// Windows detect:注册表 HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT 的
-    /// Install 值拿安装根,新版 QQNT 把客户端按版本分目录放在
-    /// versions/<curVersion>/ 下,版本号写在 versions/config.json 的
-    /// curVersion,旧版 QQ 是扁平的 resources/app/package.json,两种布局
-    /// 都试一遍
+    fn windows_qq_root(&self) -> PathBuf {
+        PathBuf::from(self.install_base_dir.render(PathStyle::Windows))
+    }
+
+    /// 侧装的 7zr 放在 QQ 根的兄弟目录 components/7za/
+    fn managed_sevenzr_path(&self) -> PathBuf {
+        let root = self.windows_qq_root();
+        root.parent().unwrap_or(&root).join("7za").join("7zr.exe")
+    }
+
+    /// Windows detect:先认侧装 current;没有再回落注册表里的系统 QQ。
+    /// 系统 QQ 只拿来报「已安装」和兜底启动,安装 / 卸载都不碰它
     async fn detect_windows(
+        &self,
+        host: &dyn Host,
+    ) -> Result<Option<DetectedVersion>, ActionError> {
+        if let Some(dir) = managed_qq_current_dir(&self.windows_qq_root()) {
+            // QQ 目录树自带 versions/config.json,版本号在那里。这个 versions
+            // 是 QQ 的布局,不是侧装外层那个 MANAGED_VERSIONS_DIR,别混用常量
+            let cfg = dir.join("versions").join("config.json");
+            let version = tokio::fs::read(&cfg)
+                .await
+                .ok()
+                .and_then(|b| parse_json_string_field(&b, "curVersion"))
+                .unwrap_or_else(|| "unknown".to_string());
+            return Ok(Some(DetectedVersion {
+                version,
+                source: dir.display().to_string(),
+            }));
+        }
+        self.detect_windows_system(host).await
+    }
+
+    /// 系统 QQ:注册表 Install 拿安装根,新布局 versions/config.json 的 curVersion,
+    /// 旧布局扁平 resources/app/package.json,两种都试
+    async fn detect_windows_system(
         &self,
         host: &dyn Host,
     ) -> Result<Option<DetectedVersion>, ActionError> {
@@ -890,15 +1015,14 @@ impl QQComponent {
         }
     }
 
-    /// Windows install:拉 pcConfig.json 拿 NSIS 安装包地址 → UrlSign(如需)
-    /// → 缓存目录切片下载(已有完整包则跳过)→ UAC 提权跑 installer.exe /s
-    /// → 只有安装成功才删缓存包(对齐 legacy QQInstall,包不丢)
+    /// Windows install:下安装包 → 7zr 解出 QQNT 树 → 落到侧装 versions/<ver>/。
+    /// 不跑安装器,用户自己装的 QQ 不受影响;只有成功才删缓存包
     async fn install_windows(
         &self,
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
         ctx.info("准备获取 QQ Windows 安装器").await;
 
         // Step 1:拉 pcConfig.json 解析下载地址;gtimg 裸链先 UrlSign
@@ -912,7 +1036,7 @@ impl QQComponent {
             .await;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // Step 2:下载 NSIS 安装包到稳定缓存;已有完整 exe 直接复用
+        // Step 2:下载安装包到稳定缓存;已有完整 exe 直接复用
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "download QQ installer".into(),
@@ -942,125 +1066,245 @@ impl QQComponent {
         }
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // Step 3:UAC 提权静默安装
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+
+        // Step 3:解包工具
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
-            message: "run installer /s".into(),
+            message: "prepare 7zr".into(),
         })
         .await;
-        let installer = local_exe.to_string_lossy().to_string();
-        ctx.info(format!("运行 QQ 静默安装器: {installer}")).await;
-        let cmd = HostCommand::new(installer)
-            .arg("/s")
-            .elevated()
-            .timeout(std::time::Duration::from_secs(600));
-        let run_result = host.run_to_string(cmd).await;
-        match run_result {
-            Ok(out) if out.success() => {
-                // 只有装成功才清缓存;.part 半成品由下载层 rename 掉
-                let _ = tokio::fs::remove_file(&local_exe).await;
-            }
-            Ok(out) => {
-                // 安装器非 0:保留安装包原样报错,用户重试不用重新下载
-                return Err(ActionError::install_step(
-                    "qq_silent_install",
-                    format!(
-                        "installer exit={:?} stderr={}",
-                        out.exit_code,
-                        out.stderr.trim()
-                    ),
-                ));
-            }
-            Err(e) => return Err(map_windows_install_error(e)),
-        }
-        ctx.info("QQ Windows 静默安装完成").await;
+        let sevenzip = self.ensure_sevenzip(ctx, 3).await?;
+        ctx.info(format!("解包工具: {}", sevenzip.display())).await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
+
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+
+        // Step 4:解包落盘
+        ctx.emit(ProgressKind::StepBegin {
+            step: 4,
+            message: "extract QQ".into(),
+        })
+        .await;
+        let qq_root = self.windows_qq_root();
+        tokio::fs::create_dir_all(&qq_root)
+            .await
+            .map_err(|e| ActionError::other(format!("创建 {} 失败: {e}", qq_root.display())))?;
+        clear_stale_staging(&qq_root).await;
+        let staging = qq_root.join(format!("{EXTRACT_STAGING_PREFIX}{}", std::process::id()));
+        let placed = self
+            .extract_and_place(host, ctx, &sevenzip, &local_exe, &qq_root, &staging)
+            .await;
+        let _ = tokio::fs::remove_dir_all(&staging).await;
+        let version = placed?;
+
+        // 只有装成功才清缓存;失败保留,重试不用重新下载
+        let _ = tokio::fs::remove_file(&local_exe).await;
+        ctx.info(format!(
+            "QQ {version} 已解包到 {}",
+            qq_root.join(MANAGED_VERSIONS_DIR).join(&version).display()
+        ))
+        .await;
+        ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
 
-    /// Windows uninstall:注册表拿安装根 → 提权跑 NSIS 卸载器 Uninstall.exe
-    /// `/S _?=<root>` 静默卸载并等退出码。_?=<root> 让卸载器在原路径原地执行
-    /// (NSIS 默认复制自身到 %TEMP% 异步跑,原进程秒退、退出码不可靠),
-    /// 与 install 的 elevated /s 链路对称。未装(注册表无 Install)按幂等成功
+    /// 7zr:侧装的 → 本机 7-Zip(完整版同样认 `-t#`)→ 下官方 7zr 到 components/7za/
+    async fn ensure_sevenzip(&self, ctx: &ActionCtx, step: u32) -> Result<PathBuf, ActionError> {
+        let managed = self.managed_sevenzr_path();
+        if managed.is_file() {
+            return Ok(managed);
+        }
+        for var in ["ProgramFiles", "ProgramW6432"] {
+            if let Some(dir) = std::env::var_os(var) {
+                let exe = PathBuf::from(dir).join("7-Zip").join("7z.exe");
+                if exe.is_file() {
+                    return Ok(exe);
+                }
+            }
+        }
+        if let Some(parent) = managed.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| ActionError::other(format!("创建 {} 失败: {e}", parent.display())))?;
+        }
+        ctx.info("下载 7zr.exe").await;
+        let mirrors = ncd_network::build_mirror_urls(SEVENZR_URL, None);
+        DownloadHelper::new()?
+            .download_with_mirrors_no_chunk(&mirrors, &managed, Some(SEVENZR_SHA256), ctx, step)
+            .await?;
+        Ok(managed)
+    }
+
+    /// 抠出内嵌 7z → 解出 Files/ → 挪到 versions/<curVersion>/ → 写 current.txt。返回版本号
+    async fn extract_and_place(
+        &self,
+        host: &dyn Host,
+        ctx: &ActionCtx,
+        sevenzip: &Path,
+        installer: &Path,
+        qq_root: &Path,
+        staging: &Path,
+    ) -> Result<String, ActionError> {
+        let installer_arg = installer.to_string_lossy().to_string();
+        let carve_dir = staging.join("carve");
+        let out_dir = staging.join("out");
+
+        let listing = run_sevenzip(
+            host,
+            sevenzip,
+            &[
+                "l".into(),
+                "-t#".into(),
+                "-sccUTF-8".into(),
+                installer_arg.clone(),
+            ],
+            "qq_list_payload",
+        )
+        .await?;
+        let payload = pick_embedded_7z_payload(&listing).ok_or_else(|| {
+            ActionError::install_step("qq_list_payload", "安装包里没找到内嵌的 7z，格式可能变了")
+        })?;
+
+        ctx.info(format!("抠出安装包内的 {payload}")).await;
+        run_sevenzip(
+            host,
+            sevenzip,
+            &[
+                "e".into(),
+                "-t#".into(),
+                "-y".into(),
+                "-bso0".into(),
+                "-bsp0".into(),
+                format!("-o{}", carve_dir.display()),
+                installer_arg,
+                payload.clone(),
+            ],
+            "qq_carve_payload",
+        )
+        .await?;
+
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+        ctx.info("解包 QQ（约 1.2GB，需要十几秒到几分钟）").await;
+        run_sevenzip(
+            host,
+            sevenzip,
+            &[
+                "x".into(),
+                "-y".into(),
+                "-bso0".into(),
+                "-bsp0".into(),
+                format!("-o{}", out_dir.display()),
+                carve_dir.join(&payload).to_string_lossy().to_string(),
+            ],
+            "qq_extract",
+        )
+        .await?;
+        let _ = tokio::fs::remove_dir_all(&carve_dir).await;
+
+        let files = out_dir.join("Files");
+        if !files.join("QQ.exe").is_file() {
+            return Err(ActionError::install_step(
+                "qq_extract",
+                "解包结果里没有 Files/QQ.exe，安装包格式可能变了",
+            ));
+        }
+        let cfg = tokio::fs::read(files.join("versions").join("config.json"))
+            .await
+            .map_err(|e| {
+                ActionError::install_step(
+                    "qq_extract",
+                    format!("读 versions/config.json 失败: {e}"),
+                )
+            })?;
+        let version = parse_json_string_field(&cfg, "curVersion")
+            .map(|v| sanitize_qq_version_for_filename(&v))
+            .ok_or_else(|| {
+                ActionError::install_step("qq_extract", "versions/config.json 缺 curVersion")
+            })?;
+
+        let versions_dir = qq_root.join(MANAGED_VERSIONS_DIR);
+        tokio::fs::create_dir_all(&versions_dir)
+            .await
+            .map_err(|e| {
+                ActionError::other(format!("创建 {} 失败: {e}", versions_dir.display()))
+            })?;
+        let dest = versions_dir.join(&version);
+        remove_managed_dir(&dest).await?;
+        tokio::fs::rename(&files, &dest)
+            .await
+            .map_err(|e| ActionError::other(format!("放置 QQ 到 {} 失败: {e}", dest.display())))?;
+        tokio::fs::write(qq_root.join(MANAGED_CURRENT_FILE), format!("{version}\n"))
+            .await
+            .map_err(|e| ActionError::other(format!("写 current.txt 失败: {e}")))?;
+
+        // 旧版本尽量清掉;还开着的删不动就留着,下次再清
+        if let Ok(mut rd) = tokio::fs::read_dir(&versions_dir).await {
+            while let Ok(Some(entry)) = rd.next_entry().await {
+                if entry.file_name().to_string_lossy() != version {
+                    let _ = tokio::fs::remove_dir_all(entry.path()).await;
+                }
+            }
+        }
+        Ok(version)
+    }
+
+    /// Windows uninstall:只删侧装树。只有系统 QQ 时报错说明,不去跑它的卸载器
     async fn uninstall_windows(
         &self,
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        ctx.emit(ProgressKind::Started { total_steps: 2 }).await;
-
-        // Step 1:注册表定位安装根与卸载器
+        ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
+        let qq_root = self.windows_qq_root();
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
-            message: "locate QQNT uninstaller".into(),
+            message: format!("remove {}", qq_root.display()),
         })
         .await;
-        let Some(install_root) = self.query_windows_install_root(host).await? else {
-            // 没装过:卸载目标态已满足,按成功返回(幂等)
-            ctx.info("QQ 未安装(注册表无 QQNT Install 项),无需卸载")
-                .await;
-            ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
-            ctx.emit(ProgressKind::Finished { ok: true }).await;
-            return Ok(());
-        };
-        let uninstaller = windows_uninstaller_path(&install_root);
-        let uninstaller_local = std::path::PathBuf::from(uninstaller.render(PathStyle::Windows));
-        if !uninstaller_local.is_file() {
-            return Err(ActionError::other(format!(
-                "QQNT 安装目录存在但找不到卸载器: {}",
-                uninstaller_local.display()
-            )));
-        }
-        ctx.info(format!("定位到 QQ 卸载器: {}", uninstaller_local.display()))
-            .await;
-        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
-
-        // Step 2:提权静默卸载;_?=<root> 保证原进程执行、退出码真实
-        ctx.emit(ProgressKind::StepBegin {
-            step: 2,
-            message: "run uninstaller /S".into(),
-        })
-        .await;
-        let root_str = install_root.render(PathStyle::Windows);
-        let cmd = HostCommand::new(uninstaller_local.to_string_lossy().to_string())
-            .arg("/S")
-            .arg(format!("_?={root_str}"))
-            .elevated()
-            .timeout(std::time::Duration::from_secs(600));
-        let run_result = host.run_to_string(cmd).await;
-        match run_result {
-            Ok(out) if out.success() => {
-                // NSIS 卸载器退出后目录可能还剩少量延迟删除的残留,不阻塞流程;
-                // 注册表键由卸载器自己清理,detect 会随之变未安装
-                ctx.info("QQ Windows 静默卸载完成").await;
-            }
-            Ok(out) => {
-                return Err(ActionError::install_step(
-                    "qq_silent_uninstall",
-                    format!(
-                        "uninstaller exit={:?} stderr={}",
-                        out.exit_code,
-                        out.stderr.trim()
-                    ),
+        let versions_dir = qq_root.join(MANAGED_VERSIONS_DIR);
+        let has_managed = versions_dir.is_dir() || qq_root.join(MANAGED_CURRENT_FILE).is_file();
+        if !has_managed {
+            if self.query_windows_install_root(host).await?.is_some() {
+                return Err(ActionError::other(
+                    "这台电脑上的 QQ 是你自己装的，这里不会卸载它；需要的话请在 Windows 设置里卸载",
                 ));
             }
-            Err(e) => return Err(map_windows_install_error(e)),
+            ctx.info("没有装 QQ，无需卸载").await;
+        } else {
+            let _ = tokio::fs::remove_file(qq_root.join(MANAGED_CURRENT_FILE)).await;
+            remove_managed_dir(&versions_dir).await?;
+            clear_stale_staging(&qq_root).await;
         }
-        ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
 
-    /// Windows verify:注册表能查到 Install,且 detect 能解析出真实版本号
-    /// (新布局 versions/config.json 或旧布局 package.json 任一命中)
+    /// Windows verify:侧装 current 有 QQ.exe,或回落的系统 QQ 注册表在;再看能否读出版本号
     async fn verify_windows(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
-        let install_root = self.query_windows_install_root(host).await?;
-        let mut report = VerifyReport::ok().with_check(
-            "registry Install value present",
-            install_root.is_some(),
-            install_root.as_ref().map(|p| format!("{p}")),
-        );
+        let mut report = match managed_qq_current_dir(&self.windows_qq_root()) {
+            Some(dir) => VerifyReport::ok().with_check(
+                "managed QQ.exe present",
+                true,
+                Some(dir.join("QQ.exe").display().to_string()),
+            ),
+            None => {
+                let install_root = self.query_windows_install_root(host).await?;
+                VerifyReport::ok().with_check(
+                    "system QQ registry Install value present",
+                    install_root.is_some(),
+                    install_root.as_ref().map(|p| format!("{p}")),
+                )
+            }
+        };
         if let Ok(Some(v)) = self.detect(host).await {
             report = report.with_check(
                 "qq version detected",
@@ -1577,25 +1821,44 @@ mod tests {
     }
 
     #[test]
-    fn map_elevation_failed_uses_admin_relaunch_copy() {
-        let err = map_windows_install_error(HostError::ElevationFailed {
-            locality: "local",
-            reason: "user cancelled UAC".into(),
-        });
-        let text = err.to_string();
-        assert!(text.contains("以管理员身份运行"));
-        assert!(text.contains("不会重新下载"));
+    fn pick_embedded_7z_payload_takes_largest_7z_entry() {
+        // 7zr 26.02 对 QQ_9.9.36_260924_x64_01.exe 跑 `l -t#` 的真实输出
+        let listing = "\
+   Date      Time    Attr         Size   Compressed  Name
+------------------- ----- ------------ ------------  ------------------------
+                    .....       132120       132120  1
+                    .....        28447        28447  2.7z
+                    .....            1            1  3
+                    .....    327637756    327637756  4.7z
+                    .....       855789       855789  5.7z
+                    .....      1792399      1792399  6
+------------------- ----- ------------ ------------  ------------------------
+                             330446512    330446512  6 files
+";
+        assert_eq!(pick_embedded_7z_payload(listing).as_deref(), Some("4.7z"));
+        assert_eq!(pick_embedded_7z_payload("no archives here"), None);
     }
 
     #[test]
-    fn windows_uninstaller_path_joins_under_install_root() {
-        let root = HostPath::from_windows(r"C:\Program Files\Tencent\QQNT");
-        let p = windows_uninstaller_path(&root);
-        assert!(p.as_posix().ends_with("/Uninstall.exe"));
-        assert_eq!(
-            p.render(PathStyle::Windows),
-            r"C:\Program Files\Tencent\QQNT\Uninstall.exe"
-        );
+    fn managed_qq_current_dir_requires_qq_exe() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        assert!(managed_qq_current_dir(root).is_none());
+
+        std::fs::write(root.join(MANAGED_CURRENT_FILE), "9.9.36-53644\n").unwrap();
+        let dir = root.join(MANAGED_VERSIONS_DIR).join("9.9.36-53644");
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(managed_qq_current_dir(root).is_none());
+
+        std::fs::write(dir.join("QQ.exe"), b"").unwrap();
+        assert_eq!(managed_qq_current_dir(root), Some(dir));
+    }
+
+    #[test]
+    fn managed_qq_current_dir_sanitizes_pointer() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join(MANAGED_CURRENT_FILE), r"..\..\evil").unwrap();
+        assert!(managed_qq_current_dir(tmp.path()).is_none());
     }
 
     #[test]

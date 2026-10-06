@@ -26,7 +26,7 @@ pub struct FileSystemRuntimeLaunchPlanner {
     /// None 时回落到 <runtime_root>/snowluma注意:这与 NapCat 的
     /// runtime_root 不同——NapCat 直接装在 runtime 根,SnowLuma 装在子目录
     snowluma_runtime_root: Option<PathBuf>,
-    /// 可选 QQ 安装目录(含 QQ.exe)。生产默认 None,走注册表解析;
+    /// 可选 QQ 安装目录(含 QQ.exe)。生产默认 None,侧装 components/QQ 优先、注册表兜底;
     /// 测试注入假路径,避免 CI runner 依赖本机 QQ。
     qq_install_path: Option<PathBuf>,
 }
@@ -228,7 +228,7 @@ pub async fn build_runtime_launch_plan(
 /// 1. 从 BotConfig.bot.snowluma_start_mode 读出 start_mode;缺省(None)
 ///    回退到 SnowLumaStartMode::ColdStart(设计文档约定的默认行为)
 /// 2. 任何模式都校验 <runtime_root>/node.exe 是常规文件存在
-/// 3. ColdStart 解析 QQ install path(Windows 注册表);HotStart 跳过
+/// 3. ColdStart 解析 QQ install path(侧装优先,注册表兜底);HotStart 跳过
 async fn build_snowluma_launch_plan(
     config: &BotConfig,
     snowluma_runtime_root: &Path,
@@ -243,7 +243,12 @@ async fn build_snowluma_launch_plan(
     let _node_path = resolve_snowluma_node_exe(snowluma_runtime_root).await?;
 
     let qq_install_path = match start_mode {
-        SnowLumaStartMode::ColdStart => Some(resolve_qq_install_path()?),
+        // SnowLuma 装在 components/SnowLuma,父目录就是 components
+        SnowLumaStartMode::ColdStart => Some(resolve_qq_install_path(
+            snowluma_runtime_root
+                .parent()
+                .unwrap_or(snowluma_runtime_root),
+        )?),
         SnowLumaStartMode::HotStart => {
             // HotStart 自带 PID 自动匹配语义(backend Phase A 按 qq_id 扫进程),
             // 这里不需要 QQ install path:用户手动启动了 QQ,QQ 路径已经定了
@@ -302,13 +307,17 @@ pub async fn build_napcat_launch_plan_with_qq_install_path(
     build_napcat_launch_plan_inner(bot_id, config, runtime_root.as_ref(), qq_install.as_ref()).await
 }
 
+/// 不带 qq_install_path 覆盖的 NapCat 启动计划。
+/// `components_dir` 是这台主机的组件根(DataPaths::components_dir):
+/// NapCat 装在它的 NapCatQQ 子目录,侧装 QQ 在 QQ 子目录,两者同源
 pub async fn build_napcat_launch_plan(
     bot_id: &BotId,
     config: &BotConfig,
-    runtime_root: impl AsRef<Path>,
+    components_dir: impl AsRef<Path>,
 ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    let qq_install = resolve_qq_install_path()?;
-    build_napcat_launch_plan_inner(bot_id, config, runtime_root.as_ref(), &qq_install).await
+    let components_dir = components_dir.as_ref();
+    let qq_install = resolve_qq_install_path(components_dir)?;
+    build_napcat_launch_plan_inner(bot_id, config, components_dir, &qq_install).await
 }
 
 async fn build_napcat_launch_plan_inner(
@@ -461,14 +470,37 @@ fn ensure_runtime_file(path: &Path, message: &str) -> Result<(), RuntimeLaunchPl
     }
 }
 
+/// 本机冷启动会用哪份 QQ,和 resolve_qq_install_path 同一套优先级
+pub fn local_qq_source(components_dir: &Path) -> ncd_domain::LocalQqSource {
+    if ncd_component::managed_qq_current_dir(&ncd_component::managed_qq_root(components_dir))
+        .is_some()
+    {
+        ncd_domain::LocalQqSource::Managed
+    } else if resolve_system_qq_install_path().is_ok_and(|p| p.join("QQ.exe").is_file()) {
+        ncd_domain::LocalQqSource::System
+    } else {
+        ncd_domain::LocalQqSource::Missing
+    }
+}
+
+/// 侧装 components/QQ 的 current 优先;没有才用用户自己装的系统 QQ
+fn resolve_qq_install_path(components_dir: &Path) -> Result<PathBuf, RuntimeLaunchPlanError> {
+    if let Some(dir) =
+        ncd_component::managed_qq_current_dir(&ncd_component::managed_qq_root(components_dir))
+    {
+        return Ok(dir);
+    }
+    resolve_system_qq_install_path()
+}
+
 #[cfg(windows)]
-fn resolve_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
+fn resolve_system_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
     use winreg::RegKey;
     use winreg::enums::HKEY_LOCAL_MACHINE;
 
     let hkml = RegKey::predef(HKEY_LOCAL_MACHINE);
     let key = hkml
-        .open_subkey(r"SOFTWARE\WOW6432Node\Tencent\QQNT")
+        .open_subkey(ncd_component::QQ_REGISTRY_SUBKEY)
         .map_err(|error| RuntimeLaunchPlanError::UnsupportedPlatform(error.to_string()))?;
     let install: String = key
         .get_value("Install")
@@ -477,7 +509,7 @@ fn resolve_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
 }
 
 #[cfg(not(windows))]
-fn resolve_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
+fn resolve_system_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
     Err(RuntimeLaunchPlanError::UnsupportedPlatform(
         "non-windows platform does not support QQ registry lookup".to_string(),
     ))

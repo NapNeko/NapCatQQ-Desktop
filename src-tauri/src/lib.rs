@@ -891,6 +891,7 @@ pub fn run() {
             commands::config_transfer::list_pending_framework_config_restores,
             commands::config_transfer::retry_framework_config_restore,
             commands::components::list_components,
+            commands::components::local_qq_source,
             commands::components::detect_component,
             commands::components::probe_local_node_candidates,
             commands::components::probe_node_binary_version,
