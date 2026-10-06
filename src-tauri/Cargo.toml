@@ -58,7 +58,19 @@ windows = { version = "0.61", features = [
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Variant",
     "Win32_UI_WindowsAndMessaging",
+    # 原生托盘面板（Direct2D + DirectWrite）
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_HiDpi",
+    "Win32_System_LibraryLoader",
 ] }
+windows-numerics = "0.2"
 tauri-winrt-notification = "0.7"
 # WebView 调度直接调 WebView2（进程归属、可见性、内存级别）；跟 wry 用的版本走，别单独升
 webview2-com = "0.38"

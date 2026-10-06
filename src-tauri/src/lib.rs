@@ -35,6 +35,14 @@ pub mod runtime;
 pub mod single_instance;
 pub mod snowluma_offline_listener;
 pub mod tray_icon;
+#[cfg(windows)]
+pub mod native_panel;
+#[cfg(windows)]
+pub mod tray_panel_native;
+#[cfg(windows)]
+pub mod chat_tray_panel_native;
+#[cfg(windows)]
+pub mod windows_ui;
 pub mod tray_panel;
 pub mod tray_summary;
 pub mod webview_scheduler;
@@ -531,6 +539,14 @@ pub fn run() {
                             "ncd::event_emit",
                             &format!("FAILED to serialize event {event_name}"),
                         );
+                    }
+                    // Bot 状态变化时，开着的原生托盘面板跟着刷一轮
+                    use ncd_domain::domain_event::DomainEventKind as EK;
+                    if matches!(event.kind(), EK::BotStateChanged | EK::BotStatusChanged | EK::BotProcessExited) {
+                        #[cfg(windows)]
+                        tray_panel_native::refresh_if_visible(&handle);
+                        #[cfg(windows)]
+                        chat_tray_panel_native::refresh_if_visible(&handle);
                     }
                 }
             });

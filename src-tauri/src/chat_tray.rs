@@ -153,18 +153,33 @@ async fn create(app: &AppHandle, id: &str, row: &ChatAccountStatus, icon: Image<
         .on_tray_icon_event(move |tray, event| {
             let app = tray.app_handle().clone();
             match event {
-                TrayIconEvent::Enter { position, .. } => crate::chat_tray_panel::enter(app, bot.clone(), qq.clone(), position),
-                TrayIconEvent::Leave { .. } => crate::chat_tray_panel::cancel_hover(&app),
+                TrayIconEvent::Enter { position, .. } => {
+                    #[cfg(windows)]
+                    crate::chat_tray_panel_native::show(&app, bot.clone(), qq.clone(), (position.x as i32, position.y as i32), false);
+                }
+                TrayIconEvent::Leave { .. } => {
+                    #[cfg(windows)]
+                    crate::chat_tray_panel_native::hide(&app);
+                }
                 TrayIconEvent::Click { button, button_state: MouseButtonState::Up, position, .. } => {
-                    crate::chat_tray_panel::cancel_hover(&app);
+                    #[cfg(windows)]
+                    crate::chat_tray_panel_native::hide(&app);
                     let bot = bot.clone(); let qq = qq.clone();
                     tauri::async_runtime::spawn(async move {
-                        let result = match button {
-                            MouseButton::Right => crate::chat_tray_panel::show(&app, bot, qq, position, true).await,
-                            MouseButton::Left => crate::chat_window::open_from_tray(app, bot, qq, None).await,
-                            _ => Ok(()),
-                        };
-                        if let Err(e) = result { tracing::warn!("chat tray action: {e}"); }
+                        match button {
+                            MouseButton::Right => {
+                                #[cfg(windows)]
+                                crate::chat_tray_panel_native::show(&app, bot, qq, (position.x as i32, position.y as i32), true);
+                                #[cfg(not(windows))]
+                                let _ = crate::chat_tray_panel::show(&app, bot, qq, position, true).await;
+                            }
+                            MouseButton::Left => {
+                                if let Err(e) = crate::chat_window::open_from_tray(app, bot, qq, None).await {
+                                    tracing::warn!("chat tray action: {e}");
+                                }
+                            }
+                            _ => {}
+                        }
                     });
                 }
                 _ => {}
@@ -251,6 +266,8 @@ pub fn spawn(app: AppHandle) {
         loop {
             if let Err(e) = refresh(&app).await { tracing::warn!("chat tray: {e}"); }
             crate::chat_tray_panel::refresh(&app).await;
+            #[cfg(windows)]
+            crate::chat_tray_panel_native::refresh_if_visible(&app);
             loop {
                 tokio::select! {
                     _ = state.chat.changed() => {

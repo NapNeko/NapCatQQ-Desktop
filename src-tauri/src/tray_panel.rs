@@ -191,7 +191,7 @@ pub fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent
             });
         }
         MouseButton::Right => {
-            let _ = show_tray_panel_at(&app, *position);
+            crate::tray_panel_native::open(&app, (position.x as i32, position.y as i32));
         }
         _ => {}
     }

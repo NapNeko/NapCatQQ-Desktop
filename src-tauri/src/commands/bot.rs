@@ -10,7 +10,7 @@ use crate::AppState;
 use crate::desktop_consent;
 
 /// 创建 / 启动等关键操作前：未同意当前 Desktop 协议则拒绝。
-fn ensure_desktop_consent(state: &AppState) -> Result<(), String> {
+pub(crate) fn ensure_desktop_consent(state: &AppState) -> Result<(), String> {
     desktop_consent::ensure_accepted(&state.data_root).map_err(|e| e.to_command_string())
 }
 
