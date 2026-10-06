@@ -18,12 +18,13 @@ import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPageNext } from './log/BotLogPage.next';
 import { BotRuntimeMetricsPageNext } from './metrics/BotRuntimeMetricsPage.next';
+import type { AppRoute } from '../../shared/components/next/Sidebar';
 
 type View = 'list' | 'config' | 'log' | 'metrics';
 
 const VIEW_ORDER: ReadonlyArray<View> = ['list', 'config', 'log', 'metrics'];
 
-export function BotPageNext() {
+export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => void } = {}) {
     const [view, setView] = useState<View>('list');
     const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
 
@@ -115,6 +116,7 @@ export function BotPageNext() {
                     }}
                     onBack={goList}
                     onSavedStay={(savedBotId) => setSelectedBotId(savedBotId)}
+                    onNavigate={onNavigate}
                 />
             </PageTransition>
         </div>
@@ -131,6 +133,7 @@ function BotViewContent({
     onViewMetrics,
     onBack,
     onSavedStay,
+    onNavigate,
 }: {
     view: View;
     selectedBotId: string | null;
@@ -141,6 +144,7 @@ function BotViewContent({
     onViewMetrics: (botId: string) => void;
     onBack: () => void;
     onSavedStay: (savedBotId: string) => void;
+    onNavigate?: (route: AppRoute) => void;
 }) {
     switch (view) {
         case 'list':
@@ -150,6 +154,7 @@ function BotViewContent({
                         onConfigureBot={onConfigureBot}
                         onViewLogs={onViewLogs}
                         onViewMetrics={onViewMetrics}
+                        onNavigate={onNavigate}
                     />
                 </RouteErrorBoundary>
             );

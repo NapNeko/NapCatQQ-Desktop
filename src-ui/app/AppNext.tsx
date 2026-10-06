@@ -598,7 +598,7 @@ const RouteContent = memo(function RouteContent({
             body = <BootstrapPanelNext onNavigate={onNavigate} />;
             break;
         case 'bots':
-            body = <BotPageNext />;
+            body = <BotPageNext onNavigate={onNavigate} />;
             break;
         case 'apps':
             body = <AppsPageNext onNavigate={onNavigate} />;

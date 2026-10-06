@@ -50,12 +50,21 @@ import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 import { ImportRemoteBotsDialog } from '../dialogs/ImportRemoteBotsDialog';
 import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
 import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
+import { SystemQqWarningDialog } from '../dialogs/SystemQqWarningDialog';
+import { componentService } from '../../../core/services/component.service';
+import {
+    dismissSystemQqWarning,
+    isSystemQqWarningDismissed,
+    launchesLocalQq,
+} from '../../../core/domain/bot/system-qq-warning';
+import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import gridStyles from './next/botCardGrid.module.css';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
     onViewMetrics: (botId: string) => void;
+    onNavigate?: (route: AppRoute) => void;
 }
 
 function isSnowLumaConsentError(err: unknown) {
@@ -72,6 +81,7 @@ export function BotListPageNext({
     onConfigureBot,
     onViewLogs,
     onViewMetrics,
+    onNavigate,
 }: BotListPageNextProps) {
     const { data: rawBotSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
     const flavorByBot = useBotFlavorMap(rawBotSnapshots);
@@ -114,6 +124,7 @@ export function BotListPageNext({
     const [consentSubmitting, setConsentSubmitting] = useState(false);
     const [consentRetryDecisions, setConsentRetryDecisions] = useState<DriftDecision[] | null>(null);
     const [startingBotId, setStartingBotId] = useState<string | null>(null);
+    const [systemQqBotId, setSystemQqBotId] = useState<string | null>(null);
     const [batchStartPreparing, setBatchStartPreparing] = useState(false);
     const activeConsentBotRef = useRef<string | null>(null);
     const openingConsentBotRef = useRef<string | null>(null);
@@ -226,8 +237,37 @@ export function BotListPageNext({
         }
     }, [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
+    // 配置漂移 → SnowLuma 协议 → start；系统 QQ 提醒点「继续启动」后也从这里接着走
+    const startAfterQqCheck = useCallback(async (botId: string) => {
+        setStartingBotId(botId);
+        let drift: ConfigDrift | null = null;
+        try {
+            drift = await botService.detectConfigDrift(botId);
+        } catch {
+            drift = null;
+        }
+        if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
+            setDriftBotId(botId);
+            setPendingDrift(drift);
+            setStartingBotId(null);
+            return;
+        }
+        startBotDirect(botId).catch(() => undefined);
+    }, [startBotDirect]);
+
+    // 探测失败不拦启动，提醒而已
+    const needsSystemQqWarning = useCallback(async (botId: string) => {
+        const config = configByBot[botId];
+        if (!config || !launchesLocalQq(config) || isSystemQqWarningDismissed()) return false;
+        try {
+            return (await componentService.localQqSource()) === 'system';
+        } catch {
+            return false;
+        }
+    }, [configByBot]);
+
     const handleStartBot = useCallback(async (botId: string) => {
-        // 顺序：Desktop 协议 → Docker 门禁 → 配置漂移 → SnowLuma 协议 → start
+        // 顺序：Desktop 协议 → 运行时 / Docker 门禁 → 系统 QQ 提醒 → 配置漂移 → SnowLuma 协议 → start
         const allowed = await requestDesktopConsent(async () => {
             clearConsentErrorSuppression(botId);
             setStartingBotId(botId);
@@ -253,22 +293,28 @@ export function BotListPageNext({
                 setStartingBotId(null);
                 return;
             }
-            let drift: ConfigDrift | null = null;
-            try {
-                drift = await botService.detectConfigDrift(botId);
-            } catch {
-                drift = null;
-            }
-            if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
-                setDriftBotId(botId);
-                setPendingDrift(drift);
+            if (await needsSystemQqWarning(botId)) {
+                setSystemQqBotId(botId);
                 setStartingBotId(null);
                 return;
             }
-            startBotDirect(botId).catch(() => undefined);
+            await startAfterQqCheck(botId);
         });
         if (!allowed) return;
-    }, [clearConsentErrorSuppression, dockerStartGate, runtimeStartGate, startBotDirect]);
+    }, [clearConsentErrorSuppression, dockerStartGate, needsSystemQqWarning, runtimeStartGate, startAfterQqCheck]);
+
+    const handleSystemQqContinue = useCallback((dismissForever: boolean) => {
+        const botId = systemQqBotId;
+        setSystemQqBotId(null);
+        if (dismissForever) dismissSystemQqWarning();
+        if (botId) startAfterQqCheck(botId).catch(() => undefined);
+    }, [startAfterQqCheck, systemQqBotId]);
+
+    const handleSystemQqInstall = useCallback((dismissForever: boolean) => {
+        setSystemQqBotId(null);
+        if (dismissForever) dismissSystemQqWarning();
+        onNavigate?.('components');
+    }, [onNavigate]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
@@ -598,6 +644,13 @@ export function BotListPageNext({
                     onCancel={handleDriftCancel}
                 />
             )}
+
+            <SystemQqWarningDialog
+                open={!!systemQqBotId}
+                onContinue={handleSystemQqContinue}
+                onInstall={handleSystemQqInstall}
+                onCancel={() => setSystemQqBotId(null)}
+            />
 
             <SnowLumaConsentDialog
                 open={!!consentBotId}

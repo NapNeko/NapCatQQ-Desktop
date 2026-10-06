@@ -9,6 +9,7 @@ import type {
     ComponentId,
     ComponentInfo,
     DependencyPlan,
+    LocalQqSource,
     NodeEnvironmentCandidate,
     NodeProbeResult,
     RequirementPhase,
@@ -23,6 +24,7 @@ import {
     mockComponentCatalog,
     mockDependencyPlan,
     mockDetect,
+    mockLocalQqSource,
     mockRunAction,
     mockRuntimeReadiness,
 } from '../ipc/mock/component.mock';
@@ -103,6 +105,12 @@ export const componentService = {
             });
         }
         return withMockDelay(mockRuntimeReadiness(componentId, hostId), 150);
+    },
+
+    // 本机 Bot 冷启动会用组件页装的 QQ 还是用户自己的 QQ
+    localQqSource: async (): Promise<LocalQqSource> => {
+        if (isTauri) return invoke<LocalQqSource>('local_qq_source');
+        return withMockDelay(mockLocalQqSource(), 150);
     },
 
     // QQ 系统依赖检测（仅 Linux 远端）。

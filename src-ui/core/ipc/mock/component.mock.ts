@@ -12,6 +12,7 @@ import type {
     DependencyNode,
     DependencyPlan,
     DomainEvent,
+    LocalQqSource,
     ProgressEvent,
     RequirementPhase,
     RuntimeReadiness,
@@ -356,6 +357,12 @@ export function mockRuntimeReadiness(root: ComponentId, hostId: string): Runtime
         root: mockNode(root, hostId, []),
         plan: mockDependencyPlan(root, hostId, 'run'),
     };
+}
+
+// 预览按「只有系统 QQ」回答，好让启动前的提醒在浏览器里也能走一遍。
+// 真机上这个值来自组件目录，不受这里影响
+export function mockLocalQqSource(): LocalQqSource {
+    return 'system';
 }
 
 // ─── 假装跑 action：吐进度事件 ─────────────────────────────────────────

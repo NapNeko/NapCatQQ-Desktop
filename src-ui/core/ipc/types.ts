@@ -324,6 +324,7 @@ export type { DependencyTarget } from './generated/domain/DependencyTarget';
 export type { DependencyNode } from './generated/domain/DependencyNode';
 export type { DependencyPlan } from './generated/domain/DependencyPlan';
 export type { RuntimeReadiness } from './generated/domain/RuntimeReadiness';
+export type { LocalQqSource } from './generated/domain/LocalQqSource';
 import type { SnowLumaLinuxPackage } from './generated/domain/SnowLumaLinuxPackage';
 export type { SnowLumaLinuxPackage };
 export type SnowLumaPackage = SnowLumaLinuxPackage;
