@@ -5,14 +5,14 @@
 //! 2. 预置 Python 3.13（uv 在本机 / 远端取不到托管解释器时，由桌面端本地下载后上传）
 //! 3. `uv venv --python 3.13 .venv`
 //! 4. `uv pip install --python .venv neobot-app`
-//! 5. 挑一个未被占用的面板口并种最小配置：data/config.toml 的 [adapter]（mode / host / port）
-//!    与 plugins_data/dashboard/config.toml（host / port）。**这里不写 token**——反向 WS 的 token
+//! 5. 挑一个未被占用的面板口并种最小配置：app/data/config.toml 的 [adapter]（mode / host / port）
+//!    与 app/data/plugins_data/dashboard/config.toml（host / port）。**这里不写 token**——反向 WS 的 token
 //!    是安装后由桌面端补的空串占位，真 token 到「对接 QQ」那一步才写
 //!
 //! 与 AstrBot 的差别：NeoBot 没有 `init` 子命令，配置由桌面端直接写；
-//! 面板配置在 `plugins_data/dashboard/config.toml`（不在 `data/config.toml`）。
+//! 面板配置在 `app/data/plugins_data/dashboard/config.toml`（不在 `app/data/config.toml`）。
 //!
-//! 探测：`data/config.toml` 存在且能读出 `[adapter]` 才算装了；有配置但 `.venv` 里没有
+//! 探测：`app/data/config.toml` 存在且能读出 `[adapter]` 才算装了；有配置但 `.venv` 里没有
 //! `neobot` 入口视为「依赖未同步」，给 `Unusable` 而不是 `NotInstalled`。
 
 use std::time::Duration;
@@ -388,7 +388,7 @@ impl NeoBotComponent {
     }
 
     /// 写 OneBot 反向 WS 与面板配置。
-    /// 面板配置在 `plugins_data/dashboard/config.toml`（与本体 config.toml 解耦）；
+    /// 面板配置在 `app/data/plugins_data/dashboard/config.toml`（与本体 config.toml 解耦）；
     /// 已有文件只补缺失的键，不覆盖用户改过的值。
     async fn seed_config(&self, host: &dyn Host, dashboard_port: u16) -> Result<(), ActionError> {
         self.seed_data_config(host).await?;
@@ -396,20 +396,20 @@ impl NeoBotComponent {
         Ok(())
     }
 
-    /// `data/config.toml` 的 `[adapter]`：只补三个键，其余（含用户自己的模型/API 配置）原样留着
+    /// `app/data/config.toml` 的 `[adapter]`：只补三个键，其余（含用户自己的模型/API 配置）原样留着
     async fn seed_data_config(&self, host: &dyn Host) -> Result<(), ActionError> {
         let path = self.config_toml();
         let existing = read_text(host, &path).await?;
         let mut table = match existing.as_deref() {
             Some(text) if !text.trim().is_empty() => parse_toml(text)
-                .map_err(|e| ActionError::install_step("seed-config", format!("data/config.toml 解析失败：{e}")))?,
+                .map_err(|e| ActionError::install_step("seed-config", format!("app/data/config.toml 解析失败：{e}")))?,
             _ => toml::Table::new(),
         };
         let adapter = table
             .entry(KEY_ADAPTER.to_string())
             .or_insert_with(|| toml::Value::Table(toml::Table::new()));
         let adapter = adapter.as_table_mut().ok_or_else(|| {
-            ActionError::install_step("seed-config", "data/config.toml 的 [adapter] 不是表")
+            ActionError::install_step("seed-config", "app/data/config.toml 的 [adapter] 不是表")
         })?;
         // 模式：只认 onebot（反向 WS 对接的前提）。旧值不是 onebot 时给出提示交给用户，不静默改写
         let current_mode = adapter
@@ -437,7 +437,7 @@ impl NeoBotComponent {
             toml::Value::Integer(i64::from(self.onebot_port)),
         );
         write_text(host, &path, &toml::to_string_pretty(&table).map_err(|e| {
-            ActionError::install_step("seed-config", format!("data/config.toml 渲染失败：{e}"))
+            ActionError::install_step("seed-config", format!("app/data/config.toml 渲染失败：{e}"))
         })?)
         .await
     }
@@ -679,11 +679,11 @@ mod tests {
             NeoBotComponent::new(HostPath::from_posix("/home/u/ncd/apps/neobot/n1"), 8080, 9981);
         assert_eq!(
             comp.config_toml().as_posix(),
-            "/home/u/ncd/apps/neobot/n1/data/config.toml"
+            "/home/u/ncd/apps/neobot/n1/app/data/config.toml"
         );
         assert_eq!(
             comp.dashboard_config().as_posix(),
-            "/home/u/ncd/apps/neobot/n1/plugins_data/dashboard/config.toml"
+            "/home/u/ncd/apps/neobot/n1/app/data/plugins_data/dashboard/config.toml"
         );
         assert_eq!(
             comp.venv_python(Os::Linux).as_posix(),

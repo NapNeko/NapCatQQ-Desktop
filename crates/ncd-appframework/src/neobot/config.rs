@@ -1,13 +1,13 @@
 //! NeoBot 类型化配置：两份 TOML 的对接相关键。
 //!
-//! - `data/config.toml` 的 `[adapter]`：反向 WS 监听地址 / 口 / token（对接必需）
-//! - `plugins_data/dashboard/config.toml`：面板监听地址 / 口（WebUI 口与 OneBot 口是两个口，
+//! - `app/data/config.toml` 的 `[adapter]`：反向 WS 监听地址 / 口 / token（对接必需）
+//! - `app/data/plugins_data/dashboard/config.toml`：面板监听地址 / 口（WebUI 口与 OneBot 口是两个口，
 //!   桌面端要拿真实面板口去开隧道，读不到就会拿实例口去连、必然失败）
 //!
 //! 只声明**对接与开 WebUI 需要**的键，上游其余几百个配置键原样留在文件里不动
 //! （差量写：`toml_patch::patch` 只改有变化的键，保注释与未知键）。
 //!
-//! 热加载：两份都吃热改。`data/config.toml` 改完 `adapter_supervisor` 会
+//! 热加载：两份都吃热改。`app/data/config.toml` 改完 `adapter_supervisor` 会
 //! stop → reconfigure → start 重建监听；面板配置由面板自己读。所以两份都标
 //! `hot_reload = true`，改完不必重启实例。
 
@@ -30,7 +30,7 @@ use super::manifest::{
 pub const DOC_ADAPTER: &str = "adapter";
 pub const DOC_DASHBOARD: &str = "dashboard";
 
-/// 协议 Bot 连过来的反向 WS 设置（`data/config.toml` 的 `[adapter]`）
+/// 协议 Bot 连过来的反向 WS 设置（`app/data/config.toml` 的 `[adapter]`）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct NeoBotAdapterConfig {
@@ -55,7 +55,7 @@ impl Default for NeoBotAdapterConfig {
     }
 }
 
-/// 网页面板设置（`plugins_data/dashboard/config.toml`，平铺键）
+/// 网页面板设置（`app/data/plugins_data/dashboard/config.toml`，平铺键）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct NeoBotDashboardConfig {
@@ -168,8 +168,8 @@ fn config_doc(id: &str, rel: &str, format: AppConfigFormat) -> AppConfigDocument
     AppConfigDocument {
         id: id.to_string(),
         label: match id {
-            DOC_ADAPTER => "OneBot 对接（data/config.toml）".to_string(),
-            _ => "网页面板（plugins_data/dashboard/config.toml）".to_string(),
+            DOC_ADAPTER => "OneBot 对接（app/data/config.toml）".to_string(),
+            _ => "网页面板（app/data/plugins_data/dashboard/config.toml）".to_string(),
         },
         rel_path: rel.to_string(),
         format,
@@ -204,7 +204,7 @@ pub fn parse_neobot_config(
         .and_then(|s| s.text.as_deref());
     if adapter_text.is_none() && dashboard_text.is_none() {
         return Err(AppFrameworkError::Integration(
-            "NeoBot 实例没有 data/config.toml 也没有面板配置".to_string(),
+            "NeoBot 实例没有 app/data/config.toml 也没有面板配置".to_string(),
         ));
     }
     let adapter_table = parse_table(adapter_text)?;
@@ -282,7 +282,7 @@ pub async fn write_neobot_config(
 
 /// 对接（apply_link）路径的写入：面板配置只在文件已存在时写。受管实例首装已
 /// seed 面板文件，照常差量更新；领养项目没装面板插件时不替它新建
-/// `plugins_data/dashboard/config.toml`——新建的文件 rollback 还原不掉，属污染用户目录。
+/// `app/data/plugins_data/dashboard/config.toml`——新建的文件 rollback 还原不掉，属污染用户目录。
 pub async fn write_link_config(
     host: &dyn Host,
     install_dir: &HostPath,
@@ -630,8 +630,8 @@ mod tests {
     fn documents_cover_both_files() {
         let docs = neobot_config_documents();
         assert_eq!(docs.len(), 2);
-        assert_eq!(docs[0].rel_path, "data/config.toml");
-        assert_eq!(docs[1].rel_path, "plugins_data/dashboard/config.toml");
+        assert_eq!(docs[0].rel_path, "app/data/config.toml");
+        assert_eq!(docs[1].rel_path, "app/data/plugins_data/dashboard/config.toml");
         assert!(docs.iter().all(|d| d.format == AppConfigFormat::Toml));
         assert!(docs.iter().all(|d| d.hot_reload));
     }

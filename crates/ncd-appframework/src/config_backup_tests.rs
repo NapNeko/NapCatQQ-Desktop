@@ -12,7 +12,7 @@ struct Node {
     symlink: bool,
 }
 
-struct TestHost {
+pub(crate) struct TestHost {
     id: String,
     nodes: Mutex<BTreeMap<String, Node>>,
     fail_once: Mutex<Option<String>>,
@@ -20,7 +20,7 @@ struct TestHost {
 }
 
 impl TestHost {
-    fn new(id: &str) -> Arc<Self> {
+    pub(crate) fn new(id: &str) -> Arc<Self> {
         let host = Arc::new(Self {
             id: id.into(),
             nodes: Mutex::new(BTreeMap::new()),
@@ -37,7 +37,7 @@ impl TestHost {
         host
     }
 
-    fn mkdir(&self, path: &str) {
+    pub(crate) fn mkdir(&self, path: &str) {
         let mut nodes = self.nodes.lock().unwrap();
         let mut cursor = String::new();
         for part in path.trim_matches('/').split('/') {
@@ -50,7 +50,7 @@ impl TestHost {
         }
     }
 
-    fn put(&self, path: &str, bytes: &[u8]) {
+    pub(crate) fn put(&self, path: &str, bytes: &[u8]) {
         self.mkdir(path.rsplit_once('/').unwrap().0);
         self.nodes.lock().unwrap().insert(
             path.into(),

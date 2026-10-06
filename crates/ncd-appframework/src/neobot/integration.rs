@@ -1,5 +1,5 @@
 //! NeoBot 对接：应用端开反向 WS 服务端，协议 Bot 作客户端连过来
-//! （`ws://127.0.0.1:<onebot_port>/`），token 落在 `data/config.toml` 的
+//! （`ws://127.0.0.1:<onebot_port>/`），token 落在 `app/data/config.toml` 的
 //! `[adapter].reverse_ws_access_token`。
 //!
 //! NeoBot 的反向 WS 服务端**不按路径分发**：鉴权只认握手里的
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(c.base.name, "ncd-app:n1");
         assert_eq!(c.base.token, "tok-abc");
         assert_eq!(plan.app_side_writes.len(), 1);
-        assert_eq!(plan.app_side_writes[0].path, "data/config.toml");
+        assert_eq!(plan.app_side_writes[0].path, "app/data/config.toml");
         assert!(plan.app_side_writes[0].summary.contains("reverse_ws_port=8080"));
         assert!(
             plan.app_side_writes[0]

@@ -238,7 +238,7 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         }
     }
 
-    /// 把对接写进 `data/config.toml` 的 `[adapter]`。
+    /// 把对接写进 `app/data/config.toml` 的 `[adapter]`。
     ///
     /// 反向 WS：应用端是监听方，**口以实例口为准**（桌面端分配的实例口就是受管口，
     /// 也是 `listen_port()` 报给编排层的值），不拿 plan 里 URL 的端口去改写——

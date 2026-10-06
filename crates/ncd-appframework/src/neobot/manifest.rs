@@ -3,7 +3,11 @@
 //!
 //! - PyPI 包名就是导入名之外的发行名：`neobot-app`，控制台入口 `neobot = "neobot_app.cli:main"`
 //!   （app/pyproject.toml:52-53）；`requires-python = ">=3.13"`
-//! - 面板是内置插件 `dashboard`，配置在 `plugins_data/dashboard/config.toml`（**不在** data/config.toml），
+//! - **数据目录是 app/data（不是 data）**：core/paths.py 的 get_data_dir() 在非打包运行时
+//!   返回「项目根/app/data」（没有 .git / pyproject.toml 祖先时回落到「cwd/app/data」），
+//!   而桌面端就是以实例目录为 cwd 启动它的（进程认领也按 cwd 比对）。所以下面所有相对路径
+//!   都以 app/data 打头；data/ 是另一套布局（打包运行「exe 目录/data」），只在识别已有项目时认。
+//! - 面板是内置插件 `dashboard`，配置在数据目录下的 `plugins_data/dashboard/config.toml`（**不在** config.toml），
 //!   默认 `host = "0.0.0.0"` / `port = 9981`，端口被占用时从 9981 起最多向后试 10 个；
 //!   登录用面板密码，PBKDF2 哈希存 `plugins_data/dashboard/auth.json`
 //! - OneBot 侧是**反向 WS 服务端**（应用端听口、协议 Bot 作客户端连过来）⇒ `OneBotLinkMode::ReverseWs`；
@@ -36,14 +40,23 @@ pub const NEOBOT_DEFAULT_DASHBOARD_PORT: u16 = 9981;
 /// OneBot 反向 WS 默认口；`[adapter].reverse_ws_port` 出厂值是 0（未配置），实际缺省落到这个
 pub const NEOBOT_DEFAULT_ONEBOT_PORT: u16 = 8080;
 
-/// 实例目录内相对路径
-pub const NEOBOT_DATA_DIR: &str = "data";
-pub const NEOBOT_CONFIG_TOML: &str = "data/config.toml";
-pub const NEOBOT_DASHBOARD_CONFIG: &str = "plugins_data/dashboard/config.toml";
-pub const NEOBOT_DASHBOARD_AUTH: &str = "plugins_data/dashboard/auth.json";
+/// 数据目录（实例目录内相对路径）：**app/data，不是 data**。
+///
+/// 见模块头：NeoBot 自己按 get_data_dir() 取「cwd/app/data」，桌面端又以实例目录为 cwd
+/// 启动它，所以 PyPI 安装的实例数据都落在这一层。原先写成 data 会让桌面端读写一棵
+/// NeoBot 从不看的树——对接写进去的端口/token 根本不生效，且导入已有项目也找不到配置。
+pub const NEOBOT_DATA_DIR: &str = "app/data";
+/// 另一套布局：打包运行（exe 目录/data）。识别已有项目时要认它，但桌面端按 NEOBOT_DATA_DIR 读写。
+pub const NEOBOT_DATA_DIR_LEGACY: &str = "data";
+pub const NEOBOT_CONFIG_TOML: &str = "app/data/config.toml";
+pub const NEOBOT_DASHBOARD_CONFIG: &str = "app/data/plugins_data/dashboard/config.toml";
+pub const NEOBOT_DASHBOARD_AUTH: &str = "app/data/plugins_data/dashboard/auth.json";
+/// 打包布局下的同名文件：识别已有项目时要认，桌面端不按这些路径读写
+pub const NEOBOT_CONFIG_TOML_LEGACY: &str = "data/config.toml";
+pub const NEOBOT_DASHBOARD_CONFIG_LEGACY: &str = "data/plugins_data/dashboard/config.toml";
 pub const NEOBOT_STDOUT_LOG: &str = ".ncd-neobot.log";
 
-/// `data/config.toml` 的 `[adapter]` 键
+/// `app/data/config.toml` 的 `[adapter]` 键
 pub const KEY_ADAPTER: &str = "adapter";
 pub const KEY_ADAPTER_MODE: &str = "mode";
 pub const KEY_REVERSE_WS_HOST: &str = "reverse_ws_host";

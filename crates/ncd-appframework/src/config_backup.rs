@@ -628,6 +628,7 @@ impl FrameworkConfigRestorePlan {
     }
 }
 
+// pub(crate)：这套内存 Host 替身别的模块的测试也要用（例如 neobot 的导入探测）
 #[cfg(test)]
 #[path = "config_backup_tests.rs"]
-mod tests;
+pub(crate) mod tests;
