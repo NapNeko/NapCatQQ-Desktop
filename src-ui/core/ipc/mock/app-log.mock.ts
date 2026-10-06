@@ -139,7 +139,7 @@ function startup(inst: AppInstance, d: Date): string[] {
             // 时间戳颜色即级别（沿用麦麦 lite 的配色约定），这里照上游真样式拼
             return [
                 logu(d, 'INFO', 'neobot_app.cli', 'NeoBot 启动中…'),
-                logu(d, 'INFO', 'neobot_app.config', '配置已加载：data/config.toml'),
+                logu(d, 'INFO', 'neobot_app.config', '配置已加载：app/data/config.toml'),
                 logu(d, 'INFO', 'neobot_app.adapter', `反向 WebSocket 监听 ${E}36mws://127.0.0.1:${inst.port}${E}0m（access token 校验：已启用）`),
                 logu(d, 'INFO', 'neobot_app.plugin', `面板已挂载：${E}36mhttp://127.0.0.1:9981${E}0m`),
                 logu(d, 'SUCCESS', 'neobot_app.core', 'OneBot 11 连接已建立'),

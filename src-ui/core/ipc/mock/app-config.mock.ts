@@ -69,15 +69,15 @@ const ASTRBOT_DOCS: AppConfigDocument[] = [
 const NEOBOT_DOCS: AppConfigDocument[] = [
     {
         id: 'adapter',
-        label: 'OneBot 对接（data/config.toml）',
-        rel_path: 'data/config.toml',
+        label: 'OneBot 对接（app/data/config.toml）',
+        rel_path: 'app/data/config.toml',
         format: 'toml',
         hot_reload: true,
     },
     {
         id: 'dashboard',
-        label: '网页面板（plugins_data/dashboard/config.toml）',
-        rel_path: 'plugins_data/dashboard/config.toml',
+        label: '网页面板（app/data/plugins_data/dashboard/config.toml）',
+        rel_path: 'app/data/plugins_data/dashboard/config.toml',
         format: 'toml',
         hot_reload: true,
     },
@@ -683,9 +683,11 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     || changed(before.bot.log, next.bot.log)
                     || before.bot.plugin_runtime.enabled !== next.bot.plugin_runtime.enabled;
                 // 只读字段以落盘为准
-                s.config = { ...next, webui_token: before.webui_token, adapter: next.adapter && before.adapter
-                    ? { ...before.adapter, chat: next.adapter.chat }
-                    : before.adapter };
+                s.config = {
+                    ...next, webui_token: before.webui_token, adapter: next.adapter && before.adapter
+                        ? { ...before.adapter, chat: next.adapter.chat }
+                        : before.adapter
+                };
                 let portChanged = false;
                 if (next.bot.webui.port !== inst.port) {
                     deps.publish({ ...inst, port: next.bot.webui.port }, 'port_changed');
@@ -881,8 +883,8 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     inst.framework_id === 'maibot'
                         ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
                         : inst.framework_id === 'koishi'
-                          ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
-                          : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                            ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
+                            : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             return withMockDelay({ doc_id: docId, text: raw.text[docId] ?? '', revision: rev(raw.rev[docId] ?? 0) });
@@ -969,12 +971,12 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     inst.framework_id === 'astrbot'
                         ? { text: { ...ASTRBOT_TEXT }, rev: { cmd_config: 1 } }
                         : inst.framework_id === 'maibot'
-                          ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
-                          : inst.framework_id === 'koishi'
-                            ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
-                            : inst.framework_id === 'neobot'
-                              ? { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } }
-                              : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                            ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
+                            : inst.framework_id === 'koishi'
+                                ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
+                                : inst.framework_id === 'neobot'
+                                    ? { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } }
+                                    : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             const current = rev(raw.rev[docId] ?? 0);

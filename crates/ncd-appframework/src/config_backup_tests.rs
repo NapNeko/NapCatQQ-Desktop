@@ -12,7 +12,7 @@ struct Node {
     symlink: bool,
 }
 
-struct TestHost {
+pub(crate) struct TestHost {
     id: String,
     nodes: Mutex<BTreeMap<String, Node>>,
     fail_once: Mutex<Option<String>>,
@@ -20,7 +20,7 @@ struct TestHost {
 }
 
 impl TestHost {
-    fn new(id: &str) -> Arc<Self> {
+    pub(crate) fn new(id: &str) -> Arc<Self> {
         let host = Arc::new(Self {
             id: id.into(),
             nodes: Mutex::new(BTreeMap::new()),
@@ -37,7 +37,7 @@ impl TestHost {
         host
     }
 
-    fn mkdir(&self, path: &str) {
+    pub(crate) fn mkdir(&self, path: &str) {
         let mut nodes = self.nodes.lock().unwrap();
         let mut cursor = String::new();
         for part in path.trim_matches('/').split('/') {
@@ -50,7 +50,7 @@ impl TestHost {
         }
     }
 
-    fn put(&self, path: &str, bytes: &[u8]) {
+    pub(crate) fn put(&self, path: &str, bytes: &[u8]) {
         self.mkdir(path.rsplit_once('/').unwrap().0);
         self.nodes.lock().unwrap().insert(
             path.into(),
@@ -217,17 +217,27 @@ async fn captures_all_builtin_framework_configs_without_programs_or_databases() 
             "neobot",
             &[
                 (
-                    "data/config.toml",
+                    "app/data/config.toml",
                     "# keep\r\n[adapter]\nreverse_ws_port = 8080\n",
                 ),
-                ("plugins_data/dashboard/config.toml", "port = 9981\n"),
-                ("plugins_data/my-plugin/config.toml", "enabled = true\n"),
+                (
+                    "app/data/plugins_data/dashboard/config.toml",
+                    "port = 9981\n",
+                ),
+                (
+                    "app/data/plugins_data/my-plugin/config.toml",
+                    "enabled = true\n",
+                ),
             ],
             &[
-                "plugins_data/dashboard/auth.json",
-                "plugins_data/my-plugin/history.json",
-                "data/chat.db",
+                "app/data/plugins_data/dashboard/auth.json",
+                "app/data/plugins_data/my-plugin/history.json",
+                "app/data/chat.db",
+                "app/.env",
                 "plugins/my-plugin/main.py",
+                // 旧版桌面端误写的壳：NeoBot 不读，不进备份
+                "data/config.toml",
+                "plugins_data/dashboard/config.toml",
             ],
         ),
         (

@@ -5,14 +5,14 @@
 //! 2. 预置 Python 3.13（uv 在本机 / 远端取不到托管解释器时，由桌面端本地下载后上传）
 //! 3. `uv venv --python 3.13 .venv`
 //! 4. `uv pip install --python .venv neobot-app`
-//! 5. 挑一个未被占用的面板口并种最小配置：data/config.toml 的 [adapter]（mode / host / port）
-//!    与 plugins_data/dashboard/config.toml（host / port）。**这里不写 token**——反向 WS 的 token
+//! 5. 挑一个未被占用的面板口并种最小配置：app/data/config.toml 的 [adapter]（mode / host / port）
+//!    与 app/data/plugins_data/dashboard/config.toml（host / port）。**这里不写 token**——反向 WS 的 token
 //!    是安装后由桌面端补的空串占位，真 token 到「对接 QQ」那一步才写
 //!
 //! 与 AstrBot 的差别：NeoBot 没有 `init` 子命令，配置由桌面端直接写；
-//! 面板配置在 `plugins_data/dashboard/config.toml`（不在 `data/config.toml`）。
+//! 面板配置在 `app/data/plugins_data/dashboard/config.toml`（不在 `app/data/config.toml`）。
 //!
-//! 探测：`data/config.toml` 存在且能读出 `[adapter]` 才算装了；有配置但 `.venv` 里没有
+//! 探测：`app/data/config.toml` 存在且能读出 `[adapter]` 才算装了；有配置但 `.venv` 里没有
 //! `neobot` 入口视为「依赖未同步」，给 `Unusable` 而不是 `NotInstalled`。
 
 use std::time::Duration;
@@ -25,8 +25,9 @@ use ncd_component::{
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 
 use super::manifest::{
-    ADAPTER_MODE_ONEBOT, KEY_ADAPTER, KEY_ADAPTER_MODE, KEY_DASHBOARD_HOST, KEY_DASHBOARD_PORT,
-    KEY_REVERSE_WS_HOST, KEY_REVERSE_WS_PORT, NEOBOT_CONFIG_TOML, NEOBOT_DASHBOARD_CONFIG,
+    ADAPTER_MODE_ONEBOT, ENV_NEOBOT_DATA_DIR, ENV_NEOBOT_ENV_FILE, KEY_ADAPTER, KEY_ADAPTER_MODE,
+    KEY_DASHBOARD_HOST, KEY_DASHBOARD_PORT, KEY_REVERSE_WS_HOST, KEY_REVERSE_WS_PORT,
+    NEOBOT_CONFIG_TOML, NEOBOT_DASHBOARD_CONFIG, NEOBOT_DATA_DIR, NEOBOT_ENV_FILE,
     NEOBOT_PYTHON_REQUIRES, NEOBOT_UV_VERSION_RANGE, PYPI_NEOBOT,
 };
 use crate::ports::PortUsage;
@@ -146,13 +147,31 @@ impl NeoBotComponent {
     }
 
     fn launch_with(&self, os: Os, args: &LaunchArgs) -> HostCommand {
-        let cmd = HostCommand::new(self.neobot_bin(os).as_posix())
+        let mut cmd = HostCommand::new(self.neobot_bin(os).as_posix())
             .working_dir(self.install_dir.clone())
             .env("PYTHONUNBUFFERED", "1")
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
             .long_running();
+        for (key, value) in self.path_env(os) {
+            cmd = cmd.env(key, value);
+        }
         args.apply_to(cmd)
+    }
+
+    /// 把上游的数据目录与 .env 钉在实例目录里：不设的话上游按 site-packages 的祖先
+    /// 找项目根，实例目录在某个 git 仓库下面时桌面端读写的文件就不是它用的那份
+    pub fn path_env(&self, os: Os) -> [(&'static str, String); 2] {
+        [
+            (
+                ENV_NEOBOT_DATA_DIR,
+                self.install_dir.join(NEOBOT_DATA_DIR).render_for(os),
+            ),
+            (
+                ENV_NEOBOT_ENV_FILE,
+                self.install_dir.join(NEOBOT_ENV_FILE).render_for(os),
+            ),
+        ]
     }
 
     /// 统一的步骤包装：超时、取消、UTF-8、逐行转 ctx.info
@@ -320,7 +339,11 @@ impl NeoBotComponent {
     }
 
     /// 已有项目：只补 uv 标记 + 同步依赖，不写配置、不改端口
-    async fn adopt_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn adopt_provision(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         const TOTAL: u32 = 4;
         ctx.emit(ProgressKind::Started { total_steps: TOTAL }).await;
 
@@ -388,7 +411,7 @@ impl NeoBotComponent {
     }
 
     /// 写 OneBot 反向 WS 与面板配置。
-    /// 面板配置在 `plugins_data/dashboard/config.toml`（与本体 config.toml 解耦）；
+    /// 面板配置在 `app/data/plugins_data/dashboard/config.toml`（与本体 config.toml 解耦）；
     /// 已有文件只补缺失的键，不覆盖用户改过的值。
     async fn seed_config(&self, host: &dyn Host, dashboard_port: u16) -> Result<(), ActionError> {
         self.seed_data_config(host).await?;
@@ -396,20 +419,24 @@ impl NeoBotComponent {
         Ok(())
     }
 
-    /// `data/config.toml` 的 `[adapter]`：只补三个键，其余（含用户自己的模型/API 配置）原样留着
+    /// `app/data/config.toml` 的 `[adapter]`：只补三个键，其余（含用户自己的模型/API 配置）原样留着
     async fn seed_data_config(&self, host: &dyn Host) -> Result<(), ActionError> {
         let path = self.config_toml();
         let existing = read_text(host, &path).await?;
         let mut table = match existing.as_deref() {
-            Some(text) if !text.trim().is_empty() => parse_toml(text)
-                .map_err(|e| ActionError::install_step("seed-config", format!("data/config.toml 解析失败：{e}")))?,
+            Some(text) if !text.trim().is_empty() => parse_toml(text).map_err(|e| {
+                ActionError::install_step(
+                    "seed-config",
+                    format!("app/data/config.toml 解析失败：{e}"),
+                )
+            })?,
             _ => toml::Table::new(),
         };
         let adapter = table
             .entry(KEY_ADAPTER.to_string())
             .or_insert_with(|| toml::Value::Table(toml::Table::new()));
         let adapter = adapter.as_table_mut().ok_or_else(|| {
-            ActionError::install_step("seed-config", "data/config.toml 的 [adapter] 不是表")
+            ActionError::install_step("seed-config", "app/data/config.toml 的 [adapter] 不是表")
         })?;
         // 模式：只认 onebot（反向 WS 对接的前提）。旧值不是 onebot 时给出提示交给用户，不静默改写
         let current_mode = adapter
@@ -436,15 +463,26 @@ impl NeoBotComponent {
             KEY_REVERSE_WS_PORT.to_string(),
             toml::Value::Integer(i64::from(self.onebot_port)),
         );
-        write_text(host, &path, &toml::to_string_pretty(&table).map_err(|e| {
-            ActionError::install_step("seed-config", format!("data/config.toml 渲染失败：{e}"))
-        })?)
+        write_text(
+            host,
+            &path,
+            &toml::to_string_pretty(&table).map_err(|e| {
+                ActionError::install_step(
+                    "seed-config",
+                    format!("app/data/config.toml 渲染失败：{e}"),
+                )
+            })?,
+        )
         .await
     }
 
     /// 面板配置：平铺的 `host` / `port`（`DashboardConfig`），只补缺失键。
     /// `dashboard_port` 是安装时探测过占用的选口；文件里已有值时不覆盖
-    async fn seed_dashboard_config(&self, host: &dyn Host, dashboard_port: u16) -> Result<(), ActionError> {
+    async fn seed_dashboard_config(
+        &self,
+        host: &dyn Host,
+        dashboard_port: u16,
+    ) -> Result<(), ActionError> {
         let path = self.dashboard_config();
         let existing = read_text(host, &path).await?;
         let mut table = match existing.as_deref() {
@@ -460,9 +498,13 @@ impl NeoBotComponent {
         table
             .entry(KEY_DASHBOARD_PORT.to_string())
             .or_insert_with(|| toml::Value::Integer(i64::from(dashboard_port)));
-        write_text(host, &path, &toml::to_string_pretty(&table).map_err(|e| {
-            ActionError::install_step("seed-config", format!("面板配置渲染失败：{e}"))
-        })?)
+        write_text(
+            host,
+            &path,
+            &toml::to_string_pretty(&table).map_err(|e| {
+                ActionError::install_step("seed-config", format!("面板配置渲染失败：{e}"))
+            })?,
+        )
         .await
     }
 
@@ -675,15 +717,18 @@ mod tests {
 
     #[test]
     fn instance_paths_follow_locked_layout() {
-        let comp =
-            NeoBotComponent::new(HostPath::from_posix("/home/u/ncd/apps/neobot/n1"), 8080, 9981);
+        let comp = NeoBotComponent::new(
+            HostPath::from_posix("/home/u/ncd/apps/neobot/n1"),
+            8080,
+            9981,
+        );
         assert_eq!(
             comp.config_toml().as_posix(),
-            "/home/u/ncd/apps/neobot/n1/data/config.toml"
+            "/home/u/ncd/apps/neobot/n1/app/data/config.toml"
         );
         assert_eq!(
             comp.dashboard_config().as_posix(),
-            "/home/u/ncd/apps/neobot/n1/plugins_data/dashboard/config.toml"
+            "/home/u/ncd/apps/neobot/n1/app/data/plugins_data/dashboard/config.toml"
         );
         assert_eq!(
             comp.venv_python(Os::Linux).as_posix(),
@@ -694,11 +739,17 @@ mod tests {
             "/home/u/ncd/apps/neobot/n1/.venv/bin/neobot"
         );
         let cmd = comp.launch_with(Os::Linux, &LaunchArgs::default());
-        assert_eq!(
-            cmd.program,
-            "/home/u/ncd/apps/neobot/n1/.venv/bin/neobot"
-        );
+        assert_eq!(cmd.program, "/home/u/ncd/apps/neobot/n1/.venv/bin/neobot");
         assert!(cmd.args.is_empty(), "入口脚本自己带参数");
+        assert_eq!(
+            cmd.environment.get("NEOBOT_DATA_DIR").map(String::as_str),
+            Some("/home/u/ncd/apps/neobot/n1/app/data"),
+            "数据目录必须钉在实例目录，不能交给上游按祖先目录猜"
+        );
+        assert_eq!(
+            cmd.environment.get("NEOBOT_ENV_FILE").map(String::as_str),
+            Some("/home/u/ncd/apps/neobot/n1/app/.env")
+        );
     }
 
     #[test]
@@ -744,10 +795,7 @@ mod tests {
             KEY_REVERSE_WS_HOST.to_string(),
             toml::Value::String("127.0.0.1".to_string()),
         );
-        adapter.insert(
-            KEY_REVERSE_WS_PORT.to_string(),
-            toml::Value::Integer(8080),
-        );
+        adapter.insert(KEY_REVERSE_WS_PORT.to_string(), toml::Value::Integer(8080));
         assert_eq!(
             table
                 .get("bot")
@@ -771,7 +819,9 @@ mod tests {
             Some("127.0.0.1")
         );
         assert_eq!(
-            adapter.get(KEY_REVERSE_WS_PORT).and_then(|v| v.as_integer()),
+            adapter
+                .get(KEY_REVERSE_WS_PORT)
+                .and_then(|v| v.as_integer()),
             Some(8080)
         );
     }
