@@ -3,10 +3,10 @@
 //!
 //! - PyPI 包名就是导入名之外的发行名：`neobot-app`，控制台入口 `neobot = "neobot_app.cli:main"`
 //!   （app/pyproject.toml:52-53）；`requires-python = ">=3.13"`
-//! - **数据目录是 app/data（不是 data）**：core/paths.py 的 get_data_dir() 在非打包运行时
-//!   返回「项目根/app/data」（没有 .git / pyproject.toml 祖先时回落到「cwd/app/data」），
-//!   而桌面端就是以实例目录为 cwd 启动它的（进程认领也按 cwd 比对）。所以下面所有相对路径
-//!   都以 app/data 打头；data/ 是另一套布局（打包运行「exe 目录/data」），只在识别已有项目时认。
+//! - **数据目录是 app/data（不是 data）**：core/paths.py 的 get_data_dir() 先认环境变量
+//!   `NEOBOT_DATA_DIR`，非打包运行时返回「项目根/app/data」（项目根 = site-packages 往上
+//!   第一个有 .git 的祖先，否则最外层有 pyproject.toml 的祖先，都没有才是 cwd）。桌面端启动时
+//!   用环境变量把它钉到「实例目录/app/data」；data/ 是打包运行（exe 目录/data）的布局，桌面端不用。
 //! - 面板是内置插件 `dashboard`，配置在数据目录下的 `plugins_data/dashboard/config.toml`（**不在** config.toml），
 //!   默认 `host = "0.0.0.0"` / `port = 9981`，端口被占用时从 9981 起最多向后试 10 个；
 //!   登录用面板密码，PBKDF2 哈希存 `plugins_data/dashboard/auth.json`
@@ -18,7 +18,7 @@
 //! 与上游「事实」相关的常量集中在这里，实现文件不重写这些字面量。
 
 use ncd_domain::{
-    AppFrameworkId, AppFrameworkManifest, AppPlacement, OneBotLinkMode, AppWebUiAuthKind,
+    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppWebUiAuthKind, OneBotLinkMode,
 };
 
 pub const NEOBOT_FRAMEWORK_ID: &str = "neobot";
@@ -42,18 +42,21 @@ pub const NEOBOT_DEFAULT_ONEBOT_PORT: u16 = 8080;
 
 /// 数据目录（实例目录内相对路径）：**app/data，不是 data**。
 ///
-/// 见模块头：NeoBot 自己按 get_data_dir() 取「cwd/app/data」，桌面端又以实例目录为 cwd
-/// 启动它，所以 PyPI 安装的实例数据都落在这一层。原先写成 data 会让桌面端读写一棵
-/// NeoBot 从不看的树——对接写进去的端口/token 根本不生效，且导入已有项目也找不到配置。
+/// 上游 get_data_dir() 的「项目根」是从 site-packages 往上找 .git / pyproject.toml，
+/// 实例目录放在某个 git 仓库下面时会跑到那个祖先的 app/data。所以启动时用
+/// `NEOBOT_DATA_DIR` 环境变量把它钉在实例目录里，下面的相对路径才一定成立。
 pub const NEOBOT_DATA_DIR: &str = "app/data";
-/// 另一套布局：打包运行（exe 目录/data）。识别已有项目时要认它，但桌面端按 NEOBOT_DATA_DIR 读写。
-pub const NEOBOT_DATA_DIR_LEGACY: &str = "data";
+/// 上游 .env 同理按项目根算，一并钉住
+pub const NEOBOT_ENV_FILE: &str = "app/.env";
+/// 上游 core/paths.py 认的环境变量名
+pub const ENV_NEOBOT_DATA_DIR: &str = "NEOBOT_DATA_DIR";
+pub const ENV_NEOBOT_ENV_FILE: &str = "NEOBOT_ENV_FILE";
 pub const NEOBOT_CONFIG_TOML: &str = "app/data/config.toml";
 pub const NEOBOT_DASHBOARD_CONFIG: &str = "app/data/plugins_data/dashboard/config.toml";
 pub const NEOBOT_DASHBOARD_AUTH: &str = "app/data/plugins_data/dashboard/auth.json";
-/// 打包布局下的同名文件：识别已有项目时要认，桌面端不按这些路径读写
+/// 旧布局的 config.toml：打包运行（exe 目录/data），以及 3.0.x 早期桌面端误写的那份。
+/// 桌面端不按它读写，只用于导入时给出明确报错、启动时把旧对接搬过去
 pub const NEOBOT_CONFIG_TOML_LEGACY: &str = "data/config.toml";
-pub const NEOBOT_DASHBOARD_CONFIG_LEGACY: &str = "data/plugins_data/dashboard/config.toml";
 pub const NEOBOT_STDOUT_LOG: &str = ".ncd-neobot.log";
 
 /// `app/data/config.toml` 的 `[adapter]` 键

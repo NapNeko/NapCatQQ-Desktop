@@ -20,15 +20,14 @@ use ncd_host::{Host, HostCommand, HostPath, Locality};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::NeoBotComponent;
-pub use control::{MIN_VERSION_WITH_SHUTDOWN_ENDPOINT, ShutdownRequest};
 pub use config::{
     DOC_ADAPTER, DOC_DASHBOARD, NeoBotAdapterConfig, NeoBotDashboardConfig, NeoBotInstanceConfig,
     neobot_config_documents,
 };
+pub use control::{MIN_VERSION_WITH_SHUTDOWN_ENDPOINT, ShutdownRequest};
 pub use integration::NeoBotIntegration;
 pub use manifest::{
-    NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT, NEOBOT_FRAMEWORK_ID,
-    neobot_manifest,
+    NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT, NEOBOT_FRAMEWORK_ID, neobot_manifest,
 };
 pub use probe::probe_neobot;
 pub use versions::{PackageVersions, fetch_versions, parse_versions};
@@ -42,10 +41,7 @@ use crate::config_doc::{
 };
 use crate::terminal;
 
-fn envelope(
-    config: NeoBotInstanceConfig,
-    snaps: &[DocumentSnapshot],
-) -> AppInstanceConfigEnvelope {
+fn envelope(config: NeoBotInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
     AppInstanceConfigEnvelope {
         config: AppInstanceConfig::NeoBot(config),
         revision: combined_revision_of(snaps),
@@ -97,7 +93,10 @@ pub fn version_supports_graceful_stop(installed_version: Option<&str>) -> bool {
         return false;
     };
     match crate::neobot::versions::parse_pep440(raw) {
-        Some(v) => v >= crate::neobot::versions::parse_pep440(control::MIN_VERSION_WITH_SHUTDOWN_ENDPOINT).expect("常量可解析"),
+        Some(v) => {
+            v >= crate::neobot::versions::parse_pep440(control::MIN_VERSION_WITH_SHUTDOWN_ENDPOINT)
+                .expect("常量可解析")
+        }
         None => false,
     }
 }
@@ -199,10 +198,25 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         spec: &AppComponentSpec,
         args: &LaunchArgs,
     ) -> Result<HostCommand, AppFrameworkError> {
-        Self::component_for(spec)
+        let comp = Self::component_for(spec);
+        let cmd = comp
             .resolve_launch_command(host, args)
             .await
-            .map_err(|e| AppFrameworkError::Runtime(e.to_string()))
+            .map_err(|e| AppFrameworkError::Runtime(e.to_string()))?;
+        // 搬不成不拦启动：最坏是实例还按出厂口听着，用户改绑一次就好
+        match config::carry_legacy_link(host, &spec.install_dir, spec.port).await {
+            Ok(true) => tracing::info!(
+                instance = spec.instance_id.as_str(),
+                "moved neobot link keys from data/config.toml to app/data/config.toml"
+            ),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(
+                instance = spec.instance_id.as_str(),
+                error = %e,
+                "failed to move neobot link keys from legacy data/config.toml"
+            ),
+        }
+        Ok(cmd)
     }
 
     async fn terminal_profile(
@@ -211,7 +225,7 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         spec: &AppComponentSpec,
     ) -> terminal::AppTerminalProfile {
         // 插件与依赖平时由面板自己装；终端里照同样的办法来
-        terminal::uv_venv_profile(
+        let mut profile = terminal::uv_venv_profile(
             host,
             spec,
             vec![
@@ -220,7 +234,15 @@ impl AppFrameworkAdapter for NeoBotAdapter {
                 TerminalSnippet::new("直接跑一次", "neobot"),
             ],
         )
-        .await
+        .await;
+        // 终端里手动跑 neobot 也要读写同一份数据，和受管启动一致
+        let comp = Self::component_for(spec);
+        profile.env.extend(
+            comp.path_env(host.os())
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v)),
+        );
+        profile
     }
 
     async fn read_access_token(
@@ -424,6 +446,9 @@ mod tests {
         assert!(!gate(None));
         assert!(!gate(Some("")));
         assert!(!gate(Some("   ")));
-        assert!(!gate(Some("installed")), "旧适配器留下的字面量不能被当成版本号");
+        assert!(
+            !gate(Some("installed")),
+            "旧适配器留下的字面量不能被当成版本号"
+        );
     }
 }

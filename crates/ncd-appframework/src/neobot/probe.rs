@@ -1,16 +1,12 @@
-//! 识别已有 NeoBot 项目（数据目录里的 config.toml + `[adapter]`）。
+//! 识别已有 NeoBot 项目（`app/data/config.toml` + `[adapter]`）。
 //!
-//! **两套数据目录布局都要认**（导入已有项目曾因为只认一套而失败）：
-//! - `app/data/`：PyPI / 源码安装。NeoBot 的 get_data_dir() 在非打包运行时返回
-//!   「项目根/app/data」（没有 .git / pyproject.toml 祖先时回落到「cwd/app/data」），
-//!   而桌面端就是以实例目录为 cwd 启动它的 —— 所以这才是最常见的布局，也是桌面端读写的那套；
-//! - `data/`：打包运行（exe 目录/data）。
-//!
-//! 只找到打包布局时不拦（那确实是个 NeoBot 项目），但会提醒两边读写位置不同。
+//! 只有打包布局（`data/config.toml`）的目录不收：桌面端用 .venv 启动并把数据目录钉在
+//! app/data，导入后原来的配置、模型和聊天记录一样都用不上，与其导进来当新实例跑，
+//! 不如明说让用户先把 data/ 挪过去。
 //!
 //! 导入已有项目时只做识别，不改文件；同步依赖交给组件的 `adopt_provision`。
 
-use ncd_domain::{AppProjectProbe, AppFrameworkId};
+use ncd_domain::{AppFrameworkId, AppProjectProbe};
 use ncd_host::{Host, HostPath};
 use ncd_traits::AppFrameworkError;
 
@@ -18,7 +14,7 @@ use super::component::NeoBotComponent;
 use super::config::read_neobot_config;
 use super::manifest::{
     KEY_ADAPTER, NEOBOT_CONFIG_TOML, NEOBOT_CONFIG_TOML_LEGACY, NEOBOT_DASHBOARD_CONFIG,
-    NEOBOT_DASHBOARD_CONFIG_LEGACY, NEOBOT_DATA_DIR, NEOBOT_FRAMEWORK_ID,
+    NEOBOT_DATA_DIR, NEOBOT_FRAMEWORK_ID,
 };
 
 /// config.toml 的样子够不够像 NeoBot。
@@ -40,41 +36,27 @@ pub async fn probe_neobot(
     host: &dyn Host,
     path: &HostPath,
 ) -> Result<AppProjectProbe, AppFrameworkError> {
-    // 先认规范布局（app/data），再认打包布局（data）。两套都可能存在（例如桌面端
-    // 按 app/data 建的实例旁边还留着早期误写的 data/），规范布局优先。
-    let mut found: Option<(&str, bool)> = None;
-    for (rel, canonical) in [
-        (NEOBOT_CONFIG_TOML, true),
-        (NEOBOT_CONFIG_TOML_LEGACY, false),
-    ] {
-        if host
-            .exists(&path.join(rel))
-            .await
-            .map_err(|e| AppFrameworkError::Host(e.to_string()))?
-        {
-            found = Some((rel, canonical));
-            break;
+    // 两份都在时以 app/data 为准：旁边的 data/ 多半是旧版桌面端误写的壳
+    if !exists(host, path, NEOBOT_CONFIG_TOML).await? {
+        if exists(host, path, NEOBOT_CONFIG_TOML_LEGACY).await? {
+            return Err(AppFrameworkError::Validation(format!(
+                "这个项目的数据在 {NEOBOT_CONFIG_TOML_LEGACY}（打包版的布局），桌面端启动的 NeoBot 只读 {NEOBOT_DATA_DIR}。先把 data 目录移到 {NEOBOT_DATA_DIR} 再导入"
+            )));
         }
+        return Err(AppFrameworkError::Validation(format!(
+            "目录里没有 {NEOBOT_CONFIG_TOML}，不是 NeoBot 项目"
+        )));
     }
-    let Some((config_rel, canonical)) = found else {
-        return Err(AppFrameworkError::Validation(
-            "目录里既没有 app/data/config.toml 也没有 data/config.toml，不是 NeoBot 项目".into(),
-        ));
-    };
-    let config = path.join(config_rel);
-    let text = read_text(host, &config).await?.unwrap_or_default();
+    let text = read_text(host, &path.join(NEOBOT_CONFIG_TOML))
+        .await?
+        .unwrap_or_default();
     if !config_looks_like_neobot(&text) {
         return Err(AppFrameworkError::Validation(format!(
-            "{config_rel} 里没有 [adapter] 分区，不像是 NeoBot 项目"
+            "{NEOBOT_CONFIG_TOML} 里没有 [adapter] 分区，不像是 NeoBot 项目"
         )));
     }
 
     let mut warnings = Vec::new();
-    if !canonical {
-        warnings.push(format!(
-            "这个项目的数据在 {NEOBOT_CONFIG_TOML_LEGACY}（打包运行的布局）。桌面端按 {NEOBOT_DATA_DIR} 读写，导入后配置可能对不上，启动前先确认"
-        ));
-    }
     let mut port = None;
     let mut dashboard_port = None;
     match read_neobot_config(host, path).await {
@@ -89,8 +71,7 @@ pub async fn probe_neobot(
             }
             if cfg.adapter.reverse_ws_access_token.trim().is_empty() {
                 warnings.push(
-                    "反向 WS 没配 access token，NeoBot 不校验握手；对接时会给它写一个"
-                        .to_string(),
+                    "反向 WS 没配 access token，NeoBot 不校验握手；对接时会给它写一个".to_string(),
                 );
             }
         }
@@ -100,22 +81,17 @@ pub async fn probe_neobot(
     }
 
     // 面板配置可能不存在（面板从没起过），那不是错误
-    let dashboard_rel = if canonical {
-        NEOBOT_DASHBOARD_CONFIG
-    } else {
-        NEOBOT_DASHBOARD_CONFIG_LEGACY
-    };
-    if !host.exists(&path.join(dashboard_rel)).await.unwrap_or(false) {
+    if !host
+        .exists(&path.join(NEOBOT_DASHBOARD_CONFIG))
+        .await
+        .unwrap_or(false)
+    {
         warnings.push(format!(
-            "还没有面板配置（{dashboard_rel}），面板会按出厂值启动"
+            "还没有面板配置（{NEOBOT_DASHBOARD_CONFIG}），面板会按出厂值启动"
         ));
     }
 
-    let comp = NeoBotComponent::new(
-        path.clone(),
-        port.unwrap_or(0),
-        dashboard_port.unwrap_or(0),
-    );
+    let comp = NeoBotComponent::new(path.clone(), port.unwrap_or(0), dashboard_port.unwrap_or(0));
     let ready = host
         .exists(&comp.neobot_bin(host.os()))
         .await
@@ -132,7 +108,7 @@ pub async fn probe_neobot(
         display_name,
         port,
         version: None,
-        env_rel_path: config_rel.to_string(),
+        env_rel_path: NEOBOT_CONFIG_TOML.to_string(),
         // NeoBot 没有 NoneBot 那种 ENVIRONMENT 分层；这里给数据目录名，
         // 只用于 UI 展示，不代表环境切换
         environment: NEOBOT_DATA_DIR.to_string(),
@@ -142,6 +118,12 @@ pub async fn probe_neobot(
         warnings,
         detected_bot_id: None,
     })
+}
+
+async fn exists(host: &dyn Host, root: &HostPath, rel: &str) -> Result<bool, AppFrameworkError> {
+    host.exists(&root.join(rel))
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))
 }
 
 async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, AppFrameworkError> {
@@ -165,12 +147,8 @@ mod tests {
 
     #[test]
     fn recognizes_neobot_config_shapes() {
-        assert!(config_looks_like_neobot(
-            "\n[adapter]\nmode = \"onebot\"\n"
-        ));
-        assert!(config_looks_like_neobot(
-            "[bot]\n# neobot 的配置\n"
-        ));
+        assert!(config_looks_like_neobot("\n[adapter]\nmode = \"onebot\"\n"));
+        assert!(config_looks_like_neobot("[bot]\n# neobot 的配置\n"));
         assert!(!config_looks_like_neobot("[bot]\nqq = 1\n"));
         assert!(!config_looks_like_neobot(""));
     }
@@ -185,7 +163,7 @@ mod tests {
         assert!(!config_looks_like_neobot("[bot]\nqq = 1\n"));
     }
 
-    // ---- 两套数据目录布局（实测反馈：PyPI 安装下只认 data/ 会导致导入失败）----
+    // ---- 数据目录布局：桌面端只读写 app/data ----
 
     use crate::config_backup::tests::TestHost;
     use std::sync::Arc;
@@ -202,30 +180,25 @@ mod tests {
 
     #[tokio::test]
     async fn probe_accepts_the_pypi_nested_data_dir() {
-        // NeoBot 非打包运行时数据在 app/data（它按 cwd 算），这是最常见的布局
         let host = host_with(&[("/n1/app/data/config.toml", CONFIG)]);
         let probe = probe_neobot(host.as_ref(), &HostPath::from_posix("/n1"))
             .await
             .expect("app/data 布局必须能导入");
         assert_eq!(probe.env_rel_path, "app/data/config.toml");
-        assert!(
-            !probe.warnings.iter().any(|w| w.contains("打包运行")),
-            "规范布局不该报布局警告：{:?}",
-            probe.warnings
-        );
+        assert_eq!(probe.port, Some(8085), "端口要从 app/data 那份读");
     }
 
     #[tokio::test]
-    async fn probe_still_accepts_the_packaged_flat_dir_but_warns() {
+    async fn probe_rejects_packaged_only_layout_with_a_hint() {
+        // 导进来也用不上原数据：桌面端启动的 NeoBot 只读 app/data
         let host = host_with(&[("/n1/data/config.toml", CONFIG)]);
-        let probe = probe_neobot(host.as_ref(), &HostPath::from_posix("/n1"))
+        let err = probe_neobot(host.as_ref(), &HostPath::from_posix("/n1"))
             .await
-            .expect("打包布局也要能导入");
-        assert_eq!(probe.env_rel_path, "data/config.toml");
+            .expect_err("只有 data/ 的项目不该被当成可直接导入");
+        let msg = format!("{err}");
         assert!(
-            probe.warnings.iter().any(|w| w.contains("打包运行")),
-            "读写位置不同必须提醒：{:?}",
-            probe.warnings
+            msg.contains("data/config.toml") && msg.contains("app/data"),
+            "{msg}"
         );
     }
 

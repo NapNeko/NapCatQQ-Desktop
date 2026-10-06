@@ -24,7 +24,8 @@ use crate::toml_patch;
 use super::manifest::{
     ADAPTER_MODE_ONEBOT, KEY_ADAPTER, KEY_ADAPTER_MODE, KEY_DASHBOARD_HOST, KEY_DASHBOARD_PORT,
     KEY_REVERSE_WS_ACCESS_TOKEN, KEY_REVERSE_WS_HOST, KEY_REVERSE_WS_PORT, NEOBOT_CONFIG_TOML,
-    NEOBOT_DASHBOARD_CONFIG, NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT,
+    NEOBOT_CONFIG_TOML_LEGACY, NEOBOT_DASHBOARD_CONFIG, NEOBOT_DEFAULT_DASHBOARD_PORT,
+    NEOBOT_DEFAULT_ONEBOT_PORT,
 };
 
 pub const DOC_ADAPTER: &str = "adapter";
@@ -117,15 +118,11 @@ impl NeoBotInstanceConfig {
                 message: "面板端口不能为 0".to_string(),
             });
         }
-        if self.adapter.reverse_ws_port != 0
-            && self.adapter.reverse_ws_port == self.dashboard.port
+        if self.adapter.reverse_ws_port != 0 && self.adapter.reverse_ws_port == self.dashboard.port
         {
             issues.push(AppConfigIssue {
                 path: "dashboard/port".to_string(),
-                message: format!(
-                    "面板口不能与 OneBot 口相同（都是 {}）",
-                    self.dashboard.port
-                ),
+                message: format!("面板口不能与 OneBot 口相同（都是 {}）", self.dashboard.port),
             });
         }
         if self.adapter.mode.trim() != ADAPTER_MODE_ONEBOT {
@@ -182,12 +179,12 @@ fn parse_table(text: Option<&str>) -> Result<toml::Table, AppFrameworkError> {
     match text {
         None => Ok(toml::Table::new()),
         Some(t) if t.trim().is_empty() => Ok(toml::Table::new()),
-        Some(t) => t
-            .parse::<toml::Table>()
-            .map_err(|e| AppFrameworkError::ConfigInvalid(vec![AppConfigIssue {
+        Some(t) => t.parse::<toml::Table>().map_err(|e| {
+            AppFrameworkError::ConfigInvalid(vec![AppConfigIssue {
                 path: String::new(),
                 message: format!("TOML 解析失败：{e}"),
-            }])),
+            }])
+        }),
     }
 }
 
@@ -228,10 +225,7 @@ pub fn parse_neobot_config(
         {
             adapter.reverse_ws_port = p;
         }
-        if let Some(v) = t
-            .get(KEY_REVERSE_WS_ACCESS_TOKEN)
-            .and_then(|v| v.as_str())
-        {
+        if let Some(v) = t.get(KEY_REVERSE_WS_ACCESS_TOKEN).and_then(|v| v.as_str()) {
             adapter.reverse_ws_access_token = v.to_string();
         }
     }
@@ -257,10 +251,7 @@ pub fn parse_neobot_config(
         dashboard.port = p;
     }
 
-    Ok(NeoBotInstanceConfig {
-        adapter,
-        dashboard,
-    })
+    Ok(NeoBotInstanceConfig { adapter, dashboard })
 }
 
 pub async fn read_neobot_config(
@@ -366,6 +357,73 @@ pub async fn ensure_token_key(
     write_one(host, &path, &patch, write_sidecar).await
 }
 
+/// 旧版桌面端把对接写进了 `data/config.toml`，NeoBot 从来不读那份。启动前把那里的
+/// 对接键搬进 `app/data/config.toml`，已对接的实例升级后不用手动改绑。
+///
+/// 只在旧文件有非空 token、新文件还没有 token 时搬（搬过一次新文件就有 token，不会重复搬，
+/// 也不会盖掉用户之后在新文件里改的值）。口以实例口为准，和 apply_link 一致。
+/// 旧文件原样留着。返回是否写了。
+pub async fn carry_legacy_link(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    instance_port: u16,
+) -> Result<bool, AppFrameworkError> {
+    let legacy_path = install_dir.join(NEOBOT_CONFIG_TOML_LEGACY);
+    let Some(legacy_text) = read_optional_text(host, &legacy_path).await? else {
+        return Ok(false);
+    };
+    let legacy = parse_table(Some(&legacy_text))?;
+    let Some(old) = legacy.get(KEY_ADAPTER).and_then(|v| v.as_table()) else {
+        return Ok(false);
+    };
+    let Some(token) = old
+        .get(KEY_REVERSE_WS_ACCESS_TOKEN)
+        .and_then(|v| v.as_str())
+        .filter(|t| !t.trim().is_empty())
+    else {
+        return Ok(false);
+    };
+
+    let path = install_dir.join(NEOBOT_CONFIG_TOML);
+    let current = parse_table(read_optional_text(host, &path).await?.as_deref())?;
+    let has_token = current
+        .get(KEY_ADAPTER)
+        .and_then(|v| v.get(KEY_REVERSE_WS_ACCESS_TOKEN))
+        .and_then(|v| v.as_str())
+        .is_some_and(|t| !t.trim().is_empty());
+    if has_token {
+        return Ok(false);
+    }
+
+    let mut adapter = toml::Table::new();
+    for key in [KEY_ADAPTER_MODE, KEY_REVERSE_WS_HOST] {
+        if let Some(v) = old.get(key).filter(|v| v.is_str()) {
+            adapter.insert(key.to_string(), v.clone());
+        }
+    }
+    let port = Some(i64::from(instance_port))
+        .filter(|p| *p > 0)
+        .or_else(|| old.get(KEY_REVERSE_WS_PORT).and_then(|v| v.as_integer()));
+    if let Some(port) = port {
+        adapter.insert(KEY_REVERSE_WS_PORT.to_string(), toml::Value::Integer(port));
+    }
+    adapter.insert(
+        KEY_REVERSE_WS_ACCESS_TOKEN.to_string(),
+        toml::Value::String(token.to_string()),
+    );
+    let mut patch = toml::Table::new();
+    patch.insert(KEY_ADAPTER.to_string(), toml::Value::Table(adapter));
+    // NeoBot 还没在 app/data 下跑过时目录不存在；远端 Host 写文件不替人建父目录
+    if let Some(parent) = path.parent() {
+        host.create_dir_all(&parent)
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    }
+    // 不落 .ncd.bak：这一步发生在启动前，失败只是没搬成，下次启动再试
+    write_one(host, &path, &patch, false).await?;
+    Ok(true)
+}
+
 /// `[adapter]` 的期望值（差量写只动这几个键）
 fn adapter_patch(config: &NeoBotInstanceConfig) -> toml::Table {
     let mut adapter = toml::Table::new();
@@ -419,9 +477,9 @@ async fn plan_write(
     if toml_patch::changes(&before, &after).is_empty() {
         return Ok(None);
     }
-    let mut doc = original
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|e| AppFrameworkError::Integration(format!("{} 解析失败：{e}", path.as_posix())))?;
+    let mut doc = original.parse::<toml_edit::DocumentMut>().map_err(|e| {
+        AppFrameworkError::Integration(format!("{} 解析失败：{e}", path.as_posix()))
+    })?;
     // 差量写：只动变了的地方，保住注释、键序和 Desktop 不认识的键
     toml_patch::apply(&mut doc, &before, &after, &toml_patch::no_identity);
     Ok(Some(doc.to_string()))
@@ -594,7 +652,9 @@ mod tests {
             "不认识的键要留着"
         );
         assert_eq!(
-            adapter.get(KEY_REVERSE_WS_PORT).and_then(|v| v.as_integer()),
+            adapter
+                .get(KEY_REVERSE_WS_PORT)
+                .and_then(|v| v.as_integer()),
             Some(8080)
         );
         assert_eq!(
@@ -631,8 +691,133 @@ mod tests {
         let docs = neobot_config_documents();
         assert_eq!(docs.len(), 2);
         assert_eq!(docs[0].rel_path, "app/data/config.toml");
-        assert_eq!(docs[1].rel_path, "app/data/plugins_data/dashboard/config.toml");
+        assert_eq!(
+            docs[1].rel_path,
+            "app/data/plugins_data/dashboard/config.toml"
+        );
         assert!(docs.iter().all(|d| d.format == AppConfigFormat::Toml));
         assert!(docs.iter().all(|d| d.hot_reload));
+    }
+
+    // ---- 旧版桌面端写进 data/config.toml 的对接，启动前搬到 app/data ----
+
+    use crate::config_backup::tests::TestHost;
+
+    const LEGACY_LINKED: &str = "[adapter]\nmode = \"onebot\"\nreverse_ws_host = \"127.0.0.1\"\nreverse_ws_port = 36909\nreverse_ws_access_token = \"tok\"\n";
+
+    async fn adapter_of(host: &TestHost, path: &str) -> toml::Table {
+        let bytes = host.read_file(&HostPath::from_posix(path)).await.unwrap();
+        let table: toml::Table = String::from_utf8_lossy(&bytes).parse().unwrap();
+        table
+            .get(KEY_ADAPTER)
+            .and_then(|v| v.as_table())
+            .cloned()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn legacy_link_moves_into_real_config_and_keeps_user_keys() {
+        let host = TestHost::new("carry");
+        host.put("/n1/data/config.toml", LEGACY_LINKED.as_bytes());
+        host.put(
+            "/n1/app/data/config.toml",
+            "# 上游生成\n[bot]\nqq = 10001\n\n[adapter]\nmode = \"onebot\"\nreverse_ws_port = 8085\nreverse_ws_access_token = \"\"\n".as_bytes(),
+        );
+        let root = HostPath::from_posix("/n1");
+        assert!(
+            carry_legacy_link(host.as_ref(), &root, 36909)
+                .await
+                .unwrap()
+        );
+        let adapter = adapter_of(&host, "/n1/app/data/config.toml").await;
+        assert_eq!(
+            adapter
+                .get(KEY_REVERSE_WS_PORT)
+                .and_then(|v| v.as_integer()),
+            Some(36909)
+        );
+        assert_eq!(
+            adapter
+                .get(KEY_REVERSE_WS_ACCESS_TOKEN)
+                .and_then(|v| v.as_str()),
+            Some("tok")
+        );
+        let text = String::from_utf8_lossy(
+            &host
+                .read_file(&HostPath::from_posix("/n1/app/data/config.toml"))
+                .await
+                .unwrap(),
+        )
+        .into_owned();
+        assert!(
+            text.contains("# 上游生成") && text.contains("qq = 10001"),
+            "{text}"
+        );
+
+        // 搬过一次新文件就有 token，再启动不重复写
+        assert!(
+            !carry_legacy_link(host.as_ref(), &root, 36909)
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_link_creates_real_config_when_neobot_never_ran_there() {
+        let host = TestHost::new("carry");
+        host.put("/n1/data/config.toml", LEGACY_LINKED.as_bytes());
+        let root = HostPath::from_posix("/n1");
+        assert!(carry_legacy_link(host.as_ref(), &root, 0).await.unwrap());
+        let adapter = adapter_of(&host, "/n1/app/data/config.toml").await;
+        assert_eq!(
+            adapter
+                .get(KEY_REVERSE_WS_PORT)
+                .and_then(|v| v.as_integer()),
+            Some(36909),
+            "实例口未知时沿用旧文件里的口"
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_link_is_skipped_without_token_or_when_already_linked() {
+        let root = HostPath::from_posix("/n1");
+
+        let unlinked = TestHost::new("carry");
+        unlinked.put(
+            "/n1/data/config.toml",
+            "[adapter]\nreverse_ws_port = 36909\nreverse_ws_access_token = \"\"\n".as_bytes(),
+        );
+        assert!(
+            !carry_legacy_link(unlinked.as_ref(), &root, 36909)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !unlinked
+                .exists(&HostPath::from_posix("/n1/app/data/config.toml"))
+                .await
+                .unwrap(),
+            "没对接过就没东西可搬，不替它建文件"
+        );
+
+        let linked = TestHost::new("carry");
+        linked.put("/n1/data/config.toml", LEGACY_LINKED.as_bytes());
+        linked.put(
+            "/n1/app/data/config.toml",
+            "[adapter]\nreverse_ws_port = 40000\nreverse_ws_access_token = \"new\"\n".as_bytes(),
+        );
+        assert!(
+            !carry_legacy_link(linked.as_ref(), &root, 36909)
+                .await
+                .unwrap()
+        );
+        let adapter = adapter_of(&linked, "/n1/app/data/config.toml").await;
+        assert_eq!(
+            adapter
+                .get(KEY_REVERSE_WS_ACCESS_TOKEN)
+                .and_then(|v| v.as_str()),
+            Some("new"),
+            "新文件已有 token 时不能被旧值盖掉"
+        );
     }
 }
