@@ -10,8 +10,10 @@ import {
     addPending,
     parseContact,
     setDraft,
+    trimAccountMessages,
 } from './model';
 import { WORKING_BYTE_LIMIT, messageBytes } from './messageWorkingSet';
+import { archiveOf, restoreArchive } from './archive';
 
 const payload = (extra = {}) => ({
     post_type: 'message',
@@ -362,6 +364,75 @@ describe('group join notices', () => {
 });
 
 describe('local image source carry', () => {
+    it('keeps a settled large pasted image while archiving only its metadata', () => {
+        const file = 'base64://' + 'A'.repeat(7 * 1024 * 1024);
+        let state = openConversation(emptyAccount('99'), {
+            key: 'group:12',
+            type: 'group',
+            id: '12',
+            name: '测试群',
+        });
+        state = settleSend(
+            addPending(
+                state,
+                'group:12',
+                'large',
+                [
+                    { type: 'image', data: { file, name: '粘贴图片.png' } },
+                    { type: 'text', data: { text: '图片说明' } },
+                ],
+                100000,
+            ),
+            'large',
+            { state: 'sent', id: '70' },
+        );
+        state = trimAccountMessages(state);
+        expect(state.messages[0].segments[0].data.file).toBe(file);
+        expect(state.archiveMessages?.[0].id).toBe('70');
+        expect(state.archiveMessages?.[0].segments[0].data.file).toBeUndefined();
+        expect(state.archiveMessages?.[0].segments[1].data.text).toBe('图片说明');
+        const saved = archiveOf(state);
+        expect(saved.messages).toHaveLength(1);
+        expect(JSON.stringify(saved).length).toBeLessThan(2048);
+        state = ingestMessage(state, payload({ message_id: 71, time: 101 }));
+        expect(state.messages.some((message) => message.id === '70')).toBe(true);
+        expect(state.messages.some((message) => message.id === '71')).toBe(true);
+        const hydrated = restoreArchive(state, saved);
+        expect(
+            hydrated.messages.find((message) => message.id === '70')?.segments[0].data.file,
+        ).toBe(file);
+    });
+    it('does not retain multiple oversized local payloads in the settled working set', () => {
+        const file = 'base64://' + 'A'.repeat(5 * 1024 * 1024);
+        let state = openConversation(emptyAccount('99'), {
+            key: 'group:12',
+            type: 'group',
+            id: '12',
+            name: '测试群',
+        });
+        for (let index = 0; index < 3; index++) {
+            const requestId = `large-${index}`;
+            state = trimAccountMessages(
+                settleSend(
+                    addPending(
+                        state,
+                        'group:12',
+                        requestId,
+                        [{ type: 'image', data: { file } }],
+                        index,
+                    ),
+                    requestId,
+                    { state: 'sent', id: String(index) },
+                ),
+            );
+        }
+        expect(state.messages).toHaveLength(1);
+        expect(state.messages[0].id).toBe('2');
+        expect(state.archiveMessages).toHaveLength(3);
+        expect(
+            state.archiveMessages?.every((message) => message.segments[0].data.file === undefined),
+        ).toBe(true);
+    });
     it('keeps the local file on image segments when the echo replaces a pending send', () => {
         let state = addPending(
             emptyAccount('99'),

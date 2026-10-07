@@ -78,7 +78,7 @@ export function retainMessages(
 ): Message[] {
     return retainWorkingMessages(messages, reading, loading, anchor, replies);
 }
-export function mergeArchiveMessages(
+export function mergeMessageRows(
     saved: readonly Message[],
     incoming: readonly Message[],
 ): Message[] {
@@ -94,10 +94,13 @@ export function mergeArchiveMessages(
         byKey.set(message.key, message);
         if (message.id) byId.set(`${message.session}/${message.id}`, message.key);
     }
-    return retainArchiveMessages(
-        [...byKey.values()].sort((a, b) => a.at - b.at),
-        MESSAGE_LIMIT,
-    );
+    return [...byKey.values()].sort((a, b) => a.at - b.at);
+}
+export function mergeArchiveMessages(
+    saved: readonly Message[],
+    incoming: readonly Message[],
+): Message[] {
+    return retainArchiveMessages(mergeMessageRows(saved, incoming), MESSAGE_LIMIT);
 }
 export function trimAccountMessages(
     state: Account,

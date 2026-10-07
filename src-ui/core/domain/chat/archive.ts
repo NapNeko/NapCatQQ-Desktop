@@ -8,6 +8,7 @@ import {
     ingestMessage,
     MESSAGE_LIMIT,
     mergeArchiveMessages,
+    mergeMessageRows,
     trimAccountMessages,
     type Account,
     type Conversation,
@@ -77,8 +78,13 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
               }
             : live;
     }
-    const messages = mergeArchiveMessages([], deduplicateMessages([...byKey.values()]));
-    return trimAccountMessages({ ...state, conversations, messages, archiveMessages: messages });
+    const messages = mergeMessageRows([], deduplicateMessages([...byKey.values()]));
+    return trimAccountMessages({
+        ...state,
+        conversations,
+        messages,
+        archiveMessages: mergeArchiveMessages([], messages),
+    });
 }
 
 export function mergeRecentConversations(state: Account, rows: unknown[]): Account {
