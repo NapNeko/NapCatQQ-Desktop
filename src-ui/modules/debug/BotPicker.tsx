@@ -12,7 +12,8 @@ import {
 } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
-import { Popover, PopoverContent, PopoverTrigger, Spinner } from '../../shared/ui';
+import { Popover, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
+import { Spinner } from '../../shared/ui/Spinner';
 import { StatusDot, type StatusDotTone } from '../../shared/ui/motion';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useServerProfiles } from '../../hooks/remote/useIsHostReachable';

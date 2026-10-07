@@ -2,7 +2,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import './index.css';
-import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
+import { TitleBarChrome } from '../shared/components/next/TitleBarChrome';
 import { TooltipProvider } from '../shared/ui/Tooltip';
 import { RouteErrorBoundary } from '../shared/ui/RouteErrorBoundary';
 import { chatDesktopService } from '../core/services/chat-desktop.service';
@@ -45,7 +45,10 @@ export function ChatPopoutApp() {
         });
         const frame = requestAnimationFrame(() =>
             requestAnimationFrame(() => {
-                if (alive) void chatDesktopService.reveal();
+                if (alive)
+                    void chatDesktopService.reveal().catch((error) => {
+                        if (alive) setHandoffError(errorText(error));
+                    });
             }),
         );
         return () => {
@@ -58,7 +61,7 @@ export function ChatPopoutApp() {
         <TooltipProvider>
             <div className="native-chat-popout flex h-screen flex-col overflow-hidden bg-canvas">
                 <div className="relative shrink-0">
-                    <CustomTitleBar variant="window" />
+                    <TitleBarChrome tool />
                     <span className="native-chat-popout-title" aria-hidden>
                         聊天
                     </span>
