@@ -18,7 +18,6 @@ import {
 } from '../../core/domain/chat/model';
 import { messagePreview, segmentPreview, type Segment } from '../../core/domain/debug/segments';
 import { projectMessageDisplay } from '../../core/domain/chat/messageDisplay';
-import { qqFaceService } from '../../core/services/qq-face.service';
 import { markdownContent } from '../../core/domain/debug/markdown';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -26,7 +25,8 @@ import { ChatAvatar } from './ChatAvatar';
 import { QQFace } from './media/QQFace';
 import { SegmentList } from '../debug/right/SegmentView';
 import { ChatViewContext, useChatView } from '../debug/right/chatContext';
-import { chatMediaService, type ImageReadOptions } from '../../core/services/chat-media.service';
+import { useChatMedia } from '../../hooks/chat/useChatMedia';
+import { useQQFaceLookup } from '../../hooks/chat/useChatQqFaces';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import { ChatImageViewer } from './ChatImageViewer';
 import { Button } from '../../shared/ui/Button';
@@ -137,10 +137,11 @@ function SearchPicture({
 }
 
 function SearchContent({ message, pattern }: { message: Message; pattern: RegExp | null }) {
+    const peekFace = useQQFaceLookup();
     let imageIndex = 0;
     return (
         <div className="native-chat-search-result-content">
-            {projectMessageDisplay(message.segments, qqFaceService.peek).map((segment, index) => {
+            {projectMessageDisplay(message.segments, peekFace).map((segment, index) => {
                 if (segment.type === 'image' || segment.type === 'mface')
                     return (
                         <SearchPicture
@@ -223,6 +224,8 @@ export function ChatSearch({
     preventRecall = false,
 }: ChatSearchProps) {
     const fallback = useChatView();
+    // target 为空时不向子组件注入读取回调，hook 的 getter 只会在 target 存在时被调用。
+    const media = useChatMedia(() => target as DebugTarget);
     const [image, setImage] = useState('');
     useEffect(() => setImage(''), [target?.bot_id, target?.qq_id]);
     const view = useMemo(
@@ -233,17 +236,12 @@ export function ChatSearch({
                 ? {
                       mediaScope: accountKey(target.bot_id, String(target.qq_id)),
                       imageReadsQueued: true,
-                      isImageSourceAlive: (data: Record<string, unknown>) =>
-                          chatMediaService.isImageSourceAlive(target, data),
-                      readImage: (
-                          data: Record<string, unknown>,
-                          refresh?: boolean,
-                          options?: ImageReadOptions,
-                      ) => chatMediaService.image(target, data, refresh, options),
+                      isImageSourceAlive: media.isImageSourceAlive,
+                      readImage: media.image,
                   }
                 : {}),
         }),
-        [fallback, target],
+        [fallback, target, media],
     );
     const motion = useMotion();
     const [query, setQuery] = useState('');

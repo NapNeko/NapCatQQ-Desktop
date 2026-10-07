@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatEmojiPicker } from './ChatEmojiPicker';
@@ -8,6 +10,11 @@ import { QQ_FACE_FALLBACK } from '../../../core/domain/chat/qqFaces';
 import { QQFace } from './QQFace';
 import { qqFaceAssetService } from '../../../core/services/qq-face-assets.service';
 import { favoriteStickerService } from '../../../core/services/favorite-sticker.service';
+
+// 选择器经 useQQFaceCatalog/useFavoriteEmojis 走 react-query,测试树需要 Provider。
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const renderPicker = (ui: ReactNode) =>
+    render(<QueryClientProvider client={newClient()}>{ui}</QueryClientProvider>);
 
 const target: DebugTarget = {
     bot_id: 'bot',
@@ -57,7 +64,7 @@ beforeEach(() => {
 describe('favorite sticker selection', () => {
     it('finds recently added QQ faces by name and sends the exact numeric id', async () => {
         const select = vi.fn();
-        render(<ChatEmojiPicker target={target} onSelect={select} disabledReason="" />);
+        renderPicker(<ChatEmojiPicker target={target} onSelect={select} disabledReason="" />);
         mockPanelScroll(screen.getByRole('tabpanel'));
         expect(screen.getAllByRole('img').length).toBeLessThan(100);
         expect(screen.queryByRole('textbox', { name: '搜索 QQ 表情' })).not.toBeInTheDocument();
@@ -83,7 +90,7 @@ describe('favorite sticker selection', () => {
             urls.map((url) => ({ url, description: '' })),
         );
         const select = vi.fn();
-        render(<ChatEmojiPicker target={target} onSelect={select} disabledReason="" />);
+        renderPicker(<ChatEmojiPicker target={target} onSelect={select} disabledReason="" />);
         fireEvent.click(screen.getByRole('tab', { name: '收藏表情' }));
         await screen.findByRole('button', { name: '插入收藏表情 1' });
         expect(screen.getAllByRole('img').length).toBeLessThan(40);
@@ -102,17 +109,22 @@ describe('favorite sticker selection', () => {
             .mockResolvedValueOnce({ faces: [{ id: '486', name: '开学啦2' }], limited: false })
             .mockResolvedValueOnce({ faces: [{ id: '14', name: '微笑' }], limited: false });
         const select = vi.fn();
+        const client = newClient();
         const view = render(
-            <ChatEmojiPicker target={target} onSelect={select} disabledReason="" />,
+            <QueryClientProvider client={client}>
+                <ChatEmojiPicker target={target} onSelect={select} disabledReason="" />
+            </QueryClientProvider>,
         );
         fireEvent.click(await screen.findByRole('button', { name: '插入QQ 表情 486' }));
         expect(select).toHaveBeenCalledWith(expect.objectContaining({ id: '486' }));
         view.rerender(
-            <ChatEmojiPicker
-                target={{ ...target, qq_id: 100 }}
-                onSelect={select}
-                disabledReason=""
-            />,
+            <QueryClientProvider client={client}>
+                <ChatEmojiPicker
+                    target={{ ...target, qq_id: 100 }}
+                    onSelect={select}
+                    disabledReason=""
+                />
+            </QueryClientProvider>,
         );
         expect(screen.queryByRole('button', { name: '插入QQ 表情 486' })).not.toBeInTheDocument();
         await screen.findByText('1 个表情');
@@ -126,7 +138,7 @@ describe('favorite sticker selection', () => {
             ],
             limited: false,
         });
-        render(<ChatEmojiPicker target={target} onSelect={vi.fn()} disabledReason="" />);
+        renderPicker(<ChatEmojiPicker target={target} onSelect={vi.fn()} disabledReason="" />);
         fireEvent.click(await screen.findByRole('button', { name: '超级', exact: true }));
         expect(screen.queryByRole('button', { name: '插入QQ 表情 14' })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '插入QQ 表情 364' }));
@@ -195,7 +207,7 @@ describe('favorite sticker selection', () => {
             ],
             limited: false,
         });
-        render(<ChatEmojiPicker target={target} onSelect={vi.fn()} disabledReason="" />);
+        renderPicker(<ChatEmojiPicker target={target} onSelect={vi.fn()} disabledReason="" />);
         await screen.findByText('3 个表情');
         mockPanelScroll(screen.getByRole('tabpanel'));
         fireEvent.click(screen.getByRole('button', { name: '搜索表情' }));
@@ -218,7 +230,7 @@ describe('favorite sticker selection', () => {
             { url: 'https://cdn.example/hello.gif', description: '打招呼' },
             { url: 'https://cdn.example/sleep.gif', description: '晚安' },
         ]);
-        render(<ChatEmojiPicker target={target} onSelect={vi.fn()} disabledReason="" />);
+        renderPicker(<ChatEmojiPicker target={target} onSelect={vi.fn()} disabledReason="" />);
         const panel = screen.getByRole('tabpanel');
         mockPanelScroll(panel);
         fireEvent.click(screen.getByRole('tab', { name: '收藏表情' }));

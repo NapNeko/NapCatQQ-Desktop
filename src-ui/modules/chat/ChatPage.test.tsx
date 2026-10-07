@@ -21,13 +21,19 @@ const target: DebugTarget = {
 };
 const friend: Contact = { key: 'private:1', type: 'private', id: '1', name: '小明' };
 const group: Contact = { key: 'group:3', type: 'group', id: '3', name: '讨论群' };
-vi.mock('@tanstack/react-query', () => ({
-    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-    useQuery: ({ queryKey }: { queryKey: string[] }) => ({
-        data: queryKey[1] === 'desktop' ? { accounts: [] } : [target],
-        isLoading: false,
-    }),
-}));
+// data 必须跨渲染引用稳定:真 react-query 数据未变时保持同一引用,
+// 而迁移后的组件会把 query.data 镜像进本地 state,每次新数组会打满渲染循环。
+vi.mock('@tanstack/react-query', () => {
+    const cache: Record<string, unknown> = {};
+    return {
+        useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+        useMutation: () => ({ mutateAsync: async () => {} }),
+        useQuery: ({ queryKey }: { queryKey: string[] }) =>
+            queryKey[1] === 'desktop'
+                ? { data: (cache.desktop ??= { accounts: [] }), isLoading: false }
+                : { data: (cache.targets ??= [target]), isLoading: false },
+    };
+});
 vi.mock('../../hooks/chat/chatStore', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../hooks/chat/chatStore')>()),
     chatAccount: () => store,

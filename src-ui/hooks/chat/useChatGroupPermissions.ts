@@ -41,14 +41,6 @@ export function warmGroupMemberPermission(
     return groupMemberPermissions.warm(target, groupId, memberId);
 }
 
-export function invalidateGroupMemberPermission(
-    target: DebugTarget,
-    groupId: string,
-    memberId: string,
-): void {
-    groupMemberPermissions.invalidate(target, groupId, memberId);
-}
-
 export function clearGroupMemberPermissions(target?: DebugTarget, groupId?: string): void {
     groupMemberPermissions.clear(target, groupId);
 }

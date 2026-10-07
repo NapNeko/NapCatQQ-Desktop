@@ -63,7 +63,7 @@ describe('native message search', () => {
         );
         const image = await screen.findByAltText('图片');
         expect(image).toHaveAttribute('src', 'data:image/png;base64,iVBORw0KGgo=');
-        expect(read).toHaveBeenCalledWith(target, item.segments[0].data, undefined, {
+        expect(read).toHaveBeenCalledWith(target, item.segments[0].data, false, {
             signal: expect.any(AbortSignal),
             context: { messageId: item.id, imageIndex: 0 },
         });

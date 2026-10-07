@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Conversation } from '../../core/domain/chat/model';
 import { ChatDetails } from './ChatDetails';
 import { chatProfileService } from '../../core/services/chat-profile.service';
@@ -16,6 +17,14 @@ const friend: Conversation = {
     lastAt: 0,
     preview: '',
 };
+
+const withQuery = (ui: ReactNode) => (
+    <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+        {ui}
+    </QueryClientProvider>
+);
 
 describe('native conversation details', () => {
     beforeEach(() => {
@@ -37,7 +46,7 @@ describe('native conversation details', () => {
                 </>
             );
         }
-        render(<Header />);
+        render(withQuery(<Header />));
         fireEvent.click(screen.getByRole('button', { name: '查看阿澄的资料' }));
         expect(await screen.findByRole('dialog', { name: '会话资料' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '关闭会话资料' }));
@@ -47,7 +56,7 @@ describe('native conversation details', () => {
     });
     it('opens private details by pointer and closes back to the trigger', async () => {
         const pin = vi.fn();
-        render(<ChatDetails contact={friend} onPin={pin} />);
+        render(withQuery(<ChatDetails contact={friend} onPin={pin} />));
         const trigger = screen.getByRole('button', { name: '会话资料' });
         fireEvent.click(trigger);
         expect(await screen.findByRole('dialog', { name: '会话资料' })).toBeInTheDocument();
@@ -82,12 +91,14 @@ describe('native conversation details', () => {
             name: '开发交流',
         };
         render(
-            <ChatDetails
-                contact={group}
-                target={target}
-                onPin={() => {}}
-                onMembers={openMembers}
-            />,
+            withQuery(
+                <ChatDetails
+                    contact={group}
+                    target={target}
+                    onPin={() => {}}
+                    onMembers={openMembers}
+                />,
+            ),
         );
         fireEvent.click(screen.getByRole('button', { name: '会话资料' }));
         expect(await screen.findByText('18 / 500 人')).toBeInTheDocument();

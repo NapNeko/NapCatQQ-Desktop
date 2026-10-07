@@ -1,6 +1,5 @@
 // 主窗口内的原生双栏聊天。
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
     ArrowLeft,
     ChevronRight,
@@ -13,8 +12,6 @@ import {
     Users,
     X,
 } from 'lucide-react';
-import { chatService } from '../../core/services/chat.service';
-import { groupMemberPermissions } from '../../core/services/group-member-permissions.service';
 import {
     chatAccount,
     reconcileChatAccounts,
@@ -24,7 +21,9 @@ import {
     selectChatBot,
     loadChatView,
 } from '../../hooks/chat/chatStore';
-import { chatDesktopService } from '../../core/services/chat-desktop.service';
+import { useChatDesktop } from '../../hooks/chat/useChatDesktop';
+import { useChatTargets } from '../../hooks/chat/useChatConversations';
+import { useChatGroupSelf } from '../../hooks/chat/useChatGroupPermissions';
 import { ChatAccountControls } from './ChatAccountControls';
 import { ConversationSkeleton } from './ChatSkeleton';
 import { useChatNotifications } from './useChatNotifications';
@@ -66,6 +65,7 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
     const [selected, select] = useState(lastBot);
     const [restored, setRestored] = useState(false);
     const [navigation, setNavigation] = useState<ChatTrayNavigation | null>(null);
+    const { loadView, takeTrayNavigation, onAccountSelected, selectAccount } = useChatDesktop();
     useEffect(() => {
         let alive = true;
         let ready = false;
@@ -75,10 +75,7 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
                 .catch(() => {})
                 .then(async () => {
                     if (!alive || !ready) return;
-                    const [view, next] = await Promise.all([
-                        chatDesktopService.loadView(),
-                        chatDesktopService.takeTrayNavigation(),
-                    ]);
+                    const [view, next] = await Promise.all([loadView(), takeTrayNavigation()]);
                     if (!alive) return;
                     if (next) setNavigation(next);
                     const bot = next?.botId ?? view.selectedBot;
@@ -90,7 +87,7 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
                 });
             return queue;
         };
-        const listening = chatDesktopService.onAccountSelected(() => {
+        const listening = onAccountSelected(() => {
             void synchronize().catch((error) => console.warn('chat tray navigation', error));
         });
         void loadChatView()
@@ -114,12 +111,8 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
             alive = false;
             void listening.then((unlisten) => unlisten());
         };
-    }, []);
-    const targets = useQuery({
-        queryKey: ['chat', 'targets'],
-        queryFn: chatService.targets,
-        refetchInterval: 15_000,
-    });
+    }, [loadView, takeTrayNavigation, onAccountSelected]);
+    const targets = useChatTargets();
     useEffect(() => {
         if (targets.data) reconcileChatAccounts(targets.data);
     }, [targets.data]);
@@ -130,11 +123,11 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
     useEffect(() => {
         if (target && restored) {
             selectChatBot(target.bot_id);
-            void chatDesktopService
-                .selectAccount(target.bot_id)
-                .catch((error) => console.warn('chat window account', error));
+            void selectAccount(target.bot_id).catch((error) =>
+                console.warn('chat window account', error),
+            );
         }
-    }, [target?.bot_id, restored]);
+    }, [target?.bot_id, restored, selectAccount]);
     const picker = (connected: boolean, label: string) => (
         <BotPicker
             compact
@@ -370,14 +363,9 @@ function ChatWorkspace({
     );
     const connected =
         target.running && target.online !== false && snapshot.connection.state === 'connected';
-    useEffect(() => {
-        if (!connected || active?.type !== 'group') {
-            groupMemberPermissions.clear();
-            return;
-        }
-        void groupMemberPermissions.self(target, active.id);
-        return () => groupMemberPermissions.clear(target, active.id);
-    }, [identity, active?.key, connected, target.backend]);
+    // 自身群权限的订阅与清理收敛到 useChatGroupSelf：群会话且已连接时 self + 作用域内 clear，
+    // 其余情况传 null 复现原 effect 的整单 clear；依赖覆盖 identity/active.key/connected/backend。
+    useChatGroupSelf(target, connected && active?.type === 'group' ? active.id : null, connected);
     const connectionLabel = !target.running
         ? '机器人已停止'
         : target.online === false

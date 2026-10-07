@@ -16,9 +16,9 @@ import { useStickToBottom } from '../debug/right/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
-import { chatService } from '../../core/services/chat.service';
+import { useChatMedia } from '../../hooks/chat/useChatMedia';
+import { useChatSend } from '../../hooks/chat/useChatSend';
 import { ChatImageViewer } from './ChatImageViewer';
-import { chatMediaService, type ImageReadOptions } from '../../core/services/chat-media.service';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
@@ -72,6 +72,9 @@ export function NativeTimeline({
     const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
     const [forwardKeys, setForwardKeys] = useState<string[]>([]);
     const snapshot = useChatSnapshot(store);
+    // target 经 hook 内部 ref 每次调用时求值，与原闭包直读 store.target 的时机一致。
+    const media = useChatMedia(() => store.target);
+    const chatSend = useChatSend(store);
     const history = snapshot.history[contact.key];
     useEffect(() => {
         void store.ensureHistory(contact.key);
@@ -264,26 +267,17 @@ export function NativeTimeline({
             mediaScope: accountKey(store.target.bot_id, String(store.target.qq_id)),
             openImage: showImage,
             imageReadsQueued: true,
-            isImageSourceAlive: (data: Record<string, unknown>) =>
-                chatMediaService.isImageSourceAlive(store.target, data),
-            readImage: (
-                data: Record<string, unknown>,
-                refresh?: boolean,
-                options?: ImageReadOptions,
-            ) => chatMediaService.image(store.target, data, refresh, options),
-            readForward: (data: Record<string, unknown>) =>
-                chatMediaService.forward(store.target, data),
-            readRecord: (data: Record<string, unknown>) =>
-                chatMediaService.record(store.target, data),
-            readVideo: (data: Record<string, unknown>, refresh?: boolean) =>
-                chatMediaService.video(store.target, data, refresh),
-            readRecordText: (messageId: string) =>
-                chatMediaService.transcript(store.target, messageId),
+            isImageSourceAlive: media.isImageSourceAlive,
+            readImage: media.image,
+            readForward: media.forward,
+            readRecord: media.record,
+            readVideo: media.video,
+            readRecordText: media.transcript,
             fileAction: (data: Record<string, unknown>) => (
                 <ChatFileAction data={data} target={store.target} contact={contact} />
             ),
             openLink: (url: string) => {
-                void chatService.openLink(url).catch((e) => setError(String(e)));
+                void chatSend.openLink(url).catch((e) => setError(String(e)));
             },
             nameOf: (userId: number) => senderNames.get(String(userId)),
             findMessage: (messageId: number) => {
@@ -311,7 +305,7 @@ export function NativeTimeline({
                 return true;
             },
         }),
-        [fallback, senderNames, messageById, revealRef, store, contact],
+        [fallback, senderNames, messageById, revealRef, store, contact, media, chatSend],
     );
     const latestLabel = stick.unseen > 0 ? `回到最新，${stick.unseen} 条新消息` : '回到最新';
     return (

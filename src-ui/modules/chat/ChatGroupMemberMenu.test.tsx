@@ -1,12 +1,22 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Contact, Message } from '../../core/domain/chat/model';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { chatProfileService } from '../../core/services/chat-profile.service';
 import { ChatGroupMemberMenu } from './ChatGroupMemberMenu';
 import { ChatMessageActions } from './ChatMessageActions';
 import { groupMemberPermissions } from '../../core/services/group-member-permissions.service';
+
+const withQuery = (ui: ReactNode) => (
+    <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+        {ui}
+    </QueryClientProvider>
+);
 
 describe('group avatar member menu', () => {
     beforeEach(() => groupMemberPermissions.clear());
@@ -60,24 +70,31 @@ describe('group avatar member menu', () => {
         );
         const onViewMember = vi.fn();
         render(
-            <ChatMessageActions store={store} contact={contact} message={message} onError={vi.fn()}>
-                {(controls) => (
-                    <article>
-                        <ChatGroupMemberMenu
-                            target={store.target}
-                            store={store}
-                            contact={contact}
-                            message={message}
-                            onMessage={vi.fn()}
-                            onViewMember={onViewMember}
-                        >
-                            <img alt="头像" />
-                        </ChatGroupMemberMenu>
-                        <p>正文</p>
-                        {controls}
-                    </article>
-                )}
-            </ChatMessageActions>,
+            withQuery(
+                <ChatMessageActions
+                    store={store}
+                    contact={contact}
+                    message={message}
+                    onError={vi.fn()}
+                >
+                    {(controls) => (
+                        <article>
+                            <ChatGroupMemberMenu
+                                target={store.target}
+                                store={store}
+                                contact={contact}
+                                message={message}
+                                onMessage={vi.fn()}
+                                onViewMember={onViewMember}
+                            >
+                                <img alt="头像" />
+                            </ChatGroupMemberMenu>
+                            <p>正文</p>
+                            {controls}
+                        </article>
+                    )}
+                </ChatMessageActions>,
+            ),
         );
         await user.pointer({ keys: '[MouseRight]', target: screen.getByAltText('头像') });
         expect(screen.getAllByRole('menu')).toHaveLength(1);

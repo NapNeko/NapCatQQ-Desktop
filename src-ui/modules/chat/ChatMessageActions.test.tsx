@@ -2,6 +2,7 @@ import { createRef, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Contact, Draft, Message } from '../../core/domain/chat/model';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { ChatMessageActions } from './ChatMessageActions';
@@ -10,6 +11,12 @@ import {
     favoriteStickerService,
     FavoriteStickerError,
 } from '../../core/services/favorite-sticker.service';
+
+// ChatMessageActions 经 useAddFavoriteSticker 走 react-query,测试树需要 Provider。
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const withQuery = (ui: ReactNode) => (
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+);
 
 const contact: Contact = { key: 'group:12', id: '12', name: '群', type: 'group' };
 const baseMessage: Message = {
@@ -83,7 +90,7 @@ function setup(
             <textarea ref={input} aria-label="输入消息" />
         </>
     );
-    const view = render(renderMessage());
+    const view = render(withQuery(renderMessage()));
     return {
         store,
         onFocusComposer,
@@ -91,7 +98,8 @@ function setup(
         onForward,
         onSelect,
         onToggleSelection,
-        rerenderSelection: (options: typeof selection) => view.rerender(renderMessage(options)),
+        rerenderSelection: (options: typeof selection) =>
+            view.rerender(withQuery(renderMessage(options))),
     };
 }
 

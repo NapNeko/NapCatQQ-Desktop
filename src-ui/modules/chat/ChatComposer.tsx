@@ -19,7 +19,7 @@ import {
 } from '../../core/domain/chat/model';
 import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
 import { errorText } from '../../core/domain/errors';
-import { chatService } from '../../core/services/chat.service';
+import { useChatSend } from '../../hooks/chat/useChatSend';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
 import { ChatEmojiPicker } from './media/ChatEmojiPicker';
@@ -45,6 +45,7 @@ export function ChatComposer({
     collapsed?: boolean;
 }) {
     const snapshot = useChatSnapshot(store);
+    const { pickFile } = useChatSend(store);
     const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const localInput = useRef<HTMLTextAreaElement>(null);
     const input = inputRef ?? localInput;
@@ -158,7 +159,7 @@ export function ChatComposer({
         setError('');
         setPendingFiles((count) => count + 1);
         try {
-            const file = await chatService.pickFile();
+            const file = await pickFile();
             if (!file) return;
             if (current().attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
             if (type === 'image' && !/.(png|jpe?g|gif|webp|bmp)$/i.test(file.name))

@@ -4,10 +4,8 @@
 import { useCallback, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { chatService } from '../../core/services/chat.service';
-import { chatProfileService } from '../../core/services/chat-profile.service';
 import type { ChatAccountStore } from './chatStore';
 import type { Contact, SessionKey } from '../../core/domain/chat/model';
-import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 
 export function useChatSend(store: ChatAccountStore) {
     const send = useCallback((key: SessionKey) => store.send(key), [store]);
@@ -29,29 +27,4 @@ export function useChatSend(store: ChatAccountStore) {
         () => ({ send, recall, retry, poke, forward, pickFile, openLink }),
         [send, recall, retry, poke, forward, pickFile, openLink],
     );
-}
-
-// 群管理动作（禁言/移出）没有 store 语义，上游结果不明确的判断（token 守卫、
-// 成功文案、onApplied 失效）留在调用方，这里只保证错误原样拒绝。
-export function useChatMemberOps() {
-    const ban = useMutation({
-        mutationFn: (args: [DebugTarget, string, string, number]) =>
-            chatProfileService.ban(...args),
-    });
-    const kick = useMutation({
-        mutationFn: (args: [DebugTarget, string, string]) => chatProfileService.kick(...args),
-    });
-    const { mutateAsync: banAsync } = ban;
-    const { mutateAsync: kickAsync } = kick;
-    const banMember = useCallback(
-        (target: DebugTarget, groupId: string, memberId: string, duration: number) =>
-            banAsync([target, groupId, memberId, duration]),
-        [banAsync],
-    );
-    const kickMember = useCallback(
-        (target: DebugTarget, groupId: string, memberId: string) =>
-            kickAsync([target, groupId, memberId]),
-        [kickAsync],
-    );
-    return useMemo(() => ({ banMember, kickMember }), [banMember, kickMember]);
 }

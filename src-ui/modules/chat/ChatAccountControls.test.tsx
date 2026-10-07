@@ -133,7 +133,7 @@ describe('chat settings organization', () => {
         expect(screen.getByText('讨论群')).toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: '恢复提醒' }));
         await waitFor(() =>
-            expect(unmute).toHaveBeenCalledWith('settings-test', '99', '123', false),
+            expect(unmute).toHaveBeenCalledWith('settings-test', '99', '123', false, false),
         );
         await waitFor(() => expect(screen.queryByText('本地免打扰群聊')).not.toBeInTheDocument());
     });

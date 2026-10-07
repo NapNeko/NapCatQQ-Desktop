@@ -1,9 +1,12 @@
 // 收发和选择器共用 QQ 表情资源与本地缓存规则。
 import { useEffect, useState } from 'react';
 import { qqFaceLarge, QQ_FACE_FALLBACK } from '../../../core/domain/chat/qqFaces';
-import { qqFaceAssetService } from '../../../core/services/qq-face-assets.service';
-import { qqFaceService } from '../../../core/services/qq-face.service';
-import { bundledQQFaceSource } from '../../../core/services/qq-face-bundled.service';
+import {
+    acquireQQFaceAsset,
+    bundledQQFaceSource,
+    invalidateQQFaceAsset,
+    useQQFaceLookup,
+} from '../../../hooks/chat/useChatQqFaces';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 const faceNames = new Map(QQ_FACE_FALLBACK.map((face) => [face.id, face.name]));
 export function qqFaceSources(id: string, animated: boolean, url?: string): string[] {
@@ -43,12 +46,13 @@ export function QQFace({
 }) {
     const motion = useMotion();
     const [failed, setFailed] = useState({ identity: '', attempts: 0 });
+    const lookupFace = useQQFaceLookup();
     const [loaded, setLoaded] = useState({ source: '', url: '' });
     const valid = /^(0|[1-9]\d{0,5})$/.test(id);
     const superFace = qqFaceLarge(data) ?? displayLarge ?? false;
     const displaySize = size ?? (animated && superFace ? 72 : 24);
     const label = valid ? 'QQ 表情 ' + id : 'QQ 表情';
-    const title = name || qqFaceService.peek(id)?.name || faceNames.get(id) || label;
+    const title = name || lookupFace(id)?.name || faceNames.get(id) || label;
     const sources = qqFaceSources(id, animated && superFace && motion.enabled, url);
     const identity = JSON.stringify(sources);
     const attempts = failed.identity === identity ? failed.attempts : 0;
@@ -58,8 +62,7 @@ export function QQFace({
         if (!source || source === local) return;
         let cancelled = false;
         let release: (() => void) | undefined;
-        void qqFaceAssetService
-            .acquire(source)
+        void acquireQQFaceAsset(source)
             .then((lease) => {
                 if (cancelled) {
                     lease.release();
@@ -108,7 +111,7 @@ export function QQFace({
             className="mx-0.5 inline-block shrink-0 align-middle object-contain"
             style={{ width: displaySize, height: displaySize }}
             onError={() => {
-                void qqFaceAssetService.invalidate(source).catch(() => {});
+                void invalidateQQFaceAsset(source).catch(() => {});
                 setFailed({ identity, attempts: attempts + 1 });
             }}
         />

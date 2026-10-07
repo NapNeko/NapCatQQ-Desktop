@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from './ChatComposer';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { chatMediaService } from '../../core/services/chat-media.service';
-import { createRef } from 'react';
+import { createRef, useState, type ReactNode } from 'react';
 import { qqFaceService } from '../../core/services/qq-face.service';
 import { QQ_FACE_FALLBACK } from '../../core/domain/chat/qqFaces';
 import { setChatPreferences } from './chatPreferences';
@@ -12,6 +13,11 @@ beforeEach(() => {
     setChatPreferences({ composerHeight: null });
     vi.spyOn(qqFaceService, 'catalog').mockResolvedValue(QQ_FACE_FALLBACK);
 });
+// ChatComposer 经 useChatSend 挂 pickFile 的 useMutation，注册 mutation 需要 provider。
+function ProviderWrapper({ children }: { children: ReactNode }) {
+    const [client] = useState(() => new QueryClient());
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
 
 function setup(disabledReason = '') {
     const store = new ChatAccountStore({
@@ -31,6 +37,7 @@ function setup(disabledReason = '') {
             contact={{ key: 'private:12', id: '12', name: '好友', type: 'private' }}
             disabledReason={disabledReason}
         />,
+        { wrapper: ProviderWrapper },
     );
     return { send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
 }
@@ -62,6 +69,7 @@ describe('native composer keyboard', () => {
         const inputRef = createRef<HTMLTextAreaElement>();
         const view = render(
             <ChatComposer store={store} contact={contact} inputRef={inputRef} disabledReason="" />,
+            { wrapper: ProviderWrapper },
         );
         const input = screen.getByRole('textbox', { name: '发送消息给好友' });
         view.rerender(
@@ -152,6 +160,7 @@ describe('native composer keyboard', () => {
                 disabledReason=""
                 inputRef={inputRef}
             />,
+            { wrapper: ProviderWrapper },
         );
         const button = screen.getByRole('button', { name: '取消引用' });
         button.focus();
@@ -186,6 +195,7 @@ describe('native composer keyboard', () => {
                 contact={{ key: 'private:12', id: '12', name: '好友', type: 'private' }}
                 disabledReason=""
             />,
+            { wrapper: ProviderWrapper },
         );
         fireEvent.click(screen.getByRole('button', { name: '表情' }));
         expect(favorites).not.toHaveBeenCalled();
@@ -234,6 +244,7 @@ describe('native composer keyboard', () => {
                 contact={{ key: 'group:12', id: '12', name: '群', type: 'group' }}
                 disabledReason=""
             />,
+            { wrapper: ProviderWrapper },
         );
         const input = screen.getByRole('textbox', { name: '发送消息给群' });
         fireEvent.change(input, { target: { value: '@', selectionStart: 1 } });
@@ -265,6 +276,7 @@ describe('native composer keyboard', () => {
                 contact={{ key: 'group:12', id: '12', name: '群', type: 'group' }}
                 disabledReason=""
             />,
+            { wrapper: ProviderWrapper },
         );
         const input = screen.getByRole('textbox', { name: '发送消息给群' });
         fireEvent.change(input, { target: { value: '@没有这个人', selectionStart: 7 } });
@@ -290,6 +302,7 @@ describe('native composer keyboard', () => {
         const contact = { key: 'group:12' as const, id: '12', name: '群', type: 'group' as const };
         const { rerender } = render(
             <ChatComposer store={store} contact={contact} disabledReason="" />,
+            { wrapper: ProviderWrapper },
         );
         const input = screen.getByRole('textbox', { name: '发送消息给群' });
         fireEvent.change(input, { target: { value: '@小', selectionStart: 2 } });

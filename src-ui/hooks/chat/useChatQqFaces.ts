@@ -49,6 +49,8 @@ export function useQQFaceCatalog(target: DebugTarget, enabled: boolean) {
         // 未就绪时回落到账号缓存,首帧不闪空目录,与选择器原 readyCatalog 判定等价。
         catalog: query.data ?? qqFaceService.peekAccount(target),
         isLoading: query.isPending,
+        // 手动 refresh 时 isPending 已假,选择器"正在更新表情"busy 态需要 isFetching 兜住。
+        isFetching: query.isFetching,
         refresh,
     };
 }

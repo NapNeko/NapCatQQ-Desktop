@@ -1,5 +1,5 @@
 // 资料使用主窗口的轻量弹层，不占用第三栏。
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
     Check,
     ChevronRight,
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { Contact, Conversation } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
-import { chatProfileService, type ChatProfile } from '../../core/services/chat-profile.service';
+import { useChatProfile } from '../../hooks/chat/useChatProfile';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
 import { ChatAvatar } from './ChatAvatar';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -41,12 +41,27 @@ export function ChatDetails({
 }: Props) {
     const [copyState, setCopyState] = useState('');
     const [internalOpen, setInternalOpen] = useState(false);
-    const [profile, setProfile] = useState<ChatProfile>();
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [attempt, setAttempt] = useState(0);
     const leaving = useRef(false);
     const visible = open ?? internalOpen;
+    const {
+        profile,
+        isLoading,
+        error: profileError,
+        refresh,
+    } = useChatProfile(target, contact, visible);
+    // 原实现每次重取开始时清空 error;react-query 会保留上次 error,重取窗口内同样不展示。
+    const [refreshing, setRefreshing] = useState(false);
+    const reload = () => {
+        setRefreshing(true);
+        void refresh().finally(() => setRefreshing(false));
+    };
+    const error = profileError
+        ? profileError instanceof Error
+            ? profileError.message
+            : '资料读取失败'
+        : '';
+    const loading = refreshing || isLoading;
+
     const change = (next: boolean) => {
         setCopyState('');
         setInternalOpen(next);
@@ -57,40 +72,6 @@ export function ChatDetails({
         change(false);
         action();
     };
-    useEffect(() => {
-        setProfile(undefined);
-    }, [target?.bot_id, target?.qq_id, contact.key]);
-    useEffect(() => {
-        if (!visible || !target) return;
-        let cancelled = false;
-        setError('');
-        setLoading(true);
-        void chatProfileService
-            .info(target, contact)
-            .then(
-                (value) => {
-                    if (!cancelled) setProfile(value);
-                },
-                (reason) => {
-                    if (!cancelled)
-                        setError(reason instanceof Error ? reason.message : '资料读取失败');
-                },
-            )
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [
-        visible,
-        target?.bot_id,
-        target?.qq_id,
-        target?.backend,
-        contact.id,
-        contact.type,
-        attempt,
-    ]);
     const displayed = { ...contact, name: profile?.name || contact.name };
     const copy = async () => {
         try {
@@ -131,7 +112,7 @@ export function ChatDetails({
                             className="native-chat-icon"
                             aria-label="刷新会话资料"
                             disabled={loading}
-                            onClick={() => setAttempt((value) => value + 1)}
+                            onClick={reload}
                         >
                             <RefreshCw size={13} />
                         </button>
@@ -186,7 +167,7 @@ export function ChatDetails({
                     {error && (
                         <p className="native-chat-profile-status" role="status">
                             {error}
-                            <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+                            <button type="button" onClick={reload}>
                                 重试
                             </button>
                         </p>

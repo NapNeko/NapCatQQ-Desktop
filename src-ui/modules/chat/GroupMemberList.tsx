@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight } from 'lucide-react';
-import type { ProfileMember } from '../../core/services/chat-profile.service';
+import type { ProfileMember } from '../../core/domain/chat/profile';
 import { ChatAvatar } from './ChatAvatar';
 
 export function GroupMemberList({

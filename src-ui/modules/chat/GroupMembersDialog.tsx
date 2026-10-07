@@ -14,9 +14,12 @@ import {
 } from 'lucide-react';
 import type { Contact } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
-import { chatProfileService, type ProfileMember } from '../../core/services/chat-profile.service';
-import { groupMemberPermissions } from '../../core/services/group-member-permissions.service';
-import { useGroupMemberPermission } from '../../hooks/chat/useGroupMemberPermission';
+import type { ProfileMember } from '../../core/domain/chat/profile';
+import { useChatGroupMemberDetail, useChatGroupMembers } from '../../hooks/chat/useChatProfile';
+import {
+    clearGroupMemberPermissions,
+    useGroupMemberPermission,
+} from '../../hooks/chat/useChatGroupPermissions';
 import { errorText } from '../../core/domain/errors';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { Button } from '../../shared/ui/Button';
@@ -49,6 +52,8 @@ export function GroupMembersDialog({
     initialMemberId?: string;
 }) {
     const identity = `${target.bot_id}/${target.qq_id}/${contact.key}`;
+    // 列表数据由 react-query 持有;kick 要立即从界面剔除而服务器最终一致有延迟,
+    // 所以镜像一份本地数组,下次 refetch 到达时覆盖回服务器数据(与原实现同构)。
     const [members, setMembers] = useState<ProfileMember[]>([]);
     const selfPermission = useGroupMemberPermission(
         target,
@@ -58,22 +63,45 @@ export function GroupMembersDialog({
     );
     const self = selfPermission?.member;
     const [selectedId, setSelectedId] = useState<string>();
-    const [detail, setDetail] = useState<ProfileMember>();
     const [query, setQuery] = useState('');
-    const [attempt, setAttempt] = useState(0);
-    const [detailAttempt, setDetailAttempt] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [detailLoading, setDetailLoading] = useState(false);
-    const [readError, setReadError] = useState('');
-    const [detailError, setDetailError] = useState('');
+    const memberList = useChatGroupMembers(
+        target,
+        contact.id,
+        open && connected && contact.type === 'group',
+    );
+    const memberDetail = useChatGroupMemberDetail(
+        target,
+        contact.id,
+        selectedId,
+        open && connected && contact.type === 'group',
+    );
+    // react-query 在重取期间保留上次 error,原实现每次取前/关闭时清空,这里同构地隐藏;
+    // 断连或未打开时不发起请求,同样不展示上一轮的失败。
+    const readError =
+        open && connected && memberList.error && !memberList.isFetching
+            ? errorText(memberList.error)
+            : '';
+    const detailError =
+        open && connected && memberDetail.error && !memberDetail.isFetching
+            ? errorText(memberDetail.error)
+            : '';
+    const detail = memberDetail.member;
+    const loading = memberList.isFetching;
+    const detailLoading = memberDetail.isFetching;
     const [copyState, setCopyState] = useState('');
     const [action, setAction] = useState<GroupMemberAction | null>(null);
     const [result, setResult] = useState<GroupMemberResult>();
-    useChatNotice(`${identity}:members`, `${contact.name} · 成员读取失败`, readError, () =>
-        setAttempt((value) => value + 1),
+    useChatNotice(
+        `${identity}:members`,
+        `${contact.name} · 成员读取失败`,
+        readError,
+        () => void memberList.refresh(),
     );
-    useChatNotice(`${identity}:member-profile`, `${contact.name} · 名片读取失败`, detailError, () =>
-        setDetailAttempt((value) => value + 1),
+    useChatNotice(
+        `${identity}:member-profile`,
+        `${contact.name} · 名片读取失败`,
+        detailError,
+        () => void memberDetail.refresh(),
     );
     useChatNotice(
         `${identity}:member-action`,
@@ -85,10 +113,7 @@ export function GroupMembersDialog({
     useEffect(() => {
         setMembers([]);
         setSelectedId(undefined);
-        setDetail(undefined);
         setQuery('');
-        setReadError('');
-        setDetailError('');
         setResult(undefined);
         setAction(null);
     }, [identity]);
@@ -96,67 +121,23 @@ export function GroupMembersDialog({
         if (!open) {
             setAction(null);
             setQuery('');
-            setReadError('');
-            setDetailError('');
             return;
         }
-        if (contact.type !== 'group') return;
-        if (!connected) {
-            groupMemberPermissions.clear(target, contact.id);
-            setLoading(false);
-            return;
-        }
-        let cancelled = false;
-        setLoading(true);
-        setReadError('');
-        void Promise.allSettled([
-            chatProfileService.members(target, contact.id),
-            groupMemberPermissions.self(target, contact.id),
-        ]).then(([list]) => {
-            if (cancelled) return;
-            if (list.status === 'fulfilled') {
-                setMembers(list.value);
-                groupMemberPermissions.seed(target, contact.id, list.value);
-                setSelectedId((previous) => {
-                    const requested = initialMemberId || previous;
-                    return list.value.some((member) => member.id === requested)
-                        ? requested
-                        : undefined;
-                });
-            } else setReadError(errorText(list.reason));
-            setLoading(false);
+        // 断连时清权限缓存条目;列表/详情的重取由 react-query 的 enabled 门控。
+        if (contact.type === 'group' && !connected) clearGroupMemberPermissions(target, contact.id);
+    }, [open, identity, target.backend, connected]);
+    useEffect(() => {
+        const list = memberList.members;
+        if (!list) return;
+        setMembers(list);
+        setSelectedId((previous) => {
+            const requested = initialMemberId || previous;
+            return list.some((entry) => entry.id === requested) ? requested : undefined;
         });
-        return () => {
-            cancelled = true;
-        };
-    }, [open, identity, target.backend, attempt, initialMemberId, connected]);
+    }, [memberList.members, initialMemberId]);
     useEffect(() => {
         setCopyState('');
-        setDetail(undefined);
-        setDetailError('');
-        if (!open || !connected || !selectedId || contact.type !== 'group') return;
-        let cancelled = false;
-        setDetailLoading(true);
-        void chatProfileService
-            .member(target, contact.id, selectedId)
-            .then(
-                (member) => {
-                    if (!cancelled) {
-                        setDetail(member);
-                        groupMemberPermissions.seed(target, contact.id, [member]);
-                    }
-                },
-                (error) => {
-                    if (!cancelled) setDetailError(errorText(error));
-                },
-            )
-            .finally(() => {
-                if (!cancelled) setDetailLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [open, identity, selectedId, detailAttempt, target.backend, connected]);
+    }, [open, identity, selectedId, target.backend, connected]);
     const term = query.trim().toLocaleLowerCase();
     const filtered = useMemo(
         () =>
@@ -243,7 +224,7 @@ export function GroupMembersDialog({
                         aria-label="刷新群成员"
                         title="刷新群成员"
                         disabled={loading || !connected}
-                        onClick={() => setAttempt((value) => value + 1)}
+                        onClick={() => void memberList.refresh()}
                     >
                         <RefreshCw size={15} />
                     </Button>
@@ -264,7 +245,7 @@ export function GroupMembersDialog({
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setAttempt((value) => value + 1)}
+                                onClick={() => void memberList.refresh()}
                             >
                                 重新读取成员
                             </Button>
@@ -393,12 +374,12 @@ export function GroupMembersDialog({
                         onClose={() => setAction(null)}
                         onResult={setResult}
                         onApplied={(applied) => {
-                            if (applied === 'kick') {
-                                setMembers((values) =>
-                                    values.filter((member) => member.id !== selected.id),
-                                );
-                                setSelectedId(undefined);
-                            } else setDetailAttempt((value) => value + 1);
+                            // 名片重取由 useChatMemberModeration 失效详情查询触发,这里只管 kick 的列表剔除。
+                            if (applied !== 'kick') return;
+                            setMembers((values) =>
+                                values.filter((member) => member.id !== selected.id),
+                            );
+                            setSelectedId(undefined);
                         }}
                     />
                 )}

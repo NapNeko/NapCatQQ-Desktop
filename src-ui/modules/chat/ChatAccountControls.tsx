@@ -1,8 +1,11 @@
 // 聊天账号设置弹窗：账号 / 消息提醒 / 窗口单栏分区，沿用设置页 FormSection 行式。
 import { useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, PanelTop, PanelsTopLeft, RefreshCw, Settings2 } from 'lucide-react';
-import { chatDesktopService, isChatPopoutWindow } from '../../core/services/chat-desktop.service';
+import {
+    isChatPopoutWindow,
+    useChatDesktop,
+    useChatDesktopStatus,
+} from '../../hooks/chat/useChatDesktop';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { ChatAccountPreference } from '../../core/ipc/generated/chat/ChatAccountPreference';
 import { Button } from '../../shared/ui/Button';
@@ -116,12 +119,8 @@ export function ChatAccountControls({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const motion = useMotion();
-    const client = useQueryClient();
-    const status = useQuery({
-        queryKey: ['chat', 'desktop'],
-        queryFn: chatDesktopService.status,
-        enabled: open,
-    });
+    const desktop = useChatDesktop();
+    const status = useChatDesktopStatus({ enabled: open });
     const accountStatus = status.data?.accounts.find(
         (r) => r.target.bot_id === target.bot_id && r.preference.selfId === String(target.qq_id),
     );
@@ -144,8 +143,7 @@ export function ChatAccountControls({
         setBusy(true);
         setError('');
         try {
-            await chatDesktopService.setPreference({ ...preference, ...patch });
-            await client.invalidateQueries({ queryKey: ['chat', 'desktop'] });
+            await desktop.setPreference({ ...preference, ...patch });
         } catch (e) {
             setError(errorText(e));
         } finally {
@@ -157,8 +155,8 @@ export function ChatAccountControls({
         setError('');
         setOpen(false);
         try {
-            if (isChatPopoutWindow()) await chatDesktopService.close(true);
-            else await chatDesktopService.open(target.bot_id);
+            if (isChatPopoutWindow()) await desktop.close(true);
+            else await desktop.open(target.bot_id);
         } catch (e) {
             setError(errorText(e));
         } finally {
@@ -180,13 +178,7 @@ export function ChatAccountControls({
         setBusy(true);
         setError('');
         try {
-            await chatDesktopService.ignoreGroup(
-                target.bot_id,
-                String(target.qq_id),
-                groupId,
-                false,
-            );
-            await client.invalidateQueries({ queryKey: ['chat', 'desktop'] });
+            await desktop.ignoreGroup(target.bot_id, String(target.qq_id), groupId, false);
         } catch (e) {
             setError(errorText(e));
         } finally {

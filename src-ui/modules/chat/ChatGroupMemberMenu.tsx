@@ -5,9 +5,12 @@ import type { Contact, Message } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
-import type { ProfileMember } from '../../core/services/chat-profile.service';
-import { groupMemberPermissions } from '../../core/services/group-member-permissions.service';
-import { useGroupMemberPermission } from '../../hooks/chat/useGroupMemberPermission';
+import type { ProfileMember } from '../../core/domain/chat/profile';
+import {
+    clearGroupMemberPermissions,
+    useGroupMemberPermission,
+    warmGroupMemberPermission,
+} from '../../hooks/chat/useChatGroupPermissions';
 import { errorText } from '../../core/domain/errors';
 import {
     ContextMenu,
@@ -72,7 +75,7 @@ export function ChatGroupMemberMenu({
     const selfRole = selfPermission?.member?.role;
     const member = memberPermission?.member;
     const prepare = () => {
-        if (eligible) void groupMemberPermissions.warm(target, contact.id, message.senderId);
+        if (eligible) void warmGroupMemberPermission(target, contact.id, message.senderId);
     };
     const person: Contact = {
         key: `private:${message.senderId}`,
@@ -99,7 +102,7 @@ export function ChatGroupMemberMenu({
     }, [identity]);
     useEffect(() => {
         if (!connected && contact.type === 'group') {
-            groupMemberPermissions.clear(target, contact.id);
+            clearGroupMemberPermissions(target, contact.id);
             return;
         }
         prepare();
@@ -202,6 +205,7 @@ export function ChatGroupMemberMenu({
                     )}
                 </ContextMenuContent>
             </ContextMenu>
+            {/* 动作生效后的权限失效由 useChatMemberModeration 的 onSuccess 完成，不再传 onApplied。 */}
             {actionMember && (
                 <ChatMemberActions
                     target={target}
@@ -211,9 +215,6 @@ export function ChatGroupMemberMenu({
                     connected={connected}
                     onClose={() => setAction(null)}
                     onResult={setResult}
-                    onApplied={() =>
-                        groupMemberPermissions.invalidate(target, contact.id, actionMember.id)
-                    }
                 />
             )}
         </>

@@ -1,13 +1,5 @@
 // 分类网格保留浏览位置，搜索仅定位与标记命中的表情。
-import {
-    useEffect,
-    useId,
-    useLayoutEffect,
-    useMemo,
-    useRef,
-    useState,
-    type RefObject,
-} from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
 import { QQFace } from './QQFace';
@@ -18,13 +10,11 @@ import {
 } from '../../../core/domain/chat/qqFaces';
 import {
     QQ_CLASSIC_FACES,
-    qqFaceService,
-    loadRecentQQFaces,
-    rememberQQFace,
-    type QQFaceCatalog,
-} from '../../../core/services/qq-face.service';
-import { chatMediaService, type FavoriteEmoji } from '../../../core/services/chat-media.service';
-import { favoriteStickerService } from '../../../core/services/favorite-sticker.service';
+    useQQFaceCatalog,
+    useRecentQQFaces,
+} from '../../../hooks/chat/useChatQqFaces';
+import { useFavoriteEmojis } from '../../../hooks/chat/useChatFavoriteStickers';
+import type { FavoriteEmoji } from '../../../core/domain/chat/media';
 import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion';
 import { errorText } from '../../../core/domain/errors';
 import type { Attachment } from '../../../core/domain/chat/model';
@@ -47,11 +37,14 @@ export function ChatEmojiPicker({
     const searchInput = useRef<HTMLInputElement>(null);
     const searchButton = useRef<HTMLButtonElement>(null);
     const identity = target.backend + ':' + target.bot_id + ':' + target.qq_id;
-    const [catalog, setCatalog] = useState<{ identity: string; value: QQFaceCatalog } | null>(null);
-    const [faceLoading, setFaceLoading] = useState(false);
-    const [faceRefresh, setFaceRefresh] = useState(0);
-    const readyCatalog =
-        catalog?.identity === identity ? catalog.value : qqFaceService.peekAccount(target);
+    const {
+        catalog: readyCatalog,
+        isLoading: catalogPending,
+        isFetching: catalogFetching,
+        refresh: refreshFaces,
+    } = useQQFaceCatalog(target, !disabledReason);
+    // pending 覆盖首载、fetching 覆盖手动刷新;禁用态下不显 busy,对齐原 effect 的 disabledReason 早退。
+    const faceLoading = !disabledReason && (catalogPending || catalogFetching);
     const faces =
         readyCatalog?.faces ??
         (target.backend === 'snowluma' ? QQ_CLASSIC_FACES : QQ_FACE_FALLBACK);
@@ -59,73 +52,28 @@ export function ChatEmojiPicker({
     const [query, setQuery] = useState('');
     const [matchCursor, setMatchCursor] = useState(0);
     const [category, setCategory] = useState('全部');
-    const [recent, setRecent] = useState<{ identity: string; ids: string[] } | null>(null);
-    const savedRecent = useMemo(() => loadRecentQQFaces(identity), [identity]);
-    const recentIds = recent?.identity === identity ? recent.ids : savedRecent;
+    const { ids: recentIds, remember: rememberRecentFace } = useRecentQQFaces(identity);
     const categories = useMemo(
         () => [...new Set(['全部', '最近', ...faces.map(qqFaceCategory)])],
         [faces],
     );
     const selectedCategory = categories.includes(category) ? category : '全部';
-    const [favorites, setFavorites] = useState<{
-        identity: string;
-        revision: number;
-        items: FavoriteEmoji[];
-    } | null>(null);
-    const favoriteItems = favorites?.identity === identity ? favorites.items : null;
-    const [favoriteLoading, setFavoriteLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [retry, setRetry] = useState(0);
+    // 收藏查询开过一次 Tab 后保持挂载:订阅通知到达即后台刷新,回 Tab 直接见新数据,
+    // 复现原"订阅 retry+1 → 回 Tab 读取"的观感且不会每次切 Tab 都发请求。
+    const [favoritesOpened, setFavoritesOpened] = useState(false);
+    const {
+        favorites,
+        isLoading: favoritePending,
+        isFetching: favoriteFetching,
+        error: favoriteFailure,
+        refresh: refreshFavorites,
+    } = useFavoriteEmojis(target, favoritesOpened && !disabledReason);
+    const favoriteItems = favorites ?? null;
+    const favoriteLoading =
+        tab === 'favorites' && !disabledReason && (favoritePending || favoriteFetching);
+    // 原实现在每次读取开始时清空错误;react-query 的 error 存续到下次成功,读取中隐藏以对齐。
+    const error = favoriteFailure && !favoriteLoading ? errorText(favoriteFailure) : '';
 
-    useEffect(() => {
-        if (disabledReason) return;
-        let cancelled = false;
-        setFaceLoading(true);
-        void qqFaceService
-            .forAccount(target, faceRefresh > 0)
-            .then((value) => {
-                if (!cancelled) setCatalog({ identity, value });
-            })
-            .finally(() => {
-                if (!cancelled) setFaceLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [identity, disabledReason, faceRefresh]);
-    useEffect(
-        () =>
-            favoriteStickerService.subscribe(target, () => {
-                chatMediaService.invalidateFavorites(target);
-                setRetry((value) => value + 1);
-            }),
-        [identity],
-    );
-    useEffect(() => {
-        if (
-            tab !== 'favorites' ||
-            disabledReason ||
-            (favorites?.identity === identity && favorites.revision === retry)
-        )
-            return;
-        let cancelled = false;
-        setFavoriteLoading(true);
-        setError('');
-        void chatMediaService
-            .favoriteDetails(target, retry > 0)
-            .then((items) => {
-                if (!cancelled) setFavorites({ identity, revision: retry, items });
-            })
-            .catch((e) => {
-                if (!cancelled) setError(errorText(e));
-            })
-            .finally(() => {
-                if (!cancelled) setFavoriteLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [tab, identity, disabledReason, retry]);
     useLayoutEffect(() => {
         if (panel.current) panel.current.scrollTop = 0;
     }, [tab, selectedCategory, identity]);
@@ -174,6 +122,7 @@ export function ChatEmojiPicker({
             setCategory(hit.category);
     }, [tab, hit?.key, visibleFaces]);
     const changeTab = (value: 'qq' | 'favorites') => {
+        if (value === 'favorites') setFavoritesOpened(true);
         setTab(value);
         setQuery('');
         setMatchCursor(0);
@@ -296,11 +245,7 @@ export function ChatEmojiPicker({
                                 !!disabledReason || (target.backend === 'snowluma' && !readyCatalog)
                             }
                             onSelect={(attachment) => {
-                                if (attachment.type === 'face')
-                                    setRecent({
-                                        identity,
-                                        ids: rememberQQFace(identity, attachment.id),
-                                    });
+                                if (attachment.type === 'face') rememberRecentFace(attachment.id);
                                 onSelect(attachment);
                             }}
                         />
@@ -318,10 +263,7 @@ export function ChatEmojiPicker({
                 ) : error && favoriteItems === null ? (
                     <div className="native-chat-face-state" role="status">
                         <span>{error}</span>
-                        <button
-                            className="native-chat-media-retry"
-                            onClick={() => setRetry((value) => value + 1)}
-                        >
+                        <button className="native-chat-media-retry" onClick={refreshFavorites}>
                             重试读取收藏表情
                         </button>
                     </div>
@@ -405,11 +347,7 @@ export function ChatEmojiPicker({
                         type="button"
                         aria-label={tab === 'qq' ? '更新 QQ 表情' : '更新收藏表情'}
                         disabled={!!disabledReason || refreshing}
-                        onClick={() =>
-                            tab === 'qq'
-                                ? setFaceRefresh((value) => value + 1)
-                                : setRetry((value) => value + 1)
-                        }
+                        onClick={() => (tab === 'qq' ? refreshFaces() : refreshFavorites())}
                     >
                         <RefreshCw size={12} />
                         更新

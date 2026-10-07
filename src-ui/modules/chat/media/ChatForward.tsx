@@ -16,7 +16,7 @@ import { ArrowLeft, ChevronRight, Clock3, Users } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Dialog, DialogContent, DialogTitle } from '../../../shared/ui/Dialog';
 import { errorText } from '../../../core/domain/errors';
-import type { ForwardNode } from '../../../core/services/chat-media.service';
+import type { ForwardNode } from '../../../core/domain/chat/media';
 import { messagePreview, type Segment } from '../../../core/domain/debug/segments';
 import { ChatViewContext, useChatView } from '../../debug/right/chatContext';
 import { LruCache } from '../../debug/right/boundedCache';

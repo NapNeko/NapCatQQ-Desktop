@@ -42,6 +42,7 @@ export function useFavoriteEmojis(target: DebugTarget, enabled: boolean) {
     return {
         favorites: query.data as FavoriteEmoji[] | undefined,
         isLoading: query.isPending,
+        isFetching: query.isFetching,
         error: query.error,
         refresh,
     };
