@@ -759,7 +759,11 @@ pub(super) fn merge_archive(current: &mut ChatArchive, incoming: ChatArchive) {
         };
         let previous = current.messages.iter().find(|m| matches(m));
         if let Some(previous) = previous {
-            message.recalled = previous.recalled.or(message.recalled);
+            message.recalled =
+                (previous.recalled == Some(true) || message.recalled == Some(true)).then_some(true);
+            if previous.recalled == Some(true) && !previous.segments.is_empty() {
+                message.segments.clone_from(&previous.segments);
+            }
             if previous.status == ChatArchiveSendStatus::Sent
                 && message.status == ChatArchiveSendStatus::Unknown
             {
@@ -836,8 +840,12 @@ mod tests {
             &json!({"notice_type":"friend_recall","user_id":22,"message_id":1}),
             None,
         );
+        let original = inbox.messages[0].segments.clone();
+        let mut stale = stale;
+        stale.messages[0].segments.clear();
         merge_archive(&mut inbox, stale);
         assert_eq!(inbox.messages[0].recalled, Some(true));
+        assert_eq!(inbox.messages[0].segments, original);
     }
     #[test]
     fn cq_media_is_restored_as_segments_instead_of_literal_codes() {

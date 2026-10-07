@@ -11,6 +11,7 @@ use std::{path::PathBuf, sync::Arc, time::Instant};
 mod desktop;
 pub mod group_files;
 mod inbox;
+mod moderation;
 mod notifications;
 
 pub struct ChatManager {
@@ -65,7 +66,16 @@ impl ChatManager {
         self.desktop.inbox.merge(&(bot_id, self_id), value).await
     }
 
-    pub async fn call(&self, request: DebugCallRequest) -> DebugCallResponse {
+    pub async fn call(&self, mut request: DebugCallRequest) -> DebugCallResponse {
+        if moderation::is_member_action(&request.action) {
+            if let Err(error) = self.check_member_action(&mut request).await {
+                return DebugCallResponse {
+                    request_id: request.request_id,
+                    result: DebugCallResult::Err { error },
+                };
+            }
+            return self.transport.call(request).await;
+        }
         if !chat_action(&request.action) {
             return rejected(request.request_id);
         }
@@ -184,6 +194,7 @@ fn chat_action(action: &str) -> bool {
         action,
         "get_login_info"
             | "get_friend_list"
+            | "get_friends_with_category"
             | "get_recent_contact"
             | "get_stranger_info"
             | "get_group_list"
@@ -200,9 +211,15 @@ fn chat_action(action: &str) -> bool {
             | "get_file"
             | "fetch_ptt_text"
             | "fetch_custom_face"
+            | "fetch_custom_face_detail"
             | "fetch_sys_faces"
+            | "add_custom_face"
+            | "download_file"
             | "send_group_msg"
             | "send_private_msg"
+            | "delete_msg"
+            | "send_group_forward_msg"
+            | "send_private_forward_msg"
             | "upload_group_file"
             | "upload_private_file"
             | "group_poke"
@@ -248,13 +265,27 @@ mod tests {
     }
 
     #[test]
-    fn chat_supports_recent_contacts_and_private_profiles() {
-        assert!(chat_action("get_recent_contact"));
-        assert!(chat_action("get_stranger_info"));
+    fn chat_allows_recall_and_forward_without_unguarded_group_management() {
+        for action in [
+            "delete_msg",
+            "send_group_forward_msg",
+            "send_private_forward_msg",
+        ] {
+            assert!(chat_action(action), "{action}");
+        }
+        assert!(!chat_action("set_group_kick"));
+        assert!(!chat_action("set_friend_add_request"));
     }
 
     #[test]
-    fn chat_allows_read_only_media_without_arbitrary_files_or_emoji_mutation() {
+    fn chat_supports_recent_contacts_and_private_profiles() {
+        assert!(chat_action("get_recent_contact"));
+        assert!(chat_action("get_stranger_info"));
+        assert!(chat_action("get_friends_with_category"));
+    }
+
+    #[test]
+    fn chat_allows_media_and_sticker_collection_without_group_file_deletion() {
         for action in [
             "get_image",
             "get_forward_msg",
@@ -262,7 +293,10 @@ mod tests {
             "get_file",
             "fetch_ptt_text",
             "fetch_custom_face",
+            "fetch_custom_face_detail",
             "fetch_sys_faces",
+            "download_file",
+            "add_custom_face",
             "get_group_info",
             "get_group_member_list",
             "get_friend_list",
@@ -271,8 +305,6 @@ mod tests {
         }
         // 群文件的改动只经 group_files 拼好的调用，不让页面直接点名
         for action in [
-            "download_file",
-            "add_custom_face",
             "delete_custom_face",
             "delete_group_file",
             "delete_group_folder",
