@@ -55,7 +55,8 @@ export function retainArchiveMessages(messages: readonly Message[], limit = 5000
         // 大型临时媒体先剥离，再计算归档预算；正文和协议标识仍保留。
         const message = archiveCopy(messages[index]);
         const size = messageBytes(message);
-        if (bytes + size > ARCHIVE_BYTE_LIMIT) continue;
+        // 归档没有持久化分页缺口；保留连续后缀，避免再插入缺口前的旧消息。
+        if (bytes + size > ARCHIVE_BYTE_LIMIT) break;
         bytes += size;
         retained.push(message);
     }

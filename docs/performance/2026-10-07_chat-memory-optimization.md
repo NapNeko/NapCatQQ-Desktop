@@ -74,6 +74,8 @@ PR #152 审查后的修复：移除依赖外部隔离配置的产品入口；显
 
 第二轮补齐大图片发送后的保留、轻量归档副本与实时消息的合并顺序，以及归档中的无 ID 通知回放去重。集中补验：195 个前端文件、1773 个用例通过，TypeScript/Vite 生产构建通过，调度器 21/21 测试与修改文件的格式检查通过。假账号原生探针返回 `MULTIWINDOW_RESTORE_CONFIRMED`、`MULTIWINDOW_OS_RESTORE_CONFIRMED` 与 `MULTIWINDOW_RESULT Ok(())`，两份页面可挂起并正常销毁；日志在本机 `tmp/perf/native-os-restore-8aed709a.log`。
 
+第三轮修复归档预算造成的隐形缺口：达到预算时停止向前保留，避免跳过一条大消息后再保存更旧的小消息。补验 195 个前端文件、1774 个用例及 TypeScript 检查通过；新用例验证较旧小消息本可放入剩余预算时，仍只保留连续的最新后缀。
+
 原始受控日志保留在本机 `tmp/perf/final-chat-repeat.log`，优化前数据见[调查报告](2026-10-07_chat-dual-window-memory-report.md)。保留的隔离探针见 `src-tauri/examples/chat_multiwindow_probe.rs`，不调用生产 runner。测试 profile 的批量删除被执行策略拦截（只返回 `blocked by policy`，没有具体理由）；账号配置等明确文件通过编辑器删除，剩余临时缓存目录是 `tmp/perf/optimized-product-profile/` 和 `tmp/perf/optimized-product-profile-final/`。
 
 以下哈希对应原始验收构建，不含 PR 审查后的窗口恢复时序修复。

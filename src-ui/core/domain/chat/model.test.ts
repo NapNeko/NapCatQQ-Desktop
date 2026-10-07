@@ -12,7 +12,12 @@ import {
     setDraft,
     trimAccountMessages,
 } from './model';
-import { WORKING_BYTE_LIMIT, messageBytes } from './messageWorkingSet';
+import {
+    WORKING_BYTE_LIMIT,
+    ARCHIVE_BYTE_LIMIT,
+    messageBytes,
+    retainArchiveMessages,
+} from './messageWorkingSet';
 import { archiveOf, restoreArchive } from './archive';
 
 const payload = (extra = {}) => ({
@@ -27,6 +32,24 @@ const payload = (extra = {}) => ({
     ...extra,
 });
 describe('native chat projection', () => {
+    it('keeps an archive suffix without a hidden gap when the next older message exceeds its budget', () => {
+        const base = ingestMessage(emptyAccount('99'), payload()).messages[0];
+        const contents = [
+            'older small message',
+            'M'.repeat(5 * 1024 * 1024),
+            'N'.repeat(4 * 1024 * 1024),
+        ];
+        const rows = contents.map((content, index) => ({
+            ...base,
+            key: `group:12/${index + 1}`,
+            id: String(index + 1),
+            at: index + 1,
+            segments: [{ type: 'text', data: { text: content } }],
+        }));
+        expect(messageBytes(rows[2]) + messageBytes(rows[0])).toBeLessThan(ARCHIVE_BYTE_LIMIT);
+        expect(messageBytes(rows[2]) + messageBytes(rows[1])).toBeGreaterThan(ARCHIVE_BYTE_LIMIT);
+        expect(retainArchiveMessages(rows).map((message) => message.id)).toEqual(['3']);
+    });
     it('keeps a bounded older page and the recent page while loading history', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         const message = state.messages[0];
