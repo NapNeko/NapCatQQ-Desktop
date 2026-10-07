@@ -227,11 +227,12 @@ impl WebviewScheduler {
         }
     }
 
-    fn is_hidden(&self, label: &str) -> bool {
+    fn needs_native_restore(&self, label: &str) -> bool {
         self.entries.lock().ok().is_some_and(|entries| {
-            entries
-                .get(label)
-                .is_some_and(|registration| registration.entry.is_hidden())
+            entries.get(label).is_some_and(|registration| {
+                registration.entry.is_hidden()
+                    || registration.entry.confirmed_hidden() == Some(true)
+            })
         })
     }
 
@@ -256,6 +257,14 @@ pub async fn show_window(window: &WebviewWindow) -> Result<(), String> {
     let (revision, actions) = scheduler
         .step(window.label(), Event::Show)
         .ok_or("WebView 调度状态不可用")?;
+    finish_show(window, revision, actions).await
+}
+
+async fn finish_show(
+    window: &WebviewWindow,
+    revision: Revision,
+    actions: Vec<Action>,
+) -> Result<(), String> {
     for action in actions {
         if action == Action::SetVisible(true) {
             let result = set_visible(window, true, revision).await;
@@ -265,7 +274,11 @@ pub async fn show_window(window: &WebviewWindow) -> Result<(), String> {
             apply(window, revision, action);
         }
     }
-    if !scheduler.can_expose(window.label(), revision) {
+    if !window
+        .app_handle()
+        .try_state::<WebviewScheduler>()
+        .is_some_and(|scheduler| scheduler.can_expose(window.label(), revision))
+    {
         return Err("窗口显示请求已失效".into());
     }
     window.show().map_err(|e| e.to_string())
@@ -282,6 +295,13 @@ pub fn hide_window(window: &WebviewWindow) -> Result<(), String> {
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(focused) => {
+            if *focused
+                && window.is_visible().unwrap_or(false)
+                && !window.is_minimized().unwrap_or(false)
+                && defer_native_restore(window)
+            {
+                return;
+            }
             if let Some(event) = policy::native_focus_event(
                 *focused,
                 window.is_visible().unwrap_or(false),
@@ -295,13 +315,8 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
             if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
                 if window.is_minimized().unwrap_or(false) {
                     notify(&webview, Event::Hide);
-                } else if window.is_visible().unwrap_or(false)
-                    && window
-                        .app_handle()
-                        .try_state::<WebviewScheduler>()
-                        .is_some_and(|scheduler| scheduler.is_hidden(window.label()))
-                {
-                    notify(&webview, Event::Show);
+                } else if window.is_visible().unwrap_or(false) {
+                    defer_native_restore(window);
                 }
             }
         }
@@ -312,6 +327,36 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         }
         _ => {}
     }
+}
+
+fn defer_native_restore(window: &tauri::Window) -> bool {
+    let Some(scheduler) = window.app_handle().try_state::<WebviewScheduler>() else {
+        return false;
+    };
+    if !scheduler.needs_native_restore(window.label()) {
+        return false;
+    }
+    let Some(webview) = window.app_handle().get_webview_window(window.label()) else {
+        return false;
+    };
+    let focused = window.is_focused().unwrap_or(false);
+    // 任务栏恢复先露出原生窗口，先收起表面，等 controller 确认后再放出。
+    if let Err(error) = window.hide() {
+        tracing::warn!(target: "ncd_tauri::webview_scheduler", label = window.label(), %error, "延迟原生窗口恢复失败");
+        return false;
+    }
+    // 在原生事件中确定代次，排队期间的隐藏/销毁可使这次恢复失效。
+    let Some((revision, actions)) = scheduler.step(window.label(), Event::Show) else {
+        return false;
+    };
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = finish_show(&webview, revision, actions).await {
+            tracing::warn!(target: "ncd_tauri::webview_scheduler", label = webview.label(), %error, "恢复 WebView 可见性失败");
+        } else if focused {
+            let _ = webview.set_focus();
+        }
+    });
+    true
 }
 
 fn notify(window: &WebviewWindow, event: Event) {
@@ -509,5 +554,20 @@ mod tests {
         assert!(!scheduler.can_expose("main", revision));
         scheduler.complete("main", revision, Action::SetVisible(true), Ok(()));
         assert!(!scheduler.can_expose("main", revision));
+    }
+
+    #[test]
+    fn os_restore_stays_gated_after_focus_until_visibility_is_confirmed() {
+        let scheduler = WebviewScheduler::default();
+        assert!(!scheduler.needs_native_restore("main"));
+        let (hidden, _) = scheduler.step("main", Event::Hide).unwrap();
+        scheduler.complete("main", hidden, Action::SetVisible(false), Ok(()));
+        assert!(scheduler.needs_native_restore("main"));
+        let (focused, _) = scheduler.step("main", Event::Focus(true)).unwrap();
+        assert!(scheduler.needs_native_restore("main"));
+        scheduler.complete("main", hidden, Action::SetVisible(true), Ok(()));
+        assert!(scheduler.needs_native_restore("main"));
+        scheduler.complete("main", focused, Action::SetVisible(true), Ok(()));
+        assert!(!scheduler.needs_native_restore("main"));
     }
 }

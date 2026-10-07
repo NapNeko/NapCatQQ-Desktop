@@ -16,6 +16,7 @@ use windows::core::Interface;
 #[derive(Default)]
 struct ProbeState {
     finished: AtomicBool,
+    native_events: AtomicBool,
 }
 
 #[tauri::command]
@@ -203,6 +204,22 @@ async fn experiment(app: AppHandle, blank: bool, two: bool, legacy: bool) -> Res
         return Err("原生窗口显示前未确认 WebView 可见".into());
     }
     eprintln!("MULTIWINDOW_RESTORE_CONFIRMED");
+    app.state::<ProbeState>()
+        .native_events
+        .store(true, Ordering::SeqCst);
+    let native_restore = async {
+        windows[0].minimize().map_err(|error| error.to_string())?;
+        confirm_native_visibility(&app, &windows[0], true).await?;
+        windows[0].unminimize().map_err(|error| error.to_string())?;
+        confirm_native_visibility(&app, &windows[0], false).await?;
+        eprintln!("MULTIWINDOW_OS_RESTORE_CONFIRMED");
+        Ok::<(), String>(())
+    }
+    .await;
+    app.state::<ProbeState>()
+        .native_events
+        .store(false, Ordering::SeqCst);
+    native_restore?;
     ncd_tauri::webview_scheduler::hide_window(&windows[0])?;
     tokio::time::sleep(Duration::from_secs(2)).await;
     for window in &windows {
@@ -224,6 +241,33 @@ async fn experiment(app: AppHandle, blank: bool, two: bool, legacy: bool) -> Res
     Ok(())
 }
 
+async fn confirm_native_visibility(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    hidden: bool,
+) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+    while tokio::time::Instant::now() < deadline {
+        let report = ncd_tauri::webview_scheduler::memory_report(app).await?;
+        let native_ready = if hidden {
+            window.is_minimized().map_err(|error| error.to_string())?
+        } else {
+            window.is_visible().map_err(|error| error.to_string())?
+                && !window.is_minimized().map_err(|error| error.to_string())?
+        };
+        if native_ready
+            && report
+                .levels
+                .iter()
+                .any(|level| level.label == window.label() && level.applied_hidden == Some(hidden))
+        {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Err(format!("原生恢复状态未确认: hidden={hidden}"))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let blank = std::env::args().any(|argument| argument == "blank");
     let two = std::env::args().any(|argument| argument == "two");
@@ -241,9 +285,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             chat_archive_load, chat_desktop_status, chat_take_tray_navigation, chat_select_account,
             chat_set_reading, chat_mark_read, chat_archive_save, chat_view_save,
             chat_release_account, chat_flush, reveal_chat_window])
-        // 隐藏探针没有用户焦点操作；避免原生建窗焦点事件改变受控的 Low/Suspend 场景。
+        // 常规阶段隔离焦点干扰；最小化/恢复验收阶段单独接入原生事件。
         .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::Destroyed) {
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                || window.app_handle().state::<ProbeState>().native_events.load(Ordering::SeqCst)
+            {
                 ncd_tauri::webview_scheduler::handle_window_event(window, event);
             }
         })
