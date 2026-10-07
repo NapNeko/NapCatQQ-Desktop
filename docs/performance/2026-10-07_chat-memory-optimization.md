@@ -70,7 +70,9 @@
 - 修改的 UI 文件 Prettier 检查、修改及新增 Rust 文件 rustfmt 检查通过；无 IPC 类型变更。
 - 原始验收已生成默认 identifier 的正式 release 可执行文件，未构建 MSI；代码随后提交到 PR #152 审查。
 
-PR #152 审查后的修复：移除依赖外部隔离配置的产品入口；显示窗口时等待 WebView 可见性读回成功，并用窗口/状态代次拒绝失效请求。调度器回归测试 20/20 通过，覆盖未完成、失败和迟到的可见性确认。
+PR #152 审查后的修复：移除依赖外部隔离配置的产品入口；显示窗口时等待 WebView 可见性读回成功，并用窗口/状态代次拒绝失效请求。操作系统恢复最小化窗口时也先收起原生表面，等 controller 确认后再显示，原生事件中确定代次，避免排队的旧恢复覆盖新的隐藏请求。
+
+第二轮补齐大图片发送后的保留、轻量归档副本与实时消息的合并顺序，以及归档中的无 ID 通知回放去重。集中补验：195 个前端文件、1773 个用例通过，TypeScript/Vite 生产构建通过，调度器 21/21 测试与修改文件的格式检查通过。假账号原生探针返回 `MULTIWINDOW_RESTORE_CONFIRMED`、`MULTIWINDOW_OS_RESTORE_CONFIRMED` 与 `MULTIWINDOW_RESULT Ok(())`，两份页面可挂起并正常销毁；日志在本机 `tmp/perf/native-os-restore-8aed709a.log`。
 
 原始受控日志保留在本机 `tmp/perf/final-chat-repeat.log`，优化前数据见[调查报告](2026-10-07_chat-dual-window-memory-report.md)。保留的隔离探针见 `src-tauri/examples/chat_multiwindow_probe.rs`，不调用生产 runner。测试 profile 的批量删除被执行策略拦截（只返回 `blocked by policy`，没有具体理由）；账号配置等明确文件通过编辑器删除，剩余临时缓存目录是 `tmp/perf/optimized-product-profile/` 和 `tmp/perf/optimized-product-profile-final/`。
 
