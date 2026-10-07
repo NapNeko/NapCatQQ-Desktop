@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyAccount, ingestMessage, type Message } from './model';
 import { archiveOf, restoreArchive } from './archive';
-import { deduplicateMessages } from './messageIdentity';
+import { deduplicateMessages, sortMessages } from './messageIdentity';
 
 const event = (message_id: number, message_seq: number, extra = {}) => ({
     message_type: 'private',
@@ -13,6 +13,46 @@ const event = (message_id: number, message_seq: number, extra = {}) => ({
     ...extra,
 });
 describe('message identity across historical API versions', () => {
+    it('preserves alternating same-second repeats when identifiers do not carry an ordering sequence', () => {
+        const rows = [
+            event(903, 903, { message_type: 'group', group_id: 12, message: '嗯', user_id: 22 }),
+            event(-401, -401, {
+                message_type: 'group',
+                group_id: 12,
+                message: '是的',
+                user_id: 23,
+            }),
+            event(11, 11, { message_type: 'group', group_id: 12, message: '嗯', user_id: 22 }),
+        ].map((raw) => ingestMessage(emptyAccount('99'), raw).messages[0]);
+        expect(deduplicateMessages(rows).map((message) => message.id)).toEqual([
+            '903',
+            '-401',
+            '11',
+        ]);
+    });
+    it('keeps local optimistic placement through second-precision echoes and sorts genuine protocol sequences', () => {
+        const first = ingestMessage(emptyAccount('99'), event(777, 777)).messages[0];
+        const local = {
+            ...first,
+            key: 'pending/a',
+            id: undefined,
+            sequence: undefined,
+            requestId: 'a',
+            at: 100650,
+        };
+        const incoming = { ...first, key: 'remote', id: '-900', at: 100000 };
+        expect(sortMessages([first, local, incoming]).map((message) => message.key)).toEqual([
+            first.key,
+            'pending/a',
+            'remote',
+        ]);
+        expect(
+            sortMessages([
+                { ...first, key: 'later', id: '-500', sequence: '53' },
+                { ...first, key: 'earlier', id: '9999', sequence: '52' },
+            ]).map((message) => message.key),
+        ).toEqual(['earlier', 'later']);
+    });
     it.each([true, false])(
         'merges legacy id-as-sequence with the canonical event in either order: %s',
         (legacyFirst) => {

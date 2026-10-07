@@ -15,6 +15,7 @@ import {
     type SessionKey,
 } from './model';
 import { deduplicateMessages } from './messageIdentity';
+import { isInlineImageReference } from './imageSource';
 
 const sessionKey = (value: string): value is SessionKey => /^(group|private):[0-9]+$/.test(value);
 
@@ -35,6 +36,19 @@ export function archiveOf(account: Account): ChatArchive {
             .slice(-MESSAGE_LIMIT)
             .map(({ gapBefore: _gapBefore, ...m }) => ({
                 ...m,
+                segments: m.segments.map((segment) => {
+                    const data = { ...segment.data };
+                    delete data.inline_ref;
+                    for (const field of ['file', 'local_file', 'url', 'base64']) {
+                        if (
+                            field === 'base64' ||
+                            isInlineImageReference(data[field]) ||
+                            /^(base64:\/\/|data:image\/)/i.test(text(data[field]))
+                        )
+                            delete data[field];
+                    }
+                    return { ...segment, data };
+                }),
                 status: m.status === 'sending' ? 'unknown' : m.status,
             })),
     };
@@ -78,6 +92,18 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
             : live;
     }
     const messages = mergeArchiveMessages([], deduplicateMessages([...byKey.values()]));
+    const latest = new Map<SessionKey, Message>();
+    for (const message of messages) latest.set(message.session, message);
+    for (const [key, message] of latest) {
+        const conversation = conversations[key];
+        if (
+            conversation &&
+            !message.recalled &&
+            message.at >= conversation.lastAt &&
+            message.segments.some((segment) => segment.type === 'markdown')
+        )
+            conversations[key] = { ...conversation, preview: messagePreview(message.segments) };
+    }
     return trimAccountMessages({ ...state, conversations, messages, archiveMessages: messages });
 }
 

@@ -3,6 +3,7 @@ import { chatService } from './chat.service';
 import { chatMediaService, createChatMediaService } from './chat-media.service';
 import type { DebugCallResponse } from '../ipc/generated/debug/DebugCallResponse';
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
+import { inlineImageService } from './inline-image.service';
 vi.mock('../ipc/transport', async (original) => ({
     ...(await original<typeof import('../ipc/transport')>()),
     isTauri: true,
@@ -40,6 +41,206 @@ const ok = (data: unknown): DebugCallResponse => ({
     },
 });
 describe('native chat media protocol', () => {
+    it('resolves private image references to preview bytes and outbound base64 only within the account', async () => {
+        const reference = inlineImageService.capture('bot', '99', 'base64://R0lGODlh');
+        const call = vi.fn();
+        const service = createChatMediaService(call);
+        try {
+            expect(await service.image(target, { file: reference })).toMatch(
+                /^(?:blob:|data:image\/)/,
+            );
+            expect((await service.imageForSend(target, { file: reference })).data.file).toBe(
+                'base64://R0lGODlh',
+            );
+            expect(service.isImageSourceAlive({ ...target, qq_id: 100 }, { file: reference })).toBe(
+                false,
+            );
+            await expect(
+                service.imageForSend({ ...target, qq_id: 100 }, { file: reference }),
+            ).rejects.toThrow('缓存已释放');
+            expect(call).not.toHaveBeenCalled();
+        } finally {
+            inlineImageService.discard('bot', '99', reference);
+        }
+    });
+    it('recovers an evicted reference by its original message and image ordinal for preview and repeat', async () => {
+        const call = vi.fn(async (_bot, action) =>
+            action === 'get_msg'
+                ? ok({
+                      message: [
+                          { type: 'image', data: { file_id: 'first' } },
+                          { type: 'image', data: { file_id: 'second' } },
+                      ],
+                  })
+                : ok({ url: 'https://cdn.example/fresh.png' }),
+        );
+        const service = createChatMediaService(call);
+        const data = {
+            file: 'ncd-inline-image://evicted',
+            source_message_id: '123',
+            source_image_index: 1,
+        };
+        expect(await service.image(target, data)).toBe('https://cdn.example/fresh.png');
+        expect((await service.imageForSend(target, data)).data.file).toBe(
+            'https://cdn.example/fresh.png',
+        );
+        expect(call.mock.calls.filter((args) => args[1] === 'get_image')).toEqual([
+            ['bot', 'get_image', { file_id: 'second' }],
+            ['bot', 'get_image', { file_id: 'second' }],
+        ]);
+        expect(JSON.stringify(call.mock.calls)).not.toContain('ncd-inline-image://');
+    });
+    it('starts the image deadline after its queue wait rather than rejecting a later healthy read', async () => {
+        vi.useFakeTimers();
+        const finish: Array<() => void> = [];
+        const call = vi.fn(
+            (_bot, _action, params) =>
+                new Promise<DebugCallResponse>((resolve) => {
+                    finish.push(() =>
+                        resolve(ok({ url: `https://cdn.example/${params.file}.png` })),
+                    );
+                }),
+        );
+        const service = createChatMediaService(call);
+        const fifthStarted = vi.fn();
+        const jobs = Array.from({ length: 5 }, (_, index) =>
+            service.image(
+                target,
+                { file: `queued-${index}` },
+                true,
+                index === 4 ? { onReadStart: fifthStarted } : {},
+            ),
+        );
+        const settled = Promise.allSettled(jobs);
+        try {
+            await vi.advanceTimersByTimeAsync(14_000);
+            expect(fifthStarted).not.toHaveBeenCalled();
+            finish.splice(0).forEach((resolve) => resolve());
+            await vi.advanceTimersByTimeAsync(0);
+            expect(fifthStarted).toHaveBeenCalledOnce();
+            await vi.advanceTimersByTimeAsync(14_000);
+            finish.splice(0).forEach((resolve) => resolve());
+            expect((await settled).every((item) => item.status === 'fulfilled')).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+    it('cancels queued reads and keeps four occupied slots until timed out upstream calls actually finish', async () => {
+        vi.useFakeTimers();
+        const finish: Array<() => void> = [];
+        const call = vi.fn(
+            (_bot, _action, params) =>
+                new Promise<DebugCallResponse>((resolve) => {
+                    finish.push(() =>
+                        resolve(ok({ url: `https://cdn.example/${params.file}.png` })),
+                    );
+                }),
+        );
+        const service = createChatMediaService(call);
+        const controller = new AbortController();
+        const jobs = Array.from({ length: 5 }, (_, index) =>
+            service.image(target, { file: `occupied-${index}` }, true),
+        );
+        const cancelled = service.image(target, { file: 'cancelled-queued' }, true, {
+            signal: controller.signal,
+        });
+        const settled = Promise.allSettled([...jobs, cancelled]);
+        try {
+            controller.abort();
+            await vi.advanceTimersByTimeAsync(15_001);
+            expect(call).toHaveBeenCalledTimes(4);
+            finish.splice(0).forEach((resolve) => resolve());
+            await vi.advanceTimersByTimeAsync(0);
+            expect(call).toHaveBeenCalledTimes(5);
+            finish.splice(0).forEach((resolve) => resolve());
+            const results = await settled;
+            expect(results[4].status).toBe('fulfilled');
+            expect(results[5]).toMatchObject({
+                status: 'rejected',
+                reason: { name: 'AbortError' },
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+    it('resolves received image resources for both send backends instead of replaying their display URL', async () => {
+        const data = {
+            file_id: 'resource-id',
+            file: 'picture.png',
+            url: 'https://cdn.example/expired?rkey=old',
+            path: 'display-only',
+        };
+        for (const backend of ['napcat', 'snowluma'] as const) {
+            const call = vi.fn().mockResolvedValue(
+                ok({
+                    file:
+                        backend === 'napcat'
+                            ? '/remote/bot/cache/picture.png'
+                            : 'https://cdn.example/fresh?rkey=new',
+                    url: 'https://cdn.example/fresh?rkey=new',
+                }),
+            );
+            const readLocal = vi.fn();
+            const segment = await createChatMediaService(call, readLocal).imageForSend(
+                { ...target, backend, host: { kind: 'remote', server_id: 'remote' } },
+                data,
+            );
+            expect(call).toHaveBeenCalledWith('bot', 'get_image', { file_id: 'resource-id' });
+            expect(segment.data.file).toBe(
+                backend === 'napcat'
+                    ? '/remote/bot/cache/picture.png'
+                    : 'https://cdn.example/fresh?rkey=new',
+            );
+            expect(segment.data.url).toBeUndefined();
+            expect(segment.data.path).toBeUndefined();
+            expect(readLocal).not.toHaveBeenCalled();
+        }
+    });
+    it('repeats complete market face metadata natively and resolves archive images without a saved URL', async () => {
+        const call = vi.fn().mockResolvedValue(ok({ file: '/bot/cache/old.png' }));
+        const service = createChatMediaService(call);
+        const market = {
+            file: '0',
+            url: 'https://cdn.example/display.gif',
+            emoji_id: 'abcd',
+            emoji_package_id: 12,
+            key: 'native-key',
+            summary: '你好',
+        };
+        for (const backend of ['napcat', 'snowluma'] as const)
+            expect(await service.imageForSend({ ...target, backend }, market)).toEqual({
+                type: 'mface',
+                data: {
+                    emoji_id: 'abcd',
+                    emoji_package_id: 12,
+                    key: 'native-key',
+                    summary: '你好',
+                },
+            });
+        expect(call).not.toHaveBeenCalled();
+        expect((await service.imageForSend(target, { file: 'archived.png' })).data.file).toBe(
+            '/bot/cache/old.png',
+        );
+        expect(call).toHaveBeenCalledWith('bot', 'get_image', { file: 'archived.png' });
+    });
+    it('reads a NapCat cache file as bytes only when the Bot runs on this computer', async () => {
+        const call = vi.fn().mockResolvedValue(ok({ file: 'C:\\bot\\cache\\archive.png' }));
+        const readLocal = vi.fn().mockResolvedValue('iVBORw0KGgo=');
+        const service = createChatMediaService(call, readLocal);
+        expect(await service.image(target, { file: 'archive.png' }, true)).toBe(
+            'data:image/png;base64,iVBORw0KGgo=',
+        );
+        expect(readLocal).toHaveBeenCalledWith('C:\\bot\\cache\\archive.png');
+        readLocal.mockClear();
+        await expect(
+            service.image(
+                { ...target, host: { kind: 'remote', server_id: 'remote' } },
+                { file: 'archive.png' },
+                true,
+            ),
+        ).rejects.toThrow('图片地址');
+        expect(readLocal).not.toHaveBeenCalled();
+    });
     it('uses an injected debug caller without opening a native chat transport', async () => {
         const native = vi.spyOn(chatService, 'call');
         const debug = vi.fn().mockResolvedValue(ok({ url: 'https://cdn.example/debug.png' }));
@@ -157,10 +358,14 @@ describe('native chat media protocol', () => {
             'data:audio/wav;base64,UklGRg==',
         );
     });
-    it('does not return the known broken image URL when refresh only returns a host path', async () => {
+    it('does not return the known broken image URL when refresh only returns a remote Bot path', async () => {
         vi.spyOn(chatService, 'call').mockResolvedValue(ok({ file: '/tmp/private/image.png' }));
         await expect(
-            chatMediaService.image(target, { url: 'https://cdn.example/broken.png' }, true),
+            chatMediaService.image(
+                { ...target, host: { kind: 'remote', server_id: 'remote' } },
+                { url: 'https://cdn.example/broken.png' },
+                true,
+            ),
         ).rejects.toThrow('可播放图片地址');
     });
     it('tries the file token if get_image does not recognize the file id', async () => {
@@ -175,8 +380,19 @@ describe('native chat media protocol', () => {
                 true,
             ),
         ).resolves.toBe('https://cdn.example/recovered.png');
+        expect(call).toHaveBeenNthCalledWith(1, 'bot', 'get_image', { file_id: 'opaque-id' });
         expect(call).toHaveBeenNthCalledWith(2, 'bot', 'get_image', { file: 'image-token' });
     });
+    it.each(['napcat', 'snowluma'] as const)(
+        'sends an explicit image file_id to %s without treating it as a file path',
+        async (backend) => {
+            const call = vi.fn().mockResolvedValue(ok({ base64: 'R0lGODlh' }));
+            await expect(
+                createChatMediaService(call).image({ ...target, backend }, { file_id: 'image-id' }),
+            ).resolves.toBe('data:image/gif;base64,R0lGODlh');
+            expect(call).toHaveBeenCalledWith('bot', 'get_image', { file_id: 'image-id' });
+        },
+    );
     it('prefers returned image bytes to a potentially expired address and rejects malformed bytes', async () => {
         const call = vi
             .fn()
@@ -321,6 +537,46 @@ describe('native chat media protocol', () => {
         ).resolves.toBe('https://cdn.example/fresh.mp4');
         expect(call).toHaveBeenCalledWith('bot', 'get_file', { file_id: 'video-id' });
     });
+    it('refreshes a video that only carries its complete URL and accepts a returned web file', async () => {
+        const call = vi.fn().mockResolvedValue(ok({ file: 'https://cdn.example/fresh.mp4' }));
+        await expect(
+            createChatMediaService(call).video(
+                target,
+                { url: 'https://cdn.example/expired.mp4?rkey=old' },
+                true,
+            ),
+        ).resolves.toBe('https://cdn.example/fresh.mp4');
+        expect(call).toHaveBeenCalledWith('bot', 'get_file', {
+            file: 'https://cdn.example/expired.mp4?rkey=old',
+        });
+    });
+    it('tries a video file token when its opaque file id is not recognized', async () => {
+        const call = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('未知标识'))
+            .mockResolvedValueOnce(ok({ url: 'https://cdn.example/recovered.mp4' }));
+        await expect(
+            createChatMediaService(call).video(
+                target,
+                { file_id: 'opaque-id', file: 'video-token' },
+                true,
+            ),
+        ).resolves.toBe('https://cdn.example/recovered.mp4');
+        expect(call).toHaveBeenNthCalledWith(1, 'bot', 'get_file', { file_id: 'opaque-id' });
+        expect(call).toHaveBeenNthCalledWith(2, 'bot', 'get_file', { file: 'video-token' });
+    });
+    it('does not reuse an expired video URL when refresh only returns a remote host path', async () => {
+        const call = vi.fn().mockResolvedValue(ok({ file: '/tmp/remote-video.mp4' }));
+        const readLocal = vi.fn();
+        await expect(
+            createChatMediaService(call, readLocal).video(
+                { ...target, host: { kind: 'remote', server_id: 'remote' } },
+                { url: 'https://cdn.example/expired.mp4?rkey=old' },
+                true,
+            ),
+        ).rejects.toThrow('可播放视频地址');
+        expect(readLocal).not.toHaveBeenCalled();
+    });
     it('rejects get_file responses that contain only a local path', async () => {
         vi.spyOn(chatService, 'call').mockResolvedValue(ok({ file: 'C:\\private\\video.mp4' }));
         await expect(chatMediaService.video(target, { file: 'opaque-video' })).rejects.toThrow(
@@ -337,6 +593,38 @@ describe('native chat media protocol', () => {
             ]),
         );
         expect(await chatMediaService.favorites(target)).toEqual(['https://cdn.example/1.png']);
+    });
+    it('reads and caches real favorite descriptions while retaining each backend order', async () => {
+        const details = [
+            { url: 'https://cdn.example/old.gif', desc: '  午安  ' },
+            { url: 'https://cdn.example/new.gif', desc: '晚安' },
+            { url: 'https://cdn.example/new.gif', desc: '重复' },
+        ];
+        const call = vi.fn().mockResolvedValue(ok(details));
+        const service = createChatMediaService(call);
+        expect(await service.favoriteDetails({ ...target, backend: 'snowluma' })).toEqual([
+            { url: 'https://cdn.example/new.gif', description: '晚安' },
+            { url: 'https://cdn.example/old.gif', description: '午安' },
+        ]);
+        await service.favoriteDetails({ ...target, backend: 'snowluma' });
+        expect(call).toHaveBeenCalledOnce();
+        service.invalidateFavorites({ ...target, backend: 'snowluma' });
+        await service.favoriteDetails({ ...target, backend: 'snowluma' });
+        expect(call).toHaveBeenCalledTimes(2);
+        expect(call.mock.calls[0][1]).toBe('fetch_custom_face_detail');
+    });
+    it('falls back to URL-only favorites when an older backend has no details action', async () => {
+        const call = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('unknown action'))
+            .mockResolvedValueOnce(ok(['https://cdn.example/1.png']));
+        expect(await createChatMediaService(call).favoriteDetails(target)).toEqual([
+            { url: 'https://cdn.example/1.png', description: '' },
+        ]);
+        expect(call.mock.calls.map((args) => args[1])).toEqual([
+            'fetch_custom_face_detail',
+            'fetch_custom_face',
+        ]);
     });
     it.each(['napcat', 'snowluma'] as const)(
         'reads beyond 200 favorites until %s returns the whole list',

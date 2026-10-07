@@ -1,9 +1,147 @@
 // QQ 数字表情的内置目录；来源 QFace _index.v2.json，2026-09-28 快照。
+import type { Segment } from '../debug/segments';
 export interface QQSystemFace {
     id: string;
     name: string;
     aliases?: string[];
     url?: string;
+    category?: string;
+    super?: boolean;
+    animationUrl?: string;
+}
+// QQNT emojiType 1/2/3/5 的数字表情快照；账号目录可以覆盖它。
+export const QQ_SUPER_FACE_IDS = new Set(
+    '5,53,74,75,114,137,181,311,312,314,317,318,319,320,324,325,326,333,337,338,339,341,342,343,344,345,346,349,350,351,358,359,360,361,362,363,364,365,366,367,368,369,370,371,372,373,374,375,376,377,378,379,380,381,382,383,384,385,386,387,388,389,390,391,392,393,394,395,396,397,398,399,400,401,402,403,404,405,406,407,408,409,410,411,412,413,415,416,417,418,419,420,421,422,423,424,425,426,427,429,430,431,432,433,434,435,436,437,438,439,440,441,442,443,444,445,446,447,448,450,451,452,453,454,455,456,457,458,459,460,461,462,463,464,465,466,467,468,469,471,472,473,474,475,476,477,478,479,480,481,482,483,484,485,486,487,488,489,490,491,492,493,494,495,496,497,498,499,500,501,502,503,504,505,506,507'.split(
+        ',',
+    ),
+);
+const interactiveIds = new Set(
+    '114,358,359,392,393,394,415,416,417,419,420,421,429,430,431,443,444,445,446,447,448,485,486,487'.split(
+        ',',
+    ),
+);
+export function qqFaceCategory(face: QQSystemFace): string {
+    return (
+        face.category ||
+        (interactiveIds.has(face.id)
+            ? '互动'
+            : (face.super ?? QQ_SUPER_FACE_IDS.has(face.id))
+              ? '超级'
+              : '经典')
+    );
+}
+export function qqFaceLarge(data?: Record<string, unknown>): boolean | undefined {
+    if (
+        data?.large === false ||
+        data?.large === 0 ||
+        data?.large === '0' ||
+        data?.large === 'false'
+    )
+        return false;
+    if (data?.large === true || data?.large === 1 || data?.large === '1' || data?.large === 'true')
+        return true;
+    const raw = data?.raw;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        const faceType = Number((raw as Record<string, unknown>).faceType);
+        if (faceType === 3) return true;
+        if (faceType === 1 || faceType === 2) return false;
+    }
+    if (data?.faceType != null) {
+        const faceType = Number(data.faceType);
+        if (faceType === 3) return true;
+        if (faceType === 1 || faceType === 2) return false;
+    }
+    if (typeof data?.is_super === 'boolean') return data.is_super;
+    // 目录描述的是可用资源，不能证明这条消息用了超级表情格式。
+    return undefined;
+}
+export function isSuperQQFace(_id: string, data?: Record<string, unknown>): boolean {
+    return qqFaceLarge(data) === true;
+}
+export type QQFaceDisplaySegment = Segment & { displayLarge?: boolean };
+type FaceLookup = (id: string) => QQSystemFace | undefined;
+// 2026 秋季新表情的独立展示名单；不作为无标记消息的协议类型事实。
+const standaloneDisplayIds = new Set(
+    '494,495,496,497,498,499,500,501,502,503,504,505,506,507'.split(','),
+);
+function facePlaceholders(name: string): string[] {
+    const label = name.replace(/^\/+/, '').trim();
+    if (!label) return [];
+    if (label.startsWith('[') && label.endsWith(']')) return [label];
+    return label.endsWith('!') ? ['[' + label + ']'] : ['[' + label + ']', '[' + label + '!]'];
+}
+export function projectQQFaceDisplay(
+    segments: readonly Segment[],
+    lookup: FaceLookup = (id) => QQ_FACE_FALLBACK.find((face) => face.id === id),
+): QQFaceDisplaySegment[] {
+    const knownFace = (segment: Segment) => {
+        const id = String(segment.data.id ?? '');
+        return lookup(id) ?? QQ_FACE_FALLBACK.find((face) => face.id === id);
+    };
+    const knownSuper = (segment: Segment) => {
+        const face = knownFace(segment);
+        return !!face && (face.super ?? QQ_SUPER_FACE_IDS.has(face.id));
+    };
+    const knownCaption = (segment: Segment, next: Segment | undefined) => {
+        const face = knownFace(segment);
+        return (
+            !!face &&
+            next?.type === 'text' &&
+            typeof next.data.text === 'string' &&
+            [face.name, ...(face.aliases ?? [])].some((name) =>
+                facePlaceholders(name).includes(next.data.text as string),
+            )
+        );
+    };
+    const body = segments.filter((segment) => segment.type !== 'reply');
+    const singleKnownSuper =
+        body.length === 1 &&
+        body[0].type === 'face' &&
+        standaloneDisplayIds.has(String(body[0].data.id ?? '')) &&
+        knownSuper(body[0]);
+    let onlyFacePairs = body.length > 1;
+    for (let index = 0; index < body.length && onlyFacePairs; index += 2) {
+        const face = body[index];
+        onlyFacePairs =
+            face.type === 'face' &&
+            qqFaceLarge(face.data) !== false &&
+            knownSuper(face) &&
+            knownCaption(face, body[index + 1]);
+    }
+    const allowCompatibilityDisplay = singleKnownSuper || onlyFacePairs;
+    const result: QQFaceDisplaySegment[] = [];
+    for (let index = 0; index < segments.length; index++) {
+        const segment = segments[index];
+        if (segment.type !== 'face') {
+            result.push(segment);
+            continue;
+        }
+        const wireLarge = qqFaceLarge(segment.data);
+        const displayLarge = wireLarge ?? (allowCompatibilityDisplay && knownSuper(segment));
+        // 推断只留在投影外层，原 data、草稿与再次发送的 wire 不变。
+        result.push(
+            wireLarge === undefined && displayLarge ? { ...segment, displayLarge: true } : segment,
+        );
+        if (!displayLarge) continue;
+        const next = segments[index + 1];
+        if (wireLarge === undefined) {
+            if (knownCaption(segment, next)) index++;
+            continue;
+        }
+        const raw = segment.data.raw;
+        const metadata =
+            raw && typeof raw === 'object' && !Array.isArray(raw)
+                ? (raw as Record<string, unknown>)
+                : segment.data;
+        const name = typeof metadata.faceText === 'string' ? metadata.faceText : '';
+        const captions = name.startsWith('/')
+            ? [name, '[' + name.slice(1) + ']', '[' + name.slice(1) + '!]']
+            : [name];
+        // 只折叠真实 faceText 的一个完整邻接副本，不删混合正文或未标记的普通表情文本。
+        if (name && next?.type === 'text' && captions.includes(String(next.data.text ?? '')))
+            index++;
+    }
+    return result;
 }
 export const QQ_FACE_FALLBACK: QQSystemFace[] = [
     { id: '0', name: '惊讶' },

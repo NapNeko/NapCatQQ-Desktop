@@ -42,6 +42,7 @@ export const chatDesktopService = {
                     ignoredGroups: [],
                     hiddenGroups: [],
                     notifyUnknownGroups: false,
+                    preventRecall: false,
                 },
                 unread: 0,
                 notificationUnread: 0,

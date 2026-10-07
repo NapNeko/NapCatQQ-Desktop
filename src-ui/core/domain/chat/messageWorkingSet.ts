@@ -1,5 +1,6 @@
 // 阅读页和近期页共享消息对象；预算按 UTF-16 内容估算，不把它当作浏览器堆采样。
 import type { Message, SessionKey } from './model';
+import { sortMessages } from './messageIdentity';
 
 export const HISTORY_PAGE_SIZE = 50;
 export const WORKING_MESSAGE_LIMIT = 1000;
@@ -107,7 +108,7 @@ export function retainWorkingMessages(
             missing = false;
         }
     }
-    result.sort((a, b) => a.at - b.at);
+    sortMessages(result);
     return result.length === messages.length &&
         result.every((message, index) => message === messages[index])
         ? messages

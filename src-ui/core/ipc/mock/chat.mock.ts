@@ -20,6 +20,41 @@ const groups = [
 ];
 const baseTime = Math.floor(Date.now() / 1000) - 60;
 const histories = new Map<string, Record<string, unknown>[]>();
+const forwardedMessages = new Map<string, Record<string, unknown>[]>();
+const messageOwners = new Map<string, string>();
+const favoriteFaces = new Map<string, Array<{ url: string; desc: string }>>();
+const downloadedFaces = new Map<string, string>();
+const removedMembers = new Map<string, Set<string>>();
+const mutedMembers = new Map<string, number>();
+function favorites(bot: string) {
+    if (!favoriteFaces.has(bot))
+        favoriteFaces.set(bot, [
+            { url: 'https://koishi.js.org/QFace/assets/qq_emoji/14/png/14.png', desc: '开心' },
+            { url: 'https://koishi.js.org/QFace/assets/qq_emoji/277/png/277.png', desc: '汪汪' },
+        ]);
+    return favoriteFaces.get(bot)!;
+}
+function failed(request: DebugCallRequest, wording: string): DebugCallResponse {
+    return {
+        request_id: request.request_id,
+        result: {
+            kind: 'ok',
+            outcome: {
+                ok: false,
+                status: 'failed',
+                retcode: 1404,
+                data: null,
+                message: '',
+                wording,
+                raw: {},
+                elapsed_ms: 1,
+                channel: { kind: 'internal' },
+                size_bytes: 0,
+                truncated: false,
+            },
+        },
+    };
+}
 for (const [type, peer, count] of [
     ['group', 20001, 125],
     ['group', 20002, 8],
@@ -130,6 +165,48 @@ function previewLongImage() {
     return canvas.toDataURL('image/png');
 }
 if (mediaPreview) {
+    mediaPreview[mediaPreview.length - 2].message = [
+        {
+            type: 'markdown',
+            data: {
+                data: JSON.stringify({
+                    content:
+                        '## 讨论纪要\n\n- 群文件按后缀区分\n- 普通表情保持行内大小\n\n**下次继续确认细节。**',
+                }),
+            },
+        },
+    ];
+    mediaPreview[mediaPreview.length - 3].message = [
+        {
+            type: 'image',
+            data: {
+                file: 'https://koishi.js.org/QFace/assets/qq_emoji/379/apng/379.png',
+                url: 'https://koishi.js.org/QFace/assets/qq_emoji/379/apng/379.png',
+                summary: '[动画表情]',
+            },
+        },
+    ];
+    mediaPreview[mediaPreview.length - 5].message = [
+        { type: 'text', data: { text: '普通内联表情与明确标记的超级表情：' } },
+        { type: 'face', data: { id: '277', raw: { faceType: 1 } } },
+        { type: 'face', data: { id: '379', raw: { faceType: 3, faceText: '[比心]' } } },
+        { type: 'text', data: { text: '[比心]' } },
+    ];
+    mediaPreview[mediaPreview.length - 6].message = [
+        { type: 'image', data: { file: 'preview-stored-image', file_id: 'preview-stored-image' } },
+    ];
+    mediaPreview[mediaPreview.length - 7].message = [
+        { type: 'face', data: { id: '498' } },
+        { type: 'text', data: { text: '[中!]' } },
+    ];
+    mediaPreview[mediaPreview.length - 8].message = [
+        { type: 'face', data: { id: '494' } },
+        { type: 'text', data: { text: '[举杯邀月]' } },
+    ];
+    mediaPreview[mediaPreview.length - 9].message = [
+        { type: 'face', data: { id: '495' } },
+        { type: 'text', data: { text: '[兔来]' } },
+    ];
     mediaPreview[mediaPreview.length - 1].message = [
         { type: 'text', data: { text: '媒体预览：语音失败与重试' } },
         { type: 'record', data: { file: 'preview-error' } },
@@ -184,24 +261,73 @@ export const chatMock = {
             data = {
                 group_id: params.group_id,
                 user_id: params.user_id,
-                role: 'owner',
-                nickname: '预览账号',
+                role:
+                    String(params.user_id) === '10021'
+                        ? 'member'
+                        : String(params.user_id) === '10022'
+                          ? 'admin'
+                          : 'owner',
+                nickname:
+                    friends.find((friend) => String(friend.user_id) === String(params.user_id))
+                        ?.nickname ?? '预览账号',
+                shut_up_timestamp:
+                    mutedMembers.get(`${request.bot_id}:${params.group_id}:${params.user_id}`) ?? 0,
             };
         else if (request.action === 'get_group_list') data = groups;
         else if (request.action === 'get_friend_list') data = friends;
+        else if (request.action === 'get_friends_with_category')
+            data = [
+                {
+                    categoryId: 1,
+                    categoryName: '开发伙伴',
+                    categoryMbCount: 1,
+                    buddyList: [friends[0]],
+                },
+                {
+                    categoryId: 2,
+                    categoryName: '生活朋友',
+                    categoryMbCount: 1,
+                    buddyList: [friends[1]],
+                },
+            ];
         else if (request.action === 'get_group_member_list')
-            data = friends.map((friend, index) => ({
-                ...friend,
-                group_id: params.group_id,
-                card: index ? '阿澄' : '小林',
-                role: index ? 'admin' : 'owner',
-                sex: index ? 'female' : 'male',
-                age: 24 + index,
-                level: '12',
-                join_time: baseTime - 86400 * 200,
-                last_sent_time: baseTime,
-            }));
-        else if (request.action === 'get_group_info')
+            data = friends
+                .filter(
+                    (friend) =>
+                        !removedMembers
+                            .get(`${request.bot_id}:${params.group_id}`)
+                            ?.has(String(friend.user_id)),
+                )
+                .map((friend) => ({
+                    ...friend,
+                    group_id: params.group_id,
+                    card: friend.nickname,
+                    role: friend.user_id === 10022 ? 'admin' : 'member',
+                    sex: friend.user_id === 10022 ? 'female' : 'male',
+                    age: friend.user_id === 10022 ? 25 : 24,
+                    level: '12',
+                    join_time: baseTime - 86400 * 200,
+                    last_sent_time: baseTime,
+                    shut_up_timestamp:
+                        mutedMembers.get(
+                            `${request.bot_id}:${params.group_id}:${friend.user_id}`,
+                        ) ?? 0,
+                }));
+        else if (request.action === 'set_group_ban') {
+            mutedMembers.set(
+                `${request.bot_id}:${params.group_id}:${params.user_id}`,
+                Number(params.duration)
+                    ? Math.floor(Date.now() / 1000) + Number(params.duration)
+                    : 0,
+            );
+            data = null;
+        } else if (request.action === 'set_group_kick') {
+            const key = `${request.bot_id}:${params.group_id}`;
+            const removed = removedMembers.get(key) ?? new Set<string>();
+            removed.add(String(params.user_id));
+            removedMembers.set(key, removed);
+            data = null;
+        } else if (request.action === 'get_group_info')
             data = {
                 ...(groups.find((group) => String(group.group_id) === String(params.group_id)) ?? {
                     group_id: params.group_id,
@@ -228,11 +354,23 @@ export const chatMock = {
                 city: '杭州',
             };
         else if (request.action === 'fetch_custom_face')
-            data = [
-                'https://koishi.js.org/QFace/assets/qq_emoji/14/png/14.png',
-                'https://koishi.js.org/QFace/assets/qq_emoji/277/png/277.png',
-            ];
-        else if (request.action === 'fetch_sys_faces')
+            data = favorites(request.bot_id).map((face) => face.url);
+        else if (request.action === 'fetch_custom_face_detail') data = favorites(request.bot_id);
+        else if (request.action === 'download_file') {
+            if (!/^https?:\/\//i.test(String(params.url))) return failed(request, '图片资源无效');
+            const path = `C:\\preview-cache\\face-${++seq}.png`;
+            downloadedFaces.set(`${request.bot_id}:${path}`, String(params.url));
+            data = { file: path };
+        } else if (request.action === 'add_custom_face') {
+            const file = String(params.file ?? '');
+            const url =
+                downloadedFaces.get(`${request.bot_id}:${file}`) ??
+                (/^(https?:\/\/|data:image\/)/i.test(file) ? file : '');
+            if (!url) return failed(request, '找不到要收藏的图片');
+            const faces = favorites(request.bot_id);
+            if (!faces.some((face) => face.url === url)) faces.push({ url, desc: '新收藏' });
+            data = null;
+        } else if (request.action === 'fetch_sys_faces')
             data = {
                 packs: [
                     {
@@ -245,10 +383,53 @@ export const chatMock = {
                     },
                 ],
             };
-        else if (request.action === 'get_forward_msg')
+        else if (request.action === 'delete_msg') {
+            const entry = [...histories.entries()].find(([, rows]) =>
+                rows.some((row) => String(row.message_id) === String(params.message_id)),
+            );
+            const owner = messageOwners.get(String(params.message_id));
+            if (!entry || (owner && owner !== request.bot_id))
+                return failed(request, '原消息不存在或不属于当前账号');
+            if (entry) {
+                const [session, rows] = entry;
+                const row = rows.find(
+                    (item) => String(item.message_id) === String(params.message_id),
+                )!;
+                const [type, peer] = session.split(':');
+                for (const sub of subscriptions.values())
+                    if (sub.bot === request.bot_id)
+                        sub.send({
+                            v: 1,
+                            bot_id: request.bot_id,
+                            events: [
+                                {
+                                    seq: ++seq,
+                                    at_ms: Date.now(),
+                                    body: {
+                                        kind: 'ob11',
+                                        payload: {
+                                            post_type: 'notice',
+                                            notice_type:
+                                                type === 'group' ? 'group_recall' : 'friend_recall',
+                                            ...(type === 'group'
+                                                ? { group_id: peer }
+                                                : { user_id: peer }),
+                                            message_id: row.message_id,
+                                        },
+                                    },
+                                },
+                            ],
+                        });
+            }
+        } else if (request.action === 'get_forward_msg') {
+            const resource = String(params.id ?? params.message_id);
+            const saved = forwardedMessages.get(`${request.bot_id}:${resource}`);
+            if (resource.startsWith('preview-sent-') && !saved)
+                return failed(request, '当前账号没有这条转发记录');
             data = {
                 messages:
-                    String(params.id ?? params.message_id) === 'preview-nested'
+                    saved ??
+                    (String(params.id ?? params.message_id) === 'preview-nested'
                         ? [
                               {
                                   sender: { user_id: 10022, nickname: '阿澄' },
@@ -278,10 +459,21 @@ export const chatMock = {
                                   time: baseTime - 60,
                                   message: [{ type: 'forward', data: { id: 'preview-nested' } }],
                               },
-                          ],
+                          ]),
             };
-        else if (request.action === 'fetch_ptt_text')
+        } else if (request.action === 'fetch_ptt_text')
             data = { text: '这是一段预览语音的转写内容。' };
+        else if (
+            request.action === 'get_image' &&
+            (params.file ?? params.file_id) === 'preview-stored-image'
+        )
+            data = {
+                url:
+                    typeof window === 'undefined'
+                        ? 'https://koishi.js.org/QFace/assets/qq_emoji/379/png/379.png'
+                        : new URL('/qq-faces/379.png', window.location.href).href,
+                file: 'C:\\NapCat\\cache\\preview-stored-image.png',
+            };
         else if (request.action === 'get_image' && params.file === 'preview-long-image')
             data = { url: previewLongImage() };
         else if (request.action === 'get_file' && params.file === 'preview-video')
@@ -341,6 +533,66 @@ export const chatMock = {
             data = { message_id: messageId };
             const targets = await onebotDebugMock.targets();
             const self = targets.find((t) => t.bot_id === request.bot_id)?.qq_id;
+            let message = params.message;
+            if (request.action.endsWith('_forward_msg')) {
+                const resource = `preview-sent-${messageId}`;
+                const nodes = Array.isArray(params.messages) ? params.messages : [];
+                if (!nodes.length || nodes.length > 20)
+                    return failed(request, '请选择 1–20 条消息');
+                for (const node of nodes) {
+                    const value = (node as { data?: Record<string, unknown> }).data ?? {};
+                    if (value.id != null) {
+                        const owner = messageOwners.get(String(value.id));
+                        if (
+                            (owner && owner !== request.bot_id) ||
+                            ![...histories.values()].some((rows) =>
+                                rows.some((row) => String(row.message_id) === String(value.id)),
+                            )
+                        )
+                            return failed(request, '原消息不存在或不属于当前账号');
+                    } else if (!Array.isArray(value.content)) {
+                        return failed(request, '转发节点缺少消息内容');
+                    }
+                }
+                const rows = nodes.map((node) => {
+                    const value = (node as { data?: Record<string, unknown> }).data ?? {};
+                    const original =
+                        value.id != null
+                            ? [...histories.values()]
+                                  .flat()
+                                  .find((row) => String(row.message_id) === String(value.id))
+                            : undefined;
+                    return (
+                        original || {
+                            sender: {
+                                user_id: value.uin || self,
+                                nickname: value.name || '预览账号',
+                            },
+                            time: Date.now() / 1000,
+                            message: value.content ?? [],
+                        }
+                    );
+                });
+                forwardedMessages.set(`${request.bot_id}:${resource}`, rows);
+                message = [{ type: 'forward', data: { id: resource } }];
+                data = { message_id: messageId, forward_id: resource, res_id: resource };
+            }
+            const payload = {
+                post_type: 'message_sent',
+                message_type: params.group_id ? 'group' : 'private',
+                group_id: params.group_id,
+                target_id: params.user_id,
+                user_id: self,
+                sender: { user_id: self, nickname: '预览账号' },
+                message_id: messageId,
+                time: Date.now() / 1000,
+                message,
+            };
+            const session = `${params.group_id ? 'group' : 'private'}:${params.group_id ?? params.user_id}`;
+            const rows = histories.get(session) ?? [];
+            rows.push(payload);
+            histories.set(session, rows);
+            messageOwners.set(String(messageId), request.bot_id);
             for (const sub of subscriptions.values())
                 if (sub.bot === request.bot_id)
                     sub.send({
@@ -352,16 +604,7 @@ export const chatMock = {
                                 at_ms: Date.now(),
                                 body: {
                                     kind: 'ob11',
-                                    payload: {
-                                        post_type: 'message_sent',
-                                        message_type: params.group_id ? 'group' : 'private',
-                                        group_id: params.group_id,
-                                        target_id: params.user_id,
-                                        user_id: self,
-                                        message_id: messageId,
-                                        time: Date.now() / 1000,
-                                        message: params.message,
-                                    },
+                                    payload,
                                 },
                             },
                         ],

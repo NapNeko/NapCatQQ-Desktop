@@ -10,6 +10,7 @@ import {
     addPending,
     parseContact,
     setDraft,
+    mergeArchiveMessages,
 } from './model';
 import { WORKING_BYTE_LIMIT, messageBytes } from './messageWorkingSet';
 
@@ -25,6 +26,47 @@ const payload = (extra = {}) => ({
     ...extra,
 });
 describe('native chat projection', () => {
+    it('does not replay evicted idless messages or notices into unread counts', () => {
+        const rows = [
+            payload({ message_id: undefined, message_seq: '81' }),
+            { notice_type: 'group_increase', group_id: 12, user_id: 44, time: 101 },
+            {
+                notice_type: 'notify',
+                sub_type: 'poke',
+                group_id: 12,
+                sender_id: 22,
+                target_id: 44,
+                time: 102,
+            },
+        ];
+        let state = ingestMessages(emptyAccount('99'), rows);
+        const unread = state.conversations['group:12'].unread;
+        const count = state.archiveMessages!.length;
+        state = { ...state, messages: [] };
+        state = ingestMessages(state, rows);
+        expect(state.messages).toHaveLength(0);
+        expect(state.archiveMessages).toHaveLength(count);
+        expect(state.conversations['group:12'].unread).toBe(unread);
+    });
+    it('retains received content when recalled messages are replayed from history or another view', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        const original = state.messages[0].segments;
+        state = ingestMessage(state, {
+            notice_type: 'group_recall',
+            group_id: 12,
+            message_id: 7,
+        });
+        state.messages = [];
+        state = ingestMessage(state, payload({ message: '消息已撤回' }), true);
+        expect(state.messages[0]).toMatchObject({ recalled: true, segments: original });
+        state = ingestMessage(state, payload({ message_seq: '999', message: '消息已撤回' }), true);
+        expect(state.messages[0]).toMatchObject({ recalled: true, segments: original });
+        expect(
+            mergeArchiveMessages(state.archiveMessages!, [
+                { ...state.messages[0], segments: [], recalled: false },
+            ])[0],
+        ).toMatchObject({ recalled: true, segments: original });
+    });
     it('keeps a bounded older page and the recent page while loading history', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         const message = state.messages[0];

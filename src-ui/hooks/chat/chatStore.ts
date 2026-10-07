@@ -4,6 +4,12 @@ import { chatService } from '../../core/services/chat.service';
 import { chatArchiveService } from '../../core/services/chat-archive.service';
 import { chatDesktopService } from '../../core/services/chat-desktop.service';
 import { qqFaceService } from '../../core/services/qq-face.service';
+import {
+    inlineImageService,
+    isInlineImageReference,
+} from '../../core/services/inline-image.service';
+import { qqFaceLarge } from '../../core/domain/chat/qqFaces';
+import { createChatMediaService } from '../../core/services/chat-media.service';
 import type { ChatAccountView } from '../../core/ipc/generated/chat/ChatAccountView';
 import type { ChatViewState } from '../../core/ipc/generated/chat/ChatViewState';
 import type { ChatReadingPosition } from '../../core/ipc/generated/chat/ChatReadingPosition';
@@ -13,6 +19,7 @@ import {
     mergeRecentConversations,
 } from '../../core/domain/chat/archive';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
+import { markdownContent } from '../../core/domain/debug/markdown';
 import {
     accountKey,
     emptyAccount,
@@ -20,10 +27,12 @@ import {
     mergeArchiveMessages,
     trimAccountMessages,
     openConversation,
+    contactFromKey,
     setDraft,
     addPending,
     settleSend,
     parseContact,
+    parseFriendCategories,
     record,
     id,
     text,
@@ -31,6 +40,7 @@ import {
     type Account,
     type Contact,
     type Draft,
+    type Message,
     type SessionKey,
 } from '../../core/domain/chat/model';
 import { HISTORY_PAGE_SIZE, type ReadingAnchor } from '../../core/domain/chat/messageWorkingSet';
@@ -38,10 +48,17 @@ import { buildMessageSegments } from '../../core/domain/debug/composerModel';
 import { localFileTokenFor } from '../../core/domain/debug/streamActions';
 import { debugErrorCopy } from '../../core/domain/debug/errorCopy';
 import { errorText } from '../../core/domain/errors';
-import type { Segment } from '../../core/domain/debug/segments';
+import { normalizeMessage, type Segment } from '../../core/domain/debug/segments';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugReceiverState } from '../../core/ipc/generated/debug/DebugReceiverState';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
+import {
+    canForwardMessage,
+    canRecallMessage,
+    canRepeatMessage,
+    ChatForwardError,
+    FORWARD_MESSAGE_LIMIT,
+} from '../../core/domain/chat/messageTransfer';
 
 export interface ChatSnapshot {
     account: Account;
@@ -57,7 +74,13 @@ export interface ChatSnapshot {
 }
 type Transport = Pick<typeof chatService, 'call' | 'subscribe' | 'unsubscribe'>;
 type ArchivePort = Pick<typeof chatArchiveService, 'load' | 'save'>;
-type SendOperation = { action: string; params: unknown; segments: Segment[] };
+type SendOperation = {
+    action: string;
+    params: unknown;
+    segments: Segment[];
+    resolveImages?: boolean;
+    sourceMessageId?: string;
+};
 function dataOf(response: DebugCallResponse): unknown {
     if (response.result.kind === 'err') {
         const copy = debugErrorCopy(response.result.error);
@@ -78,6 +101,7 @@ export class ChatAccountStore {
     private connecting = false;
     private reading: SessionKey | null = null;
     private sends = new Map<SessionKey, number>();
+    private recalls = new Map<string, number>();
     private historyCursor = new Map<SessionKey, string>();
     private pagingAnchors = new Map<SessionKey, ReadingAnchor>();
     private contactsRequest: Promise<void> | null = null;
@@ -246,9 +270,18 @@ export class ChatAccountStore {
             .load(this.target.bot_id, this.snapshot.account.selfId)
             .then((saved) => {
                 const account = saved
-                    ? restoreArchive(this.snapshot.account, saved)
+                    ? restoreArchive(this.snapshot.account, {
+                          ...saved,
+                          messages: saved.messages.map((message) => ({
+                              ...message,
+                              segments: this.externalizeSegments(
+                                  normalizeMessage(message.segments),
+                              ),
+                          })),
+                      })
                     : this.snapshot.account;
-                this.update({ account, hydrated: true });
+                this.account(account);
+                this.update({ hydrated: true });
                 void this.flushArchive();
             })
             .catch((error) =>
@@ -344,7 +377,140 @@ export class ChatAccountStore {
         return request;
     }
     private account(account: Account) {
+        const sources = new Map<string, boolean>();
+        const mark = (message: Message): Message => {
+            let changed = false;
+            const segments = message.segments.map((segment) => {
+                const reference = [
+                    segment.data.inline_ref,
+                    segment.data.local_file,
+                    segment.data.file,
+                ].find(isInlineImageReference);
+                if (!reference) return segment;
+                sources.set(reference, !!sources.get(reference) || message.status !== 'sent');
+                if (message.id && segment.data.source_message_id !== message.id) {
+                    changed = true;
+                    return { ...segment, data: { ...segment.data, source_message_id: message.id } };
+                }
+                return segment;
+            });
+            return changed ? { ...message, segments } : message;
+        };
+        const sync = (rows: Message[]): Message[] => {
+            let changed: Message[] | undefined;
+            rows.forEach((message, index) => {
+                const next = mark(message);
+                if (next === message) return;
+                changed ??= rows.slice();
+                changed[index] = next;
+            });
+            return changed ?? rows;
+        };
+        const messages = sync(account.messages);
+        const archiveMessages =
+            account.archiveMessages === account.messages
+                ? messages
+                : account.archiveMessages && sync(account.archiveMessages);
+        if (messages !== account.messages || archiveMessages !== account.archiveMessages)
+            account = { ...account, messages, archiveMessages };
+        for (const [reference, protectedSource] of sources)
+            inlineImageService.protect(
+                this.target.bot_id,
+                String(this.target.qq_id),
+                reference,
+                protectedSource,
+            );
         this.update({ account });
+    }
+    private externalizeSegments(segments: Segment[], created: string[] = []): Segment[] {
+        return segments.map((segment) => {
+            if (segment.type !== 'image' && segment.type !== 'mface') return segment;
+            const data = { ...segment.data };
+            const converted = new Map<string, string>();
+            let changed = false;
+            for (const field of ['file', 'local_file', 'base64', 'url']) {
+                const source = text(data[field]);
+                if (
+                    source.length < 256 * 1024 ||
+                    !(
+                        field === 'base64' ||
+                        /^(base64:\/\/|data:image\/[^;,]+;base64,)/i.test(source)
+                    )
+                )
+                    continue;
+                let reference = converted.get(source);
+                if (!reference) {
+                    reference = inlineImageService.capture(
+                        this.target.bot_id,
+                        String(this.target.qq_id),
+                        source,
+                        (reference) => created.push(reference),
+                    );
+                    converted.set(source, reference);
+                }
+                data[field] = reference;
+                data.inline_ref = reference;
+                changed = true;
+            }
+            return changed ? { ...segment, data } : segment;
+        });
+    }
+    private externalizeRows(rows: readonly unknown[]): unknown[] {
+        return rows.map((raw) => {
+            const row = record(raw);
+            if (!row.message && !row.raw_message) return raw;
+            const created: string[] = [];
+            try {
+                const segments = this.externalizeSegments(
+                    normalizeMessage(row.message ?? row.raw_message),
+                    created,
+                );
+                return { ...row, message: segments };
+            } catch (error) {
+                for (const reference of created)
+                    inlineImageService.discard(
+                        this.target.bot_id,
+                        String(this.target.qq_id),
+                        reference,
+                    );
+                this.update({ error: errorText(error) });
+                const segments = normalizeMessage(row.message ?? row.raw_message).map((segment) => {
+                    if (segment.type !== 'image' && segment.type !== 'mface') return segment;
+                    const data: Record<string, unknown> = {
+                        ...segment.data,
+                        source_message_id: id(row.message_id),
+                    };
+                    for (const field of ['file', 'local_file', 'url', 'base64'])
+                        if (
+                            /^(base64:\/\/|data:image\/)/i.test(text(data[field])) ||
+                            field === 'base64'
+                        )
+                            delete data[field];
+                    return { ...segment, data };
+                });
+                return { ...row, message: segments };
+            }
+        });
+    }
+    private materializeSegments(segments: Segment[]): Segment[] {
+        return segments.map((segment) => {
+            if (segment.type !== 'image' && segment.type !== 'mface') return segment;
+            const data = { ...segment.data };
+            for (const field of ['file', 'local_file', 'base64', 'url']) {
+                const value = data[field];
+                if (!isInlineImageReference(value)) continue;
+                const source = inlineImageService.source(
+                    this.target.bot_id,
+                    String(this.target.qq_id),
+                    value,
+                );
+                if (!source) throw new Error('原图片缓存已失效，请重新添加后发送');
+                data[field] = field === 'base64' ? source.slice('base64://'.length) : source;
+            }
+            delete data.inline_ref;
+            delete data.source_message_id;
+            return { ...segment, data };
+        });
     }
     private currentAnchor(key: SessionKey): ReadingAnchor | undefined {
         const value = this.timelineReaders.get(key)?.() ?? this.readingPositions[key];
@@ -384,6 +550,58 @@ export class ChatAccountStore {
                 .markRead(this.target.bot_id, this.snapshot.account.selfId, contact.key)
                 .catch((error) => this.update({ error: errorText(error) }));
     }
+    revealArchivedMessage(value: Message | string): Message | null {
+        const state = this.snapshot.account;
+        const messageKey = typeof value === 'string' ? value : value.key;
+        const saved = mergeArchiveMessages(state.archiveMessages ?? [], state.messages);
+        const message = saved.find((row) => row.key === messageKey);
+        if (!message) return null;
+        const rows = saved.filter((row) => row.session === message.session);
+        const index = rows.findIndex((row) => row.key === message.key);
+        const position: ChatReadingPosition = {
+            messageKey: message.key,
+            messageId: message.id ?? null,
+            offset: 0,
+            atBottom: false,
+        };
+        const anchor = { session: message.session, ...position };
+        this.readingPositions[message.session] = position;
+        this.initialReadingPositions[message.session] = position;
+        this.pagingAnchors.set(message.session, anchor);
+        const contact =
+            this.snapshot.contacts.find((row) => row.key === message.session) ??
+            state.conversations[message.session] ??
+            contactFromKey(message.session);
+        const current = state.conversations[message.session];
+        this.account({
+            ...state,
+            active: message.session,
+            conversations: {
+                ...state.conversations,
+                [message.session]: {
+                    ...(current ?? { pinned: false, lastAt: message.at, preview: '' }),
+                    ...contact,
+                    unread: 0,
+                },
+            },
+            messages: mergeArchiveMessages(
+                state.messages,
+                rows.slice(Math.max(0, index - HISTORY_PAGE_SIZE), index + HISTORY_PAGE_SIZE + 1),
+            ),
+        });
+        this.pagingAnchors.delete(message.session);
+        this.readingPositions[message.session] = position;
+        const oldest = this.snapshot.account.messages.find(
+            (row) => row.session === message.session && row.id,
+        );
+        if (oldest?.id) this.historyCursor.set(message.session, oldest.id);
+        else this.historyCursor.delete(message.session);
+        if (this.transport === chatService)
+            void chatDesktopService
+                .markRead(this.target.bot_id, state.selfId, message.session)
+                .catch((error) => this.update({ error: errorText(error) }));
+        return message;
+    }
     close(key: SessionKey) {
         if (this.snapshot.account.active === key) {
             this.reading = null;
@@ -391,7 +609,18 @@ export class ChatAccountStore {
         }
     }
     draft(key: SessionKey, draft: Draft) {
-        this.account(setDraft(this.snapshot.account, key, draft));
+        const attachments = draft.attachments.map((attachment) => {
+            if (attachment.type === 'face' || !isInlineImageReference(attachment.path))
+                return attachment;
+            const path = inlineImageService.source(
+                this.target.bot_id,
+                String(this.target.qq_id),
+                attachment.path,
+            );
+            if (!path) throw new Error('原图片内容已释放，请重新添加');
+            return { ...attachment, path };
+        });
+        this.account(setDraft(this.snapshot.account, key, { ...draft, attachments }));
     }
     pin(key: SessionKey) {
         const state = this.snapshot.account;
@@ -496,7 +725,7 @@ export class ChatAccountStore {
                 }
                 account = ingestMessages(
                     account,
-                    payloads,
+                    this.externalizeRows(payloads),
                     false,
                     typeof document !== 'undefined' &&
                         document.visibilityState === 'visible' &&
@@ -535,9 +764,43 @@ export class ChatAccountStore {
         const epoch = this.epoch;
         this.update({ contactsLoading: true, error: '' });
         const request = (async () => {
+            const friends = async (): Promise<Contact[]> => {
+                try {
+                    const grouped = parseFriendCategories(
+                        dataOf(
+                            await this.transport.call(
+                                this.target.bot_id,
+                                'get_friends_with_category',
+                                {},
+                            ),
+                        ),
+                    );
+                    if (grouped) return grouped;
+                } catch {
+                    // 旧协议端可能没有分组接口；普通好友列表仍可用。
+                }
+                if (epoch !== this.epoch) return [];
+                const data = dataOf(
+                    await this.transport.call(this.target.bot_id, 'get_friend_list', {}),
+                );
+                if (!Array.isArray(data)) throw new Error('好友列表返回格式无法识别');
+                return data.flatMap((row) => {
+                    const contact = parseContact(row, 'private');
+                    return contact ? [contact] : [];
+                });
+            };
             const results = await Promise.allSettled([
-                this.transport.call(this.target.bot_id, 'get_group_list', {}).then(dataOf),
-                this.transport.call(this.target.bot_id, 'get_friend_list', {}).then(dataOf),
+                this.transport
+                    .call(this.target.bot_id, 'get_group_list', {})
+                    .then(dataOf)
+                    .then((data) => {
+                        if (!Array.isArray(data)) throw new Error('群聊列表返回格式无法识别');
+                        return data.flatMap((row) => {
+                            const contact = parseContact(row, 'group');
+                            return contact ? [contact] : [];
+                        });
+                    }),
+                friends(),
             ]);
             if (epoch !== this.epoch) return;
             const contacts: Contact[] = [];
@@ -547,12 +810,7 @@ export class ChatAccountStore {
                 if (result.status === 'rejected') {
                     errors.push(errorText(result.reason));
                     contacts.push(...this.snapshot.contacts.filter((c) => c.type === type));
-                } else if (Array.isArray(result.value))
-                    for (const row of result.value) {
-                        const contact = parseContact(row, type);
-                        if (contact) contacts.push(contact);
-                    }
-                else errors.push('联系人返回格式无法识别');
+                } else contacts.push(...result.value);
             });
             const account = this.snapshot.account;
             const conversations = { ...account.conversations };
@@ -607,57 +865,44 @@ export class ChatAccountStore {
             saved && !saved.atBottom ? (saved.messageId ?? undefined) : undefined,
         );
     }
-    async latest(key: SessionKey): Promise<void> {
-        if (this.snapshot.history[key]?.loading) return;
-        this.pagingAnchors.set(key, { session: key, messageKey: '', atBottom: true });
-        delete this.readingPositions[key];
-        delete this.initialReadingPositions[key];
-        this.historyCursor.delete(key);
-        const state = this.snapshot.account;
-        const recent =
-            state.archiveMessages
-                ?.filter((message) => message.session === key)
-                .slice(-HISTORY_PAGE_SIZE)
-                .map((message) =>
-                    message.gapBefore ? { ...message, gapBefore: false } : message,
-                ) ?? [];
-        this.account({
-            ...state,
-            messages: mergeArchiveMessages(
-                state.messages.filter(
-                    (message) => message.session !== key || message.status !== 'sent',
-                ),
-                recent,
-            ),
-        });
-        this.historyCursor.delete(key);
-        this.update({
-            history: {
-                ...this.snapshot.history,
-                [key]: { loading: false, loaded: false, done: false, error: '' },
-            },
-        });
-        try {
-            await this.history(key);
-            const message = this.snapshot.account.messages
-                .filter((row) => row.session === key)
-                .at(-1);
-            if (message)
-                this.readingPositions[key] = {
-                    messageKey: message.key,
-                    messageId: message.id ?? null,
-                    offset: 0,
-                    atBottom: true,
+    async latest(key: SessionKey, signal?: AbortSignal): Promise<void> {
+        const epoch = this.epoch;
+        if (this.snapshot.history[key]?.loading && !signal?.aborted) {
+            await new Promise<void>((resolve) => {
+                const finish = () => {
+                    unsubscribe();
+                    signal?.removeEventListener('abort', finish);
+                    resolve();
                 };
-        } finally {
-            this.pagingAnchors.delete(key);
+                const unsubscribe = this.subscribe(() => {
+                    if (!this.snapshot.history[key]?.loading || epoch !== this.epoch) finish();
+                });
+                signal?.addEventListener('abort', finish, { once: true });
+            });
         }
+        if (signal?.aborted || epoch !== this.epoch) return;
+        await this.history(key, undefined, { signal, latest: true });
+        if (signal?.aborted || epoch !== this.epoch || this.snapshot.history[key]?.error) return;
+        delete this.initialReadingPositions[key];
+        const message = this.snapshot.account.messages.filter((row) => row.session === key).at(-1);
+        if (message)
+            this.readingPositions[key] = {
+                messageKey: message.key,
+                messageId: message.id ?? null,
+                offset: 0,
+                atBottom: true,
+            };
     }
-    async history(key: SessionKey, before?: string): Promise<void> {
+    async history(
+        key: SessionKey,
+        before?: string,
+        navigation?: { signal?: AbortSignal; latest: boolean },
+    ): Promise<void> {
         if (
+            navigation?.signal?.aborted ||
             this.snapshot.connection.state !== 'connected' ||
             this.snapshot.history[key]?.loading ||
-            (!before && this.snapshot.history[key]?.done)
+            (!navigation?.latest && !before && this.snapshot.history[key]?.done)
         )
             return;
         const epoch = this.epoch;
@@ -675,7 +920,7 @@ export class ChatAccountStore {
         set(true);
         try {
             const group = key.startsWith('group:');
-            const cursor = before ?? this.historyCursor.get(key);
+            const cursor = navigation?.latest ? undefined : (before ?? this.historyCursor.get(key));
             const params: Record<string, unknown> = {
                 [group ? 'group_id' : 'user_id']: this.peer(key),
                 count: HISTORY_PAGE_SIZE,
@@ -701,6 +946,10 @@ export class ChatAccountStore {
                 ),
             );
             if (epoch !== this.epoch) return;
+            if (navigation?.signal?.aborted) {
+                set(false, wasDone);
+                return;
+            }
             if (!Array.isArray(data.messages)) throw new Error('此通道未返回可识别的消息历史');
             const rows = data.messages
                 .map(record)
@@ -717,14 +966,23 @@ export class ChatAccountStore {
                 ...(group ? { group_id: this.peer(key) } : { target_id: this.peer(key) }),
             }));
             const next = id(rows[0]?.message_id);
+            const initial = this.initialReadingPositions[key];
+            const current = initial ? { session: key, ...initial } : this.currentAnchor(key);
+            const readingChanged =
+                current &&
+                (current.messageKey !== anchor?.messageKey ||
+                    current.atBottom !== anchor?.atBottom);
             const anchorIndex =
                 anchor &&
                 previous.findIndex(
                     (message) =>
                         message.key === anchor.messageKey || message.id === anchor.messageId,
                 );
-            const pagingAnchor =
-                before || !anchor || anchor.atBottom || (anchorIndex ?? -1) > HISTORY_PAGE_SIZE
+            const pagingAnchor = navigation?.latest
+                ? { session: key, messageKey: '', atBottom: true }
+                : readingChanged && current
+                  ? current
+                  : before || !anchor || anchor.atBottom || (anchorIndex ?? -1) > HISTORY_PAGE_SIZE
                     ? {
                           session: key,
                           messageKey: `${key}/${before || next}`,
@@ -733,9 +991,26 @@ export class ChatAccountStore {
                       }
                     : anchor;
             this.pagingAnchors.set(key, pagingAnchor);
+            const state = this.snapshot.account;
+            const source = navigation?.latest
+                ? {
+                      ...state,
+                      messages: mergeArchiveMessages(
+                          state.messages.filter(
+                              (message) => message.session !== key || message.status !== 'sent',
+                          ),
+                          (state.archiveMessages ?? state.messages)
+                              .filter((message) => message.session === key)
+                              .slice(-HISTORY_PAGE_SIZE)
+                              .map((message) =>
+                                  message.gapBefore ? { ...message, gapBefore: false } : message,
+                              ),
+                      ),
+                  }
+                : state;
             let account = ingestMessages(
-                this.snapshot.account,
-                incoming,
+                source,
+                this.externalizeRows(incoming),
                 true,
                 null,
                 pagingAnchor,
@@ -768,7 +1043,12 @@ export class ChatAccountStore {
                 : !next || next === cursor || rows.length < HISTORY_PAGE_SIZE;
             set(false, done, '', true);
         } catch (error) {
-            if (epoch === this.epoch) set(false, false, errorText(error));
+            if (epoch === this.epoch)
+                set(
+                    false,
+                    navigation?.signal?.aborted ? wasDone : false,
+                    navigation?.signal?.aborted ? '' : errorText(error),
+                );
         } finally {
             this.pagingAnchors.delete(key);
         }
@@ -794,9 +1074,11 @@ export class ChatAccountStore {
                 segments.push({
                     type: 'image',
                     data: {
-                        file: /^(base64:\/\/|https?:\/\/)/i.test(attachment.path)
-                            ? attachment.path
-                            : localFileTokenFor(attachment.path),
+                        file:
+                            isInlineImageReference(attachment.path) ||
+                            /^(base64:\/\/|https?:\/\/)/i.test(attachment.path)
+                                ? attachment.path
+                                : localFileTokenFor(attachment.path),
                         name: attachment.name,
                         sub_type: attachment.subType ?? 0,
                     },
@@ -861,6 +1143,7 @@ export class ChatAccountStore {
             this.snapshot.account.messages.find((m) => m.key === messageKey) ??
             this.snapshot.account.archiveMessages?.find((m) => m.key === messageKey);
         if (!message?.mine || message.status !== 'failed' || message.recalled) return;
+        if (message.segments.some((segment) => segment.type === 'forward')) return;
         const key = message.session;
         if (
             !this.target.running ||
@@ -872,7 +1155,18 @@ export class ChatAccountStore {
         const group = key.startsWith('group:');
         const peer = { [group ? 'group_id' : 'user_id']: this.peer(key) };
         const segments = message.segments.map((segment) => {
-            if (segment.type !== 'image' && segment.type !== 'file') return segment;
+            if (segment.type === 'image' || segment.type === 'mface') {
+                if (
+                    !text(segment.data.local_file) &&
+                    !text(segment.data.file) &&
+                    !text(segment.data.url) &&
+                    !text(segment.data.file_id) &&
+                    !id(segment.data.emoji_id)
+                )
+                    throw new Error('原附件已不可用，请重新添加后发送');
+                return { ...segment, data: { ...segment.data } };
+            }
+            if (segment.type !== 'file') return segment;
             const file =
                 text(segment.data.local_file) || text(segment.data.file) || text(segment.data.url);
             if (!/^(ncd-local-file:\/\/|base64:\/\/|https?:\/\/).+/i.test(file))
@@ -896,6 +1190,10 @@ export class ChatAccountStore {
                   action: group ? 'send_group_msg' : 'send_private_msg',
                   params: { ...peer, message: segments },
                   segments,
+                  resolveImages: segments.some(
+                      (segment) => segment.type === 'image' || segment.type === 'mface',
+                  ),
+                  sourceMessageId: message.id,
               };
         if (!this.snapshot.account.messages.some((row) => row.key === message.key))
             this.account({
@@ -904,12 +1202,259 @@ export class ChatAccountStore {
             });
         await this.runSends(key, [operation], message.key);
     }
-    private async runSends(key: SessionKey, operations: SendOperation[], retryKey?: string) {
+    async recall(messageKey: string): Promise<void> {
+        const message = this.findMessage(messageKey);
+        if (
+            !message ||
+            !canRecallMessage(message) ||
+            message.senderId !== this.snapshot.account.selfId
+        )
+            return;
+        this.requireConnected();
         const epoch = this.epoch;
-        this.sends.set(key, epoch);
-        if (!retryKey) this.draft(key, EMPTY_DRAFT);
+        if (this.recalls.get(messageKey) === epoch) return;
+        const scope = accountKey(this.target.bot_id, String(this.target.qq_id));
+        this.recalls.set(messageKey, epoch);
         try {
-            for (const operation of operations) {
+            const response = await this.transport.call(this.target.bot_id, 'delete_msg', {
+                message_id: this.protocolMessageId(message.id!),
+            });
+            if (!this.actionIsCurrent(epoch, scope)) return;
+            dataOf(response);
+            const state = this.snapshot.account;
+            const conversation = state.conversations[message.session];
+            const latest = (state.archiveMessages ?? state.messages)
+                .filter((row) => row.session === message.session)
+                .at(-1);
+            const mark = (row: Message) =>
+                row.session === message.session && row.id === message.id
+                    ? { ...row, recalled: true }
+                    : row;
+            this.account({
+                ...state,
+                messages: state.messages.map(mark),
+                archiveMessages: state.archiveMessages?.map(mark),
+                conversations:
+                    conversation && latest?.id === message.id && message.at >= conversation.lastAt
+                        ? {
+                              ...state.conversations,
+                              [message.session]: { ...conversation, preview: '消息已撤回' },
+                          }
+                        : state.conversations,
+            });
+        } catch (error) {
+            if (this.actionIsCurrent(epoch, scope)) throw error;
+        } finally {
+            if (this.recalls.get(messageKey) === epoch) this.recalls.delete(messageKey);
+            if (this.releaseWhenIdle && !this.isSending() && !this.hasViewers())
+                void releaseChatAccount(this).catch(() => {});
+        }
+    }
+    async repeat(messageKey: string): Promise<void> {
+        const message = this.findMessage(messageKey);
+        if (!message || !canRepeatMessage(message)) return;
+        this.requireConnected();
+        if (this.sends.get(message.session) === this.epoch) return;
+        const segments = message.segments.map((segment) => {
+            if (segment.type === 'markdown' && segment.data.content === undefined) {
+                const content = markdownContent(segment.data);
+                if (!content) throw new Error('原 Markdown 内容已不可用');
+                return { ...segment, data: { ...segment.data, content } };
+            }
+            return { ...segment, data: { ...segment.data } };
+        });
+        const group = message.session.startsWith('group:');
+        await this.runSends(
+            message.session,
+            [
+                {
+                    action: group ? 'send_group_msg' : 'send_private_msg',
+                    params: {
+                        [group ? 'group_id' : 'user_id']: this.peer(message.session),
+                        message: segments,
+                    },
+                    segments,
+                    resolveImages: true,
+                    sourceMessageId: message.id,
+                },
+            ],
+            undefined,
+            true,
+        );
+    }
+    async forward(messageKeys: readonly string[], contact: Contact): Promise<void> {
+        this.requireConnected();
+        const keys = [...new Set(messageKeys)];
+        if (!keys.length || keys.length > FORWARD_MESSAGE_LIMIT)
+            throw new Error(`一次可转发 1–${FORWARD_MESSAGE_LIMIT} 条消息`);
+        const messages = keys.map((key) => this.findMessage(key));
+        if (messages.some((message) => !message || !canForwardMessage(message)))
+            throw new Error('所选消息已不可转发，请重新选择');
+        const source = (messages as Message[]).sort((a, b) => a.at - b.at);
+        if (source.some((message) => message.session !== source[0].session))
+            throw new Error('请选择同一会话中的消息');
+        const known =
+            this.snapshot.contacts.find((row) => row.key === contact.key) ??
+            this.snapshot.account.conversations[contact.key];
+        if (!known || known.id !== contact.id || known.type !== contact.type)
+            throw new Error('转发目标不属于当前账号');
+        const epoch = this.epoch;
+        if (this.sends.get(contact.key) === epoch) throw new Error('该会话仍在发送，请稍后转发');
+        const scope = accountKey(this.target.bot_id, String(this.target.qq_id));
+        const requestId = crypto.randomUUID();
+        const peer = this.peer(contact.key);
+        const content = source.map((message) => ({
+            type: 'node',
+            data: {
+                user_id: message.senderId,
+                nickname: message.senderName,
+                time: Math.floor(message.at / 1000),
+                content: message.segments,
+            },
+        }));
+        const nodes = source.map((message) => ({
+            type: 'node',
+            data: { id: this.protocolMessageId(message.id!) },
+        }));
+        this.sends.set(contact.key, epoch);
+        const state = this.snapshot.account;
+        this.account(
+            addPending(
+                {
+                    ...state,
+                    conversations: {
+                        ...state.conversations,
+                        [contact.key]: {
+                            ...(state.conversations[contact.key] ?? {
+                                unread: 0,
+                                pinned: false,
+                                lastAt: 0,
+                                preview: '',
+                            }),
+                            ...known,
+                        },
+                    },
+                },
+                contact.key,
+                requestId,
+                [{ type: 'forward', data: { content } }],
+                Date.now(),
+            ),
+        );
+        try {
+            const group = contact.type === 'group';
+            let response: DebugCallResponse;
+            try {
+                response = await this.transport.call(
+                    this.target.bot_id,
+                    group ? 'send_group_forward_msg' : 'send_private_forward_msg',
+                    { [group ? 'group_id' : 'user_id']: peer, messages: nodes },
+                    requestId,
+                );
+            } catch (error) {
+                throw new ChatForwardError(
+                    `转发结果待确认：${errorText(error)}。请先查看目标会话`,
+                    true,
+                );
+            }
+            if (!this.actionIsCurrent(epoch, scope))
+                throw new ChatForwardError('连接已改变，转发结果待确认，请先查看目标会话', true);
+            if (response.result.kind === 'err') {
+                const error = response.result.error;
+                const uncertain = ['timeout', 'cancelled', 'transport', 'internal'].includes(
+                    error.kind,
+                );
+                const copy = debugErrorCopy(error);
+                throw new ChatForwardError(
+                    uncertain
+                        ? `转发结果待确认，请先查看目标会话：${copy.title}`
+                        : [copy.title, copy.detail].filter(Boolean).join('：'),
+                    uncertain,
+                );
+            }
+            const result = response.result.outcome;
+            if (!result.ok)
+                throw new ChatForwardError(result.wording || result.message || '转发失败');
+            this.account(
+                settleSend(this.snapshot.account, requestId, {
+                    state: 'sent',
+                    id: id(record(result.data).message_id) || undefined,
+                }),
+            );
+        } catch (error) {
+            if (this.actionIsCurrent(epoch, scope))
+                this.account(
+                    settleSend(this.snapshot.account, requestId, {
+                        state:
+                            error instanceof ChatForwardError && error.uncertain
+                                ? 'unknown'
+                                : 'failed',
+                        error: errorText(error),
+                    }),
+                );
+            throw error;
+        } finally {
+            if (this.sends.get(contact.key) === epoch) this.sends.delete(contact.key);
+            if (this.releaseWhenIdle && !this.isSending() && !this.hasViewers())
+                void releaseChatAccount(this).catch(() => {});
+        }
+    }
+    private findMessage(key: string): Message | undefined {
+        return (
+            this.snapshot.account.messages.find((message) => message.key === key) ??
+            this.snapshot.account.archiveMessages?.find((message) => message.key === key)
+        );
+    }
+    private requireConnected() {
+        if (
+            !this.target.running ||
+            this.target.online === false ||
+            this.snapshot.connection.state !== 'connected'
+        )
+            throw new Error('聊天未连接，请连接后操作');
+    }
+    private protocolMessageId(value: string): string | number {
+        if (!/^-?\d+$/.test(value) || /^-?0+$/.test(value))
+            throw new Error('此消息缺少有效协议标识');
+        if (this.target.backend !== 'snowluma') return value;
+        const numeric = Number(value);
+        if (!Number.isSafeInteger(numeric)) throw new Error('此协议的消息标识超出可支持范围');
+        return numeric;
+    }
+    private actionIsCurrent(epoch: number, scope: string): boolean {
+        return (
+            epoch === this.epoch &&
+            scope === accountKey(this.target.bot_id, String(this.target.qq_id))
+        );
+    }
+    private async runSends(
+        key: SessionKey,
+        operations: SendOperation[],
+        retryKey?: string,
+        preserveDraft = false,
+    ) {
+        const epoch = this.epoch;
+        const scope = accountKey(this.target.bot_id, String(this.target.qq_id));
+        const created: string[] = [];
+        let prepared: SendOperation[];
+        try {
+            prepared = operations.map((operation) => ({
+                ...operation,
+                segments: this.externalizeSegments(operation.segments, created),
+            }));
+        } catch (error) {
+            for (const reference of created)
+                inlineImageService.discard(
+                    this.target.bot_id,
+                    String(this.target.qq_id),
+                    reference,
+                );
+            throw error;
+        }
+        this.sends.set(key, epoch);
+        if (!retryKey && !preserveDraft) this.draft(key, EMPTY_DRAFT);
+        try {
+            for (const operation of prepared) {
                 const requestId = crypto.randomUUID();
                 this.account(
                     retryKey
@@ -937,7 +1482,7 @@ export class ChatAccountStore {
                               Date.now(),
                           ),
                 );
-                if (epoch !== this.epoch) {
+                if (!this.actionIsCurrent(epoch, scope)) {
                     this.account(
                         settleSend(this.snapshot.account, requestId, {
                             state: 'failed',
@@ -959,7 +1504,7 @@ export class ChatAccountStore {
                             (...args) => this.transport.call(...args),
                         );
                     } catch (error) {
-                        if (epoch === this.epoch) {
+                        if (this.actionIsCurrent(epoch, scope)) {
                             const failed = settleSend(this.snapshot.account, requestId, {
                                 state: 'failed',
                                 error: errorText(error),
@@ -968,7 +1513,7 @@ export class ChatAccountStore {
                                 (row) => row.requestId === requestId,
                             );
                             this.account(
-                                !retryKey && message
+                                !retryKey && !preserveDraft && message
                                     ? setDraft(
                                           failed,
                                           key,
@@ -979,16 +1524,66 @@ export class ChatAccountStore {
                         }
                         continue;
                     }
-                    if (epoch !== this.epoch) continue;
+                    if (!this.actionIsCurrent(epoch, scope)) continue;
                 }
+                let submitted = false;
                 try {
+                    let params = Array.isArray(record(operation.params).message)
+                        ? { ...record(operation.params), message: operation.segments }
+                        : operation.params;
+                    if (operation.resolveImages) {
+                        const media = createChatMediaService((...args) =>
+                            this.transport.call(...args),
+                        );
+                        const target = { ...this.target };
+                        const segments: Segment[] = [];
+                        let imageIndex = 0;
+                        for (const segment of operation.segments) {
+                            if (!this.actionIsCurrent(epoch, scope)) break;
+                            segments.push(
+                                segment.type === 'image' || segment.type === 'mface'
+                                    ? await media.imageForSend(target, segment.data, {
+                                          messageId: operation.sourceMessageId,
+                                          imageIndex: imageIndex++,
+                                      })
+                                    : segment,
+                            );
+                        }
+                        if (!this.actionIsCurrent(epoch, scope)) continue;
+                        params = { ...record(params), message: segments };
+                    }
+                    if (
+                        (operation.resolveImages || retryKey) &&
+                        this.target.backend === 'snowluma'
+                    ) {
+                        const segments = record(params).message;
+                        if (Array.isArray(segments))
+                            params = {
+                                ...record(params),
+                                message: segments.map((segment: Segment) => {
+                                    const large =
+                                        segment.type === 'face'
+                                            ? qqFaceLarge(segment.data)
+                                            : undefined;
+                                    return large === undefined
+                                        ? segment
+                                        : { ...segment, data: { ...segment.data, large } };
+                                }),
+                            };
+                    }
+                    if (Array.isArray(record(params).message))
+                        params = {
+                            ...record(params),
+                            message: this.materializeSegments(record(params).message as Segment[]),
+                        };
+                    submitted = true;
                     const response = await this.transport.call(
                         this.target.bot_id,
                         operation.action,
-                        operation.params,
+                        params,
                         requestId,
                     );
-                    if (epoch !== this.epoch) continue;
+                    if (!this.actionIsCurrent(epoch, scope)) continue;
                     if (response.result.kind === 'err') {
                         const error = response.result.error;
                         const unknown = ['timeout', 'cancelled', 'transport', 'internal'].includes(
@@ -1024,10 +1619,10 @@ export class ChatAccountStore {
                         );
                     }
                 } catch (error) {
-                    if (epoch === this.epoch)
+                    if (this.actionIsCurrent(epoch, scope))
                         this.account(
                             settleSend(this.snapshot.account, requestId, {
-                                state: 'unknown',
+                                state: submitted ? 'unknown' : 'failed',
                                 error: errorText(error),
                             }),
                         );
@@ -1040,7 +1635,7 @@ export class ChatAccountStore {
         }
     }
     isSending() {
-        return this.sends.size > 0;
+        return this.sends.size > 0 || this.recalls.size > 0;
     }
     hasViewers() {
         return this.listeners.size > 0;
@@ -1252,6 +1847,7 @@ export function releaseChatAccount(store: ChatAccountStore): Promise<void> {
             await store.disconnect();
             await store.flushForRelease();
             if (!store.hasViewers() && accounts.get(key) === store) accounts.delete(key);
+            inlineImageService.release(store.target.bot_id, store.getSnapshot().account.selfId);
             await chatDesktopService.releaseAccount(
                 store.target.bot_id,
                 store.getSnapshot().account.selfId,

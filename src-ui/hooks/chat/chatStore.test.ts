@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChatAccountStore } from './chatStore';
 import { archiveOf } from '../../core/domain/chat/archive';
-import { emptyAccount, ingestMessage } from '../../core/domain/chat/model';
+import { recoverDraft } from '../../core/domain/chat/recoverDraft';
+import { inlineImageService } from '../../core/services/inline-image.service';
+import {
+    emptyAccount,
+    ingestMessage,
+    type Contact,
+    type Message,
+} from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 import type { DebugSubscribeResponse } from '../../core/ipc/generated/debug/DebugSubscribeResponse';
@@ -56,6 +63,207 @@ function setup() {
     };
     return { transport, store: new ChatAccountStore(target, transport) };
 }
+function transferSetup() {
+    const result = setup();
+    let account = emptyAccount('99');
+    for (const messageId of [2, 3])
+        account = ingestMessage(account, {
+            message_type: 'group',
+            group_id: 12,
+            user_id: messageId === 2 ? 99 : 20,
+            message_id: messageId,
+            time: messageId,
+            message: `原消息 ${messageId}`,
+        });
+    result.store.getSnapshot().account = account;
+    const destination: Contact = { key: 'private:20', type: 'private', id: '20', name: '好友' };
+    result.store.getSnapshot().contacts = [destination];
+    result.store.draft(destination.key, { text: '目标会话草稿', attachments: [], reply: null });
+    return { ...result, destination };
+}
+describe('latest navigation and inline images', () => {
+    it('waits for an earlier page then fetches the actual latest page without a cursor', async () => {
+        const { store, transport } = setup();
+        await store.connect();
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const earlier = store.history('group:12', '8');
+        transport.call.mockResolvedValueOnce(
+            ok({ messages: [{ message_id: 99, user_id: 22, time: 99, message: '最新' }] }),
+        );
+        const latest = store.latest('group:12');
+        expect(transport.call).toHaveBeenCalledTimes(1);
+        resolve(ok({ messages: [{ message_id: 7, user_id: 22, time: 7, message: '旧页' }] }));
+        await Promise.all([earlier, latest]);
+        expect(transport.call.mock.calls[1][2]).not.toHaveProperty('message_seq');
+        expect(store.getSnapshot().account.messages.at(-1)?.id).toBe('99');
+        expect(store.readingPosition('group:12')?.atBottom).toBe(true);
+    });
+    it('cancels a late latest response without replacing a newer detached reading anchor', async () => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const controller = new AbortController();
+        const pending = store.latest('group:12', controller.signal);
+        const anchor = { messageKey: 'group:12/2', messageId: '2', offset: 15, atBottom: false };
+        store.readingPosition('group:12', anchor);
+        controller.abort();
+        resolve(
+            ok({
+                messages: [{ message_id: 100, user_id: 22, time: 100, message: '迟到的最新页' }],
+            }),
+        );
+        await pending;
+        expect(store.getSnapshot().account.messages.some((message) => message.id === '100')).toBe(
+            false,
+        );
+        expect(store.readingPosition('group:12')).toEqual(anchor);
+        expect(store.getSnapshot().history['group:12'].loading).toBe(false);
+    });
+    it('keeps a large failed pasted image visible and sends its recovered short reference as bytes', async () => {
+        const { store, transport } = setup();
+        store.target = { ...target, bot_id: 'large-inline-regression' };
+        await store.connect();
+        const source = 'base64://' + btoa('x'.repeat(5 * 1024 * 1024));
+        const failure = ok(null);
+        if (failure.result.kind === 'ok')
+            Object.assign(failure.result.outcome, { ok: false, retcode: 100, message: '未发送' });
+        transport.call.mockResolvedValue(failure);
+        store.draft('group:12', {
+            text: '',
+            reply: null,
+            attachments: [{ key: 'image', type: 'image', path: source, name: '粘贴图片.png' }],
+        });
+        await store.send('group:12');
+        const failed = store.getSnapshot().account.messages[0];
+        expect(failed.status).toBe('failed');
+        expect(String(failed.segments[0].data.file)).toMatch(/^ncd-inline-image:\/\//);
+        const recovered = recoverDraft(failed, { text: '', reply: null, attachments: [] });
+        const bytes = inlineImageService.stats().bytes;
+        store.draft('group:12', recovered);
+        await store.send('group:12');
+        expect(inlineImageService.stats().bytes).toBe(bytes);
+        expect(transport.call.mock.calls[1][2]).toMatchObject({
+            message: [{ type: 'image', data: { file: source } }],
+        });
+        expect(JSON.stringify(archiveOf(store.getSnapshot().account))).not.toContain(
+            'ncd-inline-image://',
+        );
+        inlineImageService.release(store.target.bot_id, '99');
+    });
+});
+describe('chat contacts', () => {
+    it('loads real QQ friend categories and keeps existing conversations and drafts', async () => {
+        const { transport } = setup();
+        const call = vi.fn(async (_bot: string, action: string) =>
+            ok(
+                action === 'get_group_list'
+                    ? [{ group_id: 12, group_name: '讨论群' }]
+                    : [
+                          {
+                              categoryId: 0,
+                              categoryName: '我的好友',
+                              buddyList: [{ user_id: 20, nickname: '小林' }],
+                          },
+                          {
+                              categoryId: 7,
+                              categoryName: '开发伙伴',
+                              buddyList: [{ user_id: 21, nickname: '阿澄', remark: '项目搭档' }],
+                          },
+                      ],
+            ),
+        );
+        const store = new ChatAccountStore(target, { ...transport, call });
+        store.open({ key: 'private:20', type: 'private', id: '20', name: '20' });
+        store.draft('private:20', { text: '保留草稿', reply: null, attachments: [] });
+        await store.loadContacts();
+        expect(call.mock.calls.map((args) => args[1])).toEqual([
+            'get_group_list',
+            'get_friends_with_category',
+        ]);
+        expect(store.getSnapshot().contacts).toEqual([
+            expect.objectContaining({ key: 'group:12', name: '讨论群' }),
+            expect.objectContaining({
+                key: 'private:20',
+                categoryId: '0',
+                categoryName: '我的好友',
+            }),
+            expect.objectContaining({
+                key: 'private:21',
+                name: '项目搭档',
+                categoryId: '7',
+                categoryName: '开发伙伴',
+            }),
+        ]);
+        expect(store.getSnapshot().account.conversations['private:20'].name).toBe('小林');
+        expect(store.getSnapshot().account.drafts['private:20'].text).toBe('保留草稿');
+        expect(store.getSnapshot().error).toBe('');
+    });
+    it('falls back to the ordinary friend list when the protocol has no categories', async () => {
+        const { transport } = setup();
+        const call = vi.fn(async (_bot: string, action: string) => {
+            if (action === 'get_friends_with_category') throw new Error('不支持此接口');
+            return ok(
+                action === 'get_friend_list'
+                    ? [{ user_id: 20, nickname: '好友', category_id: 0, categoryName: '我的好友' }]
+                    : [],
+            );
+        });
+        const store = new ChatAccountStore(target, { ...transport, call });
+        await store.loadContacts();
+        expect(call.mock.calls.map((args) => args[1])).toEqual([
+            'get_group_list',
+            'get_friends_with_category',
+            'get_friend_list',
+        ]);
+        expect(store.getSnapshot().contacts).toEqual([
+            expect.objectContaining({
+                key: 'private:20',
+                name: '好友',
+                categoryId: '0',
+                categoryName: '我的好友',
+            }),
+        ]);
+        expect(store.getSnapshot().error).toBe('');
+    });
+    it('retains known contacts when both grouped and fallback responses are unusable', async () => {
+        const { transport } = setup();
+        const call = vi.fn(async (_bot: string, action: string) =>
+            ok(
+                action === 'get_friends_with_category'
+                    ? [{ categoryId: 1, categoryName: '损坏分组', buddyList: null }]
+                    : null,
+            ),
+        );
+        const store = new ChatAccountStore(target, { ...transport, call });
+        const contacts: Contact[] = [
+            { key: 'group:12', type: 'group', id: '12', name: '讨论群' },
+            {
+                key: 'private:20',
+                type: 'private',
+                id: '20',
+                name: '好友',
+                categoryId: '1',
+                categoryName: '伙伴',
+            },
+        ];
+        store.getSnapshot().contacts = contacts;
+        await store.loadContacts();
+        expect(store.getSnapshot().contacts).toEqual(contacts);
+        expect(store.getSnapshot().error).toContain('列表返回格式无法识别');
+    });
+});
 describe('chat lifecycle', () => {
     it('marks a conversation read locally without opening it, changing drafts, or stopping unread tracking', async () => {
         const { store, transport } = setup();
@@ -358,7 +566,7 @@ describe('chat lifecycle', () => {
         transport.subscribe.mock.calls[0][1](batch);
         await vi.waitFor(() => expect(transport.call).toHaveBeenCalledTimes(3));
         expect(transport.call.mock.calls.map((call) => (call as unknown[])[1]).sort()).toEqual([
-            'get_friend_list',
+            'get_friends_with_category',
             'get_group_list',
             'get_recent_contact',
         ]);
@@ -474,6 +682,155 @@ describe('chat lifecycle', () => {
         await pending;
         expect(store.getSnapshot().account.drafts['group:12'].text).toBe('第二条草稿');
         expect(store.getSnapshot().account.messages[0].status).toBe('sent');
+    });
+    it('repeats the complete message once without consuming edits and keeps an uncertain result out of retry', async () => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        const source = store.getSnapshot().account.messages[0];
+        source.segments = [
+            { type: 'text', data: { text: '一起发送' } },
+            {
+                type: 'image',
+                data: { file: 'image-token', url: 'https://cdn.example/picture.gif', sub_type: 1 },
+            },
+            { type: 'face', data: { id: '14' } },
+            { type: 'markdown', data: { content: '**同一段内容**' } },
+            {
+                type: 'markdown',
+                data: { data: '{"content":"**旧档案正文**"}', template_id: 'legacy' },
+            },
+        ];
+        store.draft(source.session, { text: '正在写', reply: null, attachments: [] });
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementation((...args: unknown[]) =>
+            args[1] === 'get_image'
+                ? Promise.resolve(
+                      ok({ file: '/bot/cache/picture.gif', url: 'https://cdn.example/stale.gif' }),
+                  )
+                : new Promise((done) => {
+                      resolve = done;
+                  }),
+        );
+        const first = store.repeat(source.key);
+        await store.repeat(source.key);
+        await vi.waitFor(() => expect(transport.call).toHaveBeenCalledTimes(2));
+        expect(transport.call.mock.calls[0].slice(0, 3)).toEqual([
+            'bot',
+            'get_image',
+            { file: 'image-token' },
+        ]);
+        expect(transport.call.mock.calls[1].slice(0, 3)).toEqual([
+            'bot',
+            'send_group_msg',
+            {
+                group_id: '12',
+                message: source.segments.map((segment) =>
+                    segment.type === 'image'
+                        ? { ...segment, data: { file: '/bot/cache/picture.gif', sub_type: 1 } }
+                        : segment.type === 'markdown' && segment.data.content === undefined
+                          ? { ...segment, data: { ...segment.data, content: '**旧档案正文**' } }
+                          : segment,
+                ),
+            },
+        ]);
+        store.draft(source.session, { text: '继续写', reply: null, attachments: [] });
+        resolve({
+            request_id: 'req',
+            result: { kind: 'err', error: { kind: 'timeout', ms: 30000 } },
+        });
+        await first;
+        const pending = store.getSnapshot().account.messages.at(-1)!;
+        expect(pending.status).toBe('unknown');
+        expect(source.status).toBe('sent');
+        expect(store.getSnapshot().account.drafts[source.session].text).toBe('继续写');
+        await store.retry(pending.key);
+        expect(transport.call).toHaveBeenCalledTimes(2);
+    });
+    it('marks a repeat image lookup failure as unsent without replaying the expired URL or consuming the draft', async () => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        const source = store.getSnapshot().account.messages[0];
+        source.segments = [
+            {
+                type: 'image',
+                data: { file: 'expired-resource', url: 'https://cdn.example/stale?rkey=old' },
+            },
+        ];
+        store.draft(source.session, { text: '保留草稿', reply: null, attachments: [] });
+        const failure = ok(null);
+        if (failure.result.kind === 'ok')
+            Object.assign(failure.result.outcome, {
+                ok: false,
+                retcode: 100,
+                message: '图片缓存已失效',
+            });
+        transport.call.mockResolvedValue(failure);
+        await store.repeat(source.key);
+        expect(
+            transport.call.mock.calls.every((args) => (args as unknown[])[1] === 'get_image'),
+        ).toBe(true);
+        expect(store.getSnapshot().account.messages.at(-1)).toMatchObject({
+            status: 'failed',
+            error: '图片缓存已失效',
+        });
+        expect(store.getSnapshot().account.drafts[source.session].text).toBe('保留草稿');
+    });
+    it('preserves only explicit SnowLuma face variants when repeating a message', async () => {
+        const { store, transport } = transferSetup();
+        store.target = { ...target, bot_id: 'repeat-face-format', backend: 'snowluma' };
+        await store.connect();
+        const source = store.getSnapshot().account.messages[0];
+        source.segments = [
+            { type: 'face', data: { id: '14', raw: { faceType: 3 } } },
+            { type: 'face', data: { id: '14', raw: { faceType: 1 } } },
+            { type: 'face', data: { id: '14' } },
+            { type: 'face', data: { id: '14', large: false, raw: { faceType: 3 } } },
+        ];
+        transport.call.mockImplementation((...args: unknown[]) =>
+            Promise.resolve(
+                ok(
+                    args[1] === 'fetch_sys_faces'
+                        ? { packs: [{ emojis: [{ q_sid: '14', q_des: '微笑' }] }] }
+                        : { message_id: 8 },
+                ),
+            ),
+        );
+        await store.repeat(source.key);
+        const send = transport.call.mock.calls.find(
+            (args) => (args as unknown[])[1] === 'send_group_msg',
+        )!;
+        expect((send[2] as { message: unknown[] }).message).toEqual(
+            source.segments.map((segment, index) =>
+                index === 2
+                    ? segment
+                    : { ...segment, data: { ...segment.data, large: index === 0 } },
+            ),
+        );
+        expect(source.segments[0].data.large).toBeUndefined();
+        expect(source.segments[1].data.large).toBeUndefined();
+    });
+    it('does not submit a repeat after disconnect while the Bot image lookup is pending', async () => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        const source = store.getSnapshot().account.messages[0];
+        source.segments = [{ type: 'image', data: { file_id: 'pending-image' } }];
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const repeat = store.repeat(source.key);
+        await store.disconnect();
+        resolve(ok({ file: '/bot/cache/image.png' }));
+        await repeat;
+        expect(transport.call).toHaveBeenCalledOnce();
+        expect(transport.call.mock.calls[0].slice(0, 3)).toEqual([
+            'bot',
+            'get_image',
+            { file_id: 'pending-image' },
+        ]);
     });
     it('does not resend an unknown result', async () => {
         const { store, transport } = setup();
@@ -810,4 +1167,253 @@ describe('chat lifecycle', () => {
             expect(messages[0].segments[0].data.file).toBe('inline.txt');
         },
     );
+});
+
+describe('chat message transfer', () => {
+    it('recalls an owned sent message in both working set and archive and preserves recall on history replay', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        const draft = store.getSnapshot().account.drafts[destination.key];
+        await store.recall('group:12/2');
+        expect(transport.call.mock.calls[0]).toMatchObject([
+            'bot',
+            'delete_msg',
+            { message_id: '2' },
+        ]);
+        expect(store.getSnapshot().account.messages[0].recalled).toBe(true);
+        expect(store.getSnapshot().account.archiveMessages?.[0].recalled).toBe(true);
+        store.getSnapshot().account.messages = [];
+        transport.call.mockResolvedValueOnce(
+            ok({ messages: [{ message_id: 2, user_id: 99, time: 2, message: '旧历史' }] }),
+        );
+        await store.history('group:12');
+        expect(store.getSnapshot().account.messages[0].recalled).toBe(true);
+        expect(
+            store.getSnapshot().account.archiveMessages?.find((message) => message.id === '2')
+                ?.recalled,
+        ).toBe(true);
+        expect(store.getSnapshot().account.drafts[destination.key]).toBe(draft);
+    });
+    it.each([
+        { mine: false },
+        { id: undefined },
+        { recalled: true },
+        { status: 'failed' as const },
+        { status: 'sending' as const },
+        { status: 'unknown' as const },
+    ])('does not submit an ineligible recall (%j)', async (patch) => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        Object.assign(store.getSnapshot().account.messages[0], patch);
+        await store.recall('group:12/2');
+        expect(transport.call).not.toHaveBeenCalled();
+    });
+    it('deduplicates recall clicks and leaves the original message intact on protocol failure', async () => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const first = store.recall('group:12/2');
+        const rejected = expect(first).rejects.toThrow('超过撤回时间');
+        await store.recall('group:12/2');
+        const failed = ok(null);
+        if (failed.result.kind === 'ok')
+            Object.assign(failed.result.outcome, {
+                ok: false,
+                retcode: 100,
+                wording: '超过撤回时间',
+            });
+        resolve(failed);
+        await rejected;
+        expect(transport.call).toHaveBeenCalledTimes(1);
+        expect(store.getSnapshot().account.messages[0].recalled).not.toBe(true);
+    });
+    it('ignores a late recall response after the account identity changes', async () => {
+        const { store, transport } = transferSetup();
+        await store.connect();
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const recalling = store.recall('group:12/2');
+        store.target = { ...target, qq_id: 100 };
+        resolve(ok(null));
+        await recalling;
+        expect(store.getSnapshot().account.messages[0].recalled).not.toBe(true);
+    });
+    it.each(['napcat', 'snowluma'] as const)(
+        'forwards ordered message IDs using %s and keeps both drafts',
+        async (backend) => {
+            const { store, transport, destination } = transferSetup();
+            store.target = { ...target, backend };
+            await store.connect();
+            store.draft('group:12', { text: '原会话草稿', attachments: [], reply: null });
+            const drafts = store.getSnapshot().account.drafts;
+            await store.forward(['group:12/3', 'group:12/2'], destination);
+            expect(transport.call.mock.calls[0].slice(0, 3)).toEqual([
+                'bot',
+                'send_private_forward_msg',
+                {
+                    user_id: backend === 'snowluma' ? 20 : '20',
+                    messages: [2, 3].map((id) => ({
+                        type: 'node',
+                        data: { id: backend === 'snowluma' ? id : String(id) },
+                    })),
+                },
+            ]);
+            expect(store.getSnapshot().account.drafts).toBe(drafts);
+            expect(store.getSnapshot().account.messages.at(-1)).toMatchObject({
+                session: destination.key,
+                status: 'sent',
+                id: '8',
+                segments: [{ type: 'forward' }],
+            });
+            expect(store.getSnapshot().account.conversations[destination.key].name).toBe('好友');
+        },
+    );
+    it('rejects too many messages and targets outside the current account before submitting', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        await expect(
+            store.forward(
+                Array.from({ length: 21 }, (_, index) => `message/${index}`),
+                destination,
+            ),
+        ).rejects.toThrow('1–20');
+        await expect(
+            store.forward(['group:12/2'], {
+                key: 'private:44',
+                type: 'private',
+                id: '44',
+                name: '另一个账号的好友',
+            }),
+        ).rejects.toThrow('当前账号');
+        expect(transport.call).not.toHaveBeenCalled();
+    });
+    it('leaves uncertain forwards visible without retrying them or clearing the target draft', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        const draft = store.getSnapshot().account.drafts[destination.key];
+        transport.call.mockResolvedValueOnce({
+            request_id: 'req',
+            result: { kind: 'err', error: { kind: 'timeout', ms: 30_000 } },
+        });
+        await expect(store.forward(['group:12/2'], destination)).rejects.toMatchObject({
+            uncertain: true,
+        });
+        const pending = store.getSnapshot().account.messages.at(-1)!;
+        expect(pending.status).toBe('unknown');
+        await store.retry(pending.key);
+        expect(transport.call).toHaveBeenCalledTimes(1);
+        expect(store.getSnapshot().account.drafts[destination.key]).toBe(draft);
+    });
+    it('blocks duplicate forwards and ignores successful responses after disconnect', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const first = store.forward(['group:12/2'], destination);
+        const rejected = expect(first).rejects.toMatchObject({ uncertain: true });
+        await expect(store.forward(['group:12/2'], destination)).rejects.toThrow('仍在发送');
+        await store.disconnect();
+        resolve(ok({ message_id: 77 }));
+        await rejected;
+        expect(store.getSnapshot().account.messages.at(-1)).toMatchObject({
+            status: 'unknown',
+        });
+        expect(store.getSnapshot().account.messages.at(-1)?.id).toBeUndefined();
+        expect(transport.call).toHaveBeenCalledTimes(1);
+    });
+    it('restores an archived search hit with nearby messages and a detached reading anchor', () => {
+        const { store } = transferSetup();
+        const seed = store.getSnapshot().account.messages[0];
+        const messages: Message[] = Array.from({ length: 500 }, (_, index) => ({
+            ...seed,
+            key: `group:12/${index + 1}`,
+            id: String(index + 1),
+            at: index,
+        }));
+        store.getSnapshot().account = {
+            ...store.getSnapshot().account,
+            messages: messages.slice(-50),
+            archiveMessages: messages,
+        };
+        const draft = store.getSnapshot().account.drafts;
+        const hit = store.revealArchivedMessage(messages[10]);
+        expect(hit?.key).toBe('group:12/11');
+        expect(store.getSnapshot().account.active).toBe('group:12');
+        expect(
+            store.getSnapshot().account.messages.some((message) => message.key === hit?.key),
+        ).toBe(true);
+        expect(store.initialReadingPosition('group:12')).toMatchObject({
+            messageKey: 'group:12/11',
+            atBottom: false,
+        });
+        expect(store.getSnapshot().account.drafts).toBe(draft);
+        expect(store.revealArchivedMessage('another-account/unknown')).toBeNull();
+    });
+    it('pages before a restored archive window and keeps a newer search anchor through a late history response', async () => {
+        const { store, transport } = transferSetup();
+        const seed = store.getSnapshot().account.messages[0];
+        const saved: Message[] = Array.from({ length: 1000 }, (_, index) => ({
+            ...seed,
+            key: `group:12/${index + 1}`,
+            id: String(index + 1),
+            at: (index + 1) * 1000,
+        }));
+        store.getSnapshot().account = {
+            ...store.getSnapshot().account,
+            active: 'group:12',
+            messages: saved.slice(-50),
+            archiveMessages: saved,
+        };
+        await store.connect();
+        const page = (start: number) => ({
+            messages: Array.from({ length: 50 }, (_, index) => ({
+                message_id: start + index,
+                time: start + index,
+                user_id: 99,
+                message: `消息 ${start + index}`,
+            })),
+        });
+        transport.call.mockResolvedValueOnce(ok(page(951)));
+        await store.history('group:12');
+        store.revealArchivedMessage('group:12/501');
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((done) => {
+                    resolve = done;
+                }),
+        );
+        const earlier = store.history('group:12');
+        expect(transport.call.mock.calls[1][2]).toMatchObject({ message_seq: '451' });
+        store.revealArchivedMessage('group:12/101');
+        resolve(ok(page(401)));
+        await earlier;
+        expect(store.getSnapshot().account.messages.some((message) => message.id === '101')).toBe(
+            true,
+        );
+        expect(store.initialReadingPosition('group:12')?.messageKey).toBe('group:12/101');
+        const oldest = store
+            .getSnapshot()
+            .account.messages.find((message) => message.session === 'group:12');
+        expect(Number(oldest?.id)).toBeLessThanOrEqual(101);
+        transport.call.mockResolvedValueOnce(ok({ messages: [] }));
+        await store.history('group:12');
+        expect(transport.call.mock.calls[2][2]).toMatchObject({ message_seq: oldest?.id });
+    });
 });

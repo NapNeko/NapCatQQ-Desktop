@@ -1,6 +1,7 @@
 // 从发送记录恢复可编辑内容；本机附件路径只存在本次会话内存中。
 import { LOCAL_FILE_PREFIX } from '../debug/streamActions';
 import { text, type Draft, type Message } from './model';
+import { isInlineImageReference } from './imageSource';
 
 export function recoverDraft(message: Message, current: Draft): Draft {
     const attachments = [...current.attachments];
@@ -34,7 +35,11 @@ export function recoverDraft(message: Message, current: Draft): Draft {
             });
         } else if (segment.type === 'image' || segment.type === 'file') {
             const file = text(data.local_file) || text(data.file);
-            if (file.startsWith(LOCAL_FILE_PREFIX) || file.startsWith('base64://')) {
+            if (
+                file.startsWith(LOCAL_FILE_PREFIX) ||
+                file.startsWith('base64://') ||
+                isInlineImageReference(file)
+            ) {
                 const path = file.startsWith(LOCAL_FILE_PREFIX)
                     ? file.slice(LOCAL_FILE_PREFIX.length)
                     : file;
@@ -44,7 +49,7 @@ export function recoverDraft(message: Message, current: Draft): Draft {
                     path,
                     name:
                         text(data.name) ||
-                        (path.startsWith('base64://')
+                        (path.startsWith('base64://') || isInlineImageReference(path)
                             ? '粘贴的图片.png'
                             : path.split(/[\\/]/).pop() || '附件'),
                 });

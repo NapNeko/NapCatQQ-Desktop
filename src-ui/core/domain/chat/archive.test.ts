@@ -11,6 +11,30 @@ const event = (id = 1, time = 100) => ({
     message: '你好',
 });
 describe('chat archive projection', () => {
+    it('persists recoverable protocol ids but never process-local image refs or inline bytes', () => {
+        const state = ingestMessage(emptyAccount('99'), {
+            ...event(),
+            message: [
+                {
+                    type: 'image',
+                    data: {
+                        file: 'ncd-inline-image://private',
+                        inline_ref: 'ncd-inline-image://private',
+                        local_file: 'base64://aGVsbG8=',
+                        url: 'https://cdn.example/image',
+                        source_message_id: '1',
+                    },
+                },
+            ],
+        });
+        expect(archiveOf(state).messages[0].segments).toEqual([
+            {
+                type: 'image',
+                data: { url: 'https://cdn.example/image', source_message_id: '1' },
+            },
+        ]);
+        expect(state.messages[0].segments[0].data.inline_ref).toBe('ncd-inline-image://private');
+    });
     it('restores conversations, unread, pins and box membership without drafts or event cursors', () => {
         const state = ingestMessage(emptyAccount('99'), event());
         state.conversations['group:12'] = {
@@ -44,6 +68,22 @@ describe('chat archive projection', () => {
         archived.messages[0].status = 'sending';
         expect(() => restoreArchive(emptyAccount('100'), archived)).toThrow();
         expect(restoreArchive(emptyAccount('99'), archived).messages[0].status).toBe('unknown');
+    });
+    it('refreshes saved Markdown previews while preserving recall wording', () => {
+        const state = ingestMessage(emptyAccount('99'), {
+            ...event(),
+            message: [{ type: 'markdown', data: { data: { content: '# 标题\n\n**正文**' } } }],
+        });
+        const archived = archiveOf(state);
+        archived.conversations[0].preview = '[Markdown]';
+        expect(restoreArchive(emptyAccount('99'), archived).conversations['group:12'].preview).toBe(
+            '标题 正文',
+        );
+        archived.messages[0].recalled = true;
+        archived.conversations[0].preview = '消息已撤回';
+        expect(restoreArchive(emptyAccount('99'), archived).conversations['group:12'].preview).toBe(
+            '消息已撤回',
+        );
     });
     it('imports recent contacts without marking old messages unread or moving the active conversation', () => {
         let state = ingestMessage(emptyAccount('99'), event());

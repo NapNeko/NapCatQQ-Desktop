@@ -14,12 +14,17 @@ it('recovers attachments and mentions without losing newer draft text', () => {
             { type: 'at', data: { qq: '12' } },
             { type: 'text', data: { text: ' 看看这个' } },
             { type: 'file', data: { name: '说明.txt', file: 'ncd-local-file://D:/说明.txt' } },
+            { type: 'image', data: { file: 'ncd-inline-image://source' } },
         ],
     };
     const result = recoverDraft(message, { ...EMPTY_DRAFT, text: '新草稿' });
     expect(result.text).toBe('新草稿\n@12 看看这个');
     expect(result.mentions).toEqual([{ qq: '12', label: '@12' }]);
     expect(result.attachments[0]).toMatchObject({ path: 'D:/说明.txt' });
+    expect(result.attachments[1]).toMatchObject({
+        path: 'ncd-inline-image://source',
+        name: '粘贴的图片.png',
+    });
 });
 
 it('recovers QQ faces and favorite image URLs while rejecting unsafe protocols', () => {

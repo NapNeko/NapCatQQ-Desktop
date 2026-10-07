@@ -96,4 +96,56 @@ describe('chat profile protocol', () => {
         await expect(chatProfileService.members(target, '200')).rejects.toThrow('内容过大');
         await expect(chatProfileService.members(target, '200')).rejects.toThrow('成员列表格式');
     });
+    it('reads a fresh member card and rejects a response for a different group', async () => {
+        const call = vi
+            .spyOn(chatService, 'call')
+            .mockResolvedValueOnce(
+                ok({
+                    group_id: 200,
+                    user_id: 123,
+                    card: '群名片',
+                    role: 'member',
+                    shut_up_timestamp: 123456,
+                }),
+            )
+            .mockResolvedValueOnce(ok({ group_id: 300, user_id: 123, role: 'member' }));
+        const member = await chatProfileService.member(
+            { ...target, backend: 'snowluma' },
+            '200',
+            '123',
+        );
+        expect(call).toHaveBeenCalledWith('bot', 'get_group_member_info', {
+            group_id: 200,
+            user_id: 123,
+            no_cache: true,
+        });
+        expect(member).toMatchObject({
+            id: '123',
+            name: '群名片',
+            role: 'member',
+            mutedUntil: 123456,
+        });
+        await expect(chatProfileService.member(target, '200', '123')).rejects.toThrow(
+            '不属于当前群',
+        );
+    });
+    it('sends explicit mute duration and allows a removed member to reapply', async () => {
+        const call = vi.spyOn(chatService, 'call').mockResolvedValue(ok(null));
+        await chatProfileService.ban(target, '200', '123', 0);
+        await chatProfileService.kick(target, '200', '123');
+        expect(call).toHaveBeenNthCalledWith(1, 'bot', 'set_group_ban', {
+            group_id: '200',
+            user_id: '123',
+            duration: 0,
+        });
+        expect(call).toHaveBeenNthCalledWith(2, 'bot', 'set_group_kick', {
+            group_id: '200',
+            user_id: '123',
+            reject_add_request: false,
+        });
+        await expect(chatProfileService.ban(target, '200', '123', 31 * 86400)).rejects.toThrow(
+            '30 天',
+        );
+        expect(call).toHaveBeenCalledTimes(2);
+    });
 });

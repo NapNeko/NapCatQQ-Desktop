@@ -122,6 +122,23 @@ describe('segmentPreview', () => {
         expect(segmentPreview(seg('mface'))).toBe('[表情包]');
     });
 
+    it('Markdown reads nested or serialized bodies and previews the visible text', () => {
+        const content = '# 周报\n\n**发布** [文档](https://example.com)\n> 继续';
+        for (const data of [
+            { content },
+            { data: { content } },
+            { data: JSON.stringify({ data: { content } }) },
+        ])
+            expect(segmentPreview(seg('markdown', data))).toBe('周报 发布 文档 继续');
+    });
+
+    it('Markdown keeps a safe fallback for absent or cyclic bodies', () => {
+        const cyclic: Record<string, unknown> = {};
+        cyclic.data = cyclic;
+        expect(segmentPreview(seg('markdown', cyclic))).toBe('[Markdown]');
+        expect(segmentPreview(seg('markdown', { template_id: '123' }))).toBe('[Markdown]');
+    });
+
     it('文件带文件名，没有名字就只写类型', () => {
         expect(segmentPreview(seg('file', { name: 'report.pdf' }))).toBe('[文件] report.pdf');
         expect(segmentPreview(seg('file', { file: 'fallback.bin' }))).toBe('[文件] fallback.bin');

@@ -52,6 +52,7 @@ describe('QQ face catalog', () => {
         const fetcher = vi
             .fn()
             .mockRejectedValueOnce(new Error('offline'))
+            .mockRejectedValueOnce(new Error('mirror offline'))
             .mockResolvedValueOnce(
                 new Response(JSON.stringify({ emojis: { '600': face('600') } })),
             );
@@ -60,9 +61,78 @@ describe('QQ face catalog', () => {
         expect(QQ_FACE_FALLBACK.length).toBeGreaterThan(300);
         expect(QQ_FACE_FALLBACK.some((face) => face.id === '507')).toBe(true);
         await service.catalog();
-        expect(fetcher).toHaveBeenCalledOnce();
+        expect(fetcher).toHaveBeenCalledTimes(2);
         time.mockReturnValue(now + 61_000);
         expect(await service.catalog()).toEqual([{ id: '600', name: '新表情' }]);
+    });
+    it('persists metadata categories and reloads them without a network round trip', async () => {
+        const saved = new Map<string, string>();
+        const store = {
+            getItem: (key: string) => saved.get(key) ?? null,
+            setItem: (key: string, value: string) => {
+                saved.set(key, value);
+            },
+        };
+        const fetcher = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    emojis: {
+                        '364': {
+                            ...face('364', '/超级赞'),
+                            emojiType: 1,
+                            assets: [
+                                ...face('364').assets,
+                                { type: 'apng', path: 'assets/qq_emoji/364/apng/364.png' },
+                            ],
+                        },
+                    },
+                }),
+            ),
+        );
+        const service = createQQFaceService(fetcher, undefined, store);
+        expect(await service.catalog()).toEqual([
+            expect.objectContaining({
+                id: '364',
+                super: true,
+                category: '超级',
+                animationUrl: 'https://koishi.js.org/QFace/assets/qq_emoji/364/apng/364.png',
+            }),
+        ]);
+        const offline = vi.fn().mockRejectedValue(new Error('offline'));
+        expect(await createQQFaceService(offline, undefined, store).catalog()).toEqual(
+            await service.catalog(),
+        );
+        expect(offline).not.toHaveBeenCalled();
+    });
+    it('uses the QFace CDN mirror when the primary directory fails', async () => {
+        const fetcher = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('unreachable'))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ emojis: { '14': face('14') } })));
+        expect(await createQQFaceService(fetcher).catalog()).toEqual([
+            { id: '14', name: '新表情' },
+        ]);
+        expect(fetcher.mock.calls[1][0]).toContain('cdn.jsdelivr.net/gh/koishijs/QFace');
+    });
+    it('projects corrupt optional fields out of a saved catalog', async () => {
+        const saved = JSON.stringify({
+            expires: Date.now() + 60_000,
+            faces: [
+                {
+                    id: '14',
+                    name: '微笑',
+                    aliases: {},
+                    category: { label: '经典' },
+                    super: 'true',
+                    url: 'javascript:alert(1)',
+                },
+            ],
+        });
+        const service = createQQFaceService(vi.fn(), undefined, {
+            getItem: () => saved,
+            setItem: vi.fn(),
+        });
+        expect(await service.catalog()).toEqual([{ id: '14', name: '微笑' }]);
     });
 });
 

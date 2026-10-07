@@ -2,7 +2,8 @@
 import { normalizeMessage, messagePreview, type Segment } from '../debug/segments';
 import { isLocalFileToken } from '../debug/streamActions';
 import type { Mention } from '../debug/composerModel';
-import { findDuplicateMessage, mergeMessageIdentity } from './messageIdentity';
+import { findDuplicateMessage, mergeMessageIdentity, sortMessages } from './messageIdentity';
+import { isInlineImageReference } from './imageSource';
 import {
     retainWorkingMessages,
     retainArchiveMessages,
@@ -16,6 +17,8 @@ export interface Contact {
     id: string;
     name: string;
     members?: number;
+    categoryId?: string;
+    categoryName?: string;
 }
 export interface Conversation extends Contact {
     unread: number;
@@ -90,14 +93,23 @@ export function mergeArchiveMessages(
     );
     for (const message of incoming) {
         const previous = message.id && byId.get(`${message.session}/${message.id}`);
+        const savedMessage = byKey.get(previous || message.key);
         if (previous && previous !== message.key) byKey.delete(previous);
-        byKey.set(message.key, message);
+        byKey.set(
+            message.key,
+            savedMessage?.recalled
+                ? {
+                      ...message,
+                      recalled: true,
+                      segments: savedMessage.segments.length
+                          ? savedMessage.segments
+                          : message.segments,
+                  }
+                : message,
+        );
         if (message.id) byId.set(`${message.session}/${message.id}`, message.key);
     }
-    return retainArchiveMessages(
-        [...byKey.values()].sort((a, b) => a.at - b.at),
-        MESSAGE_LIMIT,
-    );
+    return retainArchiveMessages(sortMessages([...byKey.values()]), MESSAGE_LIMIT);
 }
 export function trimAccountMessages(
     state: Account,
@@ -144,7 +156,30 @@ export function parseContact(raw: unknown, type: Contact['type']): Contact | nul
         id: value,
         name: text(row.group_name) || text(row.remark) || text(row.nickname) || value,
         members: typeof row.member_count === 'number' ? row.member_count : undefined,
+        categoryId:
+            type === 'private' ? id(row.category_id ?? row.categoryId) || undefined : undefined,
+        categoryName:
+            type === 'private'
+                ? text(row.categoryName) || text(row.category_name) || undefined
+                : undefined,
     };
+}
+export function parseFriendCategories(raw: unknown): Contact[] | null {
+    if (!Array.isArray(raw)) return null;
+    const contacts = new Map<SessionKey, Contact>();
+    for (const value of raw) {
+        const category = record(value);
+        const categoryId = id(category.categoryId);
+        if (!categoryId || !Array.isArray(category.buddyList)) return null;
+        const categoryName =
+            text(category.categoryName).trim() ||
+            (categoryId === '0' ? '未分组' : `分组 ${categoryId}`);
+        for (const buddy of category.buddyList) {
+            const contact = parseContact(buddy, 'private');
+            if (contact) contacts.set(contact.key, { ...contact, categoryId, categoryName });
+        }
+    }
+    return [...contacts.values()];
 }
 function conversation(state: Account, contact: Contact): Conversation {
     const existing: Conversation | undefined = state.conversations[contact.key];
@@ -183,9 +218,10 @@ export function ingestMessages(
 ): Account {
     if (!rows.length) return state;
     const archived = new Map(
-        (state.archiveMessages ?? [])
-            .filter((message) => message.id)
-            .map((message) => [`${message.session}/${message.id}`, message] as const),
+        (state.archiveMessages ?? []).map(
+            (message) =>
+                [message.id ? `${message.session}/${message.id}` : message.key, message] as const,
+        ),
     );
     let next: Account = {
         ...state,
@@ -193,7 +229,7 @@ export function ingestMessages(
         conversations: { ...state.conversations },
     };
     for (const raw of rows) next = ingestOne(next, raw, historical, reading, archived);
-    next.messages.sort((a, b) => a.at - b.at);
+    sortMessages(next.messages);
     next.archiveMessages = mergeArchiveMessages(
         next.archiveMessages ?? state.messages,
         next.messages,
@@ -222,6 +258,12 @@ function ingestOne(
             row.notice_type === 'group_recall'
                 ? `group:${id(row.group_id)}`
                 : `private:${id(row.user_id)}`;
+        const latest = (state.archiveMessages ?? state.messages)
+            .filter((message) => message.session === session)
+            .at(-1);
+        const current = state.conversations[session];
+        if (current && latest?.id === messageId && latest.at >= current.lastAt)
+            state.conversations[session] = { ...current, preview: '消息已撤回' };
         for (let index = 0; index < state.messages.length; index++) {
             const message = state.messages[index];
             if (message.session === session && message.id === messageId)
@@ -283,7 +325,11 @@ function ingestOne(
                 !m.id &&
                 m.fileId === fileId,
         );
-    const saved = messageId && archived.get(`${session}/${messageId}`);
+    const saved = archived.get(messageId ? `${session}/${messageId}` : key);
+    if (saved && saved.recalled) {
+        message.recalled = true;
+        if (saved.segments.length) message.segments = saved.segments;
+    }
     if (!existing && saved && !historical) {
         if (saved.requestId)
             state.messages.push({
@@ -322,7 +368,12 @@ function ingestOne(
         ...current,
         unread: current.unread + (!historical && !mine && reading !== session ? 1 : 0),
         lastAt: Math.max(at, current.lastAt),
-        preview: at >= current.lastAt ? messagePreview(segments) : current.preview,
+        preview:
+            at >= current.lastAt
+                ? message.recalled
+                    ? '消息已撤回'
+                    : messagePreview(message.segments)
+                : current.preview,
     };
     return state;
 }
@@ -345,7 +396,7 @@ function ingestPoke(
     const at = typeof row.time === 'number' && row.time > 0 ? row.time * 1000 : Date.now();
     const echoKey = `${session}/poke/${from}/${to}/`;
     if (
-        state.messages.some(
+        [...state.messages, ...(state.archiveMessages ?? [])].some(
             (m) =>
                 m.session === session &&
                 m.notice &&
@@ -399,7 +450,11 @@ function ingestGroupJoin(
     const at = typeof row.time === 'number' && row.time > 0 ? row.time * 1000 : Date.now();
     const key = `${session}/join/${userId}/${at}`;
     // 历史回放和实时推送可能撞上同一条通知
-    if (state.messages.some((m) => m.key === key)) return state;
+    if (
+        state.messages.some((m) => m.key === key) ||
+        state.archiveMessages?.some((m) => m.key === key)
+    )
+        return state;
     const nameOf = (qq: string): string => {
         if (qq === state.selfId) return '你';
         for (let i = state.messages.length - 1; i >= 0; i--) {
@@ -486,6 +541,7 @@ export function settleSend(
                       ...m,
                       ...(echo ?? {}),
                       key: pending.key,
+                      at: pending.at,
                       requestId,
                       id: result.id || echo?.id || m.id,
                       fileId: result.fileId || echo?.fileId || m.fileId,
@@ -497,8 +553,8 @@ export function settleSend(
                       error: result.error,
                   }
                 : m,
-        )
-        .sort((a, b) => a.at - b.at);
+        );
+    sortMessages(messages);
     return {
         ...state,
         messages,
@@ -514,14 +570,17 @@ export function settleSend(
 function withLocalImageSources(segments: Segment[], previous: Segment[]): Segment[] {
     const locals = previous
         .filter((s) => s.type === 'image')
-        .map((s) => text(s.data.file))
-        .filter((f) => f.startsWith('base64://') || isLocalFileToken(f));
+        .map((s) => text(s.data.inline_ref) || text(s.data.local_file) || text(s.data.file))
+        .filter(
+            (f) => f.startsWith('base64://') || isInlineImageReference(f) || isLocalFileToken(f),
+        );
     if (!locals.length) return segments;
     let index = 0;
     return segments.map((segment) => {
         if (segment.type !== 'image') return segment;
         const local = locals[index++];
         if (!local || text(segment.data.local_file)) return segment;
+        if (text(segment.data.file) === local) return segment;
         return { ...segment, data: { ...segment.data, local_file: local } };
     });
 }

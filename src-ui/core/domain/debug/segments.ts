@@ -1,6 +1,8 @@
 // OneBot 消息段：三种入参形态（数组 / 单个段 / CQ 码字符串）统一成数组，再给出一行文字预览。
 // 事件里的 message、send_* 调用参数里的 message、raw_message 都走这里，聊天气泡和搜索共用同一份预览。
 
+import { markdownContent, markdownPlainText } from './markdown';
+
 export interface Segment {
     type: string;
     data: Record<string, unknown>;
@@ -134,7 +136,7 @@ export function segmentPreview(seg: Segment): string {
             return title ? `[卡片] ${clip(title, 60)}` : '[卡片]';
         }
         case 'markdown':
-            return '[Markdown]';
+            return markdownPlainText(markdownContent(d)) || '[Markdown]';
         case 'poke':
             return '[戳一戳]';
         case 'mface':

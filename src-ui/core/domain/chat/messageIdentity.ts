@@ -60,10 +60,56 @@ export function mergeMessageIdentity(existing: Message, incoming: Message): Mess
     return {
         ...existing,
         ...authoritative,
+        at: existing.requestId ? existing.at : authoritative.at,
         key: existing.key,
         requestId: existing.requestId || incoming.requestId,
         recalled: existing.recalled || incoming.recalled,
+        segments:
+            existing.recalled && existing.segments.length
+                ? existing.segments
+                : authoritative.segments,
     };
+}
+
+export function sortMessages(messages: Message[]): Message[] {
+    messages.sort((a, b) => Math.floor(a.at / 1000) - Math.floor(b.at / 1000));
+    const sequence = (message: Message) => {
+        if (!hasSequence(message)) return;
+        const value = Number(message.sequence);
+        return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+    };
+    for (let start = 0; start < messages.length;) {
+        let end = start + 1;
+        const second = Math.floor(messages[start].at / 1000);
+        while (end < messages.length && Math.floor(messages[end].at / 1000) === second) end++;
+        // 本地发送行是稳定的摄入锚点；确认后不能因秒精度时间或 hash ID 换位。
+        for (let run = start; run < end;) {
+            if (messages[run].requestId) {
+                run++;
+                continue;
+            }
+            let finish = run + 1;
+            while (finish < end && !messages[finish].requestId) finish++;
+            const sessions = new Map<string, number[]>();
+            for (let index = run; index < finish; index++) {
+                const indices = sessions.get(messages[index].session) ?? [];
+                indices.push(index);
+                sessions.set(messages[index].session, indices);
+            }
+            for (const indices of sessions.values()) {
+                const rows = indices.map((index) => messages[index]);
+                if (rows.every((message) => sequence(message) !== undefined)) {
+                    rows.sort((a, b) => sequence(a)! - sequence(b)!);
+                    indices.forEach((index, offset) => {
+                        messages[index] = rows[offset];
+                    });
+                }
+            }
+            run = finish;
+        }
+        start = end;
+    }
+    return messages;
 }
 
 export function deduplicateMessages(messages: readonly Message[]): Message[] {
@@ -86,12 +132,17 @@ export function deduplicateMessages(messages: readonly Message[]): Message[] {
         if (group) group.push(message);
         else groups.set(key, [message]);
     }
-    const result: Message[] = [];
+    const replacements = new Map<Message, Message>();
+    const aliases = new Set<Message>();
     for (const group of groups.values()) {
         // 多条同秒同文无法证明一一对应，宁可保留，也不吞掉真正的连续发送。
-        if (group.length === 2 && findDuplicateMessage([group[0]], group[1]))
-            result.push(mergeMessageIdentity(group[0], group[1]));
-        else result.push(...group);
+        if (group.length === 2 && findDuplicateMessage([group[0]], group[1])) {
+            replacements.set(group[0], mergeMessageIdentity(group[0], group[1]));
+            aliases.add(group[1]);
+        }
     }
-    return result.sort((a, b) => a.at - b.at);
+    const result = [...identities.values()]
+        .filter((message) => !aliases.has(message))
+        .map((message) => replacements.get(message) ?? message);
+    return sortMessages(result);
 }
