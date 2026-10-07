@@ -390,7 +390,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 领域模型 | `crates/ncd-domain/src/onebot_debug.rs`（`DebugTarget` / `DebugChannelId` / `DebugCatalog` / `DebugCallRequest` / `DebugError` / `DebugEventBatch` / 工作区、收藏、历史；流式调用 `DebugStreamCallRequest` / `DebugLocalFile` / `DebugStreamProgress` / `DebugStreamStage`）；生成类型 `src-ui/core/ipc/generated/debug/` |
-| 协议层 | `crates/ncd-onebot/`：`catalog/`（两种文档 → 统一目录，`snapshot/*.json` 是内置快照，`overrides.rs` 补安全等级 / 分类 / 参数角色，`diff.rs` 两个后端的参数差异）、`client/`（`http.rs` / `ws.rs` / `sse.rs` / `envelope.rs` 回包归一）、`backoff.rs`、`ring.rs`（事件环，序号只增） |
+| 协议层 | `crates/ncd-onebot/`：`catalog/`（两种文档 → 统一目录，`snapshot/*.json` 是内置快照，`overrides.rs` 补安全等级 / 分类 / 参数角色，`diff.rs` 两个后端的参数差异）、`client/`（`http.rs` / `ws.rs` / `sse.rs` / `envelope.rs` 回包归一）、`backoff.rs`、`ring.rs`（事件环，序号只增；5000 条 / 16 MiB JSON payload，单条 1 MiB；内部 Arc 共享，超大正文实时完整投递、补拉保留同 seq 缺失标记） |
 | 后端调试客户端 | `crates/ncd-backend-napcat/src/napcat/debug_client.rs`（WebUI 上的 schemas / 建适配器 / 调动作）、`crates/ncd-backend-snowluma/src/snowluma/debug_client.rs`（actions / invoke / SSE 流） |
 | 编排 | `crates/ncd-runtime/src/onebot_debug/`：`DebugManager`（会话表 + 「一轮」epoch，`close_all` 换轮）；`plan.rs` 通道规划与「自动」选路，`calls.rs` 可取消 / 有时限的调用，`stream.rs` 流式调用编排（分块上传 / 下载、本机文件预置，进度经 `DebugStreamSink` 一拍一拍推），`catalog.rs` 目录合并，`receiver.rs` 每 Bot 一个事件接收器（50 ms 一批推送、seq 连续、自调用去重），`lifecycle.rs` 听 Bot 停止 / 登录事件、回收 30 分钟没人用的会话（连接和隧道随之关闭），`params.rs` 调用参数瘦身（事件流和历史共用），`storage.rs` + `persist.rs` 工作区 / 收藏 / 历史落盘；Bot 数据经窄接口 `DebugBotPort`（`bot_manager/debug_port.rs` 实现） |
 | MCP 服务 | `crates/ncd-mcp/`：把 `DebugManager` 开成本机 agent 的 MCP 服务（localhost HTTP `POST /mcp`，Bearer token 在 SecretStore，axum + 手写 JSON-RPC）。`server.rs` 按设置启停 / 随机端口回填，`gate.rs` 权限闸（只读放行 / 副作用要一次性 confirm_token / 危险默认拒绝），`tools.rs` 22 个工具与 inputSchema，`rpc.rs` / `http.rs` 协议与传输；设置模型 `ncd-domain/src/mcp.rs`（`McpServerSettings` / `McpServerStatus`） |
@@ -411,7 +411,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 |--------|--------|
 | 页面与入口 | `src-ui/modules/chat/ChatPage.tsx` / `ChatTimeline.tsx` / `ChatComposer.tsx` / `chat.css`；主侧栏「聊天」，`AppNext` lazy 全宽路由；宽屏双栏、窄宽会话返回；`ChatDivider` 支持拖动与键盘调宽，`ChatDetails` 为资料弹层，`ChatAvatar` 共用头像。`ConversationList` 提供 Ctrl/Cmd+K、方向键/Enter 与右键置顶/本地已读；`conversationDate.ts` 区分今天、昨天与旧日期 |
 | 搜索与消息操作 | `ChatSearch` + `chat-search.css`：当前已加载范围、字面命中高亮、方向键/Enter 定位、显式读取更早历史与增量展开结果；`ChatMessageActions` 复用共享 ContextMenu 提供回复/复制/提及/失败恢复，`messageActions.ts` 保留草稿并消解同名 @；保留原侧边按钮密度。菜单与键盘切会话后聚焦输入框，点击发送/取消引用后可继续输入 |
-| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、档案合并；`messageIdentity.ts` 合并唯一对应的旧私聊 ID/序号表示，保留同秒重复发送，档案恢复与历史读取一并去重。`hooks/chat/chatStore.ts`：先离线恢复档案，连接建立后同步联系人与最近会话，串行保存；草稿仅留内存。内存保留全局最近 5,000 条与正在阅读/加载的会话旧页，裁剪同步失效历史游标 |
+| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、档案合并；`messageIdentity.ts` 合并唯一对应的旧私聊 ID/序号表示，保留同秒重复发送，档案恢复与历史读取一并去重。`hooks/chat/chatStore.ts`：先离线恢复档案，连接建立后同步联系人与最近会话，串行保存；草稿仅留内存。`messageWorkingSet.ts` 按 50 条逻辑页保留阅读锚点附近与近期消息，单账号工作集最多 1000 条 / 估算 8 MiB，档案独立保留 5000 条 / 估算 16 MiB；发送中临时保留。历史游标随保留页续用，中间缺口可重取，回最新同步近期页 |
 | 聊天档案 | `ncd-domain/src/chat_archive.rs` 定义 ts-rs 契约；`ncd-runtime/src/chat_archive.rs` 在注入的 `data_root/state/chat/archives/<Bot SHA256>/<QQ>.json` 原子保存，每账号最多 5,000 条消息、1,000 个会话、16 MiB。校验身份与关系，损坏文件拒绝覆盖；剔除消息段凭据、本机附件 URI 与内嵌图片，不存草稿附件 |
 | 群盒子 / 历史 | `groupBox.ts` 默认聚合所有群聊并汇总未读，主列表搜索穿透盒子；兼容旧档案的 boxed 字段，不再手动移入移出。`useHistoryPaging.ts` 上翻自动加载，加载旧页前解除贴底；时间线不再提供顶部加载按钮，读取失败由全局 InfoBar 重试。`useTimelinePosition.ts` 只恢复一次显式窗口交接锚点，正常打开/切换会话贴底。`timelineReadingAnchor.ts` 对视口上方的首测与媒体变高统一补偿；`NativeTimeline` 同帧更新行位置，按消息复用正文渲染。连续发送者压缩间距，私聊隐藏昵称，右下角图标返回最新。NapCat 的 `message_seq` 实际传短 `message_id`，SnowLuma 传数字 `message_id` |
 | 资料 / 头像 / 图片查看 | `chat-profile.service.ts` 投影上游群/个人资料与成员；`ChatDetails` 支持成员搜索、名片和发起私聊，成员列表按 60 人自动续展并虚拟渲染，滚动条仅悬停/聚焦时显示；头像/标题与图标共用弹层。`ChatAvatar` 使用群与个人头像。`ChatImageViewer` + `imageView.ts` 提供长图可读宽度、原尺寸/适应、滚轮缩放、拖动和键盘操作 |
@@ -428,6 +428,8 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 远端聊天恢复 | `onebot_debug/port.rs` 的 `recover_webui` 由 `bot_manager/debug_port.rs` 实装：缺少远端 WebUI 端点时单飞取得活 SSH 并复用运行态接管，独立任务不被接收器连接超时半途取消；保留 ServerManager 冷却限制，不启动新 Bot。SSH 恢复事件唤醒接收器，后台租约每 15 秒重新核对停止状态 |
 | IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe` 与 `chat_archive_load/save`；前端 `core/services/chat.service.ts` / `chat-archive.service.ts`，档案类型来自 `generated/chat/`。`core/ipc/mock/chat.mock.ts` 提供多页历史，`chat-archive.mock.ts` 仅在浏览器预览用 localStorage 模拟存储。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
 | 复用边界 | 复用 debug 的 BotPicker、消息段解析、@ 组装、SegmentList 与虚拟列表贴底；弹层使用 shared/ui/Popover；不导入 DebugConsolePage 或调试工作区 store |
+
+内存修复范围、缓存预算与验收记录见 [2026-10-07 内存修复](../performance/2026-10-07-memory-fixes.md)。
 
 未覆盖：无限量消息仓储、完整群管理等 QQ 客户端能力。SnowLuma 当前上游 `get_recent_contact` 返回空列表，首次使用无法据此发现未曾归档的旧会话；已有档案正常恢复。语音转码依赖服务端能力，SnowLuma 的 get_file 暂只解析图片/语音缓存，视频过期地址可能无法刷新；仅返回主机路径的媒体显示失败与重试。本机/远端 NapCat/SnowLuma 的真实账号收发及媒体仍需实机验收。
 
