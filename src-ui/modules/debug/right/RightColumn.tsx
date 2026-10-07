@@ -67,7 +67,7 @@ import { EventDetailPopover, type DetailTarget } from './EventDetailPopover';
 import { EventListView } from './EventListView';
 import { PausedPill } from './NewMessagesPill';
 import { SessionStrip } from './SessionStrip';
-import { createChatMediaService } from '../../../core/services/chat-media.service';
+import { createChatMediaService } from '../../../hooks/chat/useChatMedia';
 
 export interface RightColumnProps {
     /** 当前选中的 Bot；没在运行时输入框禁用 */

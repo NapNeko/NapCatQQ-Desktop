@@ -4,7 +4,10 @@
 import { useMemo, useRef } from 'react';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { ForwardNode, ImageReadOptions } from '../../core/domain/chat/media';
-import { chatMediaService } from '../../core/services/chat-media.service';
+import { chatMediaService, createChatMediaService } from '../../core/services/chat-media.service';
+
+// debug 右栏的媒体读取走自己的 call 通道：构造入口从这里拿，模块层不直连 service 工厂。
+export { createChatMediaService };
 
 export interface ChatMediaReader {
     isImageSourceAlive: (data: Record<string, unknown>) => boolean;
