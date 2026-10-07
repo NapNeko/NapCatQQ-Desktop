@@ -2,6 +2,9 @@
 use crate::AppState;
 use ncd_domain::chat_archive::ChatArchive;
 use ncd_domain::chat_desktop::{ChatAccountPreference, ChatDesktopStatus, ChatViewState};
+use ncd_domain::chat_group_files::{
+    ChatFileDownloadRequest, GroupFileAction, GroupFileListing, GroupFileSpace,
+};
 use ncd_domain::onebot_debug::{
     DebugCallRequest, DebugCallResponse, DebugEventBatch, DebugStreamCallRequest,
     DebugStreamProgress, DebugSubscribeResponse, DebugTarget,
@@ -221,6 +224,71 @@ pub async fn chat_release_account(
 ) -> Result<(), String> {
     state.chat.release_account(&bot_id, &self_id).await;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn chat_group_files(
+    state: State<'_, AppState>,
+    bot_id: String,
+    group_id: String,
+    folder_id: Option<String>,
+    limit: Option<u32>,
+) -> Result<GroupFileListing, String> {
+    state
+        .chat
+        .group_files(&bot_id, &group_id, folder_id.as_deref(), limit)
+        .await
+}
+#[tauri::command]
+pub async fn chat_group_file_space(
+    state: State<'_, AppState>,
+    bot_id: String,
+    group_id: String,
+) -> Result<GroupFileSpace, String> {
+    state.chat.group_file_space(&bot_id, &group_id).await
+}
+#[tauri::command]
+pub async fn chat_group_file_act(
+    state: State<'_, AppState>,
+    bot_id: String,
+    group_id: String,
+    action: GroupFileAction,
+) -> Result<(), String> {
+    state.chat.group_file_act(&bot_id, &group_id, action).await
+}
+#[tauri::command]
+pub async fn chat_file_download(
+    state: State<'_, AppState>,
+    request: ChatFileDownloadRequest,
+    progress: Channel<DebugStreamProgress>,
+) -> Result<String, String> {
+    state
+        .chat
+        .download_file(request, Arc::new(Progress(progress)))
+        .await
+}
+#[tauri::command]
+pub async fn chat_cancel(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
+    state.chat.cancel_transfer(&request_id);
+    Ok(())
+}
+// 只开本次运行里经聊天下完的文件，页面不能借这里打开任意路径。
+#[tauri::command]
+pub async fn chat_open_download(
+    state: State<'_, AppState>,
+    path: String,
+    reveal: bool,
+) -> Result<(), String> {
+    let path = std::path::PathBuf::from(path);
+    if !state.chat.downloaded(&path) {
+        return Err("只能打开聊天里下载的文件".into());
+    }
+    let result = if reveal {
+        tauri_plugin_opener::reveal_item_in_dir(&path)
+    } else {
+        tauri_plugin_opener::open_path(&path, None::<&str>)
+    };
+    result.map_err(|e| format!("打开失败：{e}"))
 }
 
 // 自己刚发的图直接读本机字节做预览，不绕协议回环；上限与媒体 inline 一致。

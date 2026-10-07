@@ -3,7 +3,7 @@
 // 放进 context 而不是一层层传 props：虚拟列表里的行是 memo 的，只有自己的条目变了才重画；
 // 这里的值由右栏建一次、之后引用不变（函数内部读 ref 拿最新数据），所以聊天每帧刷新时不会带着所有行一起重画。
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { ChatItem, SessionKey } from '../../../core/domain/debug/chat';
 import type { FillPlan, MessageItem } from '../../../core/domain/debug/chatFormat';
 import type { RequestItem } from '../../../core/domain/debug/requestHandling';
@@ -41,6 +41,8 @@ export interface ChatViewApi {
     readRecord?: (data: Record<string, unknown>) => Promise<string>;
     readVideo?: (data: Record<string, unknown>, refresh?: boolean) => Promise<string>;
     readRecordText?: (messageId: string) => Promise<string>;
+    /** 文件卡片下方的下载 / 进度；调试台不给，卡片只展示 */
+    fileAction?: (data: Record<string, unknown>) => ReactNode;
     /** 滚到被回复的那条消息并闪一下；它不在当前列表里时返回 false */
     revealMessage: (messageId: number) => boolean;
 
