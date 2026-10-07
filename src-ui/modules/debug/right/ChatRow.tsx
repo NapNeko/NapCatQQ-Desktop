@@ -8,7 +8,7 @@ import { useMotion } from '../../../hooks/preferences/useMotion';
 import { cssEase } from '../../../core/design/cssEase';
 import type { ChatItem } from '../../../core/domain/debug/chat';
 import { MessageBubble } from './MessageBubble';
-import { SafeBoundary } from './rightParts';
+import { SafeBoundary } from '../../../shared/chat/rightParts';
 import {
     CallChip,
     DroppedRow,

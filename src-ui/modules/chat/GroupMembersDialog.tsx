@@ -24,7 +24,7 @@ import { errorText } from '../../core/domain/errors';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { Button } from '../../shared/ui/Button';
 import { Dialog, DialogContent, DialogTitle } from '../../shared/ui/Dialog';
-import { ChatAvatar } from './ChatAvatar';
+import { ChatAvatar } from '../../shared/chat/ChatAvatar';
 import { GroupMemberList } from './GroupMemberList';
 import {
     ChatMemberActions,

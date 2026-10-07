@@ -16,7 +16,7 @@ import type { Contact, Conversation } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import { useChatProfile } from '../../hooks/chat/useChatProfile';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
-import { ChatAvatar } from './ChatAvatar';
+import { ChatAvatar } from '../../shared/chat/ChatAvatar';
 import { useMotion } from '../../hooks/preferences/useMotion';
 
 interface Props {

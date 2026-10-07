@@ -5,7 +5,7 @@ import type { WheelEvent } from 'react';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import type { Message } from '../../core/domain/chat/model';
 import { readTimelinePosition, useTimelinePosition } from './useTimelinePosition';
-import { useStickToBottom } from '../debug/right/useStickToBottom';
+import { useStickToBottom } from '../../hooks/useStickToBottom';
 import type { ChatReadingPosition } from '../../core/ipc/generated/chat/ChatReadingPosition';
 
 const message: Message = {

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Users } from 'lucide-react';
 import type { Contact } from '../../core/domain/chat/model';
 import { avatarUrl, initialOf } from '../../core/domain/debug/chatFormat';
-import { cn } from '../../shared/utils/cn';
+import { cn } from '../utils/cn';
 
 export function ChatAvatar({
     contact,

@@ -28,7 +28,7 @@ import {
     segmentsToDraft,
     type ComposerEntry,
 } from '../../../core/domain/debug/messageBuilder';
-import { IconAction } from './rightParts';
+import { IconAction } from '../../../shared/chat/rightParts';
 
 // 段再多就只会是误操作了（反复「解析现有内容」也会指数翻倍），给个上限
 const MAX_SEGMENTS = 50;

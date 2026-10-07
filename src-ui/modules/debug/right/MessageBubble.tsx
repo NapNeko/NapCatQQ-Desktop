@@ -21,7 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui';
 import { messagePreview } from '../../../core/domain/debug/segments';
 import { retcodeHint } from '../../../core/domain/debug/errorCopy';
 import type { ChatItem } from '../../../core/domain/debug/chat';
-import { useChatView } from './chatContext';
+import { useChatView } from '../../../shared/chat/chatContext';
 import {
     ROLE_LABEL,
     callLine,
@@ -30,8 +30,8 @@ import {
     sendActionOf,
     type MessageItem,
 } from '../../../core/domain/debug/chatFormat';
-import { Avatar, IconAction, useCopy } from './rightParts';
-import { SegmentList, isPictureOnly } from './SegmentView';
+import { Avatar, IconAction, useCopy } from '../../../shared/chat/rightParts';
+import { SegmentList, isPictureOnly } from '../../../shared/chat/SegmentView';
 
 /** 折叠后的最大高度：12 行 × 20px 行高 */
 const CLAMP_PX = 12 * 20;

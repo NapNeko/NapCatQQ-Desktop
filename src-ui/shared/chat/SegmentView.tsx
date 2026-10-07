@@ -25,27 +25,28 @@ import {
     LayoutTemplate,
     Mic,
 } from 'lucide-react';
-import { cn } from '../../../shared/utils/cn';
-import { SimpleMarkdown } from '../../../shared/ui/SimpleMarkdown';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui/Tooltip';
-import { messagePreview, segmentPreview, type Segment } from '../../../core/domain/debug/segments';
-import { markdownContent } from '../../../core/domain/debug/markdown';
+import { cn } from '../utils/cn';
+import { SimpleMarkdown } from '../ui/SimpleMarkdown';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/Tooltip';
+import { messagePreview, segmentPreview, type Segment } from '../../core/domain/debug/segments';
+import { markdownContent } from '../../core/domain/debug/markdown';
 import { useChatView } from './chatContext';
-import { fileSizeLabel, safeJson } from '../../../core/domain/debug/chatFormat';
+import { fileSizeLabel, safeJson } from '../../core/domain/debug/chatFormat';
 import { SafeBoundary, useCopy } from './rightParts';
 import { CACHE_MAX, LruCache, imageCacheKey } from './boundedCache';
-import { QQFace } from '../../chat/media/QQFace';
-import { qqFaceLarge, type QQFaceDisplaySegment } from '../../../core/domain/chat/qqFaces';
-import { projectMessageDisplay } from '../../../core/domain/chat/messageDisplay';
-import { qqFaceService } from '../../../core/services/qq-face.service';
-import type {
-    ImageReadOptions,
-    ImageSourceContext,
-} from '../../../core/services/chat-media.service';
-import { ChatForward } from '../../chat/media/ChatForward';
-import { ChatRecord } from '../../chat/media/ChatRecord';
-import { ChatVideo } from '../../chat/media/ChatVideo';
-import { ChatAvatar } from '../../chat/ChatAvatar';
+import { QQFace } from './media/QQFace';
+import {
+    qqFaceLarge,
+    type QQFaceDisplaySegment,
+    type QQSystemFace,
+} from '../../core/domain/chat/qqFaces';
+import { projectMessageDisplay } from '../../core/domain/chat/messageDisplay';
+import { useQQFaceLookup } from '../../hooks/chat/useChatQqFaces';
+import type { ImageReadOptions, ImageSourceContext } from '../../core/domain/chat/media';
+import { ChatForward } from './media/ChatForward';
+import { ChatRecord } from './media/ChatRecord';
+import { ChatVideo } from './media/ChatVideo';
+import { ChatAvatar } from './ChatAvatar';
 
 const str = (v: unknown): string =>
     typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
@@ -61,10 +62,13 @@ export function isPictureOnly(segments: readonly Segment[]): boolean {
 }
 
 /** 图片、表情、语音、视频和合并转发单独成消息时，让内容直接贴在时间线上。 */
-export function isMediaOnly(segments: readonly Segment[]): boolean {
+export function isMediaOnly(
+    segments: readonly Segment[],
+    peekFace: (id: string) => QQSystemFace | undefined,
+): boolean {
     return (
         segments.length > 0 &&
-        projectMessageDisplay(segments, qqFaceService.peek).every(
+        projectMessageDisplay(segments, peekFace).every(
             (s) =>
                 ['image', 'mface', 'record', 'video', 'forward'].includes(s.type) ||
                 (s.type === 'face' && (qqFaceLarge(s.data) ?? s.displayLarge)),
@@ -86,10 +90,11 @@ export const SegmentList = memo(function SegmentList({
     messageId?: string;
     imageIndexOffset?: number;
 }) {
+    const peekFace = useQQFaceLookup();
     if (segments.length === 0) return <span className="text-text-tertiary">（空消息）</span>;
     // 回复段不管排在哪都画在最上面
     const reply = segments.find((s) => s.type === 'reply');
-    const displayed = projectMessageDisplay(segments, qqFaceService.peek);
+    const displayed = projectMessageDisplay(segments, peekFace);
     const rest = reply ? displayed.filter((s) => s !== reply) : displayed;
     let imageIndex = imageIndexOffset;
     return (

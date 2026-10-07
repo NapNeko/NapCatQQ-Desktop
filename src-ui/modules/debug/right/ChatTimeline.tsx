@@ -13,7 +13,7 @@ import { MAX_CHAT_ITEMS, type ChatItem } from '../../../core/domain/debug/chat';
 import { needsTimeSeparator } from '../../../core/domain/debug/chatFormat';
 import { ChatRow, type TimelineRow } from './ChatRow';
 import { NewMessagesPill } from './NewMessagesPill';
-import { useStickToBottom } from './useStickToBottom';
+import { useStickToBottom } from '../../../hooks/useStickToBottom';
 
 /** 同一个人连着发、间隔在这以内的，后面几条不再画头像和名字 */
 const CONTINUE_MS = 3 * 60_000;

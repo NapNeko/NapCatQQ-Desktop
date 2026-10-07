@@ -36,8 +36,8 @@ import type { ChatTrayNavigation } from '../../core/ipc/generated/chat/ChatTrayN
 import { cn } from '../../shared/utils/cn';
 import { ChatComposer } from './ChatComposer';
 import { NativeTimeline } from './ChatTimeline';
-import { BotPicker } from '../debug/BotPicker';
-import { ChatAvatar as Avatar } from './ChatAvatar';
+import { BotPicker } from '../debug';
+import { ChatAvatar as Avatar } from '../../shared/chat/ChatAvatar';
 import { ChatDetails } from './ChatDetails';
 import { GroupMembersDialog } from './GroupMembersDialog';
 import { ChatGroupMemberMenu } from './ChatGroupMemberMenu';

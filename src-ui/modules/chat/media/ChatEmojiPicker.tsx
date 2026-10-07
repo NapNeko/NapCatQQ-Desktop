@@ -2,7 +2,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
-import { QQFace } from './QQFace';
+import { QQFace } from '../../../shared/chat/media/QQFace';
 import {
     qqFaceCategory,
     QQ_FACE_FALLBACK,
@@ -19,7 +19,7 @@ import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion'
 import { errorText } from '../../../core/domain/errors';
 import type { Attachment } from '../../../core/domain/chat/model';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
-import './chat-media.css';
+import '../../../shared/chat/media/chat-media.css';
 
 export function ChatEmojiPicker({
     target,

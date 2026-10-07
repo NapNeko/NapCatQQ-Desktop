@@ -14,12 +14,12 @@ import {
 } from 'react';
 import { ArrowLeft, ChevronRight, Clock3, Users } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Dialog, DialogContent, DialogTitle } from '../../../shared/ui/Dialog';
+import { Dialog, DialogContent, DialogTitle } from '../../ui/Dialog';
 import { errorText } from '../../../core/domain/errors';
 import type { ForwardNode } from '../../../core/domain/chat/media';
 import { messagePreview, type Segment } from '../../../core/domain/debug/segments';
-import { ChatViewContext, useChatView } from '../../debug/right/chatContext';
-import { LruCache } from '../../debug/right/boundedCache';
+import { ChatViewContext, useChatView } from '../chatContext';
+import { LruCache } from '../boundedCache';
 import { ChatImageViewer } from '../ChatImageViewer';
 import { ChatAvatar } from '../ChatAvatar';
 import { preserveTimelineReading } from '../timelineReadingAnchor';

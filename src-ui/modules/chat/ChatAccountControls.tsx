@@ -23,7 +23,7 @@ import { errorText } from '../../core/domain/errors';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import type { Contact } from '../../core/domain/chat/model';
-import { ChatAvatar } from './ChatAvatar';
+import { ChatAvatar } from '../../shared/chat/ChatAvatar';
 
 function SettingsRow({
     id,

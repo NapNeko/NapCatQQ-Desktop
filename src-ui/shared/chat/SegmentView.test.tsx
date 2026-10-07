@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SegmentList } from './SegmentView';
 import { ChatViewContext, useChatView, type ChatViewApi } from './chatContext';
-import { qqFaceAssetService } from '../../../core/services/qq-face-assets.service';
+import { qqFaceAssetService } from '../../core/services/qq-face-assets.service';
 function NativeSegments({
     api,
     segments,

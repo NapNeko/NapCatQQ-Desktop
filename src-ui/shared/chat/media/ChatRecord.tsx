@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, LoaderCircle, Mic, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { errorText } from '../../../core/domain/errors';
-import { useChatView } from '../../debug/right/chatContext';
+import { useChatView } from '../chatContext';
 import './chat-media.css';
 export function ChatRecord({
     data,

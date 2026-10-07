@@ -10,9 +10,9 @@ import {
     type ButtonHTMLAttributes,
     type ReactNode,
 } from 'react';
-import { cn } from '../../../shared/utils/cn';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui/Tooltip';
-import { avatarUrl, initialOf } from '../../../core/domain/debug/chatFormat';
+import { cn } from '../utils/cn';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/Tooltip';
+import { avatarUrl, initialOf } from '../../core/domain/debug/chatFormat';
 import { CACHE_MAX, ExpiringSet, FAILURE_TTL_MS } from './boundedCache';
 
 // ---------------------------------------------------------------------------

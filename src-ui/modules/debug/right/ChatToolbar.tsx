@@ -34,7 +34,7 @@ import type { ChatFilter } from '../../../core/domain/debug/chatFilter';
 import type { DebugChatView } from '../../../core/ipc/generated/debug/DebugChatView';
 import { COLUMN_HEADER_CLASS } from '../ColumnFrame';
 import { countFormat } from '../../../core/domain/debug/chatFormat';
-import { IconAction } from './rightParts';
+import { IconAction } from '../../../shared/chat/rightParts';
 
 export type KindFilter = ChatFilter['kinds'];
 

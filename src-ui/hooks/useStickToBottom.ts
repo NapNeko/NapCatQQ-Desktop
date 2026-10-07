@@ -30,11 +30,7 @@ import {
     type WheelEvent,
 } from 'react';
 import type { Virtualizer } from '@tanstack/react-virtual';
-import {
-    forgetScroll,
-    recallScroll,
-    useScrollMemory,
-} from '../../../hooks/debug/debugScrollMemory';
+import { forgetScroll, recallScroll, useScrollMemory } from './debug/debugScrollMemory';
 
 const STICK_PX = 120;
 /** 一批来得太多（刷屏、积压补发）就不做进场动画，满屏一起动反而看不清 */

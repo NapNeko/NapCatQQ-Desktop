@@ -49,7 +49,7 @@ import { targetDisplayName } from '../../../core/domain/debug/targetGroups';
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugChatView } from '../../../core/ipc/generated/debug/DebugChatView';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
-import { ChatViewContext, type ChatViewApi } from './chatContext';
+import { ChatViewContext, type ChatViewApi } from '../../../shared/chat/chatContext';
 import {
     idsOfItem,
     parseSessionKey,

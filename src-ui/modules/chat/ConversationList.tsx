@@ -12,7 +12,7 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '../../shared/ui/ContextMenu';
-import { ChatAvatar as Avatar } from './ChatAvatar';
+import { ChatAvatar as Avatar } from '../../shared/chat/ChatAvatar';
 import { ChatUnreadBadge, useChatSelectionMotion } from './chatMotion';
 import './conversationList.css';
 

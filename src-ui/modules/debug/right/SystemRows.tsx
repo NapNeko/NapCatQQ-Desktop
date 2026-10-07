@@ -13,7 +13,7 @@ import {
     requestLine,
 } from '../../../core/domain/debug/requestHandling';
 import { DangerConfirmDialog, dangerConfirmSkipped } from '../DangerConfirmDialog';
-import { useChatView } from './chatContext';
+import { useChatView } from '../../../shared/chat/chatContext';
 import {
     callLine,
     clockTime,
@@ -23,7 +23,7 @@ import {
     originLabel,
 } from '../../../core/domain/debug/chatFormat';
 import { HoverActions, useRowHover } from './MessageBubble';
-import { useCopy } from './rightParts';
+import { useCopy } from '../../../shared/chat/rightParts';
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
 

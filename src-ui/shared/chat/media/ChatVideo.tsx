@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, Film, LoaderCircle, RotateCcw } from 'lucide-react';
-import { useChatView } from '../../debug/right/chatContext';
-import { useCopy } from '../../debug/right/rightParts';
+import { useChatView } from '../chatContext';
+import { useCopy } from '../rightParts';
 import './chat-media.css';
 
 const text = (value: unknown) =>

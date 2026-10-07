@@ -1,7 +1,7 @@
 // 长图保留可读宽度，缩放时保留光标下的图像位置。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Maximize, MoveHorizontal, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle } from '../../shared/ui/Dialog';
+import { Dialog, DialogContent, DialogTitle } from '../ui/Dialog';
 import {
     imageScale,
     limitImageScale,
@@ -9,7 +9,7 @@ import {
     type ImageFit,
     type ImageSize,
 } from '../../core/domain/chat/imageView';
-import './chat-image-viewer.css';
+import '../../modules/chat/chat-image-viewer.css';
 
 export function ChatImageViewer({ src, onClose }: { src: string; onClose: () => void }) {
     return (

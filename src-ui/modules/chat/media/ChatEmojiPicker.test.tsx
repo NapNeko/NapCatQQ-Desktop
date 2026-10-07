@@ -7,7 +7,7 @@ import { chatMediaService } from '../../../core/services/chat-media.service';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import { qqFaceService } from '../../../core/services/qq-face.service';
 import { QQ_FACE_FALLBACK } from '../../../core/domain/chat/qqFaces';
-import { QQFace } from './QQFace';
+import { QQFace } from '../../../shared/chat/media/QQFace';
 import { qqFaceAssetService } from '../../../core/services/qq-face-assets.service';
 import { favoriteStickerService } from '../../../core/services/favorite-sticker.service';
 

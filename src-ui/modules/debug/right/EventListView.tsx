@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '../../../shared/utils/cn';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import type { ChatItem } from '../../../core/domain/debug/chat';
-import { useChatView } from './chatContext';
+import { useChatView } from '../../../shared/chat/chatContext';
 import {
     clockTimeMs,
     countFormat,
@@ -14,7 +14,7 @@ import {
     type RowTone,
 } from '../../../core/domain/debug/chatFormat';
 import { NewMessagesPill } from './NewMessagesPill';
-import { useStickToBottom } from './useStickToBottom';
+import { useStickToBottom } from '../../../hooks/useStickToBottom';
 
 const ROW_PX = 24;
 

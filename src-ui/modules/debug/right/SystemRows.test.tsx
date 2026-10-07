@@ -6,7 +6,7 @@ import { TooltipProvider } from '../../../shared/ui';
 import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 import type { RequestItem } from '../../../core/domain/debug/requestHandling';
 import { _resetDangerSkipsForTests } from '../DangerConfirmDialog';
-import { ChatViewContext, type ChatViewApi } from './chatContext';
+import { ChatViewContext, type ChatViewApi } from '../../../shared/chat/chatContext';
 import { RequestCard } from './SystemRows';
 
 function item(patch: Partial<RequestItem> = {}): RequestItem {

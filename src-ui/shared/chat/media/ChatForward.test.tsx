@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { SegmentList } from '../../debug/right/SegmentView';
-import { ChatViewContext, useChatView } from '../../debug/right/chatContext';
+import { SegmentList } from '../SegmentView';
+import { ChatViewContext, useChatView } from '../chatContext';
 import type { ForwardNode } from '../../../core/services/chat-media.service';
 
 function Records({
