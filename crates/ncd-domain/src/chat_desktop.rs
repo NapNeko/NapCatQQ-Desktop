@@ -21,6 +21,8 @@ pub struct ChatAccountPreference {
     pub hidden_groups: Vec<String>,
     #[serde(default)]
     pub notify_unknown_groups: bool,
+    #[serde(default)]
+    pub prevent_recall: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -245,8 +247,10 @@ mod tests {
         let mut preference: ChatAccountPreference = serde_json::from_str(old).unwrap();
         assert_eq!(preference.tray_notification, ChatTrayNotification::Badge);
         assert!(!preference.notify_unknown_groups);
+        assert!(!preference.prevent_recall);
         preference.ignored_groups = vec!["123".into()];
         preference.hidden_groups = vec!["456".into()];
+        preference.prevent_recall = true;
         assert!(preference.validate().is_ok());
         let restored: ChatAccountPreference =
             serde_json::from_str(&serde_json::to_string(&preference).unwrap()).unwrap();
