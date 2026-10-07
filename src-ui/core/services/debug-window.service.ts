@@ -2,8 +2,8 @@
 
 import { invoke, isTauri } from '../ipc/transport';
 
-/** 与 Rust 侧 commands/window.rs 的 DEBUG_WINDOW_LABEL 一致；main.tsx 按它分发弹出窗根组件 */
-export const DEBUG_WINDOW_LABEL = 'debug-console';
+// label 单一来源在 domain；保留原导出面，调用方不改
+export { DEBUG_WINDOW_LABEL } from '../domain/windows';
 
 // 弹出窗和主窗不共享 JS 世界，「我是谁」由 main.tsx 启动时按窗口 label 置一次，同步读
 let isPopout = false;

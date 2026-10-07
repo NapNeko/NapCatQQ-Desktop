@@ -1,7 +1,7 @@
 // 聊天窗从独立入口启动，偏好水合完成后再显示。
 import { AppProvidersNext } from './AppProvidersNext';
 import { renderRoot } from './renderRoot';
-import { markChatPopoutWindow } from '../core/services/chat-desktop.service';
+import { markChatPopoutWindow } from '../hooks/desktop/useChatPopoutBridge';
 
 export async function startChat(): Promise<void> {
     markChatPopoutWindow();

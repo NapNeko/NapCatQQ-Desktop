@@ -2,7 +2,6 @@
 import { Copy, Minus, Square, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useWindowControls } from '../../../hooks/desktop/useWindowControls';
-import { windowControlService } from '../../../core/services/desktop.service';
 import { cn } from '../../utils/cn';
 
 export function TitleBarChrome({
@@ -14,7 +13,7 @@ export function TitleBarChrome({
     tool?: boolean;
     children?: ReactNode;
 }) {
-    const { isMaximized, minimize, toggleMaximize, close } = useWindowControls();
+    const { isMaximized, minimize, toggleMaximize, close, closeSelf } = useWindowControls();
     return (
         <header
             className={cn(
@@ -58,7 +57,7 @@ export function TitleBarChrome({
                 </button>
                 <button
                     type="button"
-                    onClick={tool ? () => void windowControlService.closeSelf() : close}
+                    onClick={tool ? closeSelf : close}
                     title="关闭"
                     aria-label="关闭"
                     className={cn(

@@ -7,8 +7,12 @@ import type { ChatWindowRequest } from '../ipc/generated/chat/ChatWindowRequest'
 import type { ChatWindowState } from '../ipc/generated/chat/ChatWindowState';
 import type { ChatTrayNavigation } from '../ipc/generated/chat/ChatTrayNavigation';
 
-export const CHAT_WINDOW_LABEL = 'chat-panel';
-let popout = !isTauri && new URLSearchParams(location.search).has('chatPanel');
+// label 与「弹出窗声明」判定的单一来源在 domain；这里只保留本地绑定和原导出面
+import { CHAT_WINDOW_LABEL, isChatPopoutSearch } from '../domain/windows';
+
+export { CHAT_WINDOW_LABEL };
+
+let popout = !isTauri && isChatPopoutSearch(location.search);
 let restoreReading = popout;
 let previewEmbedRequested = !isTauri && new URLSearchParams(location.search).has('chatEmbed');
 let previewView: ChatViewState = { v: 1, revision: 0, selectedBot: null, accounts: [] };

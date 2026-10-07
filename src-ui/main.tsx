@@ -1,8 +1,7 @@
 import { AppProvidersNext } from './app/AppProvidersNext';
 import { renderRoot as render } from './app/renderRoot';
 import { isTauri } from './core/ipc/transport';
-import { DEBUG_WINDOW_LABEL } from './core/services/debug-window.service';
-import { CHAT_WINDOW_LABEL, isChatPopoutWindow } from './core/services/chat-desktop.service';
+import { CHAT_WINDOW_LABEL, DEBUG_WINDOW_LABEL, isChatPopoutSearch } from './core/domain/windows';
 
 async function currentWindowLabel(): Promise<string | null> {
     if (!isTauri) return null;
@@ -49,7 +48,7 @@ async function renderChatPopout(): Promise<void> {
 
 void (async () => {
     const label = await currentWindowLabel();
-    if (label === CHAT_WINDOW_LABEL || isChatPopoutWindow()) {
+    if (label === CHAT_WINDOW_LABEL || (!isTauri && isChatPopoutSearch(location.search))) {
         await renderChatPopout();
         return;
     }

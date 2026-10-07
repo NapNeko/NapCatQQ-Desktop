@@ -7,10 +7,10 @@ const controls = vi.hoisted(() => ({
     minimize: vi.fn(),
     toggleMaximize: vi.fn(),
     close: vi.fn(),
+    closeSelf: vi.fn(),
 }));
-const closeSelf = vi.hoisted(() => vi.fn());
+const { closeSelf } = controls;
 vi.mock('../../../hooks/desktop/useWindowControls', () => ({ useWindowControls: () => controls }));
-vi.mock('../../../core/services/desktop.service', () => ({ windowControlService: { closeSelf } }));
 
 describe('title bar window ownership', () => {
     beforeEach(() => vi.clearAllMocks());

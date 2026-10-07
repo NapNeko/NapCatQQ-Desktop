@@ -13,7 +13,7 @@ import { PagePlaceholder } from '../shared/ui/PagePlaceholder';
 import { Spinner } from '../shared/ui/Spinner';
 import { RouteErrorBoundary } from '../shared/ui/RouteErrorBoundary';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
-import { debugWindowService } from '../core/services/debug-window.service';
+import { useDebugWindow } from '../hooks/desktop/useDebugWindow';
 
 const DebugConsolePage = lazy(() =>
     import('../modules/debug/DebugConsolePage').then((m) => ({ default: m.DebugConsolePage })),
@@ -30,6 +30,7 @@ function PopoutFallback() {
 
 export const DebugPopoutApp: React.FC = () => {
     const { bars, dismiss, remove } = useGlobalInfoBars();
+    const { reveal } = useDebugWindow();
 
     // 窗口起步隐藏（克隆主窗配置），首帧上屏后再叫后端显示，防透明壳闪白。
     // 对齐主窗 AppBootGate 的双 rAF 时序
@@ -40,7 +41,7 @@ export const DebugPopoutApp: React.FC = () => {
         let inner = 0;
         const outer = requestAnimationFrame(() => {
             inner = requestAnimationFrame(() => {
-                void debugWindowService.reveal().catch((err) => {
+                void reveal().catch((err) => {
                     console.error('[DebugPopout] 显示窗口失败:', err);
                 });
             });
@@ -49,7 +50,7 @@ export const DebugPopoutApp: React.FC = () => {
             cancelAnimationFrame(outer);
             cancelAnimationFrame(inner);
         };
-    }, []);
+    }, [reveal]);
 
     return (
         <TooltipProvider>
