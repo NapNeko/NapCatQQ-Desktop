@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use serde::Serialize;
@@ -54,10 +55,14 @@ pub struct WebviewProcessUsage {
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct WebviewWindowLevel {
     pub label: String,
-    /// WebView 设了不可见（页面 hidden）
+    /// 目标不可见状态，实际执行反馈见 applied_hidden。
     pub hidden: bool,
-    /// 内存级别降到 Low
+    /// 目标 Low 状态，实际执行反馈见 applied_dormant。
     pub dormant: bool,
+    pub applied_hidden: Option<bool>,
+    // 成功设置 Low 不表示内存回收已经完成。
+    pub applied_dormant: Option<bool>,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -130,16 +135,71 @@ pub async fn memory_report(app: &AppHandle) -> Result<WebviewMemoryReport, Strin
 /// 每个窗口的调度状态，按 label 存。窗口第一次有事件时登记，销毁时摘掉。
 #[derive(Default)]
 pub struct WebviewScheduler {
-    entries: Mutex<HashMap<String, Entry>>,
+    entries: Mutex<HashMap<String, Registration>>,
+    next_window_id: AtomicU64,
+}
+
+struct Registration {
+    id: u64,
+    entry: Entry,
+}
+
+#[derive(Clone, Copy)]
+struct Revision {
+    window_id: u64,
+    generation: u64,
 }
 
 impl WebviewScheduler {
-    fn step(&self, label: &str, event: Event) -> Vec<Action> {
+    fn step(&self, label: &str, event: Event) -> Option<(Revision, Vec<Action>)> {
         let Ok(mut entries) = self.entries.lock() else {
-            return Vec::new();
+            return None;
         };
-        let entry = entries.entry(label.to_owned()).or_default();
-        policy::step(WebviewRole::from_label(label), entry, event, Instant::now())
+        let registration = entries
+            .entry(label.to_owned())
+            .or_insert_with(|| Registration {
+                id: self.next_window_id.fetch_add(1, Ordering::Relaxed),
+                entry: Entry::default(),
+            });
+        let actions = policy::step(
+            WebviewRole::from_label(label),
+            &mut registration.entry,
+            event,
+            Instant::now(),
+        );
+        Some((
+            Revision {
+                window_id: registration.id,
+                generation: registration.entry.generation(),
+            },
+            actions,
+        ))
+    }
+
+    fn is_current(&self, label: &str, revision: Revision) -> bool {
+        self.entries.lock().ok().is_some_and(|entries| {
+            entries.get(label).is_some_and(|registration| {
+                registration.id == revision.window_id
+                    && registration.entry.generation() == revision.generation
+            })
+        })
+    }
+
+    fn complete(
+        &self,
+        label: &str,
+        revision: Revision,
+        action: Action,
+        result: Result<(), String>,
+    ) -> Option<Action> {
+        let mut entries = self.entries.lock().ok()?;
+        let registration = entries.get_mut(label)?;
+        if registration.id != revision.window_id {
+            return None;
+        }
+        registration
+            .entry
+            .complete(revision.generation, action, result)
     }
 
     fn levels(&self) -> Vec<WebviewWindowLevel> {
@@ -148,10 +208,13 @@ impl WebviewScheduler {
         };
         let mut levels: Vec<WebviewWindowLevel> = entries
             .iter()
-            .map(|(label, e)| WebviewWindowLevel {
+            .map(|(label, registration)| WebviewWindowLevel {
                 label: label.clone(),
-                hidden: e.is_hidden(),
-                dormant: e.is_dormant(),
+                hidden: registration.entry.is_hidden(),
+                dormant: registration.entry.is_dormant(),
+                applied_hidden: registration.entry.confirmed_hidden(),
+                applied_dormant: registration.entry.confirmed_dormant(),
+                last_error: registration.entry.last_error().map(str::to_owned),
             })
             .collect();
         levels.sort_by(|a, b| a.label.cmp(&b.label));
@@ -199,41 +262,99 @@ fn notify(window: &WebviewWindow, event: Event) {
     let Some(scheduler) = window.app_handle().try_state::<WebviewScheduler>() else {
         return;
     };
-    for action in scheduler.step(window.label(), event) {
-        apply(window, action);
+    if let Some((revision, actions)) = scheduler.step(window.label(), event) {
+        for action in actions {
+            apply(window, revision, action);
+        }
     }
 }
 
-fn apply(window: &WebviewWindow, action: Action) {
+fn is_current(window: &WebviewWindow, revision: Revision) -> bool {
+    window
+        .app_handle()
+        .try_state::<WebviewScheduler>()
+        .is_some_and(|scheduler| scheduler.is_current(window.label(), revision))
+}
+
+fn complete(
+    window: &WebviewWindow,
+    revision: Revision,
+    action: Action,
+    result: Result<(), String>,
+) {
+    if let Some(scheduler) = window.app_handle().try_state::<WebviewScheduler>() {
+        if let Some(retry) = scheduler.complete(window.label(), revision, action, result) {
+            apply(window, revision, retry);
+        }
+    }
+}
+
+fn apply(window: &WebviewWindow, revision: Revision, action: Action) {
+    if !is_current(window, revision) {
+        return;
+    }
     match action {
         Action::SetVisible(visible) => {
-            let webview: &tauri::Webview = window.as_ref();
-            let result = if visible {
-                webview.show()
-            } else {
-                webview.hide()
-            };
-            if let Err(err) = result {
-                tracing::warn!(target: "ncd_tauri::webview_scheduler", label = window.label(), visible, "切换 WebView 可见性失败: {err}");
+            #[cfg(windows)]
+            {
+                let window = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = win::set_visible(&window, visible, revision).await;
+                    if let Err(error) = &result {
+                        tracing::warn!(target: "ncd_tauri::webview_scheduler", label = window.label(), visible, %error, "切换 WebView 可见性失败");
+                    }
+                    complete(&window, revision, action, result);
+                });
+            }
+            #[cfg(not(windows))]
+            {
+                let webview: &tauri::Webview = window.as_ref();
+                let result = if visible {
+                    webview.show()
+                } else {
+                    webview.hide()
+                };
+                complete(
+                    window,
+                    revision,
+                    action,
+                    result.map_err(|error| error.to_string()),
+                );
             }
         }
         Action::SetDormant(dormant) => {
             #[cfg(windows)]
-            win::set_dormant(window, dormant);
+            {
+                let window = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = win::set_dormant(&window, dormant, revision).await;
+                    complete(&window, revision, action, result);
+                });
+            }
             #[cfg(not(windows))]
-            let _ = dormant;
+            complete(
+                window,
+                revision,
+                action,
+                Err(format!("当前平台不支持 Low 策略: {dormant}")),
+            );
         }
         Action::ScheduleTick { after, generation } => {
             let window = window.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(after).await;
                 // 等的这段时间里窗口可能已经销毁，别给它重新登记
-                if window
-                    .app_handle()
-                    .get_webview_window(window.label())
-                    .is_some()
-                {
+                if is_current(&window, revision) {
                     notify(&window, Event::Tick(generation));
+                }
+            });
+        }
+        Action::ScheduleRetry { generation } => {
+            let window = window.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                if is_current(&window, revision) {
+                    notify(&window, Event::Retry(generation));
                 }
             });
         }
@@ -292,5 +413,19 @@ mod tests {
         assert_eq!(json["totalPrivateBytes"], 3);
         assert_eq!(json["processes"][0]["kind"], "host");
         assert_eq!(json["processes"][0]["workingSetBytes"], 6);
+    }
+
+    #[test]
+    fn old_window_completion_cannot_update_a_recreated_label() {
+        let scheduler = WebviewScheduler::default();
+        let (old, _) = scheduler.step("main", Event::Hide).unwrap();
+        scheduler.forget("main");
+        let (current, _) = scheduler.step("main", Event::Hide).unwrap();
+        assert!(!scheduler.is_current("main", old));
+        assert!(scheduler.is_current("main", current));
+        scheduler.complete("main", old, Action::SetDormant(true), Ok(()));
+        assert_eq!(scheduler.levels()[0].applied_dormant, None);
+        scheduler.complete("main", current, Action::SetDormant(true), Ok(()));
+        assert_eq!(scheduler.levels()[0].applied_dormant, Some(true));
     }
 }

@@ -5,10 +5,10 @@
  */
 export type WebviewWindowLevel = { label: string, 
 /**
- * WebView 设了不可见（页面 hidden）
+ * 目标不可见状态，实际执行反馈见 applied_hidden。
  */
 hidden: boolean, 
 /**
- * 内存级别降到 Low
+ * 目标 Low 状态，实际执行反馈见 applied_dormant。
  */
-dormant: boolean, };
+dormant: boolean, appliedHidden: boolean | null, appliedDormant: boolean | null, lastError: string | null, };
