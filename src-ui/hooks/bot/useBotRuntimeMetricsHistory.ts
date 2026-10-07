@@ -1,6 +1,6 @@
 // 趋势图打开时拉历史；切换时间窗口再拉。不按 3s 狂刷。
 
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { botService } from '../../core/services/bot.service';
 import type { MetricsHistoryPoint } from '../../core/ipc/generated/domain/MetricsHistoryPoint';
 import {
@@ -22,51 +22,42 @@ export function useBotRuntimeMetricsHistory(
     retentionDays: number,
     enabled: boolean,
 ): UseBotRuntimeMetricsHistoryResult {
-    const [points, setPoints] = useState<MetricsHistoryPoint[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const load = useCallback(
-        async (opts?: { silent?: boolean }) => {
-            if (!botId || !enabled) {
-                setPoints([]);
-                return;
-            }
-            const silent = opts?.silent === true;
-            if (!silent) setLoading(true);
-            setError(null);
-            try {
-                const { fromMs, toMs } = resolveHistoryWindowBounds(window, retentionDays);
-                const list = await botService.getRuntimeMetricsHistory(botId, fromMs, toMs);
-                setPoints(Array.isArray(list) ? list : []);
-            } catch (e) {
-                setError(e instanceof Error ? e.message : String(e));
-                setPoints([]);
-            } finally {
-                if (!silent) setLoading(false);
-            }
-        },
-        [
+    // 拆字段避免对象引用抖动导致无意义重拉
+    const range = window.mode === 'preset' ? window.range : '';
+    const fromMs = window.mode === 'custom' ? window.fromMs : 0;
+    const toMs = window.mode === 'custom' ? window.toMs : 0;
+    const followNow = window.mode === 'custom' ? window.followNow : false;
+    const query = useQuery({
+        queryKey: [
+            'botRuntimeMetricsHistory',
             botId,
-            enabled,
-            retentionDays,
-            // 拆字段避免对象引用抖动导致无意义重拉
             window.mode,
-            window.mode === 'preset' ? window.range : '',
-            window.mode === 'custom' ? window.fromMs : 0,
-            window.mode === 'custom' ? window.toMs : 0,
-            window.mode === 'custom' ? window.followNow : false,
+            range,
+            fromMs,
+            toMs,
+            followNow,
+            retentionDays,
         ],
-    );
-
-    useEffect(() => {
-        void load();
-    }, [load]);
-
+        queryFn: async () => {
+            const bounds = resolveHistoryWindowBounds(window, retentionDays);
+            const list = await botService.getRuntimeMetricsHistory(
+                botId,
+                bounds.fromMs,
+                bounds.toMs,
+            );
+            return Array.isArray(list) ? list : [];
+        },
+        enabled: enabled && !!botId,
+        retry: false,
+        staleTime: Infinity,
+    });
     return {
-        points,
-        loading,
-        error,
-        refresh: () => load({ silent: true }),
+        // 旧实现失败时清空 points，不给图喂上一次的点
+        points: query.error ? [] : (query.data ?? []),
+        loading: query.isPending,
+        error: query.error ? query.error.message : null,
+        refresh: async () => {
+            await query.refetch();
+        },
     };
 }
