@@ -1,6 +1,7 @@
 // 仅缓存管理入口的显示条件；写操作仍由 runtime 重新验证角色。
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
-import { chatProfileService, type ProfileMember } from './chat-profile.service';
+import { chatProfileService } from './chat-profile.service';
+import type { MemberPermission, ProfileMember } from '../domain/chat/profile';
 
 const TTL = 20_000;
 const STALE_TTL = 5 * 60_000;
@@ -8,12 +9,7 @@ const FAILED_TTL = 2_000;
 const MAX_MEMBERS = 64;
 const MAX_QUEUED = 16;
 const CONCURRENCY = 2;
-export type MemberPermission = {
-    status: 'loading' | 'ready' | 'failed';
-    member?: ProfileMember;
-    expires: number;
-    staleUntil?: number;
-};
+export type { MemberPermission } from '../domain/chat/profile';
 type Job = {
     target: DebugTarget;
     group: string;
