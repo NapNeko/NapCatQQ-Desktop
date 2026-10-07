@@ -68,6 +68,8 @@ pub(crate) struct Entry {
     visibility_error: Option<String>,
     dormancy_error: Option<String>,
     retries: u8,
+    visibility_pending: bool,
+    dormancy_pending: bool,
 }
 
 impl Entry {
@@ -106,19 +108,22 @@ impl Entry {
         if generation != self.generation {
             return None;
         }
-        let (confirmed, error, value) = match action {
+        let (confirmed, error, pending, value) = match action {
             Action::SetVisible(visible) => (
                 &mut self.confirmed_hidden,
                 &mut self.visibility_error,
+                &mut self.visibility_pending,
                 !visible,
             ),
             Action::SetDormant(dormant) => (
                 &mut self.confirmed_dormant,
                 &mut self.dormancy_error,
+                &mut self.dormancy_pending,
                 dormant,
             ),
             _ => return None,
         };
+        *pending = false;
         match result {
             Ok(()) => {
                 *confirmed = Some(value);
@@ -187,6 +192,14 @@ pub(crate) fn step(
                 && let Some(after) = role.idle_dormant_after()
             {
                 entry.generation += 1;
+                // 失焦会作废旧代次，尚未确认的恢复必须随新代次补发。
+                if entry.visibility_pending
+                    || entry.dormancy_pending
+                    || entry.visibility_error.is_some()
+                    || entry.dormancy_error.is_some()
+                {
+                    wake(entry, &mut actions);
+                }
                 actions.push(Action::ScheduleTick {
                     after,
                     generation: entry.generation,
@@ -210,15 +223,30 @@ pub(crate) fn step(
             }
         }
     }
+    for action in &actions {
+        match action {
+            Action::SetVisible(_) => entry.visibility_pending = true,
+            Action::SetDormant(_) => entry.dormancy_pending = true,
+            _ => {}
+        }
+    }
     actions
 }
 
 fn wake(entry: &mut Entry, actions: &mut Vec<Action>) {
-    if entry.dormant || entry.confirmed_dormant != Some(false) || entry.dormancy_error.is_some() {
+    if entry.dormant
+        || entry.dormancy_pending
+        || entry.confirmed_dormant != Some(false)
+        || entry.dormancy_error.is_some()
+    {
         entry.dormant = false;
         actions.push(Action::SetDormant(false));
     }
-    if entry.hidden || entry.confirmed_hidden != Some(false) || entry.visibility_error.is_some() {
+    if entry.hidden
+        || entry.visibility_pending
+        || entry.confirmed_hidden != Some(false)
+        || entry.visibility_error.is_some()
+    {
         entry.hidden = false;
         actions.push(Action::SetVisible(true));
     }
@@ -407,5 +435,59 @@ mod tests {
             ),
             show
         );
+    }
+    #[test]
+    fn blur_reissues_a_queued_restore_instead_of_leaving_the_visible_host_blank() {
+        let mut e = Entry::default();
+        run(WebviewRole::ChatPopout, &mut e, Event::Hide);
+        let restore = step(WebviewRole::ChatPopout, &mut e, Event::Show, Instant::now());
+        let old = e.generation();
+        assert_eq!(
+            restore,
+            vec![Action::SetDormant(false), Action::SetVisible(true)]
+        );
+        let blur = step(
+            WebviewRole::ChatPopout,
+            &mut e,
+            Event::Focus(false),
+            Instant::now(),
+        );
+        assert_eq!(
+            &blur[..2],
+            &[Action::SetDormant(false), Action::SetVisible(true)]
+        );
+        assert!(matches!(blur[2], Action::ScheduleTick { .. }));
+        assert!(
+            e.complete(
+                old,
+                Action::SetVisible(true),
+                Err("old UI callback cancelled".into())
+            )
+            .is_none()
+        );
+        assert_eq!(e.confirmed_hidden(), Some(true));
+        for action in &blur {
+            e.complete(e.generation(), *action, Ok(()));
+        }
+        assert_eq!(e.confirmed_hidden(), Some(false));
+        assert_eq!(e.confirmed_dormant(), Some(false));
+        assert_eq!(e.last_error(), None);
+    }
+    #[test]
+    fn blur_reissues_only_the_unfinished_part_of_a_restore() {
+        let mut e = Entry::default();
+        run(WebviewRole::Main, &mut e, Event::Hide);
+        step(WebviewRole::Main, &mut e, Event::Show, Instant::now());
+        e.complete(e.generation(), Action::SetVisible(true), Ok(()));
+        let actions = step(
+            WebviewRole::Main,
+            &mut e,
+            Event::Focus(false),
+            Instant::now(),
+        );
+        assert!(matches!(
+            actions.as_slice(),
+            [Action::SetDormant(false), Action::ScheduleTick { .. }]
+        ));
     }
 }

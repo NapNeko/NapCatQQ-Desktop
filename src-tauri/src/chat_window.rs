@@ -249,10 +249,11 @@ pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(CHAT_WINDOW_LABEL)
         .ok_or("聊天窗口不存在")?;
+    let coordinator = app.state::<ChatWindowCoordinator>();
+    // 此 IPC 已确认前端完成 bootstrap；显示失败也应允许后续 open 再试。
+    coordinator.ready.store(true, Ordering::SeqCst);
     crate::webview_scheduler::show_window(&window)?;
     let _ = window.set_focus();
-    let coordinator = app.state::<ChatWindowCoordinator>();
-    coordinator.ready.store(true, Ordering::SeqCst);
     if coordinator.release_main.swap(false, Ordering::SeqCst)
         && app
             .state::<crate::AppState>()
