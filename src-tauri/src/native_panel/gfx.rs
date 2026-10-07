@@ -7,6 +7,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use windows::Win32::Graphics::Direct2D::Common::D2D1_BEZIER_SEGMENT;
 use windows::Win32::Graphics::Direct2D::Common::{
@@ -30,7 +31,8 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FONT_WEIGHT_NORMAL, DWRITE_LINE_SPACING_METHOD_UNIFORM, DWRITE_TEXT_METRICS,
     DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_UNICODE_RANGE,
     DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory, IDWriteFactory5, IDWriteFontCollection1,
-    IDWriteFontFallback, IDWriteTextFormat, IDWriteTextFormat1, IDWriteTextLayout,
+    IDWriteFontFallback, IDWriteInMemoryFontFileLoader, IDWriteTextFormat, IDWriteTextFormat1,
+    IDWriteTextLayout,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::core::{HSTRING, Interface, Result, w};
@@ -126,12 +128,39 @@ impl TextStyle {
 }
 
 /// 排好的一行字。宽度是实际字宽（截断后不超过给定的最大宽度），高度就是行高。
-/// Clone 只是给排版对象 AddRef。
+/// Clone 共享排版和字体注册。
 #[derive(Clone)]
 pub struct TextBox {
-    pub layout: IDWriteTextLayout,
+    layout: IDWriteTextLayout,
     pub width: f32,
     pub height: f32,
+    // 排版可以比 TextSystem 活得更久，加载器必须等最后一个排版释放后再注销。
+    _fonts: Rc<FontLoaderRegistration>,
+}
+
+struct FontLoaderRegistration {
+    factory: IDWriteFactory5,
+    loader: IDWriteInMemoryFontFileLoader,
+}
+
+impl FontLoaderRegistration {
+    fn new(factory: IDWriteFactory5) -> Result<Self> {
+        // SAFETY: factory 是当前 UI 线程持有的 COM 引用，loader 注册后立即交给本所有者。
+        unsafe {
+            let loader = factory.CreateInMemoryFontFileLoader()?;
+            factory.RegisterFontFileLoader(&loader)?;
+            Ok(Self { factory, loader })
+        }
+    }
+}
+
+impl Drop for FontLoaderRegistration {
+    fn drop(&mut self) {
+        // SAFETY: 所有字体集合、format 和 layout 已释放；factory 和 loader 仍由本对象持有。
+        if let Err(error) = unsafe { self.factory.UnregisterFontFileLoader(&self.loader) } {
+            tracing::warn!(target: "ncd_tauri::native_panel", %error, "注销内置字体加载器失败");
+        }
+    }
 }
 
 struct FontFace {
@@ -149,6 +178,8 @@ pub struct TextSystem {
     sans: FontFace,
     mono: FontFace,
     formats: RefCell<HashMap<(u8, u32, u16, u32), IDWriteTextFormat>>,
+    // 字段按声明顺序释放，注册所有者必须排在引用字体的字段之后。
+    fonts: Rc<FontLoaderRegistration>,
 }
 
 impl TextSystem {
@@ -159,8 +190,8 @@ impl TextSystem {
         // 中间没有 `?` 提前返回漏掉 Release；AddMapping 的 pointers 指向 names 里的 HSTRING，names 活到调用之后。
         unsafe {
             let dwrite: IDWriteFactory5 = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-            let loader = dwrite.CreateInMemoryFontFileLoader()?;
-            dwrite.RegisterFontFileLoader(&loader)?;
+            let fonts = Rc::new(FontLoaderRegistration::new(dwrite.clone())?);
+            let loader = &fonts.loader;
             let builder = dwrite.CreateFontSetBuilder()?;
             for woff2 in [INTER, MONO] {
                 // DirectWrite 不直接认 woff2，先解成 OpenType；owner 传空时加载器自己拷一份数据
@@ -200,6 +231,7 @@ impl TextSystem {
                 sans,
                 mono,
                 formats: RefCell::new(HashMap::new()),
+                fonts,
             })
         }
     }
@@ -272,6 +304,7 @@ impl TextSystem {
                 layout,
                 width: metrics.widthIncludingTrailingWhitespace.min(max_width),
                 height: style.line_height,
+                _fonts: Rc::clone(&self.fonts),
             })
         }
     }
@@ -836,4 +869,32 @@ pub(crate) fn render_offscreen(
         drawn = frame.finish().is_ok();
     })?;
     drawn.then_some(pixels)
+}
+
+#[cfg(test)]
+mod font_lifetime_tests {
+    use super::*;
+
+    #[test]
+    fn layout_keeps_fonts_registered_after_text_system_is_released() {
+        let text = TextSystem::new().unwrap();
+        let fonts = Rc::downgrade(&text.fonts);
+        let factory = text.fonts.factory.clone();
+        let loader = text.fonts.loader.clone();
+        let layout = text
+            .layout("字体生命周期", TextStyle::sans(14.0, 400, 20.0), 200.0)
+            .unwrap();
+        let copy = layout.clone();
+        drop(text);
+        drop(layout);
+        assert!(fonts.upgrade().is_some());
+        // SAFETY: copy 仍持有 layout 和字体注册所有者。
+        let mut metrics = DWRITE_TEXT_METRICS::default();
+        unsafe { copy.layout.GetMetrics(&mut metrics) }.unwrap();
+        assert!(metrics.width > 0.0);
+        drop(copy);
+        assert!(fonts.upgrade().is_none());
+        // SAFETY: 仅检查注销已完成；factory 和 loader 的 COM 引用仍在本测试内存活。
+        assert!(unsafe { factory.UnregisterFontFileLoader(&loader) }.is_err());
+    }
 }

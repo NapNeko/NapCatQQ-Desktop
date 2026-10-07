@@ -134,6 +134,7 @@ export function NativeTimeline({
         stick.isFollowing,
     );
     const loadEarlier = () => {
+        position.capture();
         position.cancelRestore();
         stick.detach();
         return store.history(contact.key);
@@ -354,6 +355,21 @@ export function NativeTimeline({
                                         retryDisabled={retryDisabled}
                                         onFocusComposer={onFocusComposer}
                                         onError={setError}
+                                        onLoadGap={
+                                            message.id
+                                                ? () => {
+                                                      cancelWheel();
+                                                      latestScroll.cancel();
+                                                      position.cancelRestore();
+                                                      stick.detach();
+                                                      virtual.scrollToIndex(row.index, {
+                                                          align: 'start',
+                                                      });
+                                                      void store.history(contact.key, message.id);
+                                                  }
+                                                : undefined
+                                        }
+                                        historyLoading={!!history?.loading}
                                         enter={row.index >= stick.enterFrom}
                                         takeEnter={stick.takeEnter}
                                         order={
@@ -376,7 +392,8 @@ export function NativeTimeline({
                         onClick={() => {
                             position.cancelRestore();
                             cancelWheel();
-                            latestScroll.start();
+                            latestScroll.cancel();
+                            void store.latest(contact.key).then(() => latestScroll.start());
                         }}
                     >
                         <ArrowDown size={18} aria-hidden />
@@ -400,6 +417,8 @@ const TimelineMessage = memo(function TimelineMessage({
     retryDisabled,
     onFocusComposer,
     onError,
+    onLoadGap,
+    historyLoading,
     enter,
     takeEnter,
     order,
@@ -412,6 +431,8 @@ const TimelineMessage = memo(function TimelineMessage({
     retryDisabled: boolean;
     onFocusComposer?: () => void;
     onError: (error: string) => void;
+    onLoadGap?: () => void;
+    historyLoading: boolean;
     enter: boolean;
     takeEnter: (key: string) => boolean;
     order: number;
@@ -425,9 +446,22 @@ const TimelineMessage = memo(function TimelineMessage({
         previous?.senderId === message.senderId &&
         previous?.mine === message.mine &&
         message.at - previous.at < 3 * 60_000;
+    const gap = message.gapBefore && (
+        <div className="native-chat-notice">
+            <button
+                type="button"
+                className="native-chat-text-button"
+                disabled={historyLoading || !onLoadGap}
+                onClick={onLoadGap}
+            >
+                {historyLoading ? '正在加载…' : '加载这段消息'}
+            </button>
+        </div>
+    );
     if (message.notice) {
         return (
             <>
+                {gap}
                 {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
                 <div className="native-chat-notice">{message.notice}</div>
             </>
@@ -435,6 +469,7 @@ const TimelineMessage = memo(function TimelineMessage({
     }
     return (
         <>
+            {gap}
             {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
             <ChatMessageEntrance
                 messageKey={message.key}

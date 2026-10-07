@@ -30,7 +30,7 @@ use ncd_domain::onebot_debug::{
 };
 use ncd_onebot::backoff::Backoff;
 use ncd_onebot::client::{ClientError, SseParser, WsClient, connect_ws};
-use ncd_onebot::ring::{DEFAULT_RING_CAP, EventRing};
+use ncd_onebot::ring::{DEFAULT_RING_CAP, EventRing, MAX_EVENT_PAYLOAD_BYTES};
 use serde_json::Value;
 use tokio::sync::{Notify, mpsc};
 use tokio::time::{Instant, MissedTickBehavior};
@@ -50,6 +50,8 @@ use crate::metrics::now_ms;
 pub(super) const FLUSH_EVERY: Duration = Duration::from_millis(50);
 /// 补发缓冲时每批的条数，免得一次 IPC 塞进几千条
 const BACKLOG_CHUNK: usize = 500;
+/// JSON payload 预算，不包含 serde_json 对象与分配器开销。
+const PENDING_PAYLOAD_BYTES: usize = 2 * 1024 * 1024;
 /// 协议客户端交给接收器的事件队列容量；接收器只做入缓冲，消费得很快
 const EVENT_QUEUE_CAP: usize = 1024;
 /// 一次建连（含登录、建适配器、开隧道）的总时限
@@ -118,7 +120,8 @@ struct ReceiverInner {
     state: DebugReceiverState,
     ring: EventRing,
     /// 进了缓冲、还没推出去的
-    pending: Vec<DebugEvent>,
+    pending: Vec<Arc<DebugEvent>>,
+    pending_payload_bytes: usize,
     sinks: HashMap<String, Arc<dyn DebugEventSink>>,
     /// 最近一次有人看（最后一个窗口离开的时刻也算）或者有调用的时间，清扫按它判断
     last_viewer_or_call: Instant,
@@ -146,32 +149,57 @@ pub(super) struct PumpStart {
 }
 
 impl ReceiverInner {
-    fn push(&mut self, body: DebugEventBody) {
-        let event = self.ring.push(now_ms(), body);
-        self.pending.push(event);
-        // 正常情况下 50 ms 内攒不到这么多；真攒到了，最老的那些在缓冲里也已经被挤掉了，
-        // 前端看到编号跳了会自己按 seq 补拉
-        if self.pending.len() > DEFAULT_RING_CAP {
-            let excess = self.pending.len() - DEFAULT_RING_CAP;
-            self.pending.drain(..excess);
+    fn push(&mut self, bot_id: &BotId, body: DebugEventBody) {
+        let (event, bytes) = self.ring.push_shared(now_ms(), body);
+        if bytes > MAX_EVENT_PAYLOAD_BYTES {
+            self.flush(bot_id);
+            debug!(bot_id = %bot_id, seq = event.seq, "事件超过缓存单条预算，补拉保留缺失标记");
+            // 超大正文不进入缓存或待推队列，现有订阅者仍立即收到完整内容。
+            if !self.sinks.is_empty() {
+                self.send_batch(bot_id, vec![Arc::unwrap_or_clone(event)]);
+            }
+            return;
         }
+        if self.sinks.is_empty() {
+            return;
+        }
+        if self.pending.len() >= DEFAULT_RING_CAP
+            || self.pending_payload_bytes.saturating_add(bytes) > PENDING_PAYLOAD_BYTES
+        {
+            self.flush(bot_id);
+        }
+        if self.sinks.is_empty() {
+            return;
+        }
+        self.pending_payload_bytes += bytes;
+        self.pending.push(event);
     }
 
-    fn set_state(&mut self, state: DebugReceiverState) {
+    fn set_state(&mut self, bot_id: &BotId, state: DebugReceiverState) {
         self.state = state.clone();
         let source = self.source.clone();
-        self.push(DebugEventBody::Receiver { state, source });
+        self.push(bot_id, DebugEventBody::Receiver { state, source });
     }
 
     /// 把攒着的推给所有窗口；对面已经走了的摘掉
     fn flush(&mut self, bot_id: &BotId) {
+        self.pending_payload_bytes = 0;
         if self.pending.is_empty() {
             return;
         }
+        let pending = std::mem::take(&mut self.pending);
+        if self.sinks.is_empty() {
+            return;
+        }
+        let events = pending.into_iter().map(Arc::unwrap_or_clone).collect();
+        self.send_batch(bot_id, events);
+    }
+
+    fn send_batch(&mut self, bot_id: &BotId, events: Vec<DebugEvent>) {
         let batch = DebugEventBatch {
             v: DEBUG_EVENT_VERSION,
             bot_id: bot_id.as_str().to_owned(),
-            events: std::mem::take(&mut self.pending),
+            events,
         };
         let had_viewers = !self.sinks.is_empty();
         self.sinks.retain(|_, sink| sink.send(&batch));
@@ -195,7 +223,12 @@ impl ReceiverInner {
 
     /// 换一台新泵：旧泵的令牌取消，编号加一，状态当场变成「连接中」。
     /// 订阅的回包和随后补发的缓冲说的是同一件事，不会一个说「已停止」一个说「连接中」
-    fn next_pump(&mut self, stop: &CancellationToken, source: DebugChannelId) -> PumpStart {
+    fn next_pump(
+        &mut self,
+        bot_id: &BotId,
+        stop: &CancellationToken,
+        source: DebugChannelId,
+    ) -> PumpStart {
         self.pump.cancel();
         self.pump_seq = self.pump_seq.wrapping_add(1);
         self.pump = stop.child_token();
@@ -203,7 +236,7 @@ impl ReceiverInner {
         self.source = source.clone();
         // 换了来源，旧来源的断线时刻和新连接无关
         self.disconnected_at = None;
-        self.set_state(DebugReceiverState::Connecting);
+        self.set_state(bot_id, DebugReceiverState::Connecting);
         PumpStart {
             pump_id: self.pump_seq,
             token: self.pump.clone(),
@@ -229,6 +262,7 @@ impl Receiver {
                 state: DebugReceiverState::Connecting,
                 ring: EventRing::with_start_seq(DEFAULT_RING_CAP, next_seq),
                 pending: Vec::new(),
+                pending_payload_bytes: 0,
                 sinks: HashMap::new(),
                 last_viewer_or_call: Instant::now(),
                 disconnected_at: None,
@@ -278,7 +312,7 @@ impl Receiver {
         if target == inner.source && !halted {
             return None;
         }
-        Some(inner.next_pump(&self.stop, target))
+        Some(inner.next_pump(&self.bot_id, &self.stop, target))
     }
 
     /// 泵推一条事件；旧泵的迟到写入丢掉
@@ -287,7 +321,7 @@ impl Receiver {
         if inner.closed || inner.pump_seq != pump_id {
             return;
         }
-        inner.push(body);
+        inner.push(&self.bot_id, body);
     }
 
     fn set_state_from(&self, pump_id: u64, state: DebugReceiverState) {
@@ -295,7 +329,7 @@ impl Receiver {
         if inner.closed || inner.pump_seq != pump_id {
             return;
         }
-        inner.set_state(state);
+        inner.set_state(&self.bot_id, state);
     }
 
     /// 连上了：断过线的补一条漏掉的时间段
@@ -304,12 +338,15 @@ impl Receiver {
         if inner.closed || inner.pump_seq != pump_id {
             return;
         }
-        inner.set_state(DebugReceiverState::Connected);
+        inner.set_state(&self.bot_id, DebugReceiverState::Connected);
         if let Some(from_ms) = inner.disconnected_at.take() {
-            inner.push(DebugEventBody::Gap {
-                from_ms,
-                to_ms: now_ms(),
-            });
+            inner.push(
+                &self.bot_id,
+                DebugEventBody::Gap {
+                    from_ms,
+                    to_ms: now_ms(),
+                },
+            );
         }
     }
 
@@ -323,10 +360,13 @@ impl Receiver {
         if inner.disconnected_at.is_none() {
             inner.disconnected_at = Some(since);
         }
-        inner.set_state(DebugReceiverState::Reconnecting {
-            attempt,
-            retry_in_ms: u32::try_from(delay.as_millis()).unwrap_or(u32::MAX),
-        });
+        inner.set_state(
+            &self.bot_id,
+            DebugReceiverState::Reconnecting {
+                attempt,
+                retry_in_ms: u32::try_from(delay.as_millis()).unwrap_or(u32::MAX),
+            },
+        );
     }
 
     /// 重试也没用（鉴权失败、上游太老……）：写明原因停下，接收器留着，缓冲照样能看，
@@ -341,7 +381,7 @@ impl Receiver {
         if inner.closed {
             return;
         }
-        inner.push(DebugEventBody::Call { record });
+        inner.push(&self.bot_id, DebugEventBody::Call { record });
         inner.last_viewer_or_call = Instant::now();
     }
 
@@ -361,10 +401,24 @@ impl Receiver {
             return None;
         }
         inner.flush(&self.bot_id);
-        let mut backlog = inner.ring.tail(DEFAULT_RING_CAP).into_iter();
+        let mut backlog = inner.ring.iter_since(0).peekable();
         let mut alive = true;
         loop {
-            let events: Vec<DebugEvent> = backlog.by_ref().take(BACKLOG_CHUNK).collect();
+            let mut events = Vec::new();
+            let mut payload_bytes: usize = 0;
+            while events.len() < BACKLOG_CHUNK {
+                let Some((event, bytes)) = backlog.peek() else {
+                    break;
+                };
+                if !events.is_empty()
+                    && payload_bytes.saturating_add(*bytes) > PENDING_PAYLOAD_BYTES
+                {
+                    break;
+                }
+                payload_bytes += *bytes;
+                events.push((*event).clone());
+                backlog.next();
+            }
             if events.is_empty() {
                 break;
             }
@@ -378,6 +432,7 @@ impl Receiver {
                 break;
             }
         }
+        drop(backlog);
         if alive {
             inner.sinks.insert(subscription_id.to_owned(), sink);
         }
@@ -473,13 +528,18 @@ impl Receiver {
         let next = {
             let mut inner = self.lock();
             if !inner.closed {
-                inner.set_state(DebugReceiverState::Stopped {
-                    reason: reason.to_owned(),
-                });
+                inner.set_state(
+                    &self.bot_id,
+                    DebugReceiverState::Stopped {
+                        reason: reason.to_owned(),
+                    },
+                );
                 inner.flush(&self.bot_id);
                 inner.closed = true;
                 inner.sinks.clear();
-                inner.pending.clear();
+                inner.pending = Vec::new();
+                inner.pending_payload_bytes = 0;
+                inner.ring.clear();
             }
             inner.ring.next_seq()
         };
@@ -1358,7 +1418,7 @@ mod tests {
         assert_eq!(failed.ok, Some(false));
         assert_eq!(failed.message_id, None);
 
-        // 别人发图的 base64 也要瘦身，事件缓冲按条数封顶，不按字节
+        // 调用记录省略发送的 base64，事件缓存还有单条与总字节预算。
         let big = observed_call(
             "send_group_msg".into(),
             json!({"group_id": 7, "message": [{"type": "image", "data": {"file": "B".repeat(200_000)}}]}),
@@ -1446,6 +1506,64 @@ mod tests {
         receiver.push_from(99, ob11(9));
         receiver.flush();
         assert_eq!(first.seqs().len(), 5);
+    }
+
+    #[test]
+    fn pending_payload_budget_flushes_a_burst_without_losing_events() {
+        let receiver = receiver(1);
+        let viewer = Arc::new(Collect::default());
+        receiver.attach("viewer", Arc::clone(&viewer) as Arc<dyn DebugEventSink>);
+        for n in 0..8 {
+            receiver.push_from(
+                0,
+                DebugEventBody::Ob11 {
+                    payload: json!({"n": n, "text": "x".repeat(300_000)}),
+                },
+            );
+            assert!(receiver.lock().pending_payload_bytes <= PENDING_PAYLOAD_BYTES);
+        }
+        assert!(viewer.batch_count() > 0, "不用等定时器就推出超预算前的一批");
+        receiver.flush();
+        assert_eq!(viewer.seqs(), (1..=8).collect::<Vec<_>>());
+        assert_eq!(receiver.lock().pending_payload_bytes, 0);
+    }
+
+    #[test]
+    fn oversized_event_is_live_in_full_and_backfilled_as_a_loss_marker() {
+        let receiver = receiver(1);
+        let live = Arc::new(Collect::default());
+        receiver.attach("live", Arc::clone(&live) as Arc<dyn DebugEventSink>);
+        receiver.push_from(0, ob11(1));
+        let body = DebugEventBody::Ob11 {
+            payload: json!({"text": "x".repeat(MAX_EVENT_PAYLOAD_BYTES + 1)}),
+        };
+        receiver.push_from(0, body.clone());
+        receiver.push_from(0, ob11(3));
+        assert_eq!(live.seqs(), [1, 2]);
+        assert_eq!(lock_std(&live.batches)[1].events[0].body, body);
+        assert!(receiver.lock().pending_payload_bytes > 0);
+
+        let late = Arc::new(Collect::default());
+        let info = receiver
+            .attach("late", Arc::clone(&late) as Arc<dyn DebugEventSink>)
+            .unwrap();
+        assert_eq!(live.seqs(), [1, 2, 3]);
+        assert_eq!(late.seqs(), [1, 2, 3]);
+        assert_eq!(
+            lock_std(&late.batches)[0].events[1].body,
+            DebugEventBody::Dropped { count: 1 }
+        );
+        assert_eq!(
+            (info.first_seq, info.buffered, info.dropped_total),
+            (1, 3, 1)
+        );
+
+        assert_eq!(receiver.close("closed"), 5);
+        let inner = receiver.lock();
+        assert!(inner.ring.is_empty());
+        assert!(inner.pending.is_empty());
+        assert_eq!(inner.pending_payload_bytes, 0);
+        assert_eq!(inner.ring.next_seq(), 5);
     }
 
     #[test]

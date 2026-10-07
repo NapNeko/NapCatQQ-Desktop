@@ -31,6 +31,7 @@ export function useTimelinePosition(
     isFollowing: () => boolean,
 ) {
     const pending = useRef(store.initialReadingPosition(session));
+    const previousMessages = useRef(messages);
     const current = useRef({ messages, isFollowing });
     current.current = { messages, isFollowing };
     const capture = useCallback(() => {
@@ -49,6 +50,29 @@ export function useTimelinePosition(
         return value;
     }, [store, session, scroll, virtual]);
     useLayoutEffect(() => store.captureTimeline(session, capture), [store, session, capture]);
+    useLayoutEffect(() => {
+        const previous = previousMessages.current;
+        previousMessages.current = messages;
+        if (
+            previous.length === messages.length &&
+            previous.every((message, index) => message.key === messages[index].key)
+        )
+            return;
+        if (pending.current) return;
+        const saved = store.readingPosition(session);
+        if (!saved || saved.atBottom) return;
+        const element = scroll.current;
+        if (!element?.clientHeight || !element.clientWidth) return;
+        const index = messages.findIndex(
+            (message) =>
+                message.key === saved.messageKey ||
+                (!!saved.messageId && message.id === saved.messageId),
+        );
+        if (index < 0) return;
+        virtual.getOffsetForIndex(index, 'start');
+        const row = virtual.measurementsCache[index];
+        if (row) virtual.scrollToOffset(Math.max(0, row.start + saved.offset));
+    }, [store, session, scroll, virtual, messages]);
     useLayoutEffect(() => {
         const element = scroll.current;
         if (!element?.clientHeight || !element.clientWidth || !messages.length) return;

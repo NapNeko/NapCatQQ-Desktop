@@ -4,14 +4,82 @@ import { SegmentList } from '../../debug/right/SegmentView';
 import { ChatViewContext, useChatView } from '../../debug/right/chatContext';
 import type { ForwardNode } from '../../../core/services/chat-media.service';
 
-function Records({ read }: { read: (data: Record<string, unknown>) => Promise<ForwardNode[]> }) {
+function Records({
+    read,
+    scope,
+}: {
+    read: (data: Record<string, unknown>) => Promise<ForwardNode[]>;
+    scope?: string;
+}) {
     return (
-        <ChatViewContext.Provider value={{ ...useChatView(), readForward: read }}>
+        <ChatViewContext.Provider
+            value={{ ...useChatView(), readForward: read, mediaScope: scope }}
+        >
             <SegmentList mine={false} segments={[{ type: 'forward', data: { id: 'root' } }]} />
         </ChatViewContext.Provider>
     );
 }
 describe('forward record navigation', () => {
+    it('deduplicates a changing reader within one account and isolates the next account', async () => {
+        const first = vi.fn().mockResolvedValue([
+            {
+                senderId: '12',
+                name: '甲',
+                segments: [{ type: 'text', data: { text: '第一账号' } }],
+            },
+        ]);
+        const second = vi.fn().mockResolvedValue([
+            {
+                senderId: '13',
+                name: '乙',
+                segments: [{ type: 'text', data: { text: '第二账号' } }],
+            },
+        ]);
+        const view = render(<Records read={first} scope="forward-test/account-a" />);
+        await screen.findByText('甲: 第一账号');
+        view.rerender(<Records read={second} scope="forward-test/account-a" />);
+        await screen.findByText('甲: 第一账号');
+        expect(second).not.toHaveBeenCalled();
+        view.rerender(<Records read={second} scope="forward-test/account-b" />);
+        await screen.findByText('乙: 第二账号');
+        expect(first).toHaveBeenCalledOnce();
+        expect(second).toHaveBeenCalledOnce();
+    });
+    it('rereads an expired record after closing instead of retaining the old dialog nodes', async () => {
+        const now = Date.now();
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+        const read = vi
+            .fn()
+            .mockResolvedValueOnce([
+                {
+                    senderId: '12',
+                    name: '甲',
+                    segments: [{ type: 'text', data: { text: '旧正文' } }],
+                },
+            ])
+            .mockResolvedValueOnce([
+                {
+                    senderId: '12',
+                    name: '甲',
+                    segments: [{ type: 'text', data: { text: '新正文' } }],
+                },
+            ]);
+        try {
+            render(<Records read={read} />);
+            await screen.findByText('甲: 旧正文');
+            fireEvent.click(screen.getByRole('button', { name: '查看聊天记录' }));
+            await screen.findByText('旧正文');
+            fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            clock.mockReturnValue(now + 5 * 60_000 + 1);
+            fireEvent.click(screen.getByRole('button', { name: '查看聊天记录' }));
+            await screen.findByText('新正文');
+            expect(read).toHaveBeenCalledTimes(2);
+            expect(screen.queryByText('旧正文')).not.toBeInTheDocument();
+        } finally {
+            clock.mockRestore();
+        }
+    });
     it('opens an image above the records and closes it without closing or moving the records', async () => {
         const read = vi.fn().mockResolvedValue([
             {

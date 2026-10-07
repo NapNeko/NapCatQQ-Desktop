@@ -46,6 +46,7 @@ pub(crate) enum Event {
     Focus(bool),
     /// 失焦计时到点，带安排时的代次；代次对不上说明中间有过别的事件，作废。
     Tick(u64),
+    Retry(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +54,7 @@ pub(crate) enum Action {
     SetVisible(bool),
     SetDormant(bool),
     ScheduleTick { after: Duration, generation: u64 },
+    ScheduleRetry { generation: u64 },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -61,6 +63,11 @@ pub(crate) struct Entry {
     focused: bool,
     dormant: bool,
     generation: u64,
+    confirmed_hidden: Option<bool>,
+    confirmed_dormant: Option<bool>,
+    visibility_error: Option<String>,
+    dormancy_error: Option<String>,
+    retries: u8,
 }
 
 impl Entry {
@@ -71,6 +78,63 @@ impl Entry {
     pub(crate) fn is_dormant(&self) -> bool {
         self.dormant
     }
+
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub(crate) fn confirmed_hidden(&self) -> Option<bool> {
+        self.confirmed_hidden
+    }
+
+    pub(crate) fn confirmed_dormant(&self) -> Option<bool> {
+        self.confirmed_dormant
+    }
+
+    pub(crate) fn last_error(&self) -> Option<&str> {
+        self.visibility_error
+            .as_deref()
+            .or(self.dormancy_error.as_deref())
+    }
+
+    pub(crate) fn complete(
+        &mut self,
+        generation: u64,
+        action: Action,
+        result: Result<(), String>,
+    ) -> Option<Action> {
+        if generation != self.generation {
+            return None;
+        }
+        let (confirmed, error, value) = match action {
+            Action::SetVisible(visible) => (
+                &mut self.confirmed_hidden,
+                &mut self.visibility_error,
+                !visible,
+            ),
+            Action::SetDormant(dormant) => (
+                &mut self.confirmed_dormant,
+                &mut self.dormancy_error,
+                dormant,
+            ),
+            _ => return None,
+        };
+        match result {
+            Ok(()) => {
+                *confirmed = Some(value);
+                *error = None;
+                None
+            }
+            Err(reason) => {
+                *error = Some(reason);
+                if self.retries >= 2 {
+                    return None;
+                }
+                self.retries += 1;
+                Some(Action::ScheduleRetry { generation })
+            }
+        }
+    }
 }
 
 pub(crate) fn step(
@@ -80,15 +144,24 @@ pub(crate) fn step(
     _now: Instant,
 ) -> Vec<Action> {
     let mut actions = Vec::new();
+    if !matches!(event, Event::Retry(_) | Event::Tick(_)) {
+        entry.retries = 0;
+    }
     match event {
         Event::Hide => {
             entry.generation += 1;
             entry.focused = false;
-            if !entry.hidden {
+            if !entry.hidden
+                || entry.confirmed_hidden != Some(true)
+                || entry.visibility_error.is_some()
+            {
                 entry.hidden = true;
                 actions.push(Action::SetVisible(false));
             }
-            if !entry.dormant {
+            if !entry.dormant
+                || entry.confirmed_dormant != Some(true)
+                || entry.dormancy_error.is_some()
+            {
                 entry.dormant = true;
                 actions.push(Action::SetDormant(true));
             }
@@ -126,16 +199,26 @@ pub(crate) fn step(
                 actions.push(Action::SetDormant(true));
             }
         }
+        Event::Retry(generation) => {
+            if generation == entry.generation {
+                if entry.visibility_error.is_some() {
+                    actions.push(Action::SetVisible(!entry.hidden));
+                }
+                if entry.dormancy_error.is_some() {
+                    actions.push(Action::SetDormant(entry.dormant));
+                }
+            }
+        }
     }
     actions
 }
 
 fn wake(entry: &mut Entry, actions: &mut Vec<Action>) {
-    if entry.dormant {
+    if entry.dormant || entry.confirmed_dormant != Some(false) || entry.dormancy_error.is_some() {
         entry.dormant = false;
         actions.push(Action::SetDormant(false));
     }
-    if entry.hidden {
+    if entry.hidden || entry.confirmed_hidden != Some(false) || entry.visibility_error.is_some() {
         entry.hidden = false;
         actions.push(Action::SetVisible(true));
     }
@@ -146,7 +229,11 @@ mod tests {
     use super::*;
 
     fn run(role: WebviewRole, entry: &mut Entry, event: Event) -> Vec<Action> {
-        step(role, entry, event, Instant::now())
+        let actions = step(role, entry, event, Instant::now());
+        for action in &actions {
+            entry.complete(entry.generation(), *action, Ok(()));
+        }
+        actions
     }
 
     #[test]
@@ -170,7 +257,7 @@ mod tests {
         let mut e = Entry::default();
         assert_eq!(
             run(WebviewRole::Other, &mut e, Event::Show),
-            vec![Action::SetVisible(true)]
+            vec![Action::SetDormant(false), Action::SetVisible(true)]
         );
     }
 
@@ -258,6 +345,67 @@ mod tests {
         assert_eq!(
             WebviewRole::from_label("something-else"),
             WebviewRole::Other
+        );
+    }
+
+    #[test]
+    fn failed_low_is_unconfirmed_and_retries_are_bounded() {
+        let mut e = Entry::default();
+        step(WebviewRole::Main, &mut e, Event::Hide, Instant::now());
+        let generation = e.generation();
+        for attempt in 0..3 {
+            let retry = e.complete(
+                generation,
+                Action::SetDormant(true),
+                Err("COM failed".into()),
+            );
+            assert_eq!(retry.is_some(), attempt < 2);
+        }
+        assert!(e.is_dormant());
+        assert_eq!(e.confirmed_dormant(), None);
+        assert_eq!(e.last_error(), Some("COM failed"));
+        assert_eq!(
+            run(WebviewRole::Main, &mut e, Event::Retry(generation)),
+            vec![Action::SetDormant(true)]
+        );
+        e.complete(generation, Action::SetDormant(true), Ok(()));
+        assert_eq!(e.confirmed_dormant(), Some(true));
+        assert_eq!(e.last_error(), None);
+    }
+
+    #[test]
+    fn stale_completion_and_retry_cannot_overwrite_a_restored_window() {
+        let mut e = Entry::default();
+        run(WebviewRole::Main, &mut e, Event::Hide);
+        let old = e.generation();
+        run(WebviewRole::Main, &mut e, Event::Show);
+        e.complete(e.generation(), Action::SetDormant(false), Ok(()));
+        assert!(
+            e.complete(old, Action::SetDormant(true), Err("late".into()))
+                .is_none()
+        );
+        assert_eq!(e.confirmed_dormant(), Some(false));
+        assert_eq!(e.last_error(), None);
+        assert!(run(WebviewRole::Main, &mut e, Event::Retry(old)).is_empty());
+    }
+
+    #[test]
+    fn a_new_generation_reissues_unconfirmed_low_and_normal() {
+        let mut e = Entry::default();
+        let hide = step(WebviewRole::Main, &mut e, Event::Hide, Instant::now());
+        assert_eq!(
+            step(WebviewRole::Main, &mut e, Event::Hide, Instant::now()),
+            hide
+        );
+        let show = step(WebviewRole::Main, &mut e, Event::Show, Instant::now());
+        assert_eq!(
+            step(
+                WebviewRole::Main,
+                &mut e,
+                Event::Focus(true),
+                Instant::now()
+            ),
+            show
         );
     }
 }

@@ -81,6 +81,10 @@ where
     let (tx, rx) = oneshot::channel();
     window
         .with_webview(move |pw| {
+            // 超时后不再执行排队的操作，避免 API 已生效却无法确认结果。
+            if tx.is_closed() {
+                return;
+            }
             let _ = tx.send(f(pw));
         })
         .map_err(|e| e.to_string())?;
@@ -97,9 +101,17 @@ async fn wait<T>(rx: oneshot::Receiver<Result<T, String>>) -> Result<T, String> 
 
 /// 休眠 = `MemoryUsageTargetLevel` 设 Low：WebView2 会丢掉能重建的缓存、压低渲染进程的内存，
 /// 页面照常可用，只是回来时图片之类要重新解码。设 Normal 即恢复。
-pub(super) fn set_dormant(window: &WebviewWindow, dormant: bool) {
+pub(super) async fn set_dormant(
+    window: &WebviewWindow,
+    dormant: bool,
+    revision: super::Revision,
+) -> Result<(), String> {
     let label = window.label().to_owned();
-    let dispatched = window.with_webview(move |pw| {
+    let current_window = window.clone();
+    on_webview(window, move |pw| {
+        if !super::is_current(&current_window, revision) {
+            return Err("窗口状态已改变".into());
+        }
         let level = if dormant {
             COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
         } else {
@@ -112,14 +124,42 @@ pub(super) fn set_dormant(window: &WebviewWindow, dormant: bool) {
                 .and_then(|core| core.cast::<ICoreWebView2_19>())
                 .and_then(|core| core.SetMemoryUsageTargetLevel(level))
         };
-        match result {
+        match &result {
             Ok(()) => tracing::debug!(target: "ncd_tauri::webview_scheduler", %label, dormant, "WebView 内存级别已切换"),
             Err(err) => tracing::warn!(target: "ncd_tauri::webview_scheduler", %label, dormant, "切换 WebView 内存级别失败: {err}"),
         }
-    });
-    if let Err(err) = dispatched {
-        tracing::debug!(target: "ncd_tauri::webview_scheduler", "WebView 已不在，跳过内存级别切换: {err}");
-    }
+        result.map_err(|error| error.to_string())
+    }).await
+}
+
+pub(super) async fn set_visible(
+    window: &WebviewWindow,
+    visible: bool,
+    revision: super::Revision,
+) -> Result<(), String> {
+    let current_window = window.clone();
+    on_webview(window, move |pw| {
+        if !super::is_current(&current_window, revision) {
+            return Err("窗口状态已改变".into());
+        }
+        // SAFETY: 在该 WebView 的 UI 线程上设置并读取 controller，引用活到调用结束。
+        unsafe {
+            let controller = pw.controller();
+            controller
+                .SetIsVisible(visible)
+                .map_err(|error| error.to_string())?;
+            let mut applied = BOOL::default();
+            controller
+                .IsVisible(&mut applied)
+                .map_err(|error| error.to_string())?;
+            if applied.as_bool() == visible {
+                Ok(())
+            } else {
+                Err("WebView 可见性未生效".into())
+            }
+        }
+    })
+    .await
 }
 
 fn read_main_frame_id(pw: &PlatformWebview) -> windows::core::Result<u32> {

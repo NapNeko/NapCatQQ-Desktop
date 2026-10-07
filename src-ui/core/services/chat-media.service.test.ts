@@ -212,6 +212,37 @@ describe('native chat media protocol', () => {
             'https://cdn.example/fresh.png',
         );
     });
+    it('limits image resolution to four requests while audio can still start', async () => {
+        let active = 0;
+        let peak = 0;
+        const finish: Array<() => void> = [];
+        const call = vi.fn((_bot, action, params) => {
+            if (action !== 'get_image') return Promise.resolve(ok({ base64: 'SUQzAA==' }));
+            active += 1;
+            peak = Math.max(peak, active);
+            return new Promise<DebugCallResponse>((resolve) =>
+                finish.push(() => {
+                    active -= 1;
+                    resolve(ok({ url: `https://cdn.example/${params.file}.png` }));
+                }),
+            );
+        });
+        const service = createChatMediaService(call);
+        const requests = Array.from({ length: 8 }, (_, index) =>
+            service.image(target, { file: `limited-${index}` }, true),
+        );
+        expect(finish).toHaveLength(4);
+        const duplicate = service.image(target, { file: 'limited-7' }, true);
+        await expect(service.record(target, { file: 'voice.silk' })).resolves.toBe(
+            'data:audio/mpeg;base64,SUQzAA==',
+        );
+        finish.splice(0).forEach((resolve) => resolve());
+        await vi.waitFor(() => expect(finish).toHaveLength(4));
+        finish.splice(0).forEach((resolve) => resolve());
+        await expect(Promise.all([...requests, duplicate])).resolves.toHaveLength(9);
+        expect(peak).toBe(4);
+        expect(call.mock.calls.filter((args) => args[1] === 'get_image')).toHaveLength(8);
+    });
     it('prefers transcoded audio over SnowLuma original URLs without a format suffix', async () => {
         vi.spyOn(chatService, 'call').mockResolvedValue(
             ok({
