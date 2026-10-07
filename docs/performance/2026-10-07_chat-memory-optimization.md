@@ -44,7 +44,7 @@
 
 ## 真实产品原生验收
 
-使用 `product_dual_window_probe`、独立 bundle identifier 与临时数据根，避免单实例插件把操作转发到另一个工作区。验收程序使用产品 AppState 与窗口命令，带 CDP 仅用于驱动和检查，未调用聊天发送命令。
+本次运行使用临时 `product_dual_window_probe` 入口，在构建时指定独立 bundle identifier，并在启动时指定临时数据根与 WebView profile，避免单实例插件把操作转发到另一个工作区。验收程序使用产品 AppState 与窗口命令，带 CDP 仅用于驱动和检查，未调用聊天发送命令。该入口依赖外部参数才能隔离，已在 PR 审查后移除，避免默认运行时误触生产实例。
 
 **空临时数据根触发了产品的旧配置迁移，因此该次运行不是空账号测试。** 只用它验收真实窗口和模块加载行为，没有把它作为干净的前后内存对照。生产注册表 InstallDir / DataRoot 指针经检查未改变；测试复制的账号配置、档案、日志与截图已单独清除。
 
@@ -70,7 +70,7 @@
 - 修改的 UI 文件 Prettier 检查、修改及新增 Rust 文件 rustfmt 检查通过；无 IPC 类型变更。
 - 默认 identifier 的正式 release 可执行文件已生成，没有构建 MSI、提交或推送。
 
-原始受控日志保留在本机 `tmp/perf/final-chat-repeat.log`，优化前数据见[调查报告](2026-10-07_chat-dual-window-memory-report.md)。探针与产品入口见 `src-tauri/examples/`。测试 profile 的批量删除被执行策略拦截（只返回 `blocked by policy`，没有具体理由）；账号配置等明确文件通过编辑器删除，剩余临时缓存目录是 `tmp/perf/optimized-product-profile/` 和 `tmp/perf/optimized-product-profile-final/`。
+原始受控日志保留在本机 `tmp/perf/final-chat-repeat.log`，优化前数据见[调查报告](2026-10-07_chat-dual-window-memory-report.md)。保留的隔离探针见 `src-tauri/examples/chat_multiwindow_probe.rs`，不调用生产 runner。测试 profile 的批量删除被执行策略拦截（只返回 `blocked by policy`，没有具体理由）；账号配置等明确文件通过编辑器删除，剩余临时缓存目录是 `tmp/perf/optimized-product-profile/` 和 `tmp/perf/optimized-product-profile-final/`。
 
 | 最终产物 | SHA-256 |
 | --- | --- |
