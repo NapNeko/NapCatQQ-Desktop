@@ -226,6 +226,14 @@ impl WebviewScheduler {
             entries.remove(label);
         }
     }
+
+    fn is_hidden(&self, label: &str) -> bool {
+        self.entries.lock().ok().is_some_and(|entries| {
+            entries
+                .get(label)
+                .is_some_and(|registration| registration.entry.is_hidden())
+        })
+    }
 }
 
 /// 显示窗口：先放出 WebView、恢复内存级别，再显示原生窗口，免得闪一帧空白。
@@ -245,8 +253,27 @@ pub fn hide_window(window: &WebviewWindow) -> Result<(), String> {
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(focused) => {
+            if let Some(event) = policy::native_focus_event(
+                *focused,
+                window.is_visible().unwrap_or(false),
+                window.is_minimized().unwrap_or(false),
+            ) && let Some(webview) = window.app_handle().get_webview_window(window.label())
+            {
+                notify(&webview, event);
+            }
+        }
+        WindowEvent::Resized(_) => {
             if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
-                notify(&webview, Event::Focus(*focused));
+                if window.is_minimized().unwrap_or(false) {
+                    notify(&webview, Event::Hide);
+                } else if window.is_visible().unwrap_or(false)
+                    && window
+                        .app_handle()
+                        .try_state::<WebviewScheduler>()
+                        .is_some_and(|scheduler| scheduler.is_hidden(window.label()))
+                {
+                    notify(&webview, Event::Show);
+                }
             }
         }
         WindowEvent::Destroyed => {
