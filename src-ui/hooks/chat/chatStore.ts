@@ -12,12 +12,14 @@ import {
     restoreArchive,
     mergeRecentConversations,
 } from '../../core/domain/chat/archive';
-import { deduplicateMessages } from '../../core/domain/chat/messageIdentity';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import {
     accountKey,
     emptyAccount,
-    ingestMessage,
+    ingestMessages,
+    mergeArchiveMessages,
+    mergeMessageRows,
+    trimAccountMessages,
     openConversation,
     setDraft,
     addPending,
@@ -32,6 +34,7 @@ import {
     type Draft,
     type SessionKey,
 } from '../../core/domain/chat/model';
+import { HISTORY_PAGE_SIZE, type ReadingAnchor } from '../../core/domain/chat/messageWorkingSet';
 import { buildMessageSegments } from '../../core/domain/debug/composerModel';
 import { localFileTokenFor } from '../../core/domain/debug/streamActions';
 import { debugErrorCopy } from '../../core/domain/debug/errorCopy';
@@ -77,6 +80,7 @@ export class ChatAccountStore {
     private reading: SessionKey | null = null;
     private sends = new Map<SessionKey, number>();
     private historyCursor = new Map<SessionKey, string>();
+    private pagingAnchors = new Map<SessionKey, ReadingAnchor>();
     private contactsRequest: Promise<void> | null = null;
     private restoreRequest: Promise<void> | null = null;
     private saveRequest: Promise<void> | null = null;
@@ -123,6 +127,64 @@ export class ChatAccountStore {
     };
     private update(patch: Partial<ChatSnapshot>) {
         const previous = this.snapshot.account;
+        if (
+            patch.account &&
+            (patch.account.messages !== previous.messages ||
+                patch.account.active !== previous.active)
+        ) {
+            for (const [key, read] of this.timelineReaders) {
+                const value = read();
+                if (value) this.readingPositions[key] = value;
+            }
+            const active = patch.account.active;
+            const saved = active && this.readingPositions[active];
+            const anchor = active
+                ? (this.pagingAnchors.get(active) ??
+                  (saved ? { session: active, ...saved } : undefined))
+                : undefined;
+            let account =
+                patch.account.archiveMessages !== previous.archiveMessages
+                    ? patch.account
+                    : {
+                          ...patch.account,
+                          archiveMessages: mergeArchiveMessages(
+                              previous.archiveMessages ?? previous.messages,
+                              patch.account.messages,
+                          ),
+                      };
+            if (
+                anchor &&
+                !anchor.atBottom &&
+                !account.messages.some(
+                    (message) =>
+                        message.session === anchor.session &&
+                        (message.key === anchor.messageKey ||
+                            (!!anchor.messageId && message.id === anchor.messageId)),
+                )
+            ) {
+                const savedMessages =
+                    account.archiveMessages?.filter(
+                        (message) => message.session === anchor.session,
+                    ) ?? [];
+                const index = savedMessages.findIndex(
+                    (message) =>
+                        message.key === anchor.messageKey ||
+                        (!!anchor.messageId && message.id === anchor.messageId),
+                );
+                if (index >= 0)
+                    account = {
+                        ...account,
+                        messages: mergeMessageRows(
+                            savedMessages.slice(
+                                Math.max(0, index - HISTORY_PAGE_SIZE),
+                                index + HISTORY_PAGE_SIZE * 2,
+                            ),
+                            account.messages,
+                        ),
+                    };
+            }
+            patch = { ...patch, account: trimAccountMessages(account, anchor) };
+        }
         if (patch.account && patch.account.messages !== previous.messages) {
             const retained = new Set(patch.account.messages.map((message) => message.key));
             const retainedIds = new Set(
@@ -142,11 +204,18 @@ export class ChatAccountStore {
             if (evicted.size) {
                 const history = { ...(patch.history ?? this.snapshot.history) };
                 for (const key of evicted) {
-                    this.historyCursor.delete(key);
-                    if (history[key])
+                    const oldest = patch.account.messages.find(
+                        (message) => message.session === key && message.id,
+                    );
+                    const before = previous.messages.find(
+                        (message) => message.session === key && message.id,
+                    );
+                    if (oldest?.id) this.historyCursor.set(key as SessionKey, oldest.id);
+                    else this.historyCursor.delete(key as SessionKey);
+                    if (history[key] && (!oldest || (before && oldest.at > before.at)))
                         history[key] = {
                             loading: history[key].loading,
-                            loaded: false,
+                            loaded: !!oldest,
                             done: false,
                             error: '',
                         };
@@ -278,6 +347,10 @@ export class ChatAccountStore {
     private account(account: Account) {
         this.update({ account });
     }
+    private currentAnchor(key: SessionKey): ReadingAnchor | undefined {
+        const value = this.timelineReaders.get(key)?.() ?? this.readingPositions[key];
+        return value ? { session: key, ...value } : undefined;
+    }
     setReading(key: SessionKey | null) {
         this.reading = key;
         if (this.transport === chatService)
@@ -288,7 +361,25 @@ export class ChatAccountStore {
     }
     open(contact: Contact) {
         delete this.initialReadingPositions[contact.key];
-        this.account(openConversation(this.snapshot.account, contact));
+        delete this.readingPositions[contact.key];
+        const state = this.snapshot.account;
+        const rows =
+            state.archiveMessages?.filter((message) => message.session === contact.key) ?? [];
+        const recent = rows
+            .slice(-HISTORY_PAGE_SIZE)
+            .map((message) => (message.gapBefore ? { ...message, gapBefore: false } : message));
+        this.account(
+            openConversation(
+                {
+                    ...state,
+                    messages: mergeMessageRows(
+                        [...rows.filter((message) => message.status !== 'sent'), ...recent],
+                        state.messages,
+                    ),
+                },
+                contact,
+            ),
+        );
         if (this.transport === chatService)
             void chatDesktopService
                 .markRead(this.target.bot_id, this.snapshot.account.selfId, contact.key)
@@ -391,27 +482,30 @@ export class ChatAccountStore {
                     return;
                 let account = this.snapshot.account;
                 let connection = this.snapshot.connection;
+                const payloads: unknown[] = [];
                 for (const event of batch.events) {
                     if (event.seq <= account.lastSeq) continue;
                     const body = event.body;
                     if (body.kind === 'ob11') {
                         const self = id(body.payload.self_id);
                         if (self && self !== account.selfId) continue;
-                        account = ingestMessage(
-                            account,
-                            body.payload,
-                            false,
-                            typeof document !== 'undefined' &&
-                                document.visibilityState === 'visible' &&
-                                document.hasFocus()
-                                ? this.reading
-                                : null,
-                        );
+                        payloads.push(body.payload);
                     } else if (body.kind === 'receiver') connection = body.state;
                     else if (body.kind === 'gap' || body.kind === 'dropped')
                         account = { ...account, gap: true };
                     account = { ...account, lastSeq: event.seq };
                 }
+                account = ingestMessages(
+                    account,
+                    payloads,
+                    false,
+                    typeof document !== 'undefined' &&
+                        document.visibilityState === 'visible' &&
+                        document.hasFocus()
+                        ? this.reading
+                        : null,
+                    account.active ? this.currentAnchor(account.active) : undefined,
+                );
                 const becameConnected =
                     connection.state === 'connected' &&
                     this.snapshot.connection.state !== 'connected';
@@ -508,16 +602,74 @@ export class ChatAccountStore {
     ensureHistory(key: SessionKey): Promise<void> | undefined {
         const history = this.snapshot.history[key];
         if (history?.loaded || history?.loading || history?.error) return;
-        return this.history(key);
+        const saved = this.initialReadingPositions[key];
+        return this.history(
+            key,
+            saved && !saved.atBottom ? (saved.messageId ?? undefined) : undefined,
+        );
     }
-    async history(key: SessionKey): Promise<void> {
+    async latest(key: SessionKey): Promise<void> {
+        if (this.snapshot.history[key]?.loading) return;
+        this.pagingAnchors.set(key, { session: key, messageKey: '', atBottom: true });
+        delete this.readingPositions[key];
+        delete this.initialReadingPositions[key];
+        this.historyCursor.delete(key);
+        const state = this.snapshot.account;
+        const recent =
+            state.archiveMessages
+                ?.filter((message) => message.session === key)
+                .slice(-HISTORY_PAGE_SIZE)
+                .map((message) =>
+                    message.gapBefore ? { ...message, gapBefore: false } : message,
+                ) ?? [];
+        const recentKeys = new Set(recent.map((message) => message.key));
+        const recentIds = new Set(recent.flatMap((message) => (message.id ? [message.id] : [])));
+        this.account({
+            ...state,
+            messages: mergeMessageRows(
+                recent,
+                state.messages.filter(
+                    (message) =>
+                        message.session !== key ||
+                        message.status !== 'sent' ||
+                        recentKeys.has(message.key) ||
+                        (!!message.id && recentIds.has(message.id)),
+                ),
+            ),
+        });
+        this.historyCursor.delete(key);
+        this.update({
+            history: {
+                ...this.snapshot.history,
+                [key]: { loading: false, loaded: false, done: false, error: '' },
+            },
+        });
+        try {
+            await this.history(key);
+            const message = this.snapshot.account.messages
+                .filter((row) => row.session === key)
+                .at(-1);
+            if (message)
+                this.readingPositions[key] = {
+                    messageKey: message.key,
+                    messageId: message.id ?? null,
+                    offset: 0,
+                    atBottom: true,
+                };
+        } finally {
+            this.pagingAnchors.delete(key);
+        }
+    }
+    async history(key: SessionKey, before?: string): Promise<void> {
         if (
             this.snapshot.connection.state !== 'connected' ||
             this.snapshot.history[key]?.loading ||
-            this.snapshot.history[key]?.done
+            (!before && this.snapshot.history[key]?.done)
         )
             return;
         const epoch = this.epoch;
+        const anchor = this.pagingAnchors.get(key) ?? this.currentAnchor(key);
+        const wasDone = this.snapshot.history[key]?.done ?? false;
         const set = (
             loading: boolean,
             done = false,
@@ -530,10 +682,10 @@ export class ChatAccountStore {
         set(true);
         try {
             const group = key.startsWith('group:');
-            const cursor = this.historyCursor.get(key);
+            const cursor = before ?? this.historyCursor.get(key);
             const params: Record<string, unknown> = {
                 [group ? 'group_id' : 'user_id']: this.peer(key),
-                count: 50,
+                count: HISTORY_PAGE_SIZE,
                 reverse_order: this.target.backend === 'snowluma',
                 disable_get_url: false,
                 parse_mult_msg: true,
@@ -556,34 +708,76 @@ export class ChatAccountStore {
                 ),
             );
             if (epoch !== this.epoch) return;
-            // 请求期间缓存若被裁剪，旧游标已不连续，须重新取得最近一页。
-            if (cursor && cursor !== this.historyCursor.get(key)) {
-                set(false, false, '', false);
-                return this.history(key);
-            }
             if (!Array.isArray(data.messages)) throw new Error('此通道未返回可识别的消息历史');
             const rows = data.messages
                 .map(record)
                 .sort((a, b) => Number(a.time || 0) - Number(b.time || 0));
-            let account = this.snapshot.account;
-            for (const row of rows)
-                account = ingestMessage(
-                    account,
-                    {
-                        ...row,
-                        message_type: group ? 'group' : 'private',
-                        ...(group ? { group_id: this.peer(key) } : { target_id: this.peer(key) }),
-                    },
-                    true,
-                );
-            account = { ...account, messages: deduplicateMessages(account.messages) };
-            // NapCat 的参数虽名为 message_seq，实际按短 message_id 查内部 MsgId。
+            const previous = this.snapshot.account.messages.filter(
+                (message) => message.session === key,
+            );
+            const boundary = before && previous.findIndex((message) => message.id === before);
+            const left =
+                typeof boundary === 'number' && boundary > 0 ? previous[boundary - 1] : undefined;
+            const incoming = rows.map((row) => ({
+                ...row,
+                message_type: group ? 'group' : 'private',
+                ...(group ? { group_id: this.peer(key) } : { target_id: this.peer(key) }),
+            }));
             const next = id(rows[0]?.message_id);
-            if (next) this.historyCursor.set(key, next);
+            const anchorIndex =
+                anchor &&
+                previous.findIndex(
+                    (message) =>
+                        message.key === anchor.messageKey || message.id === anchor.messageId,
+                );
+            const pagingAnchor =
+                before || !anchor || anchor.atBottom || (anchorIndex ?? -1) > HISTORY_PAGE_SIZE
+                    ? {
+                          session: key,
+                          messageKey: `${key}/${before || next}`,
+                          messageId: before || next,
+                          atBottom: false,
+                      }
+                    : anchor;
+            this.pagingAnchors.set(key, pagingAnchor);
+            let account = ingestMessages(
+                this.snapshot.account,
+                incoming,
+                true,
+                null,
+                pagingAnchor,
+                key,
+            );
+            if (before && left && previous.find((message) => message.id === before)?.gapBefore) {
+                const filled = rows.some((row) => id(row.message_id) === left.id);
+                account = {
+                    ...account,
+                    messages: account.messages.map((message) =>
+                        message.session !== key
+                            ? message
+                            : message.id === before
+                              ? { ...message, gapBefore: false }
+                              : message.id === next
+                                ? { ...message, gapBefore: !filled }
+                                : message,
+                    ),
+                };
+            }
+            // NapCat 的参数虽名为 message_seq，实际按短 message_id 查内部 MsgId。
             this.account(account);
-            set(false, !next || next === cursor || rows.length < 50, '', true);
+            this.pagingAnchors.delete(key);
+            const oldest = this.snapshot.account.messages.find(
+                (message) => message.session === key && message.id,
+            );
+            if (oldest?.id) this.historyCursor.set(key, oldest.id);
+            const done = before
+                ? wasDone && oldest?.id === previous[0]?.id
+                : !next || next === cursor || rows.length < HISTORY_PAGE_SIZE;
+            set(false, done, '', true);
         } catch (error) {
             if (epoch === this.epoch) set(false, false, errorText(error));
+        } finally {
+            this.pagingAnchors.delete(key);
         }
     }
     async send(key: SessionKey) {
@@ -665,10 +859,14 @@ export class ChatAccountStore {
             time: Math.floor(Date.now() / 1000),
         };
         if (group) echo.group_id = this.peer(key);
-        this.account(ingestMessage(this.snapshot.account, echo));
+        this.account(
+            ingestMessages(this.snapshot.account, [echo], false, null, this.currentAnchor(key)),
+        );
     }
     async retry(messageKey: string) {
-        const message = this.snapshot.account.messages.find((m) => m.key === messageKey);
+        const message =
+            this.snapshot.account.messages.find((m) => m.key === messageKey) ??
+            this.snapshot.account.archiveMessages?.find((m) => m.key === messageKey);
         if (!message?.mine || message.status !== 'failed' || message.recalled) return;
         const key = message.session;
         if (
@@ -706,6 +904,11 @@ export class ChatAccountStore {
                   params: { ...peer, message: segments },
                   segments,
               };
+        if (!this.snapshot.account.messages.some((row) => row.key === message.key))
+            this.account({
+                ...this.snapshot.account,
+                messages: [...this.snapshot.account.messages, { ...message, status: 'sending' }],
+            });
         await this.runSends(key, [operation], message.key);
     }
     private async runSends(key: SessionKey, operations: SendOperation[], retryKey?: string) {

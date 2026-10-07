@@ -19,16 +19,16 @@ import {
     X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { Button } from '../../../shared/ui/Button';
 import {
-    Button,
     Dialog,
     DialogContent,
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    Progress,
-    TextField,
-} from '../../../shared/ui';
+} from '../../../shared/ui/Dialog';
+import { Progress } from '../../../shared/ui/Progress';
+import { TextField } from '../../../shared/ui/TextField';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui/Popover';
 import { ContextMenuItem } from '../../../shared/ui/ContextMenu';
 import { cn } from '../../../shared/utils/cn';

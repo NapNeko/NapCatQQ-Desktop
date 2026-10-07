@@ -28,12 +28,16 @@ export function useWindowControls(): WindowControls {
             const initial = await windowControlService.isMaximized();
             if (cancelled) return;
             setIsMaximized(initial);
-            unlisten = await windowControlService.onResize((latest) => {
+            const stop = await windowControlService.onResize((latest) => {
                 if (!cancelled) setIsMaximized(latest);
             });
+            if (cancelled) stop();
+            else unlisten = stop;
         };
 
-        void setup();
+        void setup().catch((error) => {
+            if (!cancelled) console.warn('窗口控制订阅失败:', error);
+        });
         return () => {
             cancelled = true;
             unlisten?.();

@@ -7,6 +7,9 @@ import {
     text,
     ingestMessage,
     MESSAGE_LIMIT,
+    mergeArchiveMessages,
+    mergeMessageRows,
+    trimAccountMessages,
     type Account,
     type Conversation,
     type Message,
@@ -28,10 +31,13 @@ export function archiveOf(account: Account): ChatArchive {
         v: 1,
         selfId: account.selfId,
         conversations: conversations.map((c) => ({ ...c, boxed: c.type === 'group' && !!c.boxed })),
-        messages: account.messages
+        messages: mergeArchiveMessages(account.archiveMessages ?? [], account.messages)
             .filter((m) => keys.has(m.session))
             .slice(-MESSAGE_LIMIT)
-            .map((m) => ({ ...m, status: m.status === 'sending' ? 'unknown' : m.status })),
+            .map(({ gapBefore: _gapBefore, ...m }) => ({
+                ...m,
+                status: m.status === 'sending' ? 'unknown' : m.status,
+            })),
     };
 }
 
@@ -56,6 +62,7 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
             status: m.status === 'sending' ? 'unknown' : m.status,
         });
     }
+    for (const m of state.archiveMessages ?? state.messages) byKey.set(identity(m), m);
     for (const m of state.messages) byKey.set(identity(m), m);
     for (const [key, live] of Object.entries(state.conversations)) {
         const saved = conversations[key];
@@ -71,7 +78,13 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
               }
             : live;
     }
-    return { ...state, conversations, messages: deduplicateMessages([...byKey.values()]) };
+    const messages = mergeMessageRows([], deduplicateMessages([...byKey.values()]));
+    return trimAccountMessages({
+        ...state,
+        conversations,
+        messages,
+        archiveMessages: mergeArchiveMessages([], messages),
+    });
 }
 
 export function mergeRecentConversations(state: Account, rows: unknown[]): Account {

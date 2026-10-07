@@ -3,12 +3,22 @@ import {
     accountKey,
     emptyAccount,
     ingestMessage,
+    ingestMessages,
+    retainMessages,
     openConversation,
     settleSend,
     addPending,
     parseContact,
     setDraft,
+    trimAccountMessages,
 } from './model';
+import {
+    WORKING_BYTE_LIMIT,
+    ARCHIVE_BYTE_LIMIT,
+    messageBytes,
+    retainArchiveMessages,
+} from './messageWorkingSet';
+import { archiveOf, restoreArchive } from './archive';
 
 const payload = (extra = {}) => ({
     post_type: 'message',
@@ -22,7 +32,25 @@ const payload = (extra = {}) => ({
     ...extra,
 });
 describe('native chat projection', () => {
-    it('keeps the older page being read when the recent-message buffer is full', () => {
+    it('keeps an archive suffix without a hidden gap when the next older message exceeds its budget', () => {
+        const base = ingestMessage(emptyAccount('99'), payload()).messages[0];
+        const contents = [
+            'older small message',
+            'M'.repeat(5 * 1024 * 1024),
+            'N'.repeat(4 * 1024 * 1024),
+        ];
+        const rows = contents.map((content, index) => ({
+            ...base,
+            key: `group:12/${index + 1}`,
+            id: String(index + 1),
+            at: index + 1,
+            segments: [{ type: 'text', data: { text: content } }],
+        }));
+        expect(messageBytes(rows[2]) + messageBytes(rows[0])).toBeLessThan(ARCHIVE_BYTE_LIMIT);
+        expect(messageBytes(rows[2]) + messageBytes(rows[1])).toBeGreaterThan(ARCHIVE_BYTE_LIMIT);
+        expect(retainArchiveMessages(rows).map((message) => message.id)).toEqual(['3']);
+    });
+    it('keeps a bounded older page and the recent page while loading history', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         const message = state.messages[0];
         state.messages = Array.from({ length: 5000 }, (_, i) => ({
@@ -33,7 +61,9 @@ describe('native chat projection', () => {
         }));
         state = ingestMessage(state, payload({ message_id: 1, message_seq: '1', time: 0.5 }), true);
         expect(state.messages[0].id).toBe('1');
-        expect(state.messages).toHaveLength(5001);
+        expect(state.messages.length).toBeLessThanOrEqual(200);
+        expect(state.archiveMessages).toHaveLength(5000);
+        expect(state.messages.at(-1)?.id).toBe('5099');
     });
     it('scopes accounts by bot and signed-in identity', () => {
         expect(accountKey('a', '1')).not.toBe(accountKey('b', '1'));
@@ -50,19 +80,76 @@ describe('native chat projection', () => {
             at: i + 1000,
         }));
         state = ingestMessage(state, payload({ group_id: 13, message_id: 9, time: 10 }));
-        expect(state.messages).toHaveLength(5001);
+        expect(state.messages.length).toBeLessThanOrEqual(200);
         expect(state.messages.some((row) => row.session === 'group:13')).toBe(true);
         state = ingestMessage(state, payload({ group_id: 13, message_id: 1, time: 0.5 }), true);
-        expect(state.messages.filter((row) => row.session === 'group:12')).toHaveLength(5000);
+        expect(
+            state.messages.filter((row) => row.session === 'group:12').length,
+        ).toBeLessThanOrEqual(150);
         expect(state.messages.some((row) => row.session === 'group:13' && row.id === '1')).toBe(
             true,
         );
+    });
+    it('retains the reading anchor, a gap and live tail while bounding a busy active conversation', () => {
+        const message = ingestMessage(emptyAccount('99'), payload()).messages[0];
+        const messages = Array.from({ length: 20000 }, (_, index) => ({
+            ...message,
+            key: `group:12/${index}`,
+            id: String(index),
+            at: index,
+        }));
+        const retained = retainMessages(messages, 'group:12', null, {
+            session: 'group:12',
+            messageKey: 'group:12/500',
+            messageId: '500',
+            atBottom: false,
+        });
+        expect(retained).toHaveLength(200);
+        expect(retained.some((row) => row.id === '500')).toBe(true);
+        expect(retained.at(-1)?.id).toBe('19999');
+        expect(retained.filter((row) => row.gapBefore)).toHaveLength(1);
+        expect(retainMessages(retained, 'private:88').length).toBeLessThanOrEqual(50);
+    });
+    it('bounds variable message content and keeps batches sorted and unread only once', () => {
+        let state = emptyAccount('99');
+        state.active = 'group:12';
+        state = ingestMessages(
+            state,
+            Array.from({ length: 300 }, (_, index) =>
+                payload({
+                    message_id: index + 1,
+                    time: 300 - index,
+                    message: '长消息'.repeat(20000),
+                }),
+            ),
+        );
+        expect(
+            state.messages.reduce((bytes, message) => bytes + messageBytes(message), 0),
+        ).toBeLessThanOrEqual(WORKING_BYTE_LIMIT);
+        expect(state.messages.map((row) => row.at)).toEqual(
+            [...state.messages.map((row) => row.at)].sort((a, b) => a - b),
+        );
+        expect(state.conversations['group:12'].unread).toBe(300);
+        const replay = ingestMessages(state, [
+            payload({ message_id: 1, time: 300 }),
+            payload({ message_id: 1, time: 300 }),
+        ]);
+        expect(replay.conversations['group:12'].unread).toBe(300);
     });
     it('deduplicates replay without increasing unread', () => {
         const first = ingestMessage(emptyAccount('99'), payload());
         const replay = ingestMessage(first, payload());
         expect(replay.messages).toHaveLength(1);
         expect(replay.conversations['group:12'].unread).toBe(1);
+    });
+    it('deduplicates archived id-less messages while preserving distinct event sequences', () => {
+        const raw = payload({ message_id: undefined, message_seq: 1234 });
+        let state = ingestMessage(emptyAccount('99'), raw);
+        state = ingestMessage({ ...state, messages: [] }, raw);
+        expect(state.messages).toHaveLength(0);
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, payload({ message_id: undefined, message_seq: 1235 }));
+        expect(state.conversations['group:12'].unread).toBe(2);
     });
     it('does not deduplicate message ids across conversations', () => {
         const first = ingestMessage(emptyAccount('99'), payload());
@@ -178,6 +265,18 @@ const poke = (extra = {}) => ({
     ...extra,
 });
 describe('poke notices', () => {
+    it('deduplicates an archived poke after it leaves the working set', () => {
+        let state = ingestMessage(emptyAccount('99'), poke());
+        state = { ...state, messages: [] };
+        state = ingestMessage(state, poke());
+        expect(state.messages).toHaveLength(0);
+        expect(state.archiveMessages).toHaveLength(1);
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, poke({ time: 201 }));
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, poke({ time: 300 }));
+        expect(state.conversations['group:12'].unread).toBe(2);
+    });
     it('renders an incoming poke as a system line with the sender name and bumps unread', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         state = ingestMessage(state, poke());
@@ -268,6 +367,16 @@ const join = (extra = {}) => ({
     ...extra,
 });
 describe('group join notices', () => {
+    it('deduplicates an archived join replay without increasing unread', () => {
+        let state = ingestMessage(emptyAccount('99'), join());
+        state = { ...state, messages: [] };
+        state = ingestMessage(state, join());
+        expect(state.messages).toHaveLength(0);
+        expect(state.archiveMessages).toHaveLength(1);
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, join({ time: 300 }));
+        expect(state.conversations['group:12'].unread).toBe(2);
+    });
     it('renders a join as a system line and bumps unread', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         state = ingestMessage(state, join());
@@ -309,6 +418,75 @@ describe('group join notices', () => {
 });
 
 describe('local image source carry', () => {
+    it('keeps a settled large pasted image while archiving only its metadata', () => {
+        const file = 'base64://' + 'A'.repeat(7 * 1024 * 1024);
+        let state = openConversation(emptyAccount('99'), {
+            key: 'group:12',
+            type: 'group',
+            id: '12',
+            name: '测试群',
+        });
+        state = settleSend(
+            addPending(
+                state,
+                'group:12',
+                'large',
+                [
+                    { type: 'image', data: { file, name: '粘贴图片.png' } },
+                    { type: 'text', data: { text: '图片说明' } },
+                ],
+                100000,
+            ),
+            'large',
+            { state: 'sent', id: '70' },
+        );
+        state = trimAccountMessages(state);
+        expect(state.messages[0].segments[0].data.file).toBe(file);
+        expect(state.archiveMessages?.[0].id).toBe('70');
+        expect(state.archiveMessages?.[0].segments[0].data.file).toBeUndefined();
+        expect(state.archiveMessages?.[0].segments[1].data.text).toBe('图片说明');
+        const saved = archiveOf(state);
+        expect(saved.messages).toHaveLength(1);
+        expect(JSON.stringify(saved).length).toBeLessThan(2048);
+        state = ingestMessage(state, payload({ message_id: 71, time: 101 }));
+        expect(state.messages.some((message) => message.id === '70')).toBe(true);
+        expect(state.messages.some((message) => message.id === '71')).toBe(true);
+        const hydrated = restoreArchive(state, saved);
+        expect(
+            hydrated.messages.find((message) => message.id === '70')?.segments[0].data.file,
+        ).toBe(file);
+    });
+    it('does not retain multiple oversized local payloads in the settled working set', () => {
+        const file = 'base64://' + 'A'.repeat(5 * 1024 * 1024);
+        let state = openConversation(emptyAccount('99'), {
+            key: 'group:12',
+            type: 'group',
+            id: '12',
+            name: '测试群',
+        });
+        for (let index = 0; index < 3; index++) {
+            const requestId = `large-${index}`;
+            state = trimAccountMessages(
+                settleSend(
+                    addPending(
+                        state,
+                        'group:12',
+                        requestId,
+                        [{ type: 'image', data: { file } }],
+                        index,
+                    ),
+                    requestId,
+                    { state: 'sent', id: String(index) },
+                ),
+            );
+        }
+        expect(state.messages).toHaveLength(1);
+        expect(state.messages[0].id).toBe('2');
+        expect(state.archiveMessages).toHaveLength(3);
+        expect(
+            state.archiveMessages?.every((message) => message.segments[0].data.file === undefined),
+        ).toBe(true);
+    });
     it('keeps the local file on image segments when the echo replaces a pending send', () => {
         let state = addPending(
             emptyAccount('99'),

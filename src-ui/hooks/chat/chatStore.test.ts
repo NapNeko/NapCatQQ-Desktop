@@ -225,7 +225,7 @@ describe('chat lifecycle', () => {
             id: '8',
         });
     });
-    it('reloads an exhausted conversation after its cached messages are evicted', async () => {
+    it('keeps exhausted recent pages available while other conversations receive messages', async () => {
         const { transport } = setup();
         const seed = ingestMessage(emptyAccount('99'), {
             message_type: 'group',
@@ -277,19 +277,67 @@ describe('chat lifecycle', () => {
             store
                 .getSnapshot()
                 .account.messages.filter((message) => message.session === 'group:13'),
-        ).toHaveLength(0);
+        ).toHaveLength(1);
         expect(store.getSnapshot().history['group:13']).toMatchObject({
-            loaded: false,
-            done: false,
+            loaded: true,
+            done: true,
         });
         store.open({ key: 'group:13', type: 'group', id: '13', name: 'B' });
         await store.ensureHistory('group:13');
-        expect(transport.call).toHaveBeenCalledTimes(2);
+        expect(transport.call).toHaveBeenCalledTimes(1);
         expect(
             store
                 .getSnapshot()
                 .account.messages.filter((message) => message.session === 'group:13'),
         ).toHaveLength(1);
+    });
+    it('continues beyond the page budget without resetting the history cursor and can return to latest', async () => {
+        const { transport } = setup();
+        const cursors: unknown[] = [];
+        const call = vi.fn(async (_bot: string, _action: string, params: unknown) => {
+            const cursor = (params as { message_seq?: string }).message_seq;
+            cursors.push(cursor);
+            const end = cursor ? Number(cursor) - 1 : 1000;
+            return ok({
+                messages: Array.from({ length: 50 }, (_, index) => ({
+                    message_id: end - 49 + index,
+                    time: end - 49 + index,
+                    user_id: 22,
+                    message: `消息${end - 49 + index}`,
+                })),
+            });
+        });
+        const store = new ChatAccountStore(target, { ...transport, call });
+        await store.connect();
+        store.open({ key: 'group:12', type: 'group', id: '12', name: '群' });
+        for (let page = 0; page < 12; page++) {
+            const first = store
+                .getSnapshot()
+                .account.messages.find((message) => message.session === 'group:12');
+            if (first)
+                store.readingPosition('group:12', {
+                    messageKey: first.key,
+                    messageId: first.id!,
+                    offset: 14,
+                    atBottom: false,
+                });
+            await store.history('group:12');
+            expect(store.getSnapshot().account.messages.length).toBeLessThanOrEqual(200);
+        }
+        expect(cursors).toEqual([
+            undefined,
+            ...Array.from({ length: 11 }, (_, index) => String(951 - index * 50)),
+        ]);
+        expect(store.getSnapshot().account.messages[0].id).toBe('401');
+        expect(store.getSnapshot().account.messages.some((message) => message.gapBefore)).toBe(
+            true,
+        );
+        await store.latest('group:12');
+        expect(cursors.at(-1)).toBeUndefined();
+        expect(store.getSnapshot().account.messages.at(-1)?.id).toBe('1000');
+        expect(store.getSnapshot().account.messages.some((message) => message.gapBefore)).toBe(
+            false,
+        );
     });
     it('syncs contacts and recent conversations when an initially connecting receiver becomes ready', async () => {
         const { store, transport } = setup();
@@ -323,6 +371,7 @@ describe('chat lifecycle', () => {
     it('uses the oldest message ID for NapCat message_seq, not the NT sequence, and deduplicates overlapping rows', async () => {
         const { store, transport } = setup();
         await store.connect();
+        store.open({ key: 'group:12', type: 'group', id: '12', name: '群' });
         const page = (start: number) =>
             Array.from({ length: 50 }, (_, i) => ({
                 message_id: start + i + 100000,
@@ -472,6 +521,32 @@ describe('chat lifecycle', () => {
         expect(calls[0][2]).toMatchObject({
             message: [{ type: 'image', data: { file: 'base64://abc' } }],
         });
+    });
+    it('keeps a large settled image through reopening the current conversation and returning to latest', async () => {
+        const { store } = setup();
+        await store.connect();
+        const contact = {
+            key: 'group:12' as const,
+            type: 'group' as const,
+            id: '12',
+            name: '测试群',
+        };
+        const file = 'base64://' + 'A'.repeat(5 * 1024 * 1024);
+        store.open(contact);
+        store.draft('group:12', {
+            text: '',
+            reply: null,
+            attachments: [{ key: 'large', name: '截图.png', path: file, type: 'image' }],
+        });
+        await store.send('group:12');
+        expect(store.getSnapshot().account.messages[0].segments[0].data.file).toBe(file);
+        store.open(contact);
+        expect(store.getSnapshot().account.messages[0].segments[0].data.file).toBe(file);
+        await store.latest('group:12');
+        expect(store.getSnapshot().account.messages[0].segments[0].data.file).toBe(file);
+        expect(
+            store.getSnapshot().account.archiveMessages?.[0].segments[0].data.file,
+        ).toBeUndefined();
     });
     it('retries the complete failed image and text together without touching a newer draft or duplicating the message', async () => {
         const { store, transport } = setup();

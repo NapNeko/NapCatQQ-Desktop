@@ -54,10 +54,10 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
 }
 
 /// 轻量模式下重建主 WebView;已有窗口则仅 show/focus
-pub fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
+pub async fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         LIGHTWEIGHT_MODE.store(false, Ordering::SeqCst);
-        crate::webview_scheduler::show_window(&window)?;
+        crate::webview_scheduler::show_window(&window).await?;
         let _ = window.unminimize();
         let _ = window.set_focus();
         let app2 = app.clone();
@@ -79,7 +79,7 @@ pub fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
 
     apply_main_window_startup_geometry(app)?;
     let _ = crate::window_icon::apply_window_icon(app, &window);
-    crate::webview_scheduler::show_window(&window)?;
+    crate::webview_scheduler::show_window(&window).await?;
     let _ = window.set_focus();
 
     LIGHTWEIGHT_MODE.store(false, Ordering::SeqCst);

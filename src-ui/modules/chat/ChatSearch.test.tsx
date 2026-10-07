@@ -1,20 +1,27 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatSearch } from './ChatSearch';
-import { emptyAccount, ingestMessage } from '../../core/domain/chat/model';
+import { emptyAccount, ingestMessages, openConversation } from '../../core/domain/chat/model';
 
 function messages(count = 3, text = (id: number) => `Hello ${id}`) {
-    let account = emptyAccount('99');
-    for (let id = 1; id <= count; id++)
-        account = ingestMessage(account, {
+    const account = ingestMessages(
+        openConversation(emptyAccount('99'), {
+            key: 'group:12',
+            type: 'group',
+            id: '12',
+            name: '群',
+        }),
+        Array.from({ length: count }, (_, index) => ({
             message_type: 'group',
             group_id: 12,
             user_id: 88,
-            message_id: id,
-            time: id,
+            message_id: index + 1,
+            time: index + 1,
             sender: { nickname: '小明' },
-            message: text(id),
-        });
+            message: text(index + 1),
+        })),
+        true,
+    );
     return account.messages.map((m, i) => ({ ...m, recalled: i === 0 }));
 }
 describe('native message search', () => {

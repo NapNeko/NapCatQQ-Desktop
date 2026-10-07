@@ -246,8 +246,6 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     botRef.current = { id: target.bot_id, name: selfName };
     const callChannelRef = useRef(callChannel);
     callChannelRef.current = callChannel;
-    const targetRef = useRef(target);
-    targetRef.current = target;
     const { send: sendCall } = useDebugCall();
 
     const activeTab = useActiveDebugTab();
@@ -276,12 +274,13 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     }, []);
     const focusComposer = useRef<(() => void) | null>(null);
     const expanded = useRef(new Set<string>());
+    const mediaScope = JSON.stringify(['debug', botId, target.qq_id, target.backend, callChannel]);
 
     const api = useMemo<ChatViewApi>(() => {
         const media = createChatMediaService((_botId, action, params) =>
             sendCall(null, {
-                bot_id: botRef.current.id,
-                channel: callChannelRef.current,
+                bot_id: botId,
+                channel: callChannel,
                 action,
                 params,
                 timeout_ms: 30_000,
@@ -337,11 +336,12 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 return problem ? { ok: false, reason: problem } : { ok: true };
             },
             openImage: (url) => setLightbox(url),
-            readImage: (data, refresh) => media.image(targetRef.current, data, refresh),
-            readForward: (data) => media.forward(targetRef.current, data),
-            readRecord: (data) => media.record(targetRef.current, data),
-            readVideo: (data, refresh) => media.video(targetRef.current, data, refresh),
-            readRecordText: (messageId) => media.transcript(targetRef.current, messageId),
+            mediaScope,
+            readImage: (data, refresh) => media.image(target, data, refresh),
+            readForward: (data) => media.forward(target, data),
+            readRecord: (data) => media.record(target, data),
+            readVideo: (data, refresh) => media.video(target, data, refresh),
+            readRecordText: (messageId) => media.transcript(target, messageId),
             openLink: (url) => openExternal(url),
             revealMessage: (id) => revealRef.current?.(id) ?? false,
             isExpanded: (key) => expanded.current.has(key),
@@ -350,8 +350,8 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 else expanded.current.delete(key);
             },
         };
-        // sendCall 由 useDebugCall 按 queryClient 记死，引用不变
-    }, [openExternal, sendCall]);
+        // 旧排队请求仍使用原账号和通道，切换 scope 后不会把结果写进新账号缓存。
+    }, [openExternal, sendCall, mediaScope]);
 
     // ---- 输入框发往哪、回复谁
     const composerSessionKey =

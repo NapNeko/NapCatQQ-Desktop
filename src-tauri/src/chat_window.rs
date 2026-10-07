@@ -177,6 +177,9 @@ async fn open_chat_window_with_navigation(
         }
     }
     if let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) {
+        if release_main {
+            coordinator.release_main.store(true, Ordering::SeqCst);
+        }
         *coordinator.navigation.lock().await = navigation;
         if let Some(bot_id) = bot_id {
             state.chat.select_view_bot(bot_id);
@@ -189,9 +192,10 @@ async fn open_chat_window_with_navigation(
         if !coordinator.ready.load(Ordering::SeqCst) {
             return Ok(());
         }
-        crate::webview_scheduler::show_window(&window)?;
+        crate::webview_scheduler::show_window(&window).await?;
         let _ = window.unminimize();
         let _ = window.set_focus();
+        release_requested_main(&app).await?;
         return Ok(());
     }
     prepare(&app, "main", "popout").await?;
@@ -224,7 +228,7 @@ async fn open_chat_window_with_navigation(
     }
 }
 
-pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
+pub fn chat_window_config(app: &AppHandle) -> Result<tauri::utils::config::WindowConfig, String> {
     let mut conf = app
         .config()
         .app
@@ -239,6 +243,15 @@ pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, Strin
     conf.min_width = Some(480.0);
     conf.min_height = Some(480.0);
     conf.visible = false;
+    conf.url = tauri::WebviewUrl::App("chat.html".into());
+    // 聊天画布本身不透明，不继承控制台的透明窗口与 Mica 合成资源。
+    conf.transparent = false;
+    conf.window_effects = None;
+    Ok(conf)
+}
+
+pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
+    let conf = chat_window_config(app)?;
     WebviewWindowBuilder::from_config(app, &conf)
         .and_then(|builder| builder.build())
         .map_err(|e| e.to_string())
@@ -246,24 +259,41 @@ pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, Strin
 
 #[tauri::command]
 pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
+    let coordinator = app.state::<ChatWindowCoordinator>();
+    let _gate = coordinator.gate.lock().await;
     let window = app
         .get_webview_window(CHAT_WINDOW_LABEL)
         .ok_or("聊天窗口不存在")?;
-    crate::webview_scheduler::show_window(&window)?;
+    crate::webview_scheduler::show_window(&window).await?;
     let _ = window.set_focus();
-    let coordinator = app.state::<ChatWindowCoordinator>();
     coordinator.ready.store(true, Ordering::SeqCst);
-    if coordinator.release_main.swap(false, Ordering::SeqCst)
-        && app
+    release_requested_main(&app).await
+}
+
+async fn release_requested_main(app: &AppHandle) -> Result<(), String> {
+    if !app
+        .state::<ChatWindowCoordinator>()
+        .release_main
+        .swap(false, Ordering::SeqCst)
+        || !app
             .state::<crate::AppState>()
             .components
             .active_tasks()
             .is_empty()
     {
-        if let Some(main) = app.get_webview_window("main") {
-            let _ = crate::webview_scheduler::hide_window(&main);
+        return Ok(());
+    }
+    let Some(main) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    let was_visible = main.is_visible().unwrap_or(false);
+    crate::webview_scheduler::hide_window(&main)?;
+    // 调用方已经持有 gate，不能再经公开入口重复加锁。
+    if let Err(error) = release_control_panel_inner(app).await {
+        if was_visible {
+            let _ = crate::webview_scheduler::show_window(&main).await;
         }
-        release_control_panel(&app).await?;
+        return Err(error);
     }
     Ok(())
 }
@@ -272,7 +302,7 @@ pub async fn focus_chat_window(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else {
         return false;
     };
-    let _ = crate::webview_scheduler::show_window(&window);
+    let _ = crate::webview_scheduler::show_window(&window).await;
     let _ = window.unminimize();
     let _ = window.set_focus();
     true
@@ -332,6 +362,10 @@ pub async fn close_chat_window(app: AppHandle, embed: bool) -> Result<(), String
 pub async fn release_control_panel(app: &AppHandle) -> Result<(), String> {
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
+    release_control_panel_inner(app).await
+}
+
+async fn release_control_panel_inner(app: &AppHandle) -> Result<(), String> {
     prepare(app, "main", "release").await?;
     app.state::<crate::AppState>()
         .chat
