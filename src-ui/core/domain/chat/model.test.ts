@@ -3,12 +3,15 @@ import {
     accountKey,
     emptyAccount,
     ingestMessage,
+    ingestMessages,
+    retainMessages,
     openConversation,
     settleSend,
     addPending,
     parseContact,
     setDraft,
 } from './model';
+import { WORKING_BYTE_LIMIT, messageBytes } from './messageWorkingSet';
 
 const payload = (extra = {}) => ({
     post_type: 'message',
@@ -22,7 +25,7 @@ const payload = (extra = {}) => ({
     ...extra,
 });
 describe('native chat projection', () => {
-    it('keeps the older page being read when the recent-message buffer is full', () => {
+    it('keeps a bounded older page and the recent page while loading history', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         const message = state.messages[0];
         state.messages = Array.from({ length: 5000 }, (_, i) => ({
@@ -33,7 +36,9 @@ describe('native chat projection', () => {
         }));
         state = ingestMessage(state, payload({ message_id: 1, message_seq: '1', time: 0.5 }), true);
         expect(state.messages[0].id).toBe('1');
-        expect(state.messages).toHaveLength(5001);
+        expect(state.messages.length).toBeLessThanOrEqual(200);
+        expect(state.archiveMessages).toHaveLength(5000);
+        expect(state.messages.at(-1)?.id).toBe('5099');
     });
     it('scopes accounts by bot and signed-in identity', () => {
         expect(accountKey('a', '1')).not.toBe(accountKey('b', '1'));
@@ -50,13 +55,61 @@ describe('native chat projection', () => {
             at: i + 1000,
         }));
         state = ingestMessage(state, payload({ group_id: 13, message_id: 9, time: 10 }));
-        expect(state.messages).toHaveLength(5001);
+        expect(state.messages.length).toBeLessThanOrEqual(200);
         expect(state.messages.some((row) => row.session === 'group:13')).toBe(true);
         state = ingestMessage(state, payload({ group_id: 13, message_id: 1, time: 0.5 }), true);
-        expect(state.messages.filter((row) => row.session === 'group:12')).toHaveLength(5000);
+        expect(
+            state.messages.filter((row) => row.session === 'group:12').length,
+        ).toBeLessThanOrEqual(150);
         expect(state.messages.some((row) => row.session === 'group:13' && row.id === '1')).toBe(
             true,
         );
+    });
+    it('retains the reading anchor, a gap and live tail while bounding a busy active conversation', () => {
+        const message = ingestMessage(emptyAccount('99'), payload()).messages[0];
+        const messages = Array.from({ length: 20000 }, (_, index) => ({
+            ...message,
+            key: `group:12/${index}`,
+            id: String(index),
+            at: index,
+        }));
+        const retained = retainMessages(messages, 'group:12', null, {
+            session: 'group:12',
+            messageKey: 'group:12/500',
+            messageId: '500',
+            atBottom: false,
+        });
+        expect(retained).toHaveLength(200);
+        expect(retained.some((row) => row.id === '500')).toBe(true);
+        expect(retained.at(-1)?.id).toBe('19999');
+        expect(retained.filter((row) => row.gapBefore)).toHaveLength(1);
+        expect(retainMessages(retained, 'private:88').length).toBeLessThanOrEqual(50);
+    });
+    it('bounds variable message content and keeps batches sorted and unread only once', () => {
+        let state = emptyAccount('99');
+        state.active = 'group:12';
+        state = ingestMessages(
+            state,
+            Array.from({ length: 300 }, (_, index) =>
+                payload({
+                    message_id: index + 1,
+                    time: 300 - index,
+                    message: '长消息'.repeat(20000),
+                }),
+            ),
+        );
+        expect(
+            state.messages.reduce((bytes, message) => bytes + messageBytes(message), 0),
+        ).toBeLessThanOrEqual(WORKING_BYTE_LIMIT);
+        expect(state.messages.map((row) => row.at)).toEqual(
+            [...state.messages.map((row) => row.at)].sort((a, b) => a - b),
+        );
+        expect(state.conversations['group:12'].unread).toBe(300);
+        const replay = ingestMessages(state, [
+            payload({ message_id: 1, time: 300 }),
+            payload({ message_id: 1, time: 300 }),
+        ]);
+        expect(replay.conversations['group:12'].unread).toBe(300);
     });
     it('deduplicates replay without increasing unread', () => {
         const first = ingestMessage(emptyAccount('99'), payload());

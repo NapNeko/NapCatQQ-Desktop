@@ -58,6 +58,31 @@ function setup() {
     return { store, element, rows, virtual };
 }
 describe('chat reading position', () => {
+    it('keeps the same message offset when older working pages are removed', () => {
+        const { store, element, rows, virtual } = setup();
+        const earlier = { ...message, key: 'private:22/1', id: '1', at: -1 };
+        const anchorRow = { ...rows[0], index: 1 };
+        rows[0] = { ...rows[0], key: earlier.key, start: 0, end: 1200, size: 1200 };
+        rows.push(anchorRow);
+        const scroll = { current: element };
+        element.scrollTop = 1231;
+        store.readingPosition(message.session, {
+            messageKey: message.key,
+            messageId: '42',
+            offset: 31,
+            atBottom: false,
+        });
+        const hook = renderHook(
+            ({ messages }) =>
+                useTimelinePosition(store, message.session, scroll, virtual, messages, () => false),
+            {
+                initialProps: { messages: [earlier, message] },
+            },
+        );
+        rows.splice(0, 2, { ...anchorRow, index: 0, start: 900, end: 1100 });
+        hook.rerender({ messages: [message] });
+        expect(element.scrollTop).toBe(931);
+    });
     it('captures a message and its partial-row offset rather than a window-specific pixel', () => {
         const { element, virtual } = setup();
         element.scrollTop = 1231;
