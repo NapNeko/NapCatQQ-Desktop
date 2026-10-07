@@ -7,29 +7,11 @@
 // 所有动作都是 POST 到面板，成功后重取列表——面板自己会落盘，桌面端不另存状态。
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, TextField } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
-import { parseNeoBotPlugins, type NeoBotPlugin } from './neobotPanels';
+import type { NeoBotPlugin } from './neobotPanels';
 import { PanelStateView } from './PanelStateView';
-import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
-
-/** 一次插件动作：POST 完重取列表。面板是唯一事实来源，桌面端不乐观更新。 */
-function usePluginAction(instanceId: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (req: { path: string; body?: unknown }) => {
-            const res = await appFrameworkService.panelCall(instanceId, 'POST', req.path, req.body);
-            if (res === null) throw new Error('该框架不支持面板操作');
-            if (res.kind !== 'ok') throw new Error(res.message || '面板拒绝了这次操作');
-            return res;
-        },
-        onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey: neobotPanelKey(instanceId, 'plugins') });
-        },
-    });
-}
+import { useNeoBotPlugins } from '../../../../hooks/apps/useNeoBotPlugins';
 
 const PluginRow: React.FC<{
     plugin: NeoBotPlugin;
@@ -131,8 +113,7 @@ export const NeoBotPluginsTab: React.FC<{
     instanceId: string;
     onGoTab: (tab: string) => void;
 }> = ({ instanceId, onGoTab }) => {
-    const query = usePanelJson(instanceId, 'plugins', '/api/plugins', parseNeoBotPlugins);
-    const action = usePluginAction(instanceId);
+    const { query, action } = useNeoBotPlugins(instanceId);
     const [repo, setRepo] = useState('');
     const [notice, setNotice] = useState<string | null>(null);
 

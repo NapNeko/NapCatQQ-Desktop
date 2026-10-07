@@ -4,8 +4,12 @@
 // 混成一个 error 的话，用户看到「加载失败」既不知道去填密码也不知道去看实例状态。
 
 import { useQuery } from '@tanstack/react-query';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
-import { parseNeoBotOverview, type NeoBotOverview } from './neobotPanel';
+import { appFrameworkService } from '../../core/services/app-framework.service';
+// TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉这条 hooks→modules 跨层（同 useBackendSettings 旧账）
+import {
+    parseNeoBotOverview,
+    type NeoBotOverview,
+} from '../../modules/apps/detail/neobot/neobotPanel';
 
 export type PanelState<T> =
     | { kind: 'ok'; data: T }

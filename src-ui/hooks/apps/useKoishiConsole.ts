@@ -9,6 +9,7 @@ import { pushErrorBar } from '../ui/pushErrorBar';
 import type {
     KoishiCommandRow,
     KoishiDatabaseTable,
+    KoishiFileContent,
     KoishiFileEntry,
     KoishiSandboxMessage,
 } from '../../core/ipc/types';
@@ -48,6 +49,22 @@ export function useKoishiExplorerTree(instanceId: string, running: boolean) {
         queryFn: () => koishiService.explorerTree(instanceId),
         enabled: running,
         retry: false,
+    });
+}
+
+// 打开单个文件才读：每次挂载都要拿当下内容，切走即丢缓存，对齐组件原来逐次 useEffect 读取的时机
+export function useKoishiFileRead(instanceId: string, path: string) {
+    return useQuery<KoishiFileContent, Error>({
+        queryKey: key(instanceId, 'file', path),
+        queryFn: () => koishiService.explorerRead(instanceId, path),
+        enabled: !!path,
+        retry: false,
+        // 挂载只拉一次：编辑器草稿是本地态，缓存回灌会冲掉未保存的编辑；换文件走 key 变化重挂载
+        refetchOnMount: false,
+        staleTime: 0,
+        gcTime: 0,
+        // 重连后的后台重取会把磁盘内容灌回正在编辑的草稿；读取时机保持与组件原来逐次请求一致
+        refetchOnReconnect: false,
     });
 }
 

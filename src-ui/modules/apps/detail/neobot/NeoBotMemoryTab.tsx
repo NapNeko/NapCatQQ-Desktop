@@ -5,7 +5,7 @@
 
 import { parseNeoBotArchives } from './neobotPanels';
 import { PanelStateView } from './PanelStateView';
-import { usePanelJson } from './useNeoBotPanel';
+import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 
 export const NeoBotMemoryTab: React.FC<{
     instanceId: string;
