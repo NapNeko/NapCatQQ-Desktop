@@ -34,6 +34,7 @@ import type { AppRoute } from '../../shared/components/next/Sidebar';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { ChatTrayNavigation } from '../../core/ipc/generated/chat/ChatTrayNavigation';
 import { cn } from '../../shared/utils/cn';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ChatComposer } from './ChatComposer';
 import { NativeTimeline } from './ChatTimeline';
 import { BotPicker } from '../debug';
@@ -72,6 +73,7 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
         let queue = Promise.resolve();
         const synchronize = () => {
             queue = queue
+                // 上一次同步失败不能把队列卡死，吞掉后续接
                 .catch(() => {})
                 .then(async () => {
                     if (!alive || !ready) return;
@@ -103,7 +105,14 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
                 }
                 await synchronize();
             })
-            .catch(() => {})
+            .catch((error) =>
+                pushInfoBar({
+                    key: 'chat:view-restore',
+                    tone: 'danger',
+                    title: '聊天视图恢复失败',
+                    content: error instanceof Error ? error.message : String(error),
+                }),
+            )
             .finally(() => {
                 if (alive) setRestored(true);
             });
