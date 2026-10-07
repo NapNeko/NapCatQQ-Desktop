@@ -192,7 +192,7 @@ async fn open_chat_window_with_navigation(
         if !coordinator.ready.load(Ordering::SeqCst) {
             return Ok(());
         }
-        crate::webview_scheduler::show_window(&window)?;
+        crate::webview_scheduler::show_window(&window).await?;
         let _ = window.unminimize();
         let _ = window.set_focus();
         release_requested_main(&app).await?;
@@ -264,7 +264,7 @@ pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(CHAT_WINDOW_LABEL)
         .ok_or("聊天窗口不存在")?;
-    crate::webview_scheduler::show_window(&window)?;
+    crate::webview_scheduler::show_window(&window).await?;
     let _ = window.set_focus();
     coordinator.ready.store(true, Ordering::SeqCst);
     release_requested_main(&app).await
@@ -291,7 +291,7 @@ async fn release_requested_main(app: &AppHandle) -> Result<(), String> {
     // 调用方已经持有 gate，不能再经公开入口重复加锁。
     if let Err(error) = release_control_panel_inner(app).await {
         if was_visible {
-            let _ = crate::webview_scheduler::show_window(&main);
+            let _ = crate::webview_scheduler::show_window(&main).await;
         }
         return Err(error);
     }
@@ -302,7 +302,7 @@ pub async fn focus_chat_window(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else {
         return false;
     };
-    let _ = crate::webview_scheduler::show_window(&window);
+    let _ = crate::webview_scheduler::show_window(&window).await;
     let _ = window.unminimize();
     let _ = window.set_focus();
     true

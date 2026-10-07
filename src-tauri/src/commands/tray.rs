@@ -25,10 +25,10 @@ pub async fn window_show(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     state.lightweight_scheduler.cancel_pending().await;
     if crate::lightweight::is_lightweight_mode() || app.get_webview_window("main").is_none() {
-        return crate::lightweight::exit_lightweight_mode(&app);
+        return crate::lightweight::exit_lightweight_mode(&app).await;
     }
     let window = main_window(&app)?;
-    crate::webview_scheduler::show_window(&window)?;
+    crate::webview_scheduler::show_window(&window).await?;
     let _ = window.unminimize();
     let _ = window.set_focus();
     Ok(())

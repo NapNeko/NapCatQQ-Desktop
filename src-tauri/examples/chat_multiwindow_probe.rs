@@ -192,6 +192,19 @@ async fn experiment(app: AppHandle, blank: bool, two: bool, legacy: bool) -> Res
     }
     tokio::time::sleep(Duration::from_secs(10)).await;
     record(&app, &format!("hidden-low-{}", windows.len())).await?;
+    ncd_tauri::webview_scheduler::show_window(&windows[0]).await?;
+    let restored = ncd_tauri::webview_scheduler::memory_report(&app).await?;
+    if !windows[0].is_visible().map_err(|error| error.to_string())?
+        || !restored
+            .levels
+            .iter()
+            .any(|level| level.label == windows[0].label() && level.applied_hidden == Some(false))
+    {
+        return Err("原生窗口显示前未确认 WebView 可见".into());
+    }
+    eprintln!("MULTIWINDOW_RESTORE_CONFIRMED");
+    ncd_tauri::webview_scheduler::hide_window(&windows[0])?;
+    tokio::time::sleep(Duration::from_secs(2)).await;
     for window in &windows {
         let success = suspend(window).await?;
         eprintln!("MULTIWINDOW_SUSPEND {} {success}", window.label());
