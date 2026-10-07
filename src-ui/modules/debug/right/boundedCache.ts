@@ -5,33 +5,61 @@
 
 /** 最近最少用的先丢；get 会把条目挪到最新 */
 export class LruCache<V> {
-    private readonly map = new Map<string, V>();
+    private readonly map = new Map<string, { value: V; bytes: number; expiresAt: number }>();
+    private bytes = 0;
 
-    constructor(private readonly max: number) {}
+    constructor(
+        private readonly max: number,
+        private readonly budget?: {
+            maxBytes: number;
+            sizeOf: (value: V) => number;
+            ttlMs: number;
+        },
+    ) {}
 
-    get(key: string): V | undefined {
-        const v = this.map.get(key);
-        if (v !== undefined) {
-            this.map.delete(key);
-            this.map.set(key, v);
+    private prune(now: number): void {
+        if (!this.budget) return;
+        for (const [key, entry] of this.map) {
+            if (entry.expiresAt <= now) this.delete(key);
         }
-        return v;
     }
 
-    set(key: string, value: V): void {
-        this.map.delete(key);
-        this.map.set(key, value);
-        if (this.map.size > this.max) {
+    get(key: string, now = Date.now()): V | undefined {
+        this.prune(now);
+        const entry = this.map.get(key);
+        if (entry !== undefined) {
+            this.map.delete(key);
+            this.map.set(key, entry);
+        }
+        return entry?.value;
+    }
+
+    set(key: string, value: V, now = Date.now()): void {
+        this.prune(now);
+        this.delete(key);
+        const bytes = this.budget ? Math.max(0, this.budget.sizeOf(value)) : 0;
+        if (this.max <= 0 || !Number.isFinite(bytes) || bytes > (this.budget?.maxBytes ?? Infinity))
+            return;
+        this.map.set(key, {
+            value,
+            bytes,
+            expiresAt: this.budget ? now + this.budget.ttlMs : Infinity,
+        });
+        this.bytes += bytes;
+        while (this.map.size > this.max || this.bytes > (this.budget?.maxBytes ?? Infinity)) {
             const oldest = this.map.keys().next();
-            if (!oldest.done) this.map.delete(oldest.value);
+            if (oldest.done) break;
+            this.delete(oldest.value);
         }
     }
 
     get size(): number {
+        this.prune(Date.now());
         return this.map.size;
     }
 
     delete(key: string): void {
+        this.bytes -= this.map.get(key)?.bytes ?? 0;
         this.map.delete(key);
     }
 }

@@ -13,12 +13,13 @@ import {
     type MutableRefObject,
 } from 'react';
 import { ArrowLeft, ChevronRight, Clock3, Users } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Dialog, DialogContent, DialogTitle } from '../../../shared/ui/Dialog';
 import { errorText } from '../../../core/domain/errors';
 import type { ForwardNode } from '../../../core/services/chat-media.service';
 import { messagePreview, type Segment } from '../../../core/domain/debug/segments';
 import { ChatViewContext, useChatView } from '../../debug/right/chatContext';
-import { CACHE_MAX, LruCache } from '../../debug/right/boundedCache';
+import { LruCache } from '../../debug/right/boundedCache';
 import { ChatImageViewer } from '../ChatImageViewer';
 import { ChatAvatar } from '../ChatAvatar';
 import './chat-media.css';
@@ -28,6 +29,7 @@ interface Frame {
     data: ForwardData;
     title: string;
     nodes: ForwardNode[] | null;
+    bytes: number;
     error: string;
     scroll: number;
 }
@@ -45,45 +47,93 @@ const newFrame = (data: ForwardData): Frame => ({
     data,
     title: titleOf(data),
     nodes: null,
+    bytes: 0,
     error: '',
     scroll: 0,
 });
 
-// 卡片预览和弹窗共读一份：缓存按读取函数分区（每个账号一份），同一条记录只请求一次。
-const forwardCache = new WeakMap<object, LruCache<ForwardNode[]>>();
-const forwardInflight = new WeakMap<object, Map<string, Promise<ForwardNode[]>>>();
-function readForwardCached(
+const FORWARD_BYTES = 8 * 1024 * 1024;
+function forwardBytes(nodes: ForwardNode[]): number {
+    // 序列化长度只用于预算，另留节点开销余量；不是 JS 堆大小。
+    return JSON.stringify(nodes).length * 2 + nodes.length * 128;
+}
+const forwardCache = new LruCache<ForwardNode[]>(64, {
+    maxBytes: FORWARD_BYTES,
+    ttlMs: 5 * 60_000,
+    sizeOf: forwardBytes,
+});
+const forwardInflight = new Map<string, Promise<ForwardNode[]>>();
+let activeForwards = 0;
+const forwardQueue: Array<() => void> = [];
+async function readForwardLimited(
     read: (data: ForwardData) => Promise<ForwardNode[]>,
     data: ForwardData,
 ): Promise<ForwardNode[]> {
-    const key = resourceId(data);
-    if (!key) return read(data);
-    let cache = forwardCache.get(read);
-    if (!cache) {
-        cache = new LruCache(CACHE_MAX);
-        forwardCache.set(read, cache);
+    if (activeForwards >= 4) {
+        if (forwardQueue.length >= 64) throw new Error('聊天记录读取繁忙，请稍后重试');
+        await new Promise<void>((resolve) => forwardQueue.push(resolve));
+    } else activeForwards += 1;
+    try {
+        return await read(data);
+    } finally {
+        const next = forwardQueue.shift();
+        if (next) next();
+        else activeForwards -= 1;
     }
-    const cached = cache.get(key);
+}
+const readerIds = new WeakMap<object, number>();
+let nextReaderId = 0;
+function readerKey(read: object, scope?: string): string | number {
+    if (scope) return scope;
+    let key = readerIds.get(read);
+    if (key === undefined) {
+        key = ++nextReaderId;
+        readerIds.set(read, key);
+    }
+    return key;
+}
+function trimFrames(path: Frame[]): Frame[] {
+    let bytes = 0;
+    return [...path]
+        .reverse()
+        .map((frame, index) => {
+            bytes += frame.bytes;
+            if (index > 0 && bytes > FORWARD_BYTES) {
+                bytes -= frame.bytes;
+                return { ...frame, nodes: null, bytes: 0 };
+            }
+            return frame;
+        })
+        .reverse();
+}
+function readForwardCached(
+    read: (data: ForwardData) => Promise<ForwardNode[]>,
+    data: ForwardData,
+    scope?: string,
+): Promise<ForwardNode[]> {
+    const resource = resourceId(data);
+    if (!resource) return readForwardLimited(read, data);
+    const key = JSON.stringify([readerKey(read, scope), resource]);
+    const cached = forwardCache.get(key);
     if (cached) return Promise.resolve(cached);
-    let inflight = forwardInflight.get(read);
-    if (!inflight) {
-        inflight = new Map();
-        forwardInflight.set(read, inflight);
-    }
-    const pending = inflight.get(key);
+    const pending = forwardInflight.get(key);
     if (pending) return pending;
-    const request = read(data).then(
+    if (forwardInflight.size >= 68)
+        return Promise.reject(new Error('聊天记录读取繁忙，请稍后重试'));
+    const request = readForwardLimited(read, data).then(
         (nodes) => {
-            cache.set(key, nodes);
-            inflight.delete(key);
+            // 媒体字节和临时 blob 地址只跟随当前弹窗，不放进长期缓存。
+            if (!/(?:data:|blob:|base64:\/\/)/i.test(JSON.stringify(nodes)))
+                forwardCache.set(key, nodes);
+            forwardInflight.delete(key);
             return nodes;
         },
         (error) => {
-            inflight.delete(key);
+            forwardInflight.delete(key);
             throw error;
         },
     );
-    inflight.set(key, request);
+    forwardInflight.set(key, request);
     return request;
 }
 
@@ -97,34 +147,43 @@ export function ChatForward({
     renderSegments: (segments: Segment[]) => ReactNode;
 }) {
     const navigation = useContext(ForwardNavigation);
+    const { mediaScope } = useChatView();
     const [open, setOpen] = useState(false);
     const [frames, setFrames] = useState<Frame[]>([]);
     const reader = useRef(read);
     reader.current = read;
     const limited = (navigation?.depth ?? 0) >= 5;
     const recursive = navigation?.contains(data) ?? false;
-    const [nodes, setNodes] = useState<ForwardNode[] | null>(null);
+    const [previews, setPreviews] = useState<string[]>([]);
     const resource = resourceId(data);
     const previewable = !limited && !recursive && !!resource;
     useEffect(() => {
+        setOpen(false);
+        setFrames([]);
+    }, [mediaScope, resource]);
+    useEffect(() => {
+        setPreviews([]);
         if (!previewable) return;
         let cancelled = false;
-        void readForwardCached(reader.current, data)
+        void readForwardCached(reader.current, data, mediaScope)
             .then((value) => {
-                if (!cancelled) setNodes(value);
+                if (!cancelled)
+                    setPreviews(
+                        value
+                            .slice(0, 3)
+                            .map((node) =>
+                                `${node.name.slice(0, 64)}: ${messagePreview(node.segments) || '（空消息）'}`.slice(
+                                    0,
+                                    180,
+                                ),
+                            ),
+                    );
             })
             .catch(() => {});
         return () => {
             cancelled = true;
         };
-    }, [previewable, resource, data]);
-    const previews = useMemo(
-        () =>
-            (nodes ?? [])
-                .slice(0, 3)
-                .map((node) => `${node.name}: ${messagePreview(node.segments) || '（空消息）'}`),
-        [nodes],
-    );
+    }, [previewable, resource, data, mediaScope]);
     return (
         <>
             <button
@@ -162,10 +221,95 @@ export function ChatForward({
                     frames={frames}
                     setFrames={setFrames}
                     read={reader}
+                    scope={mediaScope}
                     renderSegments={renderSegments}
                 />
             )}
         </>
+    );
+}
+
+interface ForwardMessagesProps {
+    body: MutableRefObject<HTMLDivElement | null>;
+    nodes: ForwardNode[];
+    renderSegments: (segments: Segment[]) => ReactNode;
+    header: ReactNode;
+    initialOffset: number;
+}
+function ForwardMessages(props: ForwardMessagesProps) {
+    if (props.nodes.length > 20) return <VirtualForwardMessages {...props} />;
+    return (
+        <>
+            {props.header}
+            {props.nodes.map((node, index) => (
+                <ForwardMessage key={index} node={node} renderSegments={props.renderSegments} />
+            ))}
+        </>
+    );
+}
+function VirtualForwardMessages({
+    body,
+    nodes,
+    renderSegments,
+    header,
+    initialOffset,
+}: ForwardMessagesProps) {
+    const virtual = useVirtualizer({
+        count: nodes.length + 1,
+        getScrollElement: () => body.current,
+        estimateSize: (index) => (index === 0 ? 48 : 110),
+        overscan: 4,
+        initialOffset,
+        directDomUpdates: true,
+    });
+    return (
+        <div ref={virtual.containerRef} style={{ position: 'relative' }}>
+            {virtual.getVirtualItems().map((row) => (
+                <div
+                    key={row.key}
+                    data-index={row.index}
+                    ref={virtual.measureElement}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%' }}
+                >
+                    {row.index === 0 ? (
+                        header
+                    ) : (
+                        <ForwardMessage
+                            node={nodes[row.index - 1]}
+                            renderSegments={renderSegments}
+                        />
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+}
+function ForwardMessage({
+    node,
+    renderSegments,
+}: {
+    node: ForwardNode;
+    renderSegments: (segments: Segment[]) => ReactNode;
+}) {
+    return (
+        <article className="native-chat-forward-node">
+            <header>
+                <ChatAvatar
+                    contact={{ type: 'private', id: node.senderId, name: node.name }}
+                    small
+                />
+                <span className="font-medium text-text-secondary">{node.name}</span>
+                {node.time && (
+                    <time className="ml-auto">
+                        {new Date(node.time).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                        })}
+                    </time>
+                )}
+            </header>
+            <div>{renderSegments(node.segments)}</div>
+        </article>
     );
 }
 
@@ -175,6 +319,7 @@ function ForwardDialog({
     frames,
     setFrames,
     read,
+    scope,
     renderSegments,
 }: {
     open: boolean;
@@ -182,6 +327,7 @@ function ForwardDialog({
     frames: Frame[];
     setFrames: Dispatch<SetStateAction<Frame[]>>;
     read: MutableRefObject<(data: ForwardData) => Promise<ForwardNode[]>>;
+    scope?: string;
     renderSegments: (segments: Segment[]) => ReactNode;
 }) {
     const body = useRef<HTMLDivElement>(null);
@@ -204,11 +350,17 @@ function ForwardDialog({
     useEffect(() => {
         if (!open || !frame || frame.nodes !== null || frame.error) return;
         let cancelled = false;
-        void readForwardCached(read.current, frame.data)
+        void readForwardCached(read.current, frame.data, scope)
             .then((nodes) => {
                 if (!cancelled)
                     setFrames((path) =>
-                        path.map((item) => (item === frame ? { ...item, nodes } : item)),
+                        trimFrames(
+                            path.map((item) =>
+                                item === frame
+                                    ? { ...item, nodes, bytes: forwardBytes(nodes) }
+                                    : item,
+                            ),
+                        ),
                     );
             })
             .catch((error) => {
@@ -222,7 +374,7 @@ function ForwardDialog({
         return () => {
             cancelled = true;
         };
-    }, [open, frame, read, setFrames]);
+    }, [open, frame, read, scope, setFrames]);
     useLayoutEffect(() => {
         if (body.current) body.current.scrollTop = frame?.scroll ?? 0;
     }, [frames.length, frame?.nodes]);
@@ -253,7 +405,10 @@ function ForwardDialog({
         <Dialog
             open={open}
             onOpenChange={(next) => {
-                if (!next) showImage('');
+                if (!next) {
+                    showImage('');
+                    setFrames([]);
+                }
                 onOpenChange(next);
             }}
         >
@@ -336,53 +491,34 @@ function ForwardDialog({
                                     这条聊天记录没有消息
                                 </p>
                             ) : (
-                                <>
-                                    <div className="native-chat-forward-summary">
-                                        <span>
-                                            <Users size={13} />
-                                            {summary?.people ?? 0} 位参与者
-                                        </span>
-                                        {summary?.first && (
+                                <ForwardMessages
+                                    key={frames.length}
+                                    body={body}
+                                    nodes={frame.nodes}
+                                    renderSegments={renderSegments}
+                                    initialOffset={frame.scroll}
+                                    header={
+                                        <div className="native-chat-forward-summary">
                                             <span>
-                                                <Clock3 size={13} />
-                                                {new Date(summary.first).toLocaleDateString(
-                                                    'zh-CN',
-                                                )}
-                                                {summary.last !== summary.first &&
-                                                    ' - ' +
-                                                        new Date(summary.last!).toLocaleDateString(
-                                                            'zh-CN',
-                                                        )}
+                                                <Users size={13} />
+                                                {summary?.people ?? 0} 位参与者
                                             </span>
-                                        )}
-                                    </div>
-                                    {frame.nodes.map((node, index) => (
-                                        <article key={index} className="native-chat-forward-node">
-                                            <header>
-                                                <ChatAvatar
-                                                    contact={{
-                                                        type: 'private',
-                                                        id: node.senderId,
-                                                        name: node.name,
-                                                    }}
-                                                    small
-                                                />
-                                                <span className="font-medium text-text-secondary">
-                                                    {node.name}
+                                            {summary?.first && (
+                                                <span>
+                                                    <Clock3 size={13} />
+                                                    {new Date(summary.first).toLocaleDateString(
+                                                        'zh-CN',
+                                                    )}
+                                                    {summary.last !== summary.first &&
+                                                        ' - ' +
+                                                            new Date(
+                                                                summary.last!,
+                                                            ).toLocaleDateString('zh-CN')}
                                                 </span>
-                                                {node.time && (
-                                                    <time className="ml-auto">
-                                                        {new Date(node.time).toLocaleTimeString(
-                                                            'zh-CN',
-                                                            { hour: '2-digit', minute: '2-digit' },
-                                                        )}
-                                                    </time>
-                                                )}
-                                            </header>
-                                            <div>{renderSegments(node.segments)}</div>
-                                        </article>
-                                    ))}
-                                </>
+                                            )}
+                                        </div>
+                                    }
+                                />
                             )}
                         </div>
                         {image && <ChatImageViewer src={image} onClose={() => showImage('')} />}

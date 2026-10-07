@@ -99,6 +99,22 @@ export function createChatMediaService(
     readLocal: (path: string) => Promise<string> = (path) => chatService.readLocalImage(path),
 ) {
     const pendingImages = new Map<string, Promise<string>>();
+    let activeImages = 0;
+    const imageQueue: Array<() => void> = [];
+    const withImageSlot = async (work: () => Promise<string>): Promise<string> => {
+        if (activeImages >= 4) {
+            if (imageQueue.length >= 256) throw new Error('图片读取繁忙，请稍后重试');
+            await new Promise<void>((resolve) => imageQueue.push(resolve));
+        } else activeImages += 1;
+        try {
+            return await work();
+        } finally {
+            // 把槽位直接交给下一项，防止新请求抢走已排队请求的名额。
+            const next = imageQueue.shift();
+            if (next) next();
+            else activeImages -= 1;
+        }
+    };
     // 自己刚发的图以本机字节为准；同步判源，无本地来源时不改变原有的调用时序。
     const localToken = (data: Record<string, unknown>): string =>
         [text(data.local_file), text(data.file)].find(
@@ -144,20 +160,20 @@ export function createChatMediaService(
             refresh = false,
         ): Promise<string> {
             const token = localToken(data);
-            if (token) {
+            const direct = token
+                ? ''
+                : playableUrl(data.url) ||
+                  playableUrl(data.file) ||
+                  imageBytes({ file: data.file });
+            if (!token && direct && !refresh) return direct;
+            if (token.startsWith('base64://')) {
                 try {
-                    const raw = token.startsWith('base64://')
-                        ? token
-                        : await readLocal(token.slice(LOCAL_FILE_PREFIX.length));
-                    const bytes = imageBytes({ base64: raw });
+                    const bytes = imageBytes({ base64: token });
                     if (bytes) return bytes;
                 } catch {
-                    /* 本机文件可能已被移动，回退协议链路 */
+                    /* 无效本机字节仍可回退远端标识。 */
                 }
             }
-            const direct =
-                playableUrl(data.url) || playableUrl(data.file) || imageBytes({ file: data.file });
-            if (direct && !refresh) return direct;
             const key = JSON.stringify([
                 target.bot_id,
                 target.qq_id,
@@ -165,10 +181,31 @@ export function createChatMediaService(
                 data.file_id,
                 data.file,
                 data.url,
+                token.startsWith('base64://') ? '' : token,
             ]);
             const existing = pendingImages.get(key);
             if (existing) return existing;
-            const request = resolveImage(target, data, refresh);
+            const request = withImageSlot(async () => {
+                if (token && !token.startsWith('base64://')) {
+                    try {
+                        const bytes = imageBytes({
+                            base64: await readLocal(token.slice(LOCAL_FILE_PREFIX.length)),
+                        });
+                        if (bytes) return bytes;
+                    } catch {
+                        /* 本机文件可能已被移动，回退协议链路。 */
+                    }
+                }
+                if (!refresh) {
+                    const fallback =
+                        direct ||
+                        playableUrl(data.url) ||
+                        playableUrl(data.file) ||
+                        imageBytes({ file: data.file });
+                    if (fallback) return fallback;
+                }
+                return resolveImage(target, data, refresh);
+            });
             if (pendingImages.size < 256) pendingImages.set(key, request);
             try {
                 return await request;

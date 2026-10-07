@@ -15,6 +15,27 @@ describe('LruCache', () => {
         expect(c.get('d')).toBe(4);
         expect(c.size).toBe(3);
     });
+    it('按字节淘汰，替换返还预算，超大值不缓存，读取不延长 TTL', () => {
+        const now = Date.now();
+        const cache = new LruCache<string>(3, {
+            maxBytes: 6,
+            sizeOf: (value) => value.length,
+            ttlMs: 1000,
+        });
+        cache.set('a', 'aa', now);
+        cache.set('b', 'bb', now);
+        expect(cache.get('a', now)).toBe('aa');
+        cache.set('c', 'ccc', now);
+        expect(cache.get('b', now)).toBeUndefined();
+        cache.set('a', 'A', now);
+        cache.set('d', 'dd', now);
+        cache.set('large', '1234567', now);
+        expect(cache.size).toBe(3);
+        expect(cache.get('large', now)).toBeUndefined();
+        expect(cache.get('a', now + 999)).toBe('A');
+        expect(cache.get('a', now + 1000)).toBeUndefined();
+        expect(cache.size).toBe(0);
+    });
 });
 
 describe('ExpiringSet', () => {
