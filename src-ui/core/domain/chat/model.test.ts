@@ -119,6 +119,15 @@ describe('native chat projection', () => {
         expect(replay.messages).toHaveLength(1);
         expect(replay.conversations['group:12'].unread).toBe(1);
     });
+    it('deduplicates archived id-less messages while preserving distinct event sequences', () => {
+        const raw = payload({ message_id: undefined, message_seq: 1234 });
+        let state = ingestMessage(emptyAccount('99'), raw);
+        state = ingestMessage({ ...state, messages: [] }, raw);
+        expect(state.messages).toHaveLength(0);
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, payload({ message_id: undefined, message_seq: 1235 }));
+        expect(state.conversations['group:12'].unread).toBe(2);
+    });
     it('does not deduplicate message ids across conversations', () => {
         const first = ingestMessage(emptyAccount('99'), payload());
         expect(ingestMessage(first, payload({ group_id: 13 })).messages).toHaveLength(2);
@@ -233,6 +242,18 @@ const poke = (extra = {}) => ({
     ...extra,
 });
 describe('poke notices', () => {
+    it('deduplicates an archived poke after it leaves the working set', () => {
+        let state = ingestMessage(emptyAccount('99'), poke());
+        state = { ...state, messages: [] };
+        state = ingestMessage(state, poke());
+        expect(state.messages).toHaveLength(0);
+        expect(state.archiveMessages).toHaveLength(1);
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, poke({ time: 201 }));
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, poke({ time: 300 }));
+        expect(state.conversations['group:12'].unread).toBe(2);
+    });
     it('renders an incoming poke as a system line with the sender name and bumps unread', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         state = ingestMessage(state, poke());
@@ -323,6 +344,16 @@ const join = (extra = {}) => ({
     ...extra,
 });
 describe('group join notices', () => {
+    it('deduplicates an archived join replay without increasing unread', () => {
+        let state = ingestMessage(emptyAccount('99'), join());
+        state = { ...state, messages: [] };
+        state = ingestMessage(state, join());
+        expect(state.messages).toHaveLength(0);
+        expect(state.archiveMessages).toHaveLength(1);
+        expect(state.conversations['group:12'].unread).toBe(1);
+        state = ingestMessage(state, join({ time: 300 }));
+        expect(state.conversations['group:12'].unread).toBe(2);
+    });
     it('renders a join as a system line and bumps unread', () => {
         let state = ingestMessage(emptyAccount('99'), payload());
         state = ingestMessage(state, join());

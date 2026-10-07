@@ -186,9 +186,10 @@ export function ingestMessages(
 ): Account {
     if (!rows.length) return state;
     const archived = new Map(
-        (state.archiveMessages ?? [])
-            .filter((message) => message.id)
-            .map((message) => [`${message.session}/${message.id}`, message] as const),
+        (state.archiveMessages ?? []).map(
+            (message) =>
+                [message.id ? `${message.session}/${message.id}` : message.key, message] as const,
+        ),
     );
     let next: Account = {
         ...state,
@@ -238,9 +239,9 @@ function ingestOne(
         return state;
     }
     if (row.notice_type === 'notify' && text(row.sub_type) === 'poke')
-        return ingestPoke(state, row, historical, reading);
+        return ingestPoke(state, row, historical, reading, archived);
     if (row.notice_type === 'group_increase')
-        return ingestGroupJoin(state, row, historical, reading);
+        return ingestGroupJoin(state, row, historical, reading, archived);
     if (row.message_type !== 'group' && row.message_type !== 'private') return state;
     const sender = record(row.sender);
     const senderId = id(sender.user_id) || id(row.user_id);
@@ -286,7 +287,7 @@ function ingestOne(
                 !m.id &&
                 m.fileId === fileId,
         );
-    const saved = messageId && archived.get(`${session}/${messageId}`);
+    const saved = archived.get(messageId ? `${session}/${messageId}` : key);
     if (!existing && saved && !historical) {
         if (saved.requestId)
             state.messages.push({
@@ -336,6 +337,7 @@ function ingestPoke(
     row: Record<string, unknown>,
     historical: boolean,
     reading: SessionKey | null,
+    archived: ReadonlyMap<string, Message>,
 ): Account {
     // 发起者优先取 sender_id：部分后端的 poke 通知里 user_id 是被拍的人
     const from = id(row.sender_id) || id(row.user_id);
@@ -347,6 +349,9 @@ function ingestPoke(
         : `private:${from === state.selfId ? to : from}`;
     const at = typeof row.time === 'number' && row.time > 0 ? row.time * 1000 : Date.now();
     const echoKey = `${session}/poke/${from}/${to}/`;
+    for (const message of archived.values())
+        if (message.notice && message.key.startsWith(echoKey) && Math.abs(at - message.at) < 8000)
+            return state;
     if (
         state.messages.some(
             (m) =>
@@ -394,6 +399,7 @@ function ingestGroupJoin(
     row: Record<string, unknown>,
     historical: boolean,
     reading: SessionKey | null,
+    archived: ReadonlyMap<string, Message>,
 ): Account {
     const groupId = id(row.group_id);
     const userId = id(row.user_id);
@@ -402,7 +408,7 @@ function ingestGroupJoin(
     const at = typeof row.time === 'number' && row.time > 0 ? row.time * 1000 : Date.now();
     const key = `${session}/join/${userId}/${at}`;
     // 历史回放和实时推送可能撞上同一条通知
-    if (state.messages.some((m) => m.key === key)) return state;
+    if (archived.has(key) || state.messages.some((m) => m.key === key)) return state;
     const nameOf = (qq: string): string => {
         if (qq === state.selfId) return '你';
         for (let i = state.messages.length - 1; i >= 0; i--) {
