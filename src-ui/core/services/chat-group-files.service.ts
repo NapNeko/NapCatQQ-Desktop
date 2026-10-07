@@ -1,6 +1,5 @@
 // 群文件：浏览和改动走 runtime 归一好的命令，上传沿用聊天的本机文件通道。
 import { Channel, invoke, isTauri, pickAnyFiles, saveFileAs } from '../ipc/transport';
-import { chatGroupFilesMock } from '../ipc/mock/chat-group-files.mock';
 import { callProblem } from '../domain/debug/errorCopy';
 import { localFileTokenFor } from '../domain/debug/streamActions';
 import { chatService } from './chat.service';
@@ -12,6 +11,9 @@ import type { GroupFileAction } from '../ipc/generated/chat/GroupFileAction';
 import type { ChatFileSource } from '../ipc/generated/chat/ChatFileSource';
 import type { ChatFileDownloadRequest } from '../ipc/generated/chat/ChatFileDownloadRequest';
 
+const previewMock = () =>
+    import('../ipc/mock/chat-group-files.mock').then((module) => module.chatGroupFilesMock);
+
 export interface LocalUpload {
     path: string;
     name: string;
@@ -21,7 +23,7 @@ const peer = (target: DebugTarget, value: string) =>
     target.backend === 'snowluma' ? Number(value) : value;
 
 export const chatGroupFilesService = {
-    list(
+    async list(
         target: DebugTarget,
         groupId: string,
         folderId: string | null,
@@ -34,17 +36,17 @@ export const chatGroupFilesService = {
                   folderId,
                   limit: limit ?? null,
               })
-            : chatGroupFilesMock.list(groupId, folderId);
+            : (await previewMock()).list(groupId, folderId);
     },
-    space(target: DebugTarget, groupId: string): Promise<GroupFileSpace> {
+    async space(target: DebugTarget, groupId: string): Promise<GroupFileSpace> {
         return isTauri
             ? invoke('chat_group_file_space', { botId: target.bot_id, groupId })
-            : chatGroupFilesMock.space(groupId);
+            : (await previewMock()).space(groupId);
     },
-    act(target: DebugTarget, groupId: string, action: GroupFileAction): Promise<void> {
+    async act(target: DebugTarget, groupId: string, action: GroupFileAction): Promise<void> {
         return isTauri
             ? invoke('chat_group_file_act', { botId: target.bot_id, groupId, action })
-            : chatGroupFilesMock.act(groupId, action);
+            : (await previewMock()).act(groupId, action);
     },
     /** 自己在群里的角色；读不到给 null，界面按「不确定」处理 */
     async selfRole(target: DebugTarget, groupId: string): Promise<string | null> {
@@ -70,6 +72,7 @@ export const chatGroupFilesService = {
         onProgress: (progress: DebugStreamProgress) => void,
     ): Promise<string | null> {
         if (!isTauri) {
+            const chatGroupFilesMock = await previewMock();
             const size =
                 source.kind === 'group'
                     ? chatGroupFilesMock.sizeOf(source.groupId, source.fileId)

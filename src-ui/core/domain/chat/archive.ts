@@ -8,6 +8,7 @@ import {
     ingestMessage,
     MESSAGE_LIMIT,
     mergeArchiveMessages,
+    mergeMessageRows,
     trimAccountMessages,
     type Account,
     type Conversation,
@@ -91,7 +92,7 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
               }
             : live;
     }
-    const messages = mergeArchiveMessages([], deduplicateMessages([...byKey.values()]));
+    const messages = mergeMessageRows([], deduplicateMessages([...byKey.values()]));
     const latest = new Map<SessionKey, Message>();
     for (const message of messages) latest.set(message.session, message);
     for (const [key, message] of latest) {
@@ -104,7 +105,12 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
         )
             conversations[key] = { ...conversation, preview: messagePreview(message.segments) };
     }
-    return trimAccountMessages({ ...state, conversations, messages, archiveMessages: messages });
+    return trimAccountMessages({
+        ...state,
+        conversations,
+        messages,
+        archiveMessages: mergeArchiveMessages([], messages),
+    });
 }
 
 export function mergeRecentConversations(state: Account, rows: unknown[]): Account {

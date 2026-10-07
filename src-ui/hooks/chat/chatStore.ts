@@ -25,6 +25,7 @@ import {
     emptyAccount,
     ingestMessages,
     mergeArchiveMessages,
+    mergeMessageRows,
     trimAccountMessages,
     openConversation,
     contactFromKey,
@@ -197,12 +198,12 @@ export class ChatAccountStore {
                 if (index >= 0)
                     account = {
                         ...account,
-                        messages: mergeArchiveMessages(
-                            account.messages,
+                        messages: mergeMessageRows(
                             savedMessages.slice(
                                 Math.max(0, index - HISTORY_PAGE_SIZE),
                                 index + HISTORY_PAGE_SIZE * 2,
                             ),
+                            account.messages,
                         ),
                     };
             }
@@ -537,10 +538,10 @@ export class ChatAccountStore {
             openConversation(
                 {
                     ...state,
-                    messages: mergeArchiveMessages(state.messages, [
-                        ...rows.filter((message) => message.status !== 'sent'),
-                        ...recent,
-                    ]),
+                    messages: mergeMessageRows(
+                        [...rows.filter((message) => message.status !== 'sent'), ...recent],
+                        state.messages,
+                    ),
                 },
                 contact,
             ),
@@ -992,19 +993,30 @@ export class ChatAccountStore {
                     : anchor;
             this.pagingAnchors.set(key, pagingAnchor);
             const state = this.snapshot.account;
+            const recent = navigation?.latest
+                ? (state.archiveMessages ?? state.messages)
+                      .filter((message) => message.session === key)
+                      .slice(-HISTORY_PAGE_SIZE)
+                      .map((message) =>
+                          message.gapBefore ? { ...message, gapBefore: false } : message,
+                      )
+                : [];
+            const recentKeys = new Set(recent.map((message) => message.key));
+            const recentIds = new Set(
+                recent.flatMap((message) => (message.id ? [message.id] : [])),
+            );
             const source = navigation?.latest
                 ? {
                       ...state,
-                      messages: mergeArchiveMessages(
+                      messages: mergeMessageRows(
+                          recent,
                           state.messages.filter(
-                              (message) => message.session !== key || message.status !== 'sent',
+                              (message) =>
+                                  message.session !== key ||
+                                  message.status !== 'sent' ||
+                                  recentKeys.has(message.key) ||
+                                  (!!message.id && recentIds.has(message.id)),
                           ),
-                          (state.archiveMessages ?? state.messages)
-                              .filter((message) => message.session === key)
-                              .slice(-HISTORY_PAGE_SIZE)
-                              .map((message) =>
-                                  message.gapBefore ? { ...message, gapBefore: false } : message,
-                              ),
                       ),
                   }
                 : state;

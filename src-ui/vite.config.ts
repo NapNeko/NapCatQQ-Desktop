@@ -64,6 +64,10 @@ export default defineConfig({
         minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'esbuild',
         sourcemap: process.env.TAURI_ENV_DEBUG === 'true',
         rollupOptions: {
+            input: {
+                main: resolve(__dirname, 'index.html'),
+                chat: resolve(__dirname, 'chat.html'),
+            },
             output: {
                 manualChunks(id) {
                     if (id.includes('node_modules')) {
@@ -72,14 +76,12 @@ export default defineConfig({
                         if (id.includes('lucide-react')) return 'vendor-icons';
                         // xterm 只有终端面板用，单拆出来跟着懒加载的 TerminalDock 走，不进启动就加载的 vendor
                         if (id.includes('@xterm')) return 'vendor-xterm';
-                        // 调试台 JSON 编辑器专用的语法包、诊断、补全单独成块，只随调试台页面按需加载；
-                        // 否则会被并进启动就加载的 vendor。@codemirror/language 不能挪：commands 依赖它，挪了会成环
+                        // 编辑器与解析器放在同一块，避免 commands/language 跨块成环或进入公共启动包。
                         if (
-                            /[\\/]@(codemirror[\\/](lang-json|lint|autocomplete)|lezer[\\/]json)[\\/]/.test(
-                                id,
-                            )
+                            /[\\/]@(codemirror|lezer)[\\/]/.test(id) ||
+                            /[\\/](style-mod|w3c-keyname|crelt)[\\/]/.test(id)
                         )
-                            return 'vendor-codemirror-json';
+                            return 'vendor-codemirror';
                         return 'vendor';
                     }
                     return undefined;

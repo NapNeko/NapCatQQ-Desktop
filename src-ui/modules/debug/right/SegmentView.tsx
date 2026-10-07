@@ -26,7 +26,8 @@ import {
     Mic,
 } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
-import { SimpleMarkdown, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
+import { SimpleMarkdown } from '../../../shared/ui/SimpleMarkdown';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui/Tooltip';
 import { messagePreview, segmentPreview, type Segment } from '../../../core/domain/debug/segments';
 import { markdownContent } from '../../../core/domain/debug/markdown';
 import { useChatView } from './chatContext';

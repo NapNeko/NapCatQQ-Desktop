@@ -25,15 +25,12 @@ impl WebviewRole {
         }
     }
 
-    /// 窗口开着但失焦多久后降到休眠；None 表示失焦不降。
-    /// 失焦就是用户去用别的程序了，正是 Low 的本意。渲染进程的 GC 堆平时空着一大半
-    /// （实测首页 30 MB 里活对象只有 3.5 MB），Low 会把这些和脚本缓存一起还回去；页面几乎
-    /// 没有大图，回来时重建的代价很小。聊天窗常开在一边当消息框，降得早一些；主窗和调试台
-    /// 失焦常是切出去看一眼就回来，多等一会儿。
+    /// 给短暂切窗留余量，长期留在另一边的页面尽早归还缓存。
     pub(crate) fn idle_dormant_after(self) -> Option<Duration> {
         match self {
-            Self::ChatPopout => Some(Duration::from_secs(60)),
-            Self::Main | Self::DebugPopout => Some(Duration::from_secs(120)),
+            Self::ChatPopout => Some(Duration::from_secs(15)),
+            Self::Main => Some(Duration::from_secs(20)),
+            Self::DebugPopout => Some(Duration::from_secs(120)),
             _ => None,
         }
     }
@@ -47,6 +44,17 @@ pub(crate) enum Event {
     /// 失焦计时到点，带安排时的代次；代次对不上说明中间有过别的事件，作废。
     Tick(u64),
     Retry(u64),
+}
+
+pub(crate) fn native_focus_event(focused: bool, visible: bool, minimized: bool) -> Option<Event> {
+    if minimized {
+        Some(Event::Hide)
+    } else if visible {
+        Some(Event::Focus(focused))
+    } else {
+        // 初始隐藏的窗口还要靠 rAF 完成首帧；隐藏后的迟到焦点也不能唤醒它。
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -308,7 +316,7 @@ mod tests {
         let Some(Action::ScheduleTick { after, generation }) = actions.first().copied() else {
             panic!("失焦应安排计时: {actions:?}");
         };
-        assert_eq!(after, Duration::from_secs(60));
+        assert_eq!(after, Duration::from_secs(15));
 
         run(WebviewRole::ChatPopout, &mut e, Event::Focus(true));
         assert!(
@@ -335,7 +343,7 @@ mod tests {
         let mut e = Entry::default();
         let actions = run(WebviewRole::Main, &mut e, Event::Focus(false));
         assert!(
-            matches!(actions.as_slice(), [Action::ScheduleTick { after, .. }] if *after == Duration::from_secs(120))
+            matches!(actions.as_slice(), [Action::ScheduleTick { after, .. }] if *after == Duration::from_secs(20))
         );
         // 没登记角色的窗口失焦不另外计时
         assert!(
@@ -373,6 +381,32 @@ mod tests {
         assert_eq!(
             WebviewRole::from_label("something-else"),
             WebviewRole::Other
+        );
+    }
+
+    #[test]
+    fn hidden_native_focus_does_not_wake_or_hide_a_booting_page() {
+        let mut entry = Entry::default();
+        run(WebviewRole::Main, &mut entry, Event::Hide);
+        let generation = entry.generation();
+        assert_eq!(native_focus_event(true, false, false), None);
+        assert_eq!(native_focus_event(false, false, false), None);
+        assert!(entry.is_hidden() && entry.is_dormant());
+        assert_eq!(entry.generation(), generation);
+    }
+
+    #[test]
+    fn minimizing_releases_the_page_and_visible_focus_restores_it() {
+        let mut entry = Entry::default();
+        let event = native_focus_event(false, true, true).unwrap();
+        assert_eq!(
+            run(WebviewRole::ChatPopout, &mut entry, event),
+            vec![Action::SetVisible(false), Action::SetDormant(true)]
+        );
+        let restored = native_focus_event(true, true, false).unwrap();
+        assert_eq!(
+            run(WebviewRole::ChatPopout, &mut entry, restored),
+            vec![Action::SetDormant(false), Action::SetVisible(true)]
         );
     }
 

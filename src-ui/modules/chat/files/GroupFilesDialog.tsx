@@ -14,7 +14,10 @@ import {
     FolderInput,
     X,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle, Progress, Select, Spinner } from '../../../shared/ui';
+import { Dialog, DialogContent, DialogTitle } from '../../../shared/ui/Dialog';
+import { Progress } from '../../../shared/ui/Progress';
+import { Select } from '../../../shared/ui/Select';
+import { Spinner } from '../../../shared/ui/Spinner';
 import {
     ContextMenu,
     ContextMenuContent,

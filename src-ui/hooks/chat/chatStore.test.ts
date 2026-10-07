@@ -879,6 +879,33 @@ describe('chat lifecycle', () => {
             message: [{ type: 'image', data: { file: 'base64://abc' } }],
         });
     });
+    it('keeps a large settled image through reopening the current conversation and returning to latest', async () => {
+        const { store } = setup();
+        await store.connect();
+        const contact = {
+            key: 'group:12' as const,
+            type: 'group' as const,
+            id: '12',
+            name: '测试群',
+        };
+        const file = 'base64://' + 'A'.repeat(5 * 1024 * 1024);
+        store.open(contact);
+        store.draft('group:12', {
+            text: '',
+            reply: null,
+            attachments: [{ key: 'large', name: '截图.png', path: file, type: 'image' }],
+        });
+        await store.send('group:12');
+        const reference = store.getSnapshot().account.messages[0].segments[0].data.file;
+        expect(reference).toMatch(/^ncd-inline-image:\/\//);
+        store.open(contact);
+        expect(store.getSnapshot().account.messages[0].segments[0].data.file).toBe(reference);
+        await store.latest('group:12');
+        expect(store.getSnapshot().account.messages[0].segments[0].data.file).toBe(reference);
+        expect(
+            archiveOf(store.getSnapshot().account).messages[0].segments[0].data.file,
+        ).toBeUndefined();
+    });
     it('retries the complete failed image and text together without touching a newer draft or duplicating the message', async () => {
         const { store, transport } = setup();
         await store.connect();

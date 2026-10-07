@@ -6,7 +6,7 @@
 
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import './index.css';
-import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
+import { TitleBarChrome } from '../shared/components/next/TitleBarChrome';
 import { GlobalTitleTooltip, InfoBarStack, TooltipProvider } from '../shared/ui';
 // fallback 直引，避免只为 Spinner 再钉死整个 shared/ui barrel 图。
 import { PagePlaceholder } from '../shared/ui/PagePlaceholder';
@@ -57,7 +57,7 @@ export const DebugPopoutApp: React.FC = () => {
                 <div className="relative flex flex-1 flex-col overflow-hidden">
                     <div className="ndf-canvas-glow" />
 
-                    <CustomTitleBar variant="window" />
+                    <TitleBarChrome tool />
 
                     <main className="relative z-10 flex min-w-0 flex-1 overflow-hidden">
                         <div className="flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8">

@@ -2,7 +2,9 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLatestScroll } from './useLatestScroll';
 
+const originalResizeObserver = globalThis.ResizeObserver;
 afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     document.body.replaceChildren();
@@ -18,18 +20,16 @@ function setup(enabled = true) {
     });
     let next: FrameRequestCallback | undefined;
     let resized: ResizeObserverCallback | undefined;
-    vi.stubGlobal(
-        'ResizeObserver',
-        class {
-            constructor(callback: ResizeObserverCallback) {
-                resized = callback;
-            }
-            observe() {}
-            disconnect() {
-                resized = undefined;
-            }
-        },
-    );
+    globalThis.ResizeObserver = class {
+        constructor(callback: ResizeObserverCallback) {
+            resized = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {
+            resized = undefined;
+        }
+    };
     vi.spyOn(performance, 'now').mockReturnValue(0);
     vi.stubGlobal(
         'requestAnimationFrame',
