@@ -54,6 +54,11 @@ export function useHistoryPaging(options: {
             });
         };
         return {
+            reset: () => {
+                armed.current = false;
+                if (frame.current !== null) cancelAnimationFrame(frame.current);
+                frame.current = null;
+            },
             onScroll: () => {
                 if (
                     armed.current &&

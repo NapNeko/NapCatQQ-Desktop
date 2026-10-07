@@ -28,11 +28,19 @@ import {
 import { cn } from '../../../shared/utils/cn';
 import { SimpleMarkdown, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
 import { messagePreview, segmentPreview, type Segment } from '../../../core/domain/debug/segments';
+import { markdownContent } from '../../../core/domain/debug/markdown';
 import { useChatView } from './chatContext';
 import { fileSizeLabel, safeJson } from '../../../core/domain/debug/chatFormat';
 import { SafeBoundary, useCopy } from './rightParts';
 import { CACHE_MAX, LruCache, imageCacheKey } from './boundedCache';
 import { QQFace } from '../../chat/media/QQFace';
+import { qqFaceLarge, type QQFaceDisplaySegment } from '../../../core/domain/chat/qqFaces';
+import { projectMessageDisplay } from '../../../core/domain/chat/messageDisplay';
+import { qqFaceService } from '../../../core/services/qq-face.service';
+import type {
+    ImageReadOptions,
+    ImageSourceContext,
+} from '../../../core/services/chat-media.service';
 import { ChatForward } from '../../chat/media/ChatForward';
 import { ChatRecord } from '../../chat/media/ChatRecord';
 import { ChatVideo } from '../../chat/media/ChatVideo';
@@ -45,14 +53,21 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 /** 只有图（或表情包）的消息不画气泡底，和 QQ 一样 */
 export function isPictureOnly(segments: readonly Segment[]): boolean {
-    return segments.length > 0 && segments.every((s) => s.type === 'image' || s.type === 'mface');
+    return (
+        segments.length > 0 &&
+        projectMessageDisplay(segments).every((s) => s.type === 'image' || s.type === 'mface')
+    );
 }
 
 /** 图片、表情、语音、视频和合并转发单独成消息时，让内容直接贴在时间线上。 */
 export function isMediaOnly(segments: readonly Segment[]): boolean {
     return (
         segments.length > 0 &&
-        segments.every((s) => ['image', 'mface', 'record', 'video', 'forward'].includes(s.type))
+        projectMessageDisplay(segments, qqFaceService.peek).every(
+            (s) =>
+                ['image', 'mface', 'record', 'video', 'forward'].includes(s.type) ||
+                (s.type === 'face' && (qqFaceLarge(s.data) ?? s.displayLarge)),
+        )
     );
 }
 
@@ -63,15 +78,19 @@ export const SegmentList = memo(function SegmentList({
     segments,
     mine,
     messageId,
+    imageIndexOffset = 0,
 }: {
     segments: Segment[];
     mine: boolean;
     messageId?: string;
+    imageIndexOffset?: number;
 }) {
     if (segments.length === 0) return <span className="text-text-tertiary">（空消息）</span>;
     // 回复段不管排在哪都画在最上面
     const reply = segments.find((s) => s.type === 'reply');
-    const rest = reply ? segments.filter((s) => s !== reply) : segments;
+    const displayed = projectMessageDisplay(segments, qqFaceService.peek);
+    const rest = reply ? displayed.filter((s) => s !== reply) : displayed;
+    let imageIndex = imageIndexOffset;
     return (
         <>
             {reply && (
@@ -79,11 +98,23 @@ export const SegmentList = memo(function SegmentList({
                     <ReplyQuote seg={reply} mine={mine} />
                 </SafeBoundary>
             )}
-            {rest.map((seg, i) => (
-                <SafeBoundary key={i} fallback={<UnknownChip seg={seg} note="这个段显示不了" />}>
-                    <SegmentView seg={seg} mine={mine} messageId={messageId} />
-                </SafeBoundary>
-            ))}
+            {rest.map((seg, i) => {
+                const ordinal = imageIndex;
+                if (seg.type === 'image' || seg.type === 'mface') imageIndex++;
+                return (
+                    <SafeBoundary
+                        key={i}
+                        fallback={<UnknownChip seg={seg} note="这个段显示不了" />}
+                    >
+                        <SegmentView
+                            seg={seg}
+                            mine={mine}
+                            messageId={messageId}
+                            imageIndex={ordinal}
+                        />
+                    </SafeBoundary>
+                );
+            })}
         </>
     );
 });
@@ -92,10 +123,12 @@ function SegmentView({
     seg,
     mine,
     messageId,
+    imageIndex,
 }: {
-    seg: Segment;
+    seg: QQFaceDisplaySegment;
     mine: boolean;
     messageId?: string;
+    imageIndex: number;
 }) {
     const d = seg.data;
     switch (seg.type) {
@@ -104,12 +137,13 @@ function SegmentView({
         case 'at':
             return <AtSeg qq={str(d.qq)} name={str(d.name)} mine={mine} />;
         case 'face':
-            return <QQFace id={str(d.id)} />;
+            return <QQFace id={str(d.id)} data={d} displayLarge={seg.displayLarge} animated />;
         case 'image':
             return (
                 <ImageSeg
                     key={imageResourceKey(d)}
                     data={d}
+                    context={{ messageId, imageIndex }}
                     summary={str(d.summary)}
                     sticker={Number(d.sub_type ?? d.subType) === 1}
                 />
@@ -119,6 +153,7 @@ function SegmentView({
                 <ImageSeg
                     key={imageResourceKey(d)}
                     data={d}
+                    context={{ messageId, imageIndex }}
                     summary={str(d.summary) || '[表情包]'}
                     sticker
                 />
@@ -147,7 +182,7 @@ function SegmentView({
         case 'xml':
             return <RichCard seg={seg} />;
         case 'markdown':
-            return <MarkdownSeg content={str(d.content) || str(d.data)} />;
+            return <MarkdownSeg content={markdownContent(d)} />;
         case 'poke':
             return <Chip icon={<Hand size={11} aria-hidden />}>戳了戳</Chip>;
         default:
@@ -265,6 +300,8 @@ function imageResourceKey(data: Record<string, unknown>): string {
     return JSON.stringify([
         str(data.file_id),
         str(data.local_file),
+        str(data.inline_ref),
+        imageCacheKey(str(data.base64)),
         imageCacheKey(str(data.file)),
         imageCacheKey(imageUrlOf(data)),
     ]);
@@ -307,16 +344,23 @@ function sizeOf(data: Record<string, unknown>, url: string, sticker = false, sco
 }
 
 async function readImageWithTimeout(
-    read: (data: Record<string, unknown>, refresh?: boolean) => Promise<string>,
+    read: (
+        data: Record<string, unknown>,
+        refresh?: boolean,
+        options?: ImageReadOptions,
+    ) => Promise<string>,
     data: Record<string, unknown>,
     refresh?: boolean,
+    signal?: AbortSignal,
+    queued = false,
+    context?: ImageSourceContext,
 ) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<string>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('图片读取超时')), 15_000);
+        if (!queued) timer = setTimeout(() => reject(new Error('图片读取超时')), 15_000);
     });
     try {
-        const value = await Promise.race([read(data, refresh), deadline]);
+        const value = await Promise.race([read(data, refresh, { signal, context }), deadline]);
         if (!/^(https?:\/\/|data:image\/|blob:)/i.test(value)) throw new Error('图片地址不可用');
         return value;
     } finally {
@@ -328,15 +372,24 @@ function ImageSeg({
     data,
     summary,
     sticker,
+    context,
 }: {
     data: Record<string, unknown>;
     summary: string;
     sticker?: boolean;
+    context: ImageSourceContext;
 }) {
-    const { openImage, readImage, mediaScope = '' } = useChatView();
+    const {
+        openImage,
+        readImage,
+        isImageSourceAlive,
+        mediaScope = '',
+        imageReadsQueued = false,
+    } = useChatView();
     const reader = useRef(readImage);
     reader.current = readImage;
     const request = useRef(0);
+    const activeRead = useRef<AbortController | null>(null);
     const canRead = !!readImage;
     const resourceKey = `${mediaScope}/${imageResourceKey(data)}`;
     const cachedUrl = resolvedImages.get(resourceKey);
@@ -366,6 +419,7 @@ function ImageSeg({
         setSize(sizeOf(data, initialUrl, sticker, mediaScope));
         return () => {
             request.current++;
+            activeRead.current?.abort();
         };
         // 档案合并会创建等价 data；只有资源身份变化才重新开始加载。
     }, [resourceKey, canRead, sticker]);
@@ -373,8 +427,17 @@ function ImageSeg({
     useEffect(() => {
         if (url || !reader.current || failed || refreshing) return;
         const current = ++request.current;
+        const controller = new AbortController();
+        activeRead.current = controller;
         setRefreshing(true);
-        void readImageWithTimeout(reader.current, data)
+        void readImageWithTimeout(
+            reader.current,
+            data,
+            undefined,
+            controller.signal,
+            imageReadsQueued,
+            context,
+        )
             .then((value) => {
                 if (current === request.current) {
                     setUrl(value);
@@ -385,6 +448,7 @@ function ImageSeg({
                 if (current === request.current) setFailed(true);
             })
             .finally(() => {
+                if (activeRead.current === controller) activeRead.current = null;
                 if (current === request.current) setRefreshing(false);
             });
     }, [resourceKey, failed, canRead, refreshing, url]);
@@ -408,15 +472,36 @@ function ImageSeg({
         refreshAttempts.current++;
         setRefreshing(true);
         const current = ++request.current;
+        const controller = new AbortController();
+        activeRead.current = controller;
         void (async () => {
             try {
                 let value: string;
                 try {
-                    value = await readImageWithTimeout(readImage, data, true);
+                    value = await readImageWithTimeout(
+                        readImage,
+                        data,
+                        true,
+                        controller.signal,
+                        imageReadsQueued,
+                        context,
+                    );
                 } catch (error) {
-                    if (current !== request.current || refreshAttempts.current >= 2) throw error;
+                    if (
+                        current !== request.current ||
+                        controller.signal.aborted ||
+                        refreshAttempts.current >= 2
+                    )
+                        throw error;
                     refreshAttempts.current++;
-                    value = await readImageWithTimeout(readImage, data, true);
+                    value = await readImageWithTimeout(
+                        readImage,
+                        data,
+                        true,
+                        controller.signal,
+                        imageReadsQueued,
+                        context,
+                    );
                 }
                 if (current === request.current) {
                     setUrl(value);
@@ -427,6 +512,7 @@ function ImageSeg({
             } catch {
                 if (current === request.current) setFailed(true);
             } finally {
+                if (activeRead.current === controller) activeRead.current = null;
                 if (current === request.current) setRefreshing(false);
             }
         })();
@@ -461,8 +547,35 @@ function ImageSeg({
     return (
         <button
             type="button"
-            onClick={(e) => {
+            onClick={async (e) => {
                 e.stopPropagation();
+                if (isImageSourceAlive && !isImageSourceAlive(data) && readImage) {
+                    if (refreshing) return;
+                    const current = ++request.current;
+                    const controller = new AbortController();
+                    activeRead.current = controller;
+                    setRefreshing(true);
+                    try {
+                        const fresh = await readImageWithTimeout(
+                            readImage,
+                            data,
+                            false,
+                            controller.signal,
+                            imageReadsQueued,
+                            context,
+                        );
+                        if (current !== request.current) return;
+                        setUrl(fresh);
+                        setLoaded(false);
+                        openImage(fresh);
+                    } catch {
+                        if (current === request.current) setFailed(true);
+                    } finally {
+                        if (activeRead.current === controller) activeRead.current = null;
+                        if (current === request.current) setRefreshing(false);
+                    }
+                    return;
+                }
                 openImage(url);
             }}
             aria-label={sticker ? `看大图：${summary}` : '看大图'}

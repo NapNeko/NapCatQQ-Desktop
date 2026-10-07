@@ -1,8 +1,6 @@
 // 资料使用主窗口的轻量弹层，不占用第三栏。
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-    ArrowLeft,
     Check,
     ChevronRight,
     Copy,
@@ -11,16 +9,12 @@ import {
     Pin,
     RefreshCw,
     Search,
+    Users,
     X,
 } from 'lucide-react';
 import type { Contact, Conversation } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
-import {
-    chatProfileService,
-    type ChatProfile,
-    type ProfileField,
-    type ProfileMember,
-} from '../../core/services/chat-profile.service';
+import { chatProfileService, type ChatProfile } from '../../core/services/chat-profile.service';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
 import { ChatAvatar } from './ChatAvatar';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -31,6 +25,7 @@ interface Props {
     onPin: () => void;
     onMessage?: (contact: Contact) => void;
     onSearch?: () => void;
+    onMembers?: () => void;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
 }
@@ -40,30 +35,22 @@ export function ChatDetails({
     onPin,
     onMessage,
     onSearch,
+    onMembers,
     open,
     onOpenChange,
 }: Props) {
     const [copyState, setCopyState] = useState('');
     const [internalOpen, setInternalOpen] = useState(false);
     const [profile, setProfile] = useState<ChatProfile>();
-    const [members, setMembers] = useState<ProfileMember[]>([]);
-    const [selectedMember, setSelectedMember] = useState<ProfileMember>();
     const [loading, setLoading] = useState(false);
-    const [membersLoading, setMembersLoading] = useState(false);
     const [error, setError] = useState('');
-    const [memberError, setMemberError] = useState('');
     const [attempt, setAttempt] = useState(0);
-    const [query, setQuery] = useState('');
     const leaving = useRef(false);
     const visible = open ?? internalOpen;
     const change = (next: boolean) => {
         setCopyState('');
         setInternalOpen(next);
         onOpenChange?.(next);
-        if (!next) {
-            setSelectedMember(undefined);
-            setQuery('');
-        }
     };
     const leave = (action: () => void) => {
         leaving.current = true;
@@ -72,15 +59,11 @@ export function ChatDetails({
     };
     useEffect(() => {
         setProfile(undefined);
-        setMembers([]);
-        setSelectedMember(undefined);
-        setQuery('');
     }, [target?.bot_id, target?.qq_id, contact.key]);
     useEffect(() => {
         if (!visible || !target) return;
         let cancelled = false;
         setError('');
-        setMemberError('');
         setLoading(true);
         void chatProfileService
             .info(target, contact)
@@ -96,25 +79,6 @@ export function ChatDetails({
             .finally(() => {
                 if (!cancelled) setLoading(false);
             });
-        if (contact.type === 'group') {
-            setMembersLoading(true);
-            void chatProfileService
-                .members(target, contact.id)
-                .then(
-                    (value) => {
-                        if (!cancelled) setMembers(value);
-                    },
-                    (reason) => {
-                        if (!cancelled)
-                            setMemberError(
-                                reason instanceof Error ? reason.message : '成员读取失败',
-                            );
-                    },
-                )
-                .finally(() => {
-                    if (!cancelled) setMembersLoading(false);
-                });
-        }
         return () => {
             cancelled = true;
         };
@@ -127,19 +91,7 @@ export function ChatDetails({
         contact.type,
         attempt,
     ]);
-    const term = query.trim().toLocaleLowerCase();
-    const filtered = useMemo(
-        () =>
-            members.filter(
-                (member) =>
-                    !term ||
-                    `${member.name} ${member.nickname} ${member.id}`
-                        .toLocaleLowerCase()
-                        .includes(term),
-            ),
-        [members, term],
-    );
-    const displayed = selectedMember ?? { ...contact, name: profile?.name || contact.name };
+    const displayed = { ...contact, name: profile?.name || contact.name };
     const copy = async () => {
         try {
             await navigator.clipboard.writeText(displayed.id);
@@ -148,17 +100,6 @@ export function ChatDetails({
             setCopyState('复制失败');
         }
     };
-    const role = (member: ProfileMember) =>
-        member.role === 'owner' ? '群主' : member.role === 'admin' ? '管理员' : '群成员';
-    const memberFields: ProfileField[] = selectedMember
-        ? [
-              { label: '昵称', value: selectedMember.nickname },
-              { label: '身份', value: role(selectedMember) },
-              { label: '头衔', value: selectedMember.title },
-              { label: '加入于', value: selectedMember.joined ?? '' },
-              { label: '最近发言', value: selectedMember.lastSent ?? '' },
-          ].filter((field) => field.value)
-        : [];
     return (
         <Popover open={visible} onOpenChange={change}>
             <PopoverTrigger asChild>
@@ -183,32 +124,13 @@ export function ChatDetails({
                 }}
             >
                 <div className="native-chat-details-heading">
-                    {selectedMember && (
-                        <button
-                            type="button"
-                            className="native-chat-icon"
-                            aria-label="返回群资料"
-                            onClick={() => {
-                                setSelectedMember(undefined);
-                                setCopyState('');
-                            }}
-                        >
-                            <ArrowLeft size={15} />
-                        </button>
-                    )}
-                    <h3>
-                        {selectedMember
-                            ? '群成员'
-                            : contact.type === 'group'
-                              ? '群资料'
-                              : '个人资料'}
-                    </h3>
-                    {target && !selectedMember && (
+                    <h3>{contact.type === 'group' ? '群资料' : '个人资料'}</h3>
+                    {target && (
                         <button
                             type="button"
                             className="native-chat-icon"
                             aria-label="刷新会话资料"
-                            disabled={loading || membersLoading}
+                            disabled={loading}
                             onClick={() => setAttempt((value) => value + 1)}
                         >
                             <RefreshCw size={13} />
@@ -224,7 +146,7 @@ export function ChatDetails({
                         </button>
                     </PopoverClose>
                 </div>
-                <ProfileBody step={selectedMember?.id ?? 'profile'}>
+                <ProfileBody step={contact.key}>
                     <div className="native-chat-details-person">
                         <ChatAvatar contact={displayed} />
                         <div className="min-w-0">
@@ -232,11 +154,7 @@ export function ChatDetails({
                                 {displayed.name}
                             </p>
                             <p className="mt-1 text-[11px] text-text-tertiary">
-                                {selectedMember
-                                    ? contact.name
-                                    : contact.type === 'group'
-                                      ? '群聊'
-                                      : 'QQ 用户'}
+                                {contact.type === 'group' ? '群聊' : 'QQ 用户'}
                             </p>
                         </div>
                     </div>
@@ -253,19 +171,19 @@ export function ChatDetails({
                         {copyState === '已复制' ? <Check size={13} /> : <Copy size={13} />}
                     </button>
                     <dl className="native-chat-profile-fields">
-                        {(selectedMember ? memberFields : (profile?.fields ?? [])).map((field) => (
+                        {(profile?.fields ?? []).map((field) => (
                             <div key={field.label}>
                                 <dt>{field.label}</dt>
                                 <dd>{field.value}</dd>
                             </div>
                         ))}
                     </dl>
-                    {!selectedMember && loading && !profile && (
+                    {loading && !profile && (
                         <p className="native-chat-profile-status" role="status">
                             正在读取资料…
                         </p>
                     )}
-                    {!selectedMember && error && (
+                    {error && (
                         <p className="native-chat-profile-status" role="status">
                             {error}
                             <button type="button" onClick={() => setAttempt((value) => value + 1)}>
@@ -273,101 +191,48 @@ export function ChatDetails({
                             </button>
                         </p>
                     )}
-                    {selectedMember ? (
-                        onMessage && (
-                            <button
-                                type="button"
-                                className="native-chat-detail-action"
-                                onClick={() => leave(() => onMessage(selectedMember))}
-                            >
-                                <MessageCircle size={14} />
-                                发消息
-                                <ChevronRight size={13} className="ml-auto" />
-                            </button>
-                        )
-                    ) : (
-                        <>
-                            <button
-                                type="button"
-                                className="native-chat-detail-action"
-                                aria-pressed={contact.pinned}
-                                onClick={onPin}
-                            >
-                                <Pin size={14} />
-                                置顶会话
-                                {contact.pinned && (
-                                    <Check size={14} className="ml-auto text-brand" />
-                                )}
-                            </button>
-                            {onSearch && (
-                                <button
-                                    type="button"
-                                    className="native-chat-detail-action"
-                                    onClick={() => leave(onSearch)}
-                                >
-                                    <Search size={14} />
-                                    查找聊天记录
-                                    <ChevronRight size={13} className="ml-auto" />
-                                </button>
-                            )}
-                            {contact.type === 'group' && target && (
-                                <section className="native-chat-detail-members" aria-label="群成员">
-                                    <div className="native-chat-members-heading">
-                                        <h4>群成员</h4>
-                                        <span>{members.length || contact.members || ''}</span>
-                                    </div>
-                                    <label className="native-chat-search">
-                                        <Search size={14} aria-hidden />
-                                        <input
-                                            aria-label="搜索群成员"
-                                            placeholder="搜索成员"
-                                            value={query}
-                                            onChange={(event) => setQuery(event.target.value)}
-                                        />
-                                        {query && (
-                                            <button
-                                                type="button"
-                                                aria-label="清除成员搜索"
-                                                onClick={() => setQuery('')}
-                                            >
-                                                <X size={13} />
-                                            </button>
-                                        )}
-                                    </label>
-                                    <MemberList
-                                        key={`${contact.key}/${term}`}
-                                        members={filtered}
-                                        onSelect={(member) => {
-                                            setSelectedMember(member);
-                                            setCopyState('');
-                                        }}
-                                    >
-                                        {membersLoading && (
-                                            <p className="native-chat-profile-status" role="status">
-                                                正在读取成员…
-                                            </p>
-                                        )}
-                                        {memberError && (
-                                            <p className="native-chat-profile-status" role="status">
-                                                {memberError}
-                                                <button
-                                                    type="button"
-                                                    aria-label="重新读取成员"
-                                                    onClick={() => setAttempt((value) => value + 1)}
-                                                >
-                                                    重试
-                                                </button>
-                                            </p>
-                                        )}
-                                        {!membersLoading && !memberError && !filtered.length && (
-                                            <p className="native-chat-profile-status">
-                                                {query ? '没有找到成员' : '暂无成员'}
-                                            </p>
-                                        )}
-                                    </MemberList>
-                                </section>
-                            )}
-                        </>
+                    {contact.type === 'private' && onMessage && (
+                        <button
+                            type="button"
+                            className="native-chat-detail-action"
+                            onClick={() => leave(() => onMessage(contact))}
+                        >
+                            <MessageCircle size={14} />
+                            发消息
+                            <ChevronRight size={13} className="ml-auto" />
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className="native-chat-detail-action"
+                        aria-pressed={contact.pinned}
+                        onClick={onPin}
+                    >
+                        <Pin size={14} />
+                        置顶会话
+                        {contact.pinned && <Check size={14} className="ml-auto text-brand" />}
+                    </button>
+                    {onSearch && (
+                        <button
+                            type="button"
+                            className="native-chat-detail-action"
+                            onClick={() => leave(onSearch)}
+                        >
+                            <Search size={14} />
+                            查找聊天记录
+                            <ChevronRight size={13} className="ml-auto" />
+                        </button>
+                    )}
+                    {contact.type === 'group' && onMembers && (
+                        <button
+                            type="button"
+                            className="native-chat-detail-action"
+                            onClick={() => leave(onMembers)}
+                        >
+                            <Users size={14} />
+                            查看群成员
+                            <ChevronRight size={13} className="ml-auto" />
+                        </button>
                     )}
                 </ProfileBody>
                 {copyState && (
@@ -377,72 +242,6 @@ export function ChatDetails({
                 )}
             </PopoverContent>
         </Popover>
-    );
-}
-
-function MemberList({
-    members,
-    onSelect,
-    children,
-}: {
-    members: ProfileMember[];
-    onSelect: (member: ProfileMember) => void;
-    children: ReactNode;
-}) {
-    const scroll = useRef<HTMLDivElement>(null);
-    const [limit, setLimit] = useState(60);
-    const count = Math.min(limit, members.length);
-    const virtual = useVirtualizer({
-        count,
-        getScrollElement: () => scroll.current,
-        getItemKey: (index) => members[index].id,
-        estimateSize: () => 48,
-        overscan: 4,
-        initialRect: { width: 300, height: 240 },
-    });
-    const rows = virtual.getVirtualItems();
-    const lastIndex = rows.at(-1)?.index ?? 0;
-    useEffect(() => {
-        if (count < members.length && lastIndex >= count - 5)
-            setLimit(Math.min(count + 60, members.length));
-    }, [lastIndex, count, members.length]);
-    return (
-        <div
-            ref={scroll}
-            className="native-chat-member-list"
-            role="region"
-            aria-label="群成员列表"
-            tabIndex={0}
-        >
-            {children}
-            <div style={{ height: virtual.getTotalSize(), position: 'relative' }}>
-                {rows.map((row) => {
-                    const member = members[row.index];
-                    return (
-                        <button
-                            type="button"
-                            key={row.key}
-                            className="native-chat-detail-member"
-                            style={{ position: 'absolute', top: row.start, height: row.size }}
-                            aria-label={`查看${member.name}的群资料`}
-                            onClick={() => onSelect(member)}
-                        >
-                            <ChatAvatar contact={member} small />
-                            <span className="min-w-0 flex-1">
-                                <span className="block truncate">{member.name}</span>
-                                <span className="native-chat-member-id">{member.id}</span>
-                            </span>
-                            {['owner', 'admin'].includes(member.role) && (
-                                <span className="native-chat-member-role">
-                                    {member.role === 'owner' ? '群主' : '管理员'}
-                                </span>
-                            )}
-                            <ChevronRight size={12} />
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
     );
 }
 

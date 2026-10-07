@@ -287,6 +287,23 @@ export function useStickToBottom<T extends Keyed>(opts: {
     useLayoutEffect(() => {
         if (opts.followUntilUserScroll && stickRef.current && !autoRef.current) snapToEnd();
     });
+    useLayoutEffect(() => {
+        const element = scrollRef.current;
+        if (!opts.followUntilUserScroll || !element) return;
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                if (stickRef.current && !autoRef.current) snapToEnd();
+            });
+        });
+        observer.observe(element);
+        if (element.lastElementChild) observer.observe(element.lastElementChild);
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+        };
+    }, [scrollRef, snapToEnd, opts.followUntilUserScroll, items.length > 0]);
 
     // 从记住的位置开始时：内容可能已经不够长、恢复后其实就在底部，下一帧按实际位置再判一次
     useLayoutEffect(() => {

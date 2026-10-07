@@ -58,6 +58,35 @@ function setup() {
     return { store, element, rows, virtual };
 }
 describe('chat reading position', () => {
+    it('leaves latest navigation in charge of position through a changed message set', () => {
+        const { store, element, virtual } = setup();
+        store.readingPosition(message.session, {
+            messageKey: message.key,
+            messageId: '42',
+            offset: 31,
+            atBottom: false,
+        });
+        const hook = renderHook(
+            ({ messages }) =>
+                useTimelinePosition(
+                    store,
+                    message.session,
+                    { current: element },
+                    virtual,
+                    messages,
+                    () => false,
+                    () => true,
+                ),
+            { initialProps: { messages: [message] } },
+        );
+        const saved = store.readingPosition(message.session);
+        element.scrollTop = 1600;
+        act(() => hook.result.current.capture());
+        hook.rerender({ messages: [message, { ...message, key: 'private:22/43', id: '43' }] });
+        expect(virtual.scrollToOffset).not.toHaveBeenCalled();
+        expect(element.scrollTop).toBe(1600);
+        expect(store.readingPosition(message.session)).toEqual(saved);
+    });
     it('keeps the same message offset when older working pages are removed', () => {
         const { store, element, rows, virtual } = setup();
         const earlier = { ...message, key: 'private:22/1', id: '1', at: -1 };

@@ -162,7 +162,7 @@ export function ChatMessageEntrance({
     const motion = useMotion();
     const body = useRef<HTMLDivElement>(null);
     const eligible = useRef<boolean | null>(null);
-    const animation = useRef<gsap.core.Tween | null>(null);
+    const animation = useRef<gsap.core.Timeline | null>(null);
     const settings = useRef({ level: motion.level, speed: motion.speed });
     useGSAP(
         () => {
@@ -176,36 +176,42 @@ export function ChatMessageEntrance({
                 element.getClientRects().length === 0
             )
                 return;
+            const sent = mine && !!element.querySelector('[data-local-send=true]');
             const distance = motion.level === 'elegant' ? 0 : motion.level === 'rich' ? 12 : 6;
-            const delay = Math.min(3, Math.max(0, order)) * motion.stagger() * 0.5;
-            animation.current = gsap.fromTo(
+            const delay = sent ? 0 : Math.min(3, Math.max(0, order)) * motion.stagger() * 0.5;
+            const timeline = gsap.timeline({ delay });
+            animation.current = timeline;
+            timeline.fromTo(
                 element,
-                { opacity: 0, x: mine ? distance : -distance, y: distance / 2 },
                 {
-                    opacity: 1,
+                    x: sent ? 0 : mine ? distance : -distance,
+                    y: sent ? distance : distance / 2,
+                    scale: 1,
+                    willChange: 'transform,opacity',
+                },
+                {
                     x: 0,
                     y: 0,
-                    duration: motion.duration('base'),
-                    delay,
+                    scale: 1,
+                    duration: motion.duration('base') * (sent ? 0.8 : 1),
                     // 正文始终单调归位，不沿用丰富挡的 back/elastic，避免文字抖动。
                     ease: motion.ease.damped,
-                    clearProps: 'opacity,transform',
+                    clearProps: 'transform,willChange',
                 },
+                0,
             );
-            const avatar = element.querySelector('.native-chat-avatar');
-            if (avatar && !avatar.closest('.invisible') && motion.level !== 'elegant') {
-                gsap.fromTo(
-                    avatar,
-                    { scale: motion.preset.feel.tapScale },
-                    {
-                        scale: 1,
-                        duration: motion.duration('fast'),
-                        delay,
-                        ease: motion.ease.pop,
-                        clearProps: 'transform',
-                    },
-                );
-            }
+            // 本地发送先显现，头像和气泡一起归位，不等整段位移结束才变清晰。
+            timeline.fromTo(
+                element,
+                { opacity: sent ? 0.35 : 0 },
+                {
+                    opacity: 1,
+                    duration: motion.duration(sent ? 'fast' : 'base') * (sent ? 0.45 : 1),
+                    ease: motion.ease.damped,
+                    clearProps: 'opacity',
+                },
+                0,
+            );
         },
         { scope: body },
     );
@@ -215,12 +221,7 @@ export function ChatMessageEntrance({
         settings.current = { level: motion.level, speed: motion.speed };
         if ((motion.enabled && !changed) || !body.current) return;
         animation.current?.kill();
-        gsap.set(body.current, { clearProps: 'opacity,transform' });
-        const avatar = body.current.querySelector('.native-chat-avatar');
-        if (avatar) {
-            gsap.killTweensOf(avatar);
-            gsap.set(avatar, { clearProps: 'transform' });
-        }
+        gsap.set(body.current, { clearProps: 'opacity,transform,willChange' });
     }, [motion.enabled, motion.level, motion.speed]);
     return (
         <div ref={body} className="native-chat-message-motion">
@@ -234,7 +235,9 @@ export function useChatTabMotion(scope: RefObject<HTMLDivElement>, token: string
     const previous = useRef<{ token: string; x: number; width: number } | null>(null);
     useGSAP(
         () => {
-            const list = scope.current?.querySelector<HTMLElement>('[role=tablist]');
+            const list = scope.current?.querySelector<HTMLElement>(
+                '.native-chat-tabs [role=tablist]',
+            );
             const button = list?.querySelector<HTMLElement>('[aria-selected=true]');
             const indicator = list?.querySelector<HTMLElement>('.native-chat-tab-indicator');
             if (!list || !button || !indicator) return;
@@ -244,10 +247,10 @@ export function useChatTabMotion(scope: RefObject<HTMLDivElement>, token: string
                 const last = previous.current;
                 previous.current = next;
                 gsap.killTweensOf(indicator);
-                gsap.set(indicator, { autoAlpha: 1 });
+                gsap.set(indicator, { autoAlpha: 1, scaleX: 1 });
                 if (animate && motion.enabled && last && last.token !== token) {
                     if (motion.level === 'elegant') {
-                        gsap.set(indicator, { x: next.x, scaleX: next.width });
+                        gsap.set(indicator, { x: next.x, width: next.width });
                         gsap.fromTo(
                             indicator,
                             { opacity: 0.4 },
@@ -260,25 +263,26 @@ export function useChatTabMotion(scope: RefObject<HTMLDivElement>, token: string
                     } else {
                         gsap.fromTo(
                             indicator,
-                            { x: last.x, scaleX: last.width },
+                            { x: last.x, width: last.width },
                             {
                                 x: next.x,
-                                scaleX: next.width,
+                                width: next.width,
                                 duration: motion.duration('base'),
                                 ease: motion.ease.damped,
                             },
                         );
                     }
-                } else gsap.set(indicator, { x: next.x, scaleX: next.width });
+                } else gsap.set(indicator, { x: next.x, width: next.width });
             };
             align(true);
-            let width = list.clientWidth;
             const observer = new ResizeObserver(() => {
-                if (list.clientWidth === width) return;
-                width = list.clientWidth;
+                const last = previous.current;
+                if (last && last.x === button.offsetLeft && last.width === button.offsetWidth)
+                    return;
                 align(false);
             });
             observer.observe(list);
+            observer.observe(button);
             return () => observer.disconnect();
         },
         {

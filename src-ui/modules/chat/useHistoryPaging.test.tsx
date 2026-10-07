@@ -81,4 +81,20 @@ describe('upward history paging', () => {
         await settlePaging();
         expect(load).toHaveBeenCalledTimes(2);
     });
+    it('disarms queued upward paging when another reading intent takes over', async () => {
+        const el = document.createElement('div');
+        el.scrollTop = 50;
+        const load = vi.fn(async () => {});
+        const { result } = renderHook(() =>
+            useHistoryPaging({ scroll: { current: el }, enabled: true, load, detach: vi.fn() }),
+        );
+        act(() => {
+            result.current.onWheel({ deltaY: -100 });
+            result.current.reset();
+        });
+        await settlePaging();
+        act(() => result.current.onScroll());
+        await settlePaging();
+        expect(load).not.toHaveBeenCalled();
+    });
 });

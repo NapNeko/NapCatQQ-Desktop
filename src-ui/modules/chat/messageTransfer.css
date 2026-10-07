@@ -1,0 +1,155 @@
+.native-chat-forward-dialog {
+    --chat-hover: color-mix(in srgb, var(--text-primary) 4.5%, transparent);
+}
+.native-chat-forward-preview {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1.7;
+}
+.native-chat-forward-contacts {
+    display: flex;
+    flex-direction: column;
+    height: min(340px, 42vh);
+    margin-top: 8px;
+}
+.native-chat-selection-dock {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    z-index: 5;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+.native-chat-selection-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 8px 6px 12px;
+    max-width: 100%;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--surface-elevated) 95%, transparent);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.native-chat-selection-count {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+.native-chat-selection-count > span {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.native-chat-selection-divider {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--border-subtle);
+}
+.native-chat-selection-bar button {
+    gap: 5px;
+    border-radius: var(--radius-pill);
+}
+.native-chat-timeline-wrap {
+    flex-direction: column;
+    min-width: 0;
+}
+.native-chat-timeline-wrap[data-selecting="true"] .native-chat-latest {
+    bottom: 80px;
+}
+.native-chat-message {
+    outline: none;
+}
+.native-chat-message:focus-visible {
+    outline: none;
+}
+.native-chat-message:focus-visible .native-chat-bubble {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+}
+.native-chat-message[data-selected="true"] .native-chat-bubble {
+    background: color-mix(in srgb, var(--action-primary) 15%, var(--chat-bubble-in));
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--action-primary) 58%, var(--surface-card));
+}
+.native-chat-message.is-mine[data-selected="true"] .native-chat-bubble {
+    background: color-mix(in srgb, var(--action-primary) 18%, var(--chat-bubble-out));
+}
+.native-chat-selection-target {
+    min-width: 0;
+    max-width: 100%;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+}
+.native-chat-selection-target[aria-disabled="true"] {
+    cursor: default;
+}
+.native-chat-selection-target:focus-visible .native-chat-bubble {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 3px;
+}
+.native-chat-selection-content {
+    pointer-events: none;
+}
+.native-chat-message[data-selecting="true"] .native-chat-bubble {
+    position: relative;
+}
+.native-chat-message[data-selected="true"] .native-chat-bubble.is-media-only::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--action-primary) 14%, transparent);
+    pointer-events: none;
+}
+.native-chat-message .native-chat-message-actions {
+    flex-direction: row;
+    gap: 1px;
+    padding: 1px;
+    z-index: 2;
+}
+.native-chat-message .native-chat-message-actions[data-layout="vertical"] {
+    flex-direction: column;
+    gap: 0;
+}
+.native-chat-message .native-chat-message-actions .native-chat-icon {
+    width: 23px;
+    height: 23px;
+}
+.native-chat-repeat,
+.native-chat-repeat-mark {
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.native-chat-repeat-mark {
+    width: 14px;
+    text-align: center;
+}
+.native-chat-composer[data-collapsed="true"] {
+    pointer-events: none;
+}
+@media (hover: none) {
+    .native-chat-message .native-chat-message-actions .native-chat-icon {
+        width: 30px;
+        height: 30px;
+    }
+}
+@container native-chat (max-width: 590px) {
+    .native-chat-selection-dock {
+        bottom: 14px;
+        max-width: calc(100% - 16px);
+    }
+    .native-chat-selection-bar {
+        gap: 5px;
+        padding-left: 10px;
+    }
+}

@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import type { Contact } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
@@ -38,7 +38,24 @@ vi.mock('./ChatDetails', () => ({ ChatDetails: () => null }));
 vi.mock('./ChatAccountControls', () => ({ ChatAccountControls: () => null }));
 vi.mock('./ChatDivider', () => ({ ChatDivider: () => null }));
 vi.mock('./ChatAvatar', () => ({ ChatAvatar: () => <span /> }));
-vi.mock('./ChatSearch', () => ({ ChatSearch: () => null }));
+vi.mock('./ChatSearch', () => ({
+    ChatSearch: ({
+        onRevealMessage,
+        initialScope,
+    }: {
+        onRevealMessage?: (message: import('../../core/domain/chat/model').Message) => void;
+        initialScope?: string;
+    }) => (
+        <button
+            onClick={() => {
+                const message = store.getSnapshot().account.archiveMessages?.[0];
+                if (message) onRevealMessage?.(message);
+            }}
+        >
+            档案搜索 {initialScope}
+        </button>
+    ),
+}));
 vi.mock('./files/GroupFilesDialog', () => ({ GroupFilesDialog: () => null }));
 vi.mock('./ChatTimeline', () => ({ NativeTimeline: () => null }));
 vi.mock('./ChatComposer', () => ({
@@ -100,6 +117,7 @@ describe('hidden conversations', () => {
         expect(store.getSnapshot().account.drafts[group.key].text).toBe('群草稿');
         expect(screen.queryByRole('button', { name: /已隐藏/ })).not.toBeInTheDocument();
         await user.click(screen.getByRole('tab', { name: '联系人' }));
+        await user.click(screen.getByRole('tab', { name: '群聊' }));
         await user.click(screen.getByRole('option', { name: /讨论群/ }));
         expect(store.getSnapshot().account.active).toBe(group.key);
         expect(screen.queryByRole('button', { name: '已隐藏 (1)' })).not.toBeInTheDocument();
@@ -125,7 +143,104 @@ describe('hidden conversations', () => {
     });
 });
 
+describe('chat contact filters', () => {
+    let originalScrollIntoView: PropertyDescriptor | undefined;
+    beforeEach(() => {
+        originalScrollIntoView = Object.getOwnPropertyDescriptor(
+            Element.prototype,
+            'scrollIntoView',
+        );
+        Object.defineProperty(Element.prototype, 'scrollIntoView', {
+            configurable: true,
+            writable: true,
+            value: vi.fn(),
+        });
+    });
+    afterEach(() => {
+        if (originalScrollIntoView)
+            Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+        else Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
+    it('separates friends and groups and filters friends by their QQ category', async () => {
+        const user = userEvent.setup();
+        const partner: Contact = {
+            key: 'private:2',
+            type: 'private',
+            id: '2',
+            name: '小林',
+            categoryId: '2',
+            categoryName: '开发伙伴',
+        };
+        store.getSnapshot().contacts = [
+            { ...friend, categoryId: '1', categoryName: '生活朋友' },
+            partner,
+            group,
+        ];
+        render(<ChatPage onNavigate={vi.fn()} />);
+        await user.click(await screen.findByRole('tab', { name: '联系人' }));
+        expect(screen.getByRole('tab', { name: '好友' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.queryByRole('option', { name: /讨论群/ })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /小明/ })).toBeInTheDocument();
+        const search = screen.getByRole('combobox', { name: '搜索会话或联系人' });
+        await user.click(search);
+        await user.keyboard('{ArrowDown}');
+        expect(search).toHaveAttribute('aria-activedescendant');
+        const categorySelect = screen.getByRole('combobox', { name: '好友分组' });
+        act(() => categorySelect.focus());
+        await user.keyboard('{ArrowDown}');
+        const categoryOption = await screen.findByRole('option', { name: '开发伙伴' });
+        act(() => categoryOption.focus());
+        await user.keyboard('{Enter}');
+        expect(search).not.toHaveAttribute('aria-activedescendant');
+        expect(screen.queryByRole('option', { name: /小明/ })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /小林/ })).toBeInTheDocument();
+        await user.click(screen.getByRole('tab', { name: '群聊' }));
+        expect(screen.queryByRole('option', { name: /小林/ })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: /讨论群/ })).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: '好友分组' })).not.toBeInTheDocument();
+    });
+    it('places unread filtering inside search and keeps empty contacts independent of it', async () => {
+        const user = userEvent.setup();
+        store.getSnapshot().contacts = [];
+        render(<ChatPage onNavigate={vi.fn()} />);
+        const unread = await screen.findByRole('button', { name: '只看未读会话' });
+        expect(unread.closest('.native-chat-search')).not.toBeNull();
+        await user.click(unread);
+        expect(unread).toHaveAttribute('aria-pressed', 'true');
+        await user.click(screen.getByRole('tab', { name: '联系人' }));
+        expect(screen.getByText('暂无好友')).toBeInTheDocument();
+        expect(screen.queryByText('没有未读消息')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: '只看未读会话' })).not.toBeInTheDocument();
+    });
+});
+
 describe('chat conversation shortcuts', () => {
+    it('opens account history without an active conversation and restores an archived result without losing drafts', async () => {
+        const user = userEvent.setup();
+        const saved = {
+            key: 'group:3/saved',
+            session: group.key,
+            id: 'saved',
+            senderId: '2',
+            senderName: '小林',
+            mine: false,
+            at: 1000,
+            status: 'sent' as const,
+            segments: [{ type: 'text', data: { text: '已保存消息' } }],
+        };
+        store.getSnapshot().account.archiveMessages = [saved];
+        store.getSnapshot().account.active = null;
+        store.draft(group.key, { text: '群草稿', attachments: [], reply: null });
+        render(<ChatPage onNavigate={vi.fn()} />);
+        await user.click(await screen.findByRole('button', { name: '搜索聊天记录' }));
+        await user.click(await screen.findByRole('button', { name: '档案搜索 account' }));
+        expect(store.getSnapshot().account.active).toBe(group.key);
+        expect(
+            store.getSnapshot().account.messages.some((message) => message.key === saved.key),
+        ).toBe(true);
+        expect(store.getSnapshot().account.drafts[friend.key].text).toBe('正在编辑');
+        expect(store.getSnapshot().account.drafts[group.key].text).toBe('群草稿');
+    });
     it('opens a tray conversation after archive hydration without replacing other drafts', async () => {
         store.getSnapshot().hydrated = true;
         store.draft(group.key, { text: '群草稿', reply: null, attachments: [] });

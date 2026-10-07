@@ -35,6 +35,61 @@ function setup(disabledReason = '') {
     return { send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
 }
 describe('native composer keyboard', () => {
+    it('keeps the editor, quote and attachments mounted through selection collapse and restores focus', async () => {
+        setChatPreferences({ composerHeight: 120 });
+        const store = new ChatAccountStore({
+            bot_id: 'bot',
+            name: '测试',
+            qq_id: 99,
+            backend: 'napcat',
+            host: { kind: 'local' },
+            running: true,
+            online: true,
+        });
+        const contact = {
+            key: 'private:12' as const,
+            id: '12',
+            name: '好友',
+            type: 'private' as const,
+        };
+        const draft = {
+            text: '继续写',
+            attachments: [{ key: 'face', type: 'face' as const, id: '14', name: '微笑' }],
+            reply: { id: '1', name: '好友', preview: '引用内容' },
+        };
+        store.draft(contact.key, draft);
+        const send = vi.spyOn(store, 'send').mockResolvedValue();
+        const inputRef = createRef<HTMLTextAreaElement>();
+        const view = render(
+            <ChatComposer store={store} contact={contact} inputRef={inputRef} disabledReason="" />,
+        );
+        const input = screen.getByRole('textbox', { name: '发送消息给好友' });
+        view.rerender(
+            <ChatComposer
+                store={store}
+                contact={contact}
+                inputRef={inputRef}
+                disabledReason=""
+                collapsed
+            />,
+        );
+        expect(inputRef.current).toBe(input);
+        expect(input).toHaveStyle({ height: '120px' });
+        expect(input.closest('.native-chat-composer')).toHaveAttribute('inert');
+        expect(input.closest('.native-chat-composer')).toHaveAttribute('aria-hidden', 'true');
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(send).not.toHaveBeenCalled();
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
+        view.rerender(
+            <ChatComposer store={store} contact={contact} inputRef={inputRef} disabledReason="" />,
+        );
+        expect(screen.getByRole('textbox', { name: '发送消息给好友' })).toBe(input);
+        expect(input).toHaveStyle({ height: '120px' });
+        expect(screen.getByRole('button', { name: '取消引用' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '移除微笑' })).toBeInTheDocument();
+        await waitFor(() => expect(input).toHaveFocus());
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
+    });
     it('keeps manual height through editing and restores automatic sizing on double click', () => {
         const { input, send } = setup();
         const handle = screen.getByRole('separator', { name: '调整输入框高度' });
@@ -123,8 +178,8 @@ describe('native composer keyboard', () => {
         });
         const send = vi.spyOn(store, 'send').mockResolvedValue();
         const favorites = vi
-            .spyOn(chatMediaService, 'favorites')
-            .mockResolvedValue(['https://cdn.example/fav.gif']);
+            .spyOn(chatMediaService, 'favoriteDetails')
+            .mockResolvedValue([{ url: 'https://cdn.example/fav.gif', description: '' }]);
         render(
             <ChatComposer
                 store={store}

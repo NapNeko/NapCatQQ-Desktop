@@ -258,17 +258,6 @@
     opacity: 0;
     pointer-events: none;
 }
-.native-chat-unread {
-    height: auto;
-    color: var(--text-tertiary);
-    font-size: 11px;
-    padding: 3px 7px;
-    border-radius: var(--radius-pill);
-}
-.native-chat-unread.is-active {
-    background: color-mix(in srgb, var(--action-primary) 12%, transparent);
-    color: var(--action-primary);
-}
 .native-chat-conversations {
     flex: 1;
     min-height: 0;
@@ -711,6 +700,18 @@
     max-width: min(76%, 620px, calc(100% - 108px));
     min-width: 0;
 }
+.native-chat-message-content-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+.native-chat-message-content-line > .native-chat-bubble {
+    min-width: 0;
+}
+.native-chat-message.is-mine .native-chat-message-content-line {
+    flex-direction: row-reverse;
+}
 /* contain:inline-size 让名字不参与气泡宽度计算，只随气泡截断；否则长名片会把短消息的气泡撑宽。 */
 .native-chat-sender {
     font-size: 11px;
@@ -753,15 +754,23 @@
 .native-chat-bubble.is-picture-only button {
     border-radius: var(--radius-sm);
 }
+.native-chat-bubble.is-recall-placeholder {
+    background: color-mix(in srgb, var(--text-primary) 5%, var(--surface-card));
+    color: var(--text-secondary);
+}
+.native-chat-bubble.is-recall-retained {
+    background: color-mix(in srgb, var(--state-warning) 12%, var(--surface-card));
+    border: 1px dashed color-mix(in srgb, var(--state-warning) 45%, transparent);
+}
 .native-chat-message[data-highlight="true"] .native-chat-bubble {
     outline: 2px solid var(--border-focus);
     outline-offset: 3px;
 }
 .native-chat-message-actions {
-    position: absolute;
-    left: calc(100% + 6px);
-    top: 2px;
+    position: relative;
     display: flex;
+    flex-shrink: 0;
+    align-self: flex-start;
     gap: 1px;
     padding: 2px;
     border: 1px solid var(--border-subtle);
@@ -776,13 +785,6 @@
     width: 26px;
     height: 26px;
     border-radius: var(--radius-xs);
-}
-.native-chat-sender ~ .native-chat-message-actions {
-    top: 22px;
-}
-.is-mine .native-chat-message-actions {
-    left: auto;
-    right: calc(100% + 6px);
 }
 .native-chat-message:hover .native-chat-message-actions,
 .native-chat-message:focus-within .native-chat-message-actions {
@@ -994,32 +996,78 @@ button.native-chat-send-status:hover {
 }
 .native-chat-attachments {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    max-height: 110px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    padding: 4px 0 10px;
+    gap: 8px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    padding: 5px 2px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-rest) transparent;
 }
-.native-chat-attachments > div {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 5px 5px 5px 6px;
-    background: var(--surface-inset);
+.native-chat-attachment {
+    position: relative;
+    display: grid;
+    grid-template-rows: 72px 18px;
+    gap: 4px;
+    flex: 0 0 112px;
+    min-width: 0;
+    padding: 5px;
+    background: var(--surface-card);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     font-size: 11px;
+    transition: border-color var(--chat-motion-fast, 0s) var(--chat-motion-ease, ease-out);
 }
-.native-chat-attachments img {
-    height: 40px;
-    width: 50px;
-    object-fit: cover;
-    border-radius: var(--radius-xs);
+.native-chat-attachment:is(:hover, :focus-within) {
+    border-color: color-mix(in srgb, var(--action-primary) 30%, var(--border-subtle));
 }
-.native-chat-attachments button {
-    padding: 3px;
+.native-chat-attachment[data-type="file"] {
+    flex-basis: 150px;
+}
+.native-chat-attachment-preview {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--surface-inset) 58%, var(--surface-card));
+    border-radius: calc(var(--radius-md) - 5px);
     color: var(--text-tertiary);
+}
+.native-chat-attachment-preview img {
+    height: 100%;
+    width: 100%;
+    object-fit: contain;
+}
+.native-chat-attachment[data-type="face"] .native-chat-attachment-preview {
+    background: color-mix(in srgb, var(--action-primary) 5%, var(--surface-card));
+}
+.native-chat-attachment-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 3px;
+    line-height: 18px;
+    color: var(--text-secondary);
+}
+.native-chat-attachment .native-chat-attachment-remove {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+}
+.native-chat-attachment .native-chat-attachment-remove:hover {
+    background: var(--surface-card);
+    color: var(--action-primary);
+    border-color: var(--border-focus);
 }
 .native-chat-emoji {
     display: grid;

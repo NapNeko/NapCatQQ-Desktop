@@ -1,0 +1,87 @@
+.native-chat-list-filter {
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-right: -3px;
+    flex-shrink: 0;
+    border-radius: var(--radius-xs);
+    color: var(--text-tertiary);
+}
+.native-chat-list-filter:hover {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.native-chat-list-filter[aria-pressed="true"] {
+    color: var(--action-primary);
+    background: color-mix(in srgb, var(--action-primary) 13%, var(--surface-card));
+}
+.native-chat-contact-filters {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 32px;
+    margin: 0 2px 8px;
+    flex-shrink: 0;
+}
+.native-chat-contact-types {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.native-chat-contact-types button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    padding: 0 7px;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+.native-chat-contact-types button span {
+    font-size: 10px;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+.native-chat-contact-types button:hover {
+    background: var(--chat-hover);
+}
+.native-chat-contact-types [aria-selected="true"] {
+    color: var(--action-primary);
+    background: color-mix(in srgb, var(--action-primary) 10%, transparent);
+    font-weight: 500;
+}
+.native-chat-contact-types button:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+}
+.native-chat-contact-category {
+    flex: 1;
+    min-width: 0;
+    max-width: 148px;
+    gap: 0;
+}
+.native-chat-contact-category > label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+.native-chat-contact-category > button {
+    height: 28px;
+    min-width: 0;
+    padding: 0 7px;
+    border-color: var(--border-subtle);
+    background: var(--chat-hover);
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+.native-chat-contact-category > button > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

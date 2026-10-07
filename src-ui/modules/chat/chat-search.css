@@ -39,7 +39,7 @@
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 10px 13px;
+    padding: 7px 9px;
     border: 1px solid transparent;
     border-radius: var(--radius-md);
     background: var(--surface-inset);
@@ -73,26 +73,61 @@
     right: 17px;
     z-index: 2;
 }
+.native-chat-search-query {
+    flex: 0 1 180px;
+    min-width: 130px;
+}
+.native-chat-search-toggle {
+    flex-shrink: 0;
+}
+.native-chat-search-toggle[aria-expanded="true"] {
+    color: var(--action-primary);
+    background: var(--brand-soft);
+}
+.native-chat-search-scope {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+}
+.native-chat-search-scope [role="tab"] {
+    padding: 5px 11px;
+    border-radius: var(--radius-xs);
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+.native-chat-search-scope [aria-selected="true"] {
+    background: var(--surface-elevated);
+    color: var(--action-primary);
+}
+.native-chat-search-scope button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
 .native-chat-search-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 15px;
-    margin-top: 14px;
+    gap: 12px;
+    min-width: 0;
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
+    padding-bottom: 9px;
 }
 .native-chat-search-categories {
     display: flex;
-    gap: 26px;
-    min-width: 0;
+    flex: 1;
+    gap: 20px;
+    min-width: 80px;
     overflow-x: auto;
     scrollbar-width: none;
 }
 .native-chat-search-categories [role="tab"] {
     position: relative;
     flex-shrink: 0;
-    padding: 10px 0 12px;
+    padding: 10px 0;
     color: var(--text-secondary);
     font-size: 13px;
 }
@@ -159,13 +194,38 @@
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    padding: 15px 8px 15px 0;
-    border-bottom: 1px solid var(--border-subtle);
+    margin: 3px 0;
+    padding: 15px 10px;
+    border-radius: var(--radius-md);
     cursor: pointer;
+    transition:
+        background-color 140ms ease,
+        box-shadow 140ms ease;
 }
 .native-chat-search-result:hover,
 .native-chat-search-result[aria-selected="true"] {
-    background: color-mix(in srgb, var(--brand-soft) 30%, transparent);
+    background: color-mix(in srgb, var(--brand-soft) 48%, var(--surface-elevated));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-subtle) 65%, transparent);
+}
+.native-chat-search-result[data-recalled="true"] {
+    background: color-mix(in srgb, var(--state-warning) 10%, var(--surface-elevated));
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--state-warning) 60%, var(--border-subtle));
+}
+.native-chat-search-result[data-recalled="true"]:hover,
+.native-chat-search-result[data-recalled="true"][aria-selected="true"] {
+    background: color-mix(in srgb, var(--state-warning) 16%, var(--surface-elevated));
+}
+.native-chat-message-search[data-motion="off"] .native-chat-search-result {
+    transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .native-chat-search-result {
+        transition: none;
+    }
+}
+.native-chat-search-recalled {
+    color: var(--text-tertiary);
+    font-size: 10px;
 }
 .native-chat-search-result .native-chat-avatar {
     position: relative;
@@ -205,25 +265,56 @@
     white-space: nowrap;
     color: var(--text-secondary);
 }
+.native-chat-search-result-origin {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.native-chat-search-result-origin > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.native-chat-search-result-session {
+    color: var(--text-tertiary);
+}
+.native-chat-search-result-session::before {
+    content: "· ";
+}
 .native-chat-search-result-meta time {
     flex-shrink: 0;
 }
 .native-chat-search-result-text {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    display: inline;
     overflow-wrap: anywhere;
     font-size: 14px;
     line-height: 1.7;
     white-space: pre-wrap;
+}
+.native-chat-search-result-content {
+    max-height: 210px;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    line-height: 1.7;
+    white-space: pre-wrap;
+}
+.native-chat-search-markdown {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    white-space: normal;
+}
+.native-chat-search-markdown h4 {
+    font-size: 14px;
 }
 .native-chat-search-picture {
     display: flex;
     width: 190px;
     max-width: 100%;
     height: 150px;
-    margin-bottom: 8px;
+    margin: 4px 0;
     align-items: flex-start;
 }
 .native-chat-search-picture img {
@@ -231,6 +322,10 @@
     max-height: 100%;
     object-fit: contain;
     border-radius: var(--radius-sm);
+}
+.native-chat-search-picture > :is(button, span) {
+    max-width: 100%;
+    max-height: 150px;
 }
 .native-chat-search-highlight {
     color: var(--action-primary);
@@ -266,10 +361,16 @@
     display: flex;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 6px 18px;
+    align-items: center;
+    gap: 8px 12px;
     padding: 12px 0;
     border-top: 1px solid var(--border-subtle);
     flex-shrink: 0;
+}
+.native-chat-search-remaining {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
 }
 .native-chat-search-dialog button {
     cursor: pointer;
@@ -317,6 +418,25 @@
     min-width: 0;
 }
 @media (max-width: 620px) {
+    .native-chat-search-toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .native-chat-search-query {
+        order: 1;
+        flex-basis: 100%;
+        min-width: 0;
+    }
+    .native-chat-search-scope [role="tab"] {
+        padding: 5px 7px;
+        font-size: 11px;
+    }
+    .native-chat-search-filter-trigger > span {
+        display: none;
+    }
+    .native-chat-search-dialog .native-chat-search {
+        padding: 8px;
+    }
     .native-chat-search-title {
         padding-left: 80px;
         padding-right: 80px;

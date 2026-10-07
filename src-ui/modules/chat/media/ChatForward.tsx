@@ -22,6 +22,12 @@ import { ChatViewContext, useChatView } from '../../debug/right/chatContext';
 import { LruCache } from '../../debug/right/boundedCache';
 import { ChatImageViewer } from '../ChatImageViewer';
 import { ChatAvatar } from '../ChatAvatar';
+import { preserveTimelineReading } from '../timelineReadingAnchor';
+import {
+    captureForwardPosition,
+    forwardPositionOffset,
+    type ForwardPosition,
+} from './forwardPosition';
 import './chat-media.css';
 
 type ForwardData = Record<string, unknown>;
@@ -32,6 +38,7 @@ interface Frame {
     bytes: number;
     error: string;
     scroll: number;
+    position: ForwardPosition;
 }
 interface Navigation {
     depth: number;
@@ -50,6 +57,7 @@ const newFrame = (data: ForwardData): Frame => ({
     bytes: 0,
     error: '',
     scroll: 0,
+    position: { scroll: 0, measurements: [] },
 });
 
 const FORWARD_BYTES = 8 * 1024 * 1024;
@@ -100,7 +108,12 @@ function trimFrames(path: Frame[]): Frame[] {
             bytes += frame.bytes;
             if (index > 0 && bytes > FORWARD_BYTES) {
                 bytes -= frame.bytes;
-                return { ...frame, nodes: null, bytes: 0 };
+                return {
+                    ...frame,
+                    nodes: null,
+                    bytes: 0,
+                    position: { ...frame.position, measurements: [] },
+                };
             }
             return frame;
         })
@@ -123,7 +136,7 @@ function readForwardCached(
     const request = readForwardLimited(read, data).then(
         (nodes) => {
             // 媒体字节和临时 blob 地址只跟随当前弹窗，不放进长期缓存。
-            if (!/(?:data:|blob:|base64:\/\/)/i.test(JSON.stringify(nodes)))
+            if (!/(?:data:|blob:|base64:\/\/|ncd-inline-image:\/\/)/i.test(JSON.stringify(nodes)))
                 forwardCache.set(key, nodes);
             forwardInflight.delete(key);
             return nodes;
@@ -234,7 +247,8 @@ interface ForwardMessagesProps {
     nodes: ForwardNode[];
     renderSegments: (segments: Segment[]) => ReactNode;
     header: ReactNode;
-    initialOffset: number;
+    position: ForwardPosition;
+    positionReader: MutableRefObject<(() => ForwardPosition) | null>;
 }
 function ForwardMessages(props: ForwardMessagesProps) {
     if (props.nodes.length > 20) return <VirtualForwardMessages {...props} />;
@@ -252,16 +266,36 @@ function VirtualForwardMessages({
     nodes,
     renderSegments,
     header,
-    initialOffset,
+    position,
+    positionReader,
 }: ForwardMessagesProps) {
     const virtual = useVirtualizer({
         count: nodes.length + 1,
         getScrollElement: () => body.current,
         estimateSize: (index) => (index === 0 ? 48 : 110),
         overscan: 4,
-        initialOffset,
+        initialOffset: forwardPositionOffset(position, nodes.length + 1),
+        initialMeasurementsCache: position.measurements,
         directDomUpdates: true,
     });
+    preserveTimelineReading(virtual, body);
+    useLayoutEffect(() => {
+        const read = () => {
+            virtual.getVirtualItems();
+            return captureForwardPosition(body.current?.scrollTop ?? 0, virtual.measurementsCache);
+        };
+        positionReader.current = read;
+        const frame = requestAnimationFrame(() => {
+            if (!body.current || !position.anchor) return;
+            virtual.getVirtualItems();
+            const row = virtual.measurementsCache[Math.min(position.anchor.index, nodes.length)];
+            if (row) body.current.scrollTop = row.start + position.anchor.offset;
+        });
+        return () => {
+            cancelAnimationFrame(frame);
+            if (positionReader.current === read) positionReader.current = null;
+        };
+    }, [virtual, body, positionReader, position, nodes.length]);
     return (
         <div ref={virtual.containerRef} style={{ position: 'relative' }}>
             {virtual.getVirtualItems().map((row) => (
@@ -331,6 +365,7 @@ function ForwardDialog({
     renderSegments: (segments: Segment[]) => ReactNode;
 }) {
     const body = useRef<HTMLDivElement>(null);
+    const positionReader = useRef<(() => ForwardPosition) | null>(null);
     const frame = frames[frames.length - 1];
     const [image, showImage] = useState('');
     const view = useChatView();
@@ -376,12 +411,20 @@ function ForwardDialog({
         };
     }, [open, frame, read, scope, setFrames]);
     useLayoutEffect(() => {
-        if (body.current) body.current.scrollTop = frame?.scroll ?? 0;
+        if (body.current && (frame?.nodes?.length ?? 0) <= 20)
+            body.current.scrollTop = frame?.scroll ?? 0;
     }, [frames.length, frame?.nodes]);
     const remember = (path: Frame[]) =>
         path.map((item, index) =>
             index === path.length - 1
-                ? { ...item, scroll: body.current?.scrollTop ?? item.scroll }
+                ? {
+                      ...item,
+                      scroll: body.current?.scrollTop ?? item.scroll,
+                      position: positionReader.current?.() ?? {
+                          scroll: body.current?.scrollTop ?? item.scroll,
+                          measurements: [],
+                      },
+                  }
                 : item,
         );
     const backTo = (index: number) => {
@@ -496,7 +539,8 @@ function ForwardDialog({
                                     body={body}
                                     nodes={frame.nodes}
                                     renderSegments={renderSegments}
-                                    initialOffset={frame.scroll}
+                                    position={frame.position}
+                                    positionReader={positionReader}
                                     header={
                                         <div className="native-chat-forward-summary">
                                             <span>

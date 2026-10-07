@@ -1,10 +1,15 @@
-import { createRef } from 'react';
+import { createRef, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Contact, Draft, Message } from '../../core/domain/chat/model';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { ChatMessageActions } from './ChatMessageActions';
+import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
+import {
+    favoriteStickerService,
+    FavoriteStickerError,
+} from '../../core/services/favorite-sticker.service';
 
 const contact: Contact = { key: 'group:12', id: '12', name: '群', type: 'group' };
 const baseMessage: Message = {
@@ -25,7 +30,13 @@ const draft: Draft = {
     reply: { id: '9', name: '小李', preview: '上一条' },
 };
 
-function setup(message = baseMessage, session = contact, connected = false) {
+function setup(
+    message = baseMessage,
+    session = contact,
+    connected = false,
+    selecting = false,
+    selection: { selected?: boolean; disabled?: boolean; content?: ReactNode } = {},
+) {
     const store = new ChatAccountStore({
         bot_id: 'bot',
         name: '测试',
@@ -40,7 +51,10 @@ function setup(message = baseMessage, session = contact, connected = false) {
     const input = createRef<HTMLTextAreaElement>();
     const onFocusComposer = vi.fn(() => input.current?.focus());
     const onError = vi.fn();
-    render(
+    const onForward = vi.fn();
+    const onSelect = vi.fn();
+    const onToggleSelection = vi.fn();
+    const renderMessage = (options = selection) => (
         <>
             <ChatMessageActions
                 store={store}
@@ -48,21 +62,133 @@ function setup(message = baseMessage, session = contact, connected = false) {
                 message={message}
                 onFocusComposer={onFocusComposer}
                 onError={onError}
+                onForward={onForward}
+                onSelect={onSelect}
+                selecting={selecting}
+                selected={options.selected}
+                selectionDisabled={options.disabled}
+                onToggleSelection={onToggleSelection}
             >
-                {(controls) => (
+                {(controls, wrapContent) => (
                     <article>
-                        <p>消息内容</p>
+                        {wrapContent(
+                            <div className="native-chat-bubble">
+                                {options.content ?? <p>消息内容</p>}
+                            </div>,
+                        )}
                         {controls}
                     </article>
                 )}
             </ChatMessageActions>
             <textarea ref={input} aria-label="输入消息" />
-        </>,
+        </>
     );
-    return { store, onFocusComposer, onError };
+    const view = render(renderMessage());
+    return {
+        store,
+        onFocusComposer,
+        onError,
+        onForward,
+        onSelect,
+        onToggleSelection,
+        rerenderSelection: (options: typeof selection) => view.rerender(renderMessage(options)),
+    };
 }
 
 describe('ChatMessageActions', () => {
+    it('toggles the bubble with click, Enter or Space without reopening actions or repeating held keys', async () => {
+        const user = userEvent.setup();
+        const { store, onToggleSelection } = setup(baseMessage, contact, true, true);
+        expect(screen.queryByRole('toolbar', { name: '消息快捷操作' })).not.toBeInTheDocument();
+        const bubble = screen.getByRole('button', { name: '选择这条消息' });
+        bubble.focus();
+        await user.keyboard('{Enter} ');
+        expect(onToggleSelection).toHaveBeenCalledTimes(2);
+        expect(onToggleSelection).toHaveBeenLastCalledWith(baseMessage.key);
+        fireEvent.click(bubble);
+        expect(onToggleSelection).toHaveBeenCalledTimes(3);
+        fireEvent.keyDown(bubble, { key: ' ', repeat: true });
+        expect(onToggleSelection).toHaveBeenCalledTimes(3);
+        await user.keyboard('{Shift>}{F10}{/Shift}');
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
+    });
+    it('captures media, link and copy clicks as selection and keeps native controls inert', () => {
+        const action = vi.fn();
+        const { onToggleSelection } = setup(baseMessage, contact, true, true, {
+            content: (
+                <>
+                    <button onPointerDown={action} onClick={action}>
+                        打开图片
+                    </button>
+                    <video aria-label="视频" controls onClick={action} />
+                    <a href="https://example.com" onClick={action}>
+                        外部链接
+                    </a>
+                    <button onClick={action}>复制内容</button>
+                </>
+            ),
+        });
+        const media = [
+            screen.getByText('打开图片'),
+            screen.getByLabelText('视频'),
+            screen.getByText('外部链接'),
+            screen.getByText('复制内容'),
+        ];
+        for (const element of media) {
+            expect(element.closest('[inert]')).not.toBeNull();
+            fireEvent.pointerDown(element);
+            fireEvent.click(element);
+        }
+        expect(onToggleSelection).toHaveBeenCalledTimes(4);
+        expect(action).not.toHaveBeenCalled();
+        expect(document.querySelector('button button')).toBeNull();
+    });
+    it('blocks a new selection at the limit while allowing a selected bubble to be deselected', () => {
+        const { onToggleSelection, rerenderSelection } = setup(baseMessage, contact, true, true, {
+            disabled: true,
+        });
+        const bubble = screen.getByRole('button', { name: '选择这条消息' });
+        expect(bubble).toHaveAttribute('aria-disabled', 'true');
+        expect(bubble).toHaveAttribute('tabindex', '-1');
+        fireEvent.click(bubble);
+        fireEvent.keyDown(bubble, { key: 'Enter' });
+        expect(onToggleSelection).not.toHaveBeenCalled();
+        rerenderSelection({ selected: true, disabled: false });
+        const selected = screen.getByRole('button', { name: '取消选择这条消息' });
+        expect(selected).toHaveAttribute('aria-pressed', 'true');
+        expect(selected).toHaveAttribute('aria-disabled', 'false');
+        fireEvent.click(selected);
+        expect(onToggleSelection).toHaveBeenCalledOnce();
+    });
+    it('starts single and multiple forwarding from the menu without changing the draft or adding visible controls', async () => {
+        const user = userEvent.setup();
+        const { store, onForward, onSelect } = setup();
+        expect(screen.getAllByRole('button')).toHaveLength(3);
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        await user.click(screen.getByRole('menuitem', { name: '转发' }));
+        expect(onForward).toHaveBeenCalledWith(baseMessage.key);
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        await user.click(screen.getByRole('menuitem', { name: '多选' }));
+        expect(onSelect).toHaveBeenCalledWith(baseMessage.key);
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
+    });
+    it('recalls a sent owned message through the same menu', async () => {
+        const user = userEvent.setup();
+        const { store } = setup({ ...baseMessage, mine: true, senderId: '99' }, contact, true);
+        const recall = vi.spyOn(store, 'recall').mockResolvedValue();
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        await user.click(screen.getByRole('menuitem', { name: '撤回' }));
+        expect(recall).toHaveBeenCalledWith(baseMessage.key);
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
+    });
+    it('does not offer recall or forwarding for an uncertain send', async () => {
+        const user = userEvent.setup();
+        setup({ ...baseMessage, mine: true, status: 'unknown' }, contact, true);
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        expect(screen.queryByRole('menuitem', { name: '撤回' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: '转发' })).not.toBeInTheDocument();
+    });
     it('replies from the context menu using the latest draft and keeps focus in the composer', async () => {
         const user = userEvent.setup();
         const { store } = setup();
@@ -77,10 +203,10 @@ describe('ChatMessageActions', () => {
         await waitFor(() => expect(screen.getByRole('textbox')).toHaveFocus());
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
-    it('mentions from the menu without losing attachments or reply or adding a taller side toolbar', async () => {
+    it('mentions from the menu without losing attachments or reply', async () => {
         const user = userEvent.setup();
         const { store } = setup();
-        expect(screen.getAllByRole('button')).toHaveLength(2);
+        expect(screen.getAllByRole('button')).toHaveLength(3);
         await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
         await user.click(screen.getByRole('menuitem', { name: '提及 小明' }));
         expect(store.getSnapshot().account.drafts[contact.key]).toEqual({
@@ -190,5 +316,69 @@ describe('ChatMessageActions', () => {
         expect(screen.queryByRole('button')).not.toBeInTheDocument();
         await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+    it('repeats from +1 once while busy and preserves the current draft', async () => {
+        const { store } = setup(baseMessage, contact, true);
+        let finish!: () => void;
+        const repeat = vi.spyOn(store, 'repeat').mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    finish = resolve;
+                }),
+        );
+        const button = screen.getByRole('button', { name: '重复发送这条消息' });
+        fireEvent.click(button);
+        fireEvent.click(button);
+        expect(repeat).toHaveBeenCalledOnce();
+        expect(repeat).toHaveBeenCalledWith(baseMessage.key);
+        expect(button).toBeDisabled();
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
+        finish();
+        await waitFor(() => expect(button).toBeEnabled());
+    });
+    it('announces a confirmed favorite through the global success InfoBar', async () => {
+        const user = userEvent.setup();
+        setup(
+            {
+                ...baseMessage,
+                segments: [{ type: 'image', data: { url: 'https://cdn.example/face.gif' } }],
+            },
+            contact,
+            true,
+        );
+        vi.spyOn(favoriteStickerService, 'add').mockResolvedValue();
+        const push = vi.spyOn(globalInfoBarStore, 'push').mockReturnValue('favorite-success');
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        await user.click(screen.getByRole('menuitem', { name: '添加到表情' }));
+        await waitFor(() =>
+            expect(push).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    tone: 'success',
+                    content: '已添加到收藏表情',
+                }),
+            ),
+        );
+    });
+    it('keeps an uncertain favorite result disabled instead of presenting success or resubmitting', async () => {
+        const user = userEvent.setup();
+        const { onError } = setup(
+            {
+                ...baseMessage,
+                segments: [{ type: 'image', data: { url: 'https://cdn.example/face.gif' } }],
+            },
+            contact,
+            true,
+        );
+        const add = vi
+            .spyOn(favoriteStickerService, 'add')
+            .mockRejectedValue(new FavoriteStickerError('添加结果待确认', true));
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        await user.click(screen.getByRole('menuitem', { name: '添加到表情' }));
+        await waitFor(() => expect(onError).toHaveBeenCalledWith('添加结果待确认'));
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        const item = screen.getByRole('menuitem', { name: '添加结果待确认' });
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(item);
+        expect(add).toHaveBeenCalledOnce();
     });
 });

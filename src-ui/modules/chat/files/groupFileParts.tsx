@@ -61,13 +61,22 @@ const ICONS: Record<FileKind, LucideIcon> = {
 };
 
 export function FileGlyph({ name, folder }: { name: string; folder?: boolean }) {
-    const Icon = folder ? Folder : ICONS[fileKind(name)];
+    const kind = fileKind(name.trim());
+    const Icon = folder ? Folder : ICONS[kind];
+    const suffix = !folder
+        ? name
+              .trim()
+              .match(/\.([a-z0-9]{1,5})$/i)?.[1]
+              .toUpperCase()
+        : undefined;
     return (
         <span
-            className={cn('native-group-file-glyph', folder ? 'is-folder' : `is-${fileKind(name)}`)}
+            className={cn('native-group-file-glyph', folder ? 'is-folder' : `is-${kind}`)}
+            data-extension={suffix}
             aria-hidden
         >
-            <Icon size={18} strokeWidth={1.6} />
+            <Icon size={18} strokeWidth={1.7} />
+            {suffix && <span className="native-group-file-extension">{suffix}</span>}
         </span>
     );
 }

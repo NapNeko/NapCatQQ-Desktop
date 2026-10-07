@@ -1,5 +1,5 @@
 // 群文件对话框：浏览、搜索、下载、上传与整理。QQ 群文件只有一层文件夹，路径最多两级。
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     ArrowDownToLine,
@@ -73,15 +73,7 @@ type Pending =
     | { kind: 'deleteFolder'; folder: GroupFolder }
     | { kind: 'create' };
 
-export function GroupFilesDialog({
-    open,
-    onOpenChange,
-    target,
-    groupId,
-    groupName,
-    connected,
-    refreshSignal,
-}: {
+interface GroupFilesDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     target: DebugTarget;
@@ -89,8 +81,31 @@ export function GroupFilesDialog({
     groupName: string;
     connected: boolean;
     refreshSignal: string;
-}) {
+}
+
+export function GroupFilesDialog(props: GroupFilesDialogProps) {
+    // 文件夹 ID 只属于当前群；切换账号或群时不能沿用浏览状态和上一份列表。
+    return <GroupFilesBrowser key={`${scopeOf(props.target)}:${props.groupId}`} {...props} />;
+}
+
+function GroupFilesBrowser({
+    open,
+    onOpenChange,
+    target,
+    groupId,
+    groupName,
+    connected,
+    refreshSignal,
+}: GroupFilesDialogProps) {
     const queries = useQueryClient();
+    const lifetime = useRef({ active: open });
+    useEffect(() => {
+        const current = { active: open };
+        lifetime.current = current;
+        return () => {
+            current.active = false;
+        };
+    }, [open]);
     const scope = scopeOf(target);
     const [folder, setFolder] = useState<GroupFolder | null>(null);
     const folderId = folder?.folderId ?? ROOT_FOLDER;
@@ -107,7 +122,6 @@ export function GroupFilesDialog({
             chatGroupFilesService.list(target, groupId, folder?.folderId ?? null, limits[folderId]),
         enabled: open && connected,
         staleTime: 15_000,
-        placeholderData: (previous) => previous,
     });
     const space = useQuery({
         queryKey: [...baseKey, 'space'],
@@ -135,7 +149,10 @@ export function GroupFilesDialog({
     }, [refreshSignal]);
     useEffect(() => {
         if (!open) {
+            setFolder(null);
+            setLimits({});
             setPending(null);
+            setBusy(false);
             setError('');
             setQuery('');
         }
@@ -178,27 +195,36 @@ export function GroupFilesDialog({
         for (const file of files) void startUpload(target, groupId, folderId, file, refresh);
     };
     const pick = () => {
+        const current = lifetime.current;
+        if (!current.active) return;
         void chatGroupFilesService
             .pickUploads()
-            .then(upload)
-            .catch((e) => setError(errorText(e)));
+            .then((files) => {
+                if (current.active) upload(files);
+            })
+            .catch((e) => {
+                if (current.active) setError(errorText(e));
+            });
     };
     const { dragging } = useTauriFileDrop(open && connected && !pending, (paths) =>
         upload(paths.map((path) => ({ path, name: path.split(/[\\/]/).pop() || path }))),
     );
     const act = async (action: GroupFileAction) => {
+        const current = lifetime.current;
+        if (!current.active) return;
         setBusy(true);
         setError('');
         try {
             await chatGroupFilesService.act(target, groupId, action);
+            if (!current.active) return;
             setPending(null);
-            refresh();
         } catch (e) {
+            if (!current.active) return;
             setError(errorText(e));
             setPending(null);
-            refresh();
         } finally {
-            setBusy(false);
+            refresh();
+            if (current.active) setBusy(false);
         }
     };
     const enter = (next: GroupFolder | null) => {

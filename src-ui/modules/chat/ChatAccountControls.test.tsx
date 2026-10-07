@@ -35,6 +35,7 @@ async function setup() {
         ignoredGroups: ['123'],
         hiddenGroups: ['456'],
         notifyUnknownGroups: false,
+        preventRecall: false,
     };
     vi.spyOn(chatDesktopService, 'status').mockImplementation(async () => ({
         v: 1,
@@ -80,6 +81,24 @@ async function setup() {
     return { user, save, unmute, reconnect };
 }
 describe('chat settings organization', () => {
+    it('saves recall protection for this account without changing notification preferences', async () => {
+        const { user, save } = await setup();
+        expect(screen.getByRole('switch', { name: '防撤回' })).not.toBeChecked();
+        await user.click(screen.getByRole('switch', { name: '防撤回' }));
+        await waitFor(() =>
+            expect(save).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    botId: 'settings-test',
+                    selfId: '99',
+                    preventRecall: true,
+                    hiddenGroups: ['456'],
+                    ignoredGroups: ['123'],
+                    trayNotification: 'badge',
+                }),
+            ),
+        );
+        await waitFor(() => expect(screen.getByRole('switch', { name: '防撤回' })).toBeChecked());
+    });
     it('shows account, notification and window sections on one page and preserves group preferences when changing tray mode', async () => {
         const { user, save } = await setup();
         expect(screen.getByRole('radio', { name: '红点' })).toHaveAttribute('aria-checked', 'true');

@@ -1,11 +1,19 @@
 // 手动高度保留为界面偏好，窗口缩小时只限制显示高度。
-import { useLayoutEffect, useRef, useState, type ComponentProps, type RefObject } from 'react';
+import {
+    useCallback,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type ComponentProps,
+    type RefObject,
+} from 'react';
 import { setChatPreferences, useChatPreferences } from './chatPreferences';
 
 export function useComposerResize(
     input: RefObject<HTMLTextAreaElement>,
     composer: RefObject<HTMLDivElement>,
     text: string,
+    collapsed = false,
 ) {
     const preference = useChatPreferences().composerHeight;
     const [manual, setManual] = useState(preference);
@@ -17,6 +25,7 @@ export function useComposerResize(
         current: number;
     } | null>(null);
     const measure = useRef(() => {});
+    const remeasure = useCallback(() => measure.current(), []);
     const clamp = (value: number) => Math.round(Math.max(52, Math.min(bounds.max, value)));
     useLayoutEffect(() => {
         setManual(preference);
@@ -26,6 +35,7 @@ export function useComposerResize(
             const element = input.current;
             const container = composer.current;
             if (!element || !container) return;
+            if (collapsed || container.dataset.collapseAnimating === 'true') return;
             const pane = container.parentElement;
             const overhead = container.offsetHeight - element.offsetHeight;
             const available = pane?.clientHeight || window.innerHeight;
@@ -43,7 +53,7 @@ export function useComposerResize(
             );
         };
         measure.current();
-    }, [text, manual, input, composer]);
+    }, [text, manual, input, composer, collapsed]);
     useLayoutEffect(() => {
         const element = input.current;
         const container = composer.current;
@@ -53,6 +63,7 @@ export function useComposerResize(
         let paneHeight = pane.clientHeight;
         let overhead = container.offsetHeight - element.offsetHeight;
         const observer = new ResizeObserver(() => {
+            if (container.dataset.collapseAnimating === 'true') return;
             const nextOverhead = container.offsetHeight - element.offsetHeight;
             if (
                 width === element.clientWidth &&
@@ -75,67 +86,70 @@ export function useComposerResize(
         setChatPreferences({ composerHeight: height });
     };
     return {
-        type: 'button',
-        role: 'separator',
-        className: 'native-chat-composer-resize',
-        'aria-label': '调整输入框高度',
-        'aria-orientation': 'horizontal',
-        'aria-valuemin': 52,
-        'aria-valuemax': bounds.max,
-        'aria-valuenow': bounds.height,
-        title: '拖动调整高度，双击恢复自动高度',
-        onDoubleClick: () => commit(null),
-        onKeyDown: (event) => {
-            if (event.key === 'Enter') {
+        remeasure,
+        handle: {
+            type: 'button',
+            role: 'separator',
+            className: 'native-chat-composer-resize',
+            'aria-label': '调整输入框高度',
+            'aria-orientation': 'horizontal',
+            'aria-valuemin': 52,
+            'aria-valuemax': bounds.max,
+            'aria-valuenow': bounds.height,
+            title: '拖动调整高度，双击恢复自动高度',
+            onDoubleClick: () => commit(null),
+            onKeyDown: (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commit(null);
+                    return;
+                }
+                const next =
+                    event.key === 'ArrowUp'
+                        ? bounds.height + 16
+                        : event.key === 'ArrowDown'
+                          ? bounds.height - 16
+                          : event.key === 'Home'
+                            ? 52
+                            : event.key === 'End'
+                              ? bounds.max
+                              : null;
+                if (next !== null) {
+                    event.preventDefault();
+                    commit(clamp(next));
+                }
+            },
+            onPointerDown: (event) => {
+                if (event.button !== 0) return;
                 event.preventDefault();
-                commit(null);
-                return;
-            }
-            const next =
-                event.key === 'ArrowUp'
-                    ? bounds.height + 16
-                    : event.key === 'ArrowDown'
-                      ? bounds.height - 16
-                      : event.key === 'Home'
-                        ? 52
-                        : event.key === 'End'
-                          ? bounds.max
-                          : null;
-            if (next !== null) {
-                event.preventDefault();
-                commit(clamp(next));
-            }
-        },
-        onPointerDown: (event) => {
-            if (event.button !== 0) return;
-            event.preventDefault();
-            event.currentTarget.focus();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            drag.current = {
-                y: event.clientY,
-                height: bounds.height,
-                current: bounds.height,
-                original: manual,
-            };
-        },
-        onPointerMove: (event) => {
-            if (!drag.current) return;
-            drag.current.current = clamp(drag.current.height + drag.current.y - event.clientY);
-            setManual(drag.current.current);
-        },
-        onPointerUp: (event) => {
-            if (!drag.current) return;
-            commit(drag.current.current);
-            drag.current = null;
-            event.currentTarget.releasePointerCapture(event.pointerId);
-        },
-        onPointerCancel: () => {
-            if (drag.current) setManual(drag.current.original);
-            drag.current = null;
-        },
-        onLostPointerCapture: () => {
-            if (drag.current) setManual(drag.current.original);
-            drag.current = null;
-        },
-    } satisfies ComponentProps<'button'>;
+                event.currentTarget.focus();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                drag.current = {
+                    y: event.clientY,
+                    height: bounds.height,
+                    current: bounds.height,
+                    original: manual,
+                };
+            },
+            onPointerMove: (event) => {
+                if (!drag.current) return;
+                drag.current.current = clamp(drag.current.height + drag.current.y - event.clientY);
+                setManual(drag.current.current);
+            },
+            onPointerUp: (event) => {
+                if (!drag.current) return;
+                commit(drag.current.current);
+                drag.current = null;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            },
+            onPointerCancel: () => {
+                if (drag.current) setManual(drag.current.original);
+                drag.current = null;
+            },
+            onLostPointerCapture: () => {
+                if (drag.current) setManual(drag.current.original);
+                drag.current = null;
+            },
+        } satisfies ComponentProps<'button'>,
+    };
 }

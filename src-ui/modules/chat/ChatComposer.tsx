@@ -29,17 +29,20 @@ import { useComposerResize } from './useComposerResize';
 import { Button } from '../../shared/ui/Button';
 import { ActionMotionIcon } from '../../shared/ui/motion/ActionMotionIcon';
 import { ChatPresence, useChatComposerMotion } from './chatMotion';
+import { useComposerCollapse } from './useComposerCollapse';
 
 export function ChatComposer({
     store,
     contact,
     disabledReason,
     inputRef,
+    collapsed = false,
 }: {
     store: ChatAccountStore;
     contact: Contact;
     disabledReason: string;
     inputRef?: RefObject<HTMLTextAreaElement>;
+    collapsed?: boolean;
 }) {
     const snapshot = useChatSnapshot(store);
     const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
@@ -47,7 +50,9 @@ export function ChatComposer({
     const input = inputRef ?? localInput;
     const composing = useRef(false);
     const composer = useRef<HTMLDivElement>(null);
-    const resize = useComposerResize(input, composer, draft.text);
+    const previouslyCollapsed = useRef(collapsed);
+    const { handle: resize, remeasure } = useComposerResize(input, composer, draft.text, collapsed);
+    useComposerCollapse(composer, collapsed, remeasure);
     const [emoji, setEmoji] = useState(false);
     const [error, setError] = useState('');
     const restoreAfterEmoji = useRef(false);
@@ -67,9 +72,24 @@ export function ChatComposer({
     const query =
         contact.type === 'group' && !mentionDismissed ? mentionQueryAt(draft.text, caret) : null;
     const mentionOpen = query !== null;
-    const memberVisible = mentionOpen && !disabledReason;
+    const memberVisible = mentionOpen && !disabledReason && !collapsed;
     useEffect(() => {
-        if (!mentionOpen || membersLoaded.current || disabledReason) return;
+        let frame = 0;
+        if (collapsed) {
+            restoreAfterEmoji.current = false;
+            setEmoji(false);
+            dismissMention(true);
+            setDragging(false);
+            dragDepth.current = 0;
+            if (composer.current?.contains(document.activeElement)) input.current?.blur();
+        } else if (previouslyCollapsed.current) {
+            frame = requestAnimationFrame(() => input.current?.focus({ preventScroll: true }));
+        }
+        previouslyCollapsed.current = collapsed;
+        return () => cancelAnimationFrame(frame);
+    }, [collapsed, input]);
+    useEffect(() => {
+        if (!mentionOpen || membersLoaded.current || disabledReason || collapsed) return;
         let cancelled = false;
         setMemberLoading(true);
         setMemberError('');
@@ -90,7 +110,7 @@ export function ChatComposer({
         return () => {
             cancelled = true;
         };
-    }, [mentionOpen, store, contact.key, disabledReason, memberRetry]);
+    }, [mentionOpen, store, contact.key, disabledReason, memberRetry, collapsed]);
     const filteredMembers = query
         ? members
               .filter((m) =>
@@ -108,8 +128,8 @@ export function ChatComposer({
             ?.scrollIntoView?.({ block: 'nearest' });
     }, [selectedMember]);
     useEffect(() => {
-        if (draft.reply) input.current?.focus();
-    }, [draft.reply]);
+        if (draft.reply && !collapsed) input.current?.focus();
+    }, [draft.reply, collapsed]);
     const current = () => store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
     const patch = (value: Partial<Draft>) => store.draft(contact.key, { ...current(), ...value });
     const chooseEmoji = (attachment: Attachment) => {
@@ -206,6 +226,7 @@ export function ChatComposer({
         (m) => m.session === contact.key && m.status === 'sending',
     );
     const canSend =
+        !collapsed &&
         !disabledReason &&
         !sending &&
         !pendingFiles &&
@@ -241,6 +262,7 @@ export function ChatComposer({
         });
     };
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (collapsed) return;
         if (event.nativeEvent.isComposing || composing.current || event.keyCode === 229) return;
         if (event.key === 'Escape') {
             dismissMention(true);
@@ -281,6 +303,9 @@ export function ChatComposer({
         <div
             ref={composer}
             className="native-chat-composer"
+            data-collapsed={collapsed}
+            aria-hidden={collapsed || undefined}
+            {...(collapsed ? { inert: '' } : {})}
             onPaste={paste}
             onDragOver={(e) => e.preventDefault()}
             onDrop={drop}
@@ -326,7 +351,7 @@ export function ChatComposer({
                 />
                 <div className="native-chat-composer-tools">
                     <Popover
-                        open={emoji}
+                        open={emoji && !collapsed}
                         onOpenChange={(open) => {
                             if (open) restoreAfterEmoji.current = false;
                             setEmoji(open);
@@ -557,7 +582,7 @@ function ChatAttachmentStrip({
     }, [attachments]);
     if (!displayed.length) return null;
     return (
-        <div className="native-chat-attachments">
+        <div className="native-chat-attachments" role="list" aria-label="待发送附件">
             {displayed.map((file) => (
                 <ChatPresence
                     key={file.key}
@@ -569,14 +594,19 @@ function ChatAttachmentStrip({
                             );
                     }}
                 >
-                    <div className="native-chat-attachment">
-                        <AttachmentPreview attachment={file} />
-                        <span className="max-w-36 truncate">{file.name}</span>
+                    <div className="native-chat-attachment" data-type={file.type} role="listitem">
+                        <div className="native-chat-attachment-preview">
+                            <AttachmentPreview attachment={file} />
+                        </div>
+                        <span className="native-chat-attachment-name" title={file.name}>
+                            {file.name}
+                        </span>
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="native-chat-icon"
+                            className="native-chat-attachment-remove"
                             aria-label={`移除${file.name}`}
+                            title={`移除${file.name}`}
                             onClick={() => onRemove(file.key)}
                         >
                             <X size={12} />
@@ -589,16 +619,24 @@ function ChatAttachmentStrip({
 }
 
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {
-    if (attachment.type === 'face') return <QQFace id={attachment.id} />;
-    if (attachment.type === 'file') return <File size={16} />;
+    const [failed, setFailed] = useState('');
+    if (attachment.type === 'face') return <QQFace id={attachment.id} size={40} />;
+    if (attachment.type === 'file') return <File size={28} strokeWidth={1.5} />;
     const source = attachment.path.startsWith('base64://')
         ? 'data:image/png;base64,' + attachment.path.slice(9)
         : /^https?:\/\//i.test(attachment.path)
           ? attachment.path
           : '';
-    return source ? (
-        <img src={source} alt={attachment.name} referrerPolicy="no-referrer" />
+    return source && attachment.path !== failed ? (
+        <img
+            src={source}
+            alt={attachment.name}
+            referrerPolicy="no-referrer"
+            decoding="async"
+            draggable={false}
+            onError={() => setFailed(attachment.path)}
+        />
     ) : (
-        <ImagePlus size={16} />
+        <ImagePlus size={28} strokeWidth={1.5} />
     );
 }

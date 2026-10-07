@@ -7,7 +7,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { ChatItem, SessionKey } from '../../../core/domain/debug/chat';
 import type { FillPlan, MessageItem } from '../../../core/domain/debug/chatFormat';
 import type { RequestItem } from '../../../core/domain/debug/requestHandling';
-import type { ForwardNode } from '../../../core/services/chat-media.service';
+import type { ForwardNode, ImageReadOptions } from '../../../core/services/chat-media.service';
 
 /** 「同意 / 拒绝」的结果：失败给一句原因 */
 export type RequestHandleResult = { ok: true } | { ok: false; reason: string };
@@ -35,7 +35,13 @@ export interface ChatViewApi {
     handleRequest: (item: RequestItem, approve: boolean) => Promise<RequestHandleResult>;
     openImage: (url: string) => void;
     openLink: (url: string) => void;
-    readImage?: (data: Record<string, unknown>, refresh?: boolean) => Promise<string>;
+    readImage?: (
+        data: Record<string, unknown>,
+        refresh?: boolean,
+        options?: ImageReadOptions,
+    ) => Promise<string>;
+    imageReadsQueued?: boolean;
+    isImageSourceAlive?: (data: Record<string, unknown>) => boolean;
     mediaScope?: string;
     readForward?: (data: Record<string, unknown>) => Promise<ForwardNode[]>;
     readRecord?: (data: Record<string, unknown>) => Promise<string>;

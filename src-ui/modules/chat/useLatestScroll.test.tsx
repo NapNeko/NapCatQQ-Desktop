@@ -17,6 +17,19 @@ function setup(enabled = true) {
         scrollHeight: { get: () => height },
     });
     let next: FrameRequestCallback | undefined;
+    let resized: ResizeObserverCallback | undefined;
+    vi.stubGlobal(
+        'ResizeObserver',
+        class {
+            constructor(callback: ResizeObserverCallback) {
+                resized = callback;
+            }
+            observe() {}
+            disconnect() {
+                resized = undefined;
+            }
+        },
+    );
     vi.spyOn(performance, 'now').mockReturnValue(0);
     vi.stubGlobal(
         'requestAnimationFrame',
@@ -55,6 +68,7 @@ function setup(enabled = true) {
         detach,
         resize: (value: number) => {
             height = value;
+            resized?.([], {} as ResizeObserver);
         },
     };
 }
@@ -88,6 +102,93 @@ describe('return to latest animation', () => {
         expect(element.scrollTop).toBeGreaterThan(compensated);
         frame(800);
         expect(element.scrollTop).toBe(4400);
+    });
+    it('keeps settling when the virtual canvas grows after the first final snap', () => {
+        const { element, hook, frame, resize, finish } = setup();
+        act(() => hook.result.current.start());
+        frame(800);
+        expect(element.scrollTop).toBe(3600);
+        expect(finish).not.toHaveBeenCalled();
+        resize(4600);
+        frame(816);
+        expect(element.scrollTop).toBe(4200);
+        frame(832);
+        frame(848);
+        expect(finish).toHaveBeenCalledOnce();
+        expect(hook.result.current.isRunning()).toBe(false);
+    });
+    it('owns the load wait and does not restart scrolling after a user cancels it', async () => {
+        const { element, hook, frame, finish } = setup();
+        let resolve!: () => void;
+        let signal!: AbortSignal;
+        const load = vi.fn((value: AbortSignal) => {
+            signal = value;
+            return new Promise<void>((done) => {
+                resolve = done;
+            });
+        });
+        act(() => hook.result.current.start(load));
+        expect(hook.result.current.isRunning()).toBe(true);
+        expect(element.scrollTop).toBe(200);
+        act(() => hook.result.current.cancel());
+        expect(signal.aborted).toBe(true);
+        await act(async () => resolve());
+        frame(800);
+        expect(element.scrollTop).toBe(200);
+        expect(finish).not.toHaveBeenCalled();
+    });
+    it('moves immediately while history loads and settles at the committed page bottom', async () => {
+        const { element, hook, frame, resize, finish } = setup();
+        let resolve!: () => void;
+        act(() =>
+            hook.result.current.start(
+                () =>
+                    new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+            ),
+        );
+        frame(16);
+        expect(element.scrollTop).toBeGreaterThan(200);
+        frame(300);
+        frame(316);
+        frame(332);
+        expect(element.scrollTop).toBe(3600);
+        expect(finish).not.toHaveBeenCalled();
+        expect(hook.result.current.isRunning()).toBe(true);
+        expect(requestAnimationFrame).toHaveBeenCalledTimes(4);
+        resize(6000);
+        frame(348);
+        expect(element.scrollTop).toBe(5600);
+        await act(async () => resolve());
+        frame(364);
+        frame(380);
+        expect(element.scrollTop).toBe(5600);
+        expect(finish).toHaveBeenCalledOnce();
+    });
+    it('does not pull the user back when a late history response arrives after takeover', async () => {
+        const { element, hook, frame, finish } = setup();
+        let resolve!: () => void;
+        let signal!: AbortSignal;
+        act(() =>
+            hook.result.current.start((value) => {
+                signal = value;
+                return new Promise<void>((done) => {
+                    resolve = done;
+                });
+            }),
+        );
+        frame(300);
+        frame(316);
+        frame(332);
+        expect(element.scrollTop).toBe(3600);
+        act(() => hook.result.current.cancel());
+        element.scrollTop = 1200;
+        await act(async () => resolve());
+        frame(400);
+        expect(signal.aborted).toBe(true);
+        expect(element.scrollTop).toBe(1200);
+        expect(finish).not.toHaveBeenCalled();
     });
     it('cancels immediately on user takeover without a delayed snap', () => {
         const { element, hook, frame, finish } = setup();

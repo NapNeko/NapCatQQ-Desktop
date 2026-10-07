@@ -29,14 +29,22 @@ export function useTimelinePosition(
     virtual: Virtualizer<HTMLDivElement, Element>,
     messages: readonly Message[],
     isFollowing: () => boolean,
+    isNavigating: () => boolean = () => false,
 ) {
     const pending = useRef(store.initialReadingPosition(session));
     const previousMessages = useRef(messages);
-    const current = useRef({ messages, isFollowing });
-    current.current = { messages, isFollowing };
+    const current = useRef({ messages, isFollowing, isNavigating });
+    current.current = { messages, isFollowing, isNavigating };
     const capture = useCallback(() => {
         const element = scroll.current;
-        if (!element || !element.clientHeight || !element.clientWidth || pending.current) return;
+        if (
+            !element ||
+            !element.clientHeight ||
+            !element.clientWidth ||
+            pending.current ||
+            current.current.isNavigating()
+        )
+            return;
         const value = readTimelinePosition(
             virtual,
             element,
@@ -58,7 +66,8 @@ export function useTimelinePosition(
             previous.every((message, index) => message.key === messages[index].key)
         )
             return;
-        if (pending.current) return;
+        if (pending.current || current.current.isNavigating() || current.current.isFollowing())
+            return;
         const saved = store.readingPosition(session);
         if (!saved || saved.atBottom) return;
         const element = scroll.current;
@@ -75,7 +84,13 @@ export function useTimelinePosition(
     }, [store, session, scroll, virtual, messages]);
     useLayoutEffect(() => {
         const element = scroll.current;
-        if (!element?.clientHeight || !element.clientWidth || !messages.length) return;
+        if (
+            current.current.isNavigating() ||
+            !element?.clientHeight ||
+            !element.clientWidth ||
+            !messages.length
+        )
+            return;
         const saved = pending.current;
         if (saved?.atBottom) {
             store.finishInitialReading(session, saved);

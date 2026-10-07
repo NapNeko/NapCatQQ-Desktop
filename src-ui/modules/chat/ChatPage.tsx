@@ -6,12 +6,15 @@ import {
     ChevronRight,
     FolderOpen,
     Inbox,
+    Mail,
     MessagesSquare,
     RefreshCw,
     Search,
+    Users,
     X,
 } from 'lucide-react';
 import { chatService } from '../../core/services/chat.service';
+import { groupMemberPermissions } from '../../core/services/group-member-permissions.service';
 import {
     chatAccount,
     reconcileChatAccounts,
@@ -26,7 +29,7 @@ import { ChatAccountControls } from './ChatAccountControls';
 import { ConversationSkeleton } from './ChatSkeleton';
 import { useChatNotifications } from './useChatNotifications';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
-import { accountKey, type Contact } from '../../core/domain/chat/model';
+import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
 import { conversationRows, groupBoxSummary } from '../../core/domain/chat/groupBox';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
@@ -37,10 +40,13 @@ import { NativeTimeline } from './ChatTimeline';
 import { BotPicker } from '../debug/BotPicker';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { ChatDetails } from './ChatDetails';
+import { GroupMembersDialog } from './GroupMembersDialog';
+import { ChatGroupMemberMenu } from './ChatGroupMemberMenu';
 import { ChatSearch } from './ChatSearch';
 import { GroupFilesDialog } from './files/GroupFilesDialog';
 import { ChatDivider } from './ChatDivider';
 import { ConversationList, useConversationNavigation } from './ConversationList';
+import { ChatContactFilters, friendCategoryItems, friendCategoryKey } from './ChatContactFilters';
 import { setChatPreferences, setConversationHidden, useChatPreferences } from './chatPreferences';
 import { Dialog, DialogContent, DialogTitle } from '../../shared/ui/Dialog';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -244,6 +250,8 @@ function ChatWorkspace({
     useChatControlReset(workspace);
     const [listWidth, setListWidth] = useState(preferences.listWidth);
     const [tab, setTab] = useState<'messages' | 'contacts'>('messages');
+    const [contactType, setContactType] = useState<Contact['type']>('private');
+    const [friendCategory, setFriendCategory] = useState('all');
     useChatTabMotion(workspace, tab);
     const [inGroupBox, setInGroupBox] = useState(
         () => account.active?.startsWith('group:') ?? false,
@@ -251,15 +259,23 @@ function ChatWorkspace({
     const [query, setQuery] = useState('');
     const [unread, setUnread] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [searchExpanded, setSearchExpanded] = useState(false);
+    const [searchScope, setSearchScope] = useState<'conversation' | 'account'>('conversation');
     const [narrowFocus, setNarrowFocus] = useState(() => !!account.active);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [filesOpen, setFilesOpen] = useState(false);
+    const [membersOpen, setMembersOpen] = useState(false);
+    const [memberFocus, setMemberFocus] = useState<string>();
     const [timelineEntry, setTimelineEntry] = useState(0);
+    const [messageSelecting, setMessageSelecting] = useState(false);
     const searchTrigger = useRef<HTMLButtonElement>(null);
+    const accountSearchTrigger = useRef<HTMLButtonElement>(null);
     const searchInput = useRef<HTMLInputElement>(null);
     const listSearchInput = useRef<HTMLInputElement>(null);
     const composerInput = useRef<HTMLTextAreaElement>(null);
     const reveal = useRef<(key: string) => void>(() => {});
+    const pendingReveal = useRef<Message | null>(null);
+    const searchRevealed = useRef(false);
     const active = account.active ? account.conversations[account.active] : undefined;
     useChatPaneMotion(
         workspace,
@@ -289,6 +305,9 @@ function ChatWorkspace({
         setSearchOpen(false);
         setDetailsOpen(false);
         setFilesOpen(false);
+        setMembersOpen(false);
+        setMemberFocus(undefined);
+        setMessageSelecting(false);
     }, [account.active]);
     // 群里新到一条文件消息，开着的群文件列表就该重读；SnowLuma 不发 group_upload 通知，只能看消息
     const fileSignal = useMemo(() => {
@@ -303,6 +322,19 @@ function ChatWorkspace({
     useEffect(() => {
         if (searchOpen) searchInput.current?.focus();
     }, [searchOpen]);
+    useEffect(() => {
+        const message = pendingReveal.current;
+        if (!message || account.active !== message.session) return;
+        const frame = requestAnimationFrame(() => {
+            reveal.current(message.key);
+            pendingReveal.current = null;
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [account.active, timelineEntry, messages]);
+    const categories = useMemo(() => friendCategoryItems(snapshot.contacts), [snapshot.contacts]);
+    const category = categories.some((item) => item.value === friendCategory)
+        ? friendCategory
+        : 'all';
     const rows = useMemo(() => {
         const term = query.trim().toLocaleLowerCase();
         if (tab === 'messages')
@@ -311,9 +343,26 @@ function ChatWorkspace({
                 { box: inGroupBox, unread, query },
             );
         return snapshot.contacts
-            .filter((c) => !term || `${c.name} ${c.id}`.toLocaleLowerCase().includes(term))
-            .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name, 'zh-CN'));
-    }, [query, tab, unread, inGroupBox, snapshot.contacts, account.conversations, hidden]);
+            .filter(
+                (c) =>
+                    c.type === contactType &&
+                    (contactType !== 'private' ||
+                        category === 'all' ||
+                        friendCategoryKey(c) === category) &&
+                    (!term || `${c.name} ${c.id}`.toLocaleLowerCase().includes(term)),
+            )
+            .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    }, [
+        query,
+        tab,
+        unread,
+        inGroupBox,
+        snapshot.contacts,
+        account.conversations,
+        hidden,
+        contactType,
+        category,
+    ]);
     const box = useMemo(
         () =>
             groupBoxSummary(Object.values(account.conversations).filter((c) => !hidden.has(c.key))),
@@ -321,6 +370,14 @@ function ChatWorkspace({
     );
     const connected =
         target.running && target.online !== false && snapshot.connection.state === 'connected';
+    useEffect(() => {
+        if (!connected || active?.type !== 'group') {
+            groupMemberPermissions.clear();
+            return;
+        }
+        void groupMemberPermissions.self(target, active.id);
+        return () => groupMemberPermissions.clear(target, active.id);
+    }, [identity, active?.key, connected, target.backend]);
     const connectionLabel = !target.running
         ? '机器人已停止'
         : target.online === false
@@ -351,11 +408,16 @@ function ChatWorkspace({
     const focusComposer = () =>
         requestAnimationFrame(() => {
             const input = composerInput.current;
-            if (input?.isConnected) {
+            if (input?.isConnected && input.closest('[data-collapsed="true"]') === null) {
                 input.focus();
                 input.setSelectionRange(input.value.length, input.value.length);
             }
         });
+    const showMembers = (memberId?: string) => {
+        setMemberFocus(memberId);
+        setMembersOpen(true);
+        setDetailsOpen(false);
+    };
     const handledNavigation = useRef<ChatTrayNavigation | null>(null);
     useEffect(() => {
         if (
@@ -378,12 +440,30 @@ function ChatWorkspace({
     });
     const closeSearch = () => {
         setSearchOpen(false);
-        searchTrigger.current?.focus();
+        (searchScope === 'account' ? accountSearchTrigger : searchTrigger).current?.focus();
     };
-    const openSearch = () => {
+    const openSearch = (typing = false) => {
+        searchRevealed.current = false;
+        setSearchExpanded(typing);
+        setSearchScope('conversation');
         setSearchOpen(true);
         setNarrowFocus(true);
         searchInput.current?.focus();
+    };
+    const revealSavedMessage = (message: Message) => {
+        const saved = store.revealArchivedMessage(message);
+        if (!saved) return;
+        const contact = store.getSnapshot().account.conversations[saved.session];
+        if (contact?.type === 'group' && hidden.has(contact.key))
+            void notifications.mute(contact.id, false, true);
+        setConversationHidden(identity, saved.session, false);
+        pendingReveal.current = saved;
+        searchRevealed.current = true;
+        setTimelineEntry((value) => value + 1);
+        setInGroupBox(saved.session.startsWith('group:'));
+        setTab('messages');
+        setNarrowFocus(true);
+        setSearchOpen(false);
     };
     return (
         <div
@@ -422,7 +502,7 @@ function ChatWorkspace({
                 }
                 if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && active) {
                     e.preventDefault();
-                    openSearch();
+                    openSearch(true);
                 }
             }}
         >
@@ -455,7 +535,7 @@ function ChatWorkspace({
                         </span>
                     </div>
                 </div>
-                <label className="native-chat-search">
+                <div className="native-chat-search">
                     <Search size={15} aria-hidden />
                     <input
                         ref={listSearchInput}
@@ -467,7 +547,7 @@ function ChatWorkspace({
                         aria-activedescendant={listNavigation.activeDescendant}
                         aria-keyshortcuts="Control+k Meta+k"
                         title="搜索会话或联系人 · Ctrl+K / ⌘K"
-                        placeholder="搜索"
+                        placeholder={tab === 'messages' && unread ? '搜索未读会话' : '搜索'}
                         value={query}
                         onChange={(e) => {
                             setQuery(e.target.value);
@@ -488,7 +568,38 @@ function ChatWorkspace({
                             <X size={13} />
                         </button>
                     )}
-                </label>
+                    {tab === 'messages' && (
+                        <button
+                            type="button"
+                            className="native-chat-list-filter"
+                            aria-label="只看未读会话"
+                            title={unread ? '显示全部会话' : '只看未读会话'}
+                            aria-pressed={unread}
+                            onClick={() => {
+                                setUnread(!unread);
+                                listNavigation.reset();
+                            }}
+                        >
+                            <Mail size={14} />
+                        </button>
+                    )}
+                    {tab === 'contacts' && (
+                        <button
+                            type="button"
+                            className="native-chat-list-filter"
+                            aria-label="刷新联系人"
+                            title="刷新联系人"
+                            disabled={snapshot.contactsLoading || !connected}
+                            onClick={() => void store.loadContacts()}
+                        >
+                            <ActionMotionIcon
+                                icon={RefreshCw}
+                                motion={snapshot.contactsLoading ? 'spin' : 'none'}
+                                size={14}
+                            />
+                        </button>
+                    )}
+                </div>
                 <div className="native-chat-tabs">
                     <div role="tablist" aria-label="聊天列表">
                         {(['messages', 'contacts'] as const).map((value) => (
@@ -503,33 +614,39 @@ function ChatWorkspace({
                         ))}
                         <span className="native-chat-tab-indicator" aria-hidden />
                     </div>
-                    {tab === 'messages' ? (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={cn('native-chat-unread', unread && 'is-active')}
-                            aria-pressed={unread}
-                            onClick={() => setUnread(!unread)}
-                        >
-                            未读
-                        </Button>
-                    ) : (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="native-chat-icon"
-                            aria-label="刷新联系人"
-                            disabled={snapshot.contactsLoading || !connected}
-                            onClick={() => void store.loadContacts()}
-                        >
-                            <ActionMotionIcon
-                                icon={RefreshCw}
-                                motion={snapshot.contactsLoading ? 'spin' : 'none'}
-                                size={14}
-                            />
-                        </Button>
-                    )}
+                    <Button
+                        ref={accountSearchTrigger}
+                        variant="ghost"
+                        size="icon"
+                        className="native-chat-icon"
+                        aria-label="搜索聊天记录"
+                        title="搜索聊天记录"
+                        onClick={() => {
+                            searchRevealed.current = false;
+                            setSearchExpanded(false);
+                            setSearchScope('account');
+                            setSearchOpen(true);
+                        }}
+                    >
+                        <Search size={15} />
+                    </Button>
                 </div>
+                {tab === 'contacts' && (
+                    <ChatContactFilters
+                        contacts={snapshot.contacts}
+                        type={contactType}
+                        category={category}
+                        categories={categories}
+                        onTypeChange={(value) => {
+                            setContactType(value);
+                            listNavigation.reset();
+                        }}
+                        onCategoryChange={(value) => {
+                            setFriendCategory(value);
+                            listNavigation.reset();
+                        }}
+                    />
+                )}
                 {tab === 'messages' &&
                     !inGroupBox &&
                     !query.trim() &&
@@ -555,7 +672,7 @@ function ChatWorkspace({
                     )}
                 {rows.length > 0 && (
                     <ConversationList
-                        key={`${tab}:${inGroupBox}`}
+                        key={`${tab}:${inGroupBox}:${contactType}:${category}`}
                         rows={rows}
                         active={account.active}
                         store={store}
@@ -581,12 +698,18 @@ function ChatWorkspace({
                         <div className="native-chat-list-empty">
                             {query ? (
                                 '没有找到匹配项'
-                            ) : unread ? (
+                            ) : unread && tab === 'messages' ? (
                                 '没有未读消息'
                             ) : inGroupBox && tab === 'messages' ? (
                                 '暂无群消息'
                             ) : tab === 'contacts' ? (
-                                '暂无联系人'
+                                contactType === 'group' ? (
+                                    '暂无群聊'
+                                ) : category === 'all' ? (
+                                    '暂无好友'
+                                ) : (
+                                    '该分组暂无好友'
+                                )
                             ) : (
                                 <>
                                     <span>{box.count ? '群会话已收进消息盒子' : '还没有会话'}</span>
@@ -660,10 +783,23 @@ function ChatWorkspace({
                                     aria-label="搜索当前会话"
                                     title="搜索消息 · Ctrl+F"
                                     aria-expanded={searchOpen}
-                                    onClick={() => setSearchOpen(!searchOpen)}
+                                    onClick={() => (searchOpen ? closeSearch() : openSearch())}
                                 >
                                     <Search size={17} />
                                 </Button>
+                                {active.type === 'group' && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="native-chat-icon"
+                                        aria-label="群成员"
+                                        title="群成员"
+                                        aria-expanded={membersOpen}
+                                        onClick={() => showMembers()}
+                                    >
+                                        <Users size={17} />
+                                    </Button>
+                                )}
                                 {active.type === 'group' && (
                                     <Button
                                         variant="ghost"
@@ -686,6 +822,9 @@ function ChatWorkspace({
                                     onPin={() => store.pin(active.key)}
                                     onMessage={open}
                                     onSearch={openSearch}
+                                    onMembers={
+                                        active.type === 'group' ? () => showMembers() : undefined
+                                    }
                                 />
                             </header>
                             {active.type === 'group' && (
@@ -699,42 +838,41 @@ function ChatWorkspace({
                                     refreshSignal={fileSignal}
                                 />
                             )}
-                            <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-                                <DialogContent
-                                    size="lg"
-                                    hideClose
-                                    className="native-chat-search-dialog"
-                                    onCloseAutoFocus={(event) => {
-                                        event.preventDefault();
-                                        searchTrigger.current?.focus();
-                                    }}
-                                >
-                                    <DialogTitle className="native-chat-search-title">
-                                        <span>聊天记录</span>
-                                        {active.name}
-                                    </DialogTitle>
-                                    <ChatSearch
-                                        inputRef={searchInput}
-                                        messages={messages}
-                                        history={snapshot.history[active.key]}
-                                        canLoadEarlier={connected}
-                                        onLoadEarlier={() => void store.history(active.key)}
-                                        onClose={closeSearch}
-                                        onReveal={(key) => {
-                                            closeSearch();
-                                            requestAnimationFrame(() => reveal.current(key));
-                                        }}
-                                    />
-                                </DialogContent>
-                            </Dialog>
+                            {active.type === 'group' && (
+                                <GroupMembersDialog
+                                    key={`${identity}/${active.key}`}
+                                    open={membersOpen}
+                                    onOpenChange={setMembersOpen}
+                                    target={target}
+                                    contact={active}
+                                    connected={connected}
+                                    onMessage={open}
+                                    initialMemberId={memberFocus}
+                                />
+                            )}
                             <NativeTimeline
                                 key={`timeline:${active.key}:${timelineEntry}`}
                                 store={store}
                                 contact={active}
                                 messages={messages}
+                                preventRecall={notifications.preventRecall}
                                 revealRef={reveal}
                                 visible={narrowFocus}
                                 onFocusComposer={focusComposer}
+                                onSelectionChange={setMessageSelecting}
+                                renderAvatar={(message, avatar) => (
+                                    <ChatGroupMemberMenu
+                                        target={target}
+                                        store={store}
+                                        contact={active}
+                                        message={message}
+                                        onMessage={open}
+                                        onViewMember={showMembers}
+                                        onFocusComposer={focusComposer}
+                                    >
+                                        {avatar}
+                                    </ChatGroupMemberMenu>
+                                )}
                             />
                             <ChatComposer
                                 key={`composer:${active.key}`}
@@ -742,6 +880,7 @@ function ChatWorkspace({
                                 contact={active}
                                 disabledReason={connected ? '' : connectionLabel}
                                 inputRef={composerInput}
+                                collapsed={messageSelecting}
                             />
                         </>
                     ) : (
@@ -761,6 +900,50 @@ function ChatWorkspace({
                     )}
                 </div>
             </main>
+            <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+                <DialogContent
+                    size="lg"
+                    hideClose
+                    className="native-chat-search-dialog"
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        if (searchRevealed.current) {
+                            searchRevealed.current = false;
+                            focusComposer();
+                        } else {
+                            (searchScope === 'account'
+                                ? accountSearchTrigger
+                                : searchTrigger
+                            ).current?.focus();
+                        }
+                    }}
+                >
+                    <DialogTitle className="native-chat-search-title">
+                        <span>聊天记录</span>
+                        {target.name}
+                    </DialogTitle>
+                    <ChatSearch
+                        target={target}
+                        initialSearchExpanded={searchExpanded}
+                        inputRef={searchInput}
+                        messages={messages}
+                        archivedMessages={account.archiveMessages ?? account.messages}
+                        conversations={account.conversations}
+                        currentSession={account.active ?? undefined}
+                        initialScope={searchScope}
+                        preventRecall={notifications.preventRecall}
+                        history={active ? snapshot.history[active.key] : undefined}
+                        canLoadEarlier={connected}
+                        onLoadEarlier={active ? () => void store.history(active.key) : undefined}
+                        onClose={closeSearch}
+                        onRevealMessage={revealSavedMessage}
+                        onReveal={(key) => {
+                            closeSearch();
+                            requestAnimationFrame(() => reveal.current(key));
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

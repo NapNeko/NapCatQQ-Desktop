@@ -67,5 +67,12 @@ export function useChatNotifications(target: DebugTarget, localHidden: string[])
                 .then(() => client.invalidateQueries({ queryKey: ['chat', 'desktop'] }))
                 .catch((reason) => setError(errorText(reason)));
     }, [account, localHidden, hidden, client, target.bot_id, target.qq_id]);
-    return { ignored, hidden, qqMuted, busy, mute };
+    return {
+        ignored,
+        hidden,
+        qqMuted,
+        busy,
+        mute,
+        preventRecall: account?.preference.preventRecall ?? false,
+    };
 }

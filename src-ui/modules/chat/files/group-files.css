@@ -39,6 +39,7 @@
 }
 
 .native-group-files-toolbar {
+    --group-files-control-height: 32px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -49,6 +50,7 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+    min-height: var(--group-files-control-height);
     flex: 1;
     color: var(--text-tertiary);
     font-size: 13px;
@@ -81,7 +83,10 @@
     align-items: center;
     gap: 7px;
     width: 220px;
-    padding: 6px 10px;
+    min-width: 120px;
+    height: var(--group-files-control-height);
+    padding: 0 10px;
+    flex-shrink: 1;
     border: 1px solid transparent;
     border-radius: var(--radius-md);
     background: var(--surface-inset);
@@ -97,6 +102,7 @@
     outline: none;
     color: var(--text-primary);
     font-size: 12px;
+    line-height: 18px;
 }
 .native-group-files-search input::placeholder {
     color: var(--text-tertiary);
@@ -105,16 +111,26 @@
     width: 96px;
     flex-shrink: 0;
 }
+.native-group-files-sort [role="combobox"] {
+    height: var(--group-files-control-height);
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    background: var(--surface-inset);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 18px;
+}
 .native-group-files-upload {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    height: 30px;
+    height: var(--group-files-control-height);
     padding: 0 12px;
     border-radius: var(--radius-md);
     background: var(--action-primary);
     color: var(--text-on-brand);
     font-size: 12px;
+    line-height: 18px;
     font-weight: 500;
     flex-shrink: 0;
 }
@@ -133,6 +149,11 @@
 .native-group-file-icon-button:not(:disabled):hover {
     background: var(--surface-inset);
     color: var(--text-primary);
+}
+.native-group-files-toolbar .native-group-file-icon-button {
+    width: var(--group-files-control-height);
+    height: var(--group-files-control-height);
+    border-radius: var(--radius-md);
 }
 
 .native-group-files-error {
@@ -306,33 +327,55 @@
 }
 
 .native-group-file-glyph {
+    position: relative;
     display: grid;
     place-items: center;
     width: 34px;
-    height: 34px;
+    height: 38px;
     flex-shrink: 0;
     border-radius: var(--radius-sm);
-    background: var(--surface-inset);
-    color: var(--text-secondary);
+    background: color-mix(
+        in srgb,
+        var(--file-glyph-color, var(--text-secondary)) 9%,
+        var(--surface-inset)
+    );
+    color: var(--file-glyph-color, var(--text-secondary));
+}
+.native-group-file-glyph[data-extension] > svg {
+    transform: translateY(-4px);
+}
+.native-group-file-extension {
+    position: absolute;
+    bottom: 3px;
+    max-width: 30px;
+    overflow: hidden;
+    font-size: 7px;
+    line-height: 9px;
+    font-weight: 650;
+    letter-spacing: 0.3px;
 }
 .native-group-file-glyph.is-folder {
-    background: color-mix(in srgb, var(--state-warning) 16%, transparent);
-    color: color-mix(in srgb, var(--state-warning) 80%, var(--text-primary));
-}
-.native-group-file-glyph.is-image,
-.native-group-file-glyph.is-video {
+    background: color-mix(in srgb, var(--brand-soft) 60%, var(--surface-inset));
     color: var(--action-primary);
 }
-.native-group-file-glyph.is-archive,
-.native-group-file-glyph.is-app {
-    color: color-mix(in srgb, var(--state-warning) 75%, var(--text-primary));
-}
-.native-group-file-glyph.is-sheet {
-    color: var(--state-success);
-}
+.native-group-file-glyph.is-image,
+.native-group-file-glyph.is-video,
+.native-group-file-glyph.is-app,
 .native-group-file-glyph.is-doc,
 .native-group-file-glyph.is-slide {
-    color: color-mix(in srgb, var(--action-primary) 60%, var(--text-secondary));
+    --file-glyph-color: var(--action-primary);
+}
+.native-group-file-glyph.is-sheet {
+    --file-glyph-color: var(--state-success);
+}
+.native-group-file-glyph.is-archive {
+    --file-glyph-color: var(--state-warning);
+}
+.native-group-file-glyph.is-audio {
+    --file-glyph-color: var(--text-secondary);
+}
+.native-group-file-glyph[data-extension="PDF"] {
+    --file-glyph-color: var(--state-danger);
 }
 
 .native-group-file-transfer {
@@ -491,5 +534,13 @@
     }
     .native-group-files-footer .native-group-files-space {
         display: none;
+    }
+}
+@media (max-width: 420px) {
+    .native-group-files-search {
+        flex-basis: calc(100% - 104px);
+    }
+    .native-group-files-upload {
+        margin-left: auto;
     }
 }

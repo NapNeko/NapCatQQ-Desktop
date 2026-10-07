@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SegmentList } from './SegmentView';
 import { ChatViewContext, useChatView, type ChatViewApi } from './chatContext';
+import { qqFaceAssetService } from '../../../core/services/qq-face-assets.service';
 function NativeSegments({
     api,
     segments,
@@ -18,6 +19,31 @@ function NativeSegments({
     );
 }
 describe('native media segments', () => {
+    it('refreshes an evicted Blob before opening the image and forwards its message ordinal', async () => {
+        const readImage = vi
+            .fn()
+            .mockResolvedValueOnce('blob:first')
+            .mockResolvedValueOnce('https://cdn.example/recovered.png');
+        const openImage = vi.fn();
+        const isImageSourceAlive = vi.fn().mockReturnValue(false);
+        const data = { file: 'ncd-inline-image://evicted' };
+        render(
+            <NativeSegments
+                messageId="123"
+                api={{ readImage, openImage, isImageSourceAlive, imageReadsQueued: true }}
+                segments={[{ type: 'image', data }]}
+            />,
+        );
+        await screen.findByAltText('图片');
+        fireEvent.click(screen.getByRole('button', { name: '看大图' }));
+        await waitFor(() =>
+            expect(openImage).toHaveBeenCalledWith('https://cdn.example/recovered.png'),
+        );
+        expect(openImage).not.toHaveBeenCalledWith('blob:first');
+        expect(readImage.mock.calls[1][2]).toMatchObject({
+            context: { messageId: '123', imageIndex: 0 },
+        });
+    });
     it('does not reset a decoded image when history supplies an equivalent segment object', () => {
         const data = { file: '0', url: 'https://cdn.example/stable-layout.gif', sub_type: 1 };
         const view = render(
@@ -582,7 +608,14 @@ describe('native media segments', () => {
 });
 
 describe('QQ face segments', () => {
-    it('renders QQ faces inline with surrounding text', () => {
+    beforeEach(() => {
+        vi.spyOn(qqFaceAssetService, 'acquire').mockImplementation(async (url) => ({
+            url,
+            release: vi.fn(),
+        }));
+        vi.spyOn(qqFaceAssetService, 'invalidate').mockResolvedValue(undefined);
+    });
+    it('renders QQ faces inline with surrounding text', async () => {
         render(
             <SegmentList
                 mine={false}
@@ -594,24 +627,98 @@ describe('QQ face segments', () => {
             />,
         );
         const face = screen.getByRole('img', { name: 'QQ 表情 14' });
-        expect(face).toHaveAttribute(
-            'src',
-            'https://koishi.js.org/QFace/assets/qq_emoji/14/png/14.png',
-        );
+        expect(face.getAttribute('src')).toContain('qq-faces/14.png');
+        expect(qqFaceAssetService.acquire).not.toHaveBeenCalled();
         expect(face).toHaveAttribute('width', '24');
         expect(screen.getByText('你好')).toBeInTheDocument();
         expect(screen.getByText('！')).toBeInTheDocument();
     });
 
-    it('keeps a readable fallback when an asset fails and retries a changed face', () => {
+    it('keeps a readable fallback when both sources fail and retries a changed face', async () => {
         const { rerender } = render(
-            <SegmentList mine={false} segments={[{ type: 'face', data: { id: '277' } }]} />,
+            <SegmentList mine={false} segments={[{ type: 'face', data: { id: '600001' } }]} />,
         );
-        fireEvent.error(screen.getByRole('img', { name: 'QQ 表情 277' }));
+        const face = screen.getByRole('img', { name: 'QQ 表情 600001' });
+        await waitFor(() =>
+            expect(face).toHaveAttribute(
+                'src',
+                'https://koishi.js.org/QFace/assets/qq_emoji/600001/png/600001.png',
+            ),
+        );
+        fireEvent.error(face);
+        await waitFor(() =>
+            expect(face).toHaveAttribute(
+                'src',
+                'https://cdn.jsdelivr.net/gh/koishijs/QFace@master/public/assets/qq_emoji/600001/png/600001.png',
+            ),
+        );
+        fireEvent.error(face);
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
-        expect(screen.getByText('表情 277')).toBeInTheDocument();
+        expect(screen.getByText('表情 600001')).toBeInTheDocument();
         rerender(<SegmentList mine={false} segments={[{ type: 'face', data: { id: '0' } }]} />);
-        expect(screen.getByRole('img', { name: 'QQ 表情 0' })).toBeInTheDocument();
+        await waitFor(() =>
+            expect(screen.getByRole('img', { name: 'QQ 表情 0' })).toHaveAttribute(
+                'src',
+                '/qq-faces/0.png',
+            ),
+        );
+    });
+
+    it('folds the proven super face caption without deleting a mixed authored sentence', async () => {
+        render(
+            <SegmentList
+                mine={false}
+                segments={[
+                    { type: 'face', data: { id: '498', raw: { faceType: 3, faceText: '/中' } } },
+                    { type: 'text', data: { text: '[中!]' } },
+                    { type: 'text', data: { text: '[中!] 今晚见' } },
+                ]}
+            />,
+        );
+        expect(screen.queryByText('[中!]', { exact: true })).not.toBeInTheDocument();
+        expect(screen.getByText('[中!] 今晚见')).toBeInTheDocument();
+        await waitFor(() =>
+            expect(screen.getByRole('img', { name: 'QQ 表情 498' }).getAttribute('src')).toContain(
+                '/498/apng/498.png',
+            ),
+        );
+        expect(screen.getByRole('img', { name: 'QQ 表情 498' })).toHaveAttribute('width', '72');
+    });
+    it('displays the markerless SnowLuma face-and-placeholder screenshots while preserving the source', async () => {
+        const source = [
+            { type: 'face', data: { id: '498' } },
+            { type: 'text', data: { text: '[中!]' } },
+            { type: 'face', data: { id: '494' } },
+            { type: 'text', data: { text: '[举杯邀月]' } },
+            { type: 'face', data: { id: '495' } },
+            { type: 'text', data: { text: '[兔来]' } },
+        ];
+        const snapshot = JSON.stringify(source);
+        const view = render(<SegmentList mine={false} segments={source} />);
+        for (const id of ['498', '494', '495'])
+            expect(screen.getByRole('img', { name: 'QQ 表情 ' + id })).toHaveAttribute(
+                'width',
+                '72',
+            );
+        for (const caption of ['[中!]', '[举杯邀月]', '[兔来]'])
+            expect(screen.queryByText(caption, { exact: true })).not.toBeInTheDocument();
+        await waitFor(() =>
+            expect(screen.getByRole('img', { name: 'QQ 表情 498' }).getAttribute('src')).toContain(
+                '/apng/',
+            ),
+        );
+        expect(JSON.stringify(source)).toBe(snapshot);
+        view.rerender(
+            <SegmentList
+                mine={false}
+                segments={[
+                    { type: 'face', data: { id: '495', large: false } },
+                    { type: 'text', data: { text: '[兔来]' } },
+                ]}
+            />,
+        );
+        expect(screen.getByRole('img', { name: 'QQ 表情 495' })).toHaveAttribute('width', '24');
+        expect(screen.getByText('[兔来]')).toBeInTheDocument();
     });
 
     it('does not interpolate malformed identifiers into resource URLs', () => {

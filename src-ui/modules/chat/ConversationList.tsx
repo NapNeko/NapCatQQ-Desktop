@@ -210,7 +210,7 @@ export function ConversationList({
                                             </span>
                                             <span className="mt-1 block truncate text-[11.5px] text-text-tertiary">
                                                 {contacts ? (
-                                                    `${contact.type === 'group' ? '群聊' : '好友'} · ${contact.id}`
+                                                    `${contact.type === 'group' ? '群聊' : contact.categoryName || '好友'} · ${contact.id}`
                                                 ) : draft.text || draft.attachments.length ? (
                                                     <>
                                                         <span className="text-brand">草稿 </span>

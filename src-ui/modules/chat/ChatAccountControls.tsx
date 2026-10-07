@@ -269,6 +269,20 @@ export function ChatAccountControls({
                                             }
                                         />
                                     </SettingsRow>
+                                    <SettingsRow
+                                        id="chat-prevent-recall"
+                                        label="防撤回"
+                                        hint="保留本地已收到的消息，已撤回内容以气泡颜色区分"
+                                    >
+                                        <Switch
+                                            id="chat-prevent-recall"
+                                            checked={preference.preventRecall}
+                                            disabled={busy || !enabled}
+                                            onCheckedChange={(preventRecall) =>
+                                                void update({ preventRecall })
+                                            }
+                                        />
+                                    </SettingsRow>
                                     <SettingsRow label="连接">
                                         <span className="text-[12px] text-text-tertiary">
                                             {connectionLabel}

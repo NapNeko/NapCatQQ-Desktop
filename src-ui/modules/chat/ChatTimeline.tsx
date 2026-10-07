@@ -7,10 +7,10 @@ import {
     useRef,
     useState,
     type MutableRefObject,
+    type ReactNode,
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown } from 'lucide-react';
-import { SegmentList, isMediaOnly, isPictureOnly } from '../debug/right/SegmentView';
 import { ChatViewContext, useChatView } from '../debug/right/chatContext';
 import { useStickToBottom } from '../debug/right/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -18,7 +18,7 @@ import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatSto
 import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
 import { chatService } from '../../core/services/chat.service';
 import { ChatImageViewer } from './ChatImageViewer';
-import { chatMediaService } from '../../core/services/chat-media.service';
+import { chatMediaService, type ImageReadOptions } from '../../core/services/chat-media.service';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
@@ -35,6 +35,10 @@ import { errorText } from '../../core/domain/errors';
 import { useSmoothWheel } from './useSmoothWheel';
 import { useLatestScroll } from './useLatestScroll';
 import { ChatFileAction } from './files/ChatFileAction';
+import { FORWARD_MESSAGE_LIMIT } from '../../core/domain/chat/messageTransfer';
+import { ChatForwardDialog } from './ChatForwardDialog';
+import { ChatMessageContent } from './ChatMessageContent';
+import { ChatSelectionBar } from './ChatSelectionBar';
 
 export function NativeTimeline({
     store,
@@ -43,6 +47,9 @@ export function NativeTimeline({
     revealRef,
     visible,
     onFocusComposer,
+    preventRecall = false,
+    renderAvatar,
+    onSelectionChange,
 }: {
     store: ChatAccountStore;
     contact: Contact;
@@ -50,6 +57,9 @@ export function NativeTimeline({
     revealRef: MutableRefObject<(key: string) => void>;
     visible: boolean;
     onFocusComposer?: () => void;
+    preventRecall?: boolean;
+    renderAvatar?: (message: Message, avatar: ReactNode) => ReactNode;
+    onSelectionChange?: (selecting: boolean) => void;
 }) {
     const scroll = useRef<HTMLDivElement>(null);
     const latest = useRef(messages);
@@ -58,6 +68,9 @@ export function NativeTimeline({
     const [image, showImage] = useState('');
     const [error, setError] = useState('');
     const [highlight, setHighlight] = useState('');
+    const [selecting, setSelecting] = useState(false);
+    const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+    const [forwardKeys, setForwardKeys] = useState<string[]>([]);
     const snapshot = useChatSnapshot(store);
     const history = snapshot.history[contact.key];
     useEffect(() => {
@@ -87,7 +100,7 @@ export function NativeTimeline({
         getItemKey: getMessageKey,
         overscan: 8,
         paddingStart: 12,
-        paddingEnd: 24,
+        paddingEnd: selecting ? 96 : 24,
         anchorTo: 'end',
         directDomUpdates: true,
         onChange: pinLatest,
@@ -99,6 +112,29 @@ export function NativeTimeline({
     );
     preserveTimelineReading(virtual, scroll);
     const key = `${accountKey(store.target.bot_id, String(store.target.qq_id))}/${contact.key}`;
+    useEffect(() => {
+        setSelecting(false);
+        setSelectedKeys([]);
+        setForwardKeys([]);
+    }, [key]);
+    useEffect(() => {
+        onSelectionChange?.(selecting);
+    }, [selecting, onSelectionChange]);
+    useEffect(() => () => onSelectionChange?.(false), [onSelectionChange]);
+    const beginSelection = useCallback((messageKey: string) => {
+        setSelecting(true);
+        setSelectedKeys([messageKey]);
+    }, []);
+    const toggleSelection = useCallback((messageKey: string) => {
+        setSelectedKeys((selected) =>
+            selected.includes(messageKey)
+                ? selected.filter((value) => value !== messageKey)
+                : selected.length < FORWARD_MESSAGE_LIMIT
+                  ? [...selected, messageKey]
+                  : selected,
+        );
+    }, []);
+    const forwardOne = useCallback((messageKey: string) => setForwardKeys([messageKey]), []);
     useChatNotice(`${key}:action`, `${contact.name} · 消息操作失败`, error);
     const savedPosition = useRef(store.initialReadingPosition(contact.key));
     const stick = useStickToBottom({
@@ -132,6 +168,7 @@ export function NativeTimeline({
         virtual,
         messages,
         stick.isFollowing,
+        latestScroll.isRunning,
     );
     const loadEarlier = () => {
         position.capture();
@@ -226,8 +263,14 @@ export function NativeTimeline({
             ...fallback,
             mediaScope: accountKey(store.target.bot_id, String(store.target.qq_id)),
             openImage: showImage,
-            readImage: (data: Record<string, unknown>, refresh?: boolean) =>
-                chatMediaService.image(store.target, data, refresh),
+            imageReadsQueued: true,
+            isImageSourceAlive: (data: Record<string, unknown>) =>
+                chatMediaService.isImageSourceAlive(store.target, data),
+            readImage: (
+                data: Record<string, unknown>,
+                refresh?: boolean,
+                options?: ImageReadOptions,
+            ) => chatMediaService.image(store.target, data, refresh, options),
             readForward: (data: Record<string, unknown>) =>
                 chatMediaService.forward(store.target, data),
             readRecord: (data: Record<string, unknown>) =>
@@ -273,7 +316,22 @@ export function NativeTimeline({
     const latestLabel = stick.unseen > 0 ? `回到最新，${stick.unseen} 条新消息` : '回到最新';
     return (
         <ChatViewContext.Provider value={view}>
-            <div className="native-chat-timeline-wrap">
+            <div
+                className="native-chat-timeline-wrap"
+                data-selecting={selecting}
+                onKeyDown={(event) => {
+                    if (
+                        selecting &&
+                        event.key === 'Escape' &&
+                        !event.defaultPrevented &&
+                        !event.nativeEvent.isComposing
+                    ) {
+                        event.preventDefault();
+                        setSelecting(false);
+                        setSelectedKeys([]);
+                    }
+                }}
+            >
                 <div
                     ref={scroll}
                     className="native-chat-timeline"
@@ -281,10 +339,12 @@ export function NativeTimeline({
                     aria-label="消息记录"
                     aria-busy={!!history?.loading}
                     onScroll={() => {
-                        if (!position.restoring() && !latestScroll.running)
+                        if (!position.restoring() && !latestScroll.isRunning())
                             stick.handlers.onScroll();
-                        if (!latestScroll.running) paging.onScroll();
-                        position.capture();
+                        if (!latestScroll.isRunning()) {
+                            paging.onScroll();
+                            position.capture();
+                        }
                     }}
                     onWheel={(e) => {
                         latestScroll.cancel();
@@ -353,8 +413,16 @@ export function NativeTimeline({
                                         previous={messages[row.index - 1]}
                                         highlighted={highlight === message.key}
                                         retryDisabled={retryDisabled}
+                                        preventRecall={preventRecall}
+                                        renderAvatar={renderAvatar}
                                         onFocusComposer={onFocusComposer}
                                         onError={setError}
+                                        selecting={selecting}
+                                        selected={selectedKeys.includes(message.key)}
+                                        selectionFull={selectedKeys.length >= FORWARD_MESSAGE_LIMIT}
+                                        onSelect={beginSelection}
+                                        onToggleSelection={toggleSelection}
+                                        onForward={forwardOne}
                                         onLoadGap={
                                             message.id
                                                 ? () => {
@@ -391,9 +459,9 @@ export function NativeTimeline({
                         title={latestLabel}
                         onClick={() => {
                             position.cancelRestore();
+                            paging.reset();
                             cancelWheel();
-                            latestScroll.cancel();
-                            void store.latest(contact.key).then(() => latestScroll.start());
+                            latestScroll.start((signal) => store.latest(contact.key, signal));
                         }}
                     >
                         <ArrowDown size={18} aria-hidden />
@@ -402,8 +470,30 @@ export function NativeTimeline({
                         )}
                     </button>
                 </ChatPresence>
+                <ChatSelectionBar
+                    visible={selecting}
+                    count={selectedKeys.length}
+                    disabled={retryDisabled}
+                    onCancel={() => {
+                        setSelecting(false);
+                        setSelectedKeys([]);
+                    }}
+                    onForward={() => setForwardKeys(selectedKeys)}
+                />
             </div>
             <ChatImageViewer src={image} onClose={() => showImage('')} />
+            {forwardKeys.length > 0 && (
+                <ChatForwardDialog
+                    store={store}
+                    messageKeys={forwardKeys}
+                    onClose={() => setForwardKeys([])}
+                    onSent={() => {
+                        setForwardKeys([]);
+                        setSelecting(false);
+                        setSelectedKeys([]);
+                    }}
+                />
+            )}
         </ChatViewContext.Provider>
     );
 }
@@ -415,8 +505,16 @@ const TimelineMessage = memo(function TimelineMessage({
     previous,
     highlighted,
     retryDisabled,
+    preventRecall,
+    renderAvatar,
     onFocusComposer,
     onError,
+    selecting,
+    selected,
+    selectionFull,
+    onSelect,
+    onToggleSelection,
+    onForward,
     onLoadGap,
     historyLoading,
     enter,
@@ -429,8 +527,16 @@ const TimelineMessage = memo(function TimelineMessage({
     previous?: Message;
     highlighted: boolean;
     retryDisabled: boolean;
+    preventRecall: boolean;
+    renderAvatar?: (message: Message, avatar: ReactNode) => ReactNode;
     onFocusComposer?: () => void;
     onError: (error: string) => void;
+    selecting: boolean;
+    selected: boolean;
+    selectionFull: boolean;
+    onSelect: (messageKey: string) => void;
+    onToggleSelection: (messageKey: string) => void;
+    onForward: (messageKey: string) => void;
     onLoadGap?: () => void;
     historyLoading: boolean;
     enter: boolean;
@@ -467,6 +573,16 @@ const TimelineMessage = memo(function TimelineMessage({
             </>
         );
     }
+    const avatar = (
+        <Avatar
+            contact={{
+                type: 'private',
+                id: message.senderId,
+                name: message.mine ? store.target.name : message.senderName,
+            }}
+            small
+        />
+    );
     return (
         <>
             {gap}
@@ -484,8 +600,14 @@ const TimelineMessage = memo(function TimelineMessage({
                     message={message}
                     onFocusComposer={onFocusComposer}
                     onError={onError}
+                    onForward={onForward}
+                    onSelect={onSelect}
+                    selecting={selecting}
+                    selected={selected}
+                    selectionDisabled={!selected && selectionFull}
+                    onToggleSelection={onToggleSelection}
                 >
-                    {(controls) => (
+                    {(controls, wrapContent) => (
                         <article
                             className={cn(
                                 'native-chat-message',
@@ -494,9 +616,14 @@ const TimelineMessage = memo(function TimelineMessage({
                                 showTime && 'is-after-time',
                             )}
                             data-highlight={highlighted}
+                            data-selected={selected}
+                            data-selecting={selecting}
+                            data-local-send={!!message.requestId}
                         >
                             {continuation ? (
                                 <span className="native-chat-avatar-space" aria-hidden />
+                            ) : renderAvatar ? (
+                                renderAvatar(message, avatar)
                             ) : (
                                 <ChatAvatarMenu
                                     store={store}
@@ -505,16 +632,7 @@ const TimelineMessage = memo(function TimelineMessage({
                                     onFocusComposer={onFocusComposer}
                                     onError={onError}
                                 >
-                                    <Avatar
-                                        contact={{
-                                            type: 'private',
-                                            id: message.senderId,
-                                            name: message.mine
-                                                ? store.target.name
-                                                : message.senderName,
-                                        }}
-                                        small
-                                    />
+                                    {avatar}
                                 </ChatAvatarMenu>
                             )}
                             <div className="native-chat-message-body">
@@ -523,30 +641,25 @@ const TimelineMessage = memo(function TimelineMessage({
                                         {message.senderName}
                                     </div>
                                 )}
-                                <div
-                                    className={cn(
-                                        'native-chat-bubble',
-                                        isMediaOnly(message.segments) && 'is-media-only',
-                                        isPictureOnly(message.segments) && 'is-picture-only',
+                                <div className="native-chat-message-content-line">
+                                    {wrapContent(
+                                        <ChatMessageContent
+                                            message={message}
+                                            preventRecall={preventRecall}
+                                        />,
                                     )}
-                                >
-                                    {message.recalled ? (
-                                        <span className="text-text-tertiary">消息已撤回</span>
-                                    ) : (
-                                        <SegmentList
-                                            segments={message.segments}
-                                            mine={message.mine}
-                                            messageId={message.id}
-                                        />
-                                    )}
+                                    {controls}
                                 </div>
                                 {message.mine && (
                                     <ChatSendStatus
                                         status={message.status}
                                         error={message.error}
-                                        retryDisabled={retryDisabled}
+                                        retryDisabled={retryDisabled || selecting}
                                         onRetry={
-                                            message.recalled
+                                            message.recalled ||
+                                            message.segments.some(
+                                                (segment) => segment.type === 'forward',
+                                            )
                                                 ? undefined
                                                 : () => {
                                                       onError('');
@@ -559,7 +672,6 @@ const TimelineMessage = memo(function TimelineMessage({
                                         }
                                     />
                                 )}
-                                {controls}
                             </div>
                         </article>
                     )}
