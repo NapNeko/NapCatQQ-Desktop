@@ -1,22 +1,8 @@
 // Bot 配置页壳：身份 / 连接 / 高级 + 粘性保存。连接编辑态在 ConnectionsTab。
+// services 直连（botService / snowlumaAppService）按 eslint 白名单留在本文件，注入子 hook。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Trash2, Save, AlertCircle, Check } from 'lucide-react';
-import {
-    Button,
-    Card,
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-    DialogFooter,
-    Tabs,
-    TabsList,
-    TabsTrigger,
-    TabsContent,
-    Spinner,
-} from '../../../shared/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../../shared/ui';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { useBotConfig } from '../../../hooks/bot/useBotConfig';
@@ -24,34 +10,26 @@ import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { isBotRunning, isBotStarting } from '../../../core/domain/bot/status';
 import {
     createDefaultBotConfig,
-    validateBotConfig,
     defaultStatusCommandConfig,
 } from '../../../core/domain/bot/config-defaults';
-import {
-    isRuntimeTargetConcreteRemote,
-    normalizeRuntimeTargetFromDisk,
-} from '../../../core/domain/bot/runtime-target';
-import {
-    isPreviewEmpty,
-    previewImportedNetwork,
-    type ImportedNetworkPreview,
-} from '../../../core/domain/bot/imported-network';
-import { useRemoteNetworkPull } from '../../../hooks/bot/useRemoteNetworkPull';
-import type { StatusCommandConfig } from '../../../core/ipc/generated/domain/StatusCommandConfig';
-import { describeSaveResult } from '../../../core/domain/bot/save-result';
 import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate';
 import { useBotRuntimeStartGate } from '../../../hooks/bot/useBotRuntimeStartGate';
 import { botService } from '../../../core/services/bot.service';
 import { snowlumaAppService } from '../../../core/services/snowlumaApp.service';
+import type { StatusCommandConfig } from '../../../core/ipc/generated/domain/StatusCommandConfig';
+import { describeSaveResult } from '../../../core/domain/bot/save-result';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
-import type { SnowLumaAppConfig } from '../../../core/ipc/generated/domain/SnowLumaAppConfig';
-import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
-import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
-import { ActionMotionIcon, infoToneMotion } from '../../../shared/ui/motion';
-import { replaceAppLinkClients } from '../../../core/domain/bot/connections';
 import { IdentityTab } from './next/IdentityTab';
 import { ConnectionsTab } from './next/ConnectionsTab';
 import { AdvancedTab } from './next/AdvancedTab';
+import { BotConfigHeader } from './next/BotConfigHeader';
+import { ConnectionCountBadge, SaveActions } from './next/BotConfigSaveActions';
+import { ConfigLoadingView, ConfigLoadErrorView } from './next/BotConfigLoadError';
+import { DeleteBotConfirmDialog } from './next/DeleteBotConfirmDialog';
+import { useBotConfigSnowlumaApp } from './next/useBotConfigSnowlumaApp';
+import { useBotConfigSaveFlow } from './next/useBotConfigSaveFlow';
+import { useBotRemoteNetworkImport } from './next/useBotRemoteNetworkImport';
+import { applyServerAppLinks, normalizeLoadedConfig } from './next/botConfigSync';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 import { RemoteNetworkPullDialog } from '../dialogs/RemoteNetworkPullDialog';
 import { BOT_TOUR_DEMO } from '../../../hooks/desktop/botTourBridge';
@@ -68,27 +46,6 @@ interface BotConfigPageNextProps {
 }
 
 type TabValue = 'identity' | 'connections' | 'advanced';
-
-const defaultSnowlumaAppConfig = (): SnowLumaAppConfig => ({
-    snowlumaWebuiPasswordOverride: '',
-    snowlumaWebuiPort: 5099,
-});
-
-function applyServerAppLinks(draft: BotConfig, server: BotConfig): BotConfig {
-    const nextClients = replaceAppLinkClients(
-        draft.connect.websocketClients,
-        server.connect.websocketClients,
-    );
-    if (
-        nextClients.length === draft.connect.websocketClients.length &&
-        nextClients.every(
-            (c, i) => JSON.stringify(c) === JSON.stringify(draft.connect.websocketClients[i]),
-        )
-    ) {
-        return draft;
-    }
-    return { ...draft, connect: { ...draft.connect, websocketClients: nextClients } };
-}
 
 export function BotConfigPageNext({
     botId,
@@ -110,40 +67,17 @@ export function BotConfigPageNext({
     const [pristine, setPristine] = useState<BotConfig>(createDefaultBotConfig());
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-    const [snowlumaApp, setSnowlumaApp] = useState<SnowLumaAppConfig>(defaultSnowlumaAppConfig);
-    const [snowlumaAppPristine, setSnowlumaAppPristine] =
-        useState<SnowLumaAppConfig>(defaultSnowlumaAppConfig);
-    const [snowlumaAppLoading, setSnowlumaAppLoading] = useState(true);
-    const [snowlumaAppLoadError, setSnowlumaAppLoadError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            setSnowlumaAppLoading(true);
-            setSnowlumaAppLoadError(null);
-            try {
-                const loaded = await snowlumaAppService.get();
-                if (cancelled) return;
-                setSnowlumaApp(loaded);
-                setSnowlumaAppPristine(loaded);
-            } catch (e) {
-                if (!cancelled) {
-                    const raw = String(e);
-                    setSnowlumaAppLoadError(raw);
-                    pushErrorBar({
-                        key: 'snowluma-app-load',
-                        title: '无法加载全局 WebUI 配置',
-                        raw,
-                    });
-                }
-            } finally {
-                if (!cancelled) setSnowlumaAppLoading(false);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+    const {
+        snowlumaApp,
+        setSnowlumaApp,
+        snowlumaAppPristine,
+        snowlumaAppLoading,
+        snowlumaAppLoadError,
+        commitIfDirty: commitSnowlumaIfDirty,
+    } = useBotConfigSnowlumaApp({
+        load: () => snowlumaAppService.get(),
+        persist: (config) => snowlumaAppService.set(config),
+    });
 
     // 把当前 bot 的 actor 状态拉过来，IdentityTab 需要根据 Running / Starting
     // 锁住 backend_type Select。复用 useBotSnapshots 的 react-query cache，
@@ -284,216 +218,35 @@ export function BotConfigPageNext({
         }));
     };
 
-    // 后端按已保存的 bot.json 找远端路径，所以看的是已保存的运行位置，不是表单里正在改的
-    const canPullRemote =
-        isEditMode &&
-        !tourDemoMode &&
-        loadedConfig != null &&
-        isRuntimeTargetConcreteRemote(loadedConfig.bot.runtime_target);
-    const { pullRemoteNetwork, pulling: pullingRemote } = useRemoteNetworkPull();
-    const [remotePreview, setRemotePreview] = useState<ImportedNetworkPreview | null>(null);
+    const {
+        canPullRemote,
+        handlePullRemote,
+        pullingRemote,
+        remotePreview,
+        confirmPullRemote,
+        setRemotePreview,
+    } = useBotRemoteNetworkImport({
+        botId,
+        isEditMode,
+        tourDemoMode,
+        loadedConfig,
+        formData,
+        onApply: setFormData,
+    });
 
-    const handlePullRemote = async () => {
-        if (!botId) return;
-        try {
-            const imported = await pullRemoteNetwork(botId);
-            if (!imported) {
-                pushInfoBar({
-                    tone: 'info',
-                    title: '远端还没有 onebot 配置文件',
-                    content: '启动一次后桌面端会按当前配置写进去',
-                    autoDismissMs: 4000,
-                });
-                return;
-            }
-            const preview = previewImportedNetwork(formData, imported);
-            if (isPreviewEmpty(preview)) {
-                pushInfoBar({
-                    tone: 'success',
-                    title: '和远端一致',
-                    autoDismissMs: 3000,
-                });
-                return;
-            }
-            setRemotePreview(preview);
-        } catch (e) {
-            pushErrorBar({
-                key: 'bot-remote-network',
-                title: '读取远端配置失败',
-                raw: String(e),
-            });
-        }
-    };
-
-    const confirmPullRemote = () => {
-        if (remotePreview) setFormData(remotePreview.next);
-        setRemotePreview(null);
-    };
-
-    const normalizeLoadedConfig = (c: BotConfig): BotConfig => {
-        let next = c;
-        if (c.bot.backend_type === 'snowluma' && !c.statusCommand) {
-            next = { ...c, statusCommand: defaultStatusCommandConfig() };
-        }
-        const rt = normalizeRuntimeTargetFromDisk(next.bot.runtime_target);
-        if (rt !== next.bot.runtime_target) {
-            next = { ...next, bot: { ...next.bot, runtime_target: rt } };
-        }
-        return next;
-    };
-
-    const commitSnowlumaIfDirty = async (): Promise<void> => {
-        if (JSON.stringify(snowlumaApp) === JSON.stringify(snowlumaAppPristine)) return;
-        await snowlumaAppService.set(snowlumaApp);
-        setSnowlumaAppPristine(snowlumaApp);
-    };
-
-    const handleSave = async () => {
-        if (tourDemoMode) {
-            pushInfoBar({
-                tone: 'info',
-                title: '演示模式：不会真正添加',
-                content: '这是入门引导里的演示新建，配置不会写入。结束引导后可自己点加号真实创建。',
-                key: 'bot-tour-demo-save',
-                autoDismissMs: 4000,
-            });
-            return;
-        }
-
-        // 实例名为空时用 placeholder 兜底(后端不允许空 name)
-        const finalData: BotConfig = {
-            ...formData,
-            bot: {
-                ...formData.bot,
-                name: formData.bot.name.trim() || `Bot-${String(formData.bot.QQID).slice(-4)}`,
-            },
-            statusCommand:
-                formData.bot.backend_type === 'snowluma'
-                    ? (formData.statusCommand ?? defaultStatusCommandConfig())
-                    : formData.statusCommand,
-        };
-
-        const validation = validateBotConfig(finalData);
-        if (!validation.ok) {
-            pushInfoBar({
-                tone: 'danger',
-                title: '配置不通过',
-                content: validation.reason,
-                key: 'bot-config-error',
-            });
-            return;
-        }
-
-        const dockerBlock = dockerSaveBlock(finalData);
-        if (dockerBlock) {
-            pushInfoBar({
-                tone: 'danger',
-                title: '无法保存',
-                content: dockerBlock,
-                key: 'bot-config-docker-gate',
-            });
-            return;
-        }
-
-        const runtimeBlock = runtimeSaveBlock(finalData);
-        if (runtimeBlock) {
-            pushInfoBar({
-                tone: 'danger',
-                title: '无法保存',
-                content: runtimeBlock,
-                key: 'bot-config-runtime-gate',
-            });
-            return;
-        }
-
-        // 先 drift 检测(纯读)。有 drift 就弹 dialog 等用户抉择,这之前绝不写任何
-        // 后端配置——否则用户在 dialog 上点取消,SnowLuma 全局配置却已落盘且无法回滚。
-        if (isEditMode && botId) {
-            try {
-                const drift = await botService.detectConfigDrift(botId);
-                if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
-                    setPendingSaveData(finalData);
-                    setPendingSaveDrift(drift);
-                    return;
-                }
-            } catch {
-                // 检测失败不阻塞保存,继续走无 drift 分支
-            }
-        }
-
-        // 无 drift(或新建模式):此时才提交 SnowLuma 全局配置并保存 Bot。
-        try {
-            await commitSnowlumaIfDirty();
-        } catch (e) {
-            pushErrorBar({
-                key: 'bot-config-error',
-                title: '保存失败',
-                raw: `全局 WebUI 配置写入失败：${String(e)}`,
-            });
-            return;
-        }
-        save(finalData);
-    };
-
-    // Drift dialog state for save
-    const [pendingSaveDrift, setPendingSaveDrift] = useState<ConfigDrift | null>(null);
-    const [pendingSaveData, setPendingSaveData] = useState<BotConfig | null>(null);
-
-    const handleSaveDriftConfirm = useCallback(
-        async (decisions: DriftDecision[]) => {
-            if (!pendingSaveData) return;
-            const dockerBlock = dockerSaveBlock(pendingSaveData);
-            if (dockerBlock) {
-                setPendingSaveDrift(null);
-                setPendingSaveData(null);
-                pushInfoBar({
-                    tone: 'danger',
-                    title: '无法保存',
-                    content: dockerBlock,
-                    key: 'bot-config-docker-gate',
-                });
-                return;
-            }
-            const runtimeBlock = runtimeSaveBlock(pendingSaveData);
-            if (runtimeBlock) {
-                setPendingSaveDrift(null);
-                setPendingSaveData(null);
-                pushInfoBar({
-                    tone: 'danger',
-                    title: '无法保存',
-                    content: runtimeBlock,
-                    key: 'bot-config-runtime-gate',
-                });
-                return;
-            }
-            try {
-                await commitSnowlumaIfDirty();
-            } catch (e) {
-                pushErrorBar({
-                    key: 'bot-config-error',
-                    title: '保存失败',
-                    raw: `全局 WebUI 配置写入失败：${String(e)}`,
-                });
-                return;
-            }
-            setPendingSaveDrift(null);
-            saveWithDecisions(pendingSaveData, decisions);
-            setPendingSaveData(null);
-        },
-        [
-            pendingSaveData,
-            saveWithDecisions,
-            snowlumaApp,
-            snowlumaAppPristine,
+    const { handleSave, pendingSaveDrift, handleSaveDriftConfirm, handleSaveDriftCancel } =
+        useBotConfigSaveFlow({
+            isEditMode,
+            botId,
+            tourDemoMode,
+            formData,
             dockerSaveBlock,
             runtimeSaveBlock,
-        ],
-    );
-
-    const handleSaveDriftCancel = useCallback(() => {
-        setPendingSaveDrift(null);
-        setPendingSaveData(null);
-    }, []);
+            commitSnowlumaIfDirty,
+            detectDrift: (id) => botService.detectConfigDrift(id),
+            save,
+            saveWithDecisions,
+        });
 
     const handleCancel = () => {
         setFormData(pristine);
@@ -501,79 +254,20 @@ export function BotConfigPageNext({
     };
 
     // ───── 加载中 / 出错 ─────
-    if (isEditMode && isLoading) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <Card className="flex flex-col items-center gap-3 px-10 py-8" variant="default">
-                    <Spinner size="lg" tone="brand" />
-                    <p className="text-sm text-text-secondary">正在读取配置文件…</p>
-                </Card>
-            </div>
-        );
-    }
-
-    if (isEditMode && error) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <Card className="flex max-w-md flex-col gap-3 px-6 py-5" variant="outlined">
-                    <h3 className="font-display text-md font-semibold text-text">读取配置失败</h3>
-                    <p className="text-sm text-text-secondary">详情见日志</p>
-                    <div>
-                        <Button variant="secondary" size="sm" onClick={onBack}>
-                            返回列表
-                        </Button>
-                    </div>
-                </Card>
-            </div>
-        );
-    }
+    if (isEditMode && isLoading) return <ConfigLoadingView />;
+    if (isEditMode && error) return <ConfigLoadErrorView onBack={onBack} />;
 
     return (
         <div className="flex h-full w-full flex-col">
-            {/* ────── Header ────── */}
-            <header
-                className="flex items-start justify-between gap-3 border-b border-border-subtle py-3"
-                data-tour-id="bot-config-header"
-            >
-                <div className="flex items-start gap-3">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onBack}
-                        aria-label="返回列表"
-                        disabled={tourDemoMode}
-                    >
-                        <ActionMotionIcon icon={ArrowLeft} size={16} />
-                    </Button>
-                    <div className="flex flex-col gap-0.5">
-                        <h1 className="font-display text-md font-semibold text-text">
-                            {tourDemoMode
-                                ? '新建 Bot（演示）'
-                                : isEditMode
-                                  ? '编辑 Bot 配置'
-                                  : '新建 Bot'}
-                        </h1>
-                        <p className="text-xs text-text-tertiary">
-                            {tourDemoMode
-                                ? '已预填演示数据，点保存不会写入配置'
-                                : isEditMode
-                                  ? `QQ ${botId} · ${formData.bot.backend_type} · ${formData.bot.runtime_target}`
-                                  : '至少添加一个连接才能与外部通信'}
-                        </p>
-                    </div>
-                </div>
-                {isEditMode && !tourDemoMode && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-danger hover:text-danger"
-                        onClick={() => setDeleteDialogOpen(true)}
-                    >
-                        <ActionMotionIcon icon={Trash2} size={13} strokeWidth={2.2} />
-                        <span>删除实例</span>
-                    </Button>
-                )}
-            </header>
+            <BotConfigHeader
+                isEditMode={isEditMode}
+                tourDemoMode={tourDemoMode}
+                botId={botId}
+                backendType={formData.bot.backend_type}
+                runtimeTarget={formData.bot.runtime_target}
+                onBack={onBack}
+                onRequestDelete={() => setDeleteDialogOpen(true)}
+            />
 
             {/* ────── Tabs + 主体 ────── */}
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2">
@@ -591,7 +285,7 @@ export function BotConfigPageNext({
                                 <TabsTrigger value="identity">身份</TabsTrigger>
                                 <TabsTrigger value="connections" data-tour-id="bot-connections-tab">
                                     连接
-                                    <ConnectionCountBadge count={countConnections(formData)} />
+                                    <ConnectionCountBadge config={formData} />
                                 </TabsTrigger>
                                 <TabsTrigger value="advanced">高级</TabsTrigger>
                             </TabsList>
@@ -650,29 +344,13 @@ export function BotConfigPageNext({
             <div id="connections-add-dock" />
 
             {/* ────── 删除二次确认 ────── */}
-            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                <DialogContent size="sm">
-                    <DialogHeader>
-                        <DialogTitle>彻底删除该 Bot？</DialogTitle>
-                        <DialogDescription>
-                            将永久删除 Bot {botId}{' '}
-                            的全部配置与数据，运行中的进程会被强制停止。此操作不可撤销。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteDialogOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button variant="danger" size="sm" onClick={remove} disabled={isDeleting}>
-                            {isDeleting ? '删除中…' : '彻底删除'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <DeleteBotConfirmDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                botId={botId}
+                onDelete={remove}
+                isDeleting={isDeleting}
+            />
 
             {/* 保存时的 drift 确认 */}
             {pendingSaveDrift && (
@@ -690,94 +368,6 @@ export function BotConfigPageNext({
                 onConfirm={confirmPullRemote}
                 onCancel={() => setRemotePreview(null)}
             />
-        </div>
-    );
-}
-
-function countConnections(c: BotConfig): number {
-    return (
-        c.connect.httpServers.length +
-        c.connect.httpSseServers.length +
-        c.connect.httpClients.length +
-        c.connect.websocketServers.length +
-        c.connect.websocketClients.length
-    );
-}
-
-function ConnectionCountBadge({ count }: { count: number }) {
-    if (count === 0) return null;
-    return (
-        <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-pill bg-info-soft px-1 text-2xs font-medium text-info">
-            {count}
-        </span>
-    );
-}
-
-interface SaveActionsProps {
-    dirty: boolean;
-    saving: boolean;
-    onSave: () => void;
-    onCancel: () => void;
-    tourDemoMode?: boolean;
-}
-
-function SaveActions({ dirty, saving, onSave, onCancel, tourDemoMode = false }: SaveActionsProps) {
-    return (
-        <div className="flex shrink-0 items-center gap-3 pr-1" data-tour-id="bot-save-actions">
-            <span className="hidden text-xs sm:inline-flex sm:items-center sm:gap-1.5">
-                {tourDemoMode ? (
-                    <span className="text-brand">演示 · 不会写入</span>
-                ) : dirty ? (
-                    <>
-                        <ActionMotionIcon
-                            icon={AlertCircle}
-                            size={12}
-                            strokeWidth={2.4}
-                            motion={infoToneMotion('info')}
-                            className="text-info"
-                        />
-                        <span className="text-info">未保存</span>
-                    </>
-                ) : (
-                    <>
-                        <ActionMotionIcon
-                            icon={Check}
-                            size={12}
-                            strokeWidth={2.4}
-                            className="text-text-tertiary"
-                        />
-                        <span className="text-text-tertiary">已是最新</span>
-                    </>
-                )}
-            </span>
-            <div className="flex items-center gap-1.5">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onCancel}
-                    disabled={!dirty || saving || tourDemoMode}
-                >
-                    撤销
-                </Button>
-                <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={onSave}
-                    disabled={(!dirty && !tourDemoMode) || saving}
-                >
-                    {saving ? (
-                        <>
-                            <Spinner size="xs" />
-                            <span>保存中</span>
-                        </>
-                    ) : (
-                        <>
-                            <ActionMotionIcon icon={Save} size={13} strokeWidth={2.2} />
-                            <span>{tourDemoMode ? '保存（演示）' : '保存'}</span>
-                        </>
-                    )}
-                </Button>
-            </div>
         </div>
     );
 }
