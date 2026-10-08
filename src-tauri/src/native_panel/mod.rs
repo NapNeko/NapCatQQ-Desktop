@@ -8,7 +8,7 @@ pub mod icons;
 pub mod parts;
 #[cfg(test)]
 pub mod shots;
-mod sys;
+pub(crate) mod sys;
 pub mod theme;
 pub mod window;
 

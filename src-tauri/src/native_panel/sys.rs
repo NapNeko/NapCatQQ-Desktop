@@ -10,9 +10,10 @@ use windows::Win32::Graphics::Direct2D::Common::{
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_FEATURE_LEVEL_DEFAULT,
-    D2D1_HWND_RENDER_TARGET_PROPERTIES, D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES,
-    D2D1_RENDER_TARGET_TYPE_SOFTWARE, D2D1_RENDER_TARGET_USAGE_NONE, ID2D1Factory1,
-    ID2D1RenderTarget,
+    D2D1_HWND_RENDER_TARGET_PROPERTIES, D2D1_PRESENT_OPTIONS, D2D1_PRESENT_OPTIONS_NONE,
+    D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS, D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE,
+    D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+    D2D1_RENDER_TARGET_USAGE_NONE, ID2D1Factory1, ID2D1RenderTarget,
 };
 use windows::Win32::Graphics::Dwm::{
     DWM_WINDOW_CORNER_PREFERENCE, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
@@ -229,6 +230,15 @@ impl Drop for PaintGuard {
     }
 }
 
+impl PaintGuard {
+    pub fn rect(&self) -> RECT {
+        self.ps.rcPaint
+    }
+    pub fn dc(&self) -> windows::Win32::Graphics::Gdi::HDC {
+        self.ps.hdc
+    }
+}
+
 /// 光标的屏幕物理坐标。
 pub fn cursor_pos() -> Option<(i32, i32)> {
     let mut point = POINT::default();
@@ -327,6 +337,17 @@ extern "system" fn trampoline<H: WndHandler>(
 /// 注册面板窗口类。同名类已存在（别的线程注册过）时 RegisterClassExW 失败，忽略即可。
 /// CS_DROPSHADOW 是系统给菜单、提示这类短时弹出窗的阴影；Win11 上它跟着 DWM 圆角走。
 pub fn register_panel_class<H: WndHandler>() {
+    register_window_class::<H>(CLASS_NAME);
+}
+
+pub fn register_window_class<H: WndHandler>(class_name: PCWSTR) {
+    register_window_class_with_style::<H>(class_name, CS_DBLCLKS | CS_DROPSHADOW);
+}
+
+pub fn register_window_class_with_style<H: WndHandler>(
+    class_name: PCWSTR,
+    style: windows::Win32::UI::WindowsAndMessaging::WNDCLASS_STYLES,
+) {
     // SAFETY: GetModuleHandleW(None) 取本进程 exe 模块；IDC_ARROW 是系统内置光标。
     let (instance, cursor) = unsafe {
         (
@@ -338,11 +359,11 @@ pub fn register_panel_class<H: WndHandler>() {
     };
     let class = WNDCLASSEXW {
         cbSize: size_of::<WNDCLASSEXW>() as u32,
-        style: CS_DBLCLKS | CS_DROPSHADOW,
+        style,
         lpfnWndProc: Some(trampoline::<H>),
         hInstance: HINSTANCE(instance),
         hCursor: cursor,
-        lpszClassName: CLASS_NAME,
+        lpszClassName: class_name,
         ..Default::default()
     };
     // SAFETY: class 在栈上活到调用结束；类名是 'static 的 w! 字面量，窗口过程是 'static 函数。
@@ -386,8 +407,46 @@ pub fn hwnd_render_target(
     height: u32,
     scale: f32,
 ) -> windows::core::Result<ID2D1RenderTarget> {
+    create_hwnd_target(
+        factory,
+        hwnd,
+        width,
+        height,
+        scale,
+        D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+        D2D1_PRESENT_OPTIONS_NONE,
+    )
+}
+
+// 截图覆盖整屏，优先硬件；不可用时由 D2D 回落软件。
+pub fn screenshot_render_target(
+    factory: &ID2D1Factory1,
+    hwnd: Hwnd,
+    width: u32,
+    height: u32,
+) -> windows::core::Result<ID2D1RenderTarget> {
+    create_hwnd_target(
+        factory,
+        hwnd,
+        width,
+        height,
+        1.0,
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS,
+    )
+}
+
+fn create_hwnd_target(
+    factory: &ID2D1Factory1,
+    hwnd: Hwnd,
+    width: u32,
+    height: u32,
+    scale: f32,
+    target_type: D2D1_RENDER_TARGET_TYPE,
+    present: D2D1_PRESENT_OPTIONS,
+) -> windows::core::Result<ID2D1RenderTarget> {
     let props = D2D1_RENDER_TARGET_PROPERTIES {
-        r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+        r#type: target_type,
         pixelFormat: D2D1_PIXEL_FORMAT {
             format: DXGI_FORMAT_B8G8R8A8_UNORM,
             alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
@@ -400,7 +459,7 @@ pub fn hwnd_render_target(
     let hwnd_props = D2D1_HWND_RENDER_TARGET_PROPERTIES {
         hwnd: hwnd.0,
         pixelSize: D2D_SIZE_U { width, height },
-        presentOptions: D2D1_PRESENT_OPTIONS_NONE,
+        presentOptions: present,
     };
     // SAFETY: 两个属性结构体在栈上活到调用结束；句柄失效时 D2D 返回错误。
     let target = unsafe { factory.CreateHwndRenderTarget(&props, &hwnd_props) }?;

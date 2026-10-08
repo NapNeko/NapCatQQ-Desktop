@@ -37,6 +37,7 @@ pub mod native_panel;
 pub mod onebot_endpoint_resolver;
 pub mod product_registry;
 pub mod runtime;
+pub mod screenshot;
 pub mod single_instance;
 pub mod snowluma_offline_listener;
 #[cfg(windows)]
@@ -507,6 +508,7 @@ pub fn run() {
         .manage(chat_window::ChatWindowCoordinator::default())
         .manage(chat_tray::ChatTrayState::default())
         .manage(webview_scheduler::WebviewScheduler::default())
+        .manage(screenshot::ScreenshotCoordinator::default())
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started
                 && let Some(state) = webview.try_state::<AppState>()
@@ -832,6 +834,7 @@ pub fn run() {
             }
             // 弹出窗销毁后,盘上的调试台工作区 / 收藏可能已被它改写:通知主窗作废旧内存状态
             if let tauri::WindowEvent::Destroyed = event {
+                screenshot::owner_destroyed(window.app_handle(), window.label());
                 let chat = Arc::clone(&window.state::<AppState>().chat);
                 let page = window.label().to_owned();
                 let before = std::time::Instant::now();
@@ -1142,6 +1145,9 @@ pub fn run() {
             commands::chat::chat_flush,
             commands::chat::chat_release_account,
             commands::chat::chat_read_local_image,
+            commands::chat_screenshot::chat_screenshot_capture,
+            commands::chat_screenshot::chat_screenshot_cancel,
+            commands::chat_screenshot::chat_screenshot_shortcut,
             commands::chat::chat_group_files,
             commands::chat::chat_group_file_space,
             commands::chat::chat_group_file_act,
