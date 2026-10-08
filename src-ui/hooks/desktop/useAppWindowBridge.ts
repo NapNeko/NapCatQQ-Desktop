@@ -8,6 +8,7 @@ import { chatDesktopService } from '../../core/services/chat-desktop.service';
 import { debugWindowService } from '../../core/services/debug-window.service';
 import { windowEventService } from '../../core/services/desktop.service';
 import { markWorkspaceStale } from '../debug/debugWorkspaceStore';
+import { featureTogglesStore } from '../preferences/featureTogglesStore';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 
 export interface AppWindowBridgeHandlers {
@@ -41,6 +42,14 @@ export function useAppWindowBridge({
         let resumeChat = false;
         const handoff = chatDesktopService.onRequest((request) => {
             if (disposed || request.v !== 1) return;
+            if (!featureTogglesStore.getSnapshot().chat) {
+                if (request.action !== 'resume') {
+                    void chatDesktopService
+                        .reply(request.requestId, '聊天功能已关闭')
+                        .catch(() => {});
+                }
+                return;
+            }
             if (request.action === 'resume') {
                 if (resumeChat) showChat();
                 return;
@@ -75,11 +84,13 @@ export function useAppWindowBridge({
             })();
         });
         const embedded = chatDesktopService.onEmbedRequested(() => {
+            if (!featureTogglesStore.getSnapshot().chat) return;
             void queryClient.invalidateQueries({ queryKey: ['chat'] });
             showChat();
         });
         void chatDesktopService.windowState().then((state) => {
-            if (!disposed && state.embedRequested) showChatQuiet();
+            if (!disposed && state.embedRequested && featureTogglesStore.getSnapshot().chat)
+                showChatQuiet();
         });
         return () => {
             disposed = true;

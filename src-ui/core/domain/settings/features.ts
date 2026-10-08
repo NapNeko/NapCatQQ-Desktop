@@ -19,6 +19,7 @@ export const DEFAULT_FEATURES: FeatureToggles = {
     ncdWatch: true,
     terminal: true,
     apiDebug: true,
+    chat: true,
 };
 
 export interface FeatureDef {
@@ -88,6 +89,12 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
         title: '工具',
         items: [
             {
+                key: 'chat',
+                label: '聊天',
+                description: '侧栏聊天入口和独立聊天窗口',
+                saves: '关闭聊天窗口、后台接收和账号托盘，保留聊天记录与账号设置',
+            },
+            {
                 key: 'terminal',
                 label: '内嵌终端',
                 description: '标题栏的终端按钮、Ctrl+` 快捷键、各卡片上的终端入口、「设置 · 终端」',
@@ -113,6 +120,7 @@ const BOOL_KEYS: ReadonlyArray<FeatureKey> = [
     'ncdWatch',
     'terminal',
     'apiDebug',
+    'chat',
 ];
 
 /** 磁盘上缺字段或不是布尔值的一律当开着；两个协议端都关了就开回 NapCat（和 Rust 端一致）。 */

@@ -39,7 +39,7 @@ import { useMotion } from '../hooks/preferences/useMotion';
 import { usePreferences } from '../hooks/preferences/usePreferences';
 import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
 import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminalStore';
-import { useFeatures } from '../hooks/preferences/featureTogglesStore';
+import { featureTogglesStore, useFeatures } from '../hooks/preferences/featureTogglesStore';
 import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
 import { dockerStatusSummary } from '../core/domain/docker/status';
@@ -158,11 +158,13 @@ export const AppNext: React.FC = () => {
     const [pageVisible, setPageVisible] = useState<boolean>(true);
     // 弹出窗事件要做的路由切换：每组动作与原内联 effect 里的 setState 批次一一对应
     const showChatPage = useCallback(() => {
+        if (!featureTogglesStore.getSnapshot().chat) return;
         setRoute('chat');
         setDisplayedRoute('chat');
         setPageVisible(true);
     }, []);
     const showChatPageQuiet = useCallback(() => {
+        if (!featureTogglesStore.getSnapshot().chat) return;
         setRoute('chat');
         setDisplayedRoute('chat');
     }, []);
@@ -213,9 +215,10 @@ export const AppNext: React.FC = () => {
         const hidden = new Set<AppRoute>();
         if (!showDocker) hidden.add('docker');
         if (!features.apps) hidden.add('apps');
+        if (!features.chat) hidden.add('chat');
         if (!debugEnabled) hidden.add('debug');
         return hidden;
-    }, [showDocker, features.apps, debugEnabled]);
+    }, [showDocker, features.apps, features.chat, debugEnabled]);
     const hostLabels = useMemo(() => {
         const map: Record<string, string> = { local: '本机' };
         for (const p of servers) {
@@ -255,7 +258,7 @@ export const AppNext: React.FC = () => {
             const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
             if (target === 'chat') {
                 void focusChatIfOpen().then((focused) => {
-                    if (!focused) setRoute('chat');
+                    if (!focused && featureTogglesStore.getSnapshot().chat) setRoute('chat');
                 });
                 return;
             }

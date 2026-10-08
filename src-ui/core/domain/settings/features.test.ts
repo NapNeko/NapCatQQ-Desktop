@@ -35,6 +35,17 @@ describe('normalizeFeatures', () => {
         });
     });
 
+    it('聊天独立于调试台开关，旧设置默认开启', () => {
+        expect(normalizeFeatures({ apiDebug: false })).toMatchObject({
+            apiDebug: false,
+            chat: true,
+        });
+        expect(normalizeFeatures({ chat: false })).toMatchObject({
+            apiDebug: true,
+            chat: false,
+        });
+    });
+
     it('框架名单去重、丢掉空值和非字符串', () => {
         expect(
             normalizeFeatures({ hiddenAppFrameworks: ['karin', 'karin', '', 3, 'maibot'] })
@@ -47,6 +58,7 @@ describe('featuresEqual', () => {
     it('逐项比较，框架名单不看顺序', () => {
         expect(featuresEqual(DEFAULT_FEATURES, { ...DEFAULT_FEATURES })).toBe(true);
         expect(featuresEqual(DEFAULT_FEATURES, { ...DEFAULT_FEATURES, apps: false })).toBe(false);
+        expect(featuresEqual(DEFAULT_FEATURES, { ...DEFAULT_FEATURES, chat: false })).toBe(false);
         const a = { ...DEFAULT_FEATURES, hiddenAppFrameworks: ['karin', 'maibot'] };
         const b = { ...DEFAULT_FEATURES, hiddenAppFrameworks: ['maibot', 'karin'] };
         expect(featuresEqual(a, b)).toBe(true);

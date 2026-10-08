@@ -24,4 +24,15 @@ describe('featureTogglesStore', () => {
         expect(listener).not.toHaveBeenCalled();
         unsub();
     });
+
+    it('保存聊天开关后通知入口，重新开启不改变其它模块', () => {
+        const listener = vi.fn();
+        const unsub = featureTogglesStore.subscribe(listener);
+        featureTogglesStore.apply({ chat: false, apiDebug: false });
+        expect(featureTogglesStore.getSnapshot().chat).toBe(false);
+        featureTogglesStore.apply({ ...featureTogglesStore.getSnapshot(), chat: true });
+        expect(featureTogglesStore.getSnapshot()).toMatchObject({ chat: true, apiDebug: false });
+        expect(listener).toHaveBeenCalledTimes(2);
+        unsub();
+    });
 });
