@@ -1,6 +1,6 @@
 // src-ui 分层门禁：规则权威是 docs/context/frontend.md §2，这里只是它的机器化投影。
-// 分层违规 = error；历史白名单（frontend.md「现存偏差」）通过 --max-warnings 基线兜住，
-// 每轮质量清扫（.claude/plan/ui-quality-sweep.md）把基线只降不升。
+// 分层违规 = error 直接挡；已登记偏差（frontend.md「现存偏差」清单）按文件降级 warn，
+// 逐个消解后删对应 overrides。quality sweep 记录见 .claude/plan/ui-quality-sweep.md。
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
@@ -57,6 +57,16 @@ export default tseslint.config(
         },
         rules: {
             ...reactHooks.configs.recommended.rules,
+            // react-hooks v6 的 React Compiler 家族规则（set-state-in-effect / refs /
+            // immutability / purity / preserve-manual-memoization / globals）：本仓库未启用
+            // React Compiler，这些规则对现有代码是 300+ 处口径外报告，不进门禁；
+            // 是否逐条采纳属功能迭代时的事。rules-of-hooks 保持 error。
+            'react-hooks/set-state-in-effect': 'off',
+            'react-hooks/refs': 'off',
+            'react-hooks/immutability': 'off',
+            'react-hooks/purity': 'off',
+            'react-hooks/preserve-manual-memoization': 'off',
+            'react-hooks/globals': 'off',
             'react-hooks/exhaustive-deps': 'warn',
             'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
             '@typescript-eslint/no-unused-vars': 'off', // tsc noUnusedLocals/Parameters 已管
@@ -74,12 +84,12 @@ export default tseslint.config(
         files: [`${UI}/core/ipc/transport.ts`],
         rules: { 'no-restricted-imports': 'off' },
     },
-    // modules / shared / app：可推倒层，禁直连 IPC 底层与 services
+    // modules / shared / app：可推倒层，禁直连 IPC 底层与 services（error = 门禁）
     {
         files: [`${UI}/modules/**`, `${UI}/shared/**`, `${UI}/app/**`],
         rules: {
             'no-restricted-imports': [
-                'warn',
+                'error',
                 {
                     patterns: layerBan(
                         [
@@ -102,11 +112,12 @@ export default tseslint.config(
         },
     },
     // hooks：只许 services/domain，禁 @tauri-apps、禁反向伸 modules
+    // （error = 门禁；settings-draft 双向纠缠属已登记偏差，见文末 override）
     {
         files: [`${UI}/hooks/**`],
         rules: {
             'no-restricted-imports': [
-                'warn',
+                'error',
                 {
                     patterns: layerBan(
                         [
@@ -122,6 +133,40 @@ export default tseslint.config(
                 },
             ],
         },
+    },
+    // hooks 对 transport 的 shell 依赖（openExternalUrl/pickDirectory/onFileDragDrop）
+    // 是文件对话框与外链打开的薄封装，frontend.md「现存偏差」登记；逐文件收敛前 warn 可见。
+    {
+        files: [
+            `${UI}/hooks/apps/useAppInstances.ts`,
+            `${UI}/hooks/useOpenExternal.ts`,
+            `${UI}/hooks/usePickDirectory.ts`,
+            `${UI}/hooks/webui/useOpenSnowlumaNovnc.ts`,
+            `${UI}/hooks/webui/useOpenWebui.ts`,
+            `${UI}/hooks/ui/useTauriFileDrop.ts`,
+        ],
+        rules: { 'no-restricted-imports': 'warn' },
+    },
+    // useBackendSettings <-> settings-draft 双向纠缠：settings 草稿体系重构前维持 warn
+    // （frontend.md「现存偏差」登记；settings-draft 也反向 import hooks/* store）。
+    {
+        files: [`${UI}/hooks/preferences/useBackendSettings.ts`],
+        rules: { 'no-restricted-imports': 'warn' },
+    },
+    // bot/settings 直连 services 的存量文件（frontend.md「现存偏差」白名单）：
+    // 逐文件拆分是独立重构，本门禁对它们保持 warn 可见，新增文件按 error 拦。
+    {
+        files: [
+            `${UI}/modules/bot/config/BotConfigPage.next.tsx`,
+            `${UI}/modules/bot/dialogs/ImportRemoteBotsDialog.tsx`,
+            `${UI}/modules/bot/list/BotListPage.next.tsx`,
+            `${UI}/modules/settings/DataRootMigrateDialog.tsx`,
+            `${UI}/modules/settings/settings-draft.ts`,
+            `${UI}/modules/settings/tabs/NcdWatchRemoteSection.tsx`,
+            `${UI}/modules/settings/tabs/NotificationsTab.tsx`,
+            `${UI}/modules/settings/tabs/WindowTab.tsx`,
+        ],
+        rules: { 'no-restricted-imports': 'warn' },
     },
     // core/domain：零运行时依赖
     {
@@ -171,6 +216,11 @@ export default tseslint.config(
                 },
             ],
         },
+    },
+    // 测试/mock 允许 import services 做 vi.mock 断言、import 任意被测层
+    {
+        files: [`${UI}/**/*.test.ts`, `${UI}/**/*.test.tsx`, `${UI}/**/*.mock.ts`],
+        rules: { 'no-restricted-imports': 'off' },
     },
     {
         files: [`${UI}/main.tsx`, `${UI}/chat-main.ts`],

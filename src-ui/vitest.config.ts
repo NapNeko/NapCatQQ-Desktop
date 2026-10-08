@@ -18,6 +18,9 @@ export default defineConfig({
         passWithNoTests: false,
         restoreMocks: true,
         clearMocks: true,
+        // 24 核机器默认按核数铺满 jsdom 环境会互相挤：waitFor 类断言成片超时（100+ 假红，
+        // 单文件跑全绿）。8 线程实测全绿且更快。机器再快也别按核数放满。
+        poolOptions: { threads: { maxThreads: 8, minThreads: 1 } },
     },
     resolve: {
         alias: [
