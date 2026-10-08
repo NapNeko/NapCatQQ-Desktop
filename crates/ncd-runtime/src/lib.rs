@@ -3,6 +3,7 @@ pub mod bot_actor;
 pub mod bot_manager;
 pub mod chat;
 mod chat_archive;
+pub mod chat_screenshots;
 pub mod events;
 pub mod napcat;
 pub mod native_deployment_adapter;

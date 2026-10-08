@@ -18,6 +18,7 @@ pub struct ChatManager {
     transport: Arc<DebugManager>,
     desktop: desktop::DesktopState,
     files: group_files::FileState,
+    screenshots: Arc<crate::chat_screenshots::ChatScreenshotCache>,
 }
 
 impl ChatManager {
@@ -27,6 +28,9 @@ impl ChatManager {
         data_root: PathBuf,
     ) -> Self {
         Self {
+            screenshots: Arc::new(crate::chat_screenshots::ChatScreenshotCache::new(
+                &data_root,
+            )),
             desktop: desktop::DesktopState::new(
                 data_root.clone(),
                 Arc::new(inbox::Inbox::new(ChatArchiveStore::new(&data_root))),
@@ -38,6 +42,10 @@ impl ChatManager {
 
     pub async fn targets(&self) -> Vec<DebugTarget> {
         self.transport.list_targets().await
+    }
+
+    pub fn screenshot_cache(&self) -> Arc<crate::chat_screenshots::ChatScreenshotCache> {
+        Arc::clone(&self.screenshots)
     }
 
     async fn archive_identity(&self, bot_id: &str, self_id: &str) -> Result<(), String> {
