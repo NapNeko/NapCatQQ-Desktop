@@ -34,6 +34,12 @@ pub struct ChatScreenshotShortcut {
     pub alt: bool,
     pub shift: bool,
     pub key: String,
+    #[serde(default)]
+    pub context: String,
+    #[serde(default)]
+    pub release_owner: bool,
+    #[serde(default = "default_global_shortcut")]
+    pub hide_window: bool,
 }
 
 fn default_global_shortcut() -> bool {
@@ -49,6 +55,9 @@ impl Default for ChatScreenshotShortcut {
             alt: false,
             shift: false,
             key: String::new(),
+            context: String::new(),
+            release_owner: false,
+            hide_window: true,
         }
     }
 }
@@ -57,6 +66,22 @@ impl Default for ChatScreenshotShortcut {
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
 pub struct ChatScreenshotShortcutEvent {
     pub v: u32,
+    pub capture_id: String,
+    pub context: String,
+    pub result: ChatScreenshotShortcutResult,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
+pub enum ChatScreenshotShortcutResult {
+    Started,
+    Finished {
+        file: Option<ChatScreenshotAttachment>,
+    },
+    Failed {
+        message: String,
+    },
 }
 
 impl ChatScreenshotShortcut {
@@ -94,6 +119,7 @@ mod tests {
             alt: true,
             shift: false,
             key: "S".into(),
+            ..Default::default()
         };
         for key in ["A", "Z", "0", "9", "F1", "F12"] {
             request.key = key.into();
@@ -118,6 +144,7 @@ mod tests {
         let old = r#"{"enabled":true,"control":true,"alt":true,"shift":false,"key":"S"}"#;
         let mut request: ChatScreenshotShortcut = serde_json::from_str(old).unwrap();
         assert!(request.global);
+        assert!(request.hide_window);
         request.global = false;
         assert!(request.validate().is_ok());
         let restored: ChatScreenshotShortcut =
@@ -153,5 +180,21 @@ mod tests {
             serde_json::from_value::<ChatScreenshotAttachment>(encoded).unwrap(),
             attachment
         );
+    }
+
+    #[test]
+    fn native_shortcut_result_keeps_its_capture_and_draft_context() {
+        let event = ChatScreenshotShortcutEvent {
+            v: 1,
+            capture_id: "capture-1".into(),
+            context: "original-draft".into(),
+            result: ChatScreenshotShortcutResult::Finished { file: None },
+        };
+        let encoded = serde_json::to_string(&event).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ChatScreenshotShortcutEvent>(&encoded).unwrap(),
+            event
+        );
+        assert!(encoded.contains("\"kind\":\"finished\""));
     }
 }

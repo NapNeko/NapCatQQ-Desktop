@@ -10,8 +10,9 @@ import {
 import { ChatAccountStore, prepareChatHandoff } from './chatStore';
 import { ChatComposer } from '../../modules/chat/ChatComposer';
 import { chatService } from '../../core/services/chat.service';
-import { EMPTY_DRAFT, type Draft } from '../../core/domain/chat/model';
+import { EMPTY_DRAFT, type Draft, type SessionKey } from '../../core/domain/chat/model';
 import type { ChatScreenshotAttachment } from '../../core/ipc/generated/chat/ChatScreenshotAttachment';
+import type { ChatScreenshotShortcutEvent } from '../../core/ipc/generated/chat/ChatScreenshotShortcutEvent';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 
 const screenshot = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const screenshot = vi.hoisted(() => ({
     shortcut: vi.fn(),
     onShortcut: vi.fn(),
     notice: vi.fn(),
+    handler: null as ((event: ChatScreenshotShortcutEvent) => void) | null,
 }));
 vi.mock('../../core/services/chat-screenshot.service', () => ({
     chatScreenshotService: screenshot,
@@ -106,10 +108,161 @@ beforeEach(() => {
     screenshot.capture.mockResolvedValue(file);
     screenshot.cancel.mockResolvedValue(undefined);
     screenshot.shortcut.mockResolvedValue(undefined);
-    screenshot.onShortcut.mockResolvedValue(() => {});
+    screenshot.onShortcut.mockImplementation(async (callback) => {
+        screenshot.handler = callback;
+        return () => {};
+    });
 });
 
 describe('screenshot draft lifecycle', () => {
+    it('unregisters the global key while recording and enables it again afterwards', async () => {
+        const { store } = setup();
+        const hook = renderHook(() => useChatScreenshot(store, 'private:12', false));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: true }),
+            ),
+        );
+        act(() => hook.result.current.suspendShortcut(true));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: false, releaseOwner: false }),
+            ),
+        );
+        act(() => hook.result.current.suspendShortcut(false));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: true }),
+            ),
+        );
+        hook.unmount();
+    });
+    it('receives a native hotkey result without asking the hidden page to start capture', async () => {
+        const { store } = setup();
+        const receive = (event: ChatScreenshotShortcutEvent) => screenshot.handler?.(event);
+        const hook = renderHook(() => useChatScreenshot(store, 'private:12', false));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    enabled: true,
+                    context: expect.any(String),
+                    hideWindow: true,
+                }),
+            ),
+        );
+        const { context } = screenshot.shortcut.mock.calls.at(-1)![0];
+        act(() =>
+            receive({ v: 1, context, capture_id: 'native-hidden', result: { kind: 'started' } }),
+        );
+        expect(hook.result.current.capturing).toBe(true);
+        expect(screenshot.capture).not.toHaveBeenCalled();
+        act(() =>
+            receive({
+                v: 1,
+                context,
+                capture_id: 'native-hidden',
+                result: { kind: 'finished', file },
+            }),
+        );
+        expect(hook.result.current.capturing).toBe(false);
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(1);
+        hook.unmount();
+    });
+
+    it('routes a result to the old conversation after listener replacement and ignores duplicates', async () => {
+        const { store } = setup();
+        const receive = (event: ChatScreenshotShortcutEvent) => screenshot.handler?.(event);
+        const hook = renderHook(({ session }) => useChatScreenshot(store, session, false), {
+            initialProps: { session: 'private:12' as SessionKey },
+        });
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenCalledWith(
+                expect.objectContaining({ enabled: true }),
+            ),
+        );
+        const { context } = screenshot.shortcut.mock.calls.at(-1)![0];
+        store.getSnapshot().account.active = 'group:20';
+        hook.rerender({ session: 'group:20' });
+        await waitFor(() =>
+            expect(screenshot.shortcut.mock.calls.at(-1)![0].context).not.toBe(context),
+        );
+        // started 在隐藏页或监听交接时迟到，finished 仍有注册时的原会话身份。
+        const event: ChatScreenshotShortcutEvent = {
+            v: 1,
+            context,
+            capture_id: 'native-replaced',
+            result: { kind: 'finished', file },
+        };
+        act(() => {
+            receive(event);
+            receive(event);
+        });
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(1);
+        expect(store.getSnapshot().account.drafts['group:20']?.attachments ?? []).toHaveLength(0);
+        expect(screenshot.capture).not.toHaveBeenCalled();
+        hook.unmount();
+    });
+
+    it('rejects a native result after the originating view has been handed off', async () => {
+        const { store } = setup();
+        const receive = (event: ChatScreenshotShortcutEvent) => screenshot.handler?.(event);
+        const hook = renderHook(() => useChatScreenshot(store, 'private:12', false));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenCalledWith(
+                expect.objectContaining({ enabled: true }),
+            ),
+        );
+        const { context } = screenshot.shortcut.mock.calls.at(-1)![0];
+        await cancelChatScreenshot();
+        expect(screenshot.cancel).toHaveBeenCalledOnce();
+        store.viewRevision++;
+        act(() =>
+            receive({
+                v: 1,
+                context,
+                capture_id: 'native-handoff',
+                result: { kind: 'finished', file },
+            }),
+        );
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
+        hook.unmount();
+    });
+
+    it('receives completion while the composer is unmounted and releases the capture lock', async () => {
+        const { store } = setup();
+        const hook = renderHook(() => useChatScreenshot(store, 'private:12', false));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenCalledWith(
+                expect.objectContaining({ enabled: true }),
+            ),
+        );
+        const { context } = screenshot.shortcut.mock.calls.at(-1)![0];
+        act(() =>
+            screenshot.handler?.({
+                v: 1,
+                context,
+                capture_id: 'native-unmounted',
+                result: { kind: 'started' },
+            }),
+        );
+        expect(hook.result.current.capturing).toBe(true);
+        hook.unmount();
+        store.releaseWhenIdle = true;
+        act(() =>
+            screenshot.handler?.({
+                v: 1,
+                context,
+                capture_id: 'native-unmounted',
+                result: { kind: 'finished', file },
+            }),
+        );
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
+        const next = setup().store;
+        const remounted = renderHook(() => useChatScreenshot(next, 'private:12', false));
+        expect(remounted.result.current.capturing).toBe(false);
+        remounted.unmount();
+    });
+
     it('keeps the image in the draft when automatic clipboard publication fails', async () => {
         const { store } = setup();
         screenshot.capture.mockResolvedValueOnce({ ...file, clipboardError: '剪贴板正在被占用' });
@@ -286,13 +439,14 @@ describe('screenshot draft lifecycle', () => {
         await store.disconnect();
     });
 
-    it('reports rejected native registration, releases the old binding, and retries a later mount', async () => {
+    it('reports rejected native registration, releases the view, and retries a later mount', async () => {
         const { store } = setup();
         let nativeBinding: string | null = null;
         screenshot.shortcut.mockImplementation(
-            async (request: { enabled: boolean; key: string }) => {
+            async (request: { enabled: boolean; key: string; releaseOwner: boolean }) => {
                 if (request.enabled && request.key === '2') throw new Error('control 参数无法识别');
-                nativeBinding = request.enabled ? request.key : null;
+                if (request.enabled) nativeBinding = request.key;
+                else if (!request.releaseOwner) nativeBinding = null;
             },
         );
         const hook = renderHook(() => useChatScreenshot(store, 'private:12', false));
@@ -314,7 +468,12 @@ describe('screenshot draft lifecycle', () => {
             ).length;
         expect(rejectedCalls()).toBe(1);
         hook.unmount();
-        await waitFor(() => expect(nativeBinding).toBeNull());
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: false, releaseOwner: true }),
+            ),
+        );
+        expect(nativeBinding).toBe('1');
         const retry = renderHook(() => useChatScreenshot(store, 'private:12', false));
         await waitFor(() => expect(rejectedCalls()).toBe(2));
         retry.unmount();

@@ -28,6 +28,7 @@ pub async fn chat_screenshot_capture(
         window,
         state.chat.screenshot_cache(),
         request,
+        None,
     )
     .await
 }

@@ -1,5 +1,5 @@
 // 截图绑定发起时的账号与会话，切换会话不改变附件去向。
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
     DEFAULT_SCREENSHOT_PREFERENCES,
     SCREENSHOT_PREFERENCES_KEY,
@@ -14,6 +14,8 @@ import { isLocalFileToken, LOCAL_FILE_PREFIX } from '../../core/domain/debug/str
 import { dismissInfoBar, pushInfoBar } from '../ui/globalInfoBarStore';
 import type { ChatAccountStore } from './chatStore';
 import { isTauri } from '../../core/domain/runtime/env';
+import type { ChatScreenshotAttachment } from '../../core/ipc/generated/chat/ChatScreenshotAttachment';
+import type { ChatScreenshotShortcutEvent } from '../../core/ipc/generated/chat/ChatScreenshotShortcutEvent';
 
 const captureListeners = new Set<() => void>();
 const preferenceListeners = new Set<() => void>();
@@ -29,8 +31,25 @@ interface Capture {
     selfId: string;
     revision: number;
     cancelled: boolean;
+    nativeId?: string;
+    onFinished?: () => void;
 }
 let activeCapture: Capture | null = null;
+const shortcutContexts = new Map<string, Capture>();
+const nativeCaptures = new Map<string, Capture>();
+const completedNativeCaptures = new Set<string>();
+let shortcutListening: Promise<void> | null = null;
+
+function ensureShortcutListener() {
+    // 完成结果可能在 Composer 卸载期间到达，监听随 WebView 存活，不跟会话重挂。
+    return (shortcutListening ??= chatScreenshotService
+        .onShortcut(receiveShortcut)
+        .then(() => {})
+        .catch((error) => {
+            shortcutListening = null;
+            throw error;
+        }));
+}
 
 function readPreferences() {
     try {
@@ -78,8 +97,19 @@ function updatePreferences(patch: Partial<ChatScreenshotPreferences>) {
     emitPreferences();
 }
 
-function configureShortcut(shortcut: string | null, global = true) {
-    const identity = shortcut === null ? null : `${global ? 'global' : 'focus'}:${shortcut}`;
+function configureShortcut(
+    shortcut: string | null,
+    global = true,
+    context = '',
+    hideWindow = true,
+    releaseOwner = false,
+) {
+    const identity =
+        shortcut === null
+            ? releaseOwner
+                ? 'released'
+                : null
+            : JSON.stringify([global, shortcut, context, hideWindow]);
     if (requestedShortcut === identity) return;
     requestedShortcut = identity;
     const revision = ++shortcutRevision;
@@ -92,6 +122,9 @@ function configureShortcut(shortcut: string | null, global = true) {
             alt: parts.includes('Alt'),
             shift: parts.includes('Shift'),
             key: parts.at(-1) ?? '',
+            context,
+            hideWindow,
+            releaseOwner,
         })
         .then(() => {
             configuredShortcut = identity;
@@ -114,7 +147,12 @@ function configureShortcut(shortcut: string | null, global = true) {
 
 export async function cancelChatScreenshot(store?: ChatAccountStore): Promise<void> {
     const capture = activeCapture;
-    if (!capture || capture.cancelled || (store && capture.store !== store)) return;
+    if (!capture) {
+        // 隐藏页可能还没收到 started；交接仍需取消原生侧已经启动的截图。
+        if (!store) await chatScreenshotService.cancel().catch(() => {});
+        return;
+    }
+    if (capture.cancelled || (store && capture.store !== store)) return;
     capture.cancelled = true;
     // 立即失效结果，原生窗口释放前仍保留单次调用锁。
     await chatScreenshotService.cancel().catch(() => {});
@@ -147,39 +185,7 @@ export async function captureChatScreenshot(
     emitCapture();
     try {
         const file = await chatScreenshotService.capture({ hideWindow: options.hideWindow });
-        if (
-            !file ||
-            capture.cancelled ||
-            store.releaseWhenIdle ||
-            store.viewRevision !== capture.revision ||
-            store.getSnapshot().account.selfId !== capture.selfId
-        )
-            return;
-        const latest = store.getSnapshot().account.drafts[session] ?? EMPTY_DRAFT;
-        if (file.clipboardError)
-            pushInfoBar({
-                key: 'chat:screenshot:clipboard',
-                tone: 'warning',
-                title: '截图已完成，剪贴板未更新',
-                content: file.clipboardError,
-            });
-        if (latest.attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
-        const path = isLocalFileToken(file.path)
-            ? file.path.slice(LOCAL_FILE_PREFIX.length)
-            : file.path;
-        store.draft(session, {
-            ...latest,
-            attachments: [
-                ...latest.attachments,
-                {
-                    key: crypto.randomUUID(),
-                    type: 'image',
-                    path,
-                    previewPath: file.previewPath,
-                    name: file.name,
-                },
-            ],
-        });
+        applyScreenshot(capture, file);
     } catch (error) {
         if (!capture.cancelled)
             pushInfoBar({
@@ -191,8 +197,86 @@ export async function captureChatScreenshot(
     } finally {
         if (activeCapture === capture) {
             activeCapture = null;
+            if (!shortcutConsumers) shortcutContexts.clear();
             emitCapture();
         }
+    }
+}
+
+function applyScreenshot(capture: Capture, file: ChatScreenshotAttachment | null) {
+    const { store, session } = capture;
+    if (
+        !file ||
+        capture.cancelled ||
+        store.releaseWhenIdle ||
+        store.viewRevision !== capture.revision ||
+        store.getSnapshot().account.selfId !== capture.selfId
+    )
+        return;
+    const latest = store.getSnapshot().account.drafts[session] ?? EMPTY_DRAFT;
+    if (file.clipboardError)
+        pushInfoBar({
+            key: 'chat:screenshot:clipboard',
+            tone: 'warning',
+            title: '截图已完成，剪贴板未更新',
+            content: file.clipboardError,
+        });
+    if (latest.attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
+    const path = isLocalFileToken(file.path)
+        ? file.path.slice(LOCAL_FILE_PREFIX.length)
+        : file.path;
+    store.draft(session, {
+        ...latest,
+        attachments: [
+            ...latest.attachments,
+            {
+                key: crypto.randomUUID(),
+                type: 'image',
+                path,
+                previewPath: file.previewPath,
+                name: file.name,
+            },
+        ],
+    });
+}
+
+function receiveShortcut(event: ChatScreenshotShortcutEvent) {
+    if (completedNativeCaptures.has(event.capture_id)) return;
+    if (event.result.kind === 'started') {
+        const context = shortcutContexts.get(event.context);
+        if (!context || nativeCaptures.has(event.capture_id)) return;
+        const capture = { ...context, nativeId: event.capture_id, cancelled: false };
+        nativeCaptures.set(event.capture_id, capture);
+        if (!activeCapture) activeCapture = capture;
+        emitCapture();
+        return;
+    }
+    // 会话切换会重挂监听，finished 仍可用注册时锁定的上下文落回原草稿。
+    const capture = nativeCaptures.get(event.capture_id) ?? shortcutContexts.get(event.context);
+    if (!capture) return;
+    completedNativeCaptures.add(event.capture_id);
+    while (completedNativeCaptures.size > 32) {
+        const oldest = completedNativeCaptures.values().next().value;
+        if (oldest === undefined) break;
+        completedNativeCaptures.delete(oldest);
+    }
+    try {
+        if (event.result.kind === 'failed') throw new Error(event.result.message);
+        applyScreenshot(capture, event.result.file);
+        if (capture.store.getSnapshot().account.active === capture.session) capture.onFinished?.();
+    } catch (error) {
+        if (!capture.cancelled)
+            pushInfoBar({
+                key: 'chat:screenshot:capture',
+                tone: 'danger',
+                title: '截图未完成',
+                content: errorText(error),
+            });
+    } finally {
+        nativeCaptures.delete(event.capture_id);
+        if (activeCapture?.nativeId === event.capture_id) activeCapture = null;
+        if (!shortcutConsumers && !activeCapture) shortcutContexts.clear();
+        emitCapture();
     }
 }
 
@@ -205,13 +289,27 @@ export function useChatScreenshot(
     const capturing = useSyncExternalStore(subscribeCapture, getCapturing, getCapturing);
     const preference = useSyncExternalStore(subscribePreferences, getPreferences, getPreferences);
     const [shortcutSuspended, suspendShortcut] = useState(false);
+    const [shortcutReady, setShortcutReady] = useState(false);
     const mounted = useRef(false);
     const finished = useRef(onFinished);
+    const selfId = store.getSnapshot().account.selfId;
+    const viewRevision = store.viewRevision;
+    const context = useMemo(
+        () => [store.target.bot_id, selfId, session, viewRevision, crypto.randomUUID()].join('/'),
+        [store, selfId, session, viewRevision],
+    );
     finished.current = onFinished;
     useEffect(() => {
         mounted.current = true;
+        let disposed = false;
+        void ensureShortcutListener()
+            .then(() => {
+                if (!disposed) setShortcutReady(true);
+            })
+            .catch(() => {});
         return () => {
             mounted.current = false;
+            disposed = true;
         };
     }, []);
     const start = useCallback(async () => {
@@ -220,21 +318,36 @@ export function useChatScreenshot(
         if (mounted.current && store.getSnapshot().account.active === session) finished.current?.();
     }, [store, session, collapsed]);
     useEffect(() => {
-        if (collapsed || shortcutSuspended) return;
-        let disposed = false;
-        let unlisten: (() => void) | undefined;
+        if (shortcutSuspended) {
+            if (shortcutCleanup !== undefined) clearTimeout(shortcutCleanup);
+            configureShortcut(null);
+            return;
+        }
+        if (collapsed || !shortcutReady) return;
         shortcutConsumers++;
         if (shortcutCleanup !== undefined) clearTimeout(shortcutCleanup);
-        configureShortcut(preference.shortcut, preference.globalShortcut);
-        void chatScreenshotService
-            .onShortcut(() => {
-                if (!disposed) void start();
-            })
-            .then((stop) => {
-                if (disposed) stop();
-                else unlisten = stop;
-            })
-            .catch(() => {});
+        shortcutContexts.set(context, {
+            store,
+            session,
+            selfId,
+            revision: viewRevision,
+            cancelled: false,
+            onFinished: () => {
+                if (mounted.current) finished.current?.();
+            },
+        });
+        // 正在截图的上下文另有持有；这里只留当前与上一个注册，避免留住已释放的账号。
+        while (shortcutContexts.size > 2) {
+            const oldest = shortcutContexts.keys().next().value;
+            if (oldest === undefined) break;
+            shortcutContexts.delete(oldest);
+        }
+        configureShortcut(
+            preference.shortcut,
+            preference.globalShortcut,
+            context,
+            preference.hideWindow,
+        );
         const handle = (event: globalThis.KeyboardEvent) => {
             if (isTauri) return;
             if (
@@ -252,15 +365,29 @@ export function useChatScreenshot(
         };
         window.addEventListener('keydown', handle);
         return () => {
-            disposed = true;
-            unlisten?.();
             window.removeEventListener('keydown', handle);
             shortcutConsumers--;
             // 会话切换会重挂 Composer，同一轮交接不反复注册原生快捷键。
             shortcutCleanup = setTimeout(() => {
-                if (!shortcutConsumers) configureShortcut(null);
+                if (!shortcutConsumers) {
+                    configureShortcut(null, true, '', true, true);
+                    if (!activeCapture) shortcutContexts.clear();
+                }
             }, 0);
         };
-    }, [collapsed, shortcutSuspended, preference.shortcut, preference.globalShortcut, start]);
+    }, [
+        collapsed,
+        shortcutSuspended,
+        shortcutReady,
+        preference.shortcut,
+        preference.globalShortcut,
+        preference.hideWindow,
+        start,
+        context,
+        store,
+        session,
+        selfId,
+        viewRevision,
+    ]);
     return { capturing, preferences: preference, updatePreferences, start, suspendShortcut };
 }

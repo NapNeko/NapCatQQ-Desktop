@@ -3,6 +3,8 @@ use ncd_domain::chat_screenshot::{
     ChatScreenshotAttachment, ChatScreenshotRequest, ChatScreenshotShortcut,
 };
 use std::sync::{Arc, Mutex};
+#[cfg(windows)]
+use tauri::Emitter;
 use tauri::Manager;
 use tokio_util::sync::CancellationToken;
 
@@ -31,6 +33,8 @@ mod window;
 pub struct ScreenshotCoordinator {
     active: Mutex<Option<(String, CancellationToken)>>,
 }
+
+pub(crate) const SHORTCUT_CAPTURE_OWNER: &str = "screenshot-shortcut";
 impl ScreenshotCoordinator {
     fn acquire(&self, owner: &str) -> Result<CancellationToken, String> {
         let mut active = self.active.lock().map_err(|_| "截图状态不可用")?;
@@ -64,25 +68,83 @@ pub async fn capture_chat(
     window: tauri::WebviewWindow,
     cache: Arc<ncd_runtime::chat_screenshots::ChatScreenshotCache>,
     request: ChatScreenshotRequest,
+    shortcut_context: Option<String>,
+) -> Result<Option<ChatScreenshotAttachment>, String> {
+    capture_inner(app, Some(window), cache, request, shortcut_context, None).await
+}
+
+#[cfg(windows)]
+async fn capture_shortcut(
+    app: tauri::AppHandle,
+    window: Option<tauri::WebviewWindow>,
+    cache: Arc<ncd_runtime::chat_screenshots::ChatScreenshotCache>,
+    request: ChatScreenshotRequest,
+    context: String,
+    clipboard_owner: isize,
+) -> Result<Option<ChatScreenshotAttachment>, String> {
+    capture_inner(
+        app,
+        window,
+        cache,
+        request,
+        Some(context),
+        Some(clipboard_owner),
+    )
+    .await
+}
+
+async fn capture_inner(
+    app: tauri::AppHandle,
+    window: Option<tauri::WebviewWindow>,
+    cache: Arc<ncd_runtime::chat_screenshots::ChatScreenshotCache>,
+    request: ChatScreenshotRequest,
+    shortcut_context: Option<String>,
+    clipboard_owner: Option<isize>,
 ) -> Result<Option<ChatScreenshotAttachment>, String> {
     #[cfg(not(windows))]
     {
-        let _ = (app, window, cache, request);
+        let _ = (
+            app,
+            window,
+            cache,
+            request,
+            shortcut_context,
+            clipboard_owner,
+        );
         Err("当前平台不支持原生截图".into())
     }
     #[cfg(windows)]
     {
-        let owner = window.label().to_string();
+        let owner = window
+            .as_ref()
+            .map_or(SHORTCUT_CAPTURE_OWNER, |window| window.label())
+            .to_string();
+        let standalone_view = window
+            .is_none()
+            .then(|| app.state::<crate::AppState>().chat.view());
         let coordinator = app.state::<ScreenshotCoordinator>();
         let cancel = coordinator.acquire(&owner)?;
         if !app.state::<crate::AppState>().chat.is_enabled() {
             coordinator.release(&owner);
             return Err("聊天功能已关闭".into());
         }
-        let hidden = request.hide_window && window.is_visible().unwrap_or(false);
+        let shortcut = shortcut_context.map(|context| (context, uuid::Uuid::new_v4().to_string()));
+        if let Some((context, capture_id)) = &shortcut {
+            emit_shortcut(
+                &app,
+                &owner,
+                context,
+                capture_id,
+                ncd_domain::chat_screenshot::ChatScreenshotShortcutResult::Started,
+            );
+        }
+        let hidden = request.hide_window
+            && window.as_ref().is_some_and(|window| {
+                window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+            });
         let mut completed = false;
-        let result=async {
-            if hidden {crate::webview_scheduler::hide_window(&window)?;}
+        let mut result: Result<Option<ChatScreenshotAttachment>, String> = async {
+            if hidden && let Some(window) = &window {crate::webview_scheduler::hide_window(window)?;}
             let desktop=tauri::async_runtime::spawn_blocking(capture::capture_desktop).await.map_err(|e|format!("采集线程失败：{e}"))??;
             if cancel.is_cancelled(){return Ok(None);}
             let (sender,receiver)=tokio::sync::oneshot::channel();
@@ -101,12 +163,15 @@ pub async fn capture_chat(
                 output = scrolled;
             }
             if cancel.is_cancelled(){return Ok(None);}
-            if app.get_webview_window(&owner).is_none(){return Ok(None);}
+            if window.is_some() && app.get_webview_window(&owner).is_none(){return Ok(None);}
             completed = true;
             let action=output.action;
             let mut encoded=tauri::async_runtime::spawn_blocking(move||encode(output)).await.map_err(|e|format!("导出线程失败：{e}"))??;
             if cancel.is_cancelled(){return Ok(None);}
-            let owner_hwnd = window.hwnd().map_err(|e|e.to_string())?.0 as isize;
+            let owner_hwnd = match &window {
+                Some(window) => window.hwnd().map_err(|e|e.to_string())?.0 as isize,
+                None => clipboard_owner.ok_or("截图剪贴板窗口不可用")?,
+            };
             let width = encoded.width; let height = encoded.height;
             let pixels = std::mem::take(&mut encoded.rgba);
             let clipboard_result = tauri::async_runtime::spawn_blocking(move||{
@@ -135,13 +200,64 @@ pub async fn capture_chat(
             }
         }.await;
         // 导出与复制先完成；显示请求被正常焦点事件取代，不能把一张成功的截图判成失败。
-        if (hidden || completed) && app.get_webview_window(&owner).is_some() {
-            if let Err(error) = restore_owner(&window).await {
+        if let Some(window) = &window
+            && (hidden || completed)
+            && app.get_webview_window(&owner).is_some()
+        {
+            if let Err(error) = restore_owner(window).await {
                 tracing::warn!(%error, "截图已完成，聊天窗口恢复稍后重试");
             }
         }
+        if let Some(view) = standalone_view
+            && let Ok(Some(file)) = &result
+        {
+            let staged = app
+                .state::<crate::AppState>()
+                .chat
+                .stage_screenshot(&view, file)
+                .await;
+            match staged {
+                Ok(bot_id) => {
+                    if let Err(error) =
+                        crate::chat_window::open_chat_window(app.clone(), Some(bot_id), false).await
+                    {
+                        tracing::warn!(%error, "截图已加入草稿，聊天窗口稍后恢复");
+                    }
+                }
+                Err(error) => result = Err(error),
+            }
+        }
+        if let Some((context, capture_id)) = shortcut {
+            use ncd_domain::chat_screenshot::ChatScreenshotShortcutResult;
+            let outcome = match &result {
+                Ok(file) => ChatScreenshotShortcutResult::Finished { file: file.clone() },
+                Err(message) => ChatScreenshotShortcutResult::Failed {
+                    message: message.clone(),
+                },
+            };
+            emit_shortcut(&app, &owner, &context, &capture_id, outcome);
+        }
         coordinator.release(&owner);
         result
+    }
+}
+
+#[cfg(windows)]
+fn emit_shortcut(
+    app: &tauri::AppHandle,
+    owner: &str,
+    context: &str,
+    capture_id: &str,
+    result: ncd_domain::chat_screenshot::ChatScreenshotShortcutResult,
+) {
+    let event = ncd_domain::chat_screenshot::ChatScreenshotShortcutEvent {
+        v: 1,
+        context: context.into(),
+        capture_id: capture_id.into(),
+        result,
+    };
+    if let Err(error) = app.emit_to(owner, shortcut::EVENT, event) {
+        tracing::warn!(%owner, %error, "发布截图结果失败");
     }
 }
 

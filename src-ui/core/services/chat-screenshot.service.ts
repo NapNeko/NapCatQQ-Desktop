@@ -25,12 +25,12 @@ export const chatScreenshotService = {
         shortcutQueue = operation.catch(() => {});
         return operation;
     },
-    onShortcut(callback: () => void): Promise<() => void> {
+    onShortcut(callback: (event: ChatScreenshotShortcutEvent) => void): Promise<() => void> {
         return isTauri
             ? listen<ChatScreenshotShortcutEvent>(
                   'chat-screenshot-shortcut',
                   (event) => {
-                      if (event.v === 1) callback();
+                      if (event.v === 1) callback(event);
                   },
                   { target: isChatPopoutWindow() ? CHAT_WINDOW_LABEL : 'main' },
               )

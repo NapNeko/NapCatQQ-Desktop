@@ -1,10 +1,10 @@
-// 聊天视图持有一份系统快捷键，隐藏消息窗不分配绘制资源。
+// 系统热键随应用存活，聊天页面只更新捕获目标和偏好。
 #![expect(unsafe_code, reason = "RegisterHotKey 与消息窗口 FFI")]
 #![warn(clippy::undocumented_unsafe_blocks)]
 use crate::native_panel::sys::{self, Hwnd, Message, WndHandler};
-use ncd_domain::chat_screenshot::{ChatScreenshotShortcut, ChatScreenshotShortcutEvent};
+use ncd_domain::chat_screenshot::{ChatScreenshotRequest, ChatScreenshotShortcut};
 use std::cell::RefCell;
-use tauri::Emitter;
+use tauri::Manager;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -22,6 +22,7 @@ struct Registration {
     hwnd: Hwnd,
     app: tauri::AppHandle,
     owner: String,
+    attached: bool,
     request: ChatScreenshotShortcut,
     id: i32,
     focus_hook: Option<HHOOK>,
@@ -46,8 +47,13 @@ pub fn configure(
     request.validate()?;
     HOTKEY.with(|cell| {
         if !request.enabled {
-            if cell.borrow().as_ref().is_some_and(|r| r.owner == owner) {
-                cell.borrow_mut().take();
+            let mut state = cell.borrow_mut();
+            if let Some(registration) = state.as_mut().filter(|r| r.owner == owner) {
+                if request.release_owner && registration.request.global {
+                    registration.attached = false;
+                } else {
+                    state.take();
+                }
             }
             return Ok(());
         }
@@ -58,6 +64,7 @@ pub fn configure(
                 && registration.request.global == request.global
             {
                 registration.owner = owner;
+                registration.attached = true;
                 registration.app = app;
                 registration.request = request;
                 return Ok(());
@@ -112,6 +119,7 @@ pub fn configure(
             hwnd,
             app,
             owner,
+            attached: true,
             request,
             id: 1,
             focus_hook,
@@ -141,11 +149,7 @@ unsafe extern "system" fn focused_keyboard(code: i32, key: WPARAM, state: LPARAM
                 && !down(0x5b)
                 && !down(0x5c)
             {
-                let _ = registration.app.emit_to(
-                    &registration.owner,
-                    EVENT,
-                    ChatScreenshotShortcutEvent { v: 1 },
-                );
+                dispatch(registration);
                 return true;
             }
             false
@@ -159,8 +163,13 @@ unsafe extern "system" fn focused_keyboard(code: i32, key: WPARAM, state: LPARAM
 }
 pub fn release(owner: &str) {
     HOTKEY.with(|s| {
-        if s.borrow().as_ref().is_some_and(|r| r.owner == owner) {
-            s.borrow_mut().take();
+        let mut state = s.borrow_mut();
+        if let Some(registration) = state.as_mut().filter(|r| r.owner == owner) {
+            if registration.request.global {
+                registration.attached = false;
+            } else {
+                state.take();
+            }
         }
     });
 }
@@ -188,6 +197,39 @@ fn binding(request: &ChatScreenshotShortcut) -> Result<(HOT_KEY_MODIFIERS, u32),
     };
     Ok((modifiers, key))
 }
+
+fn dispatch(registration: &Registration) {
+    let app = registration.app.clone();
+    let owner = registration.owner.clone();
+    let context = registration.request.context.clone();
+    let attached = registration.attached;
+    let clipboard_owner = registration.hwnd.key();
+    let request = ChatScreenshotRequest {
+        hide_window: registration.request.hide_window,
+    };
+    tauri::async_runtime::spawn(async move {
+        let window = attached.then(|| app.get_webview_window(&owner)).flatten();
+        let state = app.state::<crate::AppState>();
+        if let Err(error) = state.migrate_gate.ensure_idle() {
+            tracing::warn!(%error, "截图被数据迁移阻止");
+            return;
+        }
+        let cache = state.chat.screenshot_cache();
+        if let Err(error) = super::capture_shortcut(
+            app.clone(),
+            window,
+            cache,
+            request,
+            context,
+            clipboard_owner,
+        )
+        .await
+        {
+            tracing::warn!(%owner, %error, "派发截图快捷键失败");
+        }
+    });
+}
+
 struct Handler;
 impl WndHandler for Handler {
     fn handle(msg: &Message) -> Option<LRESULT> {
@@ -197,12 +239,9 @@ impl WndHandler for Handler {
         HOTKEY.with(|s| {
             if let Some(registration) = s.borrow().as_ref()
                 && msg.wparam() == registration.id as usize
+                && msg.hwnd() == registration.hwnd
             {
-                let _ = registration.app.emit_to(
-                    &registration.owner,
-                    EVENT,
-                    ChatScreenshotShortcutEvent { v: 1 },
-                );
+                dispatch(registration);
             }
         });
         Some(LRESULT(0))

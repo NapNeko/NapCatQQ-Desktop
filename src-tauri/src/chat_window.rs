@@ -26,7 +26,11 @@ pub async fn apply_chat_feature(app: &AppHandle, enabled: bool) -> Result<(), St
         .set_enabled(enabled)
         .await;
     if !enabled {
-        for owner in ["main", CHAT_WINDOW_LABEL] {
+        for owner in [
+            "main",
+            CHAT_WINDOW_LABEL,
+            crate::screenshot::SHORTCUT_CAPTURE_OWNER,
+        ] {
             crate::screenshot::cancel(app, owner);
             crate::screenshot::configure_shortcut(
                 app.clone(),
@@ -38,6 +42,7 @@ pub async fn apply_chat_feature(app: &AppHandle, enabled: bool) -> Result<(), St
                     alt: true,
                     shift: false,
                     key: "A".into(),
+                    ..Default::default()
                 },
             )
             .await?;

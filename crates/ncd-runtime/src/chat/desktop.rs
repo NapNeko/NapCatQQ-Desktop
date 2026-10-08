@@ -35,6 +35,54 @@ impl ViewState {
     fn accepts(&self, owner: &str, revision: u32) -> bool {
         self.owner == owner && self.snapshot.revision == revision
     }
+    fn stage_screenshot(
+        &mut self,
+        expected: &ChatViewState,
+        file: &ncd_domain::chat_screenshot::ChatScreenshotAttachment,
+    ) -> Result<String, String> {
+        if self.snapshot.revision != expected.revision {
+            return Err("聊天窗口已切换，未添加截图".into());
+        }
+        let bot_id = expected.selected_bot.as_ref().ok_or("请先选择聊天账号")?;
+        let origin = expected
+            .accounts
+            .iter()
+            .find(|account| &account.bot_id == bot_id)
+            .ok_or("聊天账号视图不可用")?;
+        let session = origin.active.as_ref().ok_or("请先选择聊天会话")?;
+        let mut next = self.snapshot.clone();
+        let account = next
+            .accounts
+            .iter_mut()
+            .find(|account| account.bot_id == origin.bot_id && account.self_id == origin.self_id)
+            .ok_or("聊天账号已切换")?;
+        let draft = account
+            .drafts
+            .entry(session.clone())
+            .or_insert_with(|| ChatDraft {
+                text: String::new(),
+                attachments: Vec::new(),
+                reply: None,
+                mentions: Vec::new(),
+            });
+        if draft.attachments.len() >= 8 {
+            return Err("一次最多添加 8 个附件".into());
+        }
+        draft.attachments.push(ChatDraftAttachment::Image {
+            key: uuid::Uuid::new_v4().to_string(),
+            name: file.name.clone(),
+            path: file.path.clone(),
+            sub_type: None,
+            preview_path: Some(file.preview_path.clone()),
+        });
+        account.active = Some(session.clone());
+        next.selected_bot = Some(bot_id.clone());
+        next.validate().map_err(str::to_owned)?;
+        // 回收前排队的保存不能覆盖刚插入的截图，重建页面会领取新的代次。
+        next.revision = next.revision.wrapping_add(1);
+        self.snapshot = next;
+        Ok(bot_id.clone())
+    }
 }
 pub(super) struct DesktopState {
     root: PathBuf,
@@ -344,6 +392,27 @@ impl ChatManager {
             .unwrap_or_else(|p| p.into_inner())
             .snapshot
             .clone()
+    }
+    pub async fn stage_screenshot(
+        &self,
+        expected: &ChatViewState,
+        file: &ncd_domain::chat_screenshot::ChatScreenshotAttachment,
+    ) -> Result<String, String> {
+        if !self.is_enabled() {
+            return Err("聊天功能已关闭".into());
+        }
+        let bot_id = expected.selected_bot.as_ref().ok_or("请先选择聊天账号")?;
+        let account = expected
+            .accounts
+            .iter()
+            .find(|account| &account.bot_id == bot_id)
+            .ok_or("聊天账号视图不可用")?;
+        super::archive_identity(&self.targets().await, bot_id, &account.self_id)?;
+        self.desktop
+            .view
+            .lock()
+            .map_err(|_| "聊天视图不可用")?
+            .stage_screenshot(expected, file)
     }
     pub fn claim_view(&self, owner: &str) -> ChatViewState {
         self.desktop
@@ -878,5 +947,78 @@ mod tests {
         let remounted = state.claim("chat-panel");
         assert!(!state.accepts("chat-panel", detached.revision));
         assert!(state.accepts("chat-panel", remounted.revision));
+    }
+
+    fn screenshot_view() -> ViewState {
+        ViewState {
+            owner: "chat-panel".into(),
+            snapshot: serde_json::from_value(serde_json::json!({
+                "v": 1, "revision": 7, "selectedBot": "bot",
+                "accounts": [{ "botId": "bot", "selfId": "10001", "active": "private:22",
+                    "drafts": { "private:22": { "text": "保留原草稿", "attachments": [], "reply": null, "mentions": [] } },
+                    "scroll": {}, "reading": {} }]
+            })).unwrap(),
+        }
+    }
+    fn screenshot_file() -> ncd_domain::chat_screenshot::ChatScreenshotAttachment {
+        ncd_domain::chat_screenshot::ChatScreenshotAttachment {
+            path: "C:/shots/one.png".into(),
+            preview_path: "C:/shots/preview.png".into(),
+            name: "截图.png".into(),
+            width: 10,
+            height: 10,
+            clipboard_error: None,
+        }
+    }
+    #[test]
+    fn closed_view_screenshot_preserves_the_draft_and_rejects_queued_old_saves() {
+        let mut state = screenshot_view();
+        let origin = state.snapshot.clone();
+        assert_eq!(
+            state.stage_screenshot(&origin, &screenshot_file()).unwrap(),
+            "bot"
+        );
+        let draft = &state.snapshot.accounts[0].drafts["private:22"];
+        assert_eq!(draft.text, "保留原草稿");
+        assert!(
+            matches!(&draft.attachments[0], ChatDraftAttachment::Image { preview_path: Some(path), .. } if path == "C:/shots/preview.png")
+        );
+        assert!(!state.accepts("chat-panel", origin.revision));
+    }
+    #[test]
+    fn recreated_view_rejects_a_screenshot_from_the_closed_view() {
+        let mut state = screenshot_view();
+        let origin = state.snapshot.clone();
+        state.claim("main");
+        assert!(state.stage_screenshot(&origin, &screenshot_file()).is_err());
+        assert!(
+            state.snapshot.accounts[0].drafts["private:22"]
+                .attachments
+                .is_empty()
+        );
+    }
+    #[test]
+    fn full_closed_draft_is_not_modified_by_a_screenshot() {
+        let mut state = screenshot_view();
+        state.snapshot.accounts[0]
+            .drafts
+            .get_mut("private:22")
+            .unwrap()
+            .attachments = (0..8)
+            .map(|index| ChatDraftAttachment::Face {
+                key: index.to_string(),
+                name: "微笑".into(),
+                id: "14".into(),
+            })
+            .collect();
+        let origin = state.snapshot.clone();
+        assert!(state.stage_screenshot(&origin, &screenshot_file()).is_err());
+        assert_eq!(state.snapshot.revision, origin.revision);
+        assert_eq!(
+            state.snapshot.accounts[0].drafts["private:22"]
+                .attachments
+                .len(),
+            8
+        );
     }
 }
