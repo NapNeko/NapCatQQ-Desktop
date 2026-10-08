@@ -321,6 +321,8 @@ pub struct FeatureToggles {
     /// （接收器和在途调用收掉，`DebugManager::set_enabled` 按它走）
     #[serde(rename = "apiDebug", default = "default_true")]
     pub api_debug: bool,
+    #[serde(default = "default_true")]
+    pub chat: bool,
 }
 
 impl Default for FeatureToggles {
@@ -334,6 +336,7 @@ impl Default for FeatureToggles {
             ncd_watch: true,
             terminal: true,
             api_debug: true,
+            chat: true,
         }
     }
 }
@@ -896,13 +899,16 @@ mod tests {
                 && parsed.features.docker_page
                 && parsed.features.terminal
                 && parsed.features.api_debug
+                && parsed.features.chat
         );
 
-        let parsed: AppSettings =
-            serde_json::from_str(r#"{"features":{"terminal":false,"apiDebug":false}}"#)
-                .expect("反序列化失败");
+        let parsed: AppSettings = serde_json::from_str(
+            r#"{"features":{"terminal":false,"apiDebug":false,"chat":false}}"#,
+        )
+        .expect("反序列化失败");
         assert!(!parsed.features.terminal);
         assert!(!parsed.features.api_debug);
+        assert!(!parsed.features.chat);
         assert!(parsed.features.apps && parsed.features.docker_page);
     }
 
