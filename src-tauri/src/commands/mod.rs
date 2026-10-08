@@ -3,6 +3,7 @@ pub mod app_settings;
 pub mod bot;
 pub mod bot_metrics;
 pub mod chat;
+pub mod chat_screenshot;
 pub mod components;
 pub mod config_transfer;
 pub mod data_root_migrate;

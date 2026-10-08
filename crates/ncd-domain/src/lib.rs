@@ -16,6 +16,7 @@ pub mod bot_status;
 pub mod chat_archive;
 pub mod chat_desktop;
 pub mod chat_group_files;
+pub mod chat_screenshot;
 pub mod component;
 pub mod daemon_state;
 pub mod data_root_migrate;

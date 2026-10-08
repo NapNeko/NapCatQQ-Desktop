@@ -30,6 +30,8 @@ import { Button } from '../../shared/ui/Button';
 import { ActionMotionIcon } from '../../shared/ui/motion/ActionMotionIcon';
 import { ChatPresence, useChatComposerMotion } from './chatMotion';
 import { useComposerCollapse } from './useComposerCollapse';
+import { useChatScreenshot } from '../../hooks/chat/useChatScreenshot';
+import { ChatScreenshotTools } from './ChatScreenshotTools';
 
 export function ChatComposer({
     store,
@@ -49,6 +51,9 @@ export function ChatComposer({
     const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const localInput = useRef<HTMLTextAreaElement>(null);
     const input = inputRef ?? localInput;
+    const screenshot = useChatScreenshot(store, contact.key, collapsed, () =>
+        input.current?.focus({ preventScroll: true }),
+    );
     const composing = useRef(false);
     const composer = useRef<HTMLDivElement>(null);
     const previouslyCollapsed = useRef(collapsed);
@@ -231,6 +236,7 @@ export function ChatComposer({
         !disabledReason &&
         !sending &&
         !pendingFiles &&
+        !screenshot.capturing &&
         (!!draft.text.trim() || draft.attachments.length > 0);
     useChatComposerMotion(composer, canSend, error);
     const send = () => {
@@ -403,6 +409,7 @@ export function ChatComposer({
                             size={18}
                         />
                     </Button>
+                    <ChatScreenshotTools screenshot={screenshot} collapsed={collapsed} />
                     <Button
                         variant="ghost"
                         size="icon"
@@ -535,7 +542,12 @@ export function ChatComposer({
                 </ChatPresence>
                 <footer>
                     <span role="status" className={error ? 'text-danger' : 'text-text-tertiary'}>
-                        {error || (pendingFiles ? '正在读取附件…' : disabledReason)}
+                        {error ||
+                            (screenshot.capturing
+                                ? '截图中…'
+                                : pendingFiles
+                                  ? '正在读取附件…'
+                                  : disabledReason)}
                     </span>
                     <Button
                         variant="ghost"
@@ -621,13 +633,32 @@ function ChatAttachmentStrip({
 
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {
     const [failed, setFailed] = useState('');
+    const [preview, setPreview] = useState({ path: '', source: '' });
+    const previewPath = attachment.type === 'image' ? attachment.previewPath : undefined;
+    useEffect(() => {
+        if (!previewPath) return;
+        let disposed = false;
+        void chatService
+            .readLocalImage(previewPath)
+            .then((bytes) => {
+                if (!disposed)
+                    setPreview({ path: previewPath, source: `data:image/png;base64,${bytes}` });
+            })
+            .catch(() => {});
+        return () => {
+            disposed = true;
+        };
+    }, [previewPath]);
     if (attachment.type === 'face') return <QQFace id={attachment.id} size={40} />;
     if (attachment.type === 'file') return <File size={28} strokeWidth={1.5} />;
-    const source = attachment.path.startsWith('base64://')
-        ? 'data:image/png;base64,' + attachment.path.slice(9)
-        : /^https?:\/\//i.test(attachment.path)
-          ? attachment.path
-          : '';
+    const source =
+        previewPath && preview.path === previewPath
+            ? preview.source
+            : attachment.path.startsWith('base64://')
+              ? 'data:image/png;base64,' + attachment.path.slice(9)
+              : /^https?:\/\//i.test(attachment.path)
+                ? attachment.path
+                : '';
     return source && attachment.path !== failed ? (
         <img
             src={source}

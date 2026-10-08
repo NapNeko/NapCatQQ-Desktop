@@ -17,6 +17,7 @@ use windows::Win32::Graphics::Direct2D::Common::{
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_LARGE, D2D1_ARC_SIZE_SMALL,
+    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
     D2D1_BITMAP_PROPERTIES, D2D1_CAP_STYLE_ROUND, D2D1_DASH_STYLE_SOLID,
     D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT, D2D1_ELLIPSE, D2D1_EXTEND_MODE_CLAMP,
     D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_GAMMA_2_2, D2D1_LINE_JOIN_ROUND,
@@ -548,6 +549,133 @@ impl Canvas {
     pub fn clear(&self, c: Rgba) {
         // SAFETY: 清屏，参数是栈上的值。
         unsafe { self.rt.Clear(Some(&color(c))) };
+    }
+
+    pub fn text_system(&self) -> &TextSystem {
+        &self.shared.text
+    }
+
+    pub fn create_bgra_bitmap(&self, width: u32, height: u32, bgra: &[u8]) -> Result<ID2D1Bitmap> {
+        let pitch = width.checked_mul(4).ok_or_else(|| {
+            windows::core::Error::new(windows::Win32::Foundation::E_INVALIDARG, "位图尺寸过大")
+        })?;
+        let expected = (pitch as usize).checked_mul(height as usize);
+        if width == 0 || height == 0 || expected != Some(bgra.len()) {
+            return Err(windows::core::Error::new(
+                windows::Win32::Foundation::E_INVALIDARG,
+                "位图像素长度不匹配",
+            ));
+        }
+        let properties = D2D1_BITMAP_PROPERTIES {
+            pixelFormat: D2D1_PIXEL_FORMAT {
+                format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+            },
+            dpiX: 96.0,
+            dpiY: 96.0,
+        };
+        // SAFETY: 已校验 bgra 恰为 pitch × height 字节；CreateBitmap 在调用结束前拷贝数据。
+        unsafe {
+            self.rt.CreateBitmap(
+                D2D_SIZE_U { width, height },
+                Some(bgra.as_ptr().cast()),
+                pitch,
+                &properties,
+            )
+        }
+    }
+
+    pub fn draw_bitmap(
+        &self,
+        bitmap: &ID2D1Bitmap,
+        destination: Rect,
+        source: Option<Rect>,
+        nearest: bool,
+    ) {
+        let destination = destination.d2d();
+        let source = source.map(|rect| rect.d2d());
+        // SAFETY: 位图和矩形存活到调用结束，位图绑定在本画布的渲染目标。
+        unsafe {
+            self.rt.DrawBitmap(
+                bitmap,
+                Some(&destination),
+                1.0,
+                if nearest {
+                    D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                } else {
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
+                },
+                source.as_ref().map(|rect| rect as *const _),
+            );
+        }
+    }
+
+    pub fn line(&self, from: (f32, f32), to: (f32, f32), width: f32, c: Rgba) {
+        // SAFETY: 参数为局部值和本画布持有的 COM 引用。
+        unsafe {
+            self.rt.DrawLine(
+                v(from),
+                v(to),
+                self.paint(c),
+                width,
+                &self.shared.round_stroke,
+            )
+        };
+    }
+
+    pub fn stroke_rect(&self, rect: Rect, width: f32, c: Rgba) {
+        // SAFETY: 参数为局部值和本画布持有的 COM 引用。
+        unsafe {
+            self.rt
+                .DrawRectangle(&rect.d2d(), self.paint(c), width, &self.shared.round_stroke)
+        };
+    }
+
+    pub fn stroke_ellipse(&self, rect: Rect, width: f32, c: Rgba) {
+        let ellipse = D2D1_ELLIPSE {
+            point: v((rect.x + rect.w / 2.0, rect.y + rect.h / 2.0)),
+            radiusX: rect.w / 2.0,
+            radiusY: rect.h / 2.0,
+        };
+        // SAFETY: 参数为局部值和本画布持有的 COM 引用。
+        unsafe {
+            self.rt
+                .DrawEllipse(&ellipse, self.paint(c), width, &self.shared.round_stroke)
+        };
+    }
+
+    pub fn path(&self, points: &[(f32, f32)]) -> Result<ID2D1PathGeometry1> {
+        // SAFETY: 几何接收器在本作用域内创建并关闭，所有坐标按值提交。
+        unsafe {
+            let path = self.shared.d2d.CreatePathGeometry()?;
+            let sink = path.Open()?;
+            if let Some(&first) = points.first() {
+                sink.BeginFigure(v(first), D2D1_FIGURE_BEGIN_FILLED);
+                for &point in points.iter().skip(1) {
+                    sink.AddLine(v(point));
+                }
+                sink.EndFigure(D2D1_FIGURE_END_OPEN);
+            }
+            sink.Close()?;
+            Ok(path)
+        }
+    }
+
+    pub fn stroke_path(&self, path: &ID2D1PathGeometry1, offset: (f32, f32), width: f32, c: Rgba) {
+        let transform = Matrix3x2 {
+            M11: 1.0,
+            M12: 0.0,
+            M21: 0.0,
+            M22: 1.0,
+            M31: offset.0,
+            M32: offset.1,
+        };
+        let _transform = TransformGuard::set(&self.rt, &transform);
+        // SAFETY: 几何、画刷和描边样式都是本线程持有的活 COM 引用。
+        unsafe {
+            self.rt
+                .DrawGeometry(path, self.paint(c), width, &self.shared.round_stroke)
+        };
     }
 
     pub fn fill(&self, r: Rect, c: Rgba) {

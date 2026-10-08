@@ -137,6 +137,8 @@ pub enum ChatDraftAttachment {
         path: String,
         #[serde(rename = "subType", default)]
         sub_type: Option<u8>,
+        #[serde(rename = "previewPath", default)]
+        preview_path: Option<String>,
     },
     File {
         key: String,
