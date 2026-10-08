@@ -1,0 +1,135 @@
+// 云崽商店的市场清单：id 是 plugins/ 下的目录名或单 JS 文件名。
+import type { AppStoreMarketEntry } from '../../types';
+
+/** 形状照后端 yunzai::store::parse_index：id 是 plugins/ 下的目录名，单 JS 是文件名 */
+export const yunzaiEntry = (
+    id: string,
+    name: string,
+    description: string,
+    author: string,
+    home: string,
+    tags: string[],
+    extra: Partial<AppStoreMarketEntry> = {},
+): AppStoreMarketEntry => ({
+    resource: 'plugin',
+    id,
+    name,
+    description,
+    version: '',
+    author,
+    homepage: home,
+    time: '',
+    package: id,
+    module_name: id,
+    flavor: 'git',
+    is_official: tags.includes('推荐'),
+    valid: true,
+    tags,
+    supported_adapters: [],
+    authors: [{ name: author, home: '' }],
+    repos: [{ url: home, type: 'git', branch: '' }],
+    files: [],
+    allow_build: [],
+    ...extra,
+});
+
+export const mockYunzaiPlugins: AppStoreMarketEntry[] = [
+    yunzaiEntry(
+        'genshin',
+        '原神基础 (genshin)',
+        'TRSS 版原神基础功能，装喵喵插件前先装它',
+        '时雨🌌星空',
+        'https://github.com/TimeRainStarSky/Yunzai-genshin',
+        ['推荐'],
+    ),
+    yunzaiEntry(
+        'TRSS-Plugin',
+        'TRSS 插件 (TRSS-Plugin)',
+        'TRSS 自带的工具箱：远程命令、文件操作、语音合成等',
+        '时雨🌌星空',
+        'https://github.com/TimeRainStarSky/TRSS-Plugin',
+        ['推荐'],
+    ),
+    yunzaiEntry(
+        'miao-plugin',
+        '喵喵插件 (miao-plugin)',
+        '原神、星铁角色面板、伤害计算、抽卡统计',
+        'yoimiya-kokomi',
+        'https://gitee.com/yoimiya-kokomi/miao-plugin',
+        ['推荐', '游戏'],
+    ),
+    yunzaiEntry(
+        'xiaoyao-cvs-plugin',
+        '逍遥图鉴',
+        '原神图鉴、攻略、签到',
+        'Ctrlcvs',
+        'https://gitee.com/Ctrlcvs/xiaoyao-cvs-plugin',
+        ['游戏'],
+    ),
+    yunzaiEntry(
+        'earth-k-plugin',
+        '土块插件',
+        '点歌、AI 绘图、表情包合成',
+        'SmallK111407',
+        'https://gitee.com/SmallK111407/earth-k-plugin',
+        ['功能'],
+    ),
+    yunzaiEntry(
+        'xiuxian-plugin',
+        '修仙文游',
+        '群里一起修仙的文字游戏',
+        'ningmengchongshui',
+        'https://gitee.com/ningmengchongshui/xiuxian-plugin',
+        ['文游'],
+    ),
+    yunzaiEntry(
+        'link:某网盘插件',
+        '某网盘插件',
+        '主页不是仓库，只能照说明手动装',
+        '佚名',
+        'https://example.com/plugin',
+        ['功能'],
+        {
+            valid: false,
+            repos: [],
+        },
+    ),
+    yunzaiEntry(
+        'chuo.js',
+        '戳一戳回复',
+        '被戳的时候随机回一句',
+        'Pinging',
+        'https://gitee.com/Pinging/js-plugin',
+        ['单 JS'],
+        {
+            flavor: 'app',
+            repos: [],
+            files: [
+                {
+                    name: 'chuo.js',
+                    url: 'https://gitee.com/Pinging/js-plugin/raw/master/chuo.js',
+                    description: '',
+                },
+            ],
+        },
+    ),
+    yunzaiEntry(
+        'qianwen.js',
+        '通义千问',
+        '接通义千问聊天，要自己填 API Key',
+        'Lain',
+        'https://gitee.com/Lain/js',
+        ['单 JS'],
+        {
+            flavor: 'app',
+            repos: [],
+            files: [
+                {
+                    name: 'qianwen.js',
+                    url: 'https://gitee.com/Lain/js/raw/main/qianwen.js',
+                    description: '',
+                },
+            ],
+        },
+    ),
+];
