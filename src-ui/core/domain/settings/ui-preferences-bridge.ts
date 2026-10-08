@@ -10,8 +10,8 @@ import {
 import { MOTION_SPEED_DEFAULT, MOTION_SPEED_MAX, MOTION_SPEED_MIN } from '../../design/motion';
 import { RADIUS_STYLE_DEFAULT, normalizeRadiusStyle } from '../../design/radius';
 import { normalizeTheme } from '../../design/themes/registry';
-import type { AppPreferences, CloseAction } from '../../../hooks/preferences/preferencesStore';
-import { normalizeCloseAction } from '../../../hooks/preferences/preferencesStore';
+import type { AppPreferences, CloseAction } from './appPreferences';
+import { normalizeCloseAction } from './appPreferences';
 
 function normalizeMotionLevel(raw: unknown): AppPreferences['motionLevel'] {
     return raw === 'elegant' || raw === 'rich' ? raw : 'standard';

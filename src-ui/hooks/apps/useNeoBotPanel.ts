@@ -6,10 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 // TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉这条 hooks→modules 跨层（同 useBackendSettings 旧账）
-import {
-    parseNeoBotOverview,
-    type NeoBotOverview,
-} from '../../modules/apps/detail/neobot/neobotPanel';
+import { parseNeoBotOverview, type NeoBotOverview } from '../../core/domain/apps/neobotPanel';
 
 export type PanelState<T> =
     | { kind: 'ok'; data: T }

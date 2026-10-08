@@ -26,7 +26,7 @@ import {
 import { SegmentMotionIcon } from '../../shared/ui/motion';
 import { GsapPresence, type EnterFn, type ExitFn } from '../../shared/ui/motion/GsapPresence';
 import gsap from 'gsap';
-import type { ThemeMode } from '../../hooks/preferences/preferencesStore';
+import type { ThemeMode } from '../../core/domain/settings/preferencesStore';
 import { THEME_GROUPS, findThemePreview } from '../../core/design/themes/registry';
 import type { MotionLevel } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';

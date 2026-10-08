@@ -36,7 +36,7 @@ import {
     preferencesStore,
     type AppPreferences,
     type CloseAction,
-} from '../../hooks/preferences/preferencesStore';
+} from '../../core/domain/settings/preferencesStore';
 
 export type AfterCloseUiBehavior = 'hide' | 'delayed_lightweight' | 'immediate_lightweight';
 export type UiModeOnStartup = 'normal' | 'tray_only';

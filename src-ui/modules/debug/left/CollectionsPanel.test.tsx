@@ -33,7 +33,7 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 import { TooltipProvider } from '../../../shared/ui';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { _resetDebugCatalogForTests } from '../../../hooks/debug/useDebugCatalog';
 import { _resetDangerSkipsForTests, dangerConfirmSkipped } from '../DangerConfirmDialog';

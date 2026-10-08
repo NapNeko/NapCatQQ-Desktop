@@ -114,7 +114,7 @@ export const BotPicker = memo(function BotPicker({
     const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
         const list = options();
         const idx = list.indexOf(document.activeElement as HTMLButtonElement);
-        let next = -1;
+        let next: number;
         if (e.key === 'ArrowDown') next = Math.min(list.length - 1, idx + 1);
         else if (e.key === 'ArrowUp') {
             if (idx <= 0 && showSearch) {

@@ -1,6 +1,6 @@
 // 窗口 Tab：关闭按钮、托盘、轻量模式和启动显示策略。
 
-import type { CloseAction } from '../../../hooks/preferences/preferencesStore';
+import type { CloseAction } from '../../../core/domain/settings/preferencesStore';
 import type {
     AfterCloseUiBehavior,
     UiModeOnStartup,

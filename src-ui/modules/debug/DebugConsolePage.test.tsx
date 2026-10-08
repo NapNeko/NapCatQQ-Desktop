@@ -46,7 +46,7 @@ vi.mock('../../hooks/ui/pushErrorBar', () => ({
 }));
 
 import { TooltipProvider } from '../../shared/ui';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { debugWorkspaceStore, defaultWorkspace } from '../../hooks/debug/debugWorkspaceStore';
 import { debugEventStore } from '../../hooks/debug/debugEventStore';
 import { _resetDebugNavForTests, openDebugConsole } from '../../hooks/debug/debugNav';

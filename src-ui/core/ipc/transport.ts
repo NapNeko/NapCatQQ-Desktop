@@ -7,6 +7,7 @@
 // `core/ipc/mock/*` 提供的纯前端假数据。
 
 import { Channel, invoke as tauriInvoke } from '@tauri-apps/api/core';
+import { isTauri } from '../domain/runtime/env';
 import {
     listen as tauriListen,
     type UnlistenFn,
@@ -16,9 +17,9 @@ import {
 /// 流式数据通道（终端输出）：比事件快、保序，原始字节不转 JSON。只由 services 层 new
 export { Channel };
 
-/// 是否运行在 Tauri webview 内（vs 浏览器预览模式）。
-export const isTauri =
-    typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+/// 是否运行在 Tauri webview 内（vs 浏览器预览模式）。权威在 core/domain/runtime/env，
+/// 这里 re-export 兼容 services 层历史 import 路径。
+export { isTauri };
 
 /// 透传到 `@tauri-apps/api/core` 的 invoke。
 /// services 层应在 `if (isTauri)` 分支调用本函数；否则走 mock。
@@ -42,7 +43,6 @@ export async function listen<T = unknown>(
                 const parsed = typeof text === 'string' ? (JSON.parse(text) as T) : (text as T);
                 handler(parsed);
             } catch (err) {
-                // eslint-disable-next-line no-console
                 console.error(
                     `[ipc/transport] failed to parse payload of event ${event}:`,
                     err,
@@ -191,7 +191,7 @@ export async function onFileDragDrop(
             handler(p);
             return;
         }
-        let position: { x: number; y: number } | null = null;
+        let position: { x: number; y: number } | null;
         try {
             // 每次都问缩放比：窗口拖到另一块屏上会变
             const logical = p.position.toLogical(await getCurrentWindow().scaleFactor());

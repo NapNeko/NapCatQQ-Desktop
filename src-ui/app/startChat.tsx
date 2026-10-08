@@ -7,7 +7,7 @@ export async function startChat(): Promise<void> {
     markChatPopoutWindow();
     const [preferences, store, surface, app] = await Promise.all([
         import('../hooks/preferences/useAppUiPreferencesBootstrap'),
-        import('../hooks/preferences/preferencesStore'),
+        import('../core/domain/settings/preferencesStore'),
         import('../core/design/surfaceCanvas'),
         import('./ChatPopoutApp'),
     ]);

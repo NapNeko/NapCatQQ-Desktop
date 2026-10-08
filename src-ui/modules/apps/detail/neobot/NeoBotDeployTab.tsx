@@ -16,8 +16,8 @@ import { isDockerBot } from '../../../../core/domain/apps/appLinkTopology';
 import { AppLinkDialog } from '../../AppLinkDialog';
 import type { AppInstance } from '../../../../core/ipc/types';
 import type { AppRoute } from '../../../../shared/components/next/Sidebar';
-import { versionRequirementText } from './neobotCapabilities';
-import { isBotAccountUnset, missingRequiredSteps } from './neobotDeploy';
+import { versionRequirementText } from '../../../../core/domain/apps/neobotCapabilities';
+import { isBotAccountUnset, missingRequiredSteps } from '../../../../core/domain/apps/neobotDeploy';
 import { PanelStateView } from './PanelStateView';
 import { useNeoBotDeploy } from '../../../../hooks/apps/useNeoBotDeploy';
 

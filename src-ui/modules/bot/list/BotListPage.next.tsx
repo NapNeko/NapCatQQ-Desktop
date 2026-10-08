@@ -253,7 +253,7 @@ export function BotListPageNext({
     const startAfterQqCheck = useCallback(
         async (botId: string) => {
             setStartingBotId(botId);
-            let drift: ConfigDrift | null = null;
+            let drift: ConfigDrift | null;
             try {
                 drift = await botService.detectConfigDrift(botId);
             } catch {

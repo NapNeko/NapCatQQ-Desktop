@@ -11,7 +11,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
 /** 远端档案列表，和 useServerManager 共用 ['servers'] 缓存；只读、不带增删改 */

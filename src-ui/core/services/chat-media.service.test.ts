@@ -312,8 +312,8 @@ describe('native chat media protocol', () => {
     it('requests playable audio and ignores an upstream local output path', async () => {
         const call = vi.spyOn(chatService, 'call').mockResolvedValue(
             ok({
-                file: 'C:\private\voice.mp3',
-                url: 'C:\private\voice.mp3',
+                file: 'C:\\private\\voice.mp3',
+                url: 'C:\\private\\voice.mp3',
                 base64: 'SUQzAA==',
             }),
         );

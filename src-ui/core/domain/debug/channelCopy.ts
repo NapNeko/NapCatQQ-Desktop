@@ -1,6 +1,6 @@
 // 通道状态和名字的展示文案，以及「去哪解决」的出口。
 
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../ui/route';
 import type { DebugChannelId } from '../../ipc/generated/debug/DebugChannelId';
 import type { DebugChannelStatus } from '../../ipc/generated/debug/DebugChannelStatus';
 

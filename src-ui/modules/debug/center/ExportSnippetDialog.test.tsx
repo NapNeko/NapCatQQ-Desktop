@@ -24,7 +24,7 @@ vi.mock('../../../core/services/onebot-debug.service', () => ({
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 import { TooltipProvider } from '../../../shared/ui';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { ExportSnippetDialog } from './ExportSnippetDialog';
 
 const CHANNELS: DebugChannels = {

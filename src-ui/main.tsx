@@ -18,7 +18,7 @@ async function renderDebugPopout(): Promise<void> {
     // 主题 / 动画 / 圆角才能跟主窗一致（偏好权威在 app-settings.json，不指望 localStorage 跨窗共享）
     const [preferences, store, surface, service, app] = await Promise.all([
         import('./hooks/preferences/useAppUiPreferencesBootstrap'),
-        import('./hooks/preferences/preferencesStore'),
+        import('./core/domain/settings/preferencesStore'),
         import('./core/design/surfaceCanvas'),
         import('./core/services/debug-window.service'),
         import('./app/DebugPopoutApp'),

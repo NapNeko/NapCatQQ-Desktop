@@ -72,7 +72,7 @@ export const RequestTabs = memo(function RequestTabs({
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End')
             return;
         const idx = tabs.findIndex((t) => t.id === activeId);
-        let next = idx;
+        let next: number;
         if (e.key === 'ArrowLeft') next = Math.max(0, idx - 1);
         else if (e.key === 'ArrowRight') next = Math.min(tabs.length - 1, idx + 1);
         else if (e.key === 'Home') next = 0;

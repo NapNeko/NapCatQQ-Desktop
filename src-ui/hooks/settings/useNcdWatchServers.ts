@@ -3,7 +3,7 @@
 
 import { useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import { botService } from '../../core/services/bot.service';
 import { componentService } from '../../core/services/component.service';
 import { serverService } from '../../core/services/server.service';

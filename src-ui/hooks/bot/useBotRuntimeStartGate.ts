@@ -16,7 +16,7 @@ import { useDockerHosts } from '../docker/useDockerHosts';
 import { dockerHostIdForConfig } from '../../core/domain/bot/docker-start-gate';
 import { useQuery } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 
 export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | undefined | null>): {

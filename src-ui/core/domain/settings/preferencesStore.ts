@@ -12,45 +12,32 @@
 //   motionSpeed     0.5 ~ 1.5（内部值）。0.5 = 体感 1× 基准，越大越快
 //   radiusStyle     square / standard / round。全局圆角风格（统一系数缩放）
 
-import { useSyncExternalStore } from 'react';
 import {
     MOTION_SPEED_DEFAULT,
     MOTION_SPEED_MAX,
     MOTION_SPEED_MIN,
     type MotionLevel,
-} from '../../core/design/motion';
+} from '../../design/motion';
 import {
     RADIUS_STYLE_DEFAULT,
     type RadiusStyle,
     normalizeRadiusStyle,
     applyRadiusStyle,
-} from '../../core/design/radius';
-import { syncRootChromeBackground } from '../../core/design/surfaceCanvas';
+} from '../../design/radius';
+import { syncRootChromeBackground } from '../../design/surfaceCanvas';
 import {
     isFlatTheme,
     normalizeTheme,
     themeScheme,
     type ThemeMode,
-} from '../../core/design/themes/registry';
-import { PALETTE_THEMES } from '../../core/design/themes/palettes';
-import { installPaletteThemeStyles } from '../../core/design/themes/paletteCss';
+} from '../../design/themes/registry';
+import { PALETTE_THEMES } from '../../design/themes/palettes';
+import { installPaletteThemeStyles } from '../../design/themes/paletteCss';
+import { type AppPreferences, type CloseAction, normalizeCloseAction } from './appPreferences';
 
-export type { ThemeMode } from '../../core/design/themes/registry';
-export type CloseAction = 'close' | 'tray';
-
-export function normalizeCloseAction(raw: unknown): CloseAction {
-    return raw === 'tray' ? 'tray' : 'close';
-}
-
-export interface AppPreferences {
-    theme: ThemeMode;
-    showMascot: boolean;
-    closeAction: CloseAction;
-    motionEnabled: boolean;
-    motionLevel: MotionLevel;
-    motionSpeed: number;
-    radiusStyle: RadiusStyle;
-}
+export type { ThemeMode } from '../../design/themes/registry';
+export type { AppPreferences, CloseAction } from './appPreferences';
+export { normalizeCloseAction } from './appPreferences';
 
 const STORAGE_KEY = 'ncd:preferences:v1';
 
@@ -200,12 +187,3 @@ export const preferencesStore = {
         };
     },
 };
-
-/// React 视图。组件 mount 时同步 store 当前快照，store 变化时重新渲染。
-export function usePreferences(): AppPreferences {
-    return useSyncExternalStore(
-        (l) => preferencesStore.subscribe(l),
-        () => preferencesStore.get(),
-        () => state,
-    );
-}

@@ -2,7 +2,7 @@
 // 再决定弹「退出程序？」还是「无法退出」。
 
 import { useCallback, useEffect, useState } from 'react';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import { windowEventService } from '../../core/services/desktop.service';
 import { prepareExitDesktop, requestExitApp } from '../../core/services/exit.service';
 import type { PrepareExitDesktopResponse } from '../../core/ipc/types';

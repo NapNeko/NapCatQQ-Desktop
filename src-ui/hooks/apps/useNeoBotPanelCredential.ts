@@ -8,8 +8,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 // TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉这条 hooks→modules 跨层
-import { parseNeoBotAuthStatus } from '../../modules/apps/detail/neobot/neobotPanels';
-import { meetsNeoBotVersion } from '../../modules/apps/detail/neobot/neobotCapabilities';
+import { parseNeoBotAuthStatus } from '../../core/domain/apps/neobotPanels';
+import { meetsNeoBotVersion } from '../../core/domain/apps/neobotCapabilities';
 import { usePanelJson } from './useNeoBotPanel';
 import type { AppInstance } from '../../core/ipc/types';
 

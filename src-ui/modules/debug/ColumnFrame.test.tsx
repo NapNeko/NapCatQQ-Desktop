@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { useRef } from 'react';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { useSlideAfterShift } from './ColumnFrame';
 
 // jsdom 的量不出来真实布局，这里按「内容节点」和「section」分开给：section 的位置故意给得

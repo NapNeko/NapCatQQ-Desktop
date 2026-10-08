@@ -3,7 +3,7 @@
 // 模型库是「本机引用名 → 供应商 + 真实模型名」的映射；分配是「角色 → 引用名」。
 // 只读展示：改模型要在面板里改（模型编辑要拉供应商模型列表、试连通，桌面端不重复做）。
 
-import { parseNeoBotModels } from './neobotPanels';
+import { parseNeoBotModels } from '../../../../core/domain/apps/neobotPanels';
 import { PanelStateView } from './PanelStateView';
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 

@@ -20,7 +20,7 @@
 
 import { createStore } from '../utils/createStore';
 import type { InfoBarStackItem } from '../../shared/ui';
-import type { InfoBarTone } from '../../shared/ui/InfoBar';
+import type { InfoBarTone } from '../../core/domain/ui/infoBarTone';
 import { resolveInfoBarAutoDismissMs } from '../../core/domain/ui/infoBarDismiss';
 import { infoBarDismissPrefsStore } from '../preferences/infoBarDismissPrefsStore';
 

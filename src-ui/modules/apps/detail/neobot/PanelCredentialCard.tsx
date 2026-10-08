@@ -15,7 +15,7 @@ import {
     type VerifyOutcome,
 } from '../../../../hooks/apps/useNeoBotPanelCredential';
 import type { AppInstance } from '../../../../core/ipc/types';
-import { versionRequirementText } from './neobotCapabilities';
+import { versionRequirementText } from '../../../../core/domain/apps/neobotCapabilities';
 
 export const PanelCredentialCard: React.FC<{
     instance: AppInstance;

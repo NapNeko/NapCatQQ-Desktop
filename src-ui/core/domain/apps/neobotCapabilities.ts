@@ -6,7 +6,7 @@
 //
 // 版本号取的是 NeoBot 的对外版本（pyproject / 面板 version 字段）。
 
-import { compareAppVersion } from '../../../../core/domain/apps/appVersions';
+import { compareAppVersion } from './appVersions';
 
 export const NEOBOT_MIN_VERSION = {
     /**

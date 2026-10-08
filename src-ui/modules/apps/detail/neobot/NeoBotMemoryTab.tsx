@@ -3,7 +3,7 @@
 // NeoBot 的记忆是分表存的；面板给出每表的条目数与超限条目数。
 // 摘要（AI 压缩）是长任务，桌面端这里先只展示，不触发。
 
-import { parseNeoBotArchives } from './neobotPanels';
+import { parseNeoBotArchives } from '../../../../core/domain/apps/neobotPanels';
 import { PanelStateView } from './PanelStateView';
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 

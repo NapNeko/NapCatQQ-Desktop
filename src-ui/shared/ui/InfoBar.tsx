@@ -51,7 +51,8 @@ function defaultIconFor(tone: 'info' | 'success' | 'warning' | 'danger') {
     }
 }
 
-export type InfoBarTone = 'info' | 'success' | 'warning' | 'danger';
+export type { InfoBarTone } from '../../core/domain/ui/infoBarTone';
+import type { InfoBarTone } from '../../core/domain/ui/infoBarTone';
 
 export interface InfoBarProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'content'> {
     tone?: InfoBarTone;

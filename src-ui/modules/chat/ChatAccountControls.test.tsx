@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { chatDesktopService } from '../../core/services/chat-desktop.service';
 import type { ChatAccountPreference } from '../../core/ipc/generated/chat/ChatAccountPreference';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';

@@ -21,7 +21,7 @@ import {
     type AppPreferences,
     type ThemeMode,
     normalizeCloseAction,
-} from '../../hooks/preferences/preferencesStore';
+} from '../../core/domain/settings/preferencesStore';
 import { infoBarDismissPrefsStore } from '../../hooks/preferences/infoBarDismissPrefsStore';
 import { featureTogglesStore } from '../../hooks/preferences/featureTogglesStore';
 import {

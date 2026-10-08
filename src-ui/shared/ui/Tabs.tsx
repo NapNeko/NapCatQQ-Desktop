@@ -39,7 +39,7 @@ const TabsCtx = createContext<TabsCtxValue>({
     listRef: { current: null },
 });
 
-interface TabsProps extends React.ComponentPropsWithoutRef<typeof RadixTabs.Root> {}
+type TabsProps = React.ComponentPropsWithoutRef<typeof RadixTabs.Root>;
 
 export const Tabs = forwardRef<React.ElementRef<typeof RadixTabs.Root>, TabsProps>(
     ({ value, defaultValue, onValueChange, children, ...props }, ref) => {

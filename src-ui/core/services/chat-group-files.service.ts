@@ -129,7 +129,7 @@ export const chatGroupFilesService = {
                 onProgress,
             );
         } catch (error) {
-            throw new Error(errorText(error));
+            throw new Error(errorText(error), { cause: error });
         }
         const problem = callProblem(response);
         if (problem) throw new Error(problem);

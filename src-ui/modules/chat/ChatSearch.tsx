@@ -429,7 +429,7 @@ export function ChatSearch({
                                     setLimit(RESULTS_PER_PAGE);
                                     event.currentTarget.parentElement
                                         ?.querySelectorAll<HTMLButtonElement>('[role=tab]')
-                                        [next]?.focus();
+                                        ?.[next]?.focus();
                                 }}
                             >
                                 {label}
@@ -554,7 +554,7 @@ export function ChatSearch({
                                         changeScope(next === 0 ? 'conversation' : 'account');
                                         event.currentTarget.parentElement
                                             ?.querySelectorAll<HTMLButtonElement>('[role=tab]')
-                                            [next]?.focus();
+                                            ?.[next]?.focus();
                                     }}
                                 >
                                     {value === 'conversation' ? '当前会话' : '本账号'}

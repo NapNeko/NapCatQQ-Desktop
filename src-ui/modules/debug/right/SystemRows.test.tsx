@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../shared/ui';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import type { RequestItem } from '../../../core/domain/debug/requestHandling';
 import { _resetDangerSkipsForTests } from '../DangerConfirmDialog';
 import { ChatViewContext, type ChatViewApi } from '../../../shared/chat/chatContext';

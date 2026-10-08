@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../shared/ui';
 import type { ChatItem } from '../../../core/domain/debug/chat';
 import type { MessageItem } from '../../../core/domain/debug/chatFormat';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { EventDetailPopover, type DetailTarget } from './EventDetailPopover';
 

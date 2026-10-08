@@ -3,7 +3,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { ListItem } from './ListItem';
 import { animateListChildrenEnter } from './listEnter';

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Card, Badge } from '../../shared/ui';
 import { Counter, MotionIcon } from '../../shared/ui/motion';
-import { usePreferences } from '../../hooks/preferences/preferencesStore';
+import { usePreferences } from '../../hooks/preferences/usePreferences';
 import { useMotion, type MotionEnv } from '../../hooks/preferences/useMotion';
 import { animateListChildrenEnterAfterPaint } from '../../shared/ui/motion/listEnter';
 import napcatPng from '../../assets/napcat-symbol-48.png?inline';

@@ -5,10 +5,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 // TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉 hooks→modules 跨层
-import {
-    parseNeoBotPlugins,
-    type NeoBotPlugins,
-} from '../../modules/apps/detail/neobot/neobotPanels';
+import { parseNeoBotPlugins, type NeoBotPlugins } from '../../core/domain/apps/neobotPanels';
 import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
 
 export function useNeoBotPlugins(instanceId: string) {

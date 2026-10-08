@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { Button, TextField } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import type { NeoBotPlugin } from './neobotPanels';
+import type { NeoBotPlugin } from '../../../../core/domain/apps/neobotPanels';
 import { PanelStateView } from './PanelStateView';
 import { useNeoBotPlugins } from '../../../../hooks/apps/useNeoBotPlugins';
 

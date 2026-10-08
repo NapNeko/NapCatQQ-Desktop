@@ -7,7 +7,7 @@ import {
     type DesktopAgreementsPayload,
 } from '../../core/services/desktop-consent.service';
 import { requestExitApp } from '../../core/services/exit.service';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
 

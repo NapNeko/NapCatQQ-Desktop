@@ -6,11 +6,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 // TODO: 能力表/解析器待下沉 core/domain/apps/neobot/，届时消掉 hooks→modules 跨层
-import { meetsNeoBotVersion } from '../../modules/apps/detail/neobot/neobotCapabilities';
+import { meetsNeoBotVersion } from '../../core/domain/apps/neobotCapabilities';
 import {
     parseNeoBotDeployStatus,
     type NeoBotDeployStatus,
-} from '../../modules/apps/detail/neobot/neobotDeploy';
+} from '../../core/domain/apps/neobotDeploy';
 import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
 import type { AppInstance } from '../../core/ipc/types';
 

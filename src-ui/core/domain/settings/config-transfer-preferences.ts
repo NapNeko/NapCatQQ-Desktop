@@ -178,6 +178,7 @@ export function restoreFrontendPreferences(
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
             `界面偏好恢复失败：${message}${rollbackErrors.length ? `；部分原偏好未能恢复：${rollbackErrors.join('；')}` : ''}`,
+            { cause: error },
         );
     }
     if (storage === window.localStorage) {

@@ -10,7 +10,7 @@ import {
     PERFORMANCE_MONITOR_HISTORY_SIZE,
 } from '../../core/domain/performance/performanceSettings';
 import { systemMetricsService } from '../../core/services/system-metrics.service';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 
 export interface ResourcePoint {
     t: number;

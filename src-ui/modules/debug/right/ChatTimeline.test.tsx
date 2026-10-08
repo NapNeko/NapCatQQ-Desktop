@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { TooltipProvider } from '../../../shared/ui';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { _resetDebugScrollMemoryForTests } from '../../../hooks/debug/debugScrollMemory';
 import type { ChatItem } from '../../../core/domain/debug/chat';
 import { ChatTimeline, type ChatTimelineProps } from './ChatTimeline';

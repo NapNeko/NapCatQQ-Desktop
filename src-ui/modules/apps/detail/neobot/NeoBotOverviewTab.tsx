@@ -4,7 +4,7 @@
 
 import { Button } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { formatUptime } from './neobotPanel';
+import { formatUptime } from '../../../../core/domain/apps/neobotPanel';
 import { PanelStateView } from './PanelStateView';
 import { useNeoBotOverview } from '../../../../hooks/apps/useNeoBotPanel';
 
