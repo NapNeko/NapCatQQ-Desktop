@@ -98,7 +98,7 @@ flowchart TB
 - `pnpm run lint` 过（0 error）：静态跨层 import 已被 `eslint.config.mjs` 的 `no-restricted-imports` 拦截，白名单见第 2 节。动态 `import()` 不受规则约束，改到 modules / shared / app 时补一遍 grep，输出只能是第 2 节「现存偏差」里的旧账：
 
       grep -rnE "import\(['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared src-ui/app
-- `pnpm run typecheck` + `pnpm run test:unit` 通过；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
+- `pnpm run typecheck` + `pnpm run test:unit` 通过；`pnpm run test:coverage` 过地板（core/domain + hooks：lines 60 / funcs 71 / branches 79，只防回退不追高）；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
 
 ## 5. 添加新功能 4 步走
 
