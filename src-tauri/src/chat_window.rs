@@ -11,6 +11,43 @@ use tokio::sync::{Mutex, oneshot};
 use ts_rs::TS;
 
 pub const CHAT_WINDOW_LABEL: &str = "chat-panel";
+
+fn ensure_chat_enabled(app: &AppHandle) -> Result<(), String> {
+    if app.state::<crate::AppState>().chat.is_enabled() {
+        Ok(())
+    } else {
+        Err("聊天功能已关闭".into())
+    }
+}
+
+pub async fn apply_chat_feature(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    app.state::<crate::AppState>()
+        .chat
+        .set_enabled(enabled)
+        .await;
+    if !enabled {
+        for owner in ["main", CHAT_WINDOW_LABEL] {
+            crate::screenshot::cancel(app, owner);
+            crate::screenshot::configure_shortcut(
+                app.clone(),
+                owner.into(),
+                ncd_domain::chat_screenshot::ChatScreenshotShortcut {
+                    enabled: false,
+                    global: false,
+                    control: true,
+                    alt: true,
+                    shift: false,
+                    key: "A".into(),
+                },
+            )
+            .await?;
+        }
+        #[cfg(windows)]
+        crate::chat_tray_panel_native::hide(app);
+        close_chat_window(app.clone(), false).await?;
+    }
+    Ok(())
+}
 #[derive(Default)]
 pub struct ChatWindowCoordinator {
     gate: Mutex<()>,
@@ -165,6 +202,7 @@ async fn open_chat_window_with_navigation(
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
     let state = app.state::<crate::AppState>();
+    ensure_chat_enabled(&app)?;
     if let Some(bot_id) = &bot_id {
         if !state
             .chat
@@ -199,6 +237,7 @@ async fn open_chat_window_with_navigation(
         return Ok(());
     }
     prepare(&app, "main", "popout").await?;
+    ensure_chat_enabled(&app)?;
     *coordinator.navigation.lock().await = navigation;
     if let Some(bot_id) = bot_id {
         state.chat.select_view_bot(bot_id);
@@ -261,6 +300,7 @@ pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, Strin
 pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
+    ensure_chat_enabled(&app)?;
     let window = app
         .get_webview_window(CHAT_WINDOW_LABEL)
         .ok_or("聊天窗口不存在")?;
@@ -302,6 +342,9 @@ async fn release_requested_main(app: &AppHandle) -> Result<(), String> {
 pub async fn focus_chat_window(app: AppHandle) -> bool {
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
+    if ensure_chat_enabled(&app).is_err() {
+        return false;
+    }
     let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else {
         return false;
     };
@@ -315,19 +358,28 @@ pub async fn focus_chat_window(app: AppHandle) -> bool {
 }
 #[tauri::command]
 pub async fn chat_window_state(app: AppHandle) -> ChatWindowState {
+    let enabled = app.state::<crate::AppState>().chat.is_enabled();
     ChatWindowState {
         v: 1,
         detached: app.get_webview_window(CHAT_WINDOW_LABEL).is_some(),
         embed_requested: app
             .state::<ChatWindowCoordinator>()
             .embed_requested
-            .swap(false, Ordering::SeqCst),
+            .swap(false, Ordering::SeqCst)
+            && enabled,
     }
 }
 #[tauri::command]
 pub async fn close_chat_window(app: AppHandle, embed: bool) -> Result<(), String> {
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
+    let enabled = app.state::<crate::AppState>().chat.is_enabled();
+    let embed = embed && enabled;
+    if !enabled {
+        coordinator.embed_requested.store(false, Ordering::SeqCst);
+        coordinator.release_main.store(false, Ordering::SeqCst);
+        coordinator.navigation.lock().await.take();
+    }
     let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else {
         return Ok(());
     };
@@ -341,11 +393,14 @@ pub async fn close_chat_window(app: AppHandle, embed: bool) -> Result<(), String
     )
     .await
     {
-        if was_visible {
-            let _ = crate::webview_scheduler::show_window(&window).await;
-            let _ = window.set_focus();
+        if enabled {
+            if was_visible {
+                let _ = crate::webview_scheduler::show_window(&window).await;
+                let _ = window.set_focus();
+            }
+            return Err(error);
         }
-        return Err(error);
+        tracing::warn!(%error, "chat disable handoff");
     }
     // Destroyed 按页面创建时间异步回收租约，不必让连接清理延迟 WebView 销毁。
     if let Err(error) = window.destroy() {

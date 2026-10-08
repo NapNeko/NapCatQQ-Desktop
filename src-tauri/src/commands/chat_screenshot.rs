@@ -20,6 +20,9 @@ pub async fn chat_screenshot_capture(
 ) -> Result<Option<ChatScreenshotAttachment>, String> {
     ensure_chat_window(&window)?;
     state.migrate_gate.ensure_idle()?;
+    if !state.chat.is_enabled() {
+        return Err("聊天功能已关闭".into());
+    }
     crate::screenshot::capture_chat(
         window.app_handle().clone(),
         window,

@@ -619,6 +619,9 @@ pub async fn import_config(
         .app_manager
         .framework_configs_restored(&framework_restore.restored_ids);
 
+    let chat_enabled = state.app_settings.read().await.features.chat;
+    crate::chat_window::apply_chat_feature(&app, chat_enabled).await?;
+
     if let Err(error) = app.emit("config-imported", &files) {
         tracing::warn!(%error, "failed to notify windows after configuration import");
     }

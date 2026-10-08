@@ -75,6 +75,10 @@ pub async fn capture_chat(
         let owner = window.label().to_string();
         let coordinator = app.state::<ScreenshotCoordinator>();
         let cancel = coordinator.acquire(&owner)?;
+        if !app.state::<crate::AppState>().chat.is_enabled() {
+            coordinator.release(&owner);
+            return Err("聊天功能已关闭".into());
+        }
         let hidden = request.hide_window && window.is_visible().unwrap_or(false);
         let mut completed = false;
         let result=async {
@@ -189,7 +193,13 @@ pub async fn configure_shortcut(
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let handle = app.clone();
         app.run_on_main_thread(move || {
-            let _ = sender.send(shortcut::configure(handle, owner, request));
+            let result = if request.enabled && !handle.state::<crate::AppState>().chat.is_enabled()
+            {
+                Err("聊天功能已关闭".into())
+            } else {
+                shortcut::configure(handle, owner, request)
+            };
+            let _ = sender.send(result);
         })
         .map_err(|e| e.to_string())?;
         receiver.await.map_err(|e| e.to_string())?

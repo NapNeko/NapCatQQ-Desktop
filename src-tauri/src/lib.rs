@@ -384,6 +384,7 @@ pub fn run() {
     ));
     // 功能开关按落盘值起停（M7）：关着就不该有接收器起来；设置保存时 set_app_settings 按新值热生效
     tauri::async_runtime::block_on(onebot_debug.set_enabled(app_settings.features.api_debug));
+    tauri::async_runtime::block_on(chat.set_enabled(app_settings.features.chat));
     // 调试台的 MCP 服务也一样：默认关，按 `mcp.enabled` 起；随机端口首次回填进设置
     let mcp = Arc::new(ncd_mcp::McpServer::new(
         Arc::clone(&onebot_debug),
