@@ -4,22 +4,8 @@ import { id, record, text, type Contact } from '../domain/chat/model';
 import { callProblem } from '../domain/debug/errorCopy';
 import { chatService } from './chat.service';
 
-export interface ProfileField {
-    label: string;
-    value: string;
-}
-export interface ChatProfile {
-    name: string;
-    fields: ProfileField[];
-}
-export interface ProfileMember extends Contact {
-    nickname: string;
-    role: string;
-    title: string;
-    joined?: string;
-    lastSent?: string;
-    mutedUntil?: number;
-}
+export type { ProfileField, ChatProfile, ProfileMember } from '../domain/chat/profile';
+import type { ChatProfile, ProfileField, ProfileMember } from '../domain/chat/profile';
 function peer(target: DebugTarget, value: string): string | number {
     if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)))
         throw new Error('无效的 QQ 号或群号');

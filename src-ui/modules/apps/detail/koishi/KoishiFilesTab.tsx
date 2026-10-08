@@ -27,8 +27,11 @@ import {
 } from '../../../../shared/ui';
 import type { SyntaxMode } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { koishiService } from '../../../../core/services/koishi.service';
-import { useKoishiExplorerTree, useKoishiFileOps } from '../../../../hooks/apps/useKoishiConsole';
+import {
+    useKoishiExplorerTree,
+    useKoishiFileOps,
+    useKoishiFileRead,
+} from '../../../../hooks/apps/useKoishiConsole';
 import { PaneLoading } from '../PaneStatus';
 import type { AppInstance, KoishiFileEntry } from '../../../../core/ipc/types';
 
@@ -360,6 +363,7 @@ function FileView({
     running: boolean;
     ops: ReturnType<typeof useKoishiFileOps>;
 }) {
+    const read = useKoishiFileRead(instance.id, path);
     const [state, setState] = useState<
         | { phase: 'loading' }
         | { phase: 'error'; message: string }
@@ -370,44 +374,40 @@ function FileView({
     const [draft, setDraft] = useState('');
     const dirty = state.phase === 'text' && draft !== state.original;
 
+    // 查询结果只在落地那一刻同步进本地相位：保存后不触发回读，草稿里未保存的编辑不会被覆盖
     useEffect(() => {
-        let dead = false;
-        setState({ phase: 'loading' });
-        koishiService
-            .explorerRead(instance.id, path)
-            .then((f) => {
-                if (dead) return;
-                if (isImage(f.mime)) {
-                    setState({
-                        phase: 'image',
-                        dataUrl: `data:${f.mime};base64,${f.base64}`,
-                        mime: f.mime!,
-                    });
-                    return;
-                }
-                if (f.mime && !f.mime.startsWith('text/') && f.mime !== 'application/json') {
-                    setState({
-                        phase: 'binary',
-                        mime: f.mime,
-                        size: Math.round((f.base64.length * 3) / 4),
-                    });
-                    return;
-                }
-                const text = decodeFile(f.base64, f.encoding);
-                setDraft(text);
-                setState({ phase: 'text', original: text });
-            })
-            .catch((e: unknown) => {
-                if (!dead)
-                    setState({
-                        phase: 'error',
-                        message: e instanceof Error ? e.message : String(e),
-                    });
+        if (read.isPending) {
+            setState({ phase: 'loading' });
+            return;
+        }
+        if (read.error) {
+            setState({
+                phase: 'error',
+                message: read.error instanceof Error ? read.error.message : String(read.error),
             });
-        return () => {
-            dead = true;
-        };
-    }, [instance.id, path]);
+            return;
+        }
+        const f = read.data!;
+        if (isImage(f.mime)) {
+            setState({
+                phase: 'image',
+                dataUrl: `data:${f.mime};base64,${f.base64}`,
+                mime: f.mime!,
+            });
+            return;
+        }
+        if (f.mime && !f.mime.startsWith('text/') && f.mime !== 'application/json') {
+            setState({
+                phase: 'binary',
+                mime: f.mime,
+                size: Math.round((f.base64.length * 3) / 4),
+            });
+            return;
+        }
+        const text = decodeFile(f.base64, f.encoding);
+        setDraft(text);
+        setState({ phase: 'text', original: text });
+    }, [read.isPending, read.error, read.data]);
 
     const name = path.split('/').pop() ?? path;
     return (

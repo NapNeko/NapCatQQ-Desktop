@@ -2,7 +2,8 @@
 // webview 里的 HTML5 drop 拿不到（窗口开着 dragDropEnabled）。浏览器预览里什么都不做。
 
 import { useEffect, useRef, useState } from 'react';
-import { isTauri, onFileDragDrop, type FileDragDropEvent } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
+import { onFileDragDrop, type FileDragDropEvent } from '../../core/ipc/transport';
 
 export type { FileDragDropEvent };
 
@@ -27,7 +28,6 @@ export function useFileDragDrop(
                 else unlisten = fn;
             })
             .catch((err) => {
-                // eslint-disable-next-line no-console
                 console.warn('[useFileDragDrop] onDragDropEvent failed:', err);
             });
         return () => {

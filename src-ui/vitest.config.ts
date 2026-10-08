@@ -18,6 +18,17 @@ export default defineConfig({
         passWithNoTests: false,
         restoreMocks: true,
         clearMocks: true,
+        // 24 核机器默认按核数铺满 jsdom 环境会互相挤：waitFor 类断言成片超时（100+ 假红，
+        // 单文件跑全绿）。8 线程实测全绿且更快。机器再快也别按核数放满。
+        poolOptions: { threads: { maxThreads: 8, minThreads: 1 } },
+        coverage: {
+            provider: 'v8',
+            // 测试地板只盯纯逻辑与 hooks 层；组件页由 vitest 行为测试 + 冒烟兜底
+            include: ['core/domain/**', 'hooks/**'],
+            // 2026-10 实测 lines 65.5 / funcs 76.6 / branches 84.3，地板取实测 -5pp 防回退
+            thresholds: { lines: 60, functions: 71, branches: 79 },
+            reporter: ['text-summary', 'html'],
+        },
     },
     resolve: {
         alias: [

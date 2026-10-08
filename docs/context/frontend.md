@@ -48,19 +48,22 @@ flowchart TB
 
 `core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `debug/`（调试台的目录整理与命令面板排序、事件流 reduce 与聊天文案、参数表单与校验、收藏整理、历史重放、安全分级 / 错误 / 通道文案、三栏宽度规则）/ `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
 
-`hooks/**`：唯一允许调 `core/services/*` 的层（除 transport 自己用）。组合 `useQuery` / `useMutation` + `subscribeDomainEvents`（订阅）+ domain reducer + 模块级 store。不允许 `import '@tauri-apps/*'`，也不反过来 import `modules/**`。
+`hooks/**`：唯一允许调 `core/services/*` 的层（除 transport 自己用）。组合 `useQuery` / `useMutation` + `subscribeDomainEvents`（订阅）+ domain reducer + 模块级 store。不允许 `import '@tauri-apps/*'`，也不反过来 import `modules/**`。环境探测 `isTauri` 在 `core/domain/runtime/env.ts`（零依赖，transport re-export 它），别从 transport 引。
 
 `modules/*` 和 `shared/*`：严禁 import `core/ipc/*`（除 `types` 与 `generated/**`）、`core/services/*`（`import type` 也算）、`@tauri-apps/*`。只允许 import `hooks/*`、`core/domain/*`、`core/ipc/types`、`core/ipc/generated/**`、`shared/*`、Tailwind / Radix / lucide / GSAP、自身 CSS。这层是"可推倒"层。
 
 `app/*`：路由壳、Provider、启动门、退出闸门，照 modules 的规矩来。
 
-### 现存偏差（改到附近时顺手收掉，别照抄）
+### 现存偏差（ESLint 白名单登记，改到附近时顺手收掉，别照抄）
 
-- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`、`settings/DataRootMigrateDialog.tsx`、`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（这几处调用多、夹着各自的状态流，得单独拆 hook）；`settings/settings-draft.ts`、`settings/tabs/WindowTab.tsx` 只引 `settings.service` 的类型和 `clientPrefsFromBackend`，没有对应的生成类型，见上面手写载荷那条。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
-- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。
-- `app/AppNext.tsx` 直接用 `desktopUpdateService`。
-- `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
-- 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`（两处）、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`。
+分层禁令在 `eslint.config.mjs` 是机器门禁：modules/shared/app、hooks、core/domain、core/services 各一块 `no-restricted-imports: error`，新违规直接红。白名单文件按文件降 warn（可见不拦截），收掉一个删一个 override，`pnpm run lint` 即清单本身。
+
+- modules 直连 services（override warn）：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`（botService/componentService/snowlumaAppService 调用多、夹着各自的状态流，得单独拆 hook）；`settings/DataRootMigrateDialog.tsx`、`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（同上）；`settings/settings-draft.ts`、`settings/tabs/WindowTab.tsx` 只引 `settings.service` 的类型和 `clientPrefsFromBackend`，没有对应的生成类型，见上面手写载荷那条。chat/apps/debug/shared/app 闭包已清零，保持住。
+- hooks 引 transport 的 shell 薄封装（override warn）：`useAppInstances`、`useOpenExternal`、`usePickDirectory`、`useOpenSnowlumaNovnc`、`useOpenWebui`、`ui/useTauriFileDrop`——外链打开、目录选择、原生拖放没有 services 等价物，直连 transport 的三个纯 shell 函数；`isTauri` 已下沉 `core/domain/runtime/env.ts` 不再是理由。
+- `hooks/preferences/useBackendSettings.ts` ↔ `modules/settings/settings-draft` 双向纠缠（override warn）：settings 草稿体系重构前维持，重构时一起拆。
+- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。动态 import 不受 `no-restricted-imports` 约束，靠 review 盯着。
+- 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`（shared 引 modules 是反向依赖，预览图暂时豁免）。
+- 测试 / `*.mock.ts` 全局豁免 `no-restricted-imports`（vi.mock 就是要 import services/hooks 本体），不算偏差。
 
 ## 3. 落点约定（放哪儿、只留几份）
 
@@ -92,12 +95,10 @@ flowchart TB
 
 - 新增 Tauri command 名只出现在某个 `core/services/*.service.ts`，不泄漏到 hooks 或 modules
 - 新增事件：Rust 侧 payload 带 `v` 信封并导出 ts-rs 类型，`DomainEvent`（`core/ipc/types.ts`）接上，事件名加到 `event-stream.service.ts` 的 `DOMAIN_EVENT_NAMES`，聚合 reducer 写在 `core/domain/events/`，最后写 hook（订阅走 `subscribeDomainEvents`）
-- modules / shared / app 文件 grep，静态 import 和动态 `import()` 各查一遍，输出只能是第 2 节「现存偏差」里的旧账，不能多：
+- `pnpm run lint` 过（0 error）：静态跨层 import 已被 `eslint.config.mjs` 的 `no-restricted-imports` 拦截，白名单见第 2 节。动态 `import()` 不受规则约束，改到 modules / shared / app 时补一遍 grep，输出只能是第 2 节「现存偏差」里的旧账：
 
-      grep -rnE "from ['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared src-ui/app
       grep -rnE "import\(['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared src-ui/app
-
-- `pnpm run typecheck` + `pnpm run test:unit` 通过；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
+- `pnpm run typecheck` + `pnpm run test:unit` 通过；`pnpm run test:coverage` 过地板（core/domain + hooks：lines 60 / funcs 71 / branches 79，只防回退不追高）；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
 
 ## 5. 添加新功能 4 步走
 

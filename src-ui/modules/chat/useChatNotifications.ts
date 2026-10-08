@@ -1,18 +1,13 @@
 // 本地忽略持久化到后台，隐藏会话与手动免打扰分别保存。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { chatDesktopService } from '../../core/services/chat-desktop.service';
 import { errorText } from '../../core/domain/errors';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
+import { useChatDesktop, useChatDesktopStatus } from '../../hooks/chat/useChatDesktop';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 
 export function useChatNotifications(target: DebugTarget, localHidden: string[]) {
-    const client = useQueryClient();
-    const status = useQuery({
-        queryKey: ['chat', 'desktop'],
-        queryFn: chatDesktopService.status,
-        refetchInterval: 5000,
-    });
+    const { ignoreGroup, mergeHiddenGroups } = useChatDesktop();
+    const status = useChatDesktopStatus({ refetchInterval: 5000 });
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const synced = useRef(false);
@@ -41,14 +36,7 @@ export function useChatNotifications(target: DebugTarget, localHidden: string[])
         setBusy(true);
         setError('');
         try {
-            await chatDesktopService.ignoreGroup(
-                target.bot_id,
-                String(target.qq_id),
-                id,
-                value,
-                hide,
-            );
-            await client.invalidateQueries({ queryKey: ['chat', 'desktop'] });
+            await ignoreGroup(target.bot_id, String(target.qq_id), id, value, hide);
         } catch (reason) {
             setError(errorText(reason));
         } finally {
@@ -62,11 +50,10 @@ export function useChatNotifications(target: DebugTarget, localHidden: string[])
             .filter((key) => key.startsWith('group:') && !hidden.has(key))
             .map((key) => key.slice(6));
         if (missing.length)
-            void chatDesktopService
-                .mergeHiddenGroups(target.bot_id, String(target.qq_id), missing)
-                .then(() => client.invalidateQueries({ queryKey: ['chat', 'desktop'] }))
-                .catch((reason) => setError(errorText(reason)));
-    }, [account, localHidden, hidden, client, target.bot_id, target.qq_id]);
+            void mergeHiddenGroups(target.bot_id, String(target.qq_id), missing).catch((reason) =>
+                setError(errorText(reason)),
+            );
+    }, [account, localHidden, hidden, mergeHiddenGroups, target.bot_id, target.qq_id]);
     return {
         ignored,
         hidden,

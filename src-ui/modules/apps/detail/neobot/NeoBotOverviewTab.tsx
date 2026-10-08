@@ -4,9 +4,9 @@
 
 import { Button } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { formatUptime } from './neobotPanel';
+import { formatUptime } from '../../../../core/domain/apps/neobotPanel';
 import { PanelStateView } from './PanelStateView';
-import { useNeoBotOverview } from './useNeoBotPanel';
+import { useNeoBotOverview } from '../../../../hooks/apps/useNeoBotPanel';
 
 const Stat: React.FC<{ label: string; value: string; tone?: 'default' | 'warn' }> = ({
     label,

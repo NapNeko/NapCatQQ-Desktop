@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { Dialog, DialogContent, DialogTitle } from '../../shared/ui';
 import {
     matchDebugShortcut,

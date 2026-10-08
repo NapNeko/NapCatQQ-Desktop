@@ -14,6 +14,7 @@ import type {
     AppConfigWriteResult,
     AppInstanceConfig,
     AppInstanceConfigEnvelope,
+    AppLinkBotDocument,
     AppPluginConfigSchema,
 } from '../../core/ipc/types';
 
@@ -148,4 +149,13 @@ export function useAppConfigText(instanceId: string | null, docId: string | null
         write: writeMutation.mutateAsync,
         isWriting: writeMutation.isPending,
     };
+}
+
+// Bot 侧（对接时桌面端写进协议 Bot 的连接配置）的只读文档列表，「原始文件」页单独一段展示。
+export function useAppLinkBotDocs(instanceId: string) {
+    return useQuery<AppLinkBotDocument[], Error>({
+        queryKey: ['appLinkBotDocs', instanceId] as const,
+        queryFn: () => appFrameworkService.linkBotDocuments(instanceId),
+        retry: false,
+    });
 }

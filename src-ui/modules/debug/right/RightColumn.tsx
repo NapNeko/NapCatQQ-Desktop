@@ -49,7 +49,7 @@ import { targetDisplayName } from '../../../core/domain/debug/targetGroups';
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugChatView } from '../../../core/ipc/generated/debug/DebugChatView';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
-import { ChatViewContext, type ChatViewApi } from './chatContext';
+import { ChatViewContext, type ChatViewApi } from '../../../shared/chat/chatContext';
 import {
     idsOfItem,
     parseSessionKey,
@@ -67,7 +67,7 @@ import { EventDetailPopover, type DetailTarget } from './EventDetailPopover';
 import { EventListView } from './EventListView';
 import { PausedPill } from './NewMessagesPill';
 import { SessionStrip } from './SessionStrip';
-import { createChatMediaService } from '../../../core/services/chat-media.service';
+import { createChatMediaService } from '../../../hooks/chat/useChatMedia';
 
 export interface RightColumnProps {
     /** 当前选中的 Bot；没在运行时输入框禁用 */

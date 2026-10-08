@@ -436,7 +436,7 @@ export type AstrBotSessionServiceConfig = {
 
 /** 上游缺字段就当 true（和 list-all-with-status 的取值逻辑一致） */
 export function parseSessionServiceConfig(json: string): AstrBotSessionServiceConfig {
-    let raw: unknown = null;
+    let raw: unknown;
     try {
         raw = JSON.parse(json);
     } catch {

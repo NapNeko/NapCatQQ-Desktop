@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Contact, Message } from '../../core/domain/chat/model';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { ChatAvatarMenu } from './ChatAvatarMenu';
@@ -18,6 +20,12 @@ const baseMessage: Message = {
     segments: [{ type: 'text', data: { text: '内容' } }],
     status: 'sent',
 };
+
+// ChatMessageActions 经 useAddFavoriteSticker 走 react-query,测试树需要 Provider。
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const withQuery = (ui: ReactNode) => (
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+);
 
 function setup(message = baseMessage, session: Contact = contact, connected = true) {
     const call = vi.fn(async () => ({
@@ -41,29 +49,31 @@ function setup(message = baseMessage, session: Contact = contact, connected = tr
     const onFocusComposer = vi.fn();
     const onError = vi.fn();
     render(
-        <ChatMessageActions
-            store={store}
-            contact={session}
-            message={message}
-            onFocusComposer={onFocusComposer}
-            onError={onError}
-        >
-            {(controls) => (
-                <article>
-                    <ChatAvatarMenu
-                        store={store}
-                        contact={session}
-                        message={message}
-                        onFocusComposer={onFocusComposer}
-                        onError={onError}
-                    >
-                        <img alt="头像" />
-                    </ChatAvatarMenu>
-                    <p>消息内容</p>
-                    {controls}
-                </article>
-            )}
-        </ChatMessageActions>,
+        withQuery(
+            <ChatMessageActions
+                store={store}
+                contact={session}
+                message={message}
+                onFocusComposer={onFocusComposer}
+                onError={onError}
+            >
+                {(controls) => (
+                    <article>
+                        <ChatAvatarMenu
+                            store={store}
+                            contact={session}
+                            message={message}
+                            onFocusComposer={onFocusComposer}
+                            onError={onError}
+                        >
+                            <img alt="头像" />
+                        </ChatAvatarMenu>
+                        <p>消息内容</p>
+                        {controls}
+                    </article>
+                )}
+            </ChatMessageActions>,
+        ),
     );
     return { store, call, onFocusComposer, onError };
 }

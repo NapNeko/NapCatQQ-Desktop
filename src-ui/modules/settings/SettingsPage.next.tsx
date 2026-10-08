@@ -48,7 +48,6 @@ export function SettingsPageNext() {
             setDraft(draftFromBackendAndPrefs(settings));
         }
         // 仅在后端设置从 IPC 到达或保存回写时同步草稿，不把 prefs 列入依赖以免编辑中被覆盖。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settings]);
 
     const dirty = draft !== null && settings !== null && isSettingsDirty(draft, settings);

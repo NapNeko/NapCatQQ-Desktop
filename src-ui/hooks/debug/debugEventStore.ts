@@ -133,7 +133,6 @@ function patchBot(botId: string, fn: (e: BotEventState) => BotEventState): void 
 function unsubscribeQuietly(subscriptionId: string): void {
     // 退订只是通知后端少数一个观众；失败了后端的空闲超时也会收尾，不值得打扰用户
     onebotDebugService.unsubscribe(subscriptionId).catch((err) => {
-        // eslint-disable-next-line no-console
         console.error('[debug] 退订事件流失败:', errorText(err));
     });
 }

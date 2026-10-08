@@ -89,7 +89,6 @@ export function DesktopLogTab({ emptyKind, entries, fontSize, viewportRef, error
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);
         }
     };
@@ -106,7 +105,6 @@ export function DesktopLogTab({ emptyKind, entries, fontSize, viewportRef, error
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);
         }
     };
@@ -122,7 +120,6 @@ export function DesktopLogTab({ emptyKind, entries, fontSize, viewportRef, error
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);
         }
     };

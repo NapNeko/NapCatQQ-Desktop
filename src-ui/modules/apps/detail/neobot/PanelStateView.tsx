@@ -7,7 +7,7 @@
 
 import type { ReactNode } from 'react';
 import { Button } from '../../../../shared/ui';
-import type { PanelState } from './useNeoBotPanel';
+import type { PanelState } from '../../../../hooks/apps/useNeoBotPanel';
 
 interface BlockedHint {
     title: string;

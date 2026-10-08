@@ -35,7 +35,7 @@ export const HostSwitcher: React.FC<HostSwitcherProps> = ({ machines, activeHost
         );
         if (currentIndex < 0) return;
 
-        let nextIndex: number | null = null;
+        let nextIndex: number | null;
         switch (e.key) {
             case 'ArrowRight':
             case 'ArrowDown':

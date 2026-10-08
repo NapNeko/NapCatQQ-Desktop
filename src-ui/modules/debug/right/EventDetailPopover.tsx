@@ -16,7 +16,7 @@ import {
 } from '../../../core/domain/debug/chatFormat';
 import { messageLinkages, type EventLinkageId } from '../../../core/domain/debug/eventActions';
 import { formatParams } from '../../../core/domain/debug/paramsText';
-import { useCopy } from './rightParts';
+import { useCopy } from '../../../shared/chat/rightParts';
 
 export interface DetailTarget {
     item: ChatItem;

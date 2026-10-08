@@ -9,93 +9,35 @@
 //      用户只会在别的页看到「先填面板密码」，却不知道自己已经填过（实测反馈）。
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, TextField } from '../../../../shared/ui';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
+import {
+    useNeoBotPanelCredential,
+    type VerifyOutcome,
+} from '../../../../hooks/apps/useNeoBotPanelCredential';
 import type { AppInstance } from '../../../../core/ipc/types';
-import { meetsNeoBotVersion, versionRequirementText } from './neobotCapabilities';
-import { parseNeoBotAuthStatus } from './neobotPanels';
-import { usePanelJson } from './useNeoBotPanel';
-
-/** 一次「保存并验证」的结果 */
-type VerifyOutcome =
-    | { state: 'ok'; text: string }
-    | { state: 'bad'; text: string }
-    | { state: 'unknown'; text: string };
+import { versionRequirementText } from '../../../../core/domain/apps/neobotCapabilities';
 
 export const PanelCredentialCard: React.FC<{
     instance: AppInstance;
     onOpenWebUi: () => void;
 }> = ({ instance, onOpenWebUi }) => {
-    const instanceId = instance.id;
-    const queryClient = useQueryClient();
     const [password, setPassword] = useState('');
     const [outcome, setOutcome] = useState<VerifyOutcome | null>(null);
-    const queryKey = ['appPanelPassword', instanceId] as const;
+    const { state, auth, loginSupported, save } = useNeoBotPanelCredential(instance);
 
-    // 登录是 1.2.4a1 起才有的能力；更老的版本连登录接口都没有
-    const loginSupported = meetsNeoBotVersion(instance.installed_version, 'panelLogin');
-
-    const state = useQuery<boolean, Error>({
-        queryKey,
-        queryFn: () => appFrameworkService.panelPasswordSet(instanceId),
-    });
-    // 探面板自己的登录状态；探不到（面板没起来）就退回「填密码」的说法，不挡用户
-    const auth = usePanelJson(
-        instanceId,
-        'authStatus',
-        '/api/auth/status',
-        parseNeoBotAuthStatus,
-        loginSupported,
-    );
-
-    const save = useMutation({
-        mutationFn: async (value: string): Promise<VerifyOutcome> => {
-            // 先存：panelCall 要从密钥库取凭据才能发起登录
-            await appFrameworkService.setPanelPassword(instanceId, value);
-            if (!value.trim()) return { state: 'unknown', text: '已清除保存的面板密码。' };
-            // 立刻用需要登录的接口验一次，把结果说出来
-            const probe = await appFrameworkService.panelCall(instanceId, 'GET', '/api/overview');
-            if (probe === null) {
-                return { state: 'unknown', text: '该框架不支持面板转发，密码已保存。' };
-            }
-            switch (probe.kind) {
-                case 'ok':
-                    return { state: 'ok', text: '登录成功：面板已接受这个密码。' };
-                case 'unauthorized':
-                    return {
-                        state: 'bad',
-                        text: '登录失败：面板不接受这个密码，请核对后重填（面板登录时用的那个）。',
-                    };
-                case 'not_found':
-                    return {
-                        state: 'unknown',
-                        text: '这个 NeoBot 版本没有 /api/overview，验证不了；密码已保存。',
-                    };
-                case 'unreachable':
-                    return {
-                        state: 'unknown',
-                        text: '面板打不通，没法验证：' + (probe.message ?? ''),
-                    };
-                default:
-                    return {
-                        state: 'unknown',
-                        text: '没能验证：' + (probe.message ?? '面板拒绝了这次请求'),
-                    };
-            }
-        },
-        onSuccess: (result) => {
-            setOutcome(result);
-            if (result.state === 'ok') setPassword('');
-            void queryClient.invalidateQueries({ queryKey });
-        },
-        onError: (err) => {
-            setOutcome({
-                state: 'unknown',
-                text: '保存失败：' + (err instanceof Error ? err.message : String(err)),
-            });
-        },
-    });
+    // 三个入口（回车 / 保存 / 清除）共用的结果处理；成功才清空密码框
+    const saveAndReport = (value: string) =>
+        save.mutate(value, {
+            onSuccess: (result) => {
+                setOutcome(result);
+                if (result.state === 'ok') setPassword('');
+            },
+            onError: (err) =>
+                setOutcome({
+                    state: 'unknown',
+                    text: '保存失败：' + (err instanceof Error ? err.message : String(err)),
+                }),
+        });
 
     const remembered = state.data === true;
     const status = auth.data?.kind === 'ok' ? auth.data.data : null;
@@ -176,14 +118,14 @@ export const PanelCredentialCard: React.FC<{
                             disabled={save.isPending}
                             onValueChange={setPassword}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && password.trim()) save.mutate(password);
+                                if (e.key === 'Enter' && password.trim()) saveAndReport(password);
                             }}
                         />
                         <Button
                             variant="primary"
                             size="sm"
                             disabled={save.isPending || !password.trim()}
-                            onClick={() => save.mutate(password)}
+                            onClick={() => saveAndReport(password)}
                         >
                             {save.isPending ? '验证中…' : '保存并验证'}
                         </Button>
@@ -192,7 +134,7 @@ export const PanelCredentialCard: React.FC<{
                                 variant="ghost"
                                 size="sm"
                                 disabled={save.isPending}
-                                onClick={() => save.mutate('')}
+                                onClick={() => saveAndReport('')}
                             >
                                 清除
                             </Button>

@@ -37,7 +37,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '../../../shared/ui';
-import { IconAction } from './rightParts';
+import { IconAction } from '../../../shared/chat/rightParts';
 import { useDebugCall } from '../../../hooks/debug/useDebugCall';
 import { useDebugContacts, type DebugContactOption } from '../../../hooks/debug/useDebugContacts';
 import { debugErrorCopy, retcodeHint } from '../../../core/domain/debug/errorCopy';

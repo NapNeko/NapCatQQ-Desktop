@@ -5,12 +5,11 @@ import './index.css';
 import { TitleBarChrome } from '../shared/components/next/TitleBarChrome';
 import { TooltipProvider } from '../shared/ui/Tooltip';
 import { RouteErrorBoundary } from '../shared/ui/RouteErrorBoundary';
-import { chatDesktopService } from '../core/services/chat-desktop.service';
 import { prepareChatHandoff, getChatSelectedBot } from '../hooks/chat/chatStore';
-import { trayService } from '../core/services/desktop.service';
 import { errorText } from '../core/domain/errors';
 import { InfoBarStack } from '../shared/ui/InfoBarStack';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
+import { useChatPopoutBridge } from '../hooks/desktop/useChatPopoutBridge';
 import { useChatNotice } from '../hooks/chat/useChatNotice';
 
 const ChatPage = lazy(() =>
@@ -21,9 +20,10 @@ export function ChatPopoutApp() {
     const [mounted, setMounted] = useState(true);
     const { bars, dismiss, remove } = useGlobalInfoBars();
     useChatNotice('window:handoff', '聊天窗口切换失败', handoffError);
+    const { onRequest, reply, reveal, showMainWindow } = useChatPopoutBridge();
     useEffect(() => {
         let alive = true;
-        const subscription = chatDesktopService.onRequest((request) => {
+        const subscription = onRequest((request) => {
             if (!alive || request.v !== 1) return;
             if (request.action === 'resume') {
                 setMounted(true);
@@ -35,18 +35,18 @@ export function ChatPopoutApp() {
                 () => flushSync(() => setMounted(false)),
                 request.action === 'embed',
             )
-                .then(() => chatDesktopService.reply(request.requestId, null))
+                .then(() => reply(request.requestId, null))
                 .catch((error) => {
                     const message = errorText(error);
                     setMounted(true);
                     setHandoffError(message);
-                    return chatDesktopService.reply(request.requestId, message).catch(() => {});
+                    return reply(request.requestId, message).catch(() => {});
                 });
         });
         const frame = requestAnimationFrame(() =>
             requestAnimationFrame(() => {
                 if (alive)
-                    void chatDesktopService.reveal().catch((error) => {
+                    void reveal().catch((error) => {
                         if (alive) setHandoffError(errorText(error));
                     });
             }),
@@ -56,7 +56,7 @@ export function ChatPopoutApp() {
             cancelAnimationFrame(frame);
             void subscription.then((unlisten) => unlisten());
         };
-    }, []);
+    }, [onRequest, reply, reveal]);
     return (
         <TooltipProvider>
             <div className="native-chat-popout flex h-screen flex-col overflow-hidden bg-canvas">
@@ -71,9 +71,7 @@ export function ChatPopoutApp() {
                         <Suspense
                             fallback={<div className="native-chat-welcome">正在加载聊天…</div>}
                         >
-                            {mounted && (
-                                <ChatPage onNavigate={() => void trayService.showMainWindow()} />
-                            )}
+                            {mounted && <ChatPage onNavigate={() => void showMainWindow()} />}
                         </Suspense>
                     </RouteErrorBoundary>
                 </main>

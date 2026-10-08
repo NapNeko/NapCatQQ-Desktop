@@ -8,7 +8,7 @@ import {
 import { defaultAppUiPreferencesFromPrefs } from '../../domain/settings/ui-preferences-bridge';
 import { DEFAULT_TASK_QUEUE_CLEANUP } from '../../domain/task-queue/cleanup';
 import { DEFAULT_FEATURES } from '../../domain/settings/features';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 
 export const mockBackendSettings: BackendSettings = {
     botLoginCheckIntervalMs: 5000,

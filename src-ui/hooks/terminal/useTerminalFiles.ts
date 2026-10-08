@@ -1,6 +1,7 @@
 // 终端旁边的文件栏：跟着 shell 报上来的当前目录走；手动点到别的目录就先不跟了，点「跟随」再回来。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { terminalService } from '../../core/services/terminal.service';
 import { errorText } from '../../core/domain/errors';
 import { baseName, joinHostPath } from '../../core/domain/terminal/paths';
@@ -76,54 +77,59 @@ export function useTerminalFiles(
     hostOs: TerminalHostOs,
     cwd: string | null,
 ): TerminalFilesApi {
+    const queryClient = useQueryClient();
     const [path, setPath] = useState<string | null>(cwd);
     const [follow, setFollow] = useState(true);
-    const [listing, setListing] = useState<TerminalDirListing | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
-    const seq = useRef(0);
 
     useEffect(() => {
         if (follow && cwd && cwd !== path) setPath(cwd);
     }, [cwd, follow, path]);
 
-    const load = useCallback(
-        async (target: string) => {
-            const ticket = ++seq.current;
-            setLoading(true);
-            try {
-                const next = await terminalService.listDir(sessionId, target);
-                if (ticket !== seq.current) return;
-                setListing(next);
-                setError(null);
-                if (next.path !== target) setPath(next.path);
-            } catch (err) {
-                if (ticket !== seq.current) return;
-                setError(errorText(err));
-            } finally {
-                if (ticket === seq.current) setLoading(false);
-            }
-        },
-        [sessionId],
-    );
+    const dirQuery = useQuery<TerminalDirListing, Error>({
+        // 空路径是盘列表（此电脑），路径本身进 key；同会话换目录各占一条缓存
+        queryKey: ['terminalDir', sessionId, path ?? ''],
+        queryFn: () => terminalService.listDir(sessionId, path!),
+        enabled: path !== null,
+        staleTime: 0,
+        // 目录列表每次列都得是当下状态；不留缓存，回旧目录也走一次真实拉取（同旧实现的 seq 行为）
+        gcTime: 0,
+        retry: false,
+        // 旧实现不受窗口焦点 / 重连事件影响；Provider 关掉了失焦重拉，重连这条也得按掉
+        refetchOnReconnect: false,
+        // 换目录取数的途中先留着上一个目录的列表压暗显示，不闪空白（旧实现如此）
+        placeholderData: keepPreviousData,
+    });
+
+    // 后端可能把路径规范化（回包路径和请求的不一样）就纠正本地路径。
+    // 占位数据是上一个目录的，拿它改路径会把导航打回去，必须跳过
+    useEffect(() => {
+        if (dirQuery.data === undefined || dirQuery.isPlaceholderData) return;
+        if (dirQuery.data.path !== path) setPath(dirQuery.data.path);
+    }, [dirQuery.data, dirQuery.isPlaceholderData, path]);
+
+    // 换目录列失败时旧列表还留在界面上（旧实现如此）；react-query 对新 key 出错时没有 data，
+    // 这里把最后一次成功列出的结果留住
+    const lastListing = useRef<TerminalDirListing | null>(null);
+    if (dirQuery.data !== undefined) lastListing.current = dirQuery.data;
+    const listing = dirQuery.data ?? (dirQuery.isError ? lastListing.current : null);
+    const loading = dirQuery.isFetching;
+    const error = dirQuery.error !== null ? errorText(dirQuery.error) : null;
+
+    // 上传、改名等动作之后重列当前目录：把整个会话的目录缓存标脏，活动中那条立刻重拉
+    const invalidateDirs = useCallback(() => {
+        void queryClient.invalidateQueries({ queryKey: ['terminalDir', sessionId] });
+    }, [queryClient, sessionId]);
 
     useEffect(() => {
-        if (path !== null) void load(path);
-    }, [path, load]);
-
-    useEffect(() => {
-        const refresh = () => {
-            if (path !== null) void load(path);
-        };
         const set = refreshers.get(sessionId) ?? new Set<() => void>();
-        set.add(refresh);
+        set.add(invalidateDirs);
         refreshers.set(sessionId, set);
         return () => {
-            set.delete(refresh);
+            set.delete(invalidateDirs);
             if (set.size === 0) refreshers.delete(sessionId);
         };
-    }, [sessionId, path, load]);
+    }, [sessionId, invalidateDirs]);
 
     const navigate = useCallback(
         (next: string) => {
@@ -144,10 +150,10 @@ export function useTerminalFiles(
                 return false;
             } finally {
                 setBusy(null);
-                if (path !== null) void load(path);
+                if (path !== null) invalidateDirs();
             }
         },
-        [load, path],
+        [invalidateDirs, path],
     );
 
     const upload = useCallback(
@@ -185,7 +191,7 @@ export function useTerminalFiles(
             if (listing?.parent != null) navigate(listing.parent);
         },
         refresh() {
-            if (path !== null) void load(path);
+            if (path !== null) void dirQuery.refetch();
         },
         makeDir: (name) =>
             run('新建文件夹', () =>

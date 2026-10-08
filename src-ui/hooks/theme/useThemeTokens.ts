@@ -41,7 +41,7 @@ function readTokenColor(name: string, fallback: string): string {
     // 保证元素进入布局树但不可见、不影响交互。
     probe.style.cssText = `position:absolute;left:-9999px;visibility:hidden;color:var(${name});`;
     document.body.appendChild(probe);
-    let computed = '';
+    let computed: string;
     try {
         computed = getComputedStyle(probe).color;
     } finally {

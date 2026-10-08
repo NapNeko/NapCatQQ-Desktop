@@ -200,7 +200,6 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
     // 搜索词跟着会话走：带着词进来时搜索条也得是开的，不然列表筛着却找不到在哪改
     useLayoutEffect(() => {
         if (savedQuery.trim() !== '') setLeftSearchOpen('catalog', true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     // 条从外面关上了：词一起清掉，理由同上
     const prevSearchOpen = useRef(searchOpen);
@@ -226,7 +225,6 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
             return;
         }
         if (listRef.current) listRef.current.scrollTop = 0;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [query]);
     const firstResultKey = searching ? (items[0]?.key ?? null) : null;
     useEffect(() => {

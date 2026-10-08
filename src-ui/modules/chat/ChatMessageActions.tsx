@@ -43,9 +43,9 @@ import {
     canRepeatMessage,
 } from '../../core/domain/chat/messageTransfer';
 import {
-    favoriteStickerService,
     FavoriteStickerError,
-} from '../../core/services/favorite-sticker.service';
+    useAddFavoriteSticker,
+} from '../../hooks/chat/useChatFavoriteStickers';
 
 interface Props {
     store: ChatAccountStore;
@@ -133,6 +133,7 @@ export function ChatMessageActions({
     const recallInFlight = useRef(false);
     const [repeating, setRepeating] = useState(false);
     const repeatInFlight = useRef(false);
+    const addFavoriteSticker = useAddFavoriteSticker(store.target);
     const [favoriteStates, setFavoriteStates] = useState<
         Record<number, 'saving' | 'saved' | 'unknown'>
     >({});
@@ -266,11 +267,14 @@ export function ChatMessageActions({
         setFavoriteStates((states) => ({ ...states, [index]: 'saving' }));
         onError('');
         try {
-            await favoriteStickerService.add(target, segment, {
-                messageId: message.id,
-                imageIndex: message.segments
-                    .slice(0, index)
-                    .filter((item) => item.type === 'image' || item.type === 'mface').length,
+            await addFavoriteSticker.mutateAsync({
+                segment,
+                context: {
+                    messageId: message.id,
+                    imageIndex: message.segments
+                        .slice(0, index)
+                        .filter((item) => item.type === 'image' || item.type === 'mface').length,
+                },
             });
             if (current()) {
                 setFavoriteStates((states) => ({ ...states, [index]: 'saved' }));

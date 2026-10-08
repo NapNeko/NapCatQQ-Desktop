@@ -1,13 +1,9 @@
 // 组件页：先选主机，再看这台机器能装啥。
+// 编排分散在同目录的模块局部 hook：useComponentHosts（主机选择）、
+// useQqDependencyProbes（QQ 依赖探测）、useComponentActions（组件操作）、
+// useDockerSudoOps（Docker 安装 + sudo 弹框）、useAppInstanceDialogs（应用端实例对话框）。
 
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    useSyncExternalStore,
-} from 'react';
+import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../shared/ui';
@@ -19,7 +15,6 @@ import { useComponentPageAlerts } from '../../hooks/components/useComponentPageA
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useQqDependencyOps } from '../../hooks/components/useQqDependencyOps';
-import { componentActionStore } from '../../hooks/components/componentActionStore';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
@@ -31,61 +26,31 @@ import { HostComponentsView } from './HostComponentsView';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
-import {
-    CreateInstanceDialog,
-    ImportInstanceDialog,
-    type CreateInstanceRequest,
-    type ImportInstanceTarget,
-} from '../apps';
-import {
-    groupByHost,
-    type ComponentRow,
-    type MachineView,
-} from '../../core/domain/components/types';
-import {
-    componentMutationBlockedReason,
-    componentLifecycleBlockedReason,
-} from '../../core/domain/components/mutation-gate';
-import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';
+import { CreateInstanceDialog, ImportInstanceDialog } from '../apps';
+import type { ComponentRow } from '../../core/domain/components/types';
 import {
     getComponentsHostBridge,
     subscribeComponentsHostBridge,
 } from '../../hooks/desktop/componentsHostBridge';
-import type { ReleaseInfoView } from '../../core/domain/release/normalize';
-import type {
-    AppFrameworkManifest,
-    ComponentId,
-    DockerInstallReport,
-    SnowLumaPackage,
-    StepKind,
-} from '../../core/ipc/types';
-import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
-import type { DockerInstallOptions } from '../../hooks/docker/useDockerHosts';
-import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
-import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
-
-// componentActionStore 跨路由存活，提权提示的去重状态也必须保持同样生命周期。
-const qqSudoPromptedTaskIds = new Set<string>();
-import { errorText } from '../../core/domain/errors';
+import type { ComponentId } from '../../core/ipc/types';
+import {
+    releaseNotesLabel,
+    resolveLatestRelease,
+    resolveLatestVersion,
+} from '../../core/domain/components/releaseLookup';
 import { cn } from '../../shared/utils/cn';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import scrollStyles from './componentsPageScroll.module.css';
-
-type QqDependencyProbeState =
-    | { status: 'loading'; report: null; error: null }
-    | { status: 'ready'; report: QqDependencyReport; error: null }
-    | { status: 'error'; report: null; error: string };
-
-function canProbeQqDependencies(machine: MachineView | null | undefined): machine is MachineView {
-    if (!machine || machine.host.os !== 'linux') return false;
-    const qq = machine.runtimeDep.find((row) => row.info.id === 'qq');
-    return qq?.status.state === 'installed';
-}
+import { useComponentHosts } from './useComponentHosts';
+import { useQqDependencyProbes } from './useQqDependencyProbes';
+import { useComponentActions } from './useComponentActions';
+import { useDockerSudoOps } from './useDockerSudoOps';
+import { useAppInstanceDialogs } from './useAppInstanceDialogs';
 
 export const ComponentsPageNext: React.FC = () => {
     const queryClient = useQueryClient();
     const { view, hosts, isLoading, error, refetch } = useComponents();
-    const { startAction, cancelAction, getProgressFor, onTaskTerminal } = useComponentAction();
+    const action = useComponentAction();
     const { detectQqDependencies, rememberSudoPassword } = useQqDependencyOps();
     const {
         snapshot: releases,
@@ -104,8 +69,6 @@ export const ComponentsPageNext: React.FC = () => {
     // 设置里关了应用端就不列应用端组
     const appsEnabled = useFeatureEnabled('apps');
     const { servers } = useServerManager();
-    const [createAppRequest, setCreateAppRequest] = useState<CreateInstanceRequest | null>(null);
-    const [importAppTarget, setImportAppTarget] = useState<ImportInstanceTarget | null>(null);
 
     // 组件主导矩阵 → 主机主导，再剔掉这台机器一个组件都装不了的空机器。
     const allRows = useMemo<ComponentRow[]>(
@@ -117,91 +80,19 @@ export const ComponentsPageNext: React.FC = () => {
         getComponentsHostBridge,
         getComponentsHostBridge,
     );
-
-    const machines = useMemo<MachineView[]>(() => {
-        const grouped = groupByHost(allRows, hosts);
-        const real = grouped.filter(
-            (m) => m.framework.length + m.runtimeDep.length + m.selfApp.length > 0,
-        );
-        // 框架 tour：注入只读演示远端，不进 servers.json
-        if (hostBridge.includeDemoRemote) {
-            return [...real, buildDemoRemoteMachine()];
-        }
-        return real;
-    }, [allRows, hosts, hostBridge.includeDemoRemote]);
-
-    // 选中的主机：默认第一台。仅 tour 的 hostSelectionLocked 时强制 preferred；
-    // 结束后 locked=false，用户可自由点远端 tab。
-    const [activeHostId, setActiveHostId] = useState<string | null>(null);
-    useEffect(() => {
-        if (machines.length === 0) {
-            if (activeHostId !== null) setActiveHostId(null);
-            return;
-        }
-        if (hostBridge.hostSelectionLocked && hostBridge.preferredHostId) {
-            const preferred = hostBridge.preferredHostId;
-            if (machines.some((m) => m.host.host_id === preferred)) {
-                if (activeHostId !== preferred) setActiveHostId(preferred);
-                return;
-            }
-        }
-        const stillThere = machines.some((m) => m.host.host_id === activeHostId);
-        if (!stillThere) setActiveHostId(machines[0].host.host_id);
-    }, [machines, activeHostId, hostBridge.preferredHostId, hostBridge.hostSelectionLocked]);
-
-    const activeMachine = useMemo(
-        () => machines.find((m) => m.host.host_id === activeHostId) ?? machines[0] ?? null,
-        [machines, activeHostId],
+    const { machines, activeHostId, setActiveHostId, activeMachine } = useComponentHosts(
+        allRows,
+        hosts,
+        hostBridge,
     );
 
-    const [qqDependencyByHost, setQqDependencyByHost] = useState<
-        Record<string, QqDependencyProbeState | undefined>
-    >({});
-    const qqDependencyInFlightRef = useRef<Set<string>>(new Set());
-
-    const probeQqDependencies = useCallback(
-        async (hostId: string, force = false) => {
-            const machine = machines.find((m) => m.host.host_id === hostId);
-            if (!canProbeQqDependencies(machine)) return;
-
-            const current = qqDependencyByHost[hostId];
-            if (!force && current) {
-                return;
-            }
-            if (qqDependencyInFlightRef.current.has(hostId)) return;
-
-            qqDependencyInFlightRef.current.add(hostId);
-            setQqDependencyByHost((prev) => ({
-                ...prev,
-                [hostId]: { status: 'loading', report: null, error: null },
-            }));
-            try {
-                const report = await detectQqDependencies(hostId);
-                setQqDependencyByHost((prev) => ({
-                    ...prev,
-                    [hostId]: { status: 'ready', report, error: null },
-                }));
-            } catch (err) {
-                const message = errorText(err, 'QQ 依赖探测失败');
-                setQqDependencyByHost((prev) => ({
-                    ...prev,
-                    [hostId]: { status: 'error', report: null, error: message },
-                }));
-                console.warn('[ComponentsPage] QQ dependency probe failed:', err);
-            } finally {
-                qqDependencyInFlightRef.current.delete(hostId);
-            }
-        },
-        [machines, qqDependencyByHost, detectQqDependencies],
+    const { probeQqDependencies, reportByHost } = useQqDependencyProbes(
+        machines,
+        activeMachine,
+        detectQqDependencies,
     );
-
-    useEffect(() => {
-        if (!canProbeQqDependencies(activeMachine)) return;
-        void probeQqDependencies(activeMachine.host.host_id);
-    }, [activeMachine, probeQqDependencies]);
-
     const activeQqDependencyReport = activeMachine
-        ? (qqDependencyByHost[activeMachine.host.host_id]?.report ?? null)
+        ? (reportByHost[activeMachine.host.host_id]?.report ?? null)
         : null;
 
     // 清单 / 探测 / 组件操作终态 → 全局 InfoBar（顶层 InfoBarStack 渲染）。
@@ -218,219 +109,57 @@ export const ComponentsPageNext: React.FC = () => {
 
     // 版本号：组件更新按钮用（含 QQ 宿主探测）。
     const latestVersionFor = useCallback(
-        (id: ComponentId): string | null => {
-            switch (id) {
-                case 'napcat':
-                    return releases.napcat?.version ?? null;
-                case 'snowluma':
-                    return releases.snowluma?.version ?? null;
-                case 'desktop_self':
-                    return releases.desktop?.version ?? null;
-                case 'ncd_watch':
-                    return releases.ncdWatch?.version ?? null;
-                case 'qq':
-                    // 按当前主机 OS 选 Linux/Windows 探测结果；远端几乎全是 Linux QQ
-                    if (activeMachine?.host.os === 'windows') {
-                        return releases.qqWindows?.version ?? null;
-                    }
-                    return releases.qqLinux?.version ?? releases.qqWindows?.version ?? null;
-                default:
-                    return null;
-            }
-        },
+        (id: ComponentId) => resolveLatestVersion(releases, activeMachine?.host.os, id),
         [releases, activeMachine?.host.os],
     );
 
     // 更新日志：只给有 GitHub release body 的组件（NC / SL / NCD / ncd-watch）。
     // QQ 走 pcConfig 版本探测，没有可用 changelog，不展示「日志」。
     const latestReleaseFor = useCallback(
-        (id: ComponentId): ReleaseInfoView | null => {
-            switch (id) {
-                case 'napcat':
-                    return releases.napcat;
-                case 'snowluma':
-                    return releases.snowluma;
-                case 'desktop_self':
-                    return releases.desktop;
-                case 'ncd_watch':
-                    return releases.ncdWatch;
-                default:
-                    return null;
-            }
-        },
+        (id: ComponentId) => resolveLatestRelease(releases, id),
         [releases],
     );
 
     const [releaseNotesTarget, setReleaseNotesTarget] = useState<ComponentId | null>(null);
 
-    const releaseNotesLabel = (id: ComponentId | null): string => {
-        switch (id) {
-            case 'napcat':
-                return 'NapCat';
-            case 'snowluma':
-                return 'SnowLuma';
-            case 'desktop_self':
-                return 'NapCatQQ Desktop';
-            case 'ncd_watch':
-                return 'ncd-watch';
-            default:
-                return '组件';
-        }
-    };
-
     const handleShowReleaseNotes = useCallback((componentId: ComponentId) => {
         setReleaseNotesTarget(componentId);
     }, []);
 
-    const handleCreateAppInstance = useCallback(
-        (manifest: AppFrameworkManifest, hostId: string) => {
-            setCreateAppRequest({ manifest, lockedHostId: hostId });
-        },
-        [],
-    );
+    const dialogs = useAppInstanceDialogs({ hostNameOf, apps });
 
-    const handleImportAppInstance = useCallback(
-        (manifest: AppFrameworkManifest, hostId: string) => {
-            setImportAppTarget({ manifest, lockedHostId: hostId });
-        },
-        [],
-    );
+    const {
+        slPkgPrompt,
+        closeSlPkgPrompt,
+        confirmSnowLumaPackage,
+        handleAction,
+        lifecycleBlockedReasonForHost,
+    } = useComponentActions({
+        hostNameOf,
+        refetch,
+        queryClient,
+        action,
+        botSnapshots,
+        botConfigs,
+        probeQqDependencies,
+    });
 
-    const [slPkgPrompt, setSlPkgPrompt] = useState<{
-        componentId: ComponentId;
-        hostId: string;
-        stepKind: StepKind;
-    } | null>(null);
-
-    const beginComponentAction = useCallback(
-        async (
-            componentId: ComponentId,
-            hostId: string,
-            stepKind: StepKind,
-            options?: { snowlumaLinuxPackage?: SnowLumaPackage },
-        ) => {
-            const taskId = await startAction(componentId, hostId, stepKind, options);
-            onTaskTerminal(taskId, (status) => {
-                // 只在成功时刷新状态；失败/取消时不刷新，避免部分删除导致探测返回 None 误显示"未安装"。
-                if (status === 'success') {
-                    refetch();
-                    if (componentId === 'snowluma') {
-                        void queryClient.invalidateQueries({ queryKey: ['appSettings'] });
-                    }
-                    if (componentId === 'qq') {
-                        void probeQqDependencies(hostId, true);
-                    }
-                }
-            });
-        },
-        [startAction, onTaskTerminal, refetch, probeQqDependencies, queryClient],
-    );
-
-    const reportActionStartError = useCallback(
-        (componentId: ComponentId, hostId: string, err: unknown) => {
-            pushErrorBar({
-                key: `component-action-start:${componentId}:${hostId}`,
-                title: `组件操作失败 · ${hostNameOf(hostId)}`,
-                raw: errorText(err, '组件操作失败，请稍后重试'),
-            });
-        },
-        [hostNameOf],
-    );
-
-    const handleAction = useCallback(
-        async (
-            componentId: ComponentId,
-            hostId: string,
-            payload: { stepKind: StepKind } | { cancelTaskId: string },
-        ) => {
-            try {
-                if ('cancelTaskId' in payload) {
-                    await cancelAction(payload.cancelTaskId);
-                    return;
-                }
-                const blocked = componentMutationBlockedReason(
-                    botSnapshots,
-                    botConfigs,
-                    hostId,
-                    payload.stepKind,
-                );
-                if (blocked) {
-                    globalInfoBarStore.push({
-                        key: `component-action-blocked:${componentId}:${hostId}:${payload.stepKind}`,
-                        tone: 'warning',
-                        title: `无法${payload.stepKind === 'update' ? '更新' : '卸载'} · ${hostNameOf(hostId)}`,
-                        content: blocked,
-                        autoDismissMs: 8_000,
-                    });
-                    return;
-                }
-                if (
-                    componentId === 'snowluma' &&
-                    (payload.stepKind === 'ensure_installed' ||
-                        payload.stepKind === 'force_install')
-                ) {
-                    setSlPkgPrompt({
-                        componentId,
-                        hostId,
-                        stepKind: payload.stepKind,
-                    });
-                    return;
-                }
-                await beginComponentAction(componentId, hostId, payload.stepKind);
-            } catch (err) {
-                reportActionStartError(componentId, hostId, err);
-            }
-        },
-        [
-            beginComponentAction,
-            cancelAction,
-            hostNameOf,
-            reportActionStartError,
-            botSnapshots,
-            botConfigs,
-        ],
-    );
-
-    const confirmSnowLumaPackage = useCallback(
-        async (pkg: SnowLumaPackage) => {
-            const pending = slPkgPrompt;
-            if (!pending) return;
-            setSlPkgPrompt(null);
-
-            void beginComponentAction(pending.componentId, pending.hostId, pending.stepKind, {
-                snowlumaLinuxPackage: pkg,
-            }).catch((err) => {
-                reportActionStartError(pending.componentId, pending.hostId, err);
-            });
-        },
-        [slPkgPrompt, beginComponentAction, reportActionStartError],
-    );
-
-    const lifecycleBlockedReasonForHost = useCallback(
-        (hostId: string) => componentLifecycleBlockedReason(botSnapshots, botConfigs, hostId),
-        [botSnapshots, botConfigs],
-    );
-
-    const startQqDepsRepair = useCallback(
-        async (hostId: string) => {
-            try {
-                const taskId = await startAction('qq', hostId, 'ensure_dependencies');
-                onTaskTerminal(taskId, (status) => {
-                    if (status === 'success') {
-                        refetch();
-                        void probeQqDependencies(hostId, true);
-                    }
-                });
-            } catch (err) {
-                pushErrorBar({
-                    key: `qq-deps-repair:${hostId}`,
-                    title: `QQ 依赖修复失败 · ${hostNameOf(hostId)}`,
-                    raw: errorText(err, '无法启动修复任务'),
-                });
-            }
-        },
-        [startAction, onTaskTerminal, refetch, hostNameOf, probeQqDependencies],
-    );
+    const {
+        sudoPrompt,
+        closeSudoPrompt,
+        handleInstallDocker,
+        handleDockerDeployError,
+        startQqDepsRepair,
+        handleSudoConfirm,
+    } = useDockerSudoOps({
+        hostNameOf,
+        installDocker: dockerHosts.install,
+        rememberSudoPassword,
+        startAction: action.startAction,
+        onTaskTerminal: action.onTaskTerminal,
+        refetch,
+        probeQqDependencies,
+    });
 
     const refetchApps = apps.refetch;
     const handleRefresh = useCallback(() => {
@@ -453,153 +182,6 @@ export const ComponentsPageNext: React.FC = () => {
     );
 
     const allEmpty = machines.length === 0;
-
-    // Docker / QQ 依赖补全：需要 sudo 时弹密码框，记住后重试。
-    const [sudoPrompt, setSudoPrompt] = useState<{
-        hostId: string;
-        hostName: string;
-        reason?: string;
-        purpose: 'docker' | 'qq_deps';
-    } | null>(null);
-
-    const componentActionSnap = useSyncExternalStore(
-        componentActionStore.subscribe,
-        componentActionStore.getSnapshot,
-        componentActionStore.getSnapshot,
-    );
-    useEffect(() => {
-        for (const taskId of Array.from(qqSudoPromptedTaskIds)) {
-            if (!(taskId in componentActionSnap.tasks)) {
-                qqSudoPromptedTaskIds.delete(taskId);
-            }
-        }
-        for (const [taskId, progress] of Object.entries(componentActionSnap.tasks)) {
-            if (progress.status !== 'failed') continue;
-            if (qqSudoPromptedTaskIds.has(taskId)) continue;
-            const target = componentActionSnap.taskTargets[taskId];
-            if (!target || target.componentId !== 'qq') continue;
-            const msg =
-                [...progress.logs].reverse().find((l) => l.level === 'error')?.message ??
-                progress.message;
-            if (!msg.includes('elevation_required')) continue;
-            qqSudoPromptedTaskIds.add(taskId);
-            globalInfoBarStore.push({
-                key: `qq-deps-sudo:${target.hostId}`,
-                tone: 'warning',
-                title: `需要 sudo 密码 · ${hostNameOf(target.hostId)}`,
-                content: '安装 QQ 系统依赖需要提权，请输入密码后重试。',
-                autoDismissMs: 0,
-            });
-            setSudoPrompt(
-                (p) =>
-                    p ?? {
-                        hostId: target.hostId,
-                        hostName: hostNameOf(target.hostId),
-                        reason: msg,
-                        purpose: 'qq_deps',
-                    },
-            );
-            break;
-        }
-    }, [componentActionSnap, hostNameOf]);
-
-    // 执行一次安装并按 status 分流。返回 report 给调用方(弹框重试时要据此判断
-    // 是否仍需密码)。底层 IPC 失败(连接断等)会抛,交给调用方处理。
-    const runInstall = useCallback(
-        async (hostId: string, options?: DockerInstallOptions): Promise<DockerInstallReport> => {
-            const hostName = hostNameOf(hostId);
-            const report = await dockerHosts.install(hostId, options);
-            switch (report.status) {
-                case 'installed':
-                case 'alreadyInstalled':
-                    globalInfoBarStore.push({
-                        key: `docker-install:${hostId}`,
-                        tone: 'success',
-                        title: `Docker · ${hostName}`,
-                        content: report.message,
-                        autoDismissMs: 8000,
-                    });
-                    break;
-                case 'manualRequired':
-                    globalInfoBarStore.push({
-                        key: `docker-install:${hostId}`,
-                        tone: 'danger',
-                        title: `Docker 未就绪 · ${hostName}`,
-                        content: report.message,
-                        autoDismissMs: 0,
-                    });
-                    break;
-                case 'needSudoPassword':
-                    // 弹框(或更新已开弹框的提示文案)向用户要 sudo 密码。
-                    break;
-            }
-            return report;
-        },
-        [dockerHosts, hostNameOf],
-    );
-
-    // 组件卡片上的"安装 Docker"按钮入口:首次尝试不带密码(后端会自己探 root/
-    // 免密/keyring 缓存密码)。只有探下来确实要密码且无缓存时才弹框。
-    const handleInstallDocker = useCallback(
-        async (hostId: string) => {
-            try {
-                const report = await runInstall(hostId);
-                if (report.status === 'needSudoPassword') {
-                    setSudoPrompt({
-                        hostId,
-                        hostName: hostNameOf(hostId),
-                        reason: report.message,
-                        purpose: 'docker',
-                    });
-                }
-            } catch (err) {
-                pushErrorBar({
-                    key: `docker-install:${hostId}`,
-                    title: `Docker 安装失败 · ${hostNameOf(hostId)}`,
-                    raw: errorText(err, 'Docker 安装失败，请手动安装后重试'),
-                });
-            }
-        },
-        [runInstall, hostNameOf],
-    );
-
-    const handleDockerDeployError = useCallback(
-        (hostId: string, flavor: import('../../core/ipc/types').DockerFlavor, err: unknown) => {
-            const framework = flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
-            pushErrorBar({
-                key: `docker-deploy:${hostId}:${flavor}`,
-                title: `${framework} Docker 部署失败 · ${hostNameOf(hostId)}`,
-                raw: errorText(err, 'Docker 部署失败，请检查 Docker 状态、镜像源与端口占用后重试'),
-            });
-        },
-        [hostNameOf],
-    );
-
-    // 弹框确认:带用户输入的密码重试。装成功就关弹框;密码不对(后端再次返回
-    // needSudoPassword)就抛出去,让弹框内联显示"密码不正确"并保持打开。
-    const handleSudoConfirm = useCallback(
-        async (password: string, remember: boolean) => {
-            if (!sudoPrompt) return;
-            if (sudoPrompt.purpose === 'qq_deps') {
-                const serverId = sudoPrompt.hostId.replace(/^remote:/, '');
-                if (remember) {
-                    await rememberSudoPassword(serverId, password);
-                }
-                setSudoPrompt(null);
-                await startQqDepsRepair(sudoPrompt.hostId);
-                return;
-            }
-            const report = await runInstall(sudoPrompt.hostId, {
-                sudoPassword: password,
-                rememberSudo: remember,
-            });
-            if (report.status === 'needSudoPassword') {
-                throw new Error(report.message);
-            }
-            setSudoPrompt(null);
-        },
-        [sudoPrompt, runInstall, startQqDepsRepair, rememberSudoPassword],
-    );
 
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -659,11 +241,11 @@ export const ComponentsPageNext: React.FC = () => {
                         machine={activeMachine}
                         appFrameworks={appsEnabled ? (appFrameworks.data ?? []) : []}
                         appInstances={apps.instances}
-                        onCreateAppInstance={handleCreateAppInstance}
-                        onImportAppInstance={handleImportAppInstance}
+                        onCreateAppInstance={dialogs.handleCreateAppInstance}
+                        onImportAppInstance={dialogs.handleImportAppInstance}
                         latestVersionFor={latestVersionFor}
                         latestReleaseFor={latestReleaseFor}
-                        getProgress={getProgressFor}
+                        getProgress={action.getProgressFor}
                         onAction={handleAction}
                         onRetryDetect={handleRetryDetect}
                         onShowReleaseNotes={handleShowReleaseNotes}
@@ -712,85 +294,26 @@ export const ComponentsPageNext: React.FC = () => {
             <SnowLumaPackageDialog
                 open={slPkgPrompt != null}
                 onOpenChange={(open) => {
-                    if (!open) setSlPkgPrompt(null);
+                    if (!open) closeSlPkgPrompt();
                 }}
                 onConfirm={confirmSnowLumaPackage}
             />
 
             <ImportInstanceDialog
-                target={importAppTarget}
+                target={dialogs.importAppTarget}
                 frameworks={appFrameworks.data ?? []}
                 servers={servers}
                 isImporting={apps.isImporting}
-                onClose={() => setImportAppTarget(null)}
-                onSubmit={async (draft) => {
-                    const imported = await apps.importInstance({
-                        framework_id: draft.frameworkId,
-                        host_id: draft.hostId,
-                        path: draft.path,
-                        display_name: draft.displayName,
-                    });
-                    setImportAppTarget(null);
-                    globalInfoBarStore.push({
-                        key: `app-instance-imported:${imported.id}`,
-                        tone: 'success',
-                        title: `已接管 ${imported.display_name} · ${hostNameOf(draft.hostId)}`,
-                        content:
-                            imported.state === 'running'
-                                ? '已由桌面端启动'
-                                : imported.state === 'not_installed'
-                                  ? '依赖未同步，先到「应用端」页安装'
-                                  : '到「应用端」页启动并对接协议 Bot。',
-                        autoDismissMs: 8_000,
-                    });
-                }}
+                onClose={dialogs.closeImportDialog}
+                onSubmit={dialogs.submitImport}
             />
 
             <CreateInstanceDialog
-                request={createAppRequest}
+                request={dialogs.createAppRequest}
                 servers={servers}
                 isCreating={apps.isCreating}
-                onClose={() => setCreateAppRequest(null)}
-                onSubmit={async (draft) => {
-                    const userPassword = createAppRequest?.manifest.webui_auth === 'user_password';
-                    const created = await apps.create({
-                        framework_id: draft.frameworkId,
-                        host_id: draft.hostId,
-                        display_name: draft.displayName,
-                        port: draft.port ?? undefined,
-                        install_dir: draft.installDirOverride || undefined,
-                        install_renderer: createAppRequest?.manifest.has_install_renderer
-                            ? draft.installRenderer
-                            : undefined,
-                        webui_username: userPassword
-                            ? draft.webuiUsername.trim() || undefined
-                            : undefined,
-                        webui_password: userPassword ? draft.webuiPassword || undefined : undefined,
-                        // 新建实例默认不随桌面端启动，要的话到详情页打开
-                        auto_start: false,
-                        accept_terms: createAppRequest?.manifest.terms.length
-                            ? draft.acceptTerms
-                            : undefined,
-                    });
-                    if (draft.installNow) apps.install(created.id, draft.version);
-                    setCreateAppRequest(null);
-                    globalInfoBarStore.push({
-                        key: `app-instance-created:${created.id}`,
-                        tone: 'success',
-                        title: `已创建 ${created.display_name} · ${hostNameOf(draft.hostId)}`,
-                        content: [
-                            draft.installNow
-                                ? '安装进度见任务队列；装好后到「应用端」页启动并对接协议 Bot。'
-                                : '实例已登记但未安装；到「应用端」页可随时安装。',
-                            userPassword && !draft.webuiPassword
-                                ? 'WebUI 密码已随机生成，见实例详情「连接」页。'
-                                : '',
-                        ]
-                            .filter(Boolean)
-                            .join(' '),
-                        autoDismissMs: 8_000,
-                    });
-                }}
+                onClose={dialogs.closeCreateDialog}
+                onSubmit={dialogs.submitCreate}
             />
 
             {sudoPrompt && (
@@ -808,7 +331,7 @@ export const ComponentsPageNext: React.FC = () => {
                             : false
                     }
                     onConfirm={handleSudoConfirm}
-                    onClose={() => setSudoPrompt(null)}
+                    onClose={closeSudoPrompt}
                 />
             )}
         </div>

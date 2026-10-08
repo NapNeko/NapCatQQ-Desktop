@@ -15,7 +15,6 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
@@ -35,7 +34,6 @@ import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useHostConnectionEvents } from '../hooks/remote/useHostConnectionEvents';
 import { useHostHealthAlerts } from '../hooks/remote/useHostHealthAlerts';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
-import { pushInfoBar } from '../hooks/ui/globalInfoBarStore';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
@@ -43,10 +41,6 @@ import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminal
 import { useFeatures } from '../hooks/preferences/featureTogglesStore';
 import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
-import { markWorkspaceStale } from '../hooks/debug/debugWorkspaceStore';
-import { debugWindowService } from '../core/services/debug-window.service';
-import { chatDesktopService } from '../core/services/chat-desktop.service';
-import { windowEventService } from '../core/services/desktop.service';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -57,8 +51,9 @@ import { useOnboardingGate } from '../hooks/desktop/useOnboardingGate';
 import { registerOnboardingHost } from '../hooks/desktop/onboardingHost';
 import { registerDesktopConsentHost } from '../hooks/desktop/desktopConsentHost';
 import { useFrameworkTour } from '../hooks/desktop/useFrameworkTour';
+import { useAppWindowBridge } from '../hooks/desktop/useAppWindowBridge';
+import { useDesktopUpdateStartupNotice } from '../hooks/desktop/useDesktopUpdate';
 import { DesktopConsentDialog } from '../shared/components/next/DesktopConsentDialog';
-import { desktopUpdateService } from '../core/services/desktop-update.service';
 import {
     ONBOARDING_GUIDE_STEP_IDS,
     OnboardingDialog,
@@ -158,78 +153,29 @@ function RouteFallback() {
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
-    const chatRouteRef = useRef(route);
-    useEffect(() => {
-        chatRouteRef.current = route;
-    }, [route]);
-    useEffect(() => {
-        let disposed = false;
-        let resumeChat = false;
-        const handoff = chatDesktopService.onRequest((request) => {
-            if (disposed || request.v !== 1) return;
-            if (request.action === 'resume') {
-                if (resumeChat) {
-                    setRoute('chat');
-                    setDisplayedRoute('chat');
-                    setPageVisible(true);
-                }
-                return;
-            }
-            void (async () => {
-                try {
-                    const { prepareChatHandoff, getChatSelectedBot } =
-                        await import('../hooks/chat/chatStore');
-                    const { flushSync } = await import('react-dom');
-                    const wasChat = chatRouteRef.current === 'chat';
-                    resumeChat = wasChat;
-                    try {
-                        await prepareChatHandoff(
-                            getChatSelectedBot(),
-                            () => {
-                                if (wasChat)
-                                    flushSync(() => {
-                                        setRoute('overview');
-                                        setDisplayedRoute('overview');
-                                        setPageVisible(true);
-                                    });
-                            },
-                            request.action === 'popout',
-                        );
-                        await chatDesktopService.reply(request.requestId, null);
-                    } catch (error) {
-                        if (wasChat)
-                            flushSync(() => {
-                                setRoute('chat');
-                                setDisplayedRoute('chat');
-                                setPageVisible(true);
-                            });
-                        throw error;
-                    }
-                } catch (error) {
-                    await chatDesktopService
-                        .reply(request.requestId, String(error))
-                        .catch(() => {});
-                }
-            })();
-        });
-        const embedded = chatDesktopService.onEmbedRequested(() => {
-            void queryClient.invalidateQueries({ queryKey: ['chat'] });
-            setRoute('chat');
-            setDisplayedRoute('chat');
-            setPageVisible(true);
-        });
-        void chatDesktopService.windowState().then((state) => {
-            if (!disposed && state.embedRequested) {
-                setRoute('chat');
-                setDisplayedRoute('chat');
-            }
-        });
-        return () => {
-            disposed = true;
-            void handoff.then((un) => un());
-            void embedded.then((un) => un());
-        };
+    const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
+    const [pageVisible, setPageVisible] = useState<boolean>(true);
+    // 弹出窗事件要做的路由切换：每组动作与原内联 effect 里的 setState 批次一一对应
+    const showChatPage = useCallback(() => {
+        setRoute('chat');
+        setDisplayedRoute('chat');
+        setPageVisible(true);
     }, []);
+    const showChatPageQuiet = useCallback(() => {
+        setRoute('chat');
+        setDisplayedRoute('chat');
+    }, []);
+    const showOverviewPage = useCallback(() => {
+        setRoute('overview');
+        setDisplayedRoute('overview');
+        setPageVisible(true);
+    }, []);
+    const { focusChatIfOpen, focusDebugIfOpen } = useAppWindowBridge({
+        route,
+        showChat: showChatPage,
+        showChatQuiet: showChatPageQuiet,
+        showOverview: showOverviewPage,
+    });
     const [collapsed, setCollapsed] = useState(true);
     const debugEnabled = useDebugConsoleEnabled();
 
@@ -306,7 +252,7 @@ export const AppNext: React.FC = () => {
         (nextRoute: AppRoute) => {
             const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
             if (target === 'chat') {
-                void chatDesktopService.focusIfOpen().then((focused) => {
+                void focusChatIfOpen().then((focused) => {
                     if (!focused) setRoute('chat');
                 });
                 return;
@@ -314,7 +260,7 @@ export const AppNext: React.FC = () => {
             // 调试台弹出窗开着时主窗不进调试页（工作区 / 收藏落盘 JSON 是两窗同一份文件，
             // 两边同时写会互相盖），入口一律把弹出窗叫到前面；没开着才正常切路由
             if (target === 'debug') {
-                void debugWindowService.focusIfOpen().then((focused) => {
+                void focusDebugIfOpen().then((focused) => {
                     if (!focused) setRoute('debug');
                 });
                 return;
@@ -322,7 +268,7 @@ export const AppNext: React.FC = () => {
             // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。
             setRoute(target);
         },
-        [hiddenRoutes],
+        [hiddenRoutes, focusChatIfOpen, focusDebugIfOpen],
     );
 
     const prefetchRoute = useCallback(
@@ -336,30 +282,6 @@ export const AppNext: React.FC = () => {
     // Bot 卡片「调试」按钮 / 右键「在调试台打开」经 debugNav 跳过来
     useEffect(() => registerDebugNavigator(() => navigate('debug')), [navigate]);
 
-    // 弹出窗关掉后，盘上的工作区 / 收藏可能已被它改写：把主窗里的内存副本作废，
-    // 下次进调试页从盘上重读（此刻主窗的调试页必然没挂着）
-    const queryClient = useQueryClient();
-    useEffect(() => {
-        let cancelled = false;
-        let unlisten: (() => void) | undefined;
-        void windowEventService
-            .onDebugPopoutClosed(() => {
-                markWorkspaceStale();
-                void queryClient.invalidateQueries();
-            })
-            .then((un) => {
-                if (cancelled) {
-                    un();
-                    return;
-                }
-                unlisten = un;
-            });
-        return () => {
-            cancelled = true;
-            unlisten?.();
-        };
-    }, [queryClient]);
-
     const toggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
 
     useEffect(() => {
@@ -372,41 +294,7 @@ export const AppNext: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- startup once
     }, []);
 
-    // 自更新结果：resume / 失败日志消费一次（#126 装完无反馈）
-    useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            try {
-                const notice = await desktopUpdateService.consumeStartupNotice();
-                if (cancelled || !notice) return;
-                // wire: serde rename_all = snake_case → "success" | "incomplete" | "failure"
-                const tone =
-                    notice.kind === 'success'
-                        ? 'success'
-                        : notice.kind === 'failure'
-                          ? 'danger'
-                          : 'warning';
-                const title =
-                    notice.kind === 'success'
-                        ? '更新完成'
-                        : notice.kind === 'failure'
-                          ? '上次更新失败'
-                          : '更新可能未完成';
-                pushInfoBar({
-                    key: 'desktop-update-startup',
-                    tone,
-                    title,
-                    content: notice.message,
-                    autoDismissMs: notice.kind === 'success' ? 6000 : 12000,
-                });
-            } catch {
-                // 启动提示失败不挡主流程
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+    useDesktopUpdateStartupNotice();
 
     useEffect(() => {
         if (desktopConsent.blocking) {
@@ -474,8 +362,6 @@ export const AppNext: React.FC = () => {
         return () => registerDesktopConsentHost(null);
     }, [desktopConsent.ensureConsent]);
 
-    const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
-    const [pageVisible, setPageVisible] = useState<boolean>(true);
     const [direction, setDirection] = useState<-1 | 0 | 1>(0);
 
     useEffect(() => {

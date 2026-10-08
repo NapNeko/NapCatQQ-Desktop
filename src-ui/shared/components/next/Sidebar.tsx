@@ -29,17 +29,8 @@ import { useMotion } from '../../../hooks/preferences/useMotion';
 import logoSidebar from '../../../assets/logo-32.png?inline';
 import logoSidebarCollapsed from '../../../assets/logo-48.png?inline';
 
-export type AppRoute =
-    | 'overview'
-    | 'bots'
-    | 'chat'
-    | 'apps'
-    | 'debug'
-    | 'components'
-    | 'docker'
-    | 'remote'
-    | 'tasks'
-    | 'settings';
+export type { AppRoute } from '../../../core/domain/ui/route';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 interface SidebarProps {
     active: AppRoute;

@@ -7,10 +7,8 @@
 // Bot id 就是 QQ，所以能直接对上——对上了就能一键链接（端口与 token 由链接流程一并写进两边）。
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Spinner } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
 import { useBotSnapshots } from '../../../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../../../hooks/bot/useBotConfigsMap';
 import { useAppLinkPlan, useApplyAppLink } from '../../../../hooks/apps/useAppLink';
@@ -18,10 +16,10 @@ import { isDockerBot } from '../../../../core/domain/apps/appLinkTopology';
 import { AppLinkDialog } from '../../AppLinkDialog';
 import type { AppInstance } from '../../../../core/ipc/types';
 import type { AppRoute } from '../../../../shared/components/next/Sidebar';
-import { meetsNeoBotVersion, versionRequirementText } from './neobotCapabilities';
-import { isBotAccountUnset, missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
+import { versionRequirementText } from '../../../../core/domain/apps/neobotCapabilities';
+import { isBotAccountUnset, missingRequiredSteps } from '../../../../core/domain/apps/neobotDeploy';
 import { PanelStateView } from './PanelStateView';
-import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
+import { useNeoBotDeploy } from '../../../../hooks/apps/useNeoBotDeploy';
 
 /** 一行「标签 + 值 + 复制」——地址与 token 都要能整段复制走 */
 const CopyRow: React.FC<{ label: string; value: string; hint?: string }> = ({
@@ -60,17 +58,8 @@ export const NeoBotDeployTab: React.FC<{
     onNavigate?: (route: AppRoute) => void;
 }> = ({ instance, onGoTab, onNavigate }) => {
     const instanceId = instance.id;
-    const queryClient = useQueryClient();
-    // 快捷部署是 1.2.4a1 才有的菜单。更老的版本（例如 1.2.3）上这个接口直接 404——
-    // 与其把「面板返回 404」拿给用户，不如提前说清楚，并给一条现在就能走的路。
-    const deploySupported = meetsNeoBotVersion(instance.installed_version, 'deployApi');
-    const query = usePanelJson(
-        instanceId,
-        'deploy',
-        '/api/deploy/status',
-        parseNeoBotDeployStatus,
-        deploySupported,
-    );
+    // 部署进度查询与 OneBot token 生成都在 hook 里：版本不够时整条查询不开（enabled=false）
+    const { query, deploySupported, generateToken } = useNeoBotDeploy(instance);
     const [dialogOpen, setDialogOpen] = useState(false);
 
     const status = query.data?.kind === 'ok' ? query.data.data : null;
@@ -91,23 +80,6 @@ export const NeoBotDeployTab: React.FC<{
 
     const { plan, previewing } = useAppLinkPlan(instanceId, matchedBotId ?? '', !!matchedBotId);
     const applyLink = useApplyAppLink();
-
-    const generateToken = useMutation({
-        mutationFn: async () => {
-            const res = await appFrameworkService.panelCall(
-                instanceId,
-                'POST',
-                '/api/deploy/onebot-token',
-                { revision: status?.revision },
-            );
-            if (res === null) throw new Error('该框架不支持面板操作');
-            if (res.kind !== 'ok') throw new Error(res.message || '面板拒绝了这次操作');
-            return res;
-        },
-        onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey: neobotPanelKey(instanceId, 'deploy') });
-        },
-    });
 
     const link = () => {
         if (!plan || !matchedBotId) return;

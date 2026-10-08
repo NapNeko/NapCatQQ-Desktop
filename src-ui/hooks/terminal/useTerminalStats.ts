@@ -1,6 +1,6 @@
 // 服务器状态条：看得见的时候每 3 秒读一次；读失败保留上一次的数，标一下「没读到」。
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { terminalService } from '../../core/services/terminal.service';
 import type { ServerStats } from '../../core/ipc/generated/domain/ServerStats';
 
@@ -10,31 +10,16 @@ export function useTerminalStats(
     sessionId: string,
     enabled: boolean,
 ): { stats: ServerStats | null; stale: boolean } {
-    const [stats, setStats] = useState<ServerStats | null>(null);
-    const [stale, setStale] = useState(false);
-
-    useEffect(() => {
-        if (!enabled) return;
-        let cancelled = false;
-        let timer: number | undefined;
-        const tick = async () => {
-            try {
-                const next = await terminalService.stats(sessionId);
-                if (cancelled) return;
-                setStats(next);
-                setStale(false);
-            } catch {
-                if (!cancelled) setStale(true);
-            } finally {
-                if (!cancelled) timer = window.setTimeout(tick, INTERVAL_MS);
-            }
-        };
-        void tick();
-        return () => {
-            cancelled = true;
-            if (timer !== undefined) window.clearTimeout(timer);
-        };
-    }, [sessionId, enabled]);
-
-    return { stats, stale };
+    const query = useQuery<ServerStats, Error>({
+        queryKey: ['terminalStats', sessionId],
+        queryFn: () => terminalService.stats(sessionId),
+        enabled,
+        // 旧实现失焦照轮；react-query 默认失焦暂停 refetchInterval，这里保持旧行为
+        refetchIntervalInBackground: true,
+        retry: false,
+        staleTime: 0,
+        refetchInterval: INTERVAL_MS,
+    });
+    // 失败时 react-query 留着上一次的 data，isError 对应旧实现的「最近一次没读到」
+    return { stats: query.data ?? null, stale: query.isError };
 }

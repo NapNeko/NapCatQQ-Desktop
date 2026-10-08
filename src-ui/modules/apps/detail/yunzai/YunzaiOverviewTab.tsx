@@ -3,16 +3,10 @@
 // 群里 #设置主人 还要去日志里抄验证码，桌面端直接填省掉这一步，所以算作一步。
 
 import type { ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Blocks, CheckCircle2, Circle, Crown, Link2, Play } from 'lucide-react';
 import { Button, Card, Spinner } from '../../../../shared/ui';
 import { yunzaiNeedsMaster } from '../../../../core/domain/apps/yunzaiConfig';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
-import {
-    APP_STORE_GC_MS,
-    APP_STORE_STALE_MS,
-    appStoreInstalledKey,
-} from '../../../../hooks/apps/appStoreQuery';
+import { useYunzaiInstalledPlugins } from '../../../../hooks/apps/useYunzaiOverview';
 import { cn } from '../../../../shared/utils/cn';
 import type { AppInstance, YunzaiInstanceConfig } from '../../../../core/ipc/types';
 
@@ -44,13 +38,7 @@ export const YunzaiOverviewTab: React.FC<{
     const needsMaster = yunzaiNeedsMaster(config);
     const masterCount = config.other.master_qq.length + config.other.master.length;
 
-    // 和插件页共用一份缓存，切过去不重读
-    const installed = useQuery({
-        queryKey: appStoreInstalledKey(instance.id, 'plugin'),
-        queryFn: () => appFrameworkService.listStoreInstalled(instance.id, 'plugin'),
-        staleTime: APP_STORE_STALE_MS,
-        gcTime: APP_STORE_GC_MS,
-    });
+    const installed = useYunzaiInstalledPlugins(instance.id);
     const missingPlugins = installed.data
         ? RECOMMENDED.filter((r) => !installed.data.some((i) => i.id === r.id))
         : [];

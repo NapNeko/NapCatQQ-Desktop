@@ -19,7 +19,7 @@ function subscribe(kind: 'close' | 'blocked') {
     };
 }
 
-vi.mock('../../core/ipc/transport', () => ({ isTauri: true }));
+vi.mock('../../core/domain/runtime/env', () => ({ isTauri: true }));
 vi.mock('../../core/services/desktop.service', () => ({
     windowEventService: {
         onRequestClose: (cb: Listener) => subscribe('close')(cb),

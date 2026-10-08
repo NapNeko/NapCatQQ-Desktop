@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { settingsService, clientPrefsFromBackend } from '../../core/services/settings.service';
-import { applySideEffects, preferencesStore } from './preferencesStore';
+import { applySideEffects, preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { infoBarDismissPrefsStore } from './infoBarDismissPrefsStore';
 import { taskQueueCleanupPrefsStore } from '../task-queue/taskQueueCleanupPrefsStore';
 import { featureTogglesStore } from './featureTogglesStore';

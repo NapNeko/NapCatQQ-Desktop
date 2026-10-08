@@ -1,6 +1,5 @@
 // 群文件对话框：浏览、搜索、下载、上传与整理。QQ 群文件只有一层文件夹，路径最多两级。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     ArrowDownToLine,
     ChevronRight,
@@ -26,7 +25,14 @@ import {
 import { ActionMotionIcon } from '../../../shared/ui/motion/ActionMotionIcon';
 import { cn } from '../../../shared/utils/cn';
 import { useTauriFileDrop } from '../../../hooks/ui/useTauriFileDrop';
-import { chatGroupFilesService } from '../../../core/services/chat-group-files.service';
+import {
+    pickChatGroupUploads,
+    useChatGroupFileAction,
+    useChatGroupFileListing,
+    useChatGroupFileSelfRole,
+    useChatGroupFileSpace,
+    useInvalidateChatGroupFiles,
+} from '../../../hooks/chat/useChatGroupFiles';
 import {
     canChangeFile,
     canManageFolders,
@@ -100,7 +106,6 @@ function GroupFilesBrowser({
     connected,
     refreshSignal,
 }: GroupFilesDialogProps) {
-    const queries = useQueryClient();
     const lifetime = useRef({ active: open });
     useEffect(() => {
         const current = { active: open };
@@ -118,35 +123,24 @@ function GroupFilesBrowser({
     const [pending, setPending] = useState<Pending | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const baseKey = ['chat', 'group-files', scope, groupId] as const;
-    const listing = useQuery({
-        queryKey: [...baseKey, 'list', folderId, limits[folderId] ?? 0],
-        queryFn: () =>
-            chatGroupFilesService.list(target, groupId, folder?.folderId ?? null, limits[folderId]),
-        enabled: open && connected,
-        staleTime: 15_000,
-    });
-    const space = useQuery({
-        queryKey: [...baseKey, 'space'],
-        queryFn: () => chatGroupFilesService.space(target, groupId),
-        enabled: open && connected,
-        staleTime: 30_000,
-    });
-    const role = useQuery({
-        queryKey: [...baseKey, 'role'],
-        queryFn: () => chatGroupFilesService.selfRole(target, groupId),
-        enabled: open && connected,
-        staleTime: 300_000,
-    });
-    const roots = useQuery({
-        queryKey: [...baseKey, 'list', ROOT_FOLDER, limits[ROOT_FOLDER] ?? 0],
-        queryFn: () => chatGroupFilesService.list(target, groupId, null, limits[ROOT_FOLDER]),
-        enabled: open && connected && !!pending && pending.kind === 'move',
-        staleTime: 15_000,
-    });
-    const refresh = () => {
-        void queries.invalidateQueries({ queryKey: baseKey });
-    };
+    const listing = useChatGroupFileListing(
+        target,
+        groupId,
+        open && connected,
+        folder?.folderId ?? null,
+        limits[folderId],
+    );
+    const space = useChatGroupFileSpace(target, groupId, open && connected);
+    const role = useChatGroupFileSelfRole(target, groupId, open && connected);
+    const roots = useChatGroupFileListing(
+        target,
+        groupId,
+        open && connected && !!pending && pending.kind === 'move',
+        null,
+        limits[ROOT_FOLDER],
+    );
+    const fileAction = useChatGroupFileAction(target, groupId);
+    const refresh = useInvalidateChatGroupFiles(target, groupId);
     useEffect(() => {
         if (open && refreshSignal) refresh();
     }, [refreshSignal]);
@@ -200,8 +194,7 @@ function GroupFilesBrowser({
     const pick = () => {
         const current = lifetime.current;
         if (!current.active) return;
-        void chatGroupFilesService
-            .pickUploads()
+        void pickChatGroupUploads()
             .then((files) => {
                 if (current.active) upload(files);
             })
@@ -218,7 +211,7 @@ function GroupFilesBrowser({
         setBusy(true);
         setError('');
         try {
-            await chatGroupFilesService.act(target, groupId, action);
+            await fileAction.mutateAsync(action);
             if (!current.active) return;
             setPending(null);
         } catch (e) {
@@ -226,7 +219,7 @@ function GroupFilesBrowser({
             setError(errorText(e));
             setPending(null);
         } finally {
-            refresh();
+            // 失效刷新已由 mutation 的 onSettled 承担,这里只收尾 busy 状态
             if (current.active) setBusy(false);
         }
     };

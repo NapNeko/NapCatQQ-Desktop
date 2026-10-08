@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultAppUiPreferencesFromPrefs } from '../domain/settings/ui-preferences-bridge';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 
 const native = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('../ipc/transport', () => ({ isTauri: true, invoke: native.invoke }));

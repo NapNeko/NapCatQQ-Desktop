@@ -4,7 +4,7 @@ import type { DesktopExitBlocked } from '../ipc/generated/DesktopExitBlocked';
 import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoint';
 import type { WindowSignal } from '../ipc/generated/WindowSignal';
 import type { LogSnapshot } from '../ipc/types';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { invoke, isTauri, listen } from '../ipc/transport';
 
 // 不走 DomainEvent 总线的几条窗口通知，名字和信封版本对应 src-tauri/src/window_events.rs，

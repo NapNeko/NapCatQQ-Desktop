@@ -3,9 +3,9 @@
 // 面板把「默认值 / 自定义值 / 合并后的实际取值」三者都给了，这里展示实际取值，
 // 并把「被自定义覆盖过」标出来 —— 排查「为什么它这么说话」时就要看这个。
 
-import { parseNeoBotPrompts } from './neobotPanels';
+import { parseNeoBotPrompts } from '../../../../core/domain/apps/neobotPanels';
 import { PanelStateView } from './PanelStateView';
-import { usePanelJson } from './useNeoBotPanel';
+import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 
 export const NeoBotPromptsTab: React.FC<{
     instanceId: string;

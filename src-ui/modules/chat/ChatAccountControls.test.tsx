@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { chatDesktopService } from '../../core/services/chat-desktop.service';
 import type { ChatAccountPreference } from '../../core/ipc/generated/chat/ChatAccountPreference';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
@@ -133,7 +133,7 @@ describe('chat settings organization', () => {
         expect(screen.getByText('讨论群')).toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: '恢复提醒' }));
         await waitFor(() =>
-            expect(unmute).toHaveBeenCalledWith('settings-test', '99', '123', false),
+            expect(unmute).toHaveBeenCalledWith('settings-test', '99', '123', false, false),
         );
         await waitFor(() => expect(screen.queryByText('本地免打扰群聊')).not.toBeInTheDocument());
     });

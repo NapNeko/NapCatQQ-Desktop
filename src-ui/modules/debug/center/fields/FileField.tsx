@@ -2,16 +2,13 @@
 // 把这台机器上的文件传给远端 / 容器里的 Bot。本机文件不落参数本身：落成
 // `ncd-local-file://<路径>` 占位，发送时后端把它传到 Bot 一侧再替换（见 stream.rs 的编排）。
 
-import { useState } from 'react';
 import { FolderOpen, X } from 'lucide-react';
-import { onebotDebugService } from '../../../../core/services/onebot-debug.service';
+import { useDebugFileOps } from '../../../../hooks/debug/useDebugFileOps';
 import {
     LOCAL_FILE_PREFIX,
     isLocalFileToken,
     localFileTokenFor,
 } from '../../../../core/domain/debug/streamActions';
-import { errorText } from '../../../../core/domain/errors';
-import { pushErrorBar } from '../../../../hooks/ui/pushErrorBar';
 import { cn } from '../../../../shared/utils/cn';
 import { FIELD_INPUT_CLASS, IconTip, fieldBorder } from '../centerParts';
 import { TextField } from './TextField';
@@ -21,7 +18,8 @@ export const FILE_HINT = 'URL、Bot 所在机器上的路径，或 base64://…'
 
 export function FileField(props: FieldProps) {
     const { value, onChange, invalid, inputId, describedBy, disabled } = props;
-    const [picking, setPicking] = useState(false);
+    const { pickLocalFile } = useDebugFileOps();
+    const picking = pickLocalFile.isPending;
 
     if (isLocalFileToken(value)) {
         const path = value.slice(LOCAL_FILE_PREFIX.length);
@@ -48,16 +46,12 @@ export function FileField(props: FieldProps) {
         );
     }
 
-    const pick = async () => {
-        setPicking(true);
-        try {
-            const picked = await onebotDebugService.pickLocalFile();
-            if (picked) onChange(localFileTokenFor(picked.path));
-        } catch (err) {
-            pushErrorBar({ key: 'debug-local-file', title: '选本机文件失败', raw: errorText(err) });
-        } finally {
-            setPicking(false);
-        }
+    const pick = () => {
+        pickLocalFile.mutate(undefined, {
+            onSuccess: (picked) => {
+                if (picked) onChange(localFileTokenFor(picked.path));
+            },
+        });
     };
 
     return (
@@ -71,7 +65,7 @@ export function FileField(props: FieldProps) {
                 hint="发送前传到 Bot 一侧再替换参数"
                 disabled={disabled || picking}
                 aria-busy={picking || undefined}
-                onClick={() => void pick()}
+                onClick={pick}
             />
         </div>
     );

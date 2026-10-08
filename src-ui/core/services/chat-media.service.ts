@@ -8,26 +8,18 @@ import type { DebugCallResponse } from '../ipc/generated/debug/DebugCallResponse
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
 import { inlineImageService, isInlineImageReference } from './inline-image.service';
 
-export interface ForwardNode {
-    senderId: string;
-    name: string;
-    time?: number;
-    segments: Segment[];
-}
-export interface FavoriteEmoji {
-    url: string;
-    description: string;
-}
-export interface ImageReadOptions {
-    signal?: AbortSignal;
-    onReadStart?: () => void;
-    context?: ImageSourceContext;
-}
-export interface ImageSourceContext {
-    messageId?: string | number;
-    imageIndex?: number;
-    preferProtocol?: boolean;
-}
+export type {
+    ForwardNode,
+    FavoriteEmoji,
+    ImageReadOptions,
+    ImageSourceContext,
+} from '../domain/chat/media';
+import type {
+    FavoriteEmoji,
+    ForwardNode,
+    ImageReadOptions,
+    ImageSourceContext,
+} from '../domain/chat/media';
 type ImageConsumer = { start?: () => void };
 interface ImageJob {
     promise: Promise<string>;

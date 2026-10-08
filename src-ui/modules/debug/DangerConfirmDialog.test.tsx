@@ -3,7 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { DangerConfirmDialog, _resetDangerSkipsForTests } from './DangerConfirmDialog';
 
 const BODY_MARK = '本次不再询问（到程序退出）';

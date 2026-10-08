@@ -1,7 +1,8 @@
 // 撤回占位和保留内容共用气泡，避免多媒体继续沿用透明底。
 import { useId } from 'react';
 import type { Message } from '../../core/domain/chat/model';
-import { SegmentList, isMediaOnly, isPictureOnly } from '../debug/right/SegmentView';
+import { SegmentList, isMediaOnly, isPictureOnly } from '../../shared/chat/SegmentView';
+import { useQQFaceLookup } from '../../hooks/chat/useChatQqFaces';
 import { cn } from '../../shared/utils/cn';
 
 export function ChatMessageContent({
@@ -12,13 +13,14 @@ export function ChatMessageContent({
     preventRecall?: boolean;
 }) {
     const recallDescription = useId();
+    const peekFace = useQQFaceLookup();
     const retained = message.recalled && preventRecall && message.segments.length > 0;
     const hidden = message.recalled && !retained;
     return (
         <div
             className={cn(
                 'native-chat-bubble',
-                !message.recalled && isMediaOnly(message.segments) && 'is-media-only',
+                !message.recalled && isMediaOnly(message.segments, peekFace) && 'is-media-only',
                 !hidden && isPictureOnly(message.segments) && 'is-picture-only',
                 hidden && 'is-recall-placeholder',
                 retained && 'is-recall-retained',

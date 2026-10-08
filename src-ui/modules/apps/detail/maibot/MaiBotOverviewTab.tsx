@@ -64,7 +64,7 @@ export const MaiBotOverviewTab: React.FC<{
     let tone: Tone;
     let title: string;
     let sub: ReactNode;
-    let actions: ReactNode = null;
+    let actions: ReactNode;
     if (!next) {
         tone = 'ready';
         title = '可以在 QQ 上找麦麦聊天了';

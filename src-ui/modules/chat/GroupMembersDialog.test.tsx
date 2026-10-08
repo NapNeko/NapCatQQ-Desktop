@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Contact } from '../../core/domain/chat/model';
@@ -28,6 +30,14 @@ const member: ProfileMember = {
 };
 const self: ProfileMember = { ...member, key: 'private:99', id: '99', name: '我', role: 'owner' };
 
+const withQuery = (ui: ReactNode) => (
+    <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+        {ui}
+    </QueryClientProvider>
+);
+
 describe('group member panel', () => {
     beforeEach(() => {
         groupMemberPermissions.clear();
@@ -48,14 +58,16 @@ describe('group member panel', () => {
             })),
         );
         render(
-            <GroupMembersDialog
-                open
-                target={target}
-                contact={group}
-                connected
-                onOpenChange={vi.fn()}
-                onMessage={vi.fn()}
-            />,
+            withQuery(
+                <GroupMembersDialog
+                    open
+                    target={target}
+                    contact={group}
+                    connected
+                    onOpenChange={vi.fn()}
+                    onMessage={vi.fn()}
+                />,
+            ),
         );
         await screen.findByRole('button', { name: '查看成员0的群资料' });
         const list = screen.getByRole('region', { name: '群成员列表' });
@@ -87,14 +99,16 @@ describe('group member panel', () => {
         );
         const onMessage = vi.fn();
         render(
-            <GroupMembersDialog
-                open
-                target={target}
-                contact={group}
-                connected
-                onOpenChange={vi.fn()}
-                onMessage={onMessage}
-            />,
+            withQuery(
+                <GroupMembersDialog
+                    open
+                    target={target}
+                    contact={group}
+                    connected
+                    onOpenChange={vi.fn()}
+                    onMessage={onMessage}
+                />,
+            ),
         );
         fireEvent.click(await screen.findByRole('button', { name: '查看群内名片的群资料' }));
         await waitFor(() =>
@@ -113,14 +127,16 @@ describe('group member panel', () => {
             userId === '99' ? { ...self, role: 'admin' } : { ...member, role: 'admin' },
         );
         render(
-            <GroupMembersDialog
-                open
-                target={target}
-                contact={group}
-                connected
-                onOpenChange={vi.fn()}
-                onMessage={vi.fn()}
-            />,
+            withQuery(
+                <GroupMembersDialog
+                    open
+                    target={target}
+                    contact={group}
+                    connected
+                    onOpenChange={vi.fn()}
+                    onMessage={vi.fn()}
+                />,
+            ),
         );
         fireEvent.click(await screen.findByRole('button', { name: '查看群内名片的群资料' }));
         await screen.findByText('管理员');
@@ -150,15 +166,17 @@ describe('group member writes', () => {
         const onResult = vi.fn();
         const onClose = vi.fn();
         render(
-            <ChatMemberActions
-                target={target}
-                contact={group}
-                member={member}
-                action="kick"
-                connected
-                onClose={onClose}
-                onResult={onResult}
-            />,
+            withQuery(
+                <ChatMemberActions
+                    target={target}
+                    contact={group}
+                    member={member}
+                    action="kick"
+                    connected
+                    onClose={onClose}
+                    onResult={onResult}
+                />,
+            ),
         );
         expect(screen.getByText(/对方仍可申请重新加入/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '移出群' }));
@@ -174,7 +192,7 @@ describe('group member writes', () => {
     });
     it('ignores a late result after switching accounts', async () => {
         let finish!: () => void;
-        vi.spyOn(chatProfileService, 'kick').mockImplementation(
+        const kick = vi.spyOn(chatProfileService, 'kick').mockImplementation(
             () =>
                 new Promise<void>((resolve) => {
                     finish = resolve;
@@ -183,31 +201,37 @@ describe('group member writes', () => {
         const onResult = vi.fn();
         const onClose = vi.fn();
         const view = render(
-            <ChatMemberActions
-                target={target}
-                contact={group}
-                member={member}
-                action="kick"
-                connected
-                onClose={onClose}
-                onResult={onResult}
-            />,
+            withQuery(
+                <ChatMemberActions
+                    target={target}
+                    contact={group}
+                    member={member}
+                    action="kick"
+                    connected
+                    onClose={onClose}
+                    onResult={onResult}
+                />,
+            ),
         );
         fireEvent.click(screen.getByRole('button', { name: '移出群' }));
+        // mutateAsync 要到微任务派发才真正调 mutationFn;先等 kick 起飞,finish 才拿到 resolve。
+        await waitFor(() => expect(kick).toHaveBeenCalledOnce());
         view.rerender(
-            <ChatMemberActions
-                target={{ ...target, bot_id: 'another' }}
-                contact={group}
-                member={member}
-                action="kick"
-                connected
-                onClose={onClose}
-                onResult={onResult}
-            />,
+            withQuery(
+                <ChatMemberActions
+                    target={{ ...target, bot_id: 'another' }}
+                    contact={group}
+                    member={member}
+                    action="kick"
+                    connected
+                    onClose={onClose}
+                    onResult={onResult}
+                />,
+            ),
         );
         await act(async () => {
             finish();
-            await Promise.resolve();
+            await new Promise((resolve) => setTimeout(resolve, 0));
         });
         expect(onResult).not.toHaveBeenCalled();
         expect(onClose).not.toHaveBeenCalled();

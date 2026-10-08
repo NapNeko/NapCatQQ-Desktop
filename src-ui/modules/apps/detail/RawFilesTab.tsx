@@ -1,12 +1,14 @@
 // 「原始文件」Tab：左侧文件条 + 右侧语法高亮编辑（与设置页 JSON 编辑器同一套）。
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Save } from 'lucide-react';
 import { Button, Spinner, SyntaxTextEditor, type SyntaxMode } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
-import { useAppConfigDocuments, useAppConfigText } from '../../../hooks/apps/useAppInstanceConfig';
-import { appFrameworkService } from '../../../core/services/app-framework.service';
+import {
+    useAppConfigDocuments,
+    useAppConfigText,
+    useAppLinkBotDocs,
+} from '../../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { cn } from '../../../shared/utils/cn';
@@ -31,11 +33,7 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
 
     // Bot 侧（对接时桌面端写进协议 Bot 的连接配置）。与应用端那几份分开取：
     // 它们在 Bot 的配置目录里，所属主机与路径根都不一样，只读展示。
-    const botQuery = useQuery({
-        queryKey: ['appLinkBotDocs', instance.id] as const,
-        queryFn: () => appFrameworkService.linkBotDocuments(instance.id),
-        retry: false,
-    });
+    const botQuery = useAppLinkBotDocs(instance.id);
     const botDocs = useMemo(() => botQuery.data ?? [], [botQuery.data]);
 
     const [selectedId, setSelectedId] = useState<string | null>(null);

@@ -23,7 +23,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { usePreferences } from './preferencesStore';
+import { usePreferences } from './usePreferences';
 import {
     motionPresets,
     scaleDuration,

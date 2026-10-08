@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import gsap from 'gsap';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { preferencesStore } from '../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { Select } from './Select';
 
 const ITEMS = [

@@ -8,6 +8,8 @@ export interface WindowControls {
     minimize: () => void;
     toggleMaximize: () => void;
     close: () => void;
+    /** 工具窗专用：直接关本窗，不走主窗的托盘 / 退出策略 */
+    closeSelf: () => void;
 }
 
 /** 启动门在 splash 首帧上屏后调一次；失败只记日志，窗口起不来也没处弹条 */
@@ -58,5 +60,9 @@ export function useWindowControls(): WindowControls {
         void windowControlService.close();
     }, []);
 
-    return { isMaximized, minimize, toggleMaximize, close };
+    const closeSelf = useCallback(() => {
+        void windowControlService.closeSelf();
+    }, []);
+
+    return { isMaximized, minimize, toggleMaximize, close, closeSelf };
 }

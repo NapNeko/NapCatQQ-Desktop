@@ -19,12 +19,12 @@ import {
 } from '../../core/domain/chat/model';
 import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
 import { errorText } from '../../core/domain/errors';
-import { chatService } from '../../core/services/chat.service';
+import { useChatSend } from '../../hooks/chat/useChatSend';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
 import { ChatEmojiPicker } from './media/ChatEmojiPicker';
-import { QQFace } from './media/QQFace';
-import { ChatAvatar } from './ChatAvatar';
+import { QQFace } from '../../shared/chat/media/QQFace';
+import { ChatAvatar } from '../../shared/chat/ChatAvatar';
 import { useComposerResize } from './useComposerResize';
 import { Button } from '../../shared/ui/Button';
 import { ActionMotionIcon } from '../../shared/ui/motion/ActionMotionIcon';
@@ -47,6 +47,7 @@ export function ChatComposer({
     collapsed?: boolean;
 }) {
     const snapshot = useChatSnapshot(store);
+    const { pickFile, readLocalImage } = useChatSend(store);
     const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const localInput = useRef<HTMLTextAreaElement>(null);
     const input = inputRef ?? localInput;
@@ -163,7 +164,7 @@ export function ChatComposer({
         setError('');
         setPendingFiles((count) => count + 1);
         try {
-            const file = await chatService.pickFile();
+            const file = await pickFile();
             if (!file) return;
             if (current().attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
             if (type === 'image' && !/.(png|jpe?g|gif|webp|bmp)$/i.test(file.name))
@@ -349,6 +350,7 @@ export function ChatComposer({
                 </ChatPresence>
                 <ChatAttachmentStrip
                     attachments={draft.attachments}
+                    readLocalImage={readLocalImage}
                     onRemove={(key) =>
                         patch({
                             attachments: current().attachments.filter((file) => file.key !== key),
@@ -572,9 +574,11 @@ export function ChatComposer({
 function ChatAttachmentStrip({
     attachments,
     onRemove,
+    readLocalImage,
 }: {
     attachments: Attachment[];
     onRemove: (key: string) => void;
+    readLocalImage: (path: string) => Promise<string>;
 }) {
     const [retained, setRetained] = useState(attachments);
     const currentKeys = useMemo(() => new Set(attachments.map((file) => file.key)), [attachments]);
@@ -608,7 +612,7 @@ function ChatAttachmentStrip({
                 >
                     <div className="native-chat-attachment" data-type={file.type} role="listitem">
                         <div className="native-chat-attachment-preview">
-                            <AttachmentPreview attachment={file} />
+                            <AttachmentPreview attachment={file} readLocalImage={readLocalImage} />
                         </div>
                         <span className="native-chat-attachment-name" title={file.name}>
                             {file.name}
@@ -630,15 +634,20 @@ function ChatAttachmentStrip({
     );
 }
 
-function AttachmentPreview({ attachment }: { attachment: Attachment }) {
+function AttachmentPreview({
+    attachment,
+    readLocalImage,
+}: {
+    attachment: Attachment;
+    readLocalImage: (path: string) => Promise<string>;
+}) {
     const [failed, setFailed] = useState('');
     const [preview, setPreview] = useState({ path: '', source: '' });
     const previewPath = attachment.type === 'image' ? attachment.previewPath : undefined;
     useEffect(() => {
         if (!previewPath) return;
         let disposed = false;
-        void chatService
-            .readLocalImage(previewPath)
+        void readLocalImage(previewPath)
             .then((bytes) => {
                 if (!disposed)
                     setPreview({ path: previewPath, source: `data:image/png;base64,${bytes}` });
@@ -647,7 +656,7 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
         return () => {
             disposed = true;
         };
-    }, [previewPath]);
+    }, [previewPath, readLocalImage]);
     if (attachment.type === 'face') return <QQFace id={attachment.id} size={40} />;
     if (attachment.type === 'file') return <File size={28} strokeWidth={1.5} />;
     const source =

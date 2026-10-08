@@ -39,7 +39,7 @@ vi.mock('../../../core/services/domain-event-hub', () => ({
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 import { TooltipProvider } from '../../../shared/ui';
-import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { debugWorkspaceStore, defaultWorkspace } from '../../../hooks/debug/debugWorkspaceStore';
 import { _resetDebugCatalogForTests } from '../../../hooks/debug/useDebugCatalog';
 import { CenterColumn } from './CenterColumn';

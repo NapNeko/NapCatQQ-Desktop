@@ -246,7 +246,7 @@ function tokenizeToml(source: string): Tok[] {
             continue;
         }
         let j = i + 1;
-        while (j < n && /[A-Za-z0-9_\-]/.test(source[j]!)) j += 1;
+        while (j < n && /[A-Za-z0-9_-]/.test(source[j]!)) j += 1;
         const word = source.slice(i, j);
         let k = j;
         while (k < n && (source[k] === ' ' || source[k] === '\t')) k += 1;

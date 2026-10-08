@@ -1,7 +1,7 @@
 // InfoBar 自动关闭：danger 永不自动关；其余 tone 由 app-settings.uiPreferences 配置。
 // 磁盘 0 = 关闭自动关闭；开启时时长 1000–60000 ms，步进 100。
 
-import type { InfoBarTone } from '../../../shared/ui/InfoBar';
+import type { InfoBarTone } from './infoBarTone';
 import type { AppUiPreferences } from '../../ipc/generated/domain/AppUiPreferences';
 
 export const INFOBAR_DISMISS_MS_OFF = 0;

@@ -15,7 +15,7 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import { pushInfoBar, dismissInfoBar } from '../ui/globalInfoBarStore';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import type { DomainEvent } from '../../core/ipc/types';

@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Contact } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
-import { chatProfileService, type ProfileMember } from '../../core/services/chat-profile.service';
+import type { ProfileMember } from '../../core/domain/chat/profile';
+import { useChatMemberModeration } from '../../hooks/chat/useChatProfile';
 import { errorText } from '../../core/domain/errors';
 import { Button } from '../../shared/ui/Button';
 import {
@@ -53,9 +54,10 @@ export function ChatMemberActions({
     onResult: (result: GroupMemberResult) => void;
     onApplied?: (action: GroupMemberAction) => void;
 }) {
+    const moderation = useChatMemberModeration(target, contact.id, member.id);
     const [duration, setDuration] = useState('600');
-    const [busy, setBusy] = useState(false);
     const busyRef = useRef(false);
+    const [busy, setBusy] = useState(false);
     const operation = useRef(0);
     const identity = `${target.bot_id}/${target.qq_id}/${contact.key}/${member.id}`;
     useEffect(() => {
@@ -75,14 +77,8 @@ export function ChatMemberActions({
         busyRef.current = true;
         setBusy(true);
         try {
-            if (active === 'kick') await chatProfileService.kick(target, contact.id, member.id);
-            else
-                await chatProfileService.ban(
-                    target,
-                    contact.id,
-                    member.id,
-                    active === 'unban' ? 0 : Number(duration),
-                );
+            if (active === 'kick') await moderation.kick.mutateAsync();
+            else await moderation.ban.mutateAsync(active === 'unban' ? 0 : Number(duration));
             if (token !== operation.current) return;
             const label = durations.find((value) => value.value === duration)?.label ?? '';
             onResult({

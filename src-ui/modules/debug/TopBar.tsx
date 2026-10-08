@@ -11,7 +11,7 @@ import { ActionMotionIcon } from '../../shared/ui/motion';
 import { flushWorkspace } from '../../hooks/debug/debugWorkspaceStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
-import { debugWindowService, isDebugPopoutWindow } from '../../core/services/debug-window.service';
+import { isDebugPopoutWindow, useDebugWindow } from '../../hooks/desktop/useDebugWindow';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import type { DebugChannelChoice } from '../../core/ipc/generated/debug/DebugChannelChoice';
 import type { DebugChannels } from '../../core/ipc/generated/debug/DebugChannels';
@@ -68,6 +68,7 @@ export const TopBar = memo(function TopBar({
     onOpenPalette,
     onNavigate,
 }: TopBarProps) {
+    const { open: openDebugWindow } = useDebugWindow();
     const botId = selected?.bot_id ?? null;
     const running = selected?.running ?? false;
 
@@ -76,12 +77,12 @@ export const TopBar = memo(function TopBar({
     const popOut = useCallback(() => {
         void (async () => {
             await flushWorkspace();
-            await debugWindowService.open();
+            await openDebugWindow();
             onNavigate?.('overview');
         })().catch((err) => {
             pushErrorBar({ key: 'debug-popout', title: '弹出调试台失败', raw: errorText(err) });
         });
-    }, [onNavigate]);
+    }, [onNavigate, openDebugWindow]);
 
     return (
         <header className="@container shrink-0 pt-3">

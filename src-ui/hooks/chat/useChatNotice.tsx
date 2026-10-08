@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { pushInfoBar, removeSoonInfoBar } from '../ui/globalInfoBarStore';
 import { Button } from '../../shared/ui/Button';
-import type { InfoBarTone } from '../../shared/ui/InfoBar';
+import type { InfoBarTone } from '../../core/domain/ui/infoBarTone';
 
 export function useChatNotice(
     key: string,

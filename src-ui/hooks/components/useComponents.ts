@@ -19,7 +19,7 @@
 
 import { useQuery, useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { isTauri } from '../../core/ipc/transport';
+import { isTauri } from '../../core/domain/runtime/env';
 import { componentService } from '../../core/services/component.service';
 import { isComponentHiddenByFeatures } from '../../core/domain/settings/features';
 import { useFeatures } from '../preferences/featureTogglesStore';
@@ -32,7 +32,7 @@ import {
     type HostInfo,
 } from '../../core/domain/components/types';
 import { errorText } from '../../core/domain/errors';
-import { mockHosts } from '../../core/ipc/mock/component.mock';
+import { mockHosts } from '../../core/domain/components/mockHosts';
 import type { Os, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
@@ -53,11 +53,11 @@ function detectLocalOs(): Os {
 
 /// Tauri 模式下从 ServerManager 拉服务器档案，组合本机 + 远端 host 列表。
 /// 浏览器预览用 mockHosts。
-function useKnownHosts(): { hosts: HostInfo[]; servers: ServerProfile[] } {
+function useKnownHosts(enabled = true): { hosts: HostInfo[]; servers: ServerProfile[] } {
     const serversQuery = useQuery({
         queryKey: ['servers'],
         queryFn: () => serverService.list(),
-        enabled: isTauri,
+        enabled: isTauri && enabled,
     });
 
     const hosts = useMemo<HostInfo[]>(() => {
@@ -128,14 +128,18 @@ function autoConnectBlocked(serverId: string): boolean {
 }
 
 interface ComponentsDataOptions {
+    // false 时整个取数层挂起（servers/catalog/detect 全不发请求）。
+    // DEV 预热跳过开关用它，避免条件调用 hooks 违反 rules-of-hooks。
+    enabled?: boolean;
     // false 时只拉 servers/catalog，不发 detect / 不自动连远端。
     // 启动预热先暖轻量缓存，idle 后再开探测，避免与首屏抢 IPC。
     detectEnabled?: boolean;
 }
 
 function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData {
+    const enabled = options.enabled ?? true;
     const detectEnabled = options.detectEnabled ?? true;
-    const { hosts, servers } = useKnownHosts();
+    const { hosts, servers } = useKnownHosts(enabled);
     const queryClient = useQueryClient();
 
     // 主机可达性：servers 列表已由 useKnownHosts 的同一 ['servers'] 查询拉到。
@@ -192,6 +196,7 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
         queryKey: ['componentCatalog'],
         queryFn: componentService.listComponents,
         staleTime: 5 * 60 * 1000,
+        enabled,
     });
 
     // 设置里关掉的组件（协议端、ncd-watch）不列也不探测，每台主机少几次远端命令
@@ -238,15 +243,14 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
 // 自动连远端与逐主机 detect，避免与 splash/首屏抢 IPC。永不卸载，保持缓存；
 // 进组件页时 useComponents 共享同一 query key。
 // dev 可设 VITE_SKIP_COMPONENTS_WARMUP=1 跳过整段预热，减轻 HMR 后 IPC 风暴。
-// skip 为构建期常量，early return 不会在运行时改变 hooks 数量。
+// skip 为构建期常量；不条件调用 hooks，而是把 enabled 传进取数层门控所有查询。
 export function useComponentsWarmup(): void {
-    if (import.meta.env.DEV && import.meta.env.VITE_SKIP_COMPONENTS_WARMUP === '1') {
-        return;
-    }
+    const skip = import.meta.env.DEV && import.meta.env.VITE_SKIP_COMPONENTS_WARMUP === '1';
 
     const [detectEnabled, setDetectEnabled] = useState(false);
 
     useEffect(() => {
+        if (skip) return;
         let cancelled = false;
         const arm = () => {
             if (!cancelled) setDetectEnabled(true);
@@ -270,9 +274,9 @@ export function useComponentsWarmup(): void {
             cancelled = true;
             window.clearTimeout(timer);
         };
-    }, []);
+    }, [skip]);
 
-    useComponentsData({ detectEnabled });
+    useComponentsData({ enabled: !skip, detectEnabled: !skip && detectEnabled });
 }
 
 export function useComponents(): UseComponentsResult {
