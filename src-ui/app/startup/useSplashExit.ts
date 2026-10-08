@@ -3,6 +3,7 @@
 // notifyReveal 在开洞那一刻回调（宿主提前起播主界面入场），onComplete 走 finish。
 
 import { useEffect } from 'react';
+import gsap from 'gsap';
 import type { MutableRefObject } from 'react';
 import { RING_FX_SIZE, SUB_TEXT } from '../../core/domain/bootstrap/splashSpec';
 import { IRIS_SUPPORTED, irisClipPath, swapText } from './splashFx';
