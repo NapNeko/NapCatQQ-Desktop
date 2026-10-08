@@ -1,5 +1,6 @@
 // 按 Bot 和登录身份分区，界面离开后释放接收租约。
 import { useSyncExternalStore } from 'react';
+import { cancelChatScreenshot } from './useChatScreenshot';
 import { chatService } from '../../core/services/chat.service';
 import { chatArchiveService } from '../../core/services/chat-archive.service';
 import { chatDesktopService } from '../../core/services/chat-desktop.service';
@@ -1703,7 +1704,12 @@ export class ChatAccountStore {
                             a.type === 'face'
                                 ? a
                                 : a.type === 'image'
-                                  ? { ...a, type: 'image' as const, subType: a.subType ?? null }
+                                  ? {
+                                        ...a,
+                                        type: 'image' as const,
+                                        subType: a.subType ?? null,
+                                        previewPath: a.previewPath ?? null,
+                                    }
                                   : { ...a, type: 'file' as const },
                         ),
                     },
@@ -1721,7 +1727,11 @@ export class ChatAccountStore {
                     ...draft,
                     attachments: draft.attachments.map((a) =>
                         a.type === 'image'
-                            ? { ...a, subType: a.subType === 1 ? (1 as const) : undefined }
+                            ? {
+                                  ...a,
+                                  subType: a.subType === 1 ? (1 as const) : undefined,
+                                  previewPath: a.previewPath ?? undefined,
+                              }
                             : a,
                     ),
                 },
@@ -1837,6 +1847,7 @@ function persistView(view: ChatViewState) {
     return saved;
 }
 export function releaseChatAccount(store: ChatAccountStore): Promise<void> {
+    void cancelChatScreenshot(store);
     const key = accountKey(store.target.bot_id, store.getSnapshot().account.selfId);
     store.releaseWhenIdle = true;
     if (store.viewRevision === viewRevision)
@@ -1876,6 +1887,7 @@ export async function prepareChatHandoff(
     unmount?: () => void,
     keepReading = true,
 ) {
+    await cancelChatScreenshot();
     // 控制台未挂聊天页时，runtime 中可能是上次独立窗留下的新草稿。
     if (!accounts.size) {
         unmount?.();

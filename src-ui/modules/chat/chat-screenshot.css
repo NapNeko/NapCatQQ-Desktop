@@ -1,0 +1,81 @@
+.native-chat-screenshot-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+}
+.native-chat-screenshot-tools .native-chat-screenshot-options {
+    width: 14px;
+    min-width: 14px;
+    padding: 0;
+    margin-left: -3px;
+    color: var(--text-tertiary);
+}
+.native-chat-screenshot-settings {
+    width: 290px;
+    padding: 12px 14px 8px;
+    font-size: 12px;
+}
+.native-chat-screenshot-heading {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-bottom: 12px;
+    min-height: 28px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+.native-chat-screenshot-row,
+.native-chat-screenshot-shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 0;
+    border-top: 1px solid var(--border-subtle);
+}
+.native-chat-screenshot-shortcut-row > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.native-chat-screenshot-shortcut-row > div > span {
+    color: var(--text-tertiary);
+    font-size: 10px;
+}
+.native-chat-screenshot-shortcut {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 118px;
+    min-height: 30px;
+    padding: 4px 7px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+    color: var(--text-secondary);
+}
+.native-chat-screenshot-shortcut kbd {
+    font: inherit;
+    font-size: 11px;
+}
+.native-chat-screenshot-shortcut kbd + kbd::before {
+    content: "+";
+    padding-right: 4px;
+    color: var(--text-tertiary);
+}
+.native-chat-screenshot-shortcut[data-recording="true"] {
+    border-color: var(--border-focus);
+    color: var(--action-primary);
+}
+.native-chat-screenshot-settings .native-chat-screenshot-reset {
+    display: flex;
+    margin-left: auto;
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    padding: 4px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+}

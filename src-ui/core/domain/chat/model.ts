@@ -47,7 +47,8 @@ export interface Message {
     gapBefore?: boolean;
 }
 export type Attachment = { key: string; name: string } & (
-    { type: 'image' | 'file'; path: string; subType?: 1 } | { type: 'face'; id: string }
+    | { type: 'image' | 'file'; path: string; subType?: 1; previewPath?: string }
+    | { type: 'face'; id: string }
 );
 export interface Reply {
     id: string;
