@@ -300,9 +300,14 @@ async fn release_requested_main(app: &AppHandle) -> Result<(), String> {
 }
 #[tauri::command]
 pub async fn focus_chat_window(app: AppHandle) -> bool {
+    let coordinator = app.state::<ChatWindowCoordinator>();
+    let _gate = coordinator.gate.lock().await;
     let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else {
         return false;
     };
+    if !coordinator.ready.load(Ordering::SeqCst) {
+        return true;
+    }
     let _ = crate::webview_scheduler::show_window(&window).await;
     let _ = window.unminimize();
     let _ = window.set_focus();
@@ -323,19 +328,27 @@ pub async fn chat_window_state(app: AppHandle) -> ChatWindowState {
 pub async fn close_chat_window(app: AppHandle, embed: bool) -> Result<(), String> {
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
-    prepare(
+    let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else {
+        return Ok(());
+    };
+    // 先收起原生窗口，网页保持可执行，避免隐藏限频拖慢草稿交接和销毁。
+    let was_visible = window.is_visible().unwrap_or(false);
+    window.hide().map_err(|error| error.to_string())?;
+    if let Err(error) = prepare(
         &app,
         CHAT_WINDOW_LABEL,
         if embed { "embed" } else { "close" },
     )
-    .await?;
-    app.state::<crate::AppState>()
-        .chat
-        .release_page(CHAT_WINDOW_LABEL)
-        .await;
-    if let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL)
-        && let Err(error) = window.destroy()
+    .await
     {
+        if was_visible {
+            let _ = crate::webview_scheduler::show_window(&window).await;
+            let _ = window.set_focus();
+        }
+        return Err(error);
+    }
+    // Destroyed 按页面创建时间异步回收租约，不必让连接清理延迟 WebView 销毁。
+    if let Err(error) = window.destroy() {
         let _ = app.emit_to(
             CHAT_WINDOW_LABEL,
             crate::window_events::CHAT_WINDOW_REQUEST,
@@ -345,6 +358,10 @@ pub async fn close_chat_window(app: AppHandle, embed: bool) -> Result<(), String
                 action: "resume".into(),
             },
         );
+        if was_visible {
+            let _ = crate::webview_scheduler::show_window(&window).await;
+            let _ = window.set_focus();
+        }
         return Err(error.to_string());
     }
     coordinator.ready.store(false, Ordering::SeqCst);

@@ -570,4 +570,22 @@ mod tests {
         scheduler.complete("main", focused, Action::SetVisible(true), Ok(()));
         assert!(!scheduler.needs_native_restore("main"));
     }
+
+    #[test]
+    fn pending_show_survives_focus_changes_and_repeated_restore_requests() {
+        let scheduler = WebviewScheduler::default();
+        let label = crate::chat_window::CHAT_WINDOW_LABEL;
+        let (hidden, _) = scheduler.step(label, Event::Hide).unwrap();
+        scheduler.complete(label, hidden, Action::SetVisible(false), Ok(()));
+        let (show, _) = scheduler.step(label, Event::Show).unwrap();
+        scheduler.step(label, Event::Focus(false)).unwrap();
+        scheduler.step(label, Event::Focus(true)).unwrap();
+        scheduler.step(label, Event::Show).unwrap();
+        assert!(scheduler.is_current(label, show));
+        assert!(!scheduler.can_expose(label, show));
+        scheduler.complete(label, show, Action::SetVisible(true), Ok(()));
+        assert!(scheduler.can_expose(label, show));
+        scheduler.step(label, Event::Hide).unwrap();
+        assert!(!scheduler.can_expose(label, show));
+    }
 }

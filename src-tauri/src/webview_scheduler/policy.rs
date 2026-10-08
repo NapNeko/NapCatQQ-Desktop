@@ -71,6 +71,7 @@ pub(crate) struct Entry {
     focused: bool,
     dormant: bool,
     generation: u64,
+    idle_generation: u64,
     confirmed_hidden: Option<bool>,
     confirmed_dormant: Option<bool>,
     visibility_error: Option<String>,
@@ -159,10 +160,14 @@ pub(crate) fn step(
     let mut actions = Vec::new();
     if !matches!(event, Event::Retry(_) | Event::Tick(_)) {
         entry.retries = 0;
+        // 焦点计时不能取消仍在等待 controller 确认的同方向显示请求。
+        entry.idle_generation = entry.idle_generation.wrapping_add(1);
     }
     match event {
         Event::Hide => {
-            entry.generation += 1;
+            if !entry.hidden || !entry.dormant {
+                entry.generation = entry.generation.wrapping_add(1);
+            }
             entry.focused = false;
             if !entry.hidden
                 || entry.confirmed_hidden != Some(true)
@@ -180,7 +185,9 @@ pub(crate) fn step(
             }
         }
         Event::Show => {
-            entry.generation += 1;
+            if entry.hidden || entry.dormant {
+                entry.generation = entry.generation.wrapping_add(1);
+            }
             wake(entry, &mut actions);
             // 显示时总是放一次可见：调度器之外有人藏过 WebView 时也能拉回来，重复设可见没有代价
             if !actions.contains(&Action::SetVisible(true)) {
@@ -188,7 +195,9 @@ pub(crate) fn step(
             }
         }
         Event::Focus(true) => {
-            entry.generation += 1;
+            if entry.hidden || entry.dormant {
+                entry.generation = entry.generation.wrapping_add(1);
+            }
             entry.focused = true;
             // 某条显示路径没经过调度器，窗口已经在前台了 WebView 还是藏着的：在这里补上
             wake(entry, &mut actions);
@@ -199,8 +208,6 @@ pub(crate) fn step(
                 && !entry.dormant
                 && let Some(after) = role.idle_dormant_after()
             {
-                entry.generation += 1;
-                // 失焦会作废旧代次，尚未确认的恢复必须随新代次补发。
                 if entry.visibility_pending
                     || entry.dormancy_pending
                     || entry.visibility_error.is_some()
@@ -210,12 +217,17 @@ pub(crate) fn step(
                 }
                 actions.push(Action::ScheduleTick {
                     after,
-                    generation: entry.generation,
+                    generation: entry.idle_generation,
                 });
             }
         }
         Event::Tick(generation) => {
-            if generation == entry.generation && !entry.focused && !entry.hidden && !entry.dormant {
+            if generation == entry.idle_generation
+                && !entry.focused
+                && !entry.hidden
+                && !entry.dormant
+            {
+                entry.generation = entry.generation.wrapping_add(1);
                 entry.dormant = true;
                 actions.push(Action::SetDormant(true));
             }
@@ -452,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_generation_reissues_unconfirmed_low_and_normal() {
+    fn repeated_requests_reissue_unconfirmed_low_and_normal() {
         let mut e = Entry::default();
         let hide = step(WebviewRole::Main, &mut e, Event::Hide, Instant::now());
         assert_eq!(
@@ -471,11 +483,11 @@ mod tests {
         );
     }
     #[test]
-    fn blur_reissues_a_queued_restore_instead_of_leaving_the_visible_host_blank() {
+    fn blur_preserves_a_queued_restore_and_schedules_idle_separately() {
         let mut e = Entry::default();
         run(WebviewRole::ChatPopout, &mut e, Event::Hide);
         let restore = step(WebviewRole::ChatPopout, &mut e, Event::Show, Instant::now());
-        let old = e.generation();
+        let restore_generation = e.generation();
         assert_eq!(
             restore,
             vec![Action::SetDormant(false), Action::SetVisible(true)]
@@ -491,15 +503,10 @@ mod tests {
             &[Action::SetDormant(false), Action::SetVisible(true)]
         );
         assert!(matches!(blur[2], Action::ScheduleTick { .. }));
-        assert!(
-            e.complete(
-                old,
-                Action::SetVisible(true),
-                Err("old UI callback cancelled".into())
-            )
-            .is_none()
-        );
+        assert_eq!(e.generation(), restore_generation);
         assert_eq!(e.confirmed_hidden(), Some(true));
+        e.complete(restore_generation, Action::SetVisible(true), Ok(()));
+        assert_eq!(e.confirmed_hidden(), Some(false));
         for action in &blur {
             e.complete(e.generation(), *action, Ok(()));
         }
@@ -523,5 +530,33 @@ mod tests {
             actions.as_slice(),
             [Action::SetDormant(false), Action::ScheduleTick { .. }]
         ));
+    }
+
+    #[test]
+    fn a_new_blur_cancels_the_previous_idle_timer_without_canceling_visibility() {
+        let mut e = Entry::default();
+        run(WebviewRole::ChatPopout, &mut e, Event::Show);
+        let resource_generation = e.generation();
+        let first = run(WebviewRole::ChatPopout, &mut e, Event::Focus(false));
+        let Action::ScheduleTick {
+            generation: old, ..
+        } = first[0]
+        else {
+            panic!("失焦应安排计时");
+        };
+        let second = run(WebviewRole::ChatPopout, &mut e, Event::Focus(false));
+        let Action::ScheduleTick {
+            generation: current,
+            ..
+        } = second[0]
+        else {
+            panic!("再次失焦应重新计时");
+        };
+        assert_eq!(e.generation(), resource_generation);
+        assert!(run(WebviewRole::ChatPopout, &mut e, Event::Tick(old)).is_empty());
+        assert_eq!(
+            run(WebviewRole::ChatPopout, &mut e, Event::Tick(current)),
+            vec![Action::SetDormant(true)]
+        );
     }
 }

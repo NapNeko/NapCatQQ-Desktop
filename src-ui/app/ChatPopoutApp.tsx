@@ -43,18 +43,15 @@ export function ChatPopoutApp() {
                     return reply(request.requestId, message).catch(() => {});
                 });
         });
-        const frame = requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-                if (alive)
-                    void reveal().catch((error) => {
-                        if (alive) setHandoffError(errorText(error));
-                    });
-            }),
-        );
+        // 隐藏的 WebView 可能不派发动画帧；监听就绪后即可显示已提交的界面。
+        void subscription
+            .then(() => (alive ? reveal() : undefined))
+            .catch((error) => {
+                if (alive) setHandoffError(errorText(error));
+            });
         return () => {
             alive = false;
-            cancelAnimationFrame(frame);
-            void subscription.then((unlisten) => unlisten());
+            void subscription.then((unlisten) => unlisten()).catch(() => {});
         };
     }, [onRequest, reply, reveal]);
     return (
