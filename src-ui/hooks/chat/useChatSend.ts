@@ -23,8 +23,10 @@ export function useChatSend(store: ChatAccountStore) {
     });
     const pickFile = useCallback(() => mutateAsync(), [mutateAsync]);
     const openLink = useCallback((url: string) => chatService.openLink(url), []);
+    // 截图附件的本地预览图读取；与 pickFile/openLink 同类薄转发，不让模块层直连 service。
+    const readLocalImage = useCallback((path: string) => chatService.readLocalImage(path), []);
     return useMemo(
-        () => ({ send, recall, retry, poke, forward, pickFile, openLink }),
-        [send, recall, retry, poke, forward, pickFile, openLink],
+        () => ({ send, recall, retry, poke, forward, pickFile, openLink, readLocalImage }),
+        [send, recall, retry, poke, forward, pickFile, openLink, readLocalImage],
     );
 }

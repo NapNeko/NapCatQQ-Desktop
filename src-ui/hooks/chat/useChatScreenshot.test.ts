@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     captureChatScreenshot,
@@ -251,12 +252,17 @@ describe('screenshot draft lifecycle', () => {
         await store.connect();
         await captureChatScreenshot(store, 'private:12', options);
         const read = vi.spyOn(chatService, 'readLocalImage').mockResolvedValue('aGVsbG8=');
+        const client = new QueryClient();
         const view = render(
-            createElement(ChatComposer, {
-                store,
-                contact: { key: 'private:12', id: '12', name: '好友', type: 'private' },
-                disabledReason: '',
-            }),
+            createElement(
+                QueryClientProvider,
+                { client },
+                createElement(ChatComposer, {
+                    store,
+                    contact: { key: 'private:12', id: '12', name: '好友', type: 'private' },
+                    disabledReason: '',
+                }),
+            ),
         );
         await screen.findByRole('img', { name: '截图.png' });
         expect(read).toHaveBeenCalledWith(file.previewPath);
