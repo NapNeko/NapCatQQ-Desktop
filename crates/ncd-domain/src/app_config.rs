@@ -180,6 +180,10 @@ fn default_ui_radius_style() -> String {
     "standard".to_string()
 }
 
+fn default_ui_sidebar_style() -> String {
+    "floating".to_string()
+}
+
 fn default_ui_motion_speed() -> f64 {
     0.5
 }
@@ -263,6 +267,9 @@ pub struct AppUiPreferences {
         default = "default_infobar_dismiss_warning_ms"
     )]
     pub info_bar_dismiss_warning_ms: u64,
+    /// 侧栏形态：classic 贴边可折叠 / floating 悬浮卡片恒展开
+    #[serde(rename = "sidebarStyle", default = "default_ui_sidebar_style")]
+    pub sidebar_style: String,
 }
 
 impl Default for AppUiPreferences {
@@ -274,6 +281,7 @@ impl Default for AppUiPreferences {
             motion_level: default_ui_motion_level(),
             motion_speed: default_ui_motion_speed(),
             radius_style: default_ui_radius_style(),
+            sidebar_style: default_ui_sidebar_style(),
             info_bar_dismiss_info_ms: default_infobar_dismiss_info_ms(),
             info_bar_dismiss_success_ms: default_infobar_dismiss_success_ms(),
             info_bar_dismiss_warning_ms: default_infobar_dismiss_warning_ms(),
@@ -645,6 +653,17 @@ mod tests {
             settings.snowluma_node_override(),
             Some("D:\\node\\node.exe")
         );
+    }
+
+    #[test]
+    fn ui_preferences_missing_sidebar_style_defaults_floating() {
+        // 旧配置（无 sidebarStyle 键）覆盖更新后自动获得悬浮侧栏，0 成本迁移。
+        let prefs: AppUiPreferences = serde_json::from_str(r#"{"theme":"auto","showMascot":true}"#).unwrap();
+        assert_eq!(prefs.sidebar_style, "floating");
+        let round: AppUiPreferences =
+            serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
+        assert_eq!(round, prefs);
+        assert_eq!(AppUiPreferences::default().sidebar_style, "floating");
     }
 
     /// Legacy PySide6 版本规范 JSON

@@ -15,4 +15,8 @@ infoBarDismissSuccessMs: bigint,
 /**
  * InfoBar warning tone 自动关闭毫秒,danger 始终不自动关
  */
-infoBarDismissWarningMs: bigint, };
+infoBarDismissWarningMs: bigint, 
+/**
+ * 侧栏形态：classic 贴边可折叠 / floating 悬浮卡片恒展开
+ */
+sidebarStyle: string, };
