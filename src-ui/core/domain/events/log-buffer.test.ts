@@ -30,6 +30,7 @@ describe('appendLine · Karin', () => {
         expect(entry.text).toBe('Karin 启动中...');
         expect(entry.level).toBe('trace');
         expect(entry.timestamp).toBe('20:16:22');
+        // eslint-disable-next-line no-control-regex -- 断言清洗后不残留 ESC
         expect(entry.text).not.toMatch(/\u001b/);
     });
 

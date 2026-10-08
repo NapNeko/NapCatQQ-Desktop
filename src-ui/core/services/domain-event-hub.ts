@@ -41,7 +41,6 @@ function ensureStarted(): Promise<void> {
 export function subscribeDomainEvents(handler: Handler): () => void {
     handlers.add(handler);
     void ensureStarted().catch((err) => {
-        // eslint-disable-next-line no-console
         console.error('[domain-event-hub] failed to start event stream:', err);
     });
 

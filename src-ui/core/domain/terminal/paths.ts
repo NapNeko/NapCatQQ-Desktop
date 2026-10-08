@@ -114,6 +114,7 @@ export function navDirection(from: string, to: string): 'in' | 'out' {
 /** 文件名里不能出现的字符（两边取并集，远端 Linux 其实只禁 `/`，但留着 `\` 会让人看不懂） */
 export function invalidFileName(name: string): boolean {
     const trimmed = name.trim();
+    // eslint-disable-next-line no-control-regex -- 就是要拦控制字符
     return !trimmed || trimmed === '.' || trimmed === '..' || /[\\/:*?"<>|\x00-\x1f]/.test(trimmed);
 }
 

@@ -6,6 +6,7 @@
 // 免得在 ssh 别的机器、mysql -p 这种要别的密码的地方误导人去填提权密码。
 
 const ESCAPES =
+    // eslint-disable-next-line no-control-regex -- ESC/BEL 字面量就是 ANSI 解析目标
     /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[P^_X][^\x1b]*\x1b\\|[ -/]*[0-~])/g;
 
 export function stripAnsi(text: string): string {

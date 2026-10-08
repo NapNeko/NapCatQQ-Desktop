@@ -37,7 +37,6 @@ export class SafeBoundary extends Component<SafeProps, { failed: boolean }> {
     }
 
     componentDidCatch(error: unknown): void {
-        // eslint-disable-next-line no-console
         console.error('[debug] 聊天条目渲染失败:', error);
     }
 

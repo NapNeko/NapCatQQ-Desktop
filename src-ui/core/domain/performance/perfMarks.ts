@@ -47,7 +47,7 @@ export function perfMark(name: string, options?: PerfMarkOptions): void {
     if (!marksEnabled()) return;
     try {
         performance.mark(name);
-        // eslint-disable-next-line no-console
+
         console.debug(`[perf] mark ${name} @ ${performance.now().toFixed(1)}ms`);
     } catch {
         /* noop */
@@ -61,7 +61,6 @@ export function perfMeasure(name: string, startMark: string, endMark: string): v
         const entries = performance.getEntriesByName(name, 'measure');
         const last = entries[entries.length - 1];
         if (last) {
-            // eslint-disable-next-line no-console
             console.debug(`[perf] measure ${name} = ${last.duration.toFixed(1)}ms`);
         }
     } catch {

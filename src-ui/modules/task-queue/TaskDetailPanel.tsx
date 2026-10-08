@@ -217,7 +217,6 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制失败:', err);
         }
     };
@@ -235,7 +234,6 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制失败:', err);
         }
     };
@@ -252,7 +250,6 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制失败:', err);
         }
     };

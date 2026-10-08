@@ -143,7 +143,6 @@ export function hydrateBotLogs(botId: string): void {
             setLogs(botId, historical);
         })
         .catch((err) => {
-            // eslint-disable-next-line no-console
             console.warn('加载 Bot 历史日志失败:', err);
         })
         .finally(() => {

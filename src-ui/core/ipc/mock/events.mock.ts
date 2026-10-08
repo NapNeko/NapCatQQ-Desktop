@@ -17,7 +17,6 @@ export function emitMockEvent(event: DomainEvent): void {
         try {
             cb(event);
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('Error invoking mock event callback:', err);
         }
     }

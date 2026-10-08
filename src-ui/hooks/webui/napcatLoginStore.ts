@@ -98,7 +98,6 @@ async function hydrateFromBackend(): Promise<void> {
             hydrateAttempts = MAX_EMPTY_HYDRATE_RETRIES;
         }
     } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[napcatLoginStore] hydrate webui bindings failed:', err);
     }
 }

@@ -40,7 +40,6 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDra
         try {
             await onOpenDataDir();
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('打开数据目录失败:', err);
         }
     };

@@ -63,7 +63,6 @@ export const eventStreamService = {
                 });
                 unlisteners.push(unlisten);
             } catch (err) {
-                // eslint-disable-next-line no-console
                 console.error(`[event-stream] failed to subscribe ${name}:`, err);
             }
         }

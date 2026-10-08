@@ -32,7 +32,6 @@ export function useDesktopLogViewer(enabled: boolean) {
         try {
             await desktopLogService.openLogLocation();
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('打开日志位置失败:', err);
         } finally {
             setOpening(false);
@@ -44,7 +43,6 @@ export function useDesktopLogViewer(enabled: boolean) {
         try {
             await navigator.clipboard.writeText(serializeDesktopLogs(filtered));
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);
         }
     }, [filtered]);

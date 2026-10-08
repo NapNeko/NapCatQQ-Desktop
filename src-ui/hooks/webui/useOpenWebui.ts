@@ -24,13 +24,11 @@ export function useOpenWebui() {
                     try {
                         await navigator.clipboard.writeText(ep.password);
                     } catch (e) {
-                        // eslint-disable-next-line no-console
                         console.warn('密码写入剪贴板失败:', e);
                     }
                 }
                 await openExternalUrl(ep.url);
             } catch (err) {
-                // eslint-disable-next-line no-console
                 console.error('打开 SnowLuma WebUI 失败:', err);
                 // 让上层决定怎么提示，这里只 throw。
                 throw err;
