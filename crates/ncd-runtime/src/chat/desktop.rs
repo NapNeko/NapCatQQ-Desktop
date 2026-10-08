@@ -72,6 +72,29 @@ impl DesktopState {
 }
 
 impl ChatManager {
+    pub async fn set_enabled(&self, enabled: bool) {
+        {
+            // 与订阅和后台收敛共用锁，关掉后不能留下迟到的租约。
+            let _lease = self.desktop.lease_gate.lock().await;
+            self.transport.set_enabled(enabled).await;
+            if !enabled {
+                self.files.cancel_all();
+                self.desktop.background.lock().await.clear();
+                self.desktop.viewers.lock().await.clear();
+                self.desktop.inbox.clear_readers();
+                for key in self.desktop.inbox.keys() {
+                    if let Err(error) = self.desktop.inbox.release(&key).await {
+                        tracing::warn!(%error, "chat disable flush");
+                    }
+                }
+            }
+        }
+        if enabled {
+            self.reconcile_background().await;
+        }
+        self.notify_changed();
+    }
+
     /// Commit imported preferences before updating the cache and background subscriptions.
     pub async fn replace_preferences_with<R>(
         &self,
@@ -99,6 +122,12 @@ impl ChatManager {
     }
 
     pub async fn desktop_status(&self) -> ChatDesktopStatus {
+        if !self.is_enabled() {
+            return ChatDesktopStatus {
+                v: 1,
+                accounts: Vec::new(),
+            };
+        }
         let targets = self.targets().await;
         let preferences = self.desktop.preferences.read().await;
         ChatDesktopStatus {
@@ -360,6 +389,11 @@ impl ChatManager {
         self_id: String,
         session: Option<String>,
     ) -> Result<(), String> {
+        let _lease = self.desktop.lease_gate.lock().await;
+        if !self.is_enabled() {
+            self.clear_reading(page);
+            return Ok(());
+        }
         self.archive_identity(&bot_id, &self_id).await?;
         if session.as_ref().is_some_and(|s| {
             !(s.starts_with("group:") || s.starts_with("private:"))
@@ -383,6 +417,9 @@ impl ChatManager {
         session: String,
     ) -> Result<(), String> {
         let _lease = self.desktop.lease_gate.lock().await;
+        if !self.is_enabled() {
+            return Ok(());
+        }
         self.archive_identity(&bot_id, &self_id).await?;
         let key = (bot_id, self_id);
         self.desktop.inbox.ensure(&key).await?;
@@ -487,6 +524,9 @@ impl ChatManager {
     }
     pub(super) async fn reconcile_background(&self) {
         let _lease = self.desktop.lease_gate.lock().await;
+        if !self.is_enabled() {
+            return;
+        }
         let targets = self.targets().await;
         let preferences = self.desktop.preferences.read().await.accounts.clone();
         for target in &targets {
@@ -609,7 +649,7 @@ impl ChatManager {
                     if matches!(event, crate::events::DomainEvent::BotStateChanged { .. } | crate::events::DomainEvent::SnowLumaLoginStateChanged { .. } | crate::events::DomainEvent::SnowLumaUinDetected { .. }) { self.reconcile_background().await; }
                 }
                 _ = flush_tick.tick() => {
-                    if let Err(e) = self.flush().await { tracing::warn!("chat inbox flush: {e}"); }
+                    if self.is_enabled() && let Err(e) = self.flush().await { tracing::warn!("chat inbox flush: {e}"); }
                 }
                 _ = recovery_tick.tick() => self.reconcile_background().await,
             }
@@ -685,6 +725,40 @@ mod tests {
             ignored_groups: vec![group.into()],
             ..Default::default()
         }
+    }
+
+    #[tokio::test]
+    async fn disabling_releases_offline_readers_and_ignores_late_reading_updates() {
+        let root = tempfile::tempdir().unwrap();
+        let chat = manager(root.path());
+        chat.load_archive("10001".into(), "10001".into())
+            .await
+            .unwrap();
+        chat.set_reading(
+            "main",
+            "10001".into(),
+            "10001".into(),
+            Some("group:1".into()),
+        )
+        .await
+        .unwrap();
+        chat.set_enabled(false).await;
+        assert!(chat.desktop.inbox.keys().is_empty());
+        chat.set_reading(
+            "main",
+            "10001".into(),
+            "10001".into(),
+            Some("group:1".into()),
+        )
+        .await
+        .unwrap();
+        chat.mark_read("10001".into(), "10001".into(), "group:1".into())
+            .await
+            .unwrap();
+        chat.load_archive("10001".into(), "10001".into())
+            .await
+            .unwrap();
+        assert!(chat.desktop.inbox.keys().is_empty());
     }
 
     #[tokio::test]

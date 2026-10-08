@@ -44,6 +44,10 @@ impl ChatManager {
         self.transport.list_targets().await
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.transport.is_enabled()
+    }
+
     pub fn screenshot_cache(&self) -> Arc<crate::chat_screenshots::ChatScreenshotCache> {
         Arc::clone(&self.screenshots)
     }
@@ -60,7 +64,12 @@ impl ChatManager {
     ) -> Result<Option<ChatArchive>, String> {
         let _lease = self.desktop.lease_gate.lock().await;
         self.archive_identity(&bot_id, &self_id).await?;
-        self.desktop.inbox.load(&(bot_id, self_id)).await.map(Some)
+        let key = (bot_id, self_id);
+        let archive = self.desktop.inbox.load(&key).await?;
+        if !self.is_enabled() {
+            self.desktop.inbox.release(&key).await?;
+        }
+        Ok(Some(archive))
     }
 
     pub async fn save_archive(
@@ -71,10 +80,23 @@ impl ChatManager {
     ) -> Result<(), String> {
         let _lease = self.desktop.lease_gate.lock().await;
         self.archive_identity(&bot_id, &self_id).await?;
-        self.desktop.inbox.merge(&(bot_id, self_id), value).await
+        let key = (bot_id, self_id);
+        self.desktop.inbox.merge(&key, value).await?;
+        if !self.is_enabled() {
+            self.desktop.inbox.release(&key).await?;
+        }
+        Ok(())
     }
 
     pub async fn call(&self, mut request: DebugCallRequest) -> DebugCallResponse {
+        if !self.is_enabled() {
+            return DebugCallResponse {
+                request_id: request.request_id,
+                result: DebugCallResult::Err {
+                    error: DebugError::FeatureDisabled,
+                },
+            };
+        }
         if moderation::is_member_action(&request.action) {
             if let Err(error) = self.check_member_action(&mut request).await {
                 return DebugCallResponse {
@@ -107,6 +129,9 @@ impl ChatManager {
         sink: Arc<dyn DebugEventSink>,
     ) -> Result<DebugSubscribeResponse, DebugError> {
         let _lease = self.desktop.lease_gate.lock().await;
+        if !self.is_enabled() {
+            return Err(DebugError::FeatureDisabled);
+        }
         let target = self
             .targets()
             .await

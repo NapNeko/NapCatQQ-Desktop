@@ -401,6 +401,88 @@ pub(super) fn event_ws_bot(qq: u64, port: u16) -> BotConfig {
 // ─── OneBot WS 服务当来源 ────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn chat_feature_releases_receivers_and_restores_background_preferences() {
+    use ncd_domain::chat_desktop::ChatAccountPreference;
+
+    let h = harness();
+    let up = Upstream::start().await;
+    let bot = h.bots.add(local_bot(10_001, BackendType::NapCat), true);
+    h.bots.set_napcat(&bot, up.port);
+    let chat = crate::chat::ChatManager::new(
+        Arc::clone(&h.bots) as Arc<dyn DebugBotPort>,
+        Arc::new(LocalOnlyHostResolver::new(
+            Arc::clone(&h.host) as Arc<dyn Host>
+        )),
+        h.data.path().to_path_buf(),
+    );
+    let preference = ChatAccountPreference {
+        bot_id: bot.as_str().into(),
+        self_id: "10001".into(),
+        enabled: true,
+        background: true,
+        tray: true,
+        ..Default::default()
+    };
+    let (debug, _) = subscribe(&h, &bot, DebugChannelId::Auto).await;
+    chat.set_preference(preference.clone()).await.unwrap();
+    let viewer = Arc::new(RecordingSink::default());
+    chat.subscribe(bot.as_str(), Arc::clone(&viewer) as Arc<dyn DebugEventSink>)
+        .await
+        .unwrap();
+    wait_until("聊天和调试台连接", || up.streams() == 2).await;
+    up.push(group_message(1));
+    wait_until("聊天收到消息", || viewer.ob11().len() == 1).await;
+
+    chat.set_enabled(false).await;
+    wait_until("关闭聊天后调试连接继续运行", || {
+        up.ws_closed() == 1
+    })
+    .await;
+    assert!(chat.desktop_status().await.accounts.is_empty());
+    assert_eq!(
+        chat.subscribe(bot.as_str(), Arc::clone(&viewer) as Arc<dyn DebugEventSink>)
+            .await
+            .unwrap_err(),
+        DebugError::FeatureDisabled
+    );
+    assert!(matches!(
+        chat.call(request(
+            "disabled",
+            &bot,
+            DebugChannelId::Auto,
+            "get_login_info"
+        ))
+        .await
+        .result,
+        DebugCallResult::Err {
+            error: DebugError::FeatureDisabled
+        }
+    ));
+    chat.set_preference(preference.clone()).await.unwrap();
+    assert_eq!(up.streams(), 2, "关闭期间没有新建连接");
+    let archive = chat
+        .load_archive(bot.as_str().into(), "10001".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(archive.messages.len(), 1);
+
+    up.push(group_message(2));
+    wait_until("调试台仍收到消息", || debug.ob11().len() == 2).await;
+    assert_eq!(viewer.ob11().len(), 1, "旧聊天页面订阅已移除");
+
+    chat.set_enabled(true).await;
+    wait_until("重新开启恢复后台连接", || up.streams() == 3).await;
+    assert_eq!(
+        chat.desktop_status().await.accounts[0].preference,
+        preference
+    );
+    assert!(h.manager.is_enabled());
+    chat.shutdown().await;
+    h.manager.close_all().await;
+}
+
+#[tokio::test]
 async fn ws_events_reach_every_viewer_once_and_late_viewers_get_the_backlog() {
     let h = harness();
     let up = Upstream::start().await;

@@ -179,6 +179,9 @@ impl Inbox {
     pub fn clear_page(&self, page: &str) {
         self.state().reading.remove(page);
     }
+    pub fn clear_readers(&self) {
+        self.state().reading.clear();
+    }
     pub fn mark_read(&self, key: &Identity, session: &str) {
         let mut state = self.state();
         if let Some(account) = state.accounts.get_mut(key)

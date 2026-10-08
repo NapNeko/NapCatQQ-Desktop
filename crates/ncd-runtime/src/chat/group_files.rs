@@ -38,6 +38,14 @@ pub(super) struct FileState {
     finished: Mutex<VecDeque<PathBuf>>,
 }
 
+impl FileState {
+    pub(super) fn cancel_all(&self) {
+        for token in lock(&self.downloads).values() {
+            token.cancel();
+        }
+    }
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|p| p.into_inner())
 }
@@ -211,8 +219,15 @@ impl ChatManager {
         sink: Arc<dyn DebugStreamSink>,
     ) -> Result<String, String> {
         let dest = download_dest(&request.dest)?;
-        let token = CancellationToken::new();
-        lock(&self.files.downloads).insert(request.request_id.clone(), token.clone());
+        let token = {
+            let _lease = self.desktop.lease_gate.lock().await;
+            if !self.is_enabled() {
+                return Err("聊天功能已关闭".into());
+            }
+            let token = CancellationToken::new();
+            lock(&self.files.downloads).insert(request.request_id.clone(), token.clone());
+            token
+        };
         let result = self.download_inner(&request, &dest, sink, token).await;
         lock(&self.files.downloads).remove(&request.request_id);
         if result.is_ok() {

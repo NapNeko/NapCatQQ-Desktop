@@ -125,6 +125,9 @@ impl ChatManager {
                 _ = self.desktop.stop.cancelled() => return,
                 _ = tick.tick() => {},
             }
+            if !self.is_enabled() {
+                continue;
+            }
             let mut requests = tokio::task::JoinSet::new();
             for (key, group_id) in self.desktop.inbox.notification_queries() {
                 let transport = Arc::clone(&self.transport);
