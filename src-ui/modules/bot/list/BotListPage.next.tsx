@@ -1,25 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
-import gsap from 'gsap';
-import { Bot, GripVertical } from 'lucide-react';
-import { useGSAP } from '@gsap/react';
-import { animateListChildrenEnterAfterPaint } from '../../../shared/ui/motion/listEnter';
-import {
-    Button,
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogTitle,
-    Spinner,
-} from '../../../shared/ui';
-import { ListItem, Counter, MotionIcon } from '../../../shared/ui/motion';
-import { PagePlaceholder } from '../../../shared/ui/PagePlaceholder';
-import { cn } from '../../../shared/utils/cn';
-import { useMotion } from '../../../hooks/preferences/useMotion';
+import { useEffect, useState, useCallback } from 'react';
+import { Counter } from '../../../shared/ui/motion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import { useSortedBots } from '../../../hooks/bot/useBotSort';
 import { useSyncRemoteRuntimes } from '../../../hooks/bot/useSyncRemoteRuntimes';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
+import { useBotStartFlow } from '../../../hooks/bot/useBotStartFlow';
 import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
 import { useBotFlavorMap } from '../../../hooks/bot/useBotFlavorMap';
 import { useBotConfigsMap } from '../../../hooks/bot/useBotConfigsMap';
@@ -32,51 +17,25 @@ import { useOpenSnowlumaNovnc } from '../../../hooks/webui/useOpenSnowlumaNovnc'
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { errorText } from '../../../core/domain/errors';
-import { useBotSnapshotAlerts } from '../../../hooks/bot/useBotSnapshotAlerts';
 import { isSnowLumaFlavor } from '../../../core/domain/bot/flavor';
-import {
-    snowlumaDaemonStateForConfig,
-    isSnowlumaRemoteDockerConfig,
-    isSnowlumaRemoteNativeConfig,
-} from '../../../core/domain/bot/snowluma-remote-ui';
 import { botService } from '../../../core/services/bot.service';
-import type { SnowLumaAgreementsPayload } from '../../../core/ipc/generated/SnowLumaAgreementsPayload';
-import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
-import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
-import { BotCard } from './next/BotCard';
 import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
+import { BotListGrid } from './next/BotListGrid';
+import { LoadingState, ErrorState, EmptyState } from './next/botListStateParts';
+import { BatchDeleteConfirmDialog } from './next/BatchDeleteConfirmDialog';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 import { ImportRemoteBotsDialog } from '../dialogs/ImportRemoteBotsDialog';
 import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
 import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
 import { SystemQqWarningDialog } from '../dialogs/SystemQqWarningDialog';
-import { componentService } from '../../../core/services/component.service';
-import {
-    dismissSystemQqWarning,
-    isSystemQqWarningDismissed,
-    launchesLocalQq,
-} from '../../../core/domain/bot/system-qq-warning';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
-import gridStyles from './next/botCardGrid.module.css';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
     onViewMetrics: (botId: string) => void;
     onNavigate?: (route: AppRoute) => void;
-}
-
-function isSnowLumaConsentError(err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return (
-        message.includes('SNOWLUMA_CONSENT_REQUIRED') || message.includes('"consentRequired":true')
-    );
-}
-
-function isDesktopConsentError(err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return message.includes('DESKTOP_CONSENT_REQUIRED');
 }
 
 export function BotListPageNext({
@@ -101,6 +60,7 @@ export function BotListPageNext({
     // 批量删除二次确认
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
+    const [batchStartPreparing, setBatchStartPreparing] = useState(false);
 
     // 把 mutation 的 success / error 消息桥接到全局 InfoBar 队列。
     const handleMessage = (msg: ActionMessage) => {
@@ -118,398 +78,31 @@ export function BotListPageNext({
 
     const mutations = useBotMutations({ onMessage: handleMessage });
 
-    // ── Config drift detection before start ──────────────────────────────
-    const [pendingDrift, setPendingDrift] = useState<ConfigDrift | null>(null);
-    const [driftBotId, setDriftBotId] = useState<string | null>(null);
-    const [consentBotId, setConsentBotId] = useState<string | null>(null);
-    const [consentPayload, setConsentPayload] = useState<SnowLumaAgreementsPayload | null>(null);
-    const [consentSubmitting, setConsentSubmitting] = useState(false);
-    const [consentRetryDecisions, setConsentRetryDecisions] = useState<DriftDecision[] | null>(
-        null,
-    );
-    const [startingBotId, setStartingBotId] = useState<string | null>(null);
-    const [systemQqBotId, setSystemQqBotId] = useState<string | null>(null);
-    const [batchStartPreparing, setBatchStartPreparing] = useState(false);
-    const activeConsentBotRef = useRef<string | null>(null);
-    const openingConsentBotRef = useRef<string | null>(null);
-    const suppressedConsentErrorsRef = useRef<Map<string, string>>(new Map());
-
-    useEffect(() => {
-        activeConsentBotRef.current = consentBotId;
-    }, [consentBotId]);
-
-    const suppressCurrentConsentError = useCallback(
-        (botId: string) => {
-            const currentError = botSnapshots
-                .find((bot) => bot.bot_id === botId)
-                ?.last_error?.trim();
-            if (currentError && isSnowLumaConsentError(currentError)) {
-                suppressedConsentErrorsRef.current.set(botId, currentError);
-            }
-        },
-        [botSnapshots],
-    );
-
-    const clearConsentErrorSuppression = useCallback((botId: string) => {
-        suppressedConsentErrorsRef.current.delete(botId);
-    }, []);
-
-    const openSnowLumaConsent = useCallback(
-        async (
-            botId: string,
-            decisions: DriftDecision[] | null = null,
-            preparedPayload?: SnowLumaAgreementsPayload,
-        ) => {
-            const activeBot = activeConsentBotRef.current;
-            if (activeBot || openingConsentBotRef.current) return;
-            activeConsentBotRef.current = botId;
-            openingConsentBotRef.current = botId;
-            setConsentBotId(botId);
-            setConsentRetryDecisions(decisions);
-            if (preparedPayload) {
-                setConsentPayload(preparedPayload);
-                openingConsentBotRef.current = null;
-                return;
-            }
-            setConsentPayload(null);
-            try {
-                const payload = await botService.getSnowLumaAgreements(botId);
-                setConsentPayload(payload);
-            } catch (err: unknown) {
-                if (activeConsentBotRef.current === botId) {
-                    activeConsentBotRef.current = null;
-                }
-                setConsentBotId(null);
-                setConsentRetryDecisions(null);
-                pushErrorBar({
-                    title: '读取 SnowLuma 协议失败',
-                    raw: errorText(err),
-                });
-            } finally {
-                if (openingConsentBotRef.current === botId) {
-                    openingConsentBotRef.current = null;
-                }
-            }
-        },
-        [],
-    );
-
-    const prepareSnowLumaConsentOrOpen = useCallback(
-        async (botId: string, decisions: DriftDecision[] | null = null) => {
-            try {
-                const payload = await botService.prepareSnowLumaAgreements(botId);
-                if (payload?.consent_required) {
-                    openSnowLumaConsent(botId, decisions, payload);
-                    return false;
-                }
-                return true;
-            } catch (err: unknown) {
-                if (isSnowLumaConsentError(err)) {
-                    await openSnowLumaConsent(botId, decisions);
-                    return false;
-                }
-                pushErrorBar({
-                    title: 'SnowLuma 启动前检查失败',
-                    raw: errorText(err),
-                });
-                return false;
-            }
-        },
-        [openSnowLumaConsent],
-    );
-
-    const startBotDirect = useCallback(
-        async (botId: string) => {
-            setStartingBotId(botId);
-            const ready = await prepareSnowLumaConsentOrOpen(botId);
-            if (!ready) {
-                setStartingBotId(null);
-                return;
-            }
-            try {
-                await mutations.startBotAsync(botId);
-            } catch (err: unknown) {
-                if (isDesktopConsentError(err)) {
-                    await requestDesktopConsent(async () => {
-                        const again = await prepareSnowLumaConsentOrOpen(botId);
-                        if (!again) return;
-                        await mutations.startBotAsync(botId);
-                    });
-                    return;
-                }
-                if (isSnowLumaConsentError(err)) {
-                    await openSnowLumaConsent(botId);
-                    return;
-                }
-                throw err;
-            } finally {
-                setStartingBotId(null);
-            }
-        },
-        [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen],
-    );
-
-    // 配置漂移 → SnowLuma 协议 → start；系统 QQ 提醒点「继续启动」后也从这里接着走
-    const startAfterQqCheck = useCallback(
-        async (botId: string) => {
-            setStartingBotId(botId);
-            let drift: ConfigDrift | null;
-            try {
-                drift = await botService.detectConfigDrift(botId);
-            } catch {
-                drift = null;
-            }
-            if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
-                setDriftBotId(botId);
-                setPendingDrift(drift);
-                setStartingBotId(null);
-                return;
-            }
-            startBotDirect(botId).catch(() => undefined);
-        },
-        [startBotDirect],
-    );
-
-    // 探测失败不拦启动，提醒而已
-    const needsSystemQqWarning = useCallback(
-        async (botId: string) => {
-            const config = configByBot[botId];
-            if (!config || !launchesLocalQq(config) || isSystemQqWarningDismissed()) return false;
-            try {
-                return (await componentService.localQqSource()) === 'system';
-            } catch {
-                return false;
-            }
-        },
-        [configByBot],
-    );
-
-    const handleStartBot = useCallback(
-        async (botId: string) => {
-            // 顺序：Desktop 协议 → 运行时 / Docker 门禁 → 系统 QQ 提醒 → 配置漂移 → SnowLuma 协议 → start
-            const allowed = await requestDesktopConsent(async () => {
-                clearConsentErrorSuppression(botId);
-                setStartingBotId(botId);
-                const runtimeGate = runtimeStartGate(botId);
-                if (runtimeGate) {
-                    pushInfoBar({
-                        tone: 'danger',
-                        title: '无法启动',
-                        content: runtimeGate,
-                        key: `bot-start-gate:${botId}`,
-                    });
-                    setStartingBotId(null);
-                    return;
-                }
-                const gate = dockerStartGate(botId);
-                if (gate) {
-                    pushInfoBar({
-                        tone: 'danger',
-                        title: '无法启动',
-                        content: gate,
-                        key: `bot-start-gate:${botId}`,
-                    });
-                    setStartingBotId(null);
-                    return;
-                }
-                if (await needsSystemQqWarning(botId)) {
-                    setSystemQqBotId(botId);
-                    setStartingBotId(null);
-                    return;
-                }
-                await startAfterQqCheck(botId);
-            });
-            if (!allowed) return;
-        },
-        [
-            clearConsentErrorSuppression,
-            dockerStartGate,
-            needsSystemQqWarning,
-            runtimeStartGate,
-            startAfterQqCheck,
-        ],
-    );
-
-    const handleSystemQqContinue = useCallback(
-        (dismissForever: boolean) => {
-            const botId = systemQqBotId;
-            setSystemQqBotId(null);
-            if (dismissForever) dismissSystemQqWarning();
-            if (botId) startAfterQqCheck(botId).catch(() => undefined);
-        },
-        [startAfterQqCheck, systemQqBotId],
-    );
-
-    const handleSystemQqInstall = useCallback(
-        (dismissForever: boolean) => {
-            setSystemQqBotId(null);
-            if (dismissForever) dismissSystemQqWarning();
-            onNavigate?.('components');
-        },
-        [onNavigate],
-    );
-
-    const handleDriftConfirm = useCallback(
-        async (decisions: DriftDecision[]) => {
-            if (!driftBotId) return;
-            clearConsentErrorSuppression(driftBotId);
-            setStartingBotId(driftBotId);
-            const runtimeGate = runtimeStartGate(driftBotId);
-            if (runtimeGate) {
-                setPendingDrift(null);
-                pushInfoBar({
-                    tone: 'danger',
-                    title: '无法启动',
-                    content: runtimeGate,
-                    key: `bot-start-gate:${driftBotId}`,
-                });
-                setDriftBotId(null);
-                setStartingBotId(null);
-                return;
-            }
-            const gate = dockerStartGate(driftBotId);
-            if (gate) {
-                setPendingDrift(null);
-                pushInfoBar({
-                    tone: 'danger',
-                    title: '无法启动',
-                    content: gate,
-                    key: `bot-start-gate:${driftBotId}`,
-                });
-                setDriftBotId(null);
-                setStartingBotId(null);
-                return;
-            }
-            setPendingDrift(null);
-            try {
-                const ready = await prepareSnowLumaConsentOrOpen(driftBotId, decisions);
-                if (!ready) {
-                    setDriftBotId(null);
-                    return;
-                }
-                const snap = await botService.startWithDecisions(driftBotId, decisions);
-                pushInfoBar({
-                    tone: 'success',
-                    title: '操作完成',
-                    content: `已发送启动指令给 Bot: ${snap.bot_id}`,
-                    autoDismissMs: 4000,
-                });
-            } catch (err: unknown) {
-                if (isSnowLumaConsentError(err)) {
-                    await openSnowLumaConsent(driftBotId, decisions);
-                    setDriftBotId(null);
-                    return;
-                }
-                pushErrorBar({
-                    title: '启动失败',
-                    raw: errorText(err),
-                });
-            }
-            setDriftBotId(null);
-            setStartingBotId(null);
-        },
-        [
-            clearConsentErrorSuppression,
-            driftBotId,
-            dockerStartGate,
-            runtimeStartGate,
-            openSnowLumaConsent,
-            prepareSnowLumaConsentOrOpen,
-        ],
-    );
-
-    const handleConsentConfirm = useCallback(async () => {
-        if (!consentBotId || !consentPayload) return;
-        setConsentSubmitting(true);
-        const retryBotId = consentBotId;
-        const retryDecisions = consentRetryDecisions;
-        try {
-            await botService.acceptSnowLumaAgreements(retryBotId, consentPayload.version);
-            suppressCurrentConsentError(retryBotId);
-        } catch (err: unknown) {
-            pushErrorBar({
-                title: 'SnowLuma 协议确认失败',
-                raw: errorText(err),
-            });
-            setConsentSubmitting(false);
-            return;
-        }
-
-        setConsentBotId(null);
-        setConsentPayload(null);
-        setConsentRetryDecisions(null);
-        activeConsentBotRef.current = null;
-        setConsentSubmitting(false);
-
-        if (retryDecisions) {
-            try {
-                setStartingBotId(retryBotId);
-                const ready = await prepareSnowLumaConsentOrOpen(retryBotId, retryDecisions);
-                if (!ready) {
-                    setStartingBotId(null);
-                    return;
-                }
-                const snap = await botService.startWithDecisions(retryBotId, retryDecisions);
-                pushInfoBar({
-                    tone: 'success',
-                    title: '操作完成',
-                    content: `已发送启动指令给 Bot: ${snap.bot_id}`,
-                    autoDismissMs: 4000,
-                });
-            } catch (err: unknown) {
-                pushErrorBar({
-                    title: '启动失败',
-                    raw: errorText(err),
-                });
-            } finally {
-                setStartingBotId(null);
-            }
-        } else {
-            startBotDirect(retryBotId).catch(() => undefined);
-        }
-    }, [
+    const {
+        pendingDrift,
         consentBotId,
         consentPayload,
-        consentRetryDecisions,
+        consentSubmitting,
+        startingBotId,
+        systemQqBotId,
+        setSystemQqBotId,
+        handleStartBot,
+        handleSystemQqContinue,
+        handleSystemQqInstall,
+        handleDriftConfirm,
+        handleDriftCancel,
+        handleConsentConfirm,
+        handleConsentCancel,
+        clearConsentErrorSuppression,
         prepareSnowLumaConsentOrOpen,
-        startBotDirect,
-        suppressCurrentConsentError,
-    ]);
-
-    const handleConsentCancel = useCallback(() => {
-        if (consentSubmitting) return;
-        const botId = consentBotId;
-        if (botId) {
-            suppressCurrentConsentError(botId);
-        }
-        setConsentBotId(null);
-        setConsentPayload(null);
-        setConsentRetryDecisions(null);
-        activeConsentBotRef.current = null;
-        if (botId) {
-            botService.releaseSnowLumaAgreementSession(botId).catch(() => undefined);
-        }
-        setStartingBotId(null);
-    }, [consentBotId, consentSubmitting, suppressCurrentConsentError]);
-
-    const handleDriftCancel = useCallback(() => {
-        setPendingDrift(null);
-        setDriftBotId(null);
-    }, []);
-
-    useEffect(() => {
-        if (activeConsentBotRef.current || openingConsentBotRef.current) return;
-        const pending = botSnapshots.find((bot) => {
-            const lastError = bot.last_error?.trim();
-            if (!lastError || !isSnowLumaConsentError(lastError)) {
-                suppressedConsentErrorsRef.current.delete(bot.bot_id);
-                return false;
-            }
-            return suppressedConsentErrorsRef.current.get(bot.bot_id) !== lastError;
-        });
-        if (!pending) return;
-        void openSnowLumaConsent(pending.bot_id);
-    }, [botSnapshots, openSnowLumaConsent]);
+    } = useBotStartFlow({
+        botSnapshots,
+        configByBot,
+        dockerStartGate,
+        runtimeStartGate,
+        mutations,
+        onNavigate,
+    });
 
     // 加载 / 错误状态也接 InfoBar，让顶部状态信息统一。但只在错误首次出现时
     // 推一次，避免 react-query 重试反复推。
@@ -623,6 +216,23 @@ export function BotListPageNext({
                         onViewMetrics={onViewMetrics}
                         onStartBot={handleStartBot}
                         onReorderBots={reorderBots}
+                        onRetrySnowlumaUi={async (id) => {
+                            try {
+                                await botService.retrySnowlumaUi(id);
+                                pushInfoBar({
+                                    key: `snowluma-ui-retry:${id}`,
+                                    tone: 'success',
+                                    title: '连接已重建',
+                                    content: 'SnowLuma WebUI 与 noVNC 隧道已重新建立。',
+                                });
+                            } catch (err: unknown) {
+                                pushErrorBar({
+                                    key: `snowluma-ui-retry:${id}`,
+                                    title: '连接重建失败',
+                                    raw: errorText(err),
+                                });
+                            }
+                        }}
                         startingBotId={startingBotId}
                     />
                 )}
@@ -653,32 +263,13 @@ export function BotListPageNext({
             />
 
             {/* 批量删除确认 */}
-            <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-                <DialogContent size="md">
-                    <DialogTitle>确认批量删除选中实例？</DialogTitle>
-                    <DialogDescription>
-                        将删除选中的 {batch.selectedIds.size} 个 Bot 实例的配置文件与数据项。
-                        若有正在运行的 Bot，会先自动停止再删除。此操作不可撤销。
-                    </DialogDescription>
-                    <DialogFooter>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setConfirmDeleteOpen(false)}
-                            disabled={mutations.isPending}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            variant="primary"
-                            onClick={onBatchDeleteConfirm}
-                            disabled={mutations.isPending}
-                            className="bg-danger hover:bg-danger/90"
-                        >
-                            彻底删除
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <BatchDeleteConfirmDialog
+                open={confirmDeleteOpen}
+                onOpenChange={setConfirmDeleteOpen}
+                selectedCount={batch.selectedIds.size}
+                busy={mutations.isPending}
+                onConfirm={onBatchDeleteConfirm}
+            />
 
             <ImportRemoteBotsDialog open={importOpen} onOpenChange={setImportOpen} />
 
@@ -709,523 +300,5 @@ export function BotListPageNext({
                 onCancel={handleConsentCancel}
             />
         </div>
-    );
-}
-
-function LoadingState() {
-    return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20 text-text-tertiary">
-            <Spinner size="lg" />
-            <p className="text-sm">正在加载 Bot 实例…</p>
-        </div>
-    );
-}
-
-function ErrorState({ onRetry }: { onRetry: () => void }) {
-    return (
-        <PagePlaceholder className="gap-3">
-            <p className="text-sm text-text-secondary">Bot 列表加载失败，详情见顶部提示条。</p>
-            <Button size="sm" variant="primary" onClick={onRetry}>
-                重试
-            </Button>
-        </PagePlaceholder>
-    );
-}
-
-function EmptyState({ onCreate, onImport }: { onCreate: () => void; onImport: () => void }) {
-    return (
-        <PagePlaceholder className="gap-4">
-            <MotionIcon
-                icon={Bot}
-                motion="bob"
-                playEnter
-                enterKey="empty-bot"
-                size={32}
-                strokeWidth={1.6}
-                className="text-text-tertiary"
-            />
-            <div>
-                <p className="font-display text-md font-semibold text-text">还没有 Bot 实例</p>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button size="sm" variant="secondary" onClick={onImport}>
-                    导入已有 Bot
-                </Button>
-                <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={onCreate}
-                    data-tour-id="bot-create-empty"
-                >
-                    创建第一个实例
-                </Button>
-            </div>
-        </PagePlaceholder>
-    );
-}
-
-/// Bot 列表带 stagger + 进退场动画。从主组件抽出来,避免在 render 中写一大段
-/// motion 逻辑。stagger 由档位 preset 提供;优雅档 stagger=0 退化为同步进场。
-type GridProps = {
-    bots: ReturnType<typeof useBotSnapshots>['data'] extends infer T
-        ? T extends readonly (infer U)[]
-            ? U[]
-            : never
-        : never;
-    flavorByBot: ReturnType<typeof useBotFlavorMap>;
-    configByBot: ReturnType<typeof useBotConfigsMap>;
-    napcat: ReturnType<typeof useNapcatLogin>;
-    snowluma: ReturnType<typeof useSnowlumaState>;
-    batch: ReturnType<typeof useBotBatchSelection>;
-    mutations: ReturnType<typeof useBotMutations>;
-    openWebui: ReturnType<typeof useOpenWebui>;
-    openSnowlumaNovnc: ReturnType<typeof useOpenSnowlumaNovnc>;
-    onConfigureBot: (botId: string | null) => void;
-    onViewLogs: (botId: string) => void;
-    onViewMetrics: (botId: string) => void;
-    onStartBot: (botId: string) => void;
-    onReorderBots: (sourceBotId: string, targetBotId: string) => void;
-    startingBotId: string | null;
-};
-
-interface CardRect {
-    id: string;
-    left: number;
-    right: number;
-    top: number;
-    bottom: number;
-    centerX: number;
-    centerY: number;
-}
-
-function BotListGrid({
-    bots,
-    flavorByBot,
-    configByBot,
-    napcat,
-    snowluma,
-    batch,
-    mutations,
-    openWebui,
-    openSnowlumaNovnc,
-    onConfigureBot,
-    onViewLogs,
-    onViewMetrics,
-    onStartBot,
-    onReorderBots,
-    startingBotId,
-}: GridProps) {
-    const m = useMotion();
-    const containerRef = useRef<HTMLDivElement>(null);
-    const ghostRef = useRef<HTMLDivElement>(null);
-    const [draggedId, setDraggedId] = useState<string | null>(null);
-    const [hoverTargetId, setHoverTargetId] = useState<string | null>(null);
-
-    const isDraggingRef = useRef(false);
-    const startPosRef = useRef<{ x: number; y: number; id: string } | null>(null);
-    const cardRectsRef = useRef<CardRect[]>([]);
-    const rafIdRef = useRef<number | null>(null);
-    const lastHoverTargetRef = useRef<string | null>(null);
-
-    const ghostTiltDeg = !m.enabled
-        ? 0
-        : m.level === 'rich'
-          ? 3.5
-          : m.level === 'standard'
-            ? 2.0
-            : 0.8;
-
-    const ghostScale = !m.enabled
-        ? 1.0
-        : m.level === 'rich'
-          ? 1.06
-          : m.level === 'standard'
-            ? 1.03
-            : 1.01;
-
-    const measureCards = useCallback(() => {
-        if (!containerRef.current) return [];
-        const elements = containerRef.current.querySelectorAll<HTMLElement>('[data-bot-card-id]');
-        const rects: CardRect[] = [];
-        elements.forEach((el) => {
-            const id = el.getAttribute('data-bot-card-id');
-            if (id) {
-                const r = el.getBoundingClientRect();
-                rects.push({
-                    id,
-                    left: r.left,
-                    right: r.right,
-                    top: r.top,
-                    bottom: r.bottom,
-                    centerX: r.left + r.width / 2,
-                    centerY: r.top + r.height / 2,
-                });
-            }
-        });
-        return rects;
-    }, []);
-
-    const handlePointerDown = (e: React.PointerEvent, botId: string) => {
-        if (batch.isBatchMode || e.button !== 0) return;
-        const target = e.target as HTMLElement;
-        const isHandle = !!target.closest('[data-drag-handle]');
-        if (
-            !isHandle &&
-            target.closest('button, input, [role="button"], a, select, [tabindex], [data-no-drag]')
-        ) {
-            return;
-        }
-
-        const startX = e.clientX;
-        const startY = e.clientY;
-        startPosRef.current = { x: startX, y: startY, id: botId };
-
-        if (isHandle) {
-            // 点击手柄：0 毫秒立即启动拖拽
-            isDraggingRef.current = true;
-            cardRectsRef.current = measureCards();
-            lastHoverTargetRef.current = botId;
-            setDraggedId(botId);
-            setHoverTargetId(botId);
-            if (ghostRef.current) {
-                ghostRef.current.style.display = 'flex';
-                ghostRef.current.style.transform = `translate3d(${startX + 14}px, ${startY + 14}px, 0) rotate(${ghostTiltDeg}deg) scale(${ghostScale})`;
-            }
-        }
-    };
-
-    useEffect(() => {
-        const onPointerMove = (e: PointerEvent) => {
-            const start = startPosRef.current;
-            if (!start) return;
-
-            if (!isDraggingRef.current) {
-                const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
-                if (dist > 4) {
-                    isDraggingRef.current = true;
-                    cardRectsRef.current = measureCards();
-                    lastHoverTargetRef.current = start.id;
-                    setDraggedId(start.id);
-                    setHoverTargetId(start.id);
-                    if (ghostRef.current) {
-                        ghostRef.current.style.display = 'flex';
-                    }
-                } else {
-                    return;
-                }
-            }
-
-            // 零 React 开销：GPU 直接位移跟随 + 动态姿态微倾角
-            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-            rafIdRef.current = requestAnimationFrame(() => {
-                if (ghostRef.current) {
-                    ghostRef.current.style.transform = `translate3d(${e.clientX + 14}px, ${e.clientY + 14}px, 0) rotate(${ghostTiltDeg}deg) scale(${ghostScale})`;
-                }
-            });
-
-            // 智能边界盒命中判定（解决对角线穿行时相邻卡片反复震荡乱跳）：
-            // 只有当光标明确进入某个卡片区域时才切换插槽，缝隙过渡时平稳保持。
-            let targetId = lastHoverTargetRef.current || start.id;
-            for (const rect of cardRectsRef.current) {
-                if (
-                    e.clientX >= rect.left &&
-                    e.clientX <= rect.right &&
-                    e.clientY >= rect.top &&
-                    e.clientY <= rect.bottom
-                ) {
-                    targetId = rect.id;
-                    break;
-                }
-            }
-
-            if (targetId !== lastHoverTargetRef.current) {
-                lastHoverTargetRef.current = targetId;
-                setHoverTargetId(targetId);
-            }
-        };
-
-        const onPointerUp = () => {
-            if (rafIdRef.current) {
-                cancelAnimationFrame(rafIdRef.current);
-                rafIdRef.current = null;
-            }
-
-            const currentDragged = startPosRef.current?.id;
-            const currentTarget = lastHoverTargetRef.current;
-
-            if (
-                isDraggingRef.current &&
-                currentDragged &&
-                currentTarget &&
-                currentDragged !== currentTarget
-            ) {
-                onReorderBots(currentDragged, currentTarget);
-                // 放置成功时播放符合当前动效档位的微回弹反馈
-                if (m.enabled && containerRef.current) {
-                    const droppedEl = containerRef.current.querySelector<HTMLElement>(
-                        `[data-bot-card-id="${currentDragged}"]`,
-                    );
-                    if (droppedEl) {
-                        m.pop(droppedEl, { ease: 'release' });
-                    }
-                }
-            }
-
-            isDraggingRef.current = false;
-            startPosRef.current = null;
-            lastHoverTargetRef.current = null;
-            setDraggedId(null);
-            setHoverTargetId(null);
-            if (ghostRef.current) {
-                ghostRef.current.style.display = 'none';
-            }
-        };
-
-        window.addEventListener('pointermove', onPointerMove, { passive: true });
-        window.addEventListener('pointerup', onPointerUp);
-        window.addEventListener('pointercancel', onPointerUp);
-        return () => {
-            window.removeEventListener('pointermove', onPointerMove);
-            window.removeEventListener('pointerup', onPointerUp);
-            window.removeEventListener('pointercancel', onPointerUp);
-        };
-    }, [ghostScale, ghostTiltDeg, m, measureCards, onReorderBots]);
-
-    // 计算拖拽中的实时预览（两两对调模式：对角线移动时仅对调目标卡片，其余卡片保持静止）
-    const displayBots = useMemo(() => {
-        if (!draggedId || !hoverTargetId || draggedId === hoverTargetId) {
-            return bots;
-        }
-        const srcIdx = bots.findIndex((b) => b.bot_id === draggedId);
-        const dstIdx = bots.findIndex((b) => b.bot_id === hoverTargetId);
-        if (srcIdx === -1 || dstIdx === -1) return bots;
-
-        const next = [...bots];
-        const temp = next[srcIdx];
-        next[srcIdx] = next[dstIdx];
-        next[dstIdx] = temp;
-        return next;
-    }, [bots, draggedId, hoverTargetId]);
-
-    // FLIP (First-Last-Invert-Play) 实时滑动让位动效：
-    // 用户移动卡片时，其他被挤压/替换的卡片会丝滑滑向新位置，视觉极其直观。
-    const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
-
-    useLayoutEffect(() => {
-        if (!containerRef.current) return;
-        const elements = containerRef.current.querySelectorAll<HTMLElement>('[data-bot-card-id]');
-        const currentRects = new Map<string, DOMRect>();
-
-        elements.forEach((el) => {
-            const id = el.getAttribute('data-bot-card-id');
-            if (id) {
-                currentRects.set(id, el.getBoundingClientRect());
-            }
-        });
-
-        elements.forEach((el) => {
-            const id = el.getAttribute('data-bot-card-id');
-            if (!id || id === draggedId) return;
-
-            const prev = prevRectsRef.current.get(id);
-            const current = currentRects.get(id);
-
-            if (prev && current) {
-                const deltaX = prev.left - current.left;
-                const deltaY = prev.top - current.top;
-
-                if (deltaX !== 0 || deltaY !== 0) {
-                    if (m.enabled) {
-                        gsap.fromTo(
-                            el,
-                            { x: deltaX, y: deltaY },
-                            {
-                                x: 0,
-                                y: 0,
-                                duration: Math.max(0.2, m.duration('fast') * 1.1),
-                                ease: 'power2.out',
-                                overwrite: 'auto',
-                            },
-                        );
-                    }
-                }
-            }
-        });
-
-        prevRectsRef.current = currentRects;
-    }, [displayBots, draggedId, m]);
-
-    const alertRows = useMemo(
-        () =>
-            bots.map((bot) => {
-                const config = configByBot[bot.bot_id] ?? null;
-                const flavor = flavorByBot[bot.bot_id] ?? null;
-                const name = config?.bot.name?.trim();
-                return {
-                    bot,
-                    displayName: name && name.length > 0 ? name : bot.bot_id,
-                    invalidationReason: napcat.byBot[bot.bot_id]?.invalidationReason ?? null,
-                    isSnowLuma: isSnowLumaFlavor(flavor),
-                    snowlumaDaemonState: snowlumaDaemonStateForConfig(
-                        config,
-                        snowluma.daemonStates,
-                    ),
-                    offlineAutoRestart: !!config?.bot.offlineAutoRestart,
-                };
-            }),
-        [bots, configByBot, flavorByBot, napcat.byBot, snowluma.daemonStates],
-    );
-    useBotSnapshotAlerts(alertRows);
-
-    // 列表 stagger: 只对初次加载播放动画
-    useGSAP(
-        () => {
-            const root = containerRef.current;
-            if (!root || !m.enabled) return;
-            return animateListChildrenEnterAfterPaint(root, bots.length, m);
-        },
-        {
-            scope: containerRef,
-            dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger],
-        },
-    );
-
-    const draggedConfig = draggedId ? configByBot[draggedId] : null;
-    const draggedDisplayName =
-        draggedConfig?.bot.name?.trim() || (draggedId ? `Bot ${draggedId}` : '');
-
-    return (
-        <>
-            <div ref={containerRef} className={gridStyles.botCardGrid}>
-                {displayBots.map((bot) => {
-                    const flavor = flavorByBot[bot.bot_id] ?? null;
-                    const config = configByBot[bot.bot_id] ?? null;
-                    const napcatBot = napcat.byBot[bot.bot_id];
-                    const snowlumaBot = snowluma.byBot[bot.bot_id];
-                    const snowlumaDaemonState = snowlumaDaemonStateForConfig(
-                        config,
-                        snowluma.daemonStates,
-                    );
-                    const isSnowlumaRemoteTunnelUi =
-                        isSnowLumaFlavor(flavor) &&
-                        (isSnowlumaRemoteDockerConfig(config) ||
-                            isSnowlumaRemoteNativeConfig(config));
-
-                    // 当前拖拽项在网格中呈现高质感的虚线落位槽
-                    if (draggedId === bot.bot_id) {
-                        return (
-                            <ListItem key={bot.bot_id}>
-                                <div
-                                    data-bot-card-id={bot.bot_id}
-                                    className="flex h-[148px] min-h-[148px] w-full items-center justify-center rounded-xl border-2 border-dashed border-brand/50 bg-brand-soft/20 text-xs font-medium text-brand select-none"
-                                >
-                                    <span className="flex items-center gap-1.5 animate-pulse font-medium">
-                                        <GripVertical size={15} /> 放置于此处
-                                    </span>
-                                </div>
-                            </ListItem>
-                        );
-                    }
-
-                    return (
-                        <ListItem key={bot.bot_id} hoverable={!draggedId}>
-                            <div
-                                data-bot-card-id={bot.bot_id}
-                                onPointerDown={(e) => handlePointerDown(e, bot.bot_id)}
-                                className={cn(
-                                    'h-[148px] min-h-[148px] select-none rounded-xl',
-                                    !batch.isBatchMode && 'cursor-grab active:cursor-grabbing',
-                                )}
-                            >
-                                <BotCard
-                                    bot={bot}
-                                    config={config}
-                                    flavor={flavor}
-                                    qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
-                                    isOnline={napcatBot?.online ?? null}
-                                    invalidationReason={napcatBot?.invalidationReason ?? null}
-                                    napcatBinding={napcatBot?.webui ?? null}
-                                    snowlumaDaemonState={snowlumaDaemonState}
-                                    snowlumaDockerEndpointsReady={
-                                        snowlumaBot?.dockerEndpointsReady ?? false
-                                    }
-                                    snowlumaLoginState={snowlumaBot?.loginState ?? null}
-                                    snowlumaProbeUnavailable={
-                                        snowlumaBot?.probeUnavailable ?? false
-                                    }
-                                    isBatchMode={batch.isBatchMode}
-                                    isSelected={batch.selectedIds.has(bot.bot_id)}
-                                    actionPending={startingBotId === bot.bot_id}
-                                    onStart={onStartBot}
-                                    onStop={mutations.stopBot}
-                                    onConfigure={onConfigureBot}
-                                    onViewLogs={onViewLogs}
-                                    onViewMetrics={onViewMetrics}
-                                    onToggleSelect={batch.toggleSelect}
-                                    onOpenWebui={(params) => {
-                                        openWebui(params).catch((err: unknown) => {
-                                            pushErrorBar({
-                                                key: `webui-open:${params.botId}`,
-                                                title: '打开 WebUI 失败',
-                                                raw: errorText(err),
-                                            });
-                                        });
-                                    }}
-                                    isSnowlumaRemoteTunnelUi={isSnowlumaRemoteTunnelUi}
-                                    onOpenNovnc={(id) => {
-                                        openSnowlumaNovnc(id).catch((err: unknown) => {
-                                            pushErrorBar({
-                                                key: `novnc-open:${id}`,
-                                                title: '打开 noVNC 失败',
-                                                raw: errorText(err),
-                                            });
-                                        });
-                                    }}
-                                    onRetrySnowlumaUi={async (id) => {
-                                        try {
-                                            await botService.retrySnowlumaUi(id);
-                                            pushInfoBar({
-                                                key: `snowluma-ui-retry:${id}`,
-                                                tone: 'success',
-                                                title: '连接已重建',
-                                                content: 'SnowLuma WebUI 与 noVNC 隧道已重新建立。',
-                                            });
-                                        } catch (err: unknown) {
-                                            pushErrorBar({
-                                                key: `snowluma-ui-retry:${id}`,
-                                                title: '连接重建失败',
-                                                raw: errorText(err),
-                                            });
-                                        }
-                                    }}
-                                />
-                            </div>
-                        </ListItem>
-                    );
-                })}
-            </div>
-
-            {/* 拖拽时的全局跟随浮动卡片（脱离 React 渲染树，纯 GPU 120Hz 变换） */}
-            <div
-                ref={ghostRef}
-                style={{ display: 'none' }}
-                className={cn(
-                    'pointer-events-none fixed top-0 left-0 z-[9999] will-change-transform flex items-center gap-2.5 rounded-xl border border-brand/60 bg-surface/95 px-4 py-3 backdrop-blur-md select-none text-text',
-                    !m.enabled
-                        ? 'shadow-none ring-0'
-                        : m.level === 'rich'
-                          ? 'shadow-[0_24px_48px_-12px_rgba(0,0,0,0.45)] ring-2 ring-brand/60'
-                          : 'shadow-2xl ring-1 ring-border-subtle',
-                )}
-            >
-                <GripVertical size={16} className="text-brand shrink-0" />
-                <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-semibold text-text truncate max-w-[160px]">
-                        {draggedDisplayName}
-                    </span>
-                    <span className="font-mono text-2xs text-text-tertiary">QQ {draggedId}</span>
-                </div>
-            </div>
-        </>
     );
 }
