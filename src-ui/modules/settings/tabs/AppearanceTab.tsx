@@ -7,6 +7,7 @@ import {
     MotionLevelSegment,
     MotionSpeedSlider,
     RadiusStyleSegment,
+    SidebarStyleSegment,
     SettingsSection,
     SettingsTabSections,
     ThemePicker,
@@ -33,6 +34,13 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                     <RadiusStyleSegment
                         value={draft.radiusStyle}
                         onChange={(v) => patchDraft({ radiusStyle: v })}
+                    />
+                </FieldRow>
+
+                <FieldRow label="侧栏形态" description="悬浮卡片不遮挡内容；经典为贴边可折叠">
+                    <SidebarStyleSegment
+                        value={draft.sidebarStyle}
+                        onChange={(v) => patchDraft({ sidebarStyle: v })}
                     />
                 </FieldRow>
 

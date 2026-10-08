@@ -20,6 +20,7 @@ import {
     preferencesStore,
     type AppPreferences,
     type ThemeMode,
+    type SidebarStyle,
     normalizeCloseAction,
 } from '../../core/domain/settings/preferencesStore';
 import { infoBarDismissPrefsStore } from '../../hooks/preferences/infoBarDismissPrefsStore';
@@ -39,6 +40,7 @@ export type SettingsDraft = Omit<BackendSettings, 'taskQueueCleanup'> & {
     motionLevel: MotionLevel;
     motionSpeed: number;
     radiusStyle: RadiusStyle;
+    sidebarStyle: SidebarStyle;
 } & InfoBarDismissDraftSlice &
     TaskQueueCleanupDraftSlice;
 
@@ -114,6 +116,7 @@ export function draftFromBackendAndPrefs(
         motionLevel: client.motionLevel,
         motionSpeed: client.motionSpeed,
         radiusStyle: client.radiusStyle,
+        sidebarStyle: client.sidebarStyle,
         ...ibDraft,
         ...tqDraft,
     };
@@ -161,6 +164,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
                 motionLevel: draft.motionLevel,
                 motionSpeed: draft.motionSpeed,
                 radiusStyle: draft.radiusStyle,
+                sidebarStyle: draft.sidebarStyle,
             },
             dismiss,
         ),
@@ -221,6 +225,7 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         draft.motionLevel !== baseline.motionLevel ||
         draft.motionSpeed !== baseline.motionSpeed ||
         draft.radiusStyle !== baseline.radiusStyle ||
+        draft.sidebarStyle !== baseline.sidebarStyle ||
         !featuresEqual(draft.features, baseline.features) ||
         draft.mcp.enabled !== baseline.mcp.enabled ||
         draft.mcp.port !== baseline.mcp.port ||
@@ -298,6 +303,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
                     motionLevel: draft.motionLevel,
                     motionSpeed: draft.motionSpeed,
                     radiusStyle: draft.radiusStyle,
+                    sidebarStyle: draft.sidebarStyle,
                 });
             },
             { enabled, level, duration, easing },
@@ -311,6 +317,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
             motionLevel: draft.motionLevel,
             motionSpeed: draft.motionSpeed,
             radiusStyle: draft.radiusStyle,
+            sidebarStyle: draft.sidebarStyle,
         });
     }
     infoBarDismissPrefsStore.applyFromUiPreferences(
@@ -323,6 +330,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
                 motionLevel: draft.motionLevel,
                 motionSpeed: draft.motionSpeed,
                 radiusStyle: draft.radiusStyle,
+                sidebarStyle: draft.sidebarStyle,
             },
             infoBarDismissPrefsFromDraftFields(infoBarDismissDraftFromSettingsDraft(draft)),
         ),

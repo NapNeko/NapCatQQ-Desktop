@@ -31,6 +31,7 @@ describe('preferencesStore 读档归一化', () => {
             motionLevel: 'standard',
             motionSpeed: MOTION_SPEED_DEFAULT,
             radiusStyle: 'standard',
+            sidebarStyle: 'floating',
         });
     });
 
@@ -58,6 +59,7 @@ describe('preferencesStore 读档归一化', () => {
             motionLevel: 'rich',
             motionSpeed: 1.2,
             radiusStyle: 'round',
+            sidebarStyle: 'classic',
         });
         expect(preferencesStore.get()).toEqual({
             theme: 'dracula',
@@ -67,6 +69,7 @@ describe('preferencesStore 读档归一化', () => {
             motionLevel: 'rich',
             motionSpeed: 1.2,
             radiusStyle: 'round',
+            sidebarStyle: 'classic',
         });
     });
 
@@ -76,12 +79,14 @@ describe('preferencesStore 读档归一化', () => {
             closeAction: 'minimize',
             motionLevel: 'ultra',
             radiusStyle: 'pointy',
+            sidebarStyle: 'slim',
         });
         const prefs = preferencesStore.get();
         expect(prefs.theme).toBe('auto');
         expect(prefs.closeAction).toBe('close');
         expect(prefs.motionLevel).toBe('standard');
         expect(prefs.radiusStyle).toBe('standard');
+        expect(prefs.sidebarStyle).toBe('floating');
     });
 
     it('motionSpeed 只认有限数并夹到区间内', async () => {
@@ -172,6 +177,7 @@ describe('preferencesStore setter 归一化', () => {
             motionLevel: 'standard',
             motionSpeed: MOTION_SPEED_DEFAULT,
             radiusStyle: 'standard',
+            sidebarStyle: 'floating',
         });
     });
 

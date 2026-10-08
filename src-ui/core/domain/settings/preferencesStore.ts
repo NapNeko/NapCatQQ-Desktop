@@ -11,6 +11,7 @@
 //   motionLevel     elegant / standard / rich。决定动画风格强度
 //   motionSpeed     0.5 ~ 1.5（内部值）。0.5 = 体感 1× 基准，越大越快
 //   radiusStyle     square / standard / round。全局圆角风格（统一系数缩放）
+//   sidebarStyle    classic 贴边可折叠 / floating 悬浮卡片（AppNext 壳消费）
 
 import {
     MOTION_SPEED_DEFAULT,
@@ -33,10 +34,15 @@ import {
 } from '../../design/themes/registry';
 import { PALETTE_THEMES } from '../../design/themes/palettes';
 import { installPaletteThemeStyles } from '../../design/themes/paletteCss';
-import { type AppPreferences, type CloseAction, normalizeCloseAction } from './appPreferences';
+import {
+    type AppPreferences,
+    type CloseAction,
+    normalizeCloseAction,
+    normalizeSidebarStyle,
+} from './appPreferences';
 
 export type { ThemeMode } from '../../design/themes/registry';
-export type { AppPreferences, CloseAction } from './appPreferences';
+export type { AppPreferences, CloseAction, SidebarStyle } from './appPreferences';
 export { normalizeCloseAction } from './appPreferences';
 
 const STORAGE_KEY = 'ncd:preferences:v1';
@@ -49,6 +55,7 @@ const defaultPrefs: AppPreferences = {
     motionLevel: 'standard',
     motionSpeed: MOTION_SPEED_DEFAULT,
     radiusStyle: RADIUS_STYLE_DEFAULT,
+    sidebarStyle: 'floating',
 };
 
 let state: AppPreferences = loadFromStorage();
@@ -68,6 +75,7 @@ function loadFromStorage(): AppPreferences {
             motionLevel: normalizeMotionLevel(parsed.motionLevel),
             motionSpeed: normalizeMotionSpeed(parsed.motionSpeed),
             radiusStyle: normalizeRadiusStyle(parsed.radiusStyle),
+            sidebarStyle: normalizeSidebarStyle(parsed.sidebarStyle),
         };
     } catch {
         return defaultPrefs;
@@ -175,6 +183,7 @@ export const preferencesStore = {
                 patch.motionSpeed !== undefined ? patch.motionSpeed : state.motionSpeed,
             ),
             radiusStyle: normalizeRadiusStyle(patch.radiusStyle ?? state.radiusStyle),
+            sidebarStyle: normalizeSidebarStyle(patch.sidebarStyle ?? state.sidebarStyle),
         };
         persist();
         notify();

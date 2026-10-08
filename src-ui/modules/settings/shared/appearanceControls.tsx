@@ -1,12 +1,22 @@
-// 外观 Tab 的三选段与速度滑块：动画档位、动画速度、圆角风格。
+// 外观 Tab 的三选段与速度滑块：动画档位、动画速度、圆角风格、侧栏形态。
 
 import type { ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
-import { Sparkles, Wand2, Feather, Square, Circle, RectangleHorizontal } from 'lucide-react';
+import {
+    Sparkles,
+    Wand2,
+    Feather,
+    Square,
+    Circle,
+    RectangleHorizontal,
+    PanelLeftDashed,
+    RectangleVertical,
+} from 'lucide-react';
 import { SegmentMotionIcon } from '../../../shared/ui/motion';
 import type { MotionLevel } from '../../../core/design/motion';
 import type { RadiusStyle } from '../../../core/design/radius';
 import { RADIUS_LABELS } from '../../../core/design/radius';
+import type { SidebarStyle } from '../../../core/domain/settings/preferencesStore';
 import {
     MOTION_SPEED_DEFAULT,
     MOTION_SPEED_MAX,
@@ -156,6 +166,55 @@ export function RadiusStyleSegment({
                             icon={it.icon}
                             selected={selected}
                             segmentKey={`radius-${it.value}`}
+                        />
+                        <span>{it.label}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+const SIDEBAR_LABELS: Record<SidebarStyle, string> = {
+    classic: '经典',
+    floating: '悬浮',
+};
+
+export function SidebarStyleSegment({
+    value,
+    onChange,
+}: {
+    value: SidebarStyle;
+    onChange: (next: SidebarStyle) => void;
+}) {
+    const items: ReadonlyArray<{
+        value: SidebarStyle;
+        label: string;
+        icon: ComponentType<LucideProps>;
+    }> = [
+        { value: 'classic', label: SIDEBAR_LABELS.classic, icon: PanelLeftDashed },
+        { value: 'floating', label: SIDEBAR_LABELS.floating, icon: RectangleVertical },
+    ];
+    return (
+        <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
+            {items.map((it) => {
+                const selected = value === it.value;
+                return (
+                    <button
+                        key={it.value}
+                        type="button"
+                        onClick={() => onChange(it.value)}
+                        className={
+                            'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-all ' +
+                            (selected
+                                ? 'border border-border/50 bg-surface text-text shadow-sm'
+                                : 'border border-transparent text-text-tertiary hover:text-text')
+                        }
+                    >
+                        <SegmentMotionIcon
+                            icon={it.icon}
+                            selected={selected}
+                            segmentKey={`sidebar-${it.value}`}
                         />
                         <span>{it.label}</span>
                     </button>

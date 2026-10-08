@@ -11,7 +11,7 @@ import { MOTION_SPEED_DEFAULT, MOTION_SPEED_MAX, MOTION_SPEED_MIN } from '../../
 import { RADIUS_STYLE_DEFAULT, normalizeRadiusStyle } from '../../design/radius';
 import { normalizeTheme } from '../../design/themes/registry';
 import type { AppPreferences, CloseAction } from './appPreferences';
-import { normalizeCloseAction } from './appPreferences';
+import { normalizeCloseAction, normalizeSidebarStyle } from './appPreferences';
 
 function normalizeMotionLevel(raw: unknown): AppPreferences['motionLevel'] {
     return raw === 'elegant' || raw === 'rich' ? raw : 'standard';
@@ -34,6 +34,7 @@ export function appUiPreferencesToAppPreferences(
         motionLevel: normalizeMotionLevel(ui.motionLevel),
         motionSpeed: normalizeMotionSpeed(ui.motionSpeed),
         radiusStyle: normalizeRadiusStyle(ui.radiusStyle),
+        sidebarStyle: normalizeSidebarStyle(ui.sidebarStyle),
     };
 }
 
@@ -48,6 +49,7 @@ export function appPreferencesToAppUiPreferences(
         motionLevel: prefs.motionLevel,
         motionSpeed: prefs.motionSpeed,
         radiusStyle: prefs.radiusStyle,
+        sidebarStyle: prefs.sidebarStyle,
         infoBarDismissInfoMs: dismiss.infoBarDismissInfoMs,
         infoBarDismissSuccessMs: dismiss.infoBarDismissSuccessMs,
         infoBarDismissWarningMs: dismiss.infoBarDismissWarningMs,
@@ -77,6 +79,7 @@ export function isDefaultUiPreferencesOnDisk(ui: AppUiPreferences): boolean {
         ui.motionEnabled !== false &&
         normalizeMotionLevel(ui.motionLevel) === 'standard' &&
         normalizeMotionSpeed(ui.motionSpeed) === MOTION_SPEED_DEFAULT &&
-        normalizeRadiusStyle(ui.radiusStyle) === RADIUS_STYLE_DEFAULT
+        normalizeRadiusStyle(ui.radiusStyle) === RADIUS_STYLE_DEFAULT &&
+        normalizeSidebarStyle(ui.sidebarStyle) === 'floating'
     );
 }

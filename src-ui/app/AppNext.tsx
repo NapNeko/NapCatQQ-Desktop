@@ -36,6 +36,7 @@ import { useHostHealthAlerts } from '../hooks/remote/useHostHealthAlerts';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
+import { usePreferences } from '../hooks/preferences/usePreferences';
 import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
 import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminalStore';
 import { useFeatures } from '../hooks/preferences/featureTogglesStore';
@@ -177,6 +178,7 @@ export const AppNext: React.FC = () => {
         showOverview: showOverviewPage,
     });
     const [collapsed, setCollapsed] = useState(true);
+    const { sidebarStyle } = usePreferences();
     const debugEnabled = useDebugConsoleEnabled();
 
     useEffect(() => {
@@ -398,6 +400,7 @@ export const AppNext: React.FC = () => {
                             onChange={navigate}
                             onPrefetch={prefetchRoute}
                             collapsed={collapsed}
+                            sidebarStyle={sidebarStyle}
                             onToggleCollapse={toggleCollapsed}
                             hiddenRoutes={hiddenRoutes}
                             taskQueueActiveCount={taskQueueActiveCount}

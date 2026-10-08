@@ -8,6 +8,7 @@ export {
     MotionLevelSegment,
     MotionSpeedSlider,
     RadiusStyleSegment,
+    SidebarStyleSegment,
 } from './shared/appearanceControls';
 export {
     BotRuntimeMetricsIntervalSlider,

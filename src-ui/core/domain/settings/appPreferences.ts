@@ -20,4 +20,12 @@ export interface AppPreferences {
     motionLevel: MotionLevel;
     motionSpeed: number;
     radiusStyle: RadiusStyle;
+    sidebarStyle: SidebarStyle;
+}
+
+export type SidebarStyle = 'classic' | 'floating';
+
+// 缺省/非法值都回落悬浮：老配置覆盖更新后默认新形态，设置里可切回经典。
+export function normalizeSidebarStyle(raw: unknown): SidebarStyle {
+    return raw === 'classic' ? 'classic' : 'floating';
 }

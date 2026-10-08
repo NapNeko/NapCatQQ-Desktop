@@ -31,6 +31,7 @@ import logoSidebarCollapsed from '../../../assets/logo-48.png?inline';
 
 export type { AppRoute } from '../../../core/domain/ui/route';
 import type { AppRoute } from '../../../core/domain/ui/route';
+import type { SidebarStyle } from '../../../core/domain/settings/appPreferences';
 
 interface SidebarProps {
     active: AppRoute;
@@ -38,6 +39,7 @@ interface SidebarProps {
     // 可选：hover/focus 时预取路由 chunk，不改变点击语义。
     onPrefetch?: (route: AppRoute) => void;
     collapsed: boolean;
+    sidebarStyle?: SidebarStyle;
     onToggleCollapse: () => void;
     // 不显示的路由（容器页没有可用 Docker、功能开关关掉的模块）。引用要稳定，侧栏是 memo 的。
     hiddenRoutes?: ReadonlySet<AppRoute>;
@@ -81,10 +83,14 @@ export const Sidebar = memo(function Sidebar({
     onChange,
     onPrefetch,
     collapsed,
+    sidebarStyle = 'floating',
     onToggleCollapse,
     hiddenRoutes,
     taskQueueActiveCount = 0,
 }: SidebarProps) {
+    const floating = sidebarStyle === 'floating';
+    // 悬浮卡片没有折叠态；collapsed 只对经典档生效。
+    const effectiveCollapsed = !floating && collapsed;
     const mainNavItems = hiddenRoutes?.size
         ? MAIN_NAV.filter((item) => !hiddenRoutes.has(item.id))
         : MAIN_NAV;
@@ -119,23 +125,28 @@ export const Sidebar = memo(function Sidebar({
             duration: m.duration('base'),
             ease: m.ease.hover,
         });
-    }, [active, collapsed, hiddenRoutes, m]);
+    }, [active, collapsed, sidebarStyle, hiddenRoutes, m]);
 
     return (
         <aside
             className={cn(
                 'relative z-20 flex shrink-0 flex-col bg-sidebar',
-                'transition-[width] duration-200 ease-out',
-                collapsed ? 'w-14' : 'w-56',
+                floating
+                    // 悬浮卡片：离边留缝 + 圆角 + 投影描边，恒展开（w 与展开态一致）。
+                    ? 'my-2 ml-2 w-48 overflow-hidden rounded-xl border border-border-subtle shadow-card'
+                    : cn(
+                          'transition-[width] duration-200 ease-out',
+                          collapsed ? 'w-14' : 'w-56',
+                      ),
             )}
         >
             <div
                 className={cn(
                     'flex h-12 shrink-0 items-center overflow-hidden',
-                    collapsed ? 'justify-center px-0' : 'gap-2 px-3',
+                    effectiveCollapsed ? 'justify-center px-0' : 'gap-2 px-3',
                 )}
             >
-                {collapsed ? (
+                {effectiveCollapsed ? (
                     <button
                         type="button"
                         onClick={onToggleCollapse}
@@ -185,6 +196,7 @@ export const Sidebar = memo(function Sidebar({
                                 NapCatQQ-Desktop
                             </span>
                         </div>
+                        {!floating && (
                         <button
                             type="button"
                             onClick={onToggleCollapse}
@@ -204,6 +216,7 @@ export const Sidebar = memo(function Sidebar({
                                 strokeWidth={1.75}
                             />
                         </button>
+                        )}
                     </>
                 )}
             </div>
@@ -224,7 +237,7 @@ export const Sidebar = memo(function Sidebar({
                             key={item.id}
                             item={item}
                             isActive={active === item.id}
-                            collapsed={collapsed}
+                            collapsed={effectiveCollapsed}
                             onSelect={onChange}
                             onPrefetch={onPrefetch}
                         />
@@ -235,7 +248,7 @@ export const Sidebar = memo(function Sidebar({
                     <TaskQueueNavRow
                         item={TASKS_NAV}
                         isActive={active === 'tasks'}
-                        collapsed={collapsed}
+                        collapsed={effectiveCollapsed}
                         activeCount={taskQueueActiveCount}
                         onSelect={onChange}
                         onPrefetch={onPrefetch}
@@ -243,7 +256,7 @@ export const Sidebar = memo(function Sidebar({
                     <NavRow
                         item={SETTINGS_NAV}
                         isActive={active === 'settings'}
-                        collapsed={collapsed}
+                        collapsed={effectiveCollapsed}
                         onSelect={onChange}
                         onPrefetch={onPrefetch}
                     />
