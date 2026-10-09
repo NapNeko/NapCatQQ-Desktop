@@ -17,23 +17,28 @@ export function useSmoothWheel(scroll: RefObject<HTMLDivElement>, enabled: boole
             last = 0;
         };
         stop.current = cancel;
+        const advance = (step: number) => {
+            const before = element.scrollTop;
+            element.scrollTop += step;
+            const moved = element.scrollTop - before;
+            remaining -= moved;
+            return Math.abs(remaining) >= 0.1 && Math.abs(moved) >= 0.01;
+        };
         const tick = (now: number) => {
-            const elapsed = last ? Math.min(32, now - last) : 16;
+            const elapsed = Math.max(1, now - last);
             last = now;
             const step =
                 Math.abs(remaining) < 1
                     ? remaining
                     : Math.sign(remaining) *
-                      Math.max(1, Math.abs(remaining) * (1 - Math.exp(-elapsed / 55)));
-            const before = element.scrollTop;
-            element.scrollTop += step;
-            remaining -= element.scrollTop - before;
-            if (Math.abs(remaining) < 0.1 || Math.abs(element.scrollTop - before) < 0.01) cancel();
+                      Math.max(1, Math.abs(remaining) * (1 - Math.exp(-elapsed / 32)));
+            if (!advance(step)) cancel();
             else frame = requestAnimationFrame(tick);
         };
         const wheel = (event: WheelEvent) => {
             if (
                 event.defaultPrevented ||
+                !event.cancelable ||
                 event.ctrlKey ||
                 event.shiftKey ||
                 event.deltaX ||
@@ -49,16 +54,37 @@ export function useSmoothWheel(scroll: RefObject<HTMLDivElement>, enabled: boole
                 cancel();
                 return;
             }
-            event.preventDefault();
             const delta =
                 event.deltaY *
                 (event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? element.clientHeight : 1);
-            if (Math.sign(delta) !== Math.sign(remaining)) remaining = 0;
+            const end = Math.max(0, element.scrollHeight - element.clientHeight);
+            if (
+                !element.clientHeight ||
+                (delta < 0 && element.scrollTop <= 0) ||
+                (delta > 0 && element.scrollTop >= end)
+            ) {
+                cancel();
+                return;
+            }
+            event.preventDefault();
+            if (remaining && Math.sign(delta) !== Math.sign(remaining)) cancel();
             remaining = Math.max(
                 -element.clientHeight * 2,
                 Math.min(element.clientHeight * 2, remaining + delta),
             );
-            if (!frame) frame = requestAnimationFrame(tick);
+            // 输入先响应，短尾部再分帧消化；掉帧后按真实时间追上输入。
+            if (
+                !advance(remaining * 0.4) ||
+                (remaining < 0 && element.scrollTop <= 0) ||
+                (remaining > 0 && element.scrollTop >= end)
+            ) {
+                cancel();
+                return;
+            }
+            if (!frame) {
+                last = performance.now();
+                frame = requestAnimationFrame(tick);
+            }
         };
         element.addEventListener('wheel', wheel, { passive: false });
         element.addEventListener('pointerdown', cancel);
