@@ -303,6 +303,11 @@ pub enum PanelOutcome {
     NotFound,
     /// 其它失败（含状态码）
     Failed(String),
+    Rejected {
+        status: u16,
+        message: String,
+        data: Option<serde_json::Value>,
+    },
 }
 
 /// 允许经桌面端转发的路径前缀。
@@ -313,18 +318,42 @@ pub enum PanelOutcome {
 const ALLOWED_PREFIX: &str = "/api/";
 
 pub fn path_is_allowed(path: &str) -> bool {
-    path.starts_with(ALLOWED_PREFIX)
-        && !path.contains("://")
-        && !path.contains("..")
-        && !path.contains('\\')
-        && !path.contains(char::is_whitespace)
+    let pathname = path
+        .split('?')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    pathname.starts_with(ALLOWED_PREFIX)
+        && !pathname.contains("://")
+        && !pathname.contains("..")
+        && !pathname.contains('\\')
+        && !["%2e", "%2f", "%5c", "%25"]
+            .iter()
+            .any(|escape| pathname.contains(escape))
+        && !path.contains('#')
+        && !path.contains(|c: char| c.is_whitespace() || c.is_control())
 }
 
 /// 面板不要求登录的接口（上游 _auth_middleware 的 public 集合里桌面端会用到的那部分）。
 ///
 /// 这些必须不带会话直接发：/api/auth/status 正是用来判断「面板还没设密码」的，
 /// 而那时根本登录不了，先登录再问就永远问不到。
-const PUBLIC_PATHS: &[&str] = &["/api/auth/status"];
+const PUBLIC_PATHS: &[&str] = &["/api/auth/status", "/api/auth/setup"];
+
+fn method_is_allowed(method: &str, path: &str) -> bool {
+    let pathname = path.split('?').next().unwrap_or_default();
+    if pathname.starts_with("/api/auth/") {
+        return matches!(
+            (method, pathname),
+            ("GET", "/api/auth/status") | ("POST", "/api/auth/setup")
+        );
+    }
+    match method {
+        "GET" | "POST" => true,
+        "PUT" | "DELETE" => path.split('?').next() == Some("/api/archives/item"),
+        _ => false,
+    }
+}
 
 /// 面板的错误回包是 {"ok":false,"error":"人话"}；把它带出来，别只报状态码
 async fn panel_error_text(resp: reqwest::Response, status: reqwest::StatusCode) -> String {
@@ -341,7 +370,7 @@ async fn panel_error_text(resp: reqwest::Response, status: reqwest::StatusCode) 
 
 /// 代前端调一次面板接口（自动登录；401/403 时清会话重登一次再试）。
 ///
-/// method 只认 GET / POST —— 面板其余方法桌面端用不到，不放行能少一类口子。
+/// PUT / DELETE 只用于档案接口，继续由面板检查管理权限与版本。
 pub async fn panel_call(
     sessions: &PanelSessions,
     instance_id: &str,
@@ -358,7 +387,7 @@ pub async fn panel_call(
         return PanelOutcome::Failed(format!("不允许的面板路径：{path}"));
     }
     let method = method.to_ascii_uppercase();
-    if method != "GET" && method != "POST" {
+    if !method_is_allowed(&method, path) {
         return PanelOutcome::Failed(format!("不支持的方法：{method}"));
     }
     let client = match client() {
@@ -381,11 +410,17 @@ pub async fn panel_call(
                 Err(outcome) => return outcome,
             }
         };
-        let mut req = if method == "GET" {
-            client.get(&url)
-        } else {
-            client.post(&url)
+        let http_method = match method.as_str() {
+            "GET" => reqwest::Method::GET,
+            "POST" => reqwest::Method::POST,
+            "PUT" => reqwest::Method::PUT,
+            "DELETE" => reqwest::Method::DELETE,
+            _ => unreachable!("method checked above"),
         };
+        let mut req = client.request(http_method, &url);
+        if path.starts_with("/api/plugins/") || path.starts_with("/api/config/models/") {
+            req = req.timeout(Duration::from_secs(180));
+        }
         if let Some(session) = &session {
             req = req
                 .header("X-Token", &session.token)
@@ -399,8 +434,7 @@ pub async fn panel_call(
             Err(e) => return PanelOutcome::Unreachable(e.to_string()),
         };
         let status = resp.status();
-        if status.as_u16() == 401 || status.as_u16() == 403 {
-            // 公开接口没带会话，重登也不会变
+        if status.as_u16() == 401 {
             if attempt == 0 && !public {
                 continue;
             }
@@ -412,10 +446,30 @@ pub async fn panel_call(
             return PanelOutcome::NotFound;
         }
         if !status.is_success() {
-            return PanelOutcome::Failed(panel_error_text(resp, status).await);
+            let data = resp.json::<serde_json::Value>().await.ok();
+            let message = data
+                .as_ref()
+                .and_then(|v| v.get("error").and_then(|v| v.as_str()))
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("面板返回 {status}"));
+            return PanelOutcome::Rejected {
+                status: status.as_u16(),
+                message,
+                data,
+            };
         }
         return match resp.json::<serde_json::Value>().await {
-            Ok(v) => PanelOutcome::Ok(v),
+            Ok(mut v) => {
+                if path == "/api/auth/setup" {
+                    // 会话凭据留在 Rust，首次设置不把 token 交给 WebView。
+                    if let Some(map) = v.as_object_mut() {
+                        map.remove("token");
+                        map.remove("csrf_token");
+                    }
+                    sessions.clear(instance_id);
+                }
+                PanelOutcome::Ok(v)
+            }
             Err(e) => PanelOutcome::Failed(format!("面板回包不是 JSON：{e}")),
         };
     }
@@ -438,6 +492,16 @@ mod panel_call_tests {
         assert!(!path_is_allowed("/api/a b"));
         assert!(!path_is_allowed("/healthz"));
         assert!(!path_is_allowed(""));
+        assert!(!path_is_allowed("/api/%2E%2E/private"));
+        assert!(!path_is_allowed("/api/%252e%252e/private"));
+        assert!(!path_is_allowed("/api/x%2fy"));
+        assert!(!path_is_allowed("/api/overview#ignored"));
+        assert!(path_is_allowed(
+            "/api/archives/item?key=notes..old%2Fprivate&table=memory"
+        ));
+        assert!(!method_is_allowed("POST", "/api/auth/login"));
+        assert!(!method_is_allowed("POST", "/api/auth/status"));
+        assert!(method_is_allowed("POST", "/api/auth/setup"));
     }
 
     #[tokio::test]
@@ -459,6 +523,143 @@ mod panel_call_tests {
         let sessions = PanelSessions::new();
         let out = panel_call(&sessions, "i1", 1, None, "DELETE", "/api/plugins", None).await;
         assert!(matches!(out, PanelOutcome::Failed(_)), "{out:?}");
+    }
+
+    #[tokio::test]
+    async fn archive_mutations_keep_body_credentials_and_conflict_details() {
+        use wiremock::matchers::{body_json, header, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let port = server.address().port();
+        Mock::given(method("POST"))
+            .and(path(LOGIN_PATH))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"token":"session", "csrf_token":"csrf"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let edit = json!({"table":"memory", "key":"group/1", "value":"draft", "tags":["new"], "version":7});
+        let conflict = json!({"ok":false,"error":"档案版本冲突","actual_version":8,"current":{"value":"server", "version":8}});
+        Mock::given(method("PUT"))
+            .and(path("/api/archives/item"))
+            .and(header("X-Token", "session"))
+            .and(header("X-CSRF-Token", "csrf"))
+            .and(body_json(edit.clone()))
+            .respond_with(ResponseTemplate::new(409).set_body_json(conflict.clone()))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let delete = json!({"table":"memory", "key":"group/1", "version":8});
+        Mock::given(method("DELETE"))
+            .and(path("/api/archives/item"))
+            .and(header("X-Token", "session"))
+            .and(header("X-CSRF-Token", "csrf"))
+            .and(body_json(delete.clone()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let sessions = PanelSessions::new();
+        let outcome = panel_call(
+            &sessions,
+            "instance",
+            port,
+            Some("mock-password"),
+            "PUT",
+            "/api/archives/item",
+            Some(edit),
+        )
+        .await;
+        match outcome {
+            PanelOutcome::Rejected {
+                status,
+                message,
+                data,
+            } => {
+                assert_eq!(status, 409);
+                assert_eq!(message, "档案版本冲突");
+                assert_eq!(data, Some(conflict));
+            }
+            other => panic!("expected conflict, got {other:?}"),
+        }
+        let outcome = panel_call(
+            &sessions,
+            "instance",
+            port,
+            Some("mock-password"),
+            "DELETE",
+            "/api/archives/item",
+            Some(delete),
+        )
+        .await;
+        assert!(matches!(outcome, PanelOutcome::Ok(_)), "{outcome:?}");
+    }
+
+    #[tokio::test]
+    async fn setup_is_public_and_never_exposes_session_tokens() {
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("POST")).and(path("/api/auth/setup"))
+            .and(body_json(json!({"password":"mock-password","confirm":"mock-password"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"token":"secret-token","csrf_token":"secret-csrf","message":"设置完成"})))
+            .expect(1).mount(&server).await;
+        let sessions = PanelSessions::new();
+        let outcome = panel_call(
+            &sessions,
+            "instance",
+            server.address().port(),
+            None,
+            "POST",
+            "/api/auth/setup",
+            Some(json!({"password":"mock-password","confirm":"mock-password"})),
+        )
+        .await;
+        match outcome {
+            PanelOutcome::Ok(data) => assert_eq!(data, json!({"ok":true,"message":"设置完成"})),
+            other => panic!("expected setup success, got {other:?}"),
+        }
+        assert!(sessions.get("instance").is_none());
+    }
+
+    #[tokio::test]
+    async fn management_permission_errors_keep_the_server_reason_without_relogin() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(LOGIN_PATH))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"token":"session","csrf_token":"csrf"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/plugins/install"))
+            .respond_with(
+                ResponseTemplate::new(403)
+                    .set_body_json(json!({"ok":false,"error":"插件管理未开启"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let outcome = panel_call(
+            &PanelSessions::new(),
+            "instance",
+            server.address().port(),
+            Some("mock-password"),
+            "POST",
+            "/api/plugins/install",
+            Some(json!({"repo":"https://github.com/example/demo"})),
+        )
+        .await;
+        assert!(
+            matches!(outcome, PanelOutcome::Rejected { status:403, message, .. } if message == "插件管理未开启")
+        );
     }
 }
 

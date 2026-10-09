@@ -13,4 +13,8 @@ data?: unknown,
 /**
  * 失败时给人看的一句话
  */
-message?: string, };
+message?: string, 
+/**
+ * 保留冲突和校验状态，编辑器才能让用户处理当前版本。
+ */
+status?: number, };

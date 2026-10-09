@@ -104,6 +104,10 @@ pub struct AppPanelResult {
     /// 失败时给人看的一句话
     #[ts(optional)]
     pub message: Option<String>,
+    /// 保留冲突和校验状态，编辑器才能让用户处理当前版本。
+    #[serde(default)]
+    #[ts(optional)]
+    pub status: Option<u16>,
 }
 
 impl AppPanelResult {
@@ -112,6 +116,7 @@ impl AppPanelResult {
             kind: AppPanelOutcomeKind::Ok,
             data: Some(data),
             message: None,
+            status: None,
         }
     }
 
@@ -120,6 +125,7 @@ impl AppPanelResult {
             kind,
             data: None,
             message: Some(message.into()),
+            status: None,
         }
     }
 }

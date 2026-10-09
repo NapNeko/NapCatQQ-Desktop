@@ -16,6 +16,7 @@ use ncd_domain::{
     AppConfigDocument, AppFrameworkManifest, AppInstance, AppProjectProbe, OneBotLinkPlan,
     TerminalSnippet,
 };
+use ncd_host::remote::TunnelSpec;
 use ncd_host::{Host, HostCommand, HostPath, Locality};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
@@ -142,17 +143,24 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         path: &str,
         body: Option<serde_json::Value>,
     ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
-        // 转发只连本机回环。远端实例的面板口读出来以后连的也是 127.0.0.1，
-        // 打到的会是本机同口的另一个服务，还会把这台实例的面板密码交给它
-        if host.locality() != Locality::Local {
-            return Ok(Some(AppPanelResult::err(
-                AppPanelOutcomeKind::Failed,
-                "远端实例的面板还不能经桌面端读取，请用「打开控制台」在浏览器里使用面板",
-            )));
-        }
         let root = Self::install_dir(instance);
         let port =
             control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
+        // 远端口必须经该主机的 SSH 隧道，不能直接命中本机同端口的服务。
+        let tunnel = if host.locality() == Locality::Remote {
+            match host.open_tunnel(TunnelSpec::local_to_remote(0, port)).await {
+                Ok(tunnel) => Some(tunnel),
+                Err(error) => {
+                    return Ok(Some(AppPanelResult::err(
+                        AppPanelOutcomeKind::Unreachable,
+                        format!("无法建立 NeoBot 面板 SSH 隧道：{error}"),
+                    )));
+                }
+            }
+        } else {
+            None
+        };
+        let port = tunnel.as_ref().map_or(port, |tunnel| tunnel.local_port());
         let outcome = control::panel_call(
             &self.sessions,
             instance.id.as_str(),
@@ -163,6 +171,7 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             body,
         )
         .await;
+        drop(tunnel);
         Ok(Some(match outcome {
             control::PanelOutcome::Ok(v) => AppPanelResult::ok(v),
             control::PanelOutcome::Unauthorized => AppPanelResult::err(
@@ -177,6 +186,16 @@ impl AppFrameworkAdapter for NeoBotAdapter {
                 "面板没有这个接口：当前 NeoBot 版本还不提供它，需要更新的版本",
             ),
             control::PanelOutcome::Failed(e) => AppPanelResult::err(AppPanelOutcomeKind::Failed, e),
+            control::PanelOutcome::Rejected {
+                status,
+                message,
+                data,
+            } => AppPanelResult {
+                kind: AppPanelOutcomeKind::Failed,
+                data,
+                message: Some(message),
+                status: Some(status),
+            },
         }))
     }
 
@@ -426,6 +445,103 @@ impl AppFrameworkAdapter for NeoBotAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_backup::tests::TestHost;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn remote_instance() -> AppInstance {
+        serde_json::from_value(serde_json::json!({
+            "id":"remote-neobot", "framework_id":"neobot", "display_name":"NeoBot",
+            "placement":"remote_native", "host_id":"remote:example",
+            "install_dir":"/apps/neobot", "port":8080, "state":"running", "created_at_ms":1
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn remote_panel_uses_the_host_tunnel_and_configured_dashboard_port() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/auth/login"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "token":"remote-token", "csrf_token":"remote-csrf"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/admin/power"))
+            .and(header("X-Token", "remote-token"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"ok":true,"state":"running"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let host = TestHost::new("remote:example");
+        host.put(
+            "/apps/neobot/app/data/config.toml",
+            b"[adapter]\nmode = 'onebot'\n",
+        );
+        host.put(
+            "/apps/neobot/app/data/plugins_data/dashboard/config.toml",
+            b"port = 43123\n",
+        );
+        host.set_tunnel_port(server.address().port());
+        let result = NeoBotAdapter::new()
+            .panel_request(
+                host.as_ref(),
+                &remote_instance(),
+                Some("test-password"),
+                "GET",
+                "/api/admin/power",
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.kind, AppPanelOutcomeKind::Ok);
+        assert_eq!(
+            host.tunnel_requests(),
+            vec![TunnelSpec::local_to_remote(0, 43123)]
+        );
+        assert_eq!(result.data.unwrap()["state"], "running");
+    }
+
+    #[tokio::test]
+    async fn failed_remote_tunnel_never_falls_back_to_a_local_service() {
+        let local_service = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/auth/login"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&local_service)
+            .await;
+        let host = TestHost::new("remote:example");
+        host.put(
+            "/apps/neobot/app/data/config.toml",
+            b"[adapter]\nmode = 'onebot'\n",
+        );
+        host.put(
+            "/apps/neobot/app/data/plugins_data/dashboard/config.toml",
+            format!("port = {}\n", local_service.address().port()).as_bytes(),
+        );
+        let result = NeoBotAdapter::new()
+            .panel_request(
+                host.as_ref(),
+                &remote_instance(),
+                Some("test-password"),
+                "GET",
+                "/api/admin/power",
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.kind, AppPanelOutcomeKind::Unreachable);
+        assert!(result.message.unwrap().contains("SSH 隧道"));
+    }
 
     /// 版本闸门：只有 1.2.3 及以上才走优雅关闭，其余返回 false 让编排层直接收树。
     /// 这是「只应该写需要 xx 版本以上」的落点。

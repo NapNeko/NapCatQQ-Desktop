@@ -1,5 +1,6 @@
 use super::*;
 use bytes::Bytes;
+use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{
     Arch, ArchiveKind, CommandOutput, HostCommand, HostError, HostProcess, HostShell, Locality,
 };
@@ -17,6 +18,8 @@ pub(crate) struct TestHost {
     nodes: Mutex<BTreeMap<String, Node>>,
     fail_once: Mutex<Option<String>>,
     shell: ncd_host::shell::BashShell,
+    tunnel_port: Mutex<Option<u16>>,
+    tunnels: Mutex<Vec<TunnelSpec>>,
 }
 
 impl TestHost {
@@ -26,6 +29,8 @@ impl TestHost {
             nodes: Mutex::new(BTreeMap::new()),
             fail_once: Mutex::new(None),
             shell: ncd_host::shell::BashShell,
+            tunnel_port: Mutex::new(None),
+            tunnels: Mutex::new(Vec::new()),
         });
         host.nodes.lock().unwrap().insert(
             String::new(),
@@ -59,6 +64,14 @@ impl TestHost {
                 symlink: false,
             },
         );
+    }
+
+    pub(crate) fn set_tunnel_port(&self, port: u16) {
+        *self.tunnel_port.lock().unwrap() = Some(port);
+    }
+
+    pub(crate) fn tunnel_requests(&self) -> Vec<TunnelSpec> {
+        self.tunnels.lock().unwrap().clone()
     }
 
     fn content(&self, path: &str) -> Option<Vec<u8>> {
@@ -182,6 +195,16 @@ impl Host for TestHost {
     }
     async fn run_to_string(&self, _: HostCommand) -> Result<CommandOutput, HostError> {
         Err(HostError::Unsupported { operation: "run" })
+    }
+    async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        self.tunnels.lock().unwrap().push(spec);
+        self.tunnel_port
+            .lock()
+            .unwrap()
+            .map(|port| TunnelHandle::detached(port, 0))
+            .ok_or(HostError::Unsupported {
+                operation: "open_tunnel",
+            })
     }
 }
 
