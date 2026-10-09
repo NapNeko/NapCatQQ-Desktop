@@ -18,7 +18,9 @@ describe('Popover focus lifecycle', () => {
     it('reruns caller autofocus when reopened during its exit animation', async () => {
         const autofocus = vi.fn((event: Event) => {
             event.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-autofocus]')?.focus();
+            (event.target as HTMLElement)
+                .querySelector<HTMLButtonElement>('[data-autofocus]')
+                ?.focus();
         });
         render(
             <Popover>
