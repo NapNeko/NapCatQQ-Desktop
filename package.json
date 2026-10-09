@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "vite --config src-ui/vite.config.ts",
     "test:unit": "vitest run --config src-ui/vitest.config.ts --dir src-ui",
+    "test:domain": "vitest run --config src-ui/vitest.config.ts core/domain",
+    "test:related": "node scripts/test-related.mjs",
     "test:coverage": "vitest run --config src-ui/vitest.config.ts --dir src-ui --coverage",
     "test:probe": "node --test \"src-tauri/resources/metrics/*.test.mjs\"",
     "build": "tsc -p src-ui/tsconfig.json && vite build --config src-ui/vite.config.ts",
@@ -19,7 +21,7 @@
     "fmt:ui": "prettier --write \"src-ui/**/*.{ts,tsx,css}\"",
     "fmt:check": "cargo fmt --all -- --check && prettier --check \"src-ui/**/*.{ts,tsx,css}\"",
     "verify": "pnpm run ts-bindings && pnpm run typecheck && pnpm run lint && pnpm run rust:check && pnpm run fmt:check",
-    "ts-bindings": "cargo test -p ncd-runtime --lib export_bindings_ -- --quiet && cargo test -p ncd-domain --lib export_bindings_ -- --quiet && cargo test -p ncd-component --lib export_bindings_ -- --quiet && cargo test -p ncd-appframework --lib export_bindings_ -- --quiet && cargo test -p ncd-deploy --lib export_bindings_ -- --quiet && cargo test -p ncd-host --lib export_bindings_ -- --quiet && cargo test -p ncd-server --lib export_bindings_ -- --quiet && cargo test -p ncd-tauri --lib export_bindings_ -- --quiet",
+    "ts-bindings": "cargo test -p ncd-runtime -p ncd-domain -p ncd-component -p ncd-appframework -p ncd-deploy -p ncd-host -p ncd-server -p ncd-tauri --lib export_bindings_ -- --quiet",
     "rust:check": "cargo check --workspace --all-targets",
     "rust:test": "cargo test --workspace",
     "tauri": "tauri",

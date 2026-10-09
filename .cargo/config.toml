@@ -1,0 +1,6 @@
+# 本地编译和测试给桌面应用留出资源；CI 可通过环境变量覆盖。
+[build]
+jobs = 2
+
+[env]
+RUST_TEST_THREADS = { value = "2", force = false }
