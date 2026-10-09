@@ -234,6 +234,7 @@ describe('命令面板', () => {
         const user = userEvent.setup();
         renderPalette();
         await screen.findByRole('option', { name: /^get_login_info/ });
+        await waitFor(() => expect(input()).toHaveFocus());
         await user.keyboard('{ArrowUp}');
         expect(selected()).toBe(option(/^get_login_info/));
         await user.keyboard('{ArrowDown}');
@@ -325,6 +326,7 @@ describe('命令面板', () => {
         await act(async () => {
             await new Promise((r) => setTimeout(r, 0));
         });
+        await waitFor(() => expect(input()).toHaveFocus());
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         await user.keyboard('{Enter}');
         await user.keyboard('{ArrowDown}{Enter}');
@@ -354,6 +356,7 @@ describe('命令面板', () => {
         renderPalette();
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         await screen.findByRole('option', { name: /^get_login_info/ });
+        await waitFor(() => expect(input()).toHaveFocus());
         await user.keyboard('{Enter}');
         expect(open).toHaveBeenCalledWith('get_login_info', { newTab: false });
     });
@@ -369,6 +372,7 @@ describe('命令面板', () => {
         const actionInput = screen.getByTestId('action-input');
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         await screen.findByRole('option', { name: /^get_login_info/ });
+        await waitFor(() => expect(input()).toHaveFocus());
         await user.keyboard('{Control>}{Enter}{/Control}');
         expect(open).toHaveBeenCalledWith('get_login_info', { newTab: true });
         // Radix 的「还给打开面板前的元素」被拦下，焦点交给新标签的接口名
@@ -387,6 +391,7 @@ describe('命令面板', () => {
         const actionInput = screen.getByTestId('action-input');
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         await screen.findByRole('option', { name: /^get_login_info/ });
+        await waitFor(() => expect(input()).toHaveFocus());
         await user.keyboard('{Enter}');
         expect(open).toHaveBeenCalledWith('get_login_info', { newTab: false });
         const ws = debugWorkspaceStore.getSnapshot().ws;
