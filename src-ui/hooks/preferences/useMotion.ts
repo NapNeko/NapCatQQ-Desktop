@@ -214,12 +214,33 @@ export function useMotion(): MotionEnv {
         };
 
         const bindHover: MotionEnv['bindHover'] = (el, opts) => {
+            const env = envRef.current;
+            if (!env.enabled) return () => {};
+            const scale = opts?.scale ?? env.preset.feel.hoverScale;
+            const lift = opts?.lift !== undefined ? opts.lift : -env.preset.feel.cardLift;
+            const ownsScale = scale !== 1;
+            const ownsY = lift !== null && lift !== 0;
+            const ownsShadow = opts?.shadow === true && env.preset.feel.shadowBoost > 0;
+            const ownsFilter = (opts?.brightness ?? true) && env.preset.feel.brightness !== 1;
+            if (!ownsScale && !ownsY && !ownsShadow && !ownsFilter) return () => {};
+            const originalShadow = el.style.boxShadow;
+            const originalFilter = el.style.filter;
+            let activeTween: gsap.core.Tween | null = null;
+            let touched = false;
+            const resetVars = (): gsap.TweenVars => {
+                const vars: gsap.TweenVars = {};
+                if (ownsScale) vars.scale = 1;
+                if (ownsY) vars.y = 0;
+                if (ownsShadow) vars.boxShadow = originalShadow;
+                if (ownsFilter) vars.filter = originalFilter;
+                return vars;
+            };
             const onEnter = () => {
                 const env = envRef.current;
                 if (!env.enabled) return;
                 const f = env.preset.feel;
                 const t = env.preset.timing;
-                const dur = scaleDuration(t.durationFast, env.speed);
+                const dur = scaleDuration(Math.min(t.durationFast, 0.09), env.speed);
                 // 只接管这里要动的属性。同一个元素上常挂着列表进场（透明度 + 位移），
                 // 整个 killTweensOf 会把进场一起掐掉：指针一扫过，卡片就停在半透明甚至
                 // 看不见，要等整组进场播完才被拉回来
@@ -228,59 +249,60 @@ export function useMotion(): MotionEnv {
                     ease: t.ease.hover,
                     overwrite: 'auto',
                 };
-                const targetScale = opts?.scale ?? f.hoverScale;
-                if (targetScale !== 1) vars.scale = targetScale;
-                const liftPx = opts?.lift !== undefined ? opts.lift : -f.cardLift;
-                if (liftPx !== 0 && liftPx !== null) vars.y = liftPx;
+                if (ownsScale) vars.scale = scale;
+                if (ownsY) vars.y = lift;
                 // boxShadow 默认 opt-in:大部分卡片元素已经在 Tailwind 写了
                 // hover:shadow-popover,我们再叠一份 GSAP boxShadow 会糊出"扩散一大圈"
                 // 的视觉。需要 GSAP 接管 shadow 时显式传 { shadow: true }。
-                if (opts?.shadow === true && f.shadowBoost > 0) {
+                if (ownsShadow) {
                     const blur = 24 + 16 * f.shadowBoost;
                     const yOff = 8 + 6 * f.shadowBoost;
                     const alpha = (0.08 + 0.06 * f.shadowBoost).toFixed(3);
                     vars.boxShadow = `0 ${yOff}px ${blur}px rgba(0,0,0,${alpha})`;
                 }
-                if ((opts?.brightness ?? true) && f.brightness !== 1) {
+                if (ownsFilter) {
                     vars.filter = `brightness(${f.brightness})`;
                 }
-                gsap.to(el, vars);
+                activeTween?.kill();
+                touched = true;
+                activeTween = gsap.to(el, vars);
             };
             const onLeave = () => {
                 const env = envRef.current;
                 if (!env.enabled) return;
                 const t = env.preset.timing;
-                const dur = scaleDuration(t.durationFast, env.speed);
+                const dur = scaleDuration(Math.min(t.durationFast, 0.09), env.speed);
                 // 只清 onEnter 真正可能设过的属性。boxShadow/filter 没开就不动,
                 // 否则一个空字符串覆盖会冲掉 Tailwind 类设的 shadow。
                 const vars: gsap.TweenVars = {
-                    scale: 1,
-                    y: 0,
+                    ...resetVars(),
                     duration: dur,
                     ease: t.ease.damped,
                     overwrite: 'auto',
                 };
-                if (opts?.shadow === true) vars.boxShadow = '';
-                if (opts?.brightness ?? true) vars.filter = '';
-                gsap.to(el, vars);
+                activeTween?.kill();
+                activeTween = gsap.to(el, vars);
             };
-            const env = envRef.current;
-            if (!env.enabled) return () => {};
             el.addEventListener('mouseenter', onEnter);
             el.addEventListener('mouseleave', onLeave);
             return () => {
                 el.removeEventListener('mouseenter', onEnter);
                 el.removeEventListener('mouseleave', onLeave);
+                activeTween?.kill();
+                if (touched) gsap.set(el, resetVars());
             };
         };
 
         const bindPress: MotionEnv['bindPress'] = (el) => {
-            // press 流程:
-            //   mousedown → 立即压扁到 tapScale,无 spring(power2.out 短促)
-            //   mouseup → 走 release ease 弹回 hoverScale(已悬停)或 1(未悬停)
-            //   mouseleave 在按下中也要触发释放,避免按住后拖出去卡在压扁状态
+            // 离开与失焦也要结束按下反馈，避免卡在缩小状态。
             let pressed = false;
             let hovered = false;
+            let touched = false;
+            let activeTween: gsap.core.Tween | null = null;
+            const stopTracking = () => {
+                window.removeEventListener('mouseup', onUp);
+                window.removeEventListener('blur', onBlur);
+            };
             const onEnter = () => {
                 hovered = true;
             };
@@ -288,49 +310,67 @@ export function useMotion(): MotionEnv {
                 hovered = false;
                 if (pressed) {
                     pressed = false;
-                    releaseTo(1);
+                    stopTracking();
+                    releaseTo(1, true);
                 }
             };
-            const onDown = () => {
+            const onDown = (event: MouseEvent) => {
                 const env = envRef.current;
-                if (!env.enabled) return;
+                if (!env.enabled || event.button !== 0) return;
                 pressed = true;
+                touched = true;
                 const f = env.preset.feel;
                 const t = env.preset.timing;
-                gsap.to(el, {
+                activeTween?.kill();
+                activeTween = gsap.to(el, {
                     scale: f.tapScale,
-                    duration: scaleDuration(t.durationFast, env.speed) * 0.55,
+                    duration: scaleDuration(Math.min(t.durationFast * 0.55, 0.04), env.speed),
                     ease: t.ease.press,
+                    overwrite: 'auto',
                 });
+                window.addEventListener('mouseup', onUp);
+                window.addEventListener('blur', onBlur);
             };
-            const releaseTo = (fallback: number) => {
+            const releaseTo = (fallback: number, cancelled = false) => {
                 const env = envRef.current;
                 if (!env.enabled) return;
                 const f = env.preset.feel;
                 const t = env.preset.timing;
-                const target = hovered ? f.hoverScale : fallback;
-                gsap.to(el, {
+                const target = !cancelled && hovered ? f.hoverScale : fallback;
+                const base = cancelled ? t.durationFast : t.durationBase;
+                const maximum = cancelled ? 0.07 : 0.16;
+                activeTween?.kill();
+                activeTween = gsap.to(el, {
                     scale: target,
-                    duration: scaleDuration(t.durationBase, env.speed),
-                    ease: t.ease.release,
+                    duration: scaleDuration(Math.min(base, maximum), env.speed),
+                    ease: cancelled ? t.ease.damped : t.ease.release,
+                    overwrite: 'auto',
                 });
             };
-            const onUp = () => {
+            const onUp = (event: MouseEvent) => {
+                if (!pressed || event.button !== 0) return;
+                pressed = false;
+                stopTracking();
+                releaseTo(1);
+            };
+            const onBlur = () => {
                 if (!pressed) return;
                 pressed = false;
-                releaseTo(1);
+                stopTracking();
+                releaseTo(1, true);
             };
             const env = envRef.current;
             if (!env.enabled) return () => {};
             el.addEventListener('mouseenter', onEnter);
             el.addEventListener('mouseleave', onLeave);
             el.addEventListener('mousedown', onDown);
-            el.addEventListener('mouseup', onUp);
             return () => {
                 el.removeEventListener('mouseenter', onEnter);
                 el.removeEventListener('mouseleave', onLeave);
                 el.removeEventListener('mousedown', onDown);
-                el.removeEventListener('mouseup', onUp);
+                stopTracking();
+                activeTween?.kill();
+                if (touched) gsap.set(el, { scale: 1 });
             };
         };
 

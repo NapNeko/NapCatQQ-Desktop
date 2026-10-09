@@ -48,7 +48,7 @@ export function ThemePicker({
             cleanups.push(m.bindPress(el));
         });
         return () => cleanups.forEach((fn) => fn());
-    }, [m.bindHover, m.bindPress, open]);
+    }, [m, open]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>

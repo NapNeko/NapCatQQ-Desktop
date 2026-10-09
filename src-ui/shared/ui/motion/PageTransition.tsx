@@ -5,7 +5,7 @@
 //
 // 动画走 WAAPI（el.animate）而不是 GSAP：transform / opacity 的 WAAPI 动画由合成线程跑，
 // 新页面挂载完、数据回来触发重渲时主线程被占满，动画照样顺；GSAP 每帧都要主线程来推，
-// 恰好在最忙的那几百毫秒里卡住。位移、缩放、时长、缓动都沿用原来的数值。
+// 恰好在最忙的那几百毫秒里卡住。短退场先交出旧页，快速反向时从当前帧接续。
 
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion';
@@ -54,8 +54,13 @@ export function PageTransition({
         if (!el) return;
         const { m: env, direction: dir, onExited: done } = latest.current;
 
-        // 上一段没播完就换方向（退场途中又点回原页），直接撤掉它，从当前内容重新进场
         const prev = animRef.current;
+        // 快速反向切页从屏幕上的当前帧继续，不闪回全亮或重新跳到起点。
+        let interrupted: Keyframe | undefined;
+        if (prev?.playState === 'running') {
+            const style = getComputedStyle(el);
+            interrupted = { opacity: style.opacity, transform: style.transform };
+        }
         animRef.current = null;
         if (prev) {
             prev.onfinish = null;
@@ -66,23 +71,25 @@ export function PageTransition({
 
         if (visible) {
             el.style.visibility = '';
+            el.style.pointerEvents = '';
             if (!canAnimate) return;
             // layout effect 在首帧绘制前执行，起点直接生效，新内容不会先亮一下
-            animRef.current = el.animate([enterFrom(dir, env), SHOWN], {
-                duration: env.duration('slow') * 1000,
+            animRef.current = el.animate([interrupted ?? enterFrom(dir, env), SHOWN], {
+                duration: env.duration('base') * 600,
                 easing: cssEase(env.ease.enter),
                 fill: 'backwards',
             });
             return;
         }
 
+        el.style.pointerEvents = 'none';
         if (!canAnimate) {
             done?.();
             return;
         }
         // fill: forwards 让页面停在淡出后的样子，等父级换好内容、这里再起进场时一起撤掉
-        const anim = el.animate([SHOWN, exitTo(dir, env)], {
-            duration: env.duration('fast') * 1000,
+        const anim = el.animate([interrupted ?? SHOWN, exitTo(dir, env)], {
+            duration: env.duration('fast') * 350,
             easing: cssEase(env.ease.exit),
             fill: 'forwards',
         });

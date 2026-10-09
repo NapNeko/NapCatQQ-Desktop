@@ -94,15 +94,19 @@ function collectStrokedNodes(svg: SVGSVGElement): SVGGeometryElement[] {
     return Array.from(
         svg.querySelectorAll<SVGGeometryElement>('path, line, circle, rect, polyline, ellipse'),
     ).filter((el) => {
-        const stroke = el.getAttribute('stroke');
-        return stroke !== 'none' && stroke !== null;
+        // Lucide 在 svg 上设置 stroke，子节点通常只继承，不带自己的属性。
+        let node: Element | null = el;
+        while (node && svg.contains(node)) {
+            const stroke = node.getAttribute('stroke');
+            if (stroke !== null) return stroke !== 'none';
+            node = node.parentElement;
+        }
+        return false;
     });
 }
 
 function resetStrokeDash(nodes: SVGGeometryElement[]) {
-    nodes.forEach((p) => {
-        gsap.set(p, { clearProps: 'strokeDasharray,strokeDashoffset' });
-    });
+    if (nodes.length) gsap.set(nodes, { clearProps: 'strokeDasharray,strokeDashoffset' });
 }
 
 export function MotionIcon({
@@ -118,45 +122,45 @@ export function MotionIcon({
 }: MotionIconProps) {
     const wrapRef = useRef<HTMLSpanElement>(null);
     const lastEnterKeyRef = useRef<string | null>(null);
+    const enterTimelineRef = useRef<gsap.core.Timeline | null>(null);
     const [enterSettled, setEnterSettled] = useState(preset === 'none');
     const m = useMotion();
     const active = preset !== 'none' && m.enabled;
 
-    useEffect(() => {
-        if (preset === 'none') {
-            setEnterSettled(true);
-            lastEnterKeyRef.current = null;
-            return;
-        }
-        // 无进场动画时直接允许循环动效（如 Loader2 spin），否则 enterSettled 会一直为 false
-        if (!playEnter) {
-            setEnterSettled(true);
-        }
-    }, [preset, playEnter]);
-
     // 选中瞬间：轻弹入 + 描边绘制
     useEffect(() => {
         const wrap = wrapRef.current;
-        if (!wrap || !m.enabled || preset === 'none' || !playEnter || !enterKey) {
-            if (wrap && preset === 'none') {
-                const svg = wrap.querySelector('svg');
-                if (svg) resetStrokeDash(collectStrokedNodes(svg));
-                gsap.set(wrap, { scale: 1, rotation: 0, opacity: 1, y: 0 });
-            }
+        if (!wrap) return;
+        if (!m.enabled || preset === 'none' || !playEnter || !enterKey) {
+            if (preset === 'none' || !playEnter || !enterKey) lastEnterKeyRef.current = null;
+            setEnterSettled(true);
             return;
         }
 
-        if (lastEnterKeyRef.current === enterKey) return;
+        // 偏好变化会中断旧动画；同一个选中项直接归位，不重播或停在半透明。
+        if (lastEnterKeyRef.current === enterKey) {
+            setEnterSettled(true);
+            return;
+        }
         lastEnterKeyRef.current = enterKey;
         setEnterSettled(false);
 
         const svg = wrap.querySelector('svg');
         const paths = svg ? collectStrokedNodes(svg) : [];
-        const speed = Math.max(0.5, m.speed);
+        // 先读取全部长度，再写描边和 transform，避免逐节点交错读写。
+        const lengths = paths.map((p) =>
+            typeof p.getTotalLength === 'function' ? Math.max(p.getTotalLength(), 6) : 24,
+        );
         const popEase = m.preset.timing.ease.pop;
         const enterTl = gsap.timeline({
-            onComplete: () => setEnterSettled(true),
+            onComplete: () => {
+                resetStrokeDash(paths);
+                gsap.set(wrap, { clearProps: 'transform,opacity' });
+                enterTimelineRef.current = null;
+                setEnterSettled(true);
+            },
         });
+        enterTimelineRef.current = enterTl;
 
         enterTl.fromTo(
             wrap,
@@ -171,10 +175,9 @@ export function MotionIcon({
         );
 
         if (paths.length > 0) {
-            const drawDur = (m.duration('fast') * 1.1) / speed;
+            const drawDur = m.duration('fast') * 1.1;
             paths.forEach((p, i) => {
-                const len =
-                    typeof p.getTotalLength === 'function' ? Math.max(p.getTotalLength(), 6) : 24;
+                const len = lengths[i];
                 gsap.set(p, { strokeDasharray: len, strokeDashoffset: len });
                 enterTl.to(
                     p,
@@ -182,35 +185,71 @@ export function MotionIcon({
                     0.04 + i * 0.022,
                 );
             });
-        } else {
-            enterTl.call(() => setEnterSettled(true), [], '+=0.02');
         }
 
         return () => {
             enterTl.kill();
+            enterTimelineRef.current = null;
+            resetStrokeDash(paths);
+            gsap.set(wrap, { clearProps: 'transform,opacity' });
         };
-    }, [preset, playEnter, enterKey, m.enabled, m.speed, m.preset.timing.ease.pop]);
+    }, [Icon, preset, playEnter, enterKey, m]);
 
     // 循环动效等进场跑完再挂，避免和弹入抢同一个 transform
     const waitEnter = playEnter && enterKey != null && enterKey !== '';
     const loop = active && (!waitEnter || enterSettled) ? loopStyle(preset, m) : null;
-
-    // 进场结束后 GSAP 会在内联 style 上留下 transform，CSS 动画虽然优先级更高，
-    // 但停掉循环时那份残留会露出来，所以挂循环前先清掉。
-    useEffect(() => {
-        const el = wrapRef.current;
-        if (el && loop) gsap.set(el, { clearProps: 'transform,opacity' });
-    }, [loop?.cls]);
+    const looping = loop !== null;
 
     useEffect(() => {
         const wrap = wrapRef.current;
         if (!wrap || !hoverAccent || !m.enabled) return;
+        let accent: gsap.core.Animation | null = null;
+        const finish = () => {
+            accent = null;
+            gsap.set(wrap, { clearProps: 'transform' });
+        };
         const onEnter = () => {
-            m.pop(wrap, { peak: 1 + (m.preset.feel.popPeak - 1) * 0.45 });
+            // 入场和 CSS 循环已经接管 transform，不再叠一份短反馈。
+            if (enterTimelineRef.current || looping) return;
+            const peak = 1 + (m.preset.feel.popPeak - 1) * 0.45;
+            if (peak === 1) return;
+            accent?.kill();
+            const tl = gsap.timeline({ onComplete: finish });
+            accent = tl;
+            tl.to(wrap, {
+                scale: peak,
+                duration: m.duration('fast') * 0.6,
+                ease: 'power2.out',
+                overwrite: 'auto',
+            }).to(wrap, {
+                scale: 1,
+                duration: m.duration('base'),
+                ease: m.ease.pop,
+                overwrite: 'auto',
+            });
+        };
+        const onLeave = () => {
+            if (!accent) return;
+            accent.kill();
+            accent = gsap.to(wrap, {
+                scale: 1,
+                duration: m.duration('fast'),
+                ease: m.ease.damped,
+                overwrite: 'auto',
+                onComplete: finish,
+            });
         };
         wrap.addEventListener('mouseenter', onEnter);
-        return () => wrap.removeEventListener('mouseenter', onEnter);
-    }, [hoverAccent, m.enabled, m.level, m.speed, m.pop, m.preset.feel.popPeak]);
+        wrap.addEventListener('mouseleave', onLeave);
+        return () => {
+            wrap.removeEventListener('mouseenter', onEnter);
+            wrap.removeEventListener('mouseleave', onLeave);
+            if (accent) {
+                accent.kill();
+                gsap.set(wrap, { clearProps: 'transform' });
+            }
+        };
+    }, [hoverAccent, enterKey, looping, m]);
 
     return (
         <span
@@ -218,7 +257,7 @@ export function MotionIcon({
             className={cn(
                 'inline-flex shrink-0 items-center justify-center',
                 // breathe 循环本身在改 opacity，再挂过渡等于每轮都重建一次过渡
-                !loop && 'transition-[opacity] duration-200',
+                !loop && enterSettled && 'transition-[opacity] duration-200',
                 !active && m.enabled && preset === 'none' && 'opacity-80',
                 loop && `ndf-icon-loop ${loop.cls}`,
                 className,
