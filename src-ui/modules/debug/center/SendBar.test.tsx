@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DebugActionSpec } from '../../../core/ipc/generated/debug/DebugActionSpec';
 import type { DebugCallRequest } from '../../../core/ipc/generated/debug/DebugCallRequest';
 import type { DebugCallResponse } from '../../../core/ipc/generated/debug/DebugCallResponse';
+import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import type { DebugWorkspace } from '../../../core/ipc/generated/debug/DebugWorkspace';
 
@@ -133,7 +134,11 @@ function workspace(action: string, params_text: string): DebugWorkspace {
     };
 }
 
-async function renderColumn(action: string, params_text: string) {
+async function renderColumn(
+    action: string,
+    params_text: string,
+    callChannel: DebugChannelId = { kind: 'auto' },
+) {
     service.workspace.mockResolvedValue(workspace(action, params_text));
     await debugWorkspaceStore.load();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -145,7 +150,7 @@ async function renderColumn(action: string, params_text: string) {
     return render(
         <CenterColumn
             target={BOT}
-            callChannel={{ kind: 'auto' }}
+            callChannel={callChannel}
             onOpenPalette={vi.fn()}
             onRevealCallChannel={vi.fn()}
         />,
@@ -281,9 +286,9 @@ describe('连发只显示最后一次', () => {
         const send = await screen.findByRole('button', { name: /^发送/ });
         await waitFor(() => expect(send).toBeEnabled());
         await user.click(send);
-        // 发送中：按钮换成取消，显示「取消只是不再等」
+        // 发送中：按钮换成取消，计时提示保留取消边界。
         expect(await screen.findByRole('button', { name: /取消/ })).toBeInTheDocument();
-        expect(screen.getByText(/取消只是不再等回包/)).toBeInTheDocument();
+        expect(screen.getByTitle('取消只是不再等回包，上游可能已经执行了')).toBeInTheDocument();
 
         // 还在等的时候再按一次 Ctrl+Enter
         fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
@@ -352,6 +357,82 @@ describe('不能发的时候写明原因', () => {
     });
 });
 
+describe('请求区与回包区', () => {
+    it('发送使用顶栏通道，恢复草稿中的旧标签通道不再覆盖它', async () => {
+        const user = userEvent.setup();
+        service.channels.mockResolvedValue({
+            bot_id: BOT.bot_id,
+            channels: [
+                {
+                    id: { kind: 'internal' },
+                    label: '内部通道',
+                    can_call: true,
+                    can_receive: true,
+                    status: { kind: 'available' },
+                    endpoint: null,
+                    token_hint: null,
+                },
+            ],
+            auto_call: { kind: 'internal' },
+            auto_events: { kind: 'internal' },
+        });
+        await renderColumn('get_login_info', '{}', { kind: 'internal' });
+        act(() => debugWorkspaceStore.setTabChannel('t1', { kind: 'http', name: '旧通道' }));
+        const send = screen.getByRole('button', { name: /^发送/ });
+        await waitFor(() => expect(send).toBeEnabled());
+        await user.click(send);
+        await waitFor(() => expect(editorCalls()).toHaveLength(1));
+        expect(editorCalls()[0]!.channel).toEqual({ kind: 'internal' });
+    });
+
+    it('收起参数后仍可发送；展开回包与参数时保留结果和已编辑的字段', async () => {
+        const user = userEvent.setup();
+        service.call.mockImplementation(async (req: DebugCallRequest) =>
+            okResponse(req, { nickname: 'retained' }),
+        );
+        await renderColumn('get_stranger_info', '{\n  "user_id": 10001\n}');
+        await user.click(screen.getByRole('radio', { name: '参数' }));
+        await user.click(screen.getByRole('radio', { name: '表单' }));
+        const input = await waitFor(() => {
+            const el = document.getElementById('debug-param-t1-user_id') as HTMLInputElement | null;
+            if (!el) throw new Error('参数字段还没画出来');
+            return el;
+        });
+        await user.clear(input);
+        await user.type(input, '20002');
+        const paramsText = debugWorkspaceStore.getSnapshot().ws.tabs[0]!.params_text;
+
+        await user.click(screen.getByRole('button', { name: '收起参数和文档' }));
+        expect(screen.getByRole('button', { name: '展开参数和文档' })).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
+        const send = screen.getByRole('button', { name: /^发送/ });
+        await waitFor(() => expect(send).toBeEnabled());
+        await user.click(send);
+        await waitFor(() => expect(editorCalls()).toHaveLength(1));
+        expect(editorCalls()[0]!.params).toEqual({ user_id: 20002 });
+        await screen.findByText('"retained"');
+
+        await user.click(screen.getByRole('button', { name: '展开参数和文档' }));
+        expect(document.getElementById('debug-param-t1-user_id')).toBe(input);
+        expect(input).toHaveValue('20002');
+        expect(debugWorkspaceStore.getSnapshot().ws.tabs[0]!.params_text).toBe(paramsText);
+        await user.click(screen.getByRole('button', { name: '收起回包' }));
+        expect(screen.getByRole('button', { name: '展开回包' })).toHaveAttribute(
+            'aria-expanded',
+            'false',
+        );
+        await user.click(screen.getByRole('button', { name: '展开回包' }));
+        expect(screen.getByRole('button', { name: '收起回包' })).toHaveAttribute(
+            'aria-expanded',
+            'true',
+        );
+        expect(screen.getByText('"retained"')).toBeInTheDocument();
+        expect(input).toHaveValue('20002');
+    });
+});
+
 describe('确认框和新开的标签', () => {
     it('确认框开着时 Bot 停了：点「确认调用」也不发，按钮旁写明原因', async () => {
         const user = userEvent.setup({ pointerEventsCheck: 0 });
@@ -409,11 +490,7 @@ describe('确认框和新开的标签', () => {
         expect(opened.action).toBe('get_stranger_info');
         expect(JSON.parse(opened.params_text)).toEqual({ user_id: 10001 });
         // 说明读到后不会被当成空标签重新填
-        await waitFor(() =>
-            expect(screen.getByRole('combobox', { name: '接口名' })).toHaveValue(
-                'get_stranger_info',
-            ),
-        );
+        await screen.findByRole('heading', { name: 'get_stranger_info' });
         expect(JSON.parse(ws().tabs.find((t) => t.id === opened.id)!.params_text)).toEqual({
             user_id: 10001,
         });

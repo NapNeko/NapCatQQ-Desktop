@@ -138,7 +138,7 @@ export const Workbench = memo(function Workbench({
     const leftHeader = (
         <div className={COLUMN_HEADER_CLASS}>
             <LeftPanelTabs active={panel} onChange={setPanel} />
-            {searchLabel && (
+            {searchLabel ? (
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <button
@@ -151,7 +151,7 @@ export const Workbench = memo(function Workbench({
                             aria-label={searchLabel}
                             aria-pressed={searchOpen}
                             className={cn(
-                                'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors',
+                                'ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                                 searchOpen
                                     ? 'bg-brand-soft text-brand'
@@ -163,6 +163,8 @@ export const Workbench = memo(function Workbench({
                     </TooltipTrigger>
                     <TooltipContent side="bottom">{searchLabel}（/）</TooltipContent>
                 </Tooltip>
+            ) : (
+                <span aria-hidden className="ml-auto h-7 w-7 shrink-0" />
             )}
             <Tooltip>
                 <TooltipTrigger asChild>

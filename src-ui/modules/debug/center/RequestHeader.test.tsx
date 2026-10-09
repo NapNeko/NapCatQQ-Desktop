@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DebugActionSpec } from '../../../core/ipc/generated/debug/DebugActionSpec';
@@ -161,7 +161,11 @@ async function renderColumn(tabs: DebugRequestDraft[], active = tabs[0]?.id ?? n
     );
 }
 
-const actionInput = () => screen.getByRole('combobox', { name: '接口名' }) as HTMLInputElement;
+const actionInput = () => {
+    if (!screen.queryByRole('combobox', { name: '接口名' }))
+        fireEvent.click(screen.getByRole('button', { name: '修改接口名' }));
+    return screen.getByRole('combobox', { name: '接口名' }) as HTMLInputElement;
+};
 const activeTab = () =>
     debugWorkspaceStore
         .getSnapshot()
@@ -220,6 +224,16 @@ afterEach(() => {
 });
 
 describe('接口名输入框', () => {
+    it('已选接口显示为标题，点修改按钮才展开输入框', async () => {
+        const user = userEvent.setup();
+        await renderColumn([tab('t1', 'get_status')]);
+        expect(screen.getByRole('heading', { name: 'get_status' })).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: '接口名' })).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: '修改接口名' }));
+        expect(screen.getByRole('combobox', { name: '接口名' })).toHaveValue('get_status');
+        await waitFor(() => expect(screen.getByRole('combobox', { name: '接口名' })).toHaveFocus());
+    });
+
     it('回车挑建议：只提交一次，提交的是挑中的那个而不是敲了一半的字', async () => {
         const user = userEvent.setup();
         await renderColumn([tab('t1', '')]);
@@ -232,10 +246,10 @@ describe('接口名输入框', () => {
         expect(open).toHaveBeenCalledTimes(1);
         expect(open).toHaveBeenCalledWith('get_group_list', {});
         expect(activeTab()?.action).toBe('get_group_list');
-        await waitFor(() => expect(actionInput().value).toBe('get_group_list'));
+        expect(screen.getByRole('heading', { name: 'get_group_list' })).toBeInTheDocument();
     });
 
-    it('点建议：只提交一次，焦点留在输入框', async () => {
+    it('点建议：只提交一次，提交后恢复接口标题', async () => {
         const user = userEvent.setup();
         await renderColumn([tab('t1', '')]);
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
@@ -246,7 +260,8 @@ describe('接口名输入框', () => {
         expect(open).toHaveBeenCalledTimes(1);
         expect(open).toHaveBeenCalledWith('get_group_info', {});
         expect(activeTab()?.action).toBe('get_group_info');
-        expect(document.activeElement).toBe(actionInput());
+        expect(screen.getByRole('heading', { name: 'get_group_info' })).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: '接口名' })).not.toBeInTheDocument();
     });
 
     it('失焦等于放弃：敲了一半的名字不会被当成接口名', async () => {
@@ -260,7 +275,7 @@ describe('接口名输入框', () => {
 
         expect(open).not.toHaveBeenCalled();
         expect(activeTab()?.action).toBe('get_status');
-        expect(actionInput().value).toBe('get_status');
+        expect(screen.getByRole('heading', { name: 'get_status' })).toBeInTheDocument();
     });
 
     it('点输入框本身不会把建议列表收起', async () => {
@@ -309,7 +324,7 @@ describe('接口名输入框', () => {
         await user.click(actionInput());
         await user.keyboard('x');
         await user.keyboard('{Escape}');
-        expect(actionInput().value).toBe('get_status');
+        expect(screen.getByRole('heading', { name: 'get_status' })).toBeInTheDocument();
         expect(service.cancel).not.toHaveBeenCalled();
 
         // 没在改：Esc 交给页面，取消进行中的调用
@@ -416,7 +431,7 @@ describe('修复第 2 轮', () => {
         expect(ws().tabs.find((t) => t.id === 't1')?.action).toBe('get_status');
 
         // 说明读到后也不会被当成空标签重新填
-        await waitFor(() => expect(actionInput()).toHaveValue('get_group_list'));
+        await screen.findByRole('heading', { name: 'get_group_list' });
         expect(JSON.parse(ws().tabs.find((t) => t.id === renamed.id)!.params_text)).toEqual({
             x: 1,
         });
@@ -460,7 +475,9 @@ describe('修复第 2 轮', () => {
         ]);
         expect(debugWorkspaceStore.getRun('t1')).toBeUndefined();
         expect(screen.queryByRole('group', { name: /参数改过了/ })).not.toBeInTheDocument();
-        await waitFor(() => expect(actionInput()).toHaveFocus());
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: '修改接口名' })).toHaveFocus(),
+        );
         // 说明读到后参数也不会被重新填
         await waitFor(() =>
             expect(service.describe).toHaveBeenCalledWith(
@@ -488,8 +505,10 @@ describe('修复第 2 轮', () => {
         expect(open).not.toHaveBeenCalled();
         expect(activeTab()?.action).toBe('get_group_info');
         expect(service.cancel).not.toHaveBeenCalled();
-        await waitFor(() => expect(actionInput()).toHaveFocus());
-        expect(actionInput()).toHaveValue('get_group_info');
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: '修改接口名' })).toHaveFocus(),
+        );
+        expect(screen.getByRole('heading', { name: 'get_group_info' })).toBeInTheDocument();
     });
 
     it('用 ↓ 重新打开建议列表时高亮回到第一项', async () => {
@@ -504,6 +523,7 @@ describe('修复第 2 轮', () => {
         await waitFor(() =>
             expect(screen.queryByRole('listbox', { name: '接口建议' })).not.toBeInTheDocument(),
         );
+        await user.click(actionInput());
         await user.keyboard('{ArrowDown}');
         await screen.findByRole('listbox', { name: '接口建议' });
         expect(screen.getAllByRole('option')[0]).toHaveAttribute('aria-selected', 'true');

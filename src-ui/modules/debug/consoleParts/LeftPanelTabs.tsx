@@ -1,4 +1,4 @@
-// 左栏三个面板（接口 / 收藏 / 历史）的标签组：图标 + 文字，窄到放不下时只留图标。
+// 左栏面板的图标标签组。
 import { useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { cn } from '../../../shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
@@ -25,14 +25,12 @@ export function LeftPanelTabs({
         onChange(next.id);
         refs.current[next.id]?.focus();
     };
-    // 左栏拖到最窄（200px）时三个「图标 + 字」放不下，字会被截成「接.」：这时只留图标，字留给读屏，
-    // 悬停提示照样写全名。提示在宽的时候也有，写的是比标签更完整的说法
     return (
         <div
             role="tablist"
             aria-label={LEFT_TABS_LABEL}
             onKeyDown={onKeyDown}
-            className="@container/lefttabs flex min-w-0 flex-1 items-center gap-0.5 rounded-md bg-inset p-0.5"
+            className="flex h-8 w-28 shrink-0 items-center gap-0.5 rounded-md bg-inset p-0.5"
         >
             {LEFT_PANELS.map((p) => {
                 const on = p.id === active;
@@ -50,7 +48,7 @@ export function LeftPanelTabs({
                                 tabIndex={on ? 0 : -1}
                                 onClick={() => onChange(p.id)}
                                 className={cn(
-                                    'inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-sm px-1.5 py-1 text-[12px] font-medium transition-colors',
+                                    'inline-flex h-7 min-w-0 flex-1 items-center justify-center rounded-sm px-1.5 transition-colors',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                                     on
                                         ? 'bg-elevated text-text shadow-sm ring-1 ring-border-subtle'
@@ -58,14 +56,12 @@ export function LeftPanelTabs({
                                 )}
                             >
                                 <Icon
-                                    size={12}
+                                    size={14}
                                     strokeWidth={2.2}
                                     aria-hidden
                                     className="shrink-0"
                                 />
-                                <span className="truncate @max-[168px]/lefttabs:sr-only">
-                                    {p.label}
-                                </span>
+                                <span className="sr-only">{p.label}</span>
                             </button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom">{p.hint}</TooltipContent>

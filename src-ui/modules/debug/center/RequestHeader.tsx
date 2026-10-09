@@ -1,11 +1,16 @@
-// 请求头：动作名（可以直接改、自由输入目录外的名字）、安全分级和几枚标记、简介，
-// 右边是收藏、复制请求 JSON、超时。
-//
-// 参数改过的标签换接口名时先问一句：原地换（参数留着）还是另开一个标签（旧标签原样不动）。
-// 两种都不丢东西，但用户心里想的不一样，不替他猜。
+// 请求头：接口标题、调用信息与操作。
 
-import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Copy, FileCode2, Star, Timer, X } from 'lucide-react';
+import {
+    memo,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type ReactNode,
+} from 'react';
+import { Copy, FileCode2, Pencil, Star, Timer, X } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import {
     Badge,
@@ -60,6 +65,8 @@ export interface RequestHeaderProps {
     /** 参数没被用户改过（改动作名时据此决定原地换还是另开） */
     untouched: boolean;
     onSave: () => void;
+    validation?: ReactNode;
+    sendControls?: ReactNode;
 }
 
 export const RequestHeader = memo(function RequestHeader({
@@ -74,6 +81,8 @@ export const RequestHeader = memo(function RequestHeader({
     parsed,
     untouched,
     onSave,
+    validation,
+    sendControls,
 }: RequestHeaderProps) {
     const action = tab.action.trim();
     const safety = spec?.safety ?? summary?.safety ?? null;
@@ -103,6 +112,7 @@ export const RequestHeader = memo(function RequestHeader({
         // 没改过参数就原地换动作（参数按新动作重新填），不必问
         if (untouched) {
             debugWorkspaceStore.openAction(next, {});
+            focusActionInput(rootRef.current?.closest('section') ?? rootRef.current);
             return;
         }
         setRenameTo(next);
@@ -110,7 +120,11 @@ export const RequestHeader = memo(function RequestHeader({
 
     const focusActionInput = (scope: Element | null | undefined) =>
         requestAnimationFrame(() =>
-            scope?.querySelector<HTMLElement>('[role="combobox"][aria-label="接口名"]')?.focus(),
+            scope
+                ?.querySelector<HTMLElement>(
+                    '[role="combobox"][aria-label="接口名"], button[aria-label="修改接口名"]',
+                )
+                ?.focus(),
         );
 
     /** 原地换：参数留在这个标签里，记成已填过，说明读到后不会被当成空标签重新填 */
@@ -149,111 +163,114 @@ export const RequestHeader = memo(function RequestHeader({
     };
 
     return (
-        <div
-            ref={rootRef}
-            className="@container shrink-0 border-b border-border-subtle/70 px-3 pb-2 pt-2"
-        >
-            <div className="flex min-w-0 items-center gap-1">
-                <ActionInput
-                    key={tab.id}
-                    value={tab.action}
-                    catalog={catalog}
-                    onCommit={commitAction}
-                />
-                <IconTip icon={Star} label="收藏这个请求" disabled={!action} onClick={onSave} />
-                <IconTip
-                    icon={Copy}
-                    label="复制请求 JSON"
-                    hint="action + params"
-                    disabled={!action}
-                    onClick={copyRequest}
-                />
-                <IconTip
-                    icon={FileCode2}
-                    label="导出调用代码"
-                    hint={
-                        parsed.ok
-                            ? '按当前动作、参数和通道生成 curl / JavaScript / Python'
-                            : '参数 JSON 有错，改好才能导出'
-                    }
-                    disabled={!action || !parsed.ok}
-                    onClick={() => setExportOpen(true)}
-                />
-                <TimeoutButton tab={tab} />
-            </div>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
-                {action && specLoading && !known && (
-                    <span className="text-2xs text-text-tertiary">正在读取说明…</span>
-                )}
-                {action && !specLoading && !known && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Badge tone="neutral" tabIndex={0}>
-                                目录里没有
-                            </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">
-                            照样可以发；没有分级时按「有副作用」处理
-                        </TooltipContent>
-                    </Tooltip>
-                )}
-                {safety && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Badge tone={SAFETY_TONE[safety]} tabIndex={0}>
-                                <span
-                                    aria-hidden
-                                    className={cn(
-                                        'h-1.5 w-1.5 rounded-full',
-                                        SAFETY_DOT_CLASS[safety],
-                                    )}
-                                />
-                                {SAFETY_LABEL[safety]}
-                            </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">{SAFETY_TEXT[safety]}</TooltipContent>
-                    </Tooltip>
-                )}
-                {summaryFrom && (
-                    <Badge
-                        tone="neutral"
-                        title={`目录里没有单列这个变体，分级按 ${summaryFrom} 算`}
-                    >
-                        按 {summaryFrom} 分级
-                    </Badge>
-                )}
-                {onlyLabel && <Badge tone="info">{onlyLabel}</Badge>}
-                {paramDiff && (
-                    <Badge tone="neutral" title="两个后端的参数定义有出入，对照表在「文档」里">
-                        参数不同
-                    </Badge>
-                )}
-                {stream && (
-                    <Badge tone="brand" title="一次请求多帧回答；分块传输只走内部通道">
-                        流式
-                    </Badge>
-                )}
-                {!supported && (
-                    <Badge
-                        tone="danger"
-                        title="当前 Bot 的版本没有实现它，调用多半返回「不支持的 API」"
-                    >
-                        当前 Bot 不支持
-                    </Badge>
-                )}
-                {(spec?.summary || summary?.summary) && (
-                    <span
-                        className="min-w-0 flex-1 truncate text-xs text-text-secondary"
-                        title={spec?.summary ?? summary?.summary}
-                    >
-                        {spec?.summary ?? summary?.summary}
-                    </span>
-                )}
-                {!action && (
-                    <span className="text-xs text-text-tertiary">
-                        填一个接口名，或者从左边目录里点一个
-                    </span>
-                )}
+        <div ref={rootRef} className="shrink-0 border-b border-border-subtle/70 px-3 py-2">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
+                <div className="flex min-w-0 items-center gap-1">
+                    <ActionInput
+                        key={tab.id}
+                        value={tab.action}
+                        catalog={catalog}
+                        onCommit={commitAction}
+                    />
+                    {validation}
+                    <IconTip icon={Star} label="收藏这个请求" disabled={!action} onClick={onSave} />
+                    <IconTip
+                        icon={Copy}
+                        label="复制请求 JSON"
+                        hint="action + params"
+                        disabled={!action}
+                        onClick={copyRequest}
+                    />
+                    <IconTip
+                        icon={FileCode2}
+                        label="导出调用代码"
+                        hint={
+                            parsed.ok
+                                ? '按当前动作、参数和通道生成 curl / JavaScript / Python'
+                                : '参数 JSON 有错，改好才能导出'
+                        }
+                        disabled={!action || !parsed.ok}
+                        onClick={() => setExportOpen(true)}
+                    />
+                </div>
+                <div className="row-span-2 flex min-w-0 flex-col items-end gap-1.5">
+                    <TimeoutButton tab={tab} />
+                    {sendControls}
+                </div>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
+                    {action && specLoading && !known && (
+                        <span className="text-2xs text-text-tertiary">正在读取说明…</span>
+                    )}
+                    {action && !specLoading && !known && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Badge tone="neutral" tabIndex={0}>
+                                    目录里没有
+                                </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                照样可以发；没有分级时按「有副作用」处理
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
+                    {safety && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Badge tone={SAFETY_TONE[safety]} tabIndex={0}>
+                                    <span
+                                        aria-hidden
+                                        className={cn(
+                                            'h-1.5 w-1.5 rounded-full',
+                                            SAFETY_DOT_CLASS[safety],
+                                        )}
+                                    />
+                                    {SAFETY_LABEL[safety]}
+                                </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">{SAFETY_TEXT[safety]}</TooltipContent>
+                        </Tooltip>
+                    )}
+                    {summaryFrom && (
+                        <Badge
+                            tone="neutral"
+                            title={`目录里没有单列这个变体，分级按 ${summaryFrom} 算`}
+                        >
+                            按 {summaryFrom} 分级
+                        </Badge>
+                    )}
+                    {onlyLabel && <Badge tone="info">{onlyLabel}</Badge>}
+                    {paramDiff && (
+                        <Badge tone="neutral" title="两个后端的参数定义有出入，对照表在「文档」里">
+                            参数不同
+                        </Badge>
+                    )}
+                    {stream && (
+                        <Badge tone="brand" title="一次请求多帧回答；分块传输只走内部通道">
+                            流式
+                        </Badge>
+                    )}
+                    {!supported && (
+                        <Badge
+                            tone="danger"
+                            title="当前 Bot 的版本没有实现它，调用多半返回「不支持的 API」"
+                        >
+                            当前 Bot 不支持
+                        </Badge>
+                    )}
+                    {(spec?.summary || summary?.summary) && (
+                        <span
+                            className="min-w-0 flex-1 truncate text-xs text-text-secondary"
+                            title={spec?.summary ?? summary?.summary}
+                        >
+                            {spec?.summary ?? summary?.summary}
+                        </span>
+                    )}
+                    {!action && (
+                        <span className="text-xs text-text-tertiary">
+                            填一个接口名，或者从左边目录里点一个
+                        </span>
+                    )}
+                </div>
             </div>
             {renameTo && (
                 <RenameChoice
@@ -267,7 +284,7 @@ export const RequestHeader = memo(function RequestHeader({
                 <ExportSnippetDialog
                     open={exportOpen}
                     onOpenChange={setExportOpen}
-                    tab={tab}
+                    tab={{ ...tab, channel: null }}
                     params={parsed.value}
                     botId={target?.bot_id ?? null}
                     callChannel={callChannel}
@@ -333,6 +350,7 @@ function ActionInput({
     onCommit: (name: string) => void;
 }) {
     const [draft, setDraft] = useState(value);
+    const [editingName, setEditingName] = useState(!value);
     const [open, setOpen] = useState(false);
     const [hl, setHl] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -359,6 +377,7 @@ function ActionInput({
     const revert = () => {
         setDraft(value);
         setOpen(false);
+        if (value) setEditingName(false);
     };
 
     /**
@@ -367,6 +386,7 @@ function ActionInput({
      */
     const commit = (name: string) => {
         setOpen(false);
+        setEditingName(false);
         const next = name.trim();
         if (next && next !== value) onCommit(next);
         else setDraft(value);
@@ -400,6 +420,28 @@ function ActionInput({
             revert();
         }
     };
+
+    if (value && !editingName) {
+        return (
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+                <h2
+                    className="min-w-0 truncate px-1 font-mono text-[15px] font-semibold text-text"
+                    title={value}
+                >
+                    {value}
+                </h2>
+                <IconTip
+                    icon={Pencil}
+                    label="修改接口名"
+                    size="sm"
+                    onClick={() => {
+                        setEditingName(true);
+                        requestAnimationFrame(() => inputRef.current?.focus());
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
         <Popover open={listOpen} onOpenChange={(o) => !o && setOpen(false)}>

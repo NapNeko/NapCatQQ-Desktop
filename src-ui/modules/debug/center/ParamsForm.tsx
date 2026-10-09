@@ -86,12 +86,11 @@ export const ParamsForm = memo(function ParamsForm({
     onSubmit,
     onEditInJson,
 }: ParamsFormProps) {
-    const byField = new Map<string, string[]>();
+    const byField = new Map<string, ParamIssue[]>();
     for (const issue of issues) {
         const root = issueRoot(issue.path);
         const list = byField.get(root) ?? [];
-        const sub = issue.path.slice(root.length);
-        list.push(sub ? `${sub.replace(/^\./, '')}：${issue.message}` : issue.message);
+        list.push(issue);
         byField.set(root, list);
     }
     const known = new Set(model.fields.map((f) => f.name));
@@ -104,18 +103,20 @@ export const ParamsForm = memo(function ParamsForm({
                     这个接口不需要参数，直接发送就行。
                 </p>
             )}
-            {model.fields.map((field) => (
-                <FieldRow
-                    key={field.name}
-                    tabId={tabId}
-                    field={field}
-                    value={values[field.name]}
-                    groupId={values.group_id}
-                    issues={byField.get(field.name)}
-                    target={target}
-                    onSubmit={onSubmit}
-                />
-            ))}
+            <div className="grid gap-x-3 gap-y-4 @min-[460px]:grid-cols-[fit-content(48%)_minmax(0,1fr)]">
+                {model.fields.map((field) => (
+                    <FieldRow
+                        key={field.name}
+                        tabId={tabId}
+                        field={field}
+                        value={values[field.name]}
+                        groupId={values.group_id}
+                        issues={byField.get(field.name)}
+                        target={target}
+                        onSubmit={onSubmit}
+                    />
+                ))}
+            </div>
             {extras.length > 0 && (
                 <section
                     aria-label="其它参数"
@@ -147,7 +148,10 @@ export const ParamsForm = memo(function ParamsForm({
                                 </button>
                                 {byField.get(key) && (
                                     <span className="text-2xs text-danger">
-                                        {byField.get(key)!.join('；')}
+                                        {byField
+                                            .get(key)!
+                                            .map((issue) => issue.message)
+                                            .join('；')}
                                     </span>
                                 )}
                             </span>
@@ -164,7 +168,7 @@ interface FieldRowProps {
     field: FormField;
     value: unknown;
     groupId: unknown;
-    issues: string[] | undefined;
+    issues: ParamIssue[] | undefined;
     target: DebugTarget | null;
     onSubmit: () => void;
 }
@@ -174,7 +178,8 @@ interface FieldRowProps {
 const FieldRow = memo(
     function FieldRow({ tabId, field, value, groupId, issues, target, onSubmit }: FieldRowProps) {
         const inputId = fieldInputId(tabId, field.name);
-        const descId = `${inputId}-desc`;
+        // Select 自己使用 -desc，表单说明另用一个 id，避免校验时重名。
+        const descId = `${inputId}-details`;
         const invalid = !!issues && issues.length > 0;
         const [hint, setHint] = useState<FieldHint | null>(null);
         const props: FieldProps = {
@@ -237,12 +242,18 @@ const FieldRow = memo(
         // NapCat 的说明常常就是「群号」「消息 ID」，和旁边的类型标签一个字不差，再写一遍只是占地方
         const description =
             field.description && field.description.trim() !== chip ? field.description : undefined;
-        // 报错、控件的临时提示、说明并成一行：一个字段底下不再叠两三行小字
+        const visibleIssues = issues
+            ?.filter((issue) => issue.message !== '必填')
+            .map((issue) => {
+                const sub = issue.path.slice(field.name.length);
+                return sub ? `${sub.replace(/^\./, '')}：${issue.message}` : issue.message;
+            });
+        const missingIssues = issues?.filter((issue) => issue.message === '必填');
         const meta: ReactNode[] = [];
-        if (invalid)
+        if (visibleIssues?.length)
             meta.push(
                 <span key="issue" className="text-danger">
-                    {issues!.join('；')}
+                    {visibleIssues.join('；')}
                 </span>,
             );
         if (hint) {
@@ -264,13 +275,13 @@ const FieldRow = memo(
         return (
             <div
                 data-param={field.name}
-                className="grid gap-x-3 gap-y-1 @min-[460px]:grid-cols-[minmax(96px,28%)_minmax(0,1fr)]"
+                className="col-span-full grid min-w-0 gap-x-3 gap-y-1 @min-[460px]:grid-cols-subgrid"
             >
                 <label
                     htmlFor={inputId}
-                    className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 @min-[460px]:pt-2.5"
+                    className="flex min-w-0 items-baseline gap-x-1.5 @min-[460px]:pt-2.5"
                 >
-                    <span className="break-all font-mono text-[12.5px] font-medium text-text">
+                    <span className="min-w-0 break-all font-mono text-[12.5px] font-medium text-text">
                         {field.name}
                         {field.required && (
                             <span className="ml-0.5 text-danger" aria-label="必填">
@@ -280,7 +291,7 @@ const FieldRow = memo(
                     </span>
                     <span
                         className={cn(
-                            'rounded-xs px-1 py-px text-[10px] leading-tight',
+                            'shrink-0 whitespace-nowrap rounded-xs px-1 py-px text-[10px] leading-tight',
                             role ? 'bg-brand-soft text-brand' : 'bg-inset text-text-tertiary',
                         )}
                         title={role ? `认作「${role}」，给了对应的输入方式` : undefined}
@@ -290,13 +301,24 @@ const FieldRow = memo(
                 </label>
                 <div className="min-w-0">
                     <FieldHintContext.Provider value={setHint}>{control}</FieldHintContext.Provider>
-                    {meta.length > 0 && (
+                    {(meta.length > 0 || missingIssues?.length) && (
                         // 不用 role="alert"：敲字时问题一会儿出现一会儿消失，每次都打断朗读；它在 aria-describedby 里，聚焦字段时会读到
                         <p
                             id={descId}
-                            className="mt-1.5 line-clamp-2 text-2xs leading-snug"
+                            className={
+                                meta.length > 0
+                                    ? 'mt-1.5 line-clamp-2 text-2xs leading-snug'
+                                    : 'sr-only'
+                            }
                             title={description}
                         >
+                            {missingIssues?.length ? (
+                                <span className="sr-only">
+                                    {missingIssues
+                                        .map((issue) => `${issue.path}：${issue.message}`)
+                                        .join('；')}
+                                </span>
+                            ) : null}
                             {meta.map((part, i) => (
                                 <span key={i}>
                                     {i > 0 && (
@@ -318,7 +340,7 @@ const FieldRow = memo(
         a.field === b.field &&
         a.target === b.target &&
         a.onSubmit === b.onSubmit &&
-        a.issues?.join('\n') === b.issues?.join('\n') &&
+        valueKey(a.issues) === valueKey(b.issues) &&
         valueKey(a.value) === valueKey(b.value) &&
         (a.field.kind !== 'member' || valueKey(a.groupId) === valueKey(b.groupId)),
 );

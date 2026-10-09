@@ -3,6 +3,7 @@
 
 import { X } from 'lucide-react';
 import { Switch } from '../../../../shared/ui';
+import { cn } from '../../../../shared/utils/cn';
 import { IconTip } from '../centerParts';
 import type { FieldProps } from './fieldKit';
 
@@ -16,6 +17,7 @@ export function BooleanField({
     field,
     value,
     onChange,
+    invalid,
     inputId,
     describedBy,
     disabled,
@@ -35,8 +37,13 @@ export function BooleanField({
                 checked={current ?? (unset ? fallback === true : false)}
                 onCheckedChange={(on) => onChange(on)}
                 disabled={disabled}
+                aria-invalid={invalid || undefined}
                 aria-describedby={describedBy}
-                className={unset ? 'opacity-60' : undefined}
+                className={cn(
+                    unset && !invalid && 'opacity-60',
+                    invalid &&
+                        '[&>button]:ring-1 [&>button]:ring-danger [&>button]:focus-visible:ring-danger',
+                )}
             />
             <span
                 className={

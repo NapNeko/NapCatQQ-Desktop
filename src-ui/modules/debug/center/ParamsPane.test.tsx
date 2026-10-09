@@ -199,7 +199,7 @@ afterEach(() => {
 });
 
 describe('参数表单 ⇄ JSON 同步', () => {
-    it('说明读到后按必填项填上初始参数（算作没改过）；整数群号空着不填 0，表单上标「必填」', async () => {
+    it('说明读到后按必填项填上初始参数（算作没改过）；整数群号空着不填 0，缺项标红并保留读屏说明', async () => {
         await renderColumn('{}');
         await waitFor(() => expect(JSON.parse(tabText())).toEqual({ message: '' }));
         await waitFor(() =>
@@ -209,6 +209,10 @@ describe('参数表单 ⇄ JSON 同步', () => {
         );
         // 表单里出现各个字段
         expect(document.getElementById('debug-param-t1-group_id')).toBeInTheDocument();
+        expect(document.getElementById('debug-param-t1-group_id')).toHaveAttribute(
+            'aria-invalid',
+            'true',
+        );
         expect(document.getElementById('debug-param-t1-auto_escape')).toBeInTheDocument();
         // 初始文本不算改过：标签上没有「改过」的点
         expect(screen.queryByLabelText('参数改过')).not.toBeInTheDocument();
@@ -293,17 +297,20 @@ describe('参数表单 ⇄ JSON 同步', () => {
         expect(screen.getByRole('radio', { name: 'JSON' })).toHaveAttribute('aria-checked', 'true');
     });
 
-    it('必填项空着时字段下标红，发送按钮变成「仍然发送」', async () => {
+    it('必填项空着时输入框标红，必填说明只供读屏，发送按钮变成「仍然发送」', async () => {
         const { container } = await renderColumn('{\n  "group_id": 1,\n  "message": ""\n}');
         expect(await screen.findByRole('button', { name: /仍然发送/ })).toBeEnabled();
-        expect(screen.getAllByText('必填').length).toBeGreaterThan(0);
         // 问题不是 live 的 alert（敲字时一会儿有一会儿没，不该反复打断朗读），而是挂在字段的描述上，聚焦字段时读到
         expect(container.querySelector('[data-param] [role="alert"]')).toBeNull();
         const message = document.getElementById('debug-param-t1-message') as HTMLTextAreaElement;
+        expect(message).toHaveAttribute('aria-invalid', 'true');
         expect(message).toHaveAccessibleDescription(/必填/);
         const describedBy = message.getAttribute('aria-describedby');
         expect(describedBy).toBeTruthy();
         expect(document.getElementById(describedBy!)).toHaveTextContent('必填');
+        expect(document.getElementById(describedBy!)?.querySelector('.sr-only')).toHaveTextContent(
+            '必填',
+        );
     });
 });
 
@@ -368,6 +375,8 @@ describe('说明读取中与一次性的跳转', () => {
     it('点问题汇总聚焦对应字段只发生一次，之后来回切视图不再抢焦点', async () => {
         const user = userEvent.setup();
         await renderColumn('{\n  "group_id": 1,\n  "message": ""\n}');
+        expect(screen.queryByRole('button', { name: /^message/ })).not.toBeInTheDocument();
+        await user.click(await screen.findByRole('button', { name: '1 处参数有问题' }));
         const jump = await screen.findByRole('button', { name: /^message/ });
         await user.click(jump);
         const message = document.getElementById('debug-param-t1-message') as HTMLTextAreaElement;

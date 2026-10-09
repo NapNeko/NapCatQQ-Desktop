@@ -1,11 +1,4 @@
-// 中栏内容：请求标签页、参数（表单 / JSON）与文档、发送、响应。
-//
-// 高度由外框给定；标签条、请求头、发送条固定，参数区和响应区上下分，中间的横条可以拖（双击恢复），
-// 两块各自在里面滚。快捷键里的发送（Ctrl+Enter）和取消（Esc）归这一栏，
-// 标签页的关闭 / 切换 / 找回和命令面板由页面挂。
-//
-// 一个标签就是一份草稿（动作名 + 参数原文 + 超时 + 可选的通道），全在工作区 store 里；
-// 这里切标签时整块按标签 id 重新挂载，字段草稿、折叠状态都不会串到别的标签上。
+// 中栏的请求草稿、文档与回包工作区。
 
 import {
     memo,
@@ -19,7 +12,7 @@ import {
     type PointerEvent as ReactPointerEvent,
     type RefObject,
 } from 'react';
-import { FilePlus2, Info, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, FilePlus2, Info, Search } from 'lucide-react';
 import { Button } from '../../../shared/ui';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import { cn } from '../../../shared/utils/cn';
@@ -57,7 +50,8 @@ import { RequestHeader } from './RequestHeader';
 import { RequestTabs } from './RequestTabs';
 import { ResponsePanel } from './ResponsePanel';
 import { SaveRequestDialog } from '../SaveRequestDialog';
-import { SendBar } from './SendBar';
+import { ParamIssuesButton, SendBar } from './SendBar';
+import { IconTip } from './centerParts';
 import { markSeeded, rememberInitialText, resolveInitialText, wasSeeded } from './seedState';
 import { lookupSummary } from '../../../core/domain/debug/catalogView';
 import { isBlankParams, paramsDirty, sendBlocker, type ClickableIdKey } from './viewHelpers';
@@ -65,7 +59,7 @@ import { isBlankParams, paramsDirty, sendBlocker, type ClickableIdKey } from './
 export interface CenterColumnProps {
     /** 当前选中的 Bot。没在运行时文档照看，发送按钮禁用并写「Bot 没在运行」 */
     target: DebugTarget | null;
-    /** 顶栏为这个 Bot 选的调用通道（可能是「自动」）；标签页自己指定了通道的以标签为准 */
+    /** 顶栏为这个 Bot 选的调用通道（可能是「自动」） */
     callChannel: DebugChannelId;
     /** 打开命令面板（标签条上的「+」用） */
     onOpenPalette: () => void;
@@ -80,6 +74,8 @@ let lastSub: ParamsSubTab = 'params';
 let lastView: ParamsView = 'form';
 const DEFAULT_SPLIT = 0.56;
 let splitRatio = DEFAULT_SPLIT;
+let lastRequestCollapsed = false;
+let lastResponseCollapsed = false;
 const MIN_REQUEST_PX = 150;
 const MIN_RESPONSE_PX = 110;
 
@@ -98,10 +94,11 @@ export const CenterColumn = memo(function CenterColumn({
     const tab = useActiveDebugTab();
 
     // 切标签时新内容轻轻淡入；进页面的第一帧不播（整页已经有路由动画）
-    const shownTab = useRef<string | null>(tab?.id ?? null);
-    const animateIn = tab !== null && shownTab.current !== null && shownTab.current !== tab.id;
+    const tabKey = tab ? `${tab.id}:${tab.action}` : null;
+    const shownTab = useRef<string | null>(tabKey);
+    const animateIn = tabKey !== null && shownTab.current !== null && shownTab.current !== tabKey;
     useEffect(() => {
-        shownTab.current = tab?.id ?? null;
+        shownTab.current = tabKey;
     });
 
     // 「+」：先给一个空白标签（当前已经是空白的就不再多开），再打开命令面板；
@@ -254,7 +251,7 @@ function TabWorkspace({
     const run = useTabRun(tab.id);
     const call = useDebugCall();
     const channels = useDebugChannels(target?.bot_id ?? null).data;
-    const channel = tab.channel ?? callChannel;
+    const channel = callChannel;
     const safety = spec?.safety ?? summary?.safety ?? null;
     // 历史 / 收藏重放来的参数里可能夹着存盘时瘦身留下的占位文字（超长字符串被换成
     // 「<已省略 N 字节>」，整份过大的收成了摘要）。发出去必然失败，在发送按钮和标签顶部都拦住
@@ -350,20 +347,33 @@ function TabWorkspace({
         setViewState(v);
     }, []);
     const [focusRequest, setFocusRequest] = useState<{ name: string; nonce: number } | null>(null);
+    const [requestCollapsed, setRequestCollapsed] = useState(lastRequestCollapsed);
+    const [responseCollapsed, setResponseCollapsed] = useState(lastResponseCollapsed);
+    const setRequestOpen = useCallback((open: boolean) => {
+        lastRequestCollapsed = !open;
+        setRequestCollapsed(!open);
+        if (!open) {
+            lastResponseCollapsed = false;
+            setResponseCollapsed(false);
+        }
+    }, []);
+    const toggleResponse = () => {
+        const collapsed = !responseCollapsed;
+        lastResponseCollapsed = collapsed;
+        setResponseCollapsed(collapsed);
+        if (collapsed) setRequestOpen(true);
+    };
     const jumpToIssue = useCallback(
         (name: string) => {
+            setRequestOpen(true);
             setSub('params');
             setView('form');
             setFocusRequest({ name, nonce: Date.now() });
         },
-        [setSub, setView],
+        [setSub, setView, setRequestOpen],
     );
 
     const [saveOpen, setSaveOpen] = useState(false);
-    const onTabChannelChange = useCallback(
-        (c: DebugChannelId | null) => debugWorkspaceStore.setTabChannel(tab.id, c),
-        [tab.id],
-    );
     const cancelRef = useRef(cancel);
     cancelRef.current = cancel;
     const onCancel = useCallback(() => void cancelRef.current(), []);
@@ -379,9 +389,9 @@ function TabWorkspace({
             { duration: m.duration('fast') * 1000, easing: cssEase(m.ease.enter) },
         );
         return () => anim.cancel();
-        // 只在挂上（切到这个标签）时播一次
+        // 切标签或原地切接口时播一次，参数输入不触发。
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [action, m.enabled, m.level, m.speed]);
 
     const splitHostRef = useRef<HTMLDivElement>(null);
     const topRef = useRef<HTMLDivElement>(null);
@@ -401,6 +411,19 @@ function TabWorkspace({
                 parsed={parsed}
                 untouched={!dirty}
                 onSave={() => setSaveOpen(true)}
+                validation={<ParamIssuesButton issues={issues} onJumpToIssue={jumpToIssue} />}
+                sendControls={
+                    <SendBar
+                        blocker={blocker}
+                        issues={issues}
+                        safety={safety}
+                        inflightSince={run?.inflight?.startedAt ?? null}
+                        progress={run?.inflight?.progress ?? null}
+                        onSend={onSubmit}
+                        onCancel={onCancel}
+                        blockedNonce={blockedNonce}
+                    />
+                }
             />
             {omittedCount > 0 && (
                 <div className="flex shrink-0 items-start gap-1.5 border-b border-border-subtle/70 bg-warning-soft/40 px-2.5 py-1.5 text-2xs leading-snug text-text-secondary">
@@ -419,8 +442,13 @@ function TabWorkspace({
             <div ref={splitHostRef} className="flex min-h-0 flex-1 flex-col">
                 <div
                     ref={topRef}
-                    className="flex min-h-0 flex-col"
-                    style={{ flex: `${splitRatio} 1 0px`, minHeight: MIN_REQUEST_PX }}
+                    className="flex min-h-0 flex-col overflow-hidden"
+                    style={{
+                        flex: requestCollapsed
+                            ? '0 0 36px'
+                            : `${responseCollapsed ? 1 : splitRatio} 1 0px`,
+                        minHeight: requestCollapsed ? 36 : MIN_REQUEST_PX,
+                    }}
                 >
                     <ParamsPane
                         tab={tab}
@@ -438,41 +466,52 @@ function TabWorkspace({
                         dirty={dirty}
                         onSubmit={onSubmit}
                         focusRequest={focusRequest}
-                    />
-                    <SendBar
-                        tabChannel={tab.channel}
-                        callChannel={callChannel}
-                        channels={channels}
-                        onTabChannelChange={onTabChannelChange}
-                        blocker={blocker}
-                        issues={issues}
-                        safety={safety}
-                        inflightSince={run?.inflight?.startedAt ?? null}
-                        progress={run?.inflight?.progress ?? null}
-                        onSend={onSubmit}
-                        onCancel={onCancel}
-                        onJumpToIssue={jumpToIssue}
-                        blockedNonce={blockedNonce}
+                        collapsed={requestCollapsed}
+                        onCollapsedChange={(collapsed) => setRequestOpen(!collapsed)}
                     />
                 </div>
-                <SplitHandle hostRef={splitHostRef} topRef={topRef} bottomRef={bottomRef} />
+                {!requestCollapsed && !responseCollapsed && (
+                    <SplitHandle hostRef={splitHostRef} topRef={topRef} bottomRef={bottomRef} />
+                )}
                 <div
                     ref={bottomRef}
-                    className="flex min-h-0 flex-col"
-                    style={{ flex: `${1 - splitRatio} 1 0px`, minHeight: MIN_RESPONSE_PX }}
+                    className="flex min-h-0 flex-col overflow-hidden border-t border-border-subtle/70"
+                    style={{
+                        flex: responseCollapsed
+                            ? '0 0 32px'
+                            : `${requestCollapsed ? 1 : 1 - splitRatio} 1 0px`,
+                        minHeight: responseCollapsed ? 32 : MIN_RESPONSE_PX,
+                    }}
                 >
-                    <ResponsePanel
-                        tabId={tab.id}
-                        run={run}
-                        target={target}
-                        fillKeys={fillKeys}
-                        canFill={parsed.ok}
-                        onFill={onFill}
-                        onRevealCallChannel={onRevealCallChannel}
-                        onResend={onSubmit}
-                        canResend={!blocker}
-                        onNavigate={onNavigate}
-                    />
+                    <div className="flex h-8 shrink-0 items-center justify-between px-3">
+                        <span className="text-xs font-medium text-text-secondary">回包</span>
+                        <IconTip
+                            icon={responseCollapsed ? ChevronUp : ChevronDown}
+                            label={responseCollapsed ? '展开回包' : '收起回包'}
+                            size="sm"
+                            aria-expanded={!responseCollapsed}
+                            onClick={toggleResponse}
+                        />
+                    </div>
+                    <div
+                        className={cn(
+                            'flex min-h-0 flex-1 flex-col',
+                            responseCollapsed && 'hidden',
+                        )}
+                    >
+                        <ResponsePanel
+                            tabId={tab.id}
+                            run={run}
+                            target={target}
+                            fillKeys={fillKeys}
+                            canFill={parsed.ok}
+                            onFill={onFill}
+                            onRevealCallChannel={onRevealCallChannel}
+                            onResend={onSubmit}
+                            canResend={!blocker}
+                            onNavigate={onNavigate}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -481,7 +520,7 @@ function TabWorkspace({
                 onOpenChange={setSaveOpen}
                 action={action}
                 params={parsed.ok ? parsed.value : null}
-                channel={tab.channel}
+                channel={null}
                 suggestedName={suggestedRequestName(action, spec?.summary ?? summary?.summary)}
             />
             {target && (
