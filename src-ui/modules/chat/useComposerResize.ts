@@ -7,6 +7,7 @@ import {
     type ComponentProps,
     type RefObject,
 } from 'react';
+import { usePointerDrag } from '../../hooks/ui/usePointerDrag';
 import { setChatPreferences, useChatPreferences } from './chatPreferences';
 
 export function useComposerResize(
@@ -21,8 +22,10 @@ export function useComposerResize(
     const drag = useRef<{
         y: number;
         height: number;
-        original: number | null;
+        original: string;
         current: number;
+        max: number;
+        handle: HTMLButtonElement;
     } | null>(null);
     const measure = useRef(() => {});
     const remeasure = useCallback(() => measure.current(), []);
@@ -35,7 +38,7 @@ export function useComposerResize(
             const element = input.current;
             const container = composer.current;
             if (!element || !container) return;
-            if (collapsed || container.dataset.collapseAnimating === 'true') return;
+            if (drag.current || collapsed || container.dataset.collapseAnimating === 'true') return;
             const pane = container.parentElement;
             const overhead = container.offsetHeight - element.offsetHeight;
             const available = pane?.clientHeight || window.innerHeight;
@@ -63,7 +66,7 @@ export function useComposerResize(
         let paneHeight = pane.clientHeight;
         let overhead = container.offsetHeight - element.offsetHeight;
         const observer = new ResizeObserver(() => {
-            if (container.dataset.collapseAnimating === 'true') return;
+            if (drag.current || container.dataset.collapseAnimating === 'true') return;
             const nextOverhead = container.offsetHeight - element.offsetHeight;
             if (
                 width === element.clientWidth &&
@@ -85,6 +88,52 @@ export function useComposerResize(
         setManual(height);
         setChatPreferences({ composerHeight: height });
     };
+    const resize = usePointerDrag<HTMLButtonElement>({
+        cursor: 'row-resize',
+        onStart: (event) => {
+            const element = input.current;
+            if (!element || collapsed) return false;
+            event.currentTarget.focus();
+            drag.current = {
+                y: event.clientY,
+                height: bounds.height,
+                current: bounds.height,
+                max: bounds.max,
+                original: element.style.height,
+                handle: event.currentTarget,
+            };
+            return true;
+        },
+        onMove: (event) => {
+            const current = drag.current;
+            const element = input.current;
+            if (!current || !element) return;
+            const next = Math.round(
+                Math.max(52, Math.min(current.max, current.height + current.y - event.clientY)),
+            );
+            if (next === current.current) return;
+            current.current = next;
+            element.style.height = `${next}px`;
+            current.handle.setAttribute('aria-valuenow', String(next));
+        },
+        onEnd: (reason) => {
+            const current = drag.current;
+            drag.current = null;
+            if (!current) return;
+            if (reason === 'commit') {
+                setBounds({ height: current.current, max: current.max });
+                commit(current.current);
+            } else {
+                if (input.current) input.current.style.height = current.original;
+                current.handle.setAttribute('aria-valuenow', String(current.height));
+                if (reason !== 'unmount') measure.current();
+            }
+        },
+    });
+    const cancelResize = resize.cancel;
+    useLayoutEffect(() => {
+        if (collapsed) cancelResize();
+    }, [collapsed, cancelResize]);
     return {
         remeasure,
         handle: {
@@ -119,37 +168,7 @@ export function useComposerResize(
                     commit(clamp(next));
                 }
             },
-            onPointerDown: (event) => {
-                if (event.button !== 0) return;
-                event.preventDefault();
-                event.currentTarget.focus();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                drag.current = {
-                    y: event.clientY,
-                    height: bounds.height,
-                    current: bounds.height,
-                    original: manual,
-                };
-            },
-            onPointerMove: (event) => {
-                if (!drag.current) return;
-                drag.current.current = clamp(drag.current.height + drag.current.y - event.clientY);
-                setManual(drag.current.current);
-            },
-            onPointerUp: (event) => {
-                if (!drag.current) return;
-                commit(drag.current.current);
-                drag.current = null;
-                event.currentTarget.releasePointerCapture(event.pointerId);
-            },
-            onPointerCancel: () => {
-                if (drag.current) setManual(drag.current.original);
-                drag.current = null;
-            },
-            onLostPointerCapture: () => {
-                if (drag.current) setManual(drag.current.original);
-                drag.current = null;
-            },
+            onPointerDown: resize.start,
         } satisfies ComponentProps<'button'>,
     };
 }

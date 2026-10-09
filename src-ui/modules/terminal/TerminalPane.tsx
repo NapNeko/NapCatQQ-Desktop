@@ -289,6 +289,7 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                 {filesOpen && (
                     <TerminalFilesPanel
                         sessionId={sessionId}
+                        visible={visible}
                         hostOs={info.host_os}
                         cwd={view.cwd}
                         width={layout.filesWidth}

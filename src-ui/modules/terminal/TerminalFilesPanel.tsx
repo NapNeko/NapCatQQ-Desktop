@@ -38,6 +38,7 @@ import {
 } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
 import { useTerminalFiles } from '../../hooks/terminal/useTerminalFiles';
+import { usePointerDrag } from '../../hooks/ui/usePointerDrag';
 import { formatBytes, formatModified } from '../../core/domain/terminal/format';
 import {
     DRIVES_PATH,
@@ -60,6 +61,7 @@ const TERMINAL_KEEP = 240;
 
 interface Props {
     sessionId: string;
+    visible: boolean;
     hostOs: TerminalHostOs;
     cwd: string | null;
     width: number;
@@ -77,6 +79,7 @@ type NameDialog = { kind: 'mkdir' } | { kind: 'rename'; entry: TerminalFileEntry
 
 export function TerminalFilesPanel({
     sessionId,
+    visible,
     hostOs,
     cwd,
     width,
@@ -88,7 +91,14 @@ export function TerminalFilesPanel({
 }: Props) {
     const files = useTerminalFiles(sessionId, hostOs, cwd);
     const asideRef = useRef<HTMLElement>(null);
-    const [liveWidth, setLiveWidth] = useState<number | null>(null);
+    const widthDrag = useRef<{
+        aside: HTMLElement;
+        right: number;
+        max: number;
+        current: number;
+        initial: number;
+        original: string;
+    } | null>(null);
     const [editing, setEditing] = useState<TerminalTextFile | null>(null);
     const [naming, setNaming] = useState<NameDialog | null>(null);
     const [name, setName] = useState('');
@@ -147,32 +157,48 @@ export function TerminalFilesPanel({
         if (el) el.scrollLeft = el.scrollWidth;
     }, [shownPath]);
 
-    // 拖的时候只改本地宽度，松手才落盘
-    const startResize = (e: React.PointerEvent) => {
-        const aside = asideRef.current;
-        const row = aside?.parentElement;
-        if (!aside || !row) return;
-        e.preventDefault();
-        const right = aside.getBoundingClientRect().right;
-        const max = Math.max(
-            WIDTH_MIN,
-            Math.min(WIDTH_MAX, row.getBoundingClientRect().width - TERMINAL_KEEP),
-        );
-        let next = width;
-        const move = (ev: PointerEvent) => {
-            next = Math.round(Math.min(max, Math.max(WIDTH_MIN, right - ev.clientX)));
-            setLiveWidth(next);
-        };
-        const up = () => {
-            window.removeEventListener('pointermove', move);
-            window.removeEventListener('pointerup', up);
-            setLiveWidth(null);
-            if (next !== width) onWidthChange(next);
-        };
-        window.addEventListener('pointermove', move);
-        window.addEventListener('pointerup', up);
-        setLiveWidth(width);
-    };
+    const resize = usePointerDrag<HTMLDivElement>({
+        cursor: 'col-resize',
+        onStart: () => {
+            const aside = asideRef.current;
+            const row = aside?.parentElement;
+            if (!aside || !row) return false;
+            widthDrag.current = {
+                aside,
+                right: aside.getBoundingClientRect().right,
+                max: Math.max(
+                    WIDTH_MIN,
+                    Math.min(WIDTH_MAX, row.getBoundingClientRect().width - TERMINAL_KEEP),
+                ),
+                current: width,
+                initial: width,
+                original: aside.style.width,
+            };
+            return true;
+        },
+        onMove: (event) => {
+            const current = widthDrag.current;
+            if (!current) return;
+            const next = Math.round(
+                Math.min(current.max, Math.max(WIDTH_MIN, current.right - event.clientX)),
+            );
+            if (next === current.current) return;
+            current.current = next;
+            current.aside.style.width = `${next}px`;
+        },
+        onEnd: (reason) => {
+            const current = widthDrag.current;
+            widthDrag.current = null;
+            if (!current) return;
+            if (reason === 'commit') {
+                if (current.current !== current.initial) onWidthChange(current.current);
+            } else current.aside.style.width = current.original;
+        },
+    });
+    const cancelResize = resize.cancel;
+    useLayoutEffect(() => {
+        if (!visible) cancelResize();
+    }, [visible, cancelResize]);
 
     return (
         <aside
@@ -182,14 +208,15 @@ export function TerminalFilesPanel({
                 'relative flex min-h-0 shrink-0 flex-col overflow-x-clip border-l border-border-subtle bg-surface',
                 slideIn && 'ncd-term-slide-in',
             )}
-            style={{ width: liveWidth ?? width }}
+            style={{ width }}
             data-terminal-drop={sessionId}
             data-terminal-drop-dir={drives ? undefined : listingDir}
         >
             <div
                 className="ncd-term-files-resize"
-                data-dragging={liveWidth !== null}
-                onPointerDown={startResize}
+                data-dragging={resize.dragging}
+                style={{ touchAction: 'none' }}
+                onPointerDown={resize.start}
                 title="拖动改宽度"
             />
             <div className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border-subtle px-1.5">

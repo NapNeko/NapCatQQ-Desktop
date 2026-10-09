@@ -10,6 +10,7 @@ import { Button } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
 import { useThemeTokens } from '../../hooks/theme/useThemeTokens';
 import { useMotion } from '../../hooks/preferences/useMotion';
+import { usePointerDrag } from '../../hooks/ui/usePointerDrag';
 import gsap from 'gsap';
 import {
     DOCK_HEIGHT_MIN,
@@ -31,106 +32,11 @@ import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { buildPalette } from '../../core/domain/terminal/palette';
 import { quotePath, shellSyntaxOf } from '../../core/domain/terminal/paths';
 import { getRuntime, setTerminalTheme, startTerminalRuntimes } from './registry';
-import { TerminalPane } from './TerminalPane';
+import { TerminalGroupView } from './TerminalGroupView';
 import { TerminalNewMenu, TerminalTabs } from './TerminalTabs';
 
 /** 面板顶上最高能拖到哪：标题栏（44）下面再留一截，看得见后面的页面；要全屏走最大化 */
 const DOCK_TOP_KEEP = 44 + 72;
-
-function useDrag(onMove: (e: PointerEvent) => void, onEnd?: () => void) {
-    const [dragging, setDragging] = useState(false);
-    const start = useCallback(
-        (e: React.PointerEvent) => {
-            e.preventDefault();
-            setDragging(true);
-            const move = (ev: PointerEvent) => onMove(ev);
-            const up = () => {
-                setDragging(false);
-                window.removeEventListener('pointermove', move);
-                window.removeEventListener('pointerup', up);
-                onEnd?.();
-            };
-            window.addEventListener('pointermove', move);
-            window.addEventListener('pointerup', up);
-        },
-        [onMove, onEnd],
-    );
-    return { dragging, start };
-}
-
-function GroupView({
-    group,
-    visible,
-    drop,
-}: {
-    group: TerminalGroup;
-    visible: boolean;
-    drop: TerminalDropTarget | null;
-}) {
-    const boxRef = useRef<HTMLDivElement>(null);
-    const divider = useDrag((e) => {
-        const rect = boxRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const ratio =
-            group.split === 'row'
-                ? (e.clientX - rect.left) / rect.width
-                : (e.clientY - rect.top) / rect.height;
-        terminalStore.setRatio(group.id, ratio);
-    });
-    const [first, second] = group.panes;
-    const zoneOf = (id: string | undefined) =>
-        id && drop?.sessionId === id ? (drop.dir ? 'files' : 'terminal') : null;
-    return (
-        <div
-            ref={boxRef}
-            className={cn(
-                'ncd-term-group flex min-h-0 min-w-0 flex-1',
-                group.split === 'column' ? 'flex-col' : 'flex-row',
-            )}
-        >
-            {first && (
-                <div
-                    className="flex min-h-0 min-w-0"
-                    style={
-                        second
-                            ? { flexBasis: `${group.ratio * 100}%`, flexGrow: 0, flexShrink: 0 }
-                            : { flex: 1 }
-                    }
-                >
-                    <TerminalPane
-                        sessionId={first}
-                        focused={group.focused === first}
-                        visible={visible}
-                        dropZone={zoneOf(first)}
-                        showHeader
-                    />
-                </div>
-            )}
-            {second && (
-                <>
-                    <div
-                        className="ncd-term-divider"
-                        data-split={group.split}
-                        data-dragging={divider.dragging}
-                        onPointerDown={divider.start}
-                    />
-                    <div
-                        className="ncd-term-pane-in flex min-h-0 min-w-0 flex-1"
-                        data-split={group.split}
-                    >
-                        <TerminalPane
-                            sessionId={second}
-                            focused={group.focused === second}
-                            visible={visible}
-                            dropZone={zoneOf(second)}
-                            showHeader
-                        />
-                    </div>
-                </>
-            )}
-        </div>
-    );
-}
 
 /** 没分屏时点了把当前这个目标在右边再开一块；分了以后换成左右 / 上下切换，按钮不挪位置 */
 function SplitButton({
@@ -174,8 +80,13 @@ export function TerminalDock() {
     const layout = useTerminalLayout();
     const prefs = useTerminalPrefs();
     const dockRef = useRef<HTMLElement>(null);
-    const [liveHeight, setLiveHeight] = useState<number | null>(null);
-    const liveHeightRef = useRef<number | null>(null);
+    const heightDrag = useRef<{
+        dock: HTMLElement;
+        bottom: number;
+        max: number;
+        current: number;
+        original: string;
+    } | null>(null);
     const motion = useMotion();
     // 收起时先放完退场动画再摘掉；还原时先把铺满的面板收回去再换布局，
     // 所以「画不画」「按不按最大化排」各有一份，比 store 晚一拍
@@ -206,7 +117,7 @@ export function TerminalDock() {
                     opacity: 1,
                     y: 0,
                     scale: 1,
-                    duration: motion.duration('base'),
+                    duration: motion.duration('base') * 0.65,
                     ease: motion.ease.enter,
                     clearProps: 'opacity,transform',
                 },
@@ -218,7 +129,7 @@ export function TerminalDock() {
                 opacity: 0,
                 y: 18,
                 scale: 0.992,
-                duration: motion.duration('fast'),
+                duration: motion.duration('fast') * 0.4,
                 ease: motion.ease.exit,
                 onComplete: () => setMounted(false),
             });
@@ -248,7 +159,7 @@ export function TerminalDock() {
                 { y: edge },
                 {
                     y: 0,
-                    duration: motion.duration('base'),
+                    duration: motion.duration('base') * 0.65,
                     ease: motion.ease.enter,
                     clearProps: 'transform',
                 },
@@ -259,7 +170,7 @@ export function TerminalDock() {
                 { y: 0 },
                 {
                     y: edge,
-                    duration: motion.duration('base'),
+                    duration: motion.duration('base') * 0.65,
                     ease: motion.ease.enter,
                     // 位移留到换完布局那一刻再清（下面的 effect），不然会先闪一帧铺满的样子
                     onComplete: () => setShownMax(false),
@@ -325,30 +236,49 @@ export function TerminalDock() {
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
-    const resize = useDrag(
-        (e) => {
+    const resize = usePointerDrag<HTMLDivElement>({
+        cursor: 'row-resize',
+        onStart: () => {
             const dock = dockRef.current;
             const parent = dock?.parentElement;
-            if (!dock || !parent) return;
+            if (!dock || !parent || !state.open) return false;
+            openAnim.current?.progress(1);
             const bottom = dock.getBoundingClientRect().bottom;
             const max = bottom - parent.getBoundingClientRect().top - DOCK_TOP_KEEP;
+            heightDrag.current = {
+                dock,
+                bottom,
+                max: Math.max(DOCK_HEIGHT_MIN, max),
+                current: layout.height,
+                original: dock.style.height,
+            };
+            return true;
+        },
+        onMove: (event) => {
+            const current = heightDrag.current;
+            if (!current) return;
             const next = Math.round(
-                Math.min(
-                    Math.max(bottom - e.clientY, DOCK_HEIGHT_MIN),
-                    Math.max(DOCK_HEIGHT_MIN, max),
-                ),
+                Math.min(Math.max(current.bottom - event.clientY, DOCK_HEIGHT_MIN), current.max),
             );
-            liveHeightRef.current = next;
-            setLiveHeight(next);
+            if (next === current.current) return;
+            current.current = next;
+            current.dock.style.height = `${next}px`;
         },
-        () => {
-            // 拖的时候只改本地高度，松手才落盘
-            if (liveHeightRef.current !== null)
-                terminalLayout.patch({ height: liveHeightRef.current });
-            liveHeightRef.current = null;
-            setLiveHeight(null);
+        onEnd: (reason) => {
+            const current = heightDrag.current;
+            heightDrag.current = null;
+            if (!current) return;
+            if (reason === 'commit') {
+                if (current.current !== layout.height)
+                    terminalLayout.patch({ height: current.current });
+            } else current.dock.style.height = current.original;
         },
-    );
+    });
+    const cancelResize = resize.cancel;
+    useLayoutEffect(() => {
+        if (!state.open || state.maximized) cancelResize();
+        if (state.maximized) dockRef.current?.style.removeProperty('height');
+    }, [state.open, state.maximized, cancelResize]);
 
     const onDrop = useCallback((target: TerminalDropTarget, paths: string[]) => {
         const view = terminalStore.getSnapshot().sessions[target.sessionId];
@@ -382,7 +312,7 @@ export function TerminalDock() {
 
     if (!mounted) return null;
     const activeGroup = state.groups.find((g) => g.id === state.activeGroup) ?? null;
-    const height = liveHeight ?? layout.height;
+    const height = layout.height;
     const focusedId = activeGroup?.focused;
     const focusedView = focusedId ? state.sessions[focusedId] : undefined;
 
@@ -406,6 +336,7 @@ export function TerminalDock() {
                 <div
                     className="ncd-term-resize"
                     data-dragging={resize.dragging}
+                    style={{ touchAction: 'none' }}
                     onPointerDown={resize.start}
                     onDoubleClick={() => terminalStore.setMaximized(true)}
                     title="拖动改高度，双击最大化"
@@ -438,7 +369,7 @@ export function TerminalDock() {
                 </button>
             </header>
             {activeGroup ? (
-                <GroupView
+                <TerminalGroupView
                     key={activeGroup.id}
                     group={activeGroup}
                     visible={state.open}
