@@ -1,15 +1,37 @@
-// JSON 编辑器：调试台的参数输入和响应查看共用。
-// 在 SyntaxTextEditor 的基础上加了 JSON 语法诊断、括号配对，以及按 JSON Schema 补全顶层键名和枚举值。
+// 调试台参数与回包共用的 JSON 编辑器。
 
 import { useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react';
-import { EditorView, drawSelection, keymap } from '@codemirror/view';
+import {
+    EditorView,
+    drawSelection,
+    highlightActiveLine,
+    highlightActiveLineGutter,
+    keymap,
+    lineNumbers,
+} from '@codemirror/view';
 import { Compartment, EditorState } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import {
+    defaultKeymap,
+    history,
+    historyKeymap,
+    indentLess,
+    indentMore,
+} from '@codemirror/commands';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
-import { bracketMatching } from '@codemirror/language';
+import {
+    bracketMatching,
+    foldGutter,
+    foldKeymap,
+    indentOnInput,
+    indentUnit,
+} from '@codemirror/language';
 import { linter, lintGutter } from '@codemirror/lint';
 import {
     autocompletion,
+    acceptCompletion,
+    closeBrackets,
+    closeBracketsKeymap,
+    completionKeymap,
     type Completion,
     type CompletionContext,
     type CompletionResult,
@@ -402,9 +424,11 @@ function lintJson(view: EditorView) {
     return /\S/.test(view.state.doc.toString()) ? parseLinter(view) : [];
 }
 
-function contentAttributes(ariaLabel: string | undefined) {
+function contentAttributes(ariaLabel: string | undefined, readOnly: boolean) {
     return EditorView.contentAttributes.of({
         'aria-label': ariaLabel ?? 'JSON 编辑器',
+        'aria-readonly': String(readOnly),
+        tabindex: '0',
         spellcheck: 'false',
         autocorrect: 'off',
         autocapitalize: 'off',
@@ -425,8 +449,15 @@ function schemaKeyOf(schema: Record<string, unknown> | null | undefined): string
     }
 }
 
-function schemaExtension(schema: Record<string, unknown> | null | undefined) {
-    return autocompletion({ override: [schemaKeyCompletion(schema)], icons: false });
+function schemaExtension(schema: Record<string, unknown> | null | undefined, readOnly: boolean) {
+    return readOnly
+        ? []
+        : autocompletion({
+              override: [schemaKeyCompletion(schema)],
+              icons: false,
+              defaultKeymap: false,
+              activateOnCompletion: (completion) => completion.type === 'property',
+          });
 }
 
 export function JsonCodeEditor({
@@ -476,11 +507,22 @@ export function JsonCodeEditor({
                     json(),
                     syntaxColorField('json'),
                     drawSelection(),
+                    lineNumbers(),
+                    foldGutter(),
                     history(),
                     bracketMatching(),
                     // 只读是拿来看的（回包原文）：诊断是给编辑用的，超大回包只截了开头一段时满屏报错只会误导
-                    ...(readOnly ? [] : [linter(lintJson, { delay: 300 }), lintGutter()]),
-                    schemaGateRef.current.of(schemaExtension(schemaRef.current)),
+                    ...(readOnly
+                        ? []
+                        : [
+                              highlightActiveLine(),
+                              highlightActiveLineGutter(),
+                              closeBrackets(),
+                              indentOnInput(),
+                              linter(lintJson, { delay: 300 }),
+                              lintGutter(),
+                          ]),
+                    schemaGateRef.current.of(schemaExtension(schemaRef.current, readOnly)),
                     // Mod-Enter 必须排在 defaultKeymap 前面，否则先被「插入空行」吃掉
                     keymap.of([
                         {
@@ -492,11 +534,25 @@ export function JsonCodeEditor({
                                 return true;
                             },
                         },
+                        ...(readOnly
+                            ? []
+                            : [
+                                  ...completionKeymap,
+                                  ...closeBracketsKeymap,
+                                  {
+                                      key: 'Tab',
+                                      run: (editor: EditorView) =>
+                                          acceptCompletion(editor) || indentMore(editor),
+                                      shift: indentLess,
+                                  },
+                              ]),
+                        ...foldKeymap,
                         ...defaultKeymap,
                         ...historyKeymap,
                     ]),
                     EditorState.tabSize.of(2),
-                    attrsGateRef.current.of(contentAttributes(ariaLabelRef.current)),
+                    indentUnit.of('  '),
+                    attrsGateRef.current.of(contentAttributes(ariaLabelRef.current, readOnly)),
                     EditorView.editable.of(!readOnly),
                     EditorState.readOnly.of(readOnly),
                     EditorView.updateListener.of((update) => {
@@ -525,16 +581,20 @@ export function JsonCodeEditor({
         if (!view || appliedSchemaKeyRef.current === schemaKey) return;
         appliedSchemaKeyRef.current = schemaKey;
         view.dispatch({
-            effects: schemaGateRef.current.reconfigure(schemaExtension(schemaRef.current)),
+            effects: schemaGateRef.current.reconfigure(
+                schemaExtension(schemaRef.current, readOnly),
+            ),
         });
-    }, [schemaKey]);
+    }, [schemaKey, readOnly]);
 
     useEffect(() => {
         const view = viewRef.current;
         if (!view || appliedAriaLabelRef.current === ariaLabel) return;
         appliedAriaLabelRef.current = ariaLabel;
-        view.dispatch({ effects: attrsGateRef.current.reconfigure(contentAttributes(ariaLabel)) });
-    }, [ariaLabel]);
+        view.dispatch({
+            effects: attrsGateRef.current.reconfigure(contentAttributes(ariaLabel, readOnly)),
+        });
+    }, [ariaLabel, readOnly]);
 
     useImperativeHandle(
         handleRef,

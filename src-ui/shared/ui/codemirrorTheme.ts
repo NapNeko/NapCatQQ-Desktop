@@ -57,9 +57,28 @@ export const editorTheme = EditorView.theme({
 // 放进深色主题里会突兀，所以统一改成设计令牌。SyntaxTextEditor 没有这些扩展，不引入。
 export const editorPopupTheme = EditorView.theme({
     '.cm-gutters': {
-        backgroundColor: 'transparent',
+        backgroundColor: 'var(--color-inset)',
         color: 'var(--color-text-tertiary)',
         border: 'none',
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+        minWidth: '2.5em',
+        padding: '0 6px 0 8px',
+    },
+    '.cm-foldGutter .cm-gutterElement': { padding: '0 4px', cursor: 'pointer' },
+    '.cm-activeLine': {
+        backgroundColor: 'color-mix(in srgb, var(--color-brand) 5%, transparent)',
+    },
+    '.cm-activeLineGutter': {
+        color: 'var(--color-text)',
+        backgroundColor: 'color-mix(in srgb, var(--color-brand) 9%, transparent)',
+    },
+    '.cm-foldPlaceholder': {
+        color: 'var(--color-text-secondary)',
+        backgroundColor: 'var(--color-elevated)',
+        border: '1px solid var(--color-border-subtle)',
+        borderRadius: 'var(--radius-xs)',
+        padding: '0 4px',
     },
     '.cm-lintRange-error': {
         backgroundImage: 'none',
