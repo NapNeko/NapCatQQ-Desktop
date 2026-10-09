@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
+import { availableParallelism } from 'node:os';
 
 // 配置在 src-ui/；pnpm 从仓库根调用时 cwd 仍是根，用 root 固定 UI 树。
 const uiRoot = __dirname;
@@ -10,6 +10,17 @@ export default defineConfig({
     plugins: [react()],
     test: {
         environment: 'jsdom',
+        environmentMatchGlobs: [
+            [
+                'core/domain/bot/{imported-network,runtime-gate,runtime-metrics-display,runtime-metrics-settings,system-qq-warning}.test.ts',
+                'jsdom',
+            ],
+            [
+                'core/domain/settings/{config-transfer-preferences,preferencesStore}.test.ts',
+                'jsdom',
+            ],
+            ['core/domain/**/*.{test,spec}.ts', 'node'],
+        ],
         globals: true,
         // 相对 root（src-ui），不要用仓库根相对路径或绝对 path resolve 做 glob。
         setupFiles: ['./test/setup.ts'],
@@ -18,9 +29,10 @@ export default defineConfig({
         passWithNoTests: false,
         restoreMocks: true,
         clearMocks: true,
-        // 24 核机器默认按核数铺满 jsdom 环境会互相挤：waitFor 类断言成片超时（100+ 假红，
-        // 单文件跑全绿）。8 线程实测全绿且更快。机器再快也别按核数放满。
-        poolOptions: { threads: { maxThreads: 8, minThreads: 1 } },
+        // 限制实际使用的进程池，避免高核数、低内存的开发机铺满 jsdom。
+        pool: 'forks',
+        maxWorkers: process.env.CI ? Math.min(4, availableParallelism()) : 2,
+        minWorkers: 1,
         coverage: {
             provider: 'v8',
             // 测试地板只盯纯逻辑与 hooks 层；组件页由 vitest 行为测试 + 冒烟兜底
