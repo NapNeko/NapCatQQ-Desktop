@@ -156,7 +156,6 @@ jobs:
     env:
       # 测试失败仍报告断言源码位置；关闭符号以减少链接和缓存传输成本。
       RUSTFLAGS: -C debuginfo=0
-      CARGO_LOG: cargo::core::compiler::fingerprint=info
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -252,7 +251,6 @@ jobs:
     runs-on: windows-latest
     env:
       RUSTFLAGS: -C debuginfo=0
-      CARGO_LOG: cargo::core::compiler::fingerprint=info
     steps:
       - name: Checkout
         uses: actions/checkout@v4
