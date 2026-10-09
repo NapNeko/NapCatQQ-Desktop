@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { Blob as NodeBlob } from 'node:buffer';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQQFaceAssetService } from './qq-face-assets.service';
 
 function cacheStorage() {
@@ -16,6 +17,10 @@ function cacheStorage() {
     return { saved, storage: { open: async () => store } as unknown as CacheStorage };
 }
 describe('persistent QQ face resources', () => {
+    // Node 的 Response 需要配套的 Blob；jsdom 的 Blob 没有 stream()。
+    beforeEach(() => vi.stubGlobal('Blob', NodeBlob));
+    afterEach(() => vi.unstubAllGlobals());
+
     it('shares live resources and reloads persisted bytes after all blob leases are released', async () => {
         const source = 'https://koishi.js.org/QFace/assets/qq_emoji/364/apng/364.png';
         const { saved, storage } = cacheStorage();
