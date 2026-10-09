@@ -35,7 +35,7 @@ test('unchanged contents reuse prior timestamps after a fresh checkout', (t) => 
     captureInputs(root, manifest);
     writeFileSync(file, readFileSync(file));
     assert.equal(restoreInputs(root, manifest).restored, 1);
-    assert.ok(Math.abs(statSync(file).mtimeMs - oldTime) < 2);
+    assert.ok(Math.abs(statSync(file).mtimeMs - Math.floor(oldTime / 1000) * 1000) < 2);
 });
 
 test('changed contents keep their new timestamps and trigger normal invalidation', (t) => {
@@ -63,7 +63,7 @@ test('directory timestamps are reused only when membership and contents match', 
     captureInputs(root, manifest);
     utimesSync(dir, Date.now() / 1000, Date.now() / 1000);
     restoreInputs(root, manifest);
-    assert.ok(Math.abs(statSync(dir).mtimeMs - oldTime) < 2);
+    assert.ok(Math.abs(statSync(dir).mtimeMs - Math.floor(oldTime / 1000) * 1000) < 2);
     writeFileSync(resolve(root, 'src/new.rs'), 'pub fn added() {}');
     const changedTime = statSync(dir).mtimeMs;
     restoreInputs(root, manifest);

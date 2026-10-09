@@ -166,7 +166,8 @@ export function restoreInputs(root, manifest, onChanged = () => {}) {
             onChanged(file);
             continue;
         }
-        utimesSync(path, statSync(path).atime, previous.mtimeMs / 1000);
+        // 归档可能丢失亚秒精度；已校验内容的输入不能比缓存里的 dep-info 更新。
+        utimesSync(path, statSync(path).atime, Math.floor(previous.mtimeMs / 1000));
         restored++;
     }
     // rerun-if-changed 也可指向目录；只有成员与内容都一致才恢复目录时间。
@@ -185,7 +186,7 @@ export function restoreInputs(root, manifest, onChanged = () => {}) {
             JSON.stringify(readdirSync(path).sort()) !== JSON.stringify(previous.children)
         )
             continue;
-        utimesSync(path, statSync(path).atime, previous.mtimeMs / 1000);
+        utimesSync(path, statSync(path).atime, Math.floor(previous.mtimeMs / 1000));
     }
     return { restored, changed };
 }
