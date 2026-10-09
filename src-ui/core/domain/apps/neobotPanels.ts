@@ -100,13 +100,20 @@ export function parseNeoBotModels(raw: unknown): NeoBotModels | null {
     const r = asRecord(raw);
     if (!r || !Array.isArray(r.library)) return null;
     // 平台凭据状态在 platforms 里，用来标「这个模型现在能不能用」
-    const platforms = asRecord(r.platforms) ?? {};
+    const platforms = Array.isArray(r.platforms)
+        ? Object.fromEntries(
+              r.platforms
+                  .map(asRecord)
+                  .filter((p): p is Record<string, unknown> => p !== null)
+                  .map((p) => [asString(p.name), p]),
+          )
+        : (asRecord(r.platforms) ?? {});
     const hasKey = (provider: string): boolean => {
         const p = asRecord(platforms[provider]);
         return p ? asBool(p.has_key) : false;
     };
     const assignments: Record<string, string> = {};
-    const assignRaw = asRecord(r.assignments) ?? {};
+    const assignRaw = asRecord(asRecord(r.assignments)?.roles) ?? asRecord(r.assignments) ?? {};
     for (const [role, ref] of Object.entries(assignRaw)) {
         if (typeof ref === 'string' && ref.trim()) assignments[role] = ref;
     }
@@ -204,7 +211,7 @@ export function parseNeoBotArchives(raw: unknown): NeoBotArchives | null {
                 // 列表接口用 table_name，超限清单用 name —— 两个都认
                 name: asString(t.table_name) || asString(t.name),
                 count: asNumber(t.count),
-                overLimit: asNumber(t.over_limit),
+                overLimit: asNumber(t.over_limit_count ?? t.over_limit),
             }))
             .filter((t) => t.name !== ''),
         summarizeAvailable: asBool(r.summarize_available),

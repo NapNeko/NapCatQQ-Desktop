@@ -2,6 +2,7 @@
 // 其余路径如实报「未模拟」，免得预览里看着像通了、真机却是空的。
 import type { AppPanelResult } from '../../types';
 import { withMockDelay } from '../bootstrap.mock';
+import { mockNeoBotWorkspace } from './neobot-workspace';
 
 /** 预览里「记住的面板密码」：只记有没有，不存明文 */
 const panelPasswords = new Set<string>();
@@ -14,6 +15,8 @@ export const neobotPanelApi = {
         _body?: unknown,
     ): Promise<AppPanelResult | null> => {
         const ok = (data: unknown) => withMockDelay({ kind: 'ok' as const, data });
+        const workspace = mockNeoBotWorkspace(_id, method, path, _body);
+        if (workspace) return withMockDelay(workspace);
         if (method === 'POST') {
             // 插件的几个动作：预览里只要「面板收下了」就够，列表不变也没关系
             const panelAction =

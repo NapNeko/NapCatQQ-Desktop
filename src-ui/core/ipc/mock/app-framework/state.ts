@@ -119,7 +119,7 @@ export const instances: AppInstance[] = [
             connection_name: 'ncd-app:nb7c1d20',
             linked_at_ms: Date.now() - 1_200_000,
         },
-        installed_version: '1.2.0',
+        installed_version: '1.2.4a1',
         created_at_ms: Date.now() - 3_600_000,
         install_renderer: false,
         origin: 'created',

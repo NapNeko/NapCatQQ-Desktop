@@ -10,6 +10,7 @@ import { appFrameworkService } from '../../core/services/app-framework.service';
 // TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉这条 hooks→modules 跨层
 import { parseNeoBotAuthStatus } from '../../core/domain/apps/neobotPanels';
 import { meetsNeoBotVersion } from '../../core/domain/apps/neobotCapabilities';
+import { record, text } from '../../core/domain/apps/neobotWorkspace';
 import { usePanelJson } from './useNeoBotPanel';
 import type { AppInstance } from '../../core/ipc/types';
 
@@ -77,8 +78,32 @@ export function useNeoBotPanelCredential(instance: AppInstance) {
         },
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: appPanelPasswordKey(instanceId) });
+            void queryClient.invalidateQueries({ queryKey: ['neobotPanel', instanceId] });
         },
     });
 
-    return { state, auth, loginSupported, save };
+    const setup = useMutation({
+        retry: false,
+        mutationFn: async (value: string): Promise<VerifyOutcome> => {
+            const result = await appFrameworkService.panelCall(
+                instanceId,
+                'POST',
+                '/api/auth/setup',
+                { password: value, confirm: value },
+            );
+            if (!result || result.kind !== 'ok' || record(result.data).ok === false)
+                throw new Error(
+                    result?.message || text(record(result?.data).error) || '首次设置密码失败',
+                );
+            // 设置成功后才记入本机密钥库，不把失败的密码当作可用凭据。
+            await appFrameworkService.setPanelPassword(instanceId, value);
+            return { state: 'ok', text: '面板密码已设置并记住。' };
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: appPanelPasswordKey(instanceId) });
+            void queryClient.invalidateQueries({ queryKey: ['neobotPanel', instanceId] });
+        },
+    });
+
+    return { state, auth, loginSupported, save, setup };
 }

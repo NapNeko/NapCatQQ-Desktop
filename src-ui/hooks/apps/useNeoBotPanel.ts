@@ -6,7 +6,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 // TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉这条 hooks→modules 跨层（同 useBackendSettings 旧账）
-import { parseNeoBotOverview, type NeoBotOverview } from '../../core/domain/apps/neobotPanel';
+import {
+    asRecord,
+    parseNeoBotOverview,
+    type NeoBotOverview,
+} from '../../core/domain/apps/neobotPanel';
 
 export type PanelState<T> =
     | { kind: 'ok'; data: T }
@@ -42,6 +46,7 @@ export function usePanelJson<T>(
     path: string,
     parse: (raw: unknown) => T | null,
     enabled = true,
+    pollMs: number | false = false,
 ) {
     return useQuery<PanelState<T>, Error>({
         queryKey: neobotPanelKey(instanceId, what),
@@ -58,6 +63,12 @@ export function usePanelJson<T>(
             return { kind: res.kind, message: res.message ?? '' };
         },
         retry: false,
+        refetchInterval: (query) => {
+            const state = query.state.data;
+            const status = state?.kind === 'ok' ? asRecord(state.data)?.status : undefined;
+            return ['done', 'failed', 'noop'].includes(String(status)) ? false : pollMs;
+        },
+        refetchIntervalInBackground: false,
     });
 }
 

@@ -108,7 +108,7 @@ export const appFrameworkService = {
     },
     panelCall: async (
         instanceId: string,
-        method: 'GET' | 'POST',
+        method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         path: string,
         body?: unknown,
     ): Promise<AppPanelResult | null> => {

@@ -33,7 +33,7 @@ export function blockedHint(state: PanelState<unknown>, notFoundHint?: string): 
             return {
                 title: '先填面板密码',
                 // 凭据卡片在「Web 控制台」页，不在本页——指路，别说「上面」
-                body: '面板接口要登录才能读。到「Web 控制台」页看「面板凭据」那一栏——它会先探面板的登录状态，告诉你是「还没设密码」还是「把密码填进来」。',
+                body: '到「面板凭据」设置或填写面板密码，保存并验证后即可使用。',
                 action: { label: '去填面板密码', tab: 'console' },
             };
         case 'unreachable':

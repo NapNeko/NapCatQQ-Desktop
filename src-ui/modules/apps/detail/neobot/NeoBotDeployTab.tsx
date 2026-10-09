@@ -1,10 +1,4 @@
-// NeoBot 详情「部署」页：把「还差什么」列出来，并把最容易卡住的一步——把 NeoBot 和 QQ 连起来——做成一次点击。
-//
-// 与面板「快捷部署」的分工：那边的表单在面板里，这边不做重复的表单（改人设、密钥去面板更顺手），
-// 但建立 OneBot 对接必须在这边做，因为 Bot 配置归桌面端管（面板看不到桌面端有哪些 Bot）。
-//
-// QQ 从哪儿来：面板的快捷部署里填过，deploy_status 的 values.bot_account 就是它。桌面端的
-// Bot id 就是 QQ，所以能直接对上——对上了就能一键链接（端口与 token 由链接流程一并写进两边）。
+// NeoBot 部署缺项与 OneBot 对接；具体字段由配置、模型和供应商页面编辑。
 
 import { useMemo, useState } from 'react';
 import { Button, Spinner } from '../../../../shared/ui';
@@ -174,13 +168,20 @@ export const NeoBotDeployTab: React.FC<{
                                     ))}
                                 </ul>
                                 <p className="mt-2 text-2xs text-text-tertiary">
-                                    人设、密钥、昵称这些在面板里改更顺手——
+                                    设置机器人身份、人设和平台密钥：
                                     <button
                                         type="button"
                                         className="ml-1 text-brand hover:underline"
-                                        onClick={() => onGoTab('console')}
+                                        onClick={() => onGoTab('config')}
                                     >
-                                        到「Web 控制台」打开面板
+                                        本体配置
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="ml-3 text-brand hover:underline"
+                                        onClick={() => onGoTab('env')}
+                                    >
+                                        供应商与密钥
                                     </button>
                                 </p>
                             </section>

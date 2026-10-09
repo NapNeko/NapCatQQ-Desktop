@@ -22,8 +22,9 @@ export const PanelCredentialCard: React.FC<{
     onOpenWebUi: () => void;
 }> = ({ instance, onOpenWebUi }) => {
     const [password, setPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
     const [outcome, setOutcome] = useState<VerifyOutcome | null>(null);
-    const { state, auth, loginSupported, save } = useNeoBotPanelCredential(instance);
+    const { state, auth, loginSupported, save, setup } = useNeoBotPanelCredential(instance);
 
     // 三个入口（回车 / 保存 / 清除）共用的结果处理；成功才清空密码框
     const saveAndReport = (value: string) =>
@@ -80,26 +81,51 @@ export const PanelCredentialCard: React.FC<{
             ) : needsSetup ? (
                 <div className="mt-1 flex flex-col gap-2">
                     <p className="text-xs leading-relaxed text-text-secondary">
-                        面板还没有设置登录密码，所以桌面的面板页现在读不到数据。
-                        密码要由你来设——面板把它存成哈希，桌面端读不出也写不了，
-                        <span className="text-text"> 也更不该替你设</span>。
+                        首次设置后，密码由 NeoBot 存成哈希，桌面端保存在本机密钥库。
                     </p>
                     {status?.setupAllowed ? (
-                        <p className="text-xs leading-relaxed text-text-secondary">
-                            你现在这台机器就能设：点下面的按钮打开面板，按提示设一个密码，
-                            然后回到这里把它填进来。
-                        </p>
+                        <>
+                            <TextField
+                                label="新面板密码"
+                                type="password"
+                                autoComplete="new-password"
+                                value={password}
+                                disabled={setup.isPending}
+                                onValueChange={setPassword}
+                            />
+                            <TextField
+                                label="确认密码"
+                                type="password"
+                                autoComplete="new-password"
+                                value={confirmation}
+                                disabled={setup.isPending}
+                                onValueChange={setConfirmation}
+                            />
+                            <Button
+                                size="sm"
+                                variant="primary"
+                                disabled={setup.isPending || !password || password !== confirmation}
+                                onClick={() =>
+                                    setup.mutate(password, {
+                                        onSuccess: (result) => {
+                                            setPassword('');
+                                            setConfirmation('');
+                                            setOutcome(result);
+                                        },
+                                        onError: (error) =>
+                                            setOutcome({ state: 'bad', text: error.message }),
+                                    })
+                                }
+                            >
+                                {setup.isPending ? '设置中…' : '设置并记住密码'}
+                            </Button>
+                        </>
                     ) : (
                         <p className="text-xs leading-relaxed text-text-secondary">
                             只能在 NeoBot 所在的那台机器上设（面板只允许本机完成首次设置）。
                             设好之后回到这里把密码填进来。
                         </p>
                     )}
-                    <div>
-                        <Button size="sm" variant="primary" onClick={onOpenWebUi}>
-                            打开面板去设置
-                        </Button>
-                    </div>
                 </div>
             ) : (
                 <>

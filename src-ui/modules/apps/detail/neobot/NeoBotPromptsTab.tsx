@@ -1,80 +1,162 @@
-// NeoBot 详情「提示词」页：各分区的可编辑项与实际取值。
-//
-// 面板把「默认值 / 自定义值 / 合并后的实际取值」三者都给了，这里展示实际取值，
-// 并把「被自定义覆盖过」标出来 —— 排查「为什么它这么说话」时就要看这个。
-
-import { parseNeoBotPrompts } from '../../../../core/domain/apps/neobotPanels';
-import { PanelStateView } from './PanelStateView';
+import { useState } from 'react';
+import { Button, Select, TextAreaField, TextField } from '../../../../shared/ui';
+import { parseNeoBotPrompts, type NeoBotPrompts } from '../../../../core/domain/apps/neobotPanels';
+import { strings, text, type PanelObject } from '../../../../core/domain/apps/neobotWorkspace';
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
+import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
+import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
+import {
+    ConfirmAction,
+    FullText,
+    PanelPage,
+    PanelSection,
+    type NeoBotPageProps,
+} from './workspaceParts';
 
-export const NeoBotPromptsTab: React.FC<{
-    instanceId: string;
-    onGoTab: (tab: string) => void;
-}> = ({ instanceId, onGoTab }) => {
-    const query = usePanelJson(instanceId, 'prompts', '/api/prompts', parseNeoBotPrompts);
-
+function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPrompts }) {
+    const action = useNeoBotAction(instanceId);
+    const items = data.sections.flatMap((s) =>
+        s.keys.map((k) => ({ ...k, section: s.name, id: `${s.name}/${k.path}` })),
+    );
+    const [selection, setSelection] = useNeoBotDraftState<string | null>('prompts:selection', null);
+    const [edits, setEdits] = useNeoBotDraftState<Record<string, string>>('prompts:edits', {});
+    const [values, setValues] = useState<Record<string, string>>({});
+    const [preview, setPreview] = useState<PanelObject | null>(null);
+    const current = items.find((k) => k.id === selection) ?? items[0];
+    if (!current) return <p className="text-xs text-text-tertiary">暂无提示词模板</p>;
+    const draft = edits[current.id] ?? current.value;
+    const dirty = draft !== current.value;
+    const target = { section: current.section, path: current.path };
+    const clearEdit = () =>
+        setEdits((prev) => {
+            const next = { ...prev };
+            delete next[current.id];
+            return next;
+        });
     return (
-        <PanelStateView
-            state={query.data}
-            isError={query.isError}
-            errorMessage={query.error?.message}
-            onRetry={() => void query.refetch()}
-            onGoTab={onGoTab}
+        <PanelSection
+            title="提示词模板"
+            actions={
+                <>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!dirty || action.isPending}
+                        onClick={clearEdit}
+                    >
+                        撤销草稿
+                    </Button>
+                    <ConfirmAction
+                        label="恢复默认"
+                        description="删除当前模板的自定义覆盖？"
+                        disabled={!data.editable || action.isPending}
+                        onConfirm={() =>
+                            void action
+                                .run({ path: '/api/prompts/reset', body: target })
+                                .then((next) => {
+                                    if (next) {
+                                        clearEdit();
+                                        setPreview(null);
+                                    }
+                                })
+                        }
+                    />
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={!data.editable || !dirty || action.isPending}
+                        onClick={() =>
+                            void action
+                                .run({
+                                    path: '/api/prompts/save',
+                                    body: { ...target, value: draft },
+                                })
+                                .then((next) => {
+                                    if (next) clearEdit();
+                                })
+                        }
+                    >
+                        保存模板
+                    </Button>
+                </>
+            }
         >
-            {(data) => (
-                <div className="flex flex-col gap-4">
-                    {!data.editable && (
-                        <p className="text-2xs text-warning">
-                            面板当前关闭了管理功能，这里只能看，改要去面板。
+            <Select
+                label="模板"
+                value={current.id}
+                disabled={action.isPending}
+                items={items.map((k) => ({
+                    value: k.id,
+                    label: `${k.section} · ${k.label}${edits[k.id] !== undefined ? '（草稿）' : k.overridden ? '（已自定义）' : ''}`,
+                }))}
+                onValueChange={(id) => {
+                    setSelection(id);
+                    setPreview(null);
+                }}
+            />
+            {!data.editable && <p className="mt-3 text-xs text-warning">当前会话只有查看权限</p>}
+            <TextAreaField
+                className="mt-4"
+                label="模板内容"
+                value={draft}
+                disabled={!data.editable || action.isPending}
+                minRows={12}
+                maxRows={24}
+                mono
+                onValueChange={(value) => {
+                    setEdits({ ...edits, [current.id]: value });
+                    setPreview(null);
+                }}
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {current.placeholders.map((key) => (
+                    <TextField
+                        key={key}
+                        label={`预览变量：${key}`}
+                        value={values[key] ?? ''}
+                        onValueChange={(value) => {
+                            setValues({ ...values, [key]: value });
+                            setPreview(null);
+                        }}
+                    />
+                ))}
+            </div>
+            <Button
+                className="mt-4"
+                size="sm"
+                variant="secondary"
+                disabled={action.isPending}
+                onClick={() =>
+                    void action
+                        .run({
+                            path: '/api/prompts/preview',
+                            body: { ...target, template: draft, values },
+                            quiet: true,
+                        })
+                        .then(setPreview)
+                }
+            >
+                预览渲染
+            </Button>
+            {preview && (
+                <div className="mt-4">
+                    <FullText label="渲染结果" value={text(preview.rendered)} />
+                    {strings(preview.unresolved).length > 0 && (
+                        <p className="mt-2 text-xs text-warning">
+                            未替换：{strings(preview.unresolved).join('、')}
                         </p>
                     )}
-                    {data.sections.length === 0 && (
-                        <p className="text-xs text-text-tertiary">面板没有返回任何提示词分区。</p>
-                    )}
-                    {data.sections.map((section) => (
-                        <section key={section.name} className="flex flex-col gap-1.5">
-                            <h4 className="text-2xs uppercase tracking-widest text-text-tertiary">
-                                {section.name}
-                            </h4>
-                            <ul className="flex flex-col gap-1">
-                                {section.keys.map((k) => (
-                                    <li
-                                        key={k.path}
-                                        className="rounded-sm border border-border-subtle bg-inset/40 px-3 py-2"
-                                    >
-                                        <div className="flex items-baseline justify-between gap-2">
-                                            <span className="truncate text-xs text-text">
-                                                {k.label}
-                                            </span>
-                                            <span className="flex shrink-0 items-baseline gap-1.5">
-                                                {k.overridden && (
-                                                    <span className="text-2xs text-warning">
-                                                        已改
-                                                    </span>
-                                                )}
-                                                <span className="font-mono text-2xs text-text-tertiary">
-                                                    {k.kind}
-                                                </span>
-                                            </span>
-                                        </div>
-                                        <p
-                                            className="mt-1 line-clamp-3 whitespace-pre-wrap font-mono text-2xs leading-snug text-text-secondary"
-                                            title={k.value}
-                                        >
-                                            {k.value || '(空)'}
-                                        </p>
-                                        {k.placeholders.length > 0 && (
-                                            <p className="mt-1 truncate text-2xs text-text-tertiary">
-                                                占位符：{k.placeholders.join('、')}
-                                            </p>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        </section>
-                    ))}
                 </div>
             )}
-        </PanelStateView>
+        </PanelSection>
     );
-};
+}
+
+export function NeoBotPromptsTab({ instanceId, onGoTab }: NeoBotPageProps) {
+    const query = usePanelJson(instanceId, 'prompts', '/api/prompts', parseNeoBotPrompts);
+    return (
+        <PanelPage query={query} onGoTab={onGoTab}>
+            {(data) => <PromptEditor key={instanceId} instanceId={instanceId} data={data} />}
+        </PanelPage>
+    );
+}
