@@ -9,6 +9,7 @@
     "test:unit": "vitest run --config src-ui/vitest.config.ts --dir src-ui",
     "test:domain": "vitest run --config src-ui/vitest.config.ts core/domain",
     "test:related": "node scripts/test-related.mjs",
+    "test:ci": "node --test scripts/ci-gate.test.mjs",
     "test:coverage": "vitest run --config src-ui/vitest.config.ts --dir src-ui --coverage",
     "test:probe": "node --test \"src-tauri/resources/metrics/*.test.mjs\"",
     "build": "tsc -p src-ui/tsconfig.json && vite build --config src-ui/vite.config.ts",

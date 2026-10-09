@@ -25,6 +25,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "4"
 
 jobs:
   resolve:
