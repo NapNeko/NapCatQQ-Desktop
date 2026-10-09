@@ -9,6 +9,9 @@ fn main() {
     use std::fs;
     use std::path::Path;
 
+    // manifest 来自脚本内的固定文本，不依赖包内其他文件。
+    println!("cargo:rerun-if-changed=build.rs");
+
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let manifest = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
@@ -35,4 +38,6 @@ fn main() {
 }
 
 #[cfg(not(windows))]
-fn main() {}
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+}
