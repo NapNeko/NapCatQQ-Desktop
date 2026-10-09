@@ -1,6 +1,29 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatImageViewer } from './ChatImageViewer';
+
+let observers: Map<Element, (width: number, height: number) => void>;
+const originalResizeObserver = globalThis.ResizeObserver;
+beforeEach(() => {
+    observers = new Map();
+    globalThis.ResizeObserver = class {
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+            const resize = (width: number, height: number) =>
+                this.callback(
+                    [{ target, contentRect: { width, height } } as ResizeObserverEntry],
+                    this as unknown as ResizeObserver,
+                );
+            observers.set(target, resize);
+            resize(1000, 650);
+        }
+        unobserve() {}
+        disconnect() {}
+    };
+});
+afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+});
 
 describe('chat image viewer', () => {
     it('zooms, returns to original size and resets controls for a new image', async () => {
@@ -31,5 +54,42 @@ describe('chat image viewer', () => {
         expect(screen.getByText('图片加载失败')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '重试' }));
         expect(screen.getByText('正在加载图片…')).toBeInTheDocument();
+    });
+    it('fits to fractional canvas dimensions instead of rounded client sizes', async () => {
+        render(<ChatImageViewer src="https://example.test/landscape.png" onClose={() => {}} />);
+        const picture = await screen.findByAltText('消息图片');
+        const canvas = screen.getByLabelText('图片画布，滚轮缩放，拖动查看');
+        Object.defineProperties(canvas, {
+            clientWidth: { value: 1000 },
+            clientHeight: { value: 651 },
+        });
+        Object.defineProperties(picture, {
+            naturalWidth: { value: 1600 },
+            naturalHeight: { value: 1200 },
+        });
+        act(() => observers.get(canvas)?.(1000.25, 650.75));
+        fireEvent.load(picture);
+        expect(parseFloat(picture.style.height)).toBeCloseTo(602.75);
+
+        act(() => observers.get(canvas)?.(1200.25, 750.75));
+        expect(parseFloat(picture.style.height)).toBeCloseTo(702.75);
+        fireEvent.click(screen.getByRole('button', { name: '原始尺寸' }));
+        act(() => observers.get(canvas)?.(1000.25, 650.75));
+        expect(picture).toHaveStyle({ width: '1600px', height: '1200px' });
+    });
+    it('waits for a usable canvas before displaying a decoded image', async () => {
+        render(<ChatImageViewer src="https://example.test/small.png" onClose={() => {}} />);
+        const picture = await screen.findByAltText('消息图片');
+        const canvas = screen.getByLabelText('图片画布，滚轮缩放，拖动查看');
+        act(() => observers.get(canvas)?.(0, 0));
+        Object.defineProperties(picture, {
+            naturalWidth: { value: 333 },
+            naturalHeight: { value: 136 },
+        });
+        fireEvent.load(picture);
+        expect(screen.getByRole('button', { name: '放大图片' })).toBeDisabled();
+        act(() => observers.get(canvas)?.(1000.25, 650.75));
+        expect(screen.getByRole('button', { name: '放大图片' })).toBeEnabled();
+        expect(picture).toHaveStyle({ width: '333px', height: '136px' });
     });
 });

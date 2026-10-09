@@ -44,15 +44,19 @@ function ImageCanvas({ src, onClose }: { src: string; onClose: () => void }) {
     const drag = useRef<{ x: number; y: number; left: number; top: number; id: number } | null>(
         null,
     );
-    const ready = natural.width > 0 && !error;
+    const ready = natural.width > 0 && area.width > 0 && area.height > 0 && !error;
     const scale = mode === 'manual' ? manual : imageScale(natural, area, mode);
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!viewport) return;
-        const measure = () =>
-            setArea({ width: viewport.clientWidth, height: viewport.clientHeight });
-        const observer = new ResizeObserver(measure);
+        const observer = new ResizeObserver(([entry]) => {
+            if (!entry) return;
+            // clientHeight 会取整；回填舞台后可能反复触发滚动条和尺寸变化。
+            const { width, height } = entry.contentRect;
+            setArea((current) =>
+                current.width === width && current.height === height ? current : { width, height },
+            );
+        });
         observer.observe(viewport);
-        measure();
         return () => observer.disconnect();
     }, [viewport]);
     const zoom = useCallback(
@@ -193,8 +197,8 @@ function ImageCanvas({ src, onClose }: { src: string; onClose: () => void }) {
                 <div
                     className="native-chat-image-stage"
                     style={{
-                        width: Math.max(area.width, natural.width * scale + 48),
-                        height: Math.max(area.height, natural.height * scale + 48),
+                        width: natural.width * scale + 48,
+                        height: natural.height * scale + 48,
                         visibility: ready ? 'visible' : 'hidden',
                     }}
                 >
@@ -213,8 +217,6 @@ function ImageCanvas({ src, onClose }: { src: string; onClose: () => void }) {
                         style={{
                             width: natural.width * scale || undefined,
                             height: natural.height * scale || undefined,
-                            left: Math.max(24, (area.width - natural.width * scale) / 2),
-                            top: Math.max(24, (area.height - natural.height * scale) / 2),
                         }}
                     />
                 </div>
