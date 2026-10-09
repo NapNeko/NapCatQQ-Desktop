@@ -31,6 +31,8 @@ function trackedFiles(root) {
 function inputFiles(root) {
     const files = trackedFiles(root);
     if (existsSync(resolve(root, generatedProxy))) files.push(generatedProxy);
+    const dotenv = resolve(root, '.env');
+    if (existsSync(dotenv) && statSync(dotenv).size === 0) files.push('.env');
     return [...new Set(files)].filter((file) => lstatSync(resolve(root, file)).isFile());
 }
 
@@ -119,11 +121,14 @@ export function captureInputs(root, manifest) {
     return Object.keys(files).length;
 }
 
-export function restoreInputs(root, manifest) {
+export function restoreInputs(root, manifest, onChanged = () => {}) {
     // build.rs 在源码树生成此文件；缓存命中时仍须让 dep-info 找到它。
     const proxy = resolve(root, generatedProxy);
     const template = resolve(root, proxyTemplate);
     if (!existsSync(proxy) && existsSync(template)) copyFileSync(template, proxy);
+    // 缺失的 rerun-if-changed 输入会让 build.rs 每轮都运行；只补空文件。
+    const dotenv = resolve(root, '.env');
+    if (!existsSync(dotenv) && existsSync(template)) writeFileSync(dotenv, '');
     if (!existsSync(manifest)) return { restored: 0, changed: 0 };
 
     let snapshot;
@@ -158,6 +163,7 @@ export function restoreInputs(root, manifest) {
             continue;
         if (hash !== previous.hash) {
             changed++;
+            onChanged(file);
             continue;
         }
         utimesSync(path, statSync(path).atime, previous.mtimeMs / 1000);
@@ -203,7 +209,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
             break;
         }
         case 'restore':
-            console.log('Cargo input timestamps:', restoreInputs(root, manifest));
+            console.log(
+                'Cargo input timestamps:',
+                restoreInputs(root, manifest, (file) =>
+                    console.log(`Cargo changed input: ${file}`),
+                ),
+            );
             break;
         case 'capture':
             console.log(`Recorded ${captureInputs(root, manifest)} Cargo input timestamps`);

@@ -104,8 +104,21 @@ test('generated proxy placeholder is recreated before checking cached inputs', (
     restoreInputs(root, manifest);
     captureInputs(root, manifest);
     rmSync(resolve(root, proxy));
-    assert.equal(restoreInputs(root, manifest).restored, 2);
+    rmSync(resolve(root, '.env'));
+    assert.equal(restoreInputs(root, manifest).restored, 3);
     assert.equal(readFileSync(resolve(root, proxy), 'utf8'), 'pub const BASE: &str = "";');
+});
+
+test('existing dotenv contents are preserved and untracked values stay out of metadata', (t) => {
+    const { root, manifest } = fixture(t, {
+        'crates/ncd-network/src/proxy_constants.template.rs': 'pub const BASE: &str = "";',
+    });
+    const dotenv = resolve(root, '.env');
+    writeFileSync(dotenv, 'EXISTING_CONFIG=keep\n');
+    restoreInputs(root, manifest);
+    assert.equal(readFileSync(dotenv, 'utf8'), 'EXISTING_CONFIG=keep\n');
+    captureInputs(root, manifest);
+    assert.equal(JSON.parse(readFileSync(manifest, 'utf8')).files['.env'], undefined);
 });
 
 test(
@@ -116,7 +129,10 @@ test(
             'Cargo.toml':
                 '[package]\nname = "ci-cache-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
             'src/lib.rs': '#[test]\nfn value() { assert_eq!(1 + 1, 2); }\n',
+            'build.rs': 'fn main() { println!("cargo:rerun-if-changed=.env"); }\n',
+            'crates/ncd-network/src/proxy_constants.template.rs': 'pub const BASE: &str = "";',
         });
+        restoreInputs(root, manifest);
         const runCargo = () => {
             return spawnSync('cargo', ['test', '--offline', '--lib', '--color', 'never'], {
                 cwd: root,
@@ -138,6 +154,7 @@ test(
         captureInputs(root, manifest);
         const source = resolve(root, 'src/lib.rs');
         writeFileSync(source, readFileSync(source));
+        rmSync(resolve(root, '.env'));
         restoreInputs(root, manifest);
         const reused = runCargo();
         assert.equal(reused.status, 0, reused.stderr);
