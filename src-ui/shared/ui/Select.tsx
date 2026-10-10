@@ -61,9 +61,14 @@ function SelectInner<V extends string>(
     const m = useMotion();
     // Radix Select：空字符串会抛错，统一当未选。
     const radixValue = value === '' || value === undefined ? undefined : value;
+    const selectedLabel = radixValue
+        ? items.find((item) => item.value === radixValue)?.label
+        : undefined;
+    const selectedTitle = typeof selectedLabel === 'string' ? selectedLabel : undefined;
 
     return (
-        <div className={cn('flex flex-col gap-1.5', className)}>
+        // min-w-0：放进 grid/flex 时不让单行 label 撑宽轨道，省略号才生效
+        <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
             {label && (
                 <label htmlFor={fieldId} className="text-xs font-medium text-text-secondary">
                     {label}
@@ -81,6 +86,7 @@ function SelectInner<V extends string>(
                     id={fieldId}
                     aria-invalid={invalid || undefined}
                     aria-describedby={describedById}
+                    title={selectedTitle}
                     className={cn(
                         'inline-flex w-full items-center justify-between gap-2 rounded-sm bg-field px-3 py-2',
                         'text-sm text-text border outline-none transition-colors',
@@ -95,14 +101,18 @@ function SelectInner<V extends string>(
                             : 'border-border-subtle focus-visible:border-brand data-[state=open]:border-brand',
                     )}
                 >
-                    <RadixSelect.Value placeholder={placeholder} />
+                    {/* 长 label 单行省略，完整文本走 trigger 的 title。
+                        外包一层：Radix 2.x 的 SelectValue 会丢弃 className。 */}
+                    <span className="min-w-0 flex-1 truncate text-left">
+                        <RadixSelect.Value placeholder={placeholder} />
+                    </span>
                     <RadixSelect.Icon asChild>
                         <MotionIcon
                             icon={ChevronDown}
                             motion="none"
                             playEnter={false}
                             size={14}
-                            className="text-text-tertiary"
+                            className="shrink-0 text-text-tertiary"
                         />
                     </RadixSelect.Icon>
                 </RadixSelect.Trigger>
