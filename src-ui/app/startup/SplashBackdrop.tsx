@@ -58,9 +58,10 @@ export const SplashBackdrop: React.FC<{
                 style={ringFxStyle}
                 aria-hidden
             />
+            {/* 退场冲击波垫在 stage（z-10）之下，从 logo 背后扩开 */}
             <div
                 ref={refs.shockRef}
-                className="ndf-splash-shockwave z-20 opacity-0"
+                className="ndf-splash-shockwave z-0 opacity-0"
                 style={ringFxStyle}
                 aria-hidden
             />
