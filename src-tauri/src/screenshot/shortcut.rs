@@ -41,8 +41,8 @@ impl Drop for Registration {
 thread_local! { static HOTKEY:RefCell<Option<Registration>>=const{RefCell::new(None)}; }
 pub fn configure(
     app: tauri::AppHandle,
-    owner: String,
-    request: ChatScreenshotShortcut,
+    mut owner: String,
+    mut request: ChatScreenshotShortcut,
 ) -> Result<(), String> {
     request.validate()?;
     HOTKEY.with(|cell| {
@@ -59,12 +59,20 @@ pub fn configure(
         }
         let (modifiers, key) = binding(&request)?;
         let mut state = cell.borrow_mut();
+        // 其他窗口的启动兜底可更新偏好，不能抢走仍挂载的聊天会话目标。
+        if request.context.is_empty()
+            && let Some(registration) = state.as_ref().filter(|registration| registration.attached)
+        {
+            owner.clone_from(&registration.owner);
+            request.context.clone_from(&registration.request.context);
+        }
+        let attached = !request.context.is_empty();
         if let Some(registration) = state.as_mut() {
             if binding(&registration.request)? == (modifiers, key)
                 && registration.request.global == request.global
             {
                 registration.owner = owner;
-                registration.attached = true;
+                registration.attached = attached;
                 registration.app = app;
                 registration.request = request;
                 return Ok(());
@@ -119,7 +127,7 @@ pub fn configure(
             hwnd,
             app,
             owner,
-            attached: true,
+            attached,
             request,
             id: 1,
             focus_hook,
@@ -199,6 +207,14 @@ fn binding(request: &ChatScreenshotShortcut) -> Result<(HOT_KEY_MODIFIERS, u32),
 }
 
 fn dispatch(registration: &Registration) {
+    if let Some(focused) = super::window::activate() {
+        if focused {
+            tracing::info!("再次按下截图快捷键，已召回当前截图");
+        } else {
+            tracing::warn!("当前截图仍在进行，未能取得前台焦点");
+        }
+        return;
+    }
     let app = registration.app.clone();
     let owner = registration.owner.clone();
     let context = registration.request.context.clone();
@@ -206,6 +222,7 @@ fn dispatch(registration: &Registration) {
     let clipboard_owner = registration.hwnd.key();
     let request = ChatScreenshotRequest {
         hide_window: registration.request.hide_window,
+        add_to_chat: registration.request.add_to_chat,
     };
     tauri::async_runtime::spawn(async move {
         let window = attached.then(|| app.get_webview_window(&owner)).flatten();

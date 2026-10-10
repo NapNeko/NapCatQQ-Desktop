@@ -7,7 +7,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use ncd_domain::chat_screenshot::{
@@ -183,7 +183,7 @@ pub(crate) fn run() {
     context.config_mut().app.security.capabilities.push(
         serde_json::from_value(serde_json::json!({
             "identifier": "shortcut-smoke",
-            "windows": ["chat-panel"],
+            "windows": ["main", "chat-panel"],
             "remote": { "urls": ["*"] },
             "permissions": ["core:default"]
         }))
@@ -222,8 +222,10 @@ pub(crate) fn run() {
         .setup(move |app| {
             let window = tauri::WebviewWindowBuilder::new(
                 app,
-                "chat-panel",
-                if std::env::args().any(|argument| argument == "--react") {
+                if std::env::args().any(|argument| argument == "--startup") { "main" } else { "chat-panel" },
+                if std::env::args().any(|argument| argument == "--startup") {
+                    WebviewUrl::External("http://localhost:1420/".parse()?)
+                } else if std::env::args().any(|argument| argument == "--react") {
                     WebviewUrl::External("http://localhost:1420/chat.html".parse()?)
                 } else {
                     WebviewUrl::CustomProtocol("shortcut-smoke://localhost".parse()?)
@@ -237,7 +239,7 @@ pub(crate) fn run() {
                 window.__shortcutSmoke = { ready: false, error: null, events: 0 };
                 window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {
                     event: 'chat-screenshot-shortcut',
-                    target: { kind: 'AnyLabel', label: 'chat-panel' },
+                    target: { kind: 'AnyLabel', label: window.__TAURI_INTERNALS__.metadata.currentWindow.label },
                     handler: window.__TAURI_INTERNALS__.transformCallback(() => window.__shortcutSmoke.events++)
                 }).then(() => window.__shortcutSmoke.ready = true)
                   .catch(error => window.__shortcutSmoke.error = String(error));
@@ -288,7 +290,8 @@ async fn run_test(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), St
         }
     });
     let same = std::env::args().any(|argument| argument == "--same-shortcut");
-    if std::env::args().any(|argument| argument == "--react") {
+    let startup = std::env::args().any(|argument| argument == "--startup");
+    if startup || std::env::args().any(|argument| argument == "--react") {
         tokio::time::timeout(Duration::from_secs(15), async {
             loop {
                 if app
@@ -304,7 +307,14 @@ async fn run_test(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), St
             }
         })
         .await
-        .map_err(|_| "真实聊天页面未注册快捷键".to_string())?;
+        .map_err(|_| "应用页面未注册快捷键".to_string())?;
+        if startup {
+            let configured = app.state::<AppState>().configured.lock().map_err(|_| "fixture unavailable")?.clone();
+            if configured.is_none_or(|request| !request.context.is_empty()) {
+                return Err("启动测试意外依赖了聊天会话".into());
+            }
+            eprintln!("SHORTCUT_SMOKE startup_registered_without_chat=true");
+        }
     } else {
         screenshot::configure_shortcut(
             app.clone(),
@@ -319,13 +329,19 @@ async fn run_test(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), St
                 context: "isolated-shortcut-smoke".into(),
                 release_owner: false,
                 hide_window: !same,
+                add_to_chat: true,
             },
         )
         .await?;
     }
     // SAFETY: 只记句柄，结束后交还测试前的前台窗口。
     let previous = unsafe { GetForegroundWindow() }.0 as isize;
-    for stage in ["visible", "minimized", "hidden", "released", "closed"] {
+    let mut stages = vec!["visible", "minimized", "hidden"];
+    if std::env::args().any(|argument| argument == "--repeat-hidden") {
+        stages.extend(std::iter::repeat_n("hidden", 20));
+    }
+    stages.extend(["released", "closed"]);
+    for stage in stages {
         if stage == "closed" {
             window.destroy().map_err(|e| e.to_string())?;
         } else {
@@ -393,6 +409,7 @@ async fn run_test(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), St
                 app.get_webview_window(window.label()).is_some()
             );
         }
+        let triggered_at = Instant::now();
         press_shortcut()?;
         let started = match wait_event(&mut receiver).await {
             Ok(event) => event,
@@ -407,6 +424,7 @@ async fn run_test(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), St
         if started.result != ChatScreenshotShortcutResult::Started {
             return Err(format!("{stage}: 收到意外事件 {:?}", started.result));
         }
+        let received_ms = triggered_at.elapsed().as_millis();
         let opened = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 // SAFETY: user32 校验窗口句柄，探测只读。
@@ -420,24 +438,40 @@ async fn run_test(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), St
             }
         })
         .await;
+        let opened_ms = triggered_at.elapsed().as_millis();
         tokio::time::sleep(Duration::from_millis(150)).await;
         let mut class = [0u16; 128];
         // SAFETY: 缓冲区有效，系统只写返回的窗口类名。
         let len = unsafe { GetClassNameW(GetForegroundWindow(), &mut class) }.max(0) as usize;
         let focused = String::from_utf16_lossy(&class[..len]) == "NCD.ChatScreenshot.v1";
-        eprintln!("SHORTCUT_SMOKE stage={stage} overlay_foreground={focused}");
-        let capture_owner = if matches!(stage, "released" | "closed") {
+        eprintln!("SHORTCUT_SMOKE stage={stage} received_ms={received_ms} opened_ms={opened_ms} overlay_foreground={focused}");
+        let capture_owner = if startup || matches!(stage, "released" | "closed") {
             screenshot::SHORTCUT_CAPTURE_OWNER
         } else {
             window.label()
         };
-        screenshot::cancel(&app, capture_owner);
         if opened.is_err() {
+            screenshot::cancel(&app, capture_owner);
             return Err(format!("{stage}: 收到了热键，但截图窗口没有显示"));
         }
         if !focused {
+            screenshot::cancel(&app, capture_owner);
             return Err(format!("{stage}: 截图窗已打开，但未取得前台与键盘焦点"));
         }
+        if std::env::args().any(|argument| argument == "--recall-active") {
+            press_shortcut()?;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            // SAFETY: 重复热键应仍指向同一原生截图，不创建第二次捕获。
+            let mut class = [0u16; 128];
+            let len = unsafe { GetClassNameW(GetForegroundWindow(), &mut class) }.max(0) as usize;
+            if String::from_utf16_lossy(&class[..len]) != "NCD.ChatScreenshot.v1" {
+                return Err(format!("{stage}: 再次按热键没有召回当前截图"));
+            }
+            if receiver.try_recv().is_ok() {
+                return Err(format!("{stage}: 再次按热键意外开始了另一轮截图"));
+            }
+        }
+        screenshot::cancel(&app, capture_owner);
         let finished = wait_event(&mut receiver).await?;
         if finished.result != (ChatScreenshotShortcutResult::Finished { file: None }) {
             return Err(format!("{stage}: 取消未完成 {:?}", finished.result));

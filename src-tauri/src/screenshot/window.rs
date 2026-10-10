@@ -193,6 +193,10 @@ pub fn open(desktop: Desktop, owner: String, sender: Sender) -> Result<(), Strin
     }
     if let Some(hwnd) = foreground {
         hwnd.set_foreground();
+        // SAFETY: 只探测当前前台窗口；后台触发时系统可能拒绝激活请求。
+        if unsafe { GetForegroundWindow() } != hwnd.raw() {
+            tracing::warn!("截图窗已打开，但未取得前台焦点");
+        }
     }
     Ok(())
 }
@@ -202,6 +206,21 @@ pub fn cancel_owner(owner: &str) {
     if matches {
         finish(None);
     }
+}
+
+pub(super) fn activate() -> Option<bool> {
+    let session = active()?;
+    let session = session.try_borrow().ok()?;
+    let hwnds: Vec<_> = session.overlays.iter().map(|overlay| overlay.hwnd).collect();
+    let foreground = session.overlays.get(session.toolbar_monitor)?.hwnd;
+    drop(session);
+    for hwnd in &hwnds {
+        hwnd.show_no_activate();
+    }
+    foreground.set_foreground();
+    // SAFETY: 只比较系统校验过的 HWND；不把请求聚焦当成已经拿到焦点。
+    let focused = unsafe { GetForegroundWindow() };
+    Some(hwnds.iter().any(|hwnd| hwnd.raw() == focused))
 }
 
 fn finish(action: Option<OutputAction>) {

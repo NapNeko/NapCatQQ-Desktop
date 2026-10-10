@@ -4,6 +4,8 @@ use ncd_domain::chat_screenshot::{
 };
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
+use std::time::Instant;
+#[cfg(windows)]
 use tauri::Emitter;
 use tauri::Manager;
 use tokio_util::sync::CancellationToken;
@@ -115,12 +117,12 @@ async fn capture_inner(
     }
     #[cfg(windows)]
     {
+        let started_at = Instant::now();
         let owner = window
             .as_ref()
             .map_or(SHORTCUT_CAPTURE_OWNER, |window| window.label())
             .to_string();
-        let standalone_view = window
-            .is_none()
+        let standalone_view = (window.is_none() && request.add_to_chat)
             .then(|| app.state::<crate::AppState>().chat.view());
         let coordinator = app.state::<ScreenshotCoordinator>();
         let cancel = coordinator.acquire(&owner)?;
@@ -138,10 +140,10 @@ async fn capture_inner(
                 ncd_domain::chat_screenshot::ChatScreenshotShortcutResult::Started,
             );
         }
-        let hidden = request.hide_window
-            && window.as_ref().is_some_and(|window| {
-                window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
-            });
+        let owner_was_visible = window.as_ref().is_some_and(|window| {
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+        });
+        let hidden = request.hide_window && owner_was_visible;
         let mut completed = false;
         let mut result: Result<Option<ChatScreenshotAttachment>, String> = async {
             if hidden && let Some(window) = &window {crate::webview_scheduler::hide_window(window)?;}
@@ -149,9 +151,16 @@ async fn capture_inner(
             if cancel.is_cancelled(){return Ok(None);}
             let (sender,receiver)=tokio::sync::oneshot::channel();
             let owner_copy=owner.clone();let cancel_copy=cancel.clone();
+            let captured_ms = started_at.elapsed().as_millis() as u64;
+            let queued_at = Instant::now();
             app.run_on_main_thread(move||{
                 if cancel_copy.is_cancelled(){let _=sender.send(Ok(None));return;}
-                if let Err(error)=window::open(desktop,owner_copy,sender){tracing::warn!(%error,"创建原生截图窗失败");}
+                let queued_ms = queued_at.elapsed().as_millis() as u64;
+                let opening_at = Instant::now();
+                match window::open(desktop,owner_copy.clone(),sender) {
+                    Ok(()) => tracing::info!(owner = %owner_copy, captured_ms, queued_ms, opened_ms = opening_at.elapsed().as_millis() as u64, total_ms = started_at.elapsed().as_millis() as u64, "原生截图工具已打开"),
+                    Err(error) => tracing::warn!(%error,"创建原生截图窗失败"),
+                }
             }).map_err(|e|e.to_string())?;
             let output=tokio::select!{
                 result=receiver=>result.map_err(|_|"截图窗口未能打开")??,
@@ -164,7 +173,6 @@ async fn capture_inner(
             }
             if cancel.is_cancelled(){return Ok(None);}
             if window.is_some() && app.get_webview_window(&owner).is_none(){return Ok(None);}
-            completed = true;
             let action=output.action;
             let mut encoded=tauri::async_runtime::spawn_blocking(move||encode(output)).await.map_err(|e|format!("导出线程失败：{e}"))??;
             if cancel.is_cancelled(){return Ok(None);}
@@ -177,7 +185,7 @@ async fn capture_inner(
             let clipboard_result = tauri::async_runtime::spawn_blocking(move||{
                 clipboard::copy_rgba(windows::Win32::Foundation::HWND(owner_hwnd as *mut _),width,height,&pixels)
             }).await.map_err(|e|e.to_string())?;
-            match action {
+            let result = match action {
                 window::OutputAction::Attach=>{
                     let mut attachment = tauri::async_runtime::spawn_blocking(move||cache.save(encoded.width,encoded.height,&encoded.png,&encoded.preview)).await.map_err(|e|e.to_string())??;
                     attachment.clipboard_error = clipboard_result.err();
@@ -197,11 +205,13 @@ async fn capture_inner(
                     Ok(None)
                 },
                 window::OutputAction::Scroll => Err("滚动截图尚未完成".into()),
-            }
+            };
+            completed = result.is_ok();
+            result
         }.await;
         // 导出与复制先完成；显示请求被正常焦点事件取代，不能把一张成功的截图判成失败。
         if let Some(window) = &window
-            && (hidden || completed)
+            && should_restore_owner(hidden, completed, request.add_to_chat)
             && app.get_webview_window(&owner).is_some()
         {
             if let Err(error) = restore_owner(window).await {
@@ -238,6 +248,7 @@ async fn capture_inner(
             emit_shortcut(&app, &owner, &context, &capture_id, outcome);
         }
         coordinator.release(&owner);
+        tracing::info!(%owner, completed, elapsed_ms = started_at.elapsed().as_millis() as u64, "原生截图已结束");
         result
     }
 }
@@ -258,6 +269,15 @@ fn emit_shortcut(
     };
     if let Err(error) = app.emit_to(owner, shortcut::EVENT, event) {
         tracing::warn!(%owner, %error, "发布截图结果失败");
+    }
+}
+
+#[cfg(windows)]
+fn should_restore_owner(hidden: bool, completed: bool, add_to_chat: bool) -> bool {
+    if completed {
+        add_to_chat
+    } else {
+        hidden
     }
 }
 
@@ -373,4 +393,32 @@ fn encode(output: window::Output) -> Result<Encoded, String> {
         png,
         preview,
     })
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::should_restore_owner;
+
+    #[test]
+    fn clipboard_only_capture_does_not_restore_or_focus_the_owner() {
+        for hidden in [false, true] {
+            assert!(!should_restore_owner(hidden, true, false));
+        }
+    }
+
+    #[test]
+    fn add_to_chat_capture_restores_the_owner_after_completion() {
+        for hidden in [false, true] {
+            assert!(should_restore_owner(hidden, true, true));
+        }
+    }
+
+    #[test]
+    fn cancelled_or_failed_capture_only_restores_a_temporarily_hidden_owner() {
+        for add_to_chat in [false, true] {
+            for hidden in [false, true] {
+                assert_eq!(should_restore_owner(hidden, false, add_to_chat), hidden);
+            }
+        }
+    }
 }
