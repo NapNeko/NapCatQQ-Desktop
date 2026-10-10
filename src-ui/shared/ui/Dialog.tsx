@@ -560,7 +560,7 @@ const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(
                 {!hideClose && (
                     <RadixDialog.Close
                         aria-label="关闭"
-                        className="absolute right-3 top-3 z-10 rounded-xs p-1 text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        className="absolute right-3 top-3 z-10 inline-flex h-6 w-6 items-center justify-center rounded-xs text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     >
                         <MotionIcon
                             icon={CloseIcon}
