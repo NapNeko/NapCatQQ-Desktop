@@ -2,11 +2,22 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
 pub struct ChatScreenshotRequest {
     pub hide_window: bool,
+    #[serde(default = "default_add_to_chat")]
+    pub add_to_chat: bool,
+}
+
+impl Default for ChatScreenshotRequest {
+    fn default() -> Self {
+        Self {
+            hide_window: false,
+            add_to_chat: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -40,9 +51,15 @@ pub struct ChatScreenshotShortcut {
     pub release_owner: bool,
     #[serde(default = "default_global_shortcut")]
     pub hide_window: bool,
+    #[serde(default = "default_add_to_chat")]
+    pub add_to_chat: bool,
 }
 
 fn default_global_shortcut() -> bool {
+    true
+}
+
+fn default_add_to_chat() -> bool {
     true
 }
 
@@ -58,6 +75,7 @@ impl Default for ChatScreenshotShortcut {
             context: String::new(),
             release_owner: false,
             hide_window: true,
+            add_to_chat: true,
         }
     }
 }
@@ -145,6 +163,7 @@ mod tests {
         let mut request: ChatScreenshotShortcut = serde_json::from_str(old).unwrap();
         assert!(request.global);
         assert!(request.hide_window);
+        assert!(request.add_to_chat);
         request.global = false;
         assert!(request.validate().is_ok());
         let restored: ChatScreenshotShortcut =
@@ -159,6 +178,7 @@ mod tests {
             control: true,
             alt: true,
             key: "S".into(),
+            add_to_chat: false,
             ..Default::default()
         };
         let encoded = serde_json::to_string(&shortcut).unwrap();
@@ -166,6 +186,9 @@ mod tests {
             serde_json::from_str::<ChatScreenshotShortcut>(&encoded).unwrap(),
             shortcut
         );
+        let old_request: ChatScreenshotRequest =
+            serde_json::from_str(r#"{"hideWindow":true}"#).unwrap();
+        assert!(old_request.add_to_chat);
         let attachment = ChatScreenshotAttachment {
             path: "full.png".into(),
             preview_path: "preview.png".into(),
