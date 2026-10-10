@@ -1,4 +1,4 @@
-// CPU / RAM 占用率折线图（渐变填充 + 发光曲线 + 呼吸端点 + 新点滚入）。
+// CPU / RAM 占用率折线图（渐变填充 + 发光曲线 + 小猫端点 + 新点滚入），卡头带一句负载状态。
 //
 // 监控默认开着，间隔 1.2 s、滚一次 1.18 s，以前逐帧重算裁剪后的路径，等于首页一直在重绘这两张图，
 // 发光滤镜还要跟着每帧重新栅格化。现在每个采样只算一次 N+1 个点的整条曲线，外层 div 用 WAAPI
@@ -9,6 +9,11 @@ import type { LucideIcon } from 'lucide-react';
 import { Card } from '../../../shared/ui';
 import type { ResourcePoint } from '../../../hooks/diagnostics/useResourceMonitor';
 import { performanceScrollDurationMs } from '../../../core/domain/performance/performanceSettings';
+import {
+    loadLevel,
+    type LoadLevel,
+    type LoadTone,
+} from '../../../core/domain/performance/loadDisplay';
 import {
     buildAreaPath,
     buildSmoothPath,
@@ -34,6 +39,9 @@ interface OccupancyChartProps {
 
 const Y_TICKS = [100, 75, 50, 25, 0];
 const PADDING = { top: 8, right: 8, bottom: 8, left: 38 } as const;
+// 最旧那一截淡出；右边收一小截，让填充在猫头下面软着收尾，不留一道竖边（曲线那截正好被猫头盖住）
+const FADE_MASK =
+    'linear-gradient(90deg, transparent, #000 12%, #000 calc(100% - 8px), transparent)';
 
 const valueY = (value: number, innerH: number) => innerH * (1 - value / 100);
 
@@ -164,25 +172,23 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
 
     let hoverInfo: ReturnType<typeof pickHover> = null;
     if (hovering && slots > 0) {
-        const live = scrollFrom
-            ? scrollPoints(
-                  scrollFrom,
-                  incoming,
-                  scrollProgress(startedAt, duration),
-                  slots,
-                  innerW,
-                  innerH,
-              )
-            : { values, points };
+        let live = { values, points };
+        if (scrollFrom) {
+            const progress = scrollProgress(startedAt, duration);
+            live = scrollPoints(scrollFrom, incoming, progress, slots, innerW, innerH);
+        }
         hoverInfo = pickHover(clipDisplayPoints(live.points, 0, innerW), live.values, hoverX);
     }
     const headerValueText = hoverInfo ? `${Math.round(hoverInfo.value)}%` : valueText;
+    // 状态跟着卡头的数走：悬停看历史时也说那一刻的状态，不和数字打架
+    const level =
+        slots > 0 ? loadLevel(dataKey, hoverInfo ? Math.round(hoverInfo.value) : incoming) : null;
     const ready = size.w > 0 && size.h > 0 && slots > 0;
 
     return (
         <Card padding="md" className={`flex flex-col ${className ?? ''}`.trim()}>
-            {/* 卡片头部：图标 + 标题 + 醒目大字号当前负载 */}
-            <div className="mb-2 flex shrink-0 items-center justify-between">
+            {/* 卡片头部：图标 + 标题，右边一句状态 + 醒目大字号当前负载 */}
+            <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                     <div
                         className="grid h-7 w-7 place-items-center rounded-sm"
@@ -192,15 +198,12 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                     >
                         <Icon size={14} strokeWidth={2} style={{ color: accentColor }} />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-text">{title}</span>
-                        <span
-                            className="h-1.5 w-1.5 rounded-full animate-pulse"
-                            style={{ backgroundColor: accentColor }}
-                        />
-                    </div>
+                    <span className="font-display text-[13.5px] font-semibold text-text">
+                        {title}
+                    </span>
                 </div>
-                <div className="flex items-baseline gap-1">
+                <div className="flex items-center gap-2">
+                    {level && <LevelChip level={level} accentColor={accentColor} />}
                     <span
                         className="font-mono text-lg font-bold tabular-nums tracking-tight"
                         style={{ color: accentColor }}
@@ -250,7 +253,13 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                         <div
                             aria-hidden
                             className="pointer-events-none absolute top-0 overflow-hidden"
-                            style={{ left: PADDING.left, width: innerW, height: size.h }}
+                            style={{
+                                left: PADDING.left,
+                                width: innerW,
+                                height: size.h,
+                                maskImage: FADE_MASK,
+                                WebkitMaskImage: FADE_MASK,
+                            }}
                         >
                             <div
                                 ref={trackRef}
@@ -262,12 +271,12 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                                             <stop
                                                 offset="0%"
                                                 stopColor={accentColor}
-                                                stopOpacity={0.36}
+                                                stopOpacity={0.24}
                                             />
                                             <stop
-                                                offset="45%"
+                                                offset="55%"
                                                 stopColor={accentColor}
-                                                stopOpacity={0.12}
+                                                stopOpacity={0.07}
                                             />
                                             <stop
                                                 offset="100%"
@@ -287,10 +296,10 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                                         >
                                             <feDropShadow
                                                 dx="0"
-                                                dy="1.5"
-                                                stdDeviation="2.5"
+                                                dy="2"
+                                                stdDeviation="3"
                                                 floodColor={accentColor}
-                                                floodOpacity="0.4"
+                                                floodOpacity="0.3"
                                             />
                                         </filter>
                                     </defs>
@@ -304,7 +313,7 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                                                 d={linePath}
                                                 fill="none"
                                                 stroke={accentColor}
-                                                strokeWidth={2.2}
+                                                strokeWidth={2}
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
                                                 filter={`url(#${filterId})`}
@@ -325,25 +334,10 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                                 top: PADDING.top,
                                 transform: `translate(${innerW}px, ${valueY(incoming, innerH)}px)`,
                                 opacity: hoverInfo ? 0 : 1,
+                                transition: 'opacity 150ms ease-out',
                             }}
                         >
-                            <span
-                                className={`absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full${motionEnabled ? ' animate-pulse' : ''}`}
-                                style={{
-                                    backgroundColor: `color-mix(in srgb, ${accentColor} 25%, transparent)`,
-                                }}
-                            />
-                            <span
-                                className="absolute rounded-full"
-                                style={{
-                                    left: -4.4,
-                                    top: -4.4,
-                                    width: 8.8,
-                                    height: 8.8,
-                                    backgroundColor: accentColor,
-                                    border: '1.8px solid var(--surface-card)',
-                                }}
-                            />
+                            <CatMarker accentColor={accentColor} breathing={motionEnabled} />
                         </span>
 
                         {hoverInfo && (
@@ -441,6 +435,64 @@ const PillLabel: React.FC<{
                 {text}
             </text>
         </g>
+    );
+};
+
+// 小猫头：耳朵尖朝上，脸心对准数据点
+const CatMarker: React.FC<{ accentColor: string; breathing: boolean }> = ({
+    accentColor,
+    breathing,
+}) => (
+    <>
+        <span
+            className={`absolute -left-3 -top-3 h-6 w-6 rounded-full${breathing ? ' animate-pulse' : ''}`}
+            style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 16%, transparent)` }}
+        />
+        <svg
+            viewBox="0 0 24 22"
+            width={18}
+            height={16.5}
+            className="absolute -left-[9px] -top-[9px]"
+        >
+            <path
+                d="M3.5 1.5 L9 6.2 Q12 5.4 15 6.2 L20.5 1.5 Q22.5 7.5 22 12 Q21.2 20.5 12 20.5 Q2.8 20.5 2 12 Q1.5 7.5 3.5 1.5 Z"
+                fill={accentColor}
+                stroke="var(--surface-card)"
+                strokeWidth={2}
+                strokeLinejoin="round"
+            />
+            <ellipse cx={8.6} cy={12.6} rx={1.3} ry={1.7} fill="var(--surface-card)" />
+            <ellipse cx={15.4} cy={12.6} rx={1.3} ry={1.7} fill="var(--surface-card)" />
+        </svg>
+    </>
+);
+
+function toneColor(tone: LoadTone, accentColor: string): string {
+    switch (tone) {
+        case 'calm':
+            return 'var(--state-success)';
+        case 'warning':
+            return 'var(--state-warning)';
+        case 'danger':
+            return 'var(--state-danger)';
+        default:
+            return accentColor;
+    }
+}
+
+const LevelChip: React.FC<{ level: LoadLevel; accentColor: string }> = ({ level, accentColor }) => {
+    const base = toneColor(level.tone, accentColor);
+    // 琥珀、浅绿直接当字色在浅底上发虚，字色往正文色压一点
+    return (
+        <span
+            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
+            style={{
+                color: `color-mix(in srgb, ${base} 72%, var(--text-primary))`,
+                backgroundColor: `color-mix(in srgb, ${base} 12%, transparent)`,
+            }}
+        >
+            {level.label}
+        </span>
     );
 };
 
