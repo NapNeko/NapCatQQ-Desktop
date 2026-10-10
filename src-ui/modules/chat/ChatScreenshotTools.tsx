@@ -24,6 +24,7 @@ export function ChatScreenshotTools({
     const hideId = useId();
     const globalId = useId();
     const shortcutId = useId();
+    const addToChatId = useId();
     const stopRecording = () => {
         setRecording(false);
         screenshot.suspendShortcut(false);
@@ -87,6 +88,16 @@ export function ChatScreenshotTools({
                         >
                             <RotateCcw size={14} />
                         </Button>
+                    </div>
+                    <div className="native-chat-screenshot-row">
+                        <label htmlFor={addToChatId}>截图后添加到聊天框</label>
+                        <Switch
+                            id={addToChatId}
+                            checked={screenshot.preferences.addToChat}
+                            onCheckedChange={(addToChat) =>
+                                screenshot.updatePreferences({ addToChat })
+                            }
+                        />
                     </div>
                     <div className="native-chat-screenshot-row">
                         <label htmlFor={hideId}>截图时隐藏聊天窗口</label>

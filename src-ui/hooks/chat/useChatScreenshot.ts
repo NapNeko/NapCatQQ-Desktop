@@ -21,6 +21,7 @@ const captureListeners = new Set<() => void>();
 const preferenceListeners = new Set<() => void>();
 let preferences: ChatScreenshotPreferences | undefined;
 let shortcutConsumers = 0;
+let appShortcutConsumers = 0;
 let configuredShortcut: string | null = null;
 let requestedShortcut: string | null = null;
 let shortcutRevision = 0;
@@ -30,6 +31,7 @@ interface Capture {
     session: SessionKey;
     selfId: string;
     revision: number;
+    addToChat: boolean;
     cancelled: boolean;
     nativeId?: string;
     onFinished?: () => void;
@@ -103,13 +105,14 @@ function configureShortcut(
     context = '',
     hideWindow = true,
     releaseOwner = false,
+    addToChat = true,
 ) {
     const identity =
         shortcut === null
             ? releaseOwner
                 ? 'released'
                 : null
-            : JSON.stringify([global, shortcut, context, hideWindow]);
+            : JSON.stringify([global, shortcut, context, hideWindow, addToChat]);
     if (requestedShortcut === identity) return;
     requestedShortcut = identity;
     const revision = ++shortcutRevision;
@@ -125,6 +128,7 @@ function configureShortcut(
             context,
             hideWindow,
             releaseOwner,
+            addToChat,
         })
         .then(() => {
             configuredShortcut = identity;
@@ -143,6 +147,18 @@ function configureShortcut(
                     content: errorText(error),
                 });
         });
+}
+
+function configureAppShortcut() {
+    const preference = getPreferences();
+    configureShortcut(
+        preference.shortcut,
+        preference.globalShortcut,
+        '',
+        preference.hideWindow,
+        false,
+        preference.addToChat,
+    );
 }
 
 export async function cancelChatScreenshot(store?: ChatAccountStore): Promise<void> {
@@ -165,7 +181,7 @@ export async function captureChatScreenshot(
 ): Promise<void> {
     if (activeCapture) return;
     const account = store.getSnapshot().account;
-    if ((account.drafts[session] ?? EMPTY_DRAFT).attachments.length >= 8) {
+    if (options.addToChat && (account.drafts[session] ?? EMPTY_DRAFT).attachments.length >= 8) {
         pushInfoBar({
             key: 'chat:screenshot:capture',
             tone: 'warning',
@@ -179,12 +195,16 @@ export async function captureChatScreenshot(
         session,
         selfId: account.selfId,
         revision: store.viewRevision,
+        addToChat: options.addToChat,
         cancelled: false,
     };
     activeCapture = capture;
     emitCapture();
     try {
-        const file = await chatScreenshotService.capture({ hideWindow: options.hideWindow });
+        const file = await chatScreenshotService.capture({
+            hideWindow: options.hideWindow,
+            addToChat: options.addToChat,
+        });
         applyScreenshot(capture, file);
     } catch (error) {
         if (!capture.cancelled)
@@ -221,6 +241,7 @@ function applyScreenshot(capture: Capture, file: ChatScreenshotAttachment | null
             title: '截图已完成，剪贴板未更新',
             content: file.clipboardError,
         });
+    if (!capture.addToChat) return;
     if (latest.attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
     const path = isLocalFileToken(file.path)
         ? file.path.slice(LOCAL_FILE_PREFIX.length)
@@ -263,7 +284,8 @@ function receiveShortcut(event: ChatScreenshotShortcutEvent) {
     try {
         if (event.result.kind === 'failed') throw new Error(event.result.message);
         applyScreenshot(capture, event.result.file);
-        if (capture.store.getSnapshot().account.active === capture.session) capture.onFinished?.();
+        if (capture.addToChat && capture.store.getSnapshot().account.active === capture.session)
+            capture.onFinished?.();
     } catch (error) {
         if (!capture.cancelled)
             pushInfoBar({
@@ -314,8 +336,10 @@ export function useChatScreenshot(
     }, []);
     const start = useCallback(async () => {
         if (collapsed || activeCapture) return;
-        await captureChatScreenshot(store, session);
-        if (mounted.current && store.getSnapshot().account.active === session) finished.current?.();
+        const options = getPreferences();
+        await captureChatScreenshot(store, session, options);
+        if (options.addToChat && mounted.current && store.getSnapshot().account.active === session)
+            finished.current?.();
     }, [store, session, collapsed]);
     useEffect(() => {
         if (shortcutSuspended) {
@@ -331,6 +355,7 @@ export function useChatScreenshot(
             session,
             selfId,
             revision: viewRevision,
+            addToChat: preference.addToChat,
             cancelled: false,
             onFinished: () => {
                 if (mounted.current) finished.current?.();
@@ -347,6 +372,8 @@ export function useChatScreenshot(
             preference.globalShortcut,
             context,
             preference.hideWindow,
+            false,
+            preference.addToChat,
         );
         const handle = (event: globalThis.KeyboardEvent) => {
             if (isTauri) return;
@@ -371,6 +398,7 @@ export function useChatScreenshot(
             shortcutCleanup = setTimeout(() => {
                 if (!shortcutConsumers) {
                     configureShortcut(null, true, '', true, true);
+                    if (appShortcutConsumers) configureAppShortcut();
                     if (!activeCapture) shortcutContexts.clear();
                 }
             }, 0);
@@ -382,6 +410,7 @@ export function useChatScreenshot(
         preference.shortcut,
         preference.globalShortcut,
         preference.hideWindow,
+        preference.addToChat,
         start,
         context,
         store,
@@ -390,4 +419,21 @@ export function useChatScreenshot(
         viewRevision,
     ]);
     return { capturing, preferences: preference, updatePreferences, start, suspendShortcut };
+}
+
+export function useAppScreenshotShortcut(enabled: boolean) {
+    const preference = useSyncExternalStore(subscribePreferences, getPreferences, getPreferences);
+    useEffect(() => {
+        if (!enabled) {
+            requestedShortcut = null;
+            configuredShortcut = null;
+            return;
+        }
+        appShortcutConsumers++;
+        // 输入框会提供会话目标；启动兜底只负责让快捷键在其他页面也可用。
+        if (!shortcutConsumers) configureAppShortcut();
+        return () => {
+            appShortcutConsumers--;
+        };
+    }, [enabled, preference]);
 }

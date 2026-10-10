@@ -11,10 +11,12 @@ describe('screenshot preferences', () => {
         expect(parseScreenshotPreferences('{')).toEqual(DEFAULT_SCREENSHOT_PREFERENCES);
         expect(parseScreenshotPreferences(null)).toEqual(DEFAULT_SCREENSHOT_PREFERENCES);
         expect(parseScreenshotPreferences('{"hideWindow":false}')).toEqual({
+            addToChat: true,
             hideWindow: false,
             globalShortcut: true,
             shortcut: 'Ctrl+Alt+S',
         });
+        expect(parseScreenshotPreferences('{"addToChat":false}').addToChat).toBe(false);
         expect(parseScreenshotPreferences('{"shortcut":"Meta+S"}').shortcut).toBe('Ctrl+Alt+S');
     });
 

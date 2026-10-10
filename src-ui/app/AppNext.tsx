@@ -42,6 +42,7 @@ import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTa
 import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminalStore';
 import { featureTogglesStore, useFeatures } from '../hooks/preferences/featureTogglesStore';
 import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
+import { useAppScreenshotShortcut } from '../hooks/chat/useChatScreenshot';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
@@ -200,6 +201,7 @@ export const AppNext: React.FC = () => {
     const { servers } = useServerManager();
     const dockerHostIds = useMemo(() => servers.map((p) => `remote:${p.id}`), [servers]);
     const features = useFeatures();
+    useAppScreenshotShortcut(features.chat);
     // 容器页关了就不去每台远端探 Docker，这份探测只为决定侧栏要不要显示容器页
     const dockerProbeHostIds = features.dockerPage ? dockerHostIds : NO_HOSTS;
     const dockerStatusByHost = useDockerStatusByHost(dockerProbeHostIds);

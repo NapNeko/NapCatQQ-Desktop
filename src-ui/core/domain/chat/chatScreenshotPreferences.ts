@@ -1,5 +1,6 @@
 // 截图偏好只保存开关和组合键，旧值或损坏值回到默认设置。
 export interface ChatScreenshotPreferences {
+    addToChat: boolean;
     hideWindow: boolean;
     globalShortcut: boolean;
     shortcut: string;
@@ -7,6 +8,7 @@ export interface ChatScreenshotPreferences {
 
 export const SCREENSHOT_PREFERENCES_KEY = 'ncd.chat.screenshot.v1';
 export const DEFAULT_SCREENSHOT_PREFERENCES: ChatScreenshotPreferences = {
+    addToChat: true,
     hideWindow: true,
     globalShortcut: true,
     shortcut: 'Ctrl+Alt+S',
@@ -36,6 +38,10 @@ export function parseScreenshotPreferences(raw: string | null): ChatScreenshotPr
         if (!value || typeof value !== 'object') return DEFAULT_SCREENSHOT_PREFERENCES;
         const saved = value as Record<string, unknown>;
         return {
+            addToChat:
+                typeof saved.addToChat === 'boolean'
+                    ? saved.addToChat
+                    : DEFAULT_SCREENSHOT_PREFERENCES.addToChat,
             globalShortcut:
                 typeof saved.globalShortcut === 'boolean'
                     ? saved.globalShortcut

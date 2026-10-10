@@ -6,6 +6,7 @@ import {
     captureChatScreenshot,
     cancelChatScreenshot,
     useChatScreenshot,
+    useAppScreenshotShortcut,
 } from './useChatScreenshot';
 import { ChatAccountStore, prepareChatHandoff } from './chatStore';
 import { ChatComposer } from '../../modules/chat/ChatComposer';
@@ -38,7 +39,12 @@ const file: ChatScreenshotAttachment = {
     width: 1920,
     height: 1080,
 };
-const options = { hideWindow: true, globalShortcut: true, shortcut: 'Ctrl+Alt+S' };
+const options = {
+    addToChat: true,
+    hideWindow: true,
+    globalShortcut: true,
+    shortcut: 'Ctrl+Alt+S',
+};
 const ok = (data: unknown): DebugCallResponse => ({
     request_id: 'request',
     result: {
@@ -115,6 +121,65 @@ beforeEach(() => {
 });
 
 describe('screenshot draft lifecycle', () => {
+    it('registers the application shortcut before any chat composer mounts', async () => {
+        const hook = renderHook(({ enabled }) => useAppScreenshotShortcut(enabled), {
+            initialProps: { enabled: false },
+        });
+        expect(screenshot.shortcut).not.toHaveBeenCalled();
+        hook.rerender({ enabled: true });
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: true, global: true, context: '', key: 'S' }),
+            ),
+        );
+        hook.unmount();
+    });
+
+    it('keeps the mounted conversation target when application preferences change', async () => {
+        const { store } = setup();
+        const hook = renderHook(
+            ({ enabled }) => {
+                useAppScreenshotShortcut(enabled);
+                return useChatScreenshot(store, 'private:12', false);
+            },
+            { initialProps: { enabled: true } },
+        );
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    enabled: true,
+                    context: expect.stringContaining('/private:12/'),
+                }),
+            ),
+        );
+        const context = screenshot.shortcut.mock.calls.at(-1)![0].context;
+        act(() => hook.result.current.updatePreferences({ hideWindow: false }));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: true, context, hideWindow: false }),
+            ),
+        );
+        act(() => hook.result.current.updatePreferences({ hideWindow: true }));
+        hook.unmount();
+    });
+
+    it('re-registers the application shortcut after the feature is re-enabled', async () => {
+        const hook = renderHook(({ enabled }) => useAppScreenshotShortcut(enabled), {
+            initialProps: { enabled: false },
+        });
+        hook.rerender({ enabled: true });
+        await waitFor(() => expect(screenshot.shortcut).toHaveBeenCalled());
+        screenshot.shortcut.mockClear();
+        hook.rerender({ enabled: false });
+        hook.rerender({ enabled: true });
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: true, context: '' }),
+            ),
+        );
+        hook.unmount();
+    });
+
     it('unregisters the global key while recording and enables it again afterwards', async () => {
         const { store } = setup();
         const hook = renderHook(() => useChatScreenshot(store, 'private:12', false));
@@ -166,6 +231,70 @@ describe('screenshot draft lifecycle', () => {
         );
         expect(hook.result.current.capturing).toBe(false);
         expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(1);
+        hook.unmount();
+    });
+
+    it('does not block capture when a full draft is not receiving the screenshot', async () => {
+        const { store } = setup();
+        const attachments = Array.from({ length: 8 }, (_, index) => ({
+            key: String(index),
+            type: 'face' as const,
+            id: '14',
+            name: '微笑',
+        }));
+        store.draft('private:12', { ...EMPTY_DRAFT, attachments });
+        await captureChatScreenshot(store, 'private:12', { ...options, addToChat: false });
+        expect(screenshot.capture).toHaveBeenCalledWith({ hideWindow: true, addToChat: false });
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(8);
+    });
+
+    it('respects the add-to-chat preference for native hotkey captures', async () => {
+        const { store } = setup();
+        const receive = (event: ChatScreenshotShortcutEvent) => screenshot.handler?.(event);
+        const onFinished = vi.fn();
+        const hook = renderHook(() => useChatScreenshot(store, 'private:12', false, onFinished));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenCalledWith(
+                expect.objectContaining({ enabled: true }),
+            ),
+        );
+        act(() => hook.result.current.updatePreferences({ addToChat: false }));
+        await waitFor(() => {
+            expect(hook.result.current.preferences.addToChat).toBe(false);
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ addToChat: false }),
+            );
+        });
+        const { context } = screenshot.shortcut.mock.calls.at(-1)![0];
+        act(() =>
+            receive({ v: 1, context, capture_id: 'native-no-attach', result: { kind: 'started' } }),
+        );
+        act(() =>
+            receive({
+                v: 1,
+                context,
+                capture_id: 'native-no-attach',
+                result: { kind: 'finished', file },
+            }),
+        );
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
+        expect(onFinished).not.toHaveBeenCalled();
+        act(() => hook.result.current.updatePreferences({ addToChat: true }));
+        hook.unmount();
+    });
+
+    it('does not refocus the composer after a clipboard-only toolbar capture', async () => {
+        const { store } = setup();
+        const onFinished = vi.fn();
+        const hook = renderHook(() => useChatScreenshot(store, 'private:12', false, onFinished));
+        act(() => hook.result.current.updatePreferences({ addToChat: false }));
+        await act(async () => {
+            await hook.result.current.start();
+        });
+        expect(screenshot.capture).toHaveBeenCalledWith({ hideWindow: true, addToChat: false });
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
+        expect(onFinished).not.toHaveBeenCalled();
+        act(() => hook.result.current.updatePreferences({ addToChat: true }));
         hook.unmount();
     });
 
