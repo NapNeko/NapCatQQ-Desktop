@@ -22,6 +22,7 @@ import { GlobalTitleTooltip, InfoBarStack, TooltipProvider } from '../shared/ui'
 // fallback 直引，避免只为 Spinner 再钉死整个 shared/ui barrel 图。
 import { PagePlaceholder } from '../shared/ui/PagePlaceholder';
 import { Spinner } from '../shared/ui/Spinner';
+import { FLOAT_LAYER_ID } from '../shared/ui/BodyPortal';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
 import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
@@ -396,9 +397,7 @@ export const AppNext: React.FC = () => {
                     <div
                         className={
                             'ndf-canvas-glow' +
-                            (motion.preset.feel.overshoot &&
-                            motion.enabled &&
-                            route === 'overview'
+                            (motion.preset.feel.overshoot && motion.enabled && route === 'overview'
                                 ? ' is-breathing'
                                 : '')
                         }
@@ -458,6 +457,9 @@ export const AppNext: React.FC = () => {
                                 </div>
                             </div>
                         </main>
+
+                        {/* 贴底悬浮按钮的挂载槽：在 main（z-10）之上、终端面板之下 */}
+                        <div id={FLOAT_LAYER_ID} className="contents" />
 
                         {features.terminal && (
                             <Suspense fallback={null}>

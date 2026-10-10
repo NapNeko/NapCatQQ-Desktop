@@ -184,8 +184,8 @@ export function TerminalDock() {
             gsap.set(el, { clearProps: 'transform' });
     }, [shownMax]);
 
-    // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这几样避开面板。
-    // 面板贴着窗口底边、离底有一截空隙，抬的高度按「面板顶边到窗口底」算
+    // --terminal-dock-inset 给聊天页让出面板高度（chat.css）；data-terminal-covers 让贴底悬浮按钮
+    // 在面板铺满时藏起来。面板贴着窗口底边、离底有一截空隙，按「面板顶边到窗口底」算
     useLayoutEffect(() => {
         const root = document.documentElement;
         const dock = dockRef.current;
@@ -303,13 +303,6 @@ export function TerminalDock() {
     }, []);
     const drop = useTerminalFileDrop(state.open && state.groups.length > 0, onDrop);
 
-    // 悬浮按钮跟着面板滑上滑下；拖高度时逐帧跟手，不带过渡
-    const glide = motion.enabled && !resize.dragging;
-    useLayoutEffect(() => {
-        document.documentElement.toggleAttribute('data-terminal-glide', glide);
-        return () => document.documentElement.removeAttribute('data-terminal-glide');
-    }, [glide]);
-
     if (!mounted) return null;
     const activeGroup = state.groups.find((g) => g.id === state.activeGroup) ?? null;
     const height = layout.height;
@@ -322,7 +315,8 @@ export function TerminalDock() {
             aria-label="终端"
             data-motion={motion.enabled ? 'on' : 'off'}
             className={cn(
-                'ncd-term absolute inset-x-2 bottom-2 z-20 flex min-h-0 flex-col overflow-hidden rounded-md',
+                // z 高过浮层槽里的悬浮按钮（z-30 / 批量条 z-50），面板盖住它们
+                'ncd-term absolute inset-x-2 bottom-2 z-[60] flex min-h-0 flex-col overflow-hidden rounded-md',
                 'border border-border-subtle bg-surface shadow-popover',
                 // 最大化时顶到标题栏下面（标题栏 h-11）
                 shownMax && 'top-11',

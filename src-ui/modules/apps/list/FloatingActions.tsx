@@ -6,7 +6,7 @@ import { Boxes, Import, RefreshCw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
 import { FAB_PRIMARY_MOTION, MotionIcon, refreshMotion } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
-import { BodyPortal } from '../../../shared/ui/BodyPortal';
+import { FloatLayerPortal } from '../../../shared/ui/BodyPortal';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 
 interface FloatingActionsProps {
@@ -48,7 +48,7 @@ export function FloatingActions({
     }, [m.enabled, m.level, m.speed, m.duration, m.ease.enter]);
 
     return (
-        <BodyPortal>
+        <FloatLayerPortal>
             <div
                 ref={groupRef}
                 className="float-above-terminal pointer-events-none fixed bottom-6 right-6 z-30 flex flex-col items-center gap-3"
@@ -103,7 +103,7 @@ export function FloatingActions({
                     </CircleButton>
                 ) : null}
             </div>
-        </BodyPortal>
+        </FloatLayerPortal>
     );
 }
 

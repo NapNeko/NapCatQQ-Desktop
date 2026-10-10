@@ -1,7 +1,7 @@
 // 右下角悬浮三圆按钮(新增 / 刷新 / 进入批量模式)。
 //
 // 不用 GsapPresence 包整组：进场依赖 refReady + 初始 hidden，在 Tauri/WebView 里
-// 容易一直卡在不可见。定位与远端页 FloatingAddButton 一致，仅多 BodyPortal 防裁切。
+// 容易一直卡在不可见。定位与远端页 FloatingAddButton 一致，仅多 FloatLayerPortal 防裁切。
 
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
@@ -14,7 +14,7 @@ import {
     refreshMotion,
 } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
-import { BodyPortal } from '../../../../shared/ui/BodyPortal';
+import { FloatLayerPortal } from '../../../../shared/ui/BodyPortal';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 
 interface FloatingActionsProps {
@@ -59,7 +59,7 @@ export function FloatingActions({
     if (!visible) return null;
 
     return (
-        <BodyPortal>
+        <FloatLayerPortal>
             <div
                 ref={groupRef}
                 className="float-above-terminal pointer-events-none fixed bottom-6 right-6 z-30 flex flex-col items-center gap-3"
@@ -130,7 +130,7 @@ export function FloatingActions({
                     />
                 </CircleButton>
             </div>
-        </BodyPortal>
+        </FloatLayerPortal>
     );
 }
 
