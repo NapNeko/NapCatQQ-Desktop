@@ -395,6 +395,16 @@ export const AppNext: React.FC = () => {
                 <div className="relative flex flex-1 overflow-hidden">
                     <div
                         className={
+                            'ndf-canvas-glow' +
+                            (motion.preset.feel.overshoot &&
+                            motion.enabled &&
+                            route === 'overview'
+                                ? ' is-breathing'
+                                : '')
+                        }
+                    />
+                    <div
+                        className={
                             motion.enabled ? 'ndf-shell-enter-sidebar flex h-full' : 'flex h-full'
                         }
                     >
@@ -410,18 +420,7 @@ export const AppNext: React.FC = () => {
                         />
                     </div>
 
-                    <div className="relative flex flex-1 flex-col overflow-hidden">
-                        <div
-                            className={
-                                'ndf-canvas-glow' +
-                                (motion.preset.feel.overshoot &&
-                                motion.enabled &&
-                                route === 'overview'
-                                    ? ' is-breathing'
-                                    : '')
-                            }
-                        />
-
+                    <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
                         <div className={motion.enabled ? 'ndf-shell-enter-titlebar' : ''}>
                             <CustomTitleBar />
                         </div>

@@ -37,7 +37,7 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
 
-                <FieldRow label="侧栏形态" description="悬浮卡片不遮挡内容；经典为贴边可折叠">
+                <FieldRow label="侧栏形态" description="悬浮为窄图标卡片；经典为贴边可折叠">
                     <SidebarStyleSegment
                         value={draft.sidebarStyle}
                         onChange={(v) => patchDraft({ sidebarStyle: v })}

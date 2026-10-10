@@ -89,8 +89,8 @@ export const Sidebar = memo(function Sidebar({
     taskQueueActiveCount = 0,
 }: SidebarProps) {
     const floating = sidebarStyle === 'floating';
-    // 悬浮卡片没有折叠态；collapsed 只对经典档生效。
-    const effectiveCollapsed = !floating && collapsed;
+    // 悬浮档 = 窄图标悬浮卡片：行恒图标态、无折叠按钮；collapsed 只对经典档生效。
+    const compact = floating || collapsed;
     const mainNavItems = hiddenRoutes?.size
         ? MAIN_NAV.filter((item) => !hiddenRoutes.has(item.id))
         : MAIN_NAV;
@@ -132,21 +132,32 @@ export const Sidebar = memo(function Sidebar({
             className={cn(
                 'relative z-20 flex shrink-0 flex-col bg-sidebar',
                 floating
-                    // 悬浮卡片：离边留缝 + 圆角 + 投影描边，恒展开（w 与展开态一致）。
-                    ? 'my-2 ml-2 w-48 overflow-hidden rounded-xl border border-border-subtle shadow-card'
-                    : cn(
-                          'transition-[width] duration-200 ease-out',
-                          collapsed ? 'w-14' : 'w-56',
-                      ),
+                    ? // 离边留缝 + 圆角 + 投影描边；窄身，图标居中。
+                      'my-2 ml-2 w-14 overflow-hidden rounded-xl border border-border-subtle shadow-card'
+                    : cn('transition-[width] duration-200 ease-out', collapsed ? 'w-14' : 'w-56'),
             )}
         >
             <div
                 className={cn(
                     'flex h-12 shrink-0 items-center overflow-hidden',
-                    effectiveCollapsed ? 'justify-center px-0' : 'gap-2 px-3',
+                    compact ? 'justify-center px-0' : 'gap-2 px-3',
                 )}
             >
-                {effectiveCollapsed ? (
+                {floating ? (
+                    <div
+                        className="flex min-w-0 flex-1 items-center justify-center"
+                        data-tauri-drag-region
+                    >
+                        <img
+                            src={logoSidebarCollapsed}
+                            alt="NapCatQQ-Desktop logo"
+                            width={28}
+                            height={28}
+                            className={LOGO_IMG_CLASS}
+                            draggable={false}
+                        />
+                    </div>
+                ) : collapsed ? (
                     <button
                         type="button"
                         onClick={onToggleCollapse}
@@ -196,7 +207,6 @@ export const Sidebar = memo(function Sidebar({
                                 NapCatQQ-Desktop
                             </span>
                         </div>
-                        {!floating && (
                         <button
                             type="button"
                             onClick={onToggleCollapse}
@@ -216,7 +226,6 @@ export const Sidebar = memo(function Sidebar({
                                 strokeWidth={1.75}
                             />
                         </button>
-                        )}
                     </>
                 )}
             </div>
@@ -237,7 +246,7 @@ export const Sidebar = memo(function Sidebar({
                             key={item.id}
                             item={item}
                             isActive={active === item.id}
-                            collapsed={effectiveCollapsed}
+                            collapsed={compact}
                             onSelect={onChange}
                             onPrefetch={onPrefetch}
                         />
@@ -248,7 +257,7 @@ export const Sidebar = memo(function Sidebar({
                     <TaskQueueNavRow
                         item={TASKS_NAV}
                         isActive={active === 'tasks'}
-                        collapsed={effectiveCollapsed}
+                        collapsed={compact}
                         activeCount={taskQueueActiveCount}
                         onSelect={onChange}
                         onPrefetch={onPrefetch}
@@ -256,7 +265,7 @@ export const Sidebar = memo(function Sidebar({
                     <NavRow
                         item={SETTINGS_NAV}
                         isActive={active === 'settings'}
-                        collapsed={effectiveCollapsed}
+                        collapsed={compact}
                         onSelect={onChange}
                         onPrefetch={onPrefetch}
                     />
