@@ -146,24 +146,18 @@ pub async fn list_bot_flavors(
     state.bot_manager.list_bot_flavors().await.map_err(map_err)
 }
 
-/// 当前内存中的 NapCat WebUI (port, token);多实例 port 可能 +1
-/// 前端冷启动 / 刷新后 hydrate,不依赖是否还听得到历史事件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NapcatWebuiBindingDto {
-    pub bot_id: String,
-    pub port: u16,
-    pub token: String,
-    pub online: Option<bool>,
-}
+pub use ncd_domain::napcat_events::NapcatWebuiBindingDto;
 
 #[tauri::command]
 pub async fn list_napcat_webui_bindings(
     state: State<'_, AppState>,
 ) -> Result<Vec<NapcatWebuiBindingDto>, String> {
     let rows = state.bot_manager.list_napcat_webui_endpoints().await;
+    let mut issues = state.bot_manager.list_napcat_webui_auth_issues().await;
     Ok(rows
         .into_iter()
         .map(|(id, port, token, online)| NapcatWebuiBindingDto {
+            auth_issue: issues.remove(&id),
             bot_id: id.to_string(),
             port,
             token,
