@@ -115,7 +115,7 @@ flowchart TB
 | 路由 NC/SL × Local/Server × Native/Docker | `crates/ncd-runtime/src/launch/router.rs` + `bot_manager` `backend_for_config`；远端选中路径取自组件执行器那份 `RemoteInventoryService`（`BotManager::with_remote_inventory`） |
 | Actor 状态机 | `crates/ncd-runtime/src/bot_actor.rs` + `ncd-domain/bot_actor.rs` |
 | 本机启动计划 | `crates/ncd-runtime/src/launch/plan.rs` |
-| Docker 会话（隧道/日志/poller） | `crates/ncd-runtime/src/remote/docker_session.rs` |
+| Docker 会话（隧道/日志/poller） | `crates/ncd-runtime/src/remote/docker_session.rs`；NapCat WebUI token 以容器 `/app/napcat/config/webui.json` 为准（`docker_helpers::read_napcat_docker_webui_token`），日志出现新 token 或鉴权被拒时重读（`remote/docker_webui_token.rs`） |
 | 远端 runtime 会话表 | `crates/ncd-runtime/src/remote/runtime_sessions.rs` |
 | 远端日志 follow | `crates/ncd-runtime/src/remote/bot_log_follow.rs` |
 | 冷启动 reconcile | `crates/ncd-runtime/src/bootstrap/reconcile.rs` |
@@ -136,7 +136,8 @@ KB：`.claude/kb/desktop-routing.md`, `nc-vs-sl.md`
 |--------|--------|
 | crate 入口 | `crates/ncd-backend-napcat/src/lib.rs` |
 | WebUI 客户端 | `.../napcat/webui_client/`（trait / client / payloads / error） |
-| 登录轮询 | `.../napcat/login_poller/`（loop / transitions / types + 测试） |
+| 登录轮询 | `.../napcat/login_poller/`（loop / transitions / types / backoff + 测试）；换凭据失败退避，原因经 `napcat_webui_auth_changed` 推给徽章 |
+| webui.json 解析 | `.../napcat/webui_config.rs` |
 | 端点表 | `.../napcat/endpoint_table.rs` |
 | 离线通知 | `.../napcat/offline_notifier.rs` |
 | 远端 NapCat session | `.../remote_native_napcat_session/`（含 `launch.rs` 启动规划） |
