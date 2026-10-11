@@ -1469,6 +1469,7 @@ export class ChatAccountStore {
             data: {
                 user_id: message.senderId,
                 nickname: message.senderName,
+                message_id: message.id,
                 time: Math.floor(message.at / 1000),
                 content: message.segments,
             },
@@ -1513,7 +1514,6 @@ export class ChatAccountStore {
                     requestId,
                 );
             } catch (error) {
-                message_id: message.id,
                 throw new ChatForwardError(
                     `转发结果待确认：${errorText(error)}。请先查看目标会话`,
                     true,
