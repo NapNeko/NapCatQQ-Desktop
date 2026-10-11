@@ -690,6 +690,7 @@ pub(crate) fn sync_ui_preferences(app: &tauri::AppHandle) {
         return;
     };
     let ui = ncd_runtime::desktop::load_app_settings(&state.data_root).ui_preferences;
+    crate::native_panel::window::set_motion(ui.motion_enabled, ui.motion_speed);
     set_ui_preferences(UiPreferences {
         theme: ui.theme,
         radius_style: ui.radius_style,

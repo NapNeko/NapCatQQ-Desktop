@@ -19,6 +19,7 @@ import {
     restoreArchive,
     mergeRecentConversations,
 } from '../../core/domain/chat/archive';
+import { fileSegmentName, fileSegmentSource } from '../../core/domain/chat/groupFiles';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import { markdownContent } from '../../core/domain/debug/markdown';
 import {
@@ -47,12 +48,13 @@ import {
 } from '../../core/domain/chat/model';
 import { HISTORY_PAGE_SIZE, type ReadingAnchor } from '../../core/domain/chat/messageWorkingSet';
 import { buildMessageSegments } from '../../core/domain/debug/composerModel';
-import { localFileTokenFor } from '../../core/domain/debug/streamActions';
+import { localFileTokenFor, LOCAL_FILE_PREFIX } from '../../core/domain/debug/streamActions';
 import { debugErrorCopy } from '../../core/domain/debug/errorCopy';
 import { errorText } from '../../core/domain/errors';
 import { normalizeMessage, type Segment } from '../../core/domain/debug/segments';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugReceiverState } from '../../core/ipc/generated/debug/DebugReceiverState';
+import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 import {
     canForwardMessage,
@@ -60,11 +62,13 @@ import {
     canRepeatMessage,
     ChatForwardError,
     FORWARD_MESSAGE_LIMIT,
+    type ForwardMode,
 } from '../../core/domain/chat/messageTransfer';
 
 export interface ChatSnapshot {
     account: Account;
     contacts: Contact[];
+    sendProgress: Record<string, DebugStreamProgress>;
     connection: DebugReceiverState;
     error: string;
     contactsLoading: boolean;
@@ -101,6 +105,8 @@ export class ChatAccountStore {
     private epoch = 0;
     private subscription: string | null = null;
     private connecting = false;
+    private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    private reconnectAttempt = 0;
     private reading: SessionKey | null = null;
     private sends = new Map<SessionKey, number>();
     private recalls = new Map<string, number>();
@@ -133,6 +139,7 @@ export class ChatAccountStore {
         this.snapshot = {
             account: emptyAccount(String(target.qq_id)),
             contacts: [],
+            sendProgress: {},
             connection: { state: 'stopped', reason: '尚未连接' },
             error: '',
             contactsLoading: false,
@@ -660,6 +667,7 @@ export class ChatAccountStore {
         this.recentRequest = null;
         const account = this.snapshot.account;
         this.update({
+            sendProgress: {},
             contactsLoading: false,
             recentLoading: false,
             history: Object.fromEntries(
@@ -678,7 +686,27 @@ export class ChatAccountStore {
             },
         });
     }
+    private scheduleReconnect() {
+        if (
+            this.reconnectTimer ||
+            this.connecting ||
+            !this.hasViewers() ||
+            this.releaseWhenIdle ||
+            !this.target.running ||
+            this.target.online === false ||
+            this.snapshot.connection.state !== 'stopped'
+        )
+            return;
+        const delay = Math.min(30_000, 1000 * 2 ** Math.min(this.reconnectAttempt++, 5));
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = undefined;
+            if (this.hasViewers()) void this.initialize();
+        }, delay);
+    }
     async disconnect() {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = undefined;
+        this.reconnectAttempt = 0;
         this.setReading(null);
         this.epoch++;
         this.connecting = false;
@@ -686,7 +714,7 @@ export class ChatAccountStore {
         const subscription = this.subscription;
         this.subscription = null;
         this.interruptPending();
-        this.update({ connection: { state: 'stopped', reason: '已断开' } });
+        this.update({ connection: { state: 'stopped', reason: '已断开' }, sendProgress: {} });
         if (subscription) {
             try {
                 await this.transport.unsubscribe(subscription);
@@ -698,6 +726,8 @@ export class ChatAccountStore {
     async connect() {
         if (this.connecting || !this.target.running || this.target.online === false) return;
         if (this.subscription && this.snapshot.connection.state !== 'stopped') return;
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = undefined;
         const old = this.subscription;
         this.subscription = null;
         const epoch = ++this.epoch;
@@ -707,6 +737,7 @@ export class ChatAccountStore {
         try {
             if (old) await this.transport.unsubscribe(old);
             if (epoch !== this.epoch) return;
+            let receivedState = false;
             const result = await this.transport.subscribe(this.target.bot_id, (batch) => {
                 if (epoch !== this.epoch || batch.bot_id !== this.target.bot_id || batch.v !== 1)
                     return;
@@ -720,8 +751,10 @@ export class ChatAccountStore {
                         const self = id(body.payload.self_id);
                         if (self && self !== account.selfId) continue;
                         payloads.push(body.payload);
-                    } else if (body.kind === 'receiver') connection = body.state;
-                    else if (body.kind === 'gap' || body.kind === 'dropped')
+                    } else if (body.kind === 'receiver') {
+                        receivedState = true;
+                        connection = body.state;
+                    } else if (body.kind === 'gap' || body.kind === 'dropped')
                         account = { ...account, gap: true };
                     account = { ...account, lastSeq: event.seq };
                 }
@@ -740,6 +773,12 @@ export class ChatAccountStore {
                     connection.state === 'connected' &&
                     this.snapshot.connection.state !== 'connected';
                 this.update({ account, connection });
+                if (connection.state === 'connected') {
+                    this.reconnectAttempt = 0;
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = undefined;
+                }
+                if (connection.state === 'stopped') this.scheduleReconnect();
                 if (becameConnected) {
                     void this.loadContacts();
                     void this.loadRecent();
@@ -750,7 +789,8 @@ export class ChatAccountStore {
                 return;
             }
             this.subscription = result.subscription_id;
-            this.update({ connection: result.receiver.state });
+            if (!receivedState) this.update({ connection: result.receiver.state });
+            if (this.snapshot.connection.state === 'connected') this.reconnectAttempt = 0;
         } catch (error) {
             if (epoch === this.epoch)
                 this.update({
@@ -758,7 +798,10 @@ export class ChatAccountStore {
                     connection: { state: 'stopped', reason: errorText(error) },
                 });
         } finally {
-            if (epoch === this.epoch) this.connecting = false;
+            if (epoch === this.epoch) {
+                this.connecting = false;
+                this.scheduleReconnect();
+            }
         }
     }
     loadContacts(): Promise<void> {
@@ -1295,7 +1338,12 @@ export class ChatAccountStore {
             true,
         );
     }
-    async forward(messageKeys: readonly string[], contact: Contact): Promise<void> {
+    async forward(
+        messageKeys: readonly string[],
+        contact: Contact,
+        mode: ForwardMode = 'merged',
+        onProgress?: (sent: number, total: number) => void,
+    ): Promise<void> {
         this.requireConnected();
         const keys = [...new Set(messageKeys)];
         if (!keys.length || keys.length > FORWARD_MESSAGE_LIMIT)
@@ -1313,6 +1361,106 @@ export class ChatAccountStore {
             throw new Error('转发目标不属于当前账号');
         const epoch = this.epoch;
         if (this.sends.get(contact.key) === epoch) throw new Error('该会话仍在发送，请稍后转发');
+        if (mode === 'individual') {
+            const state = this.snapshot.account;
+            this.account({
+                ...state,
+                conversations: {
+                    ...state.conversations,
+                    [contact.key]: {
+                        ...(state.conversations[contact.key] ?? {
+                            unread: 0,
+                            pinned: false,
+                            lastAt: 0,
+                            preview: '',
+                        }),
+                        ...known,
+                    },
+                },
+            });
+            this.sends.set(contact.key, epoch);
+            let sent = 0;
+            try {
+                for (const message of source) {
+                    this.requireConnected();
+                    if (epoch !== this.epoch)
+                        throw new ChatForwardError(
+                            `连接已改变，已转发 ${sent}/${source.length} 条，请查看目标会话`,
+                            true,
+                        );
+                    const segments = message.segments.filter(
+                        (segment) => segment.type !== 'reply' && segment.type !== 'file',
+                    );
+                    const operations: SendOperation[] = [];
+                    if (segments.length)
+                        operations.push({
+                            action:
+                                contact.type === 'group' ? 'send_group_msg' : 'send_private_msg',
+                            params: {
+                                [contact.type === 'group' ? 'group_id' : 'user_id']: this.peer(
+                                    contact.key,
+                                ),
+                                message: segments,
+                            },
+                            segments,
+                            resolveImages: true,
+                            sourceMessageId: message.id,
+                        });
+                    for (const segment of message.segments.filter(
+                        (segment) => segment.type === 'file',
+                    )) {
+                        const sourceContact = contactFromKey(message.session);
+                        const source = fileSegmentSource(
+                            { ...segment.data, file_id: segment.data.file_id ?? message.fileId },
+                            sourceContact,
+                        );
+                        const name = fileSegmentName(segment.data);
+                        const local = text(segment.data.file);
+                        const file = local.startsWith(LOCAL_FILE_PREFIX)
+                            ? local
+                            : source
+                              ? localFileTokenFor(
+                                    await chatService.cacheFile(this.target.bot_id, source, name),
+                                )
+                              : /^https?:\/\//i.test(local)
+                                ? local
+                                : '';
+                        if (!file) throw new Error('文件消息缺少可转发的来源');
+                        operations.push({
+                            action:
+                                contact.type === 'group'
+                                    ? 'upload_group_file'
+                                    : 'upload_private_file',
+                            params: {
+                                [contact.type === 'group' ? 'group_id' : 'user_id']: this.peer(
+                                    contact.key,
+                                ),
+                                file,
+                                name,
+                                upload_file: true,
+                            },
+                            segments: [{ type: 'file', data: { name, file } }],
+                        });
+                    }
+                    if (!operations.length) throw new Error('消息没有可转发的内容');
+                    await this.runSends(contact.key, operations, undefined, true, true);
+                    sent++;
+                    onProgress?.(sent, source.length);
+                }
+            } catch (error) {
+                const uncertain =
+                    sent > 0 || (error instanceof ChatForwardError && error.uncertain);
+                throw new ChatForwardError(
+                    `已转发 ${sent}/${source.length} 条：${errorText(error)}${uncertain ? '。请先查看目标会话，避免重复转发' : ''}`,
+                    uncertain,
+                );
+            } finally {
+                if (this.sends.get(contact.key) === epoch) this.sends.delete(contact.key);
+                if (this.releaseWhenIdle && !this.isSending() && !this.hasViewers())
+                    void releaseChatAccount(this).catch(() => {});
+            }
+            return;
+        }
         const scope = accountKey(this.target.bot_id, String(this.target.qq_id));
         const requestId = crypto.randomUUID();
         const peer = this.peer(contact.key);
@@ -1445,10 +1593,12 @@ export class ChatAccountStore {
         operations: SendOperation[],
         retryKey?: string,
         preserveDraft = false,
+        forwarding = false,
     ) {
         const epoch = this.epoch;
         const scope = accountKey(this.target.bot_id, String(this.target.qq_id));
         const created: string[] = [];
+        let completedOperations = 0;
         let prepared: SendOperation[];
         try {
             prepared = operations.map((operation) => ({
@@ -1502,6 +1652,7 @@ export class ChatAccountStore {
                             error: '发送已中止，此条尚未提交',
                         }),
                     );
+                    if (forwarding) throw new ChatForwardError('连接已改变，转发已停止', true);
                     continue;
                 }
                 if (
@@ -1535,9 +1686,14 @@ export class ChatAccountStore {
                                     : failed,
                             );
                         }
+                        if (forwarding)
+                            throw new ChatForwardError(errorText(error), completedOperations > 0);
                         continue;
                     }
-                    if (!this.actionIsCurrent(epoch, scope)) continue;
+                    if (!this.actionIsCurrent(epoch, scope)) {
+                        if (forwarding) throw new ChatForwardError('连接已改变，转发已停止', true);
+                        continue;
+                    }
                 }
                 let submitted = false;
                 try {
@@ -1553,16 +1709,34 @@ export class ChatAccountStore {
                         let imageIndex = 0;
                         for (const segment of operation.segments) {
                             if (!this.actionIsCurrent(epoch, scope)) break;
-                            segments.push(
-                                segment.type === 'image' || segment.type === 'mface'
-                                    ? await media.imageForSend(target, segment.data, {
-                                          messageId: operation.sourceMessageId,
-                                          imageIndex: imageIndex++,
-                                      })
-                                    : segment,
-                            );
+                            if (segment.type === 'record' || segment.type === 'video') {
+                                const reference =
+                                    segment.type === 'record'
+                                        ? await media.record(target, segment.data)
+                                        : await media.video(target, segment.data);
+                                segments.push({
+                                    type: segment.type,
+                                    data: {
+                                        file: reference.startsWith('data:')
+                                            ? `base64://${reference.slice(reference.indexOf(',') + 1)}`
+                                            : reference,
+                                    },
+                                });
+                            } else
+                                segments.push(
+                                    segment.type === 'image' || segment.type === 'mface'
+                                        ? await media.imageForSend(target, segment.data, {
+                                              messageId: operation.sourceMessageId,
+                                              imageIndex: imageIndex++,
+                                          })
+                                        : segment,
+                                );
                         }
-                        if (!this.actionIsCurrent(epoch, scope)) continue;
+                        if (!this.actionIsCurrent(epoch, scope)) {
+                            if (forwarding)
+                                throw new ChatForwardError('连接已改变，转发已停止', true);
+                            continue;
+                        }
                         params = { ...record(params), message: segments };
                     }
                     if (
@@ -1595,8 +1769,30 @@ export class ChatAccountStore {
                         operation.action,
                         params,
                         requestId,
+                        (progress) => {
+                            if (
+                                !this.actionIsCurrent(epoch, scope) ||
+                                progress.v !== 1 ||
+                                progress.request_id !== requestId ||
+                                !this.snapshot.account.messages.some(
+                                    (message) =>
+                                        message.requestId === requestId &&
+                                        message.status === 'sending',
+                                )
+                            )
+                                return;
+                            this.update({
+                                sendProgress: {
+                                    ...this.snapshot.sendProgress,
+                                    [requestId]: progress,
+                                },
+                            });
+                        },
                     );
-                    if (!this.actionIsCurrent(epoch, scope)) continue;
+                    if (!this.actionIsCurrent(epoch, scope)) {
+                        if (forwarding) throw new ChatForwardError('连接已改变，转发已停止', true);
+                        continue;
+                    }
                     if (response.result.kind === 'err') {
                         const error = response.result.error;
                         const unknown = ['timeout', 'cancelled', 'transport', 'internal'].includes(
@@ -1639,11 +1835,31 @@ export class ChatAccountStore {
                                 error: errorText(error),
                             }),
                         );
+                } finally {
+                    if (
+                        this.actionIsCurrent(epoch, scope) &&
+                        this.snapshot.sendProgress[requestId]
+                    ) {
+                        const next = { ...this.snapshot.sendProgress };
+                        delete next[requestId];
+                        this.update({ sendProgress: next });
+                    }
+                }
+                if (forwarding) {
+                    const message = this.snapshot.account.messages.find(
+                        (row) => row.requestId === requestId,
+                    );
+                    if (!this.actionIsCurrent(epoch, scope) || message?.status !== 'sent')
+                        throw new ChatForwardError(
+                            message?.error || '转发结果待确认',
+                            completedOperations > 0 || message?.status !== 'failed',
+                        );
+                    completedOperations++;
                 }
             }
         } finally {
-            if (this.sends.get(key) === epoch) this.sends.delete(key);
-            if (this.releaseWhenIdle && !this.isSending() && !this.hasViewers())
+            if (!forwarding && this.sends.get(key) === epoch) this.sends.delete(key);
+            if (!forwarding && this.releaseWhenIdle && !this.isSending() && !this.hasViewers())
                 void releaseChatAccount(this).catch(() => {});
         }
     }

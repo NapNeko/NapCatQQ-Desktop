@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { accountKey, type Contact } from '../../core/domain/chat/model';
-import { ChatForwardError } from '../../core/domain/chat/messageTransfer';
+import { type ForwardMode, ChatForwardError } from '../../core/domain/chat/messageTransfer';
 import { errorText } from '../../core/domain/errors';
 import { messagePreview } from '../../core/domain/debug/segments';
 import { Button } from '../../shared/ui/Button';
@@ -31,6 +31,8 @@ export function ChatForwardDialog({
     const snapshot = useChatSnapshot(store);
     const [query, setQuery] = useState('');
     const [target, setTarget] = useState<Contact | null>(null);
+    const [mode, setMode] = useState<ForwardMode>('merged');
+    const [progress, setProgress] = useState(0);
     const [busy, setBusy] = useState(false);
     const [uncertain, setUncertain] = useState(false);
     const [error, setError] = useState('');
@@ -78,7 +80,7 @@ export function ChatForwardDialog({
         setBusy(true);
         setError('');
         try {
-            await store.forward(messageKeys, target);
+            await store.forward(messageKeys, target, mode, setProgress);
             onSent();
         } catch (failure) {
             setUncertain(failure instanceof ChatForwardError && failure.uncertain);
@@ -103,6 +105,21 @@ export function ChatForwardDialog({
                 <DialogHeader>
                     <DialogTitle>转发 {messageKeys.length} 条消息</DialogTitle>
                 </DialogHeader>
+                <div className="flex gap-4 py-3" role="radiogroup" aria-label="转发方式">
+                    {(['merged', 'individual'] as const).map((value) => (
+                        <label key={value} className="flex items-center gap-2 text-xs">
+                            <input
+                                type="radio"
+                                name="forward-mode"
+                                value={value}
+                                checked={mode === value}
+                                disabled={busy || uncertain}
+                                onChange={() => setMode(value)}
+                            />
+                            {value === 'merged' ? '合并转发' : '逐条转发'}
+                        </label>
+                    ))}
+                </div>
                 <div className="native-chat-forward-preview">
                     {messages.slice(0, 3).map((message) => (
                         <div key={message.key} className="truncate">
@@ -167,7 +184,13 @@ export function ChatForwardDialog({
                         disabled={busy || uncertain || disconnected || !target}
                         onClick={() => void submit()}
                     >
-                        {busy ? '正在转发…' : uncertain ? '结果待确认' : '转发'}
+                        {busy
+                            ? mode === 'individual'
+                                ? `正在转发 ${progress}/${messageKeys.length}`
+                                : '正在转发…'
+                            : uncertain
+                              ? '结果待确认'
+                              : '转发'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

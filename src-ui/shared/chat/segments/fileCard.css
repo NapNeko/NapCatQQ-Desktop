@@ -1,0 +1,58 @@
+.chat-file-card {
+    display: flex;
+    gap: 12px;
+    width: 280px;
+    max-width: 100%;
+    padding: 14px;
+    margin-block: 2px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: var(--surface-card);
+    color: var(--text-primary);
+}
+.chat-file-card-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    height: 52px;
+    border-radius: 9px;
+    background: var(--brand-soft);
+    color: var(--brand);
+}
+.chat-file-card[data-category="archive"] .chat-file-card-icon {
+    color: #b7791f;
+    background: #b7791f18;
+}
+.chat-file-card[data-category="audio"] .chat-file-card-icon,
+.chat-file-card[data-category="video"] .chat-file-card-icon {
+    color: #8b5cf6;
+    background: #8b5cf618;
+}
+.chat-file-card-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 6px;
+}
+.chat-file-card-name {
+    font-size: 13px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.chat-file-card-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+.chat-file-card-actions {
+    padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+}
+.chat-file-card-actions:empty {
+    display: none;
+}

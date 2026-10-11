@@ -19,6 +19,7 @@ import {
 } from '../../core/domain/chat/model';
 import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
 import { errorText } from '../../core/domain/errors';
+import { useCommittedCaret } from '../../hooks/ui/useCommittedCaret';
 import { useChatSend } from '../../hooks/chat/useChatSend';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
@@ -47,10 +48,11 @@ export function ChatComposer({
     collapsed?: boolean;
 }) {
     const snapshot = useChatSnapshot(store);
-    const { pickFile, readLocalImage } = useChatSend(store);
+    const { pickFile, readLocalImage, onFileDragDrop, stageAttachment } = useChatSend(store);
     const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const localInput = useRef<HTMLTextAreaElement>(null);
     const input = inputRef ?? localInput;
+    const commitCaret = useCommittedCaret(input, draft.text);
     const screenshot = useChatScreenshot(store, contact.key, collapsed, () =>
         input.current?.focus({ preventScroll: true }),
     );
@@ -65,6 +67,51 @@ export function ChatComposer({
     const [pendingFiles, setPendingFiles] = useState(0);
     const [dragging, setDragging] = useState(false);
     const dragDepth = useRef(0);
+    const dropEnabled = useRef(!collapsed);
+    dropEnabled.current = !collapsed;
+    useEffect(() => {
+        if (!onFileDragDrop) return;
+        let alive = true;
+        const listening = onFileDragDrop((event) => {
+            if (!alive) return;
+            if (event.type === 'leave' || !dropEnabled.current) {
+                setDragging(false);
+                return;
+            }
+            const bounds = composer.current?.getBoundingClientRect();
+            const point = event.position;
+            const inside =
+                !!bounds &&
+                !!point &&
+                point.x >= bounds.left &&
+                point.x <= bounds.right &&
+                point.y >= bounds.top &&
+                point.y <= bounds.bottom;
+            setDragging(inside && event.type !== 'drop');
+            if (event.type !== 'drop' || !inside) return;
+            const current = store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
+            const slots = Math.max(0, 8 - current.attachments.length);
+            const files = event.paths.slice(0, slots).map((path): Attachment => ({
+                key: crypto.randomUUID(),
+                path,
+                name: path.split(/[\\/]/).pop() || path,
+                type: /\.(png|jpe?g|gif|webp|bmp)$/i.test(path) ? 'image' : 'file',
+            }));
+            store.draft(contact.key, {
+                ...current,
+                attachments: [...current.attachments, ...files],
+            });
+            setError(event.paths.length > slots ? '一次最多添加 8 个附件' : '');
+            input.current?.focus({ preventScroll: true });
+        });
+        void listening.catch((failure) => {
+            if (alive) setError(errorText(failure));
+        });
+        return () => {
+            alive = false;
+            void listening.then((unlisten) => unlisten()).catch(() => {});
+        };
+    }, [onFileDragDrop, store, contact.key, input]);
     const [caret, setCaret] = useState(0);
     const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
     const [memberError, setMemberError] = useState('');
@@ -135,7 +182,7 @@ export function ChatComposer({
     }, [selectedMember]);
     useEffect(() => {
         if (draft.reply && !collapsed) input.current?.focus();
-    }, [draft.reply, collapsed]);
+    }, [draft.reply, collapsed, input]);
     const current = () => store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
     const patch = (value: Partial<Draft>) => store.draft(contact.key, { ...current(), ...value });
     const chooseEmoji = (attachment: Attachment) => {
@@ -153,12 +200,9 @@ export function ChatComposer({
         const start = input.current?.selectionStart ?? currentDraft.text.length;
         const end = input.current?.selectionEnd ?? start;
         const text = currentDraft.text.slice(0, start) + value + currentDraft.text.slice(end);
+        commitCaret(text, start + value.length);
         patch({ text, mentions: pruneMentions(text, currentDraft.mentions ?? []) });
         setCaret(start + value.length);
-        requestAnimationFrame(() => {
-            input.current?.focus();
-            input.current?.setSelectionRange(start + value.length, start + value.length);
-        });
     };
     const pick = async (type: 'image' | 'file') => {
         setError('');
@@ -181,25 +225,31 @@ export function ChatComposer({
             setPendingFiles((count) => count - 1);
         }
     };
-    const addImage = async (file: globalThis.File) => {
+    const addAttachment = async (file: globalThis.File) => {
         setPendingFiles((count) => count + 1);
         try {
-            if (file.size > 10 * 1024 * 1024) throw new Error('粘贴图片不能超过 10 MB');
+            const image = file.type.startsWith('image/');
+            if (file.size > (image ? 10 : 64) * 1024 * 1024)
+                throw new Error(
+                    image ? '粘贴图片不能超过 10 MB' : '浏览器附件不能超过 64 MB，请用附件按钮选择',
+                );
             const data = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(String(reader.result));
                 reader.onerror = () => reject(new Error('读取图片失败'));
                 reader.readAsDataURL(file);
             });
+            const base64 = data.slice(data.indexOf(',') + 1);
+            const path = await stageAttachment(file.name || '粘贴的图片.png', base64);
             if (current().attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
             patch({
                 attachments: [
                     ...current().attachments,
                     {
                         key: crypto.randomUUID(),
-                        path: `base64://${data.slice(data.indexOf(',') + 1)}`,
+                        path,
                         name: file.name || '粘贴的图片.png',
-                        type: 'image',
+                        type: image ? 'image' : 'file',
                     },
                 ],
             });
@@ -209,24 +259,28 @@ export function ChatComposer({
             setPendingFiles((count) => count - 1);
         }
     };
+    const addAttachments = async (files: globalThis.File[]) => {
+        const slots = Math.max(0, 8 - current().attachments.length);
+        setError(files.length > slots ? '一次最多添加 8 个附件' : '');
+        // 顺序读取，避免多份大附件同时膨胀成 base64 驻留内存。
+        for (const file of files.slice(0, slots)) await addAttachment(file);
+    };
     const paste = (event: ClipboardEvent) => {
-        const images = Array.from(event.clipboardData.files).filter((f) =>
-            f.type.startsWith('image/'),
-        );
+        if (collapsed) return;
+        const images = Array.from(event.clipboardData.files);
         if (images.length) {
             event.preventDefault();
-            for (const file of images) void addImage(file);
+            void addAttachments(images);
         }
     };
     const drop = (event: DragEvent) => {
         event.preventDefault();
         dragDepth.current = 0;
         setDragging(false);
+        if (collapsed || onFileDragDrop) return;
         setError('');
         const files = Array.from(event.dataTransfer.files);
-        const images = files.filter((f) => f.type.startsWith('image/'));
-        for (const file of images) void addImage(file);
-        if (images.length !== files.length) setError('其他文件请用附件按钮选择');
+        void addAttachments(files);
     };
     const sending = snapshot.account.messages.some(
         (m) => m.session === contact.key && m.status === 'sending',
@@ -256,17 +310,12 @@ export function ChatComposer({
             value.mentions ?? [],
             members.filter((m) => m.name === member.name).length,
         );
-        patch({
-            text: value.text.slice(0, query.start) + label + ' ' + value.text.slice(caret),
-            mentions: [...(value.mentions ?? []), { qq: member.id, label }],
-        });
+        const text = value.text.slice(0, query.start) + label + ' ' + value.text.slice(caret);
         const nextCaret = query.start + label.length + 1;
+        commitCaret(text, nextCaret);
+        patch({ text, mentions: [...(value.mentions ?? []), { qq: member.id, label }] });
         setCaret(nextCaret);
         dismissMention(true);
-        requestAnimationFrame(() => {
-            input.current?.focus();
-            input.current?.setSelectionRange(nextCaret, nextCaret);
-        });
     };
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (collapsed) return;
@@ -539,7 +588,7 @@ export function ChatComposer({
                     </PopoverContent>
                 </Popover>
                 <ChatPresence visible={dragging}>
-                    <div className="native-chat-drop-hint">松开添加图片</div>
+                    <div className="native-chat-drop-hint">松开添加图片或文件</div>
                 </ChatPresence>
                 <footer>
                     <span role="status" className={error ? 'text-danger' : 'text-text-tertiary'}>

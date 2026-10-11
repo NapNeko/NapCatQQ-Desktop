@@ -647,6 +647,13 @@ const TimelineMessage = memo(function TimelineMessage({
                                 {message.mine && (
                                     <ChatSendStatus
                                         status={message.status}
+                                        progress={
+                                            message.requestId
+                                                ? store.getSnapshot().sendProgress?.[
+                                                      message.requestId
+                                                  ]
+                                                : undefined
+                                        }
                                         error={message.error}
                                         retryDisabled={retryDisabled || selecting}
                                         onRetry={

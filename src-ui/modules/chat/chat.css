@@ -1464,3 +1464,24 @@ button.native-chat-send-status:hover {
         animation: none !important;
     }
 }
+
+.native-chat-send-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 280px;
+    margin-top: 5px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+.native-chat-send-progress > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.native-chat-send-progress progress {
+    width: 54px;
+    height: 4px;
+    flex-shrink: 0;
+    accent-color: var(--brand);
+}

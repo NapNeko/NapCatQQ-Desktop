@@ -1,6 +1,14 @@
 // 聊天只使用独立 IPC，不复用调试台的开关或接收器。
-import { Channel, invoke, isTauri, pickAnyFiles, openExternalUrl } from '../ipc/transport';
+import {
+    Channel,
+    invoke,
+    isTauri,
+    pickAnyFiles,
+    openExternalUrl,
+    onFileDragDrop,
+} from '../ipc/transport';
 import { localFilesInParams } from '../domain/debug/streamActions';
+import type { ChatFileSource } from '../ipc/generated/chat/ChatFileSource';
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
 import type { DebugEventBatch } from '../ipc/generated/debug/DebugEventBatch';
 import type { DebugCallResponse } from '../ipc/generated/debug/DebugCallResponse';
@@ -11,6 +19,9 @@ import type { DebugStreamProgress } from '../ipc/generated/debug/DebugStreamProg
 const previewMock = () => import('../ipc/mock/chat.mock').then((module) => module.chatMock);
 
 export const chatService = {
+    onFileDragDrop: isTauri ? onFileDragDrop : undefined,
+    stageAttachment: async (name: string, base64: string): Promise<string> =>
+        isTauri ? invoke('chat_stage_attachment', { name, base64 }) : `base64://${base64}`,
     targets: async (): Promise<DebugTarget[]> =>
         isTauri ? invoke('chat_targets') : (await previewMock()).targets(),
     async call(
@@ -59,6 +70,8 @@ export const chatService = {
         const [path] = await pickAnyFiles('选择附件');
         return path ? { path, name: path.split(/[\\/]/).pop() || path } : null;
     },
+    cacheFile: async (botId: string, source: ChatFileSource, name: string): Promise<string> =>
+        isTauri ? invoke('chat_cache_file', { botId, source, name }) : `preview://${name}`,
     readLocalImage: (path: string): Promise<string> =>
         isTauri
             ? invoke('chat_read_local_image', { path })

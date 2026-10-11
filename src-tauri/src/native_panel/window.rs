@@ -3,6 +3,8 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Instant;
 
 use windows::Win32::Foundation::{E_FAIL, HWND, LRESULT};
 // WM_MOUSELEAVE 在 UI::Controls 里
@@ -18,6 +20,37 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use super::gfx::{Canvas, shared};
 use super::sys::{self, Hwnd, Message, WndHandler};
 use super::theme::{Theme, theme};
+
+const TIMER_TRANSITION: usize = 3;
+const WM_PANEL_HIDE: u32 = WM_APP + 2;
+static MOTION_DURATION: AtomicU32 = AtomicU32::new(180);
+
+pub fn set_motion(enabled: bool, speed: f64) {
+    let speed = if speed.is_finite() {
+        speed.clamp(0.5, 1.5)
+    } else {
+        0.5
+    };
+    MOTION_DURATION.store(
+        if enabled {
+            (90.0 / speed).round() as u32
+        } else {
+            0
+        },
+        Ordering::Relaxed,
+    );
+}
+
+struct Transition {
+    start: Instant,
+    duration_ms: u32,
+    from_y: i32,
+    to_y: i32,
+    x: i32,
+    width: i32,
+    height: i32,
+    closing: bool,
+}
 
 const TIMER_ANIM: usize = 1;
 const ANIM_INTERVAL_MS: u32 = 33; // ~30fps，只在动画时才跑
@@ -68,12 +101,112 @@ struct WindowData {
     position: Option<PositionFn>,
     animating: bool,
     hover_outside_ticks: u32,
+    transition: Option<Transition>,
 }
 
 thread_local! {
     static WINDOWS: RefCell<HashMap<isize, Rc<RefCell<WindowData>>>> = RefCell::new(HashMap::new());
     // CreateWindowExW 期间交给 WM_CREATE 的内容。不走 lpCreateParams 裸指针，建窗中途失败时只丢一次
     static PENDING: RefCell<Option<Box<dyn PanelContent>>> = const { RefCell::new(None) };
+}
+
+fn transition_duration() -> u32 {
+    if sys::client_area_animations() {
+        MOTION_DURATION.load(Ordering::Relaxed)
+    } else {
+        0
+    }
+}
+
+fn start_hide(hwnd: Hwnd) {
+    if !hwnd.is_visible() {
+        return;
+    }
+    let duration = transition_duration();
+    if duration == 0 {
+        finish_hide(hwnd);
+        return;
+    }
+    let Some((x, y, right, bottom)) = hwnd.screen_rect() else {
+        finish_hide(hwnd);
+        return;
+    };
+    with_window(hwnd, |data| {
+        let Ok(mut data) = data.try_borrow_mut() else {
+            hwnd.post(WM_PANEL_HIDE);
+            return;
+        };
+        if data.transition.as_ref().is_some_and(|t| t.closing) {
+            return;
+        }
+        let offset = ((if data.anchor.1 > (y + bottom) / 2 {
+            10.0
+        } else {
+            -10.0
+        }) * data.scale)
+            .round() as i32;
+        data.transition = Some(Transition {
+            start: Instant::now(),
+            duration_ms: duration * 2 / 3,
+            from_y: y,
+            to_y: y + offset,
+            x,
+            width: right - x,
+            height: bottom - y,
+            closing: true,
+        });
+        hwnd.kill_timer(TIMER_HOVER);
+        hwnd.set_timer(TIMER_TRANSITION, 16);
+    });
+}
+
+fn finish_hide(hwnd: Hwnd) {
+    hwnd.kill_timer(TIMER_TRANSITION);
+    hwnd.kill_timer(TIMER_ANIM);
+    hwnd.kill_timer(TIMER_HOVER);
+    with_window(hwnd, |data| {
+        if let Ok(mut data) = data.try_borrow_mut() {
+            data.transition = None;
+            data.animating = false;
+        }
+    });
+    hwnd.hide();
+}
+
+fn tick_transition(hwnd: Hwnd) {
+    let frame = with_window(hwnd, |data| {
+        let Ok(mut data) = data.try_borrow_mut() else {
+            return None;
+        };
+        let Some(t) = data.transition.as_ref() else {
+            hwnd.kill_timer(TIMER_TRANSITION);
+            return None;
+        };
+        let progress =
+            (t.start.elapsed().as_secs_f64() * 1000.0 / f64::from(t.duration_ms.max(1))).min(1.0);
+        let eased = if t.closing {
+            progress * progress
+        } else {
+            1.0 - (1.0 - progress).powi(3)
+        };
+        let y = (f64::from(t.from_y) + f64::from(t.to_y - t.from_y) * eased).round() as i32;
+        let frame = (t.x, y, t.width, t.height, progress >= 1.0, t.closing);
+        if frame.4 {
+            data.transition = None;
+        }
+        Some(frame)
+    })
+    .flatten();
+    if let Some((x, y, w, h, done, closing)) = frame {
+        // 放掉 WindowData 借用后才移动，SetWindowPos 会同步投递窗口消息。
+        hwnd.set_pos(x, y, w, h);
+        if done {
+            hwnd.kill_timer(TIMER_TRANSITION);
+            if closing {
+                finish_hide(hwnd);
+            }
+        }
+    }
 }
 
 fn with_window<R>(hwnd: Hwnd, f: impl FnOnce(&Rc<RefCell<WindowData>>) -> R) -> Option<R> {
@@ -121,6 +254,17 @@ struct PanelProc;
 impl WndHandler for PanelProc {
     fn handle(msg: &Message) -> Option<LRESULT> {
         let hwnd = msg.hwnd();
+        if matches!(
+            msg.id(),
+            WM_LBUTTONDOWN | WM_LBUTTONDBLCLK | WM_LBUTTONUP | WM_KEYDOWN
+        ) && with_window(hwnd, |data| {
+            data.try_borrow()
+                .is_ok_and(|d| d.transition.as_ref().is_some_and(|t| t.closing))
+        })
+        .unwrap_or(false)
+        {
+            return Some(LRESULT(0));
+        }
         match msg.id() {
             WM_CREATE => {
                 let Some(content) = PENDING.with(|slot| slot.borrow_mut().take()) else {
@@ -138,6 +282,7 @@ impl WndHandler for PanelProc {
                         position: None,
                         animating: false,
                         hover_outside_ticks: 0,
+                        transition: None,
                     },
                 );
                 Some(LRESULT(0))
@@ -178,8 +323,14 @@ impl WndHandler for PanelProc {
                 with_window(hwnd, |data| relayout(hwnd, data));
                 Some(LRESULT(0))
             }
+            WM_PANEL_HIDE => {
+                start_hide(hwnd);
+                Some(LRESULT(0))
+            }
             WM_TIMER => {
-                if msg.wparam() == TIMER_ANIM {
+                if msg.wparam() == TIMER_TRANSITION {
+                    tick_transition(hwnd);
+                } else if msg.wparam() == TIMER_ANIM {
                     with_window(hwnd, |data| {
                         let keep = {
                             let Ok(mut data) = data.try_borrow_mut() else {
@@ -248,7 +399,7 @@ impl WndHandler for PanelProc {
                     data.content.click(x, y, &theme())
                 });
                 if consumed.unwrap_or(false) {
-                    hwnd.hide();
+                    start_hide(hwnd);
                 } else {
                     hwnd.invalidate();
                 }
@@ -257,7 +408,7 @@ impl WndHandler for PanelProc {
             WM_KEYDOWN => {
                 let vk = msg.wparam() as u16;
                 if vk == VK_ESCAPE.0 {
-                    hwnd.hide();
+                    start_hide(hwnd);
                     return Some(LRESULT(0));
                 }
                 with_window(hwnd, |data| {
@@ -279,12 +430,12 @@ impl WndHandler for PanelProc {
                 })
                 .unwrap_or(false);
                 if !hover {
-                    hwnd.hide();
+                    start_hide(hwnd);
                 }
                 Some(LRESULT(0))
             }
             WM_CLOSE => {
-                hwnd.hide();
+                start_hide(hwnd);
                 Some(LRESULT(0))
             }
             WM_DESTROY => {
@@ -330,7 +481,7 @@ fn poll_hover(hwnd: Hwnd) {
     .unwrap_or(false);
     if expired {
         hwnd.kill_timer(TIMER_HOVER);
-        hwnd.hide();
+        start_hide(hwnd);
     }
 }
 
@@ -377,6 +528,8 @@ fn relayout(hwnd: Hwnd, data: &Rc<RefCell<WindowData>>) -> (i32, i32) {
             hwnd.post(WM_PANEL_RELAYOUT);
             return hwnd.client_size().unwrap_or((0, 0));
         };
+        data.transition = None;
+        hwnd.kill_timer(TIMER_TRANSITION);
         let width = data.width_dip;
         let (w_dip, h_dip) = data.content.measure(width, &theme);
         if w_dip > 0.0 {
@@ -451,7 +604,7 @@ fn build_target(hwnd: Hwnd, scale: f32) -> Option<Canvas> {
 }
 
 pub fn hide(hwnd: HWND) {
-    Hwnd::from_raw(hwnd).hide();
+    start_hide(Hwnd::from_raw(hwnd));
 }
 
 pub fn destroy(hwnd: HWND) {
@@ -525,8 +678,12 @@ impl NativePanel {
 
     /// 面板当前是否可见。
     pub fn is_visible(&self) -> bool {
-        // 失焦、ESC、点了动作都直接 ShowWindow(SW_HIDE)，以窗口真实状态为准
+        // 收起动画开始后业务层立即视为关闭；再次展开可以反向接续动画。
         self.hwnd.is_visible()
+            && self
+                .data
+                .try_borrow()
+                .is_ok_and(|d| !d.transition.as_ref().is_some_and(|t| t.closing))
     }
 
     /// 只重画，不重排（头像到了这类不改尺寸的变化）。
@@ -566,7 +723,41 @@ impl NativePanel {
             .try_borrow()
             .map(|d| d.content.is_hover_panel())
             .unwrap_or(false);
-        self.hwnd.set_pos(x, y, px_w, px_h);
+        let was_visible = self.hwnd.is_visible();
+        let closing = self
+            .data
+            .try_borrow()
+            .is_ok_and(|d| d.transition.as_ref().is_some_and(|t| t.closing));
+        self.hwnd.kill_timer(TIMER_TRANSITION);
+        let duration = transition_duration();
+        if duration > 0 && (!was_visible || closing) {
+            let offset =
+                ((if anchor.1 > y + px_h / 2 { 10.0 } else { -10.0 }) * scale).round() as i32;
+            let from_y = if was_visible {
+                self.hwnd.screen_rect().map(|r| r.1).unwrap_or(y + offset)
+            } else {
+                y + offset
+            };
+            self.hwnd.set_pos(x, from_y, px_w, px_h);
+            if let Ok(mut data) = self.data.try_borrow_mut() {
+                data.transition = Some(Transition {
+                    start: Instant::now(),
+                    duration_ms: duration,
+                    from_y,
+                    to_y: y,
+                    x,
+                    width: px_w,
+                    height: px_h,
+                    closing: false,
+                });
+            }
+            self.hwnd.set_timer(TIMER_TRANSITION, 16);
+        } else {
+            if let Ok(mut data) = self.data.try_borrow_mut() {
+                data.transition = None;
+            }
+            self.hwnd.set_pos(x, y, px_w, px_h);
+        }
         self.hwnd.show_no_activate();
         self.hwnd.invalidate();
         if focus {
@@ -580,7 +771,7 @@ impl NativePanel {
     }
 
     pub fn hide(&self) {
-        self.hwnd.hide();
+        start_hide(self.hwnd);
     }
 
     #[cfg(test)]
@@ -746,7 +937,12 @@ mod tests {
             "WM_PAINT must validate the update region"
         );
         panel.hide();
-        assert!(!panel.is_visible());
+        let until = Instant::now() + std::time::Duration::from_millis(500);
+        while panel.hwnd.is_visible() && Instant::now() < until {
+            pump();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(!panel.hwnd.is_visible());
         panel.destroy();
     }
 

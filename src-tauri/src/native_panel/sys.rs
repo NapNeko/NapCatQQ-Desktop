@@ -732,3 +732,22 @@ pub mod testing {
         Some(dib.rgba())
     }
 }
+
+/// Windows 的“在 Windows 中显示动画”设置。
+pub fn client_area_animations() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    };
+    let mut enabled = BOOL(1);
+    // SAFETY: 系统向有效的栈上 BOOL 写入，不保留指针。
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&raw mut enabled).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    }
+    .is_err()
+        || enabled.as_bool()
+}

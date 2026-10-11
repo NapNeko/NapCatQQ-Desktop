@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from './ChatComposer';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
+import { chatService } from '../../core/services/chat.service';
+import type { FileDragDropEvent } from '../../core/ipc/transport';
 import { chatMediaService } from '../../core/services/chat-media.service';
 import { createRef, useState, type ReactNode } from 'react';
 import { qqFaceService } from '../../core/services/qq-face.service';
@@ -39,7 +41,7 @@ function setup(disabledReason = '') {
         />,
         { wrapper: ProviderWrapper },
     );
-    return { send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
+    return { store, send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
 }
 describe('native composer keyboard', () => {
     it('keeps the editor, quote and attachments mounted through selection collapse and restores focus', async () => {
@@ -336,5 +338,61 @@ describe('native composer keyboard', () => {
         fireEvent.keyDown(input, { key: 'Enter' });
         expect(send).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: '发送消息' })).toBeDisabled();
+    });
+});
+
+describe('attachment drag and drop', () => {
+    it('accepts native images and arbitrary files only inside the composer', async () => {
+        let handler!: (event: FileDragDropEvent) => void;
+        const unlisten = vi.fn();
+        const previous = chatService.onFileDragDrop;
+        chatService.onFileDragDrop = vi.fn(async (callback) => {
+            handler = callback;
+            return unlisten;
+        });
+        try {
+            const { store, input } = setup();
+            const composer = input.closest('.native-chat-composer')!;
+            vi.spyOn(composer, 'getBoundingClientRect').mockReturnValue({
+                left: 10,
+                top: 100,
+                right: 500,
+                bottom: 300,
+            } as DOMRect);
+            act(() =>
+                handler({ type: 'drop', paths: ['C:\\外部.zip'], position: { x: 20, y: 20 } }),
+            );
+            expect(store.getSnapshot().account.drafts['private:12'].attachments).toEqual([]);
+            await act(async () =>
+                handler({
+                    type: 'drop',
+                    paths: ['C:\\照片.png', 'C:\\报告.pdf', 'C:\\视频.mp4'],
+                    position: { x: 20, y: 150 },
+                }),
+            );
+            expect(store.getSnapshot().account.drafts['private:12'].attachments).toMatchObject([
+                { type: 'image', name: '照片.png', path: 'C:\\照片.png' },
+                { type: 'file', name: '报告.pdf' },
+                { type: 'file', name: '视频.mp4' },
+            ]);
+            expect(input).toHaveFocus();
+        } finally {
+            chatService.onFileDragDrop = previous;
+        }
+    });
+    it('stages a browser file instead of rejecting non-image drops', async () => {
+        const stage = vi
+            .spyOn(chatService, 'stageAttachment')
+            .mockResolvedValue('C:\\cache\\报告.pdf');
+        const { store, input } = setup();
+        fireEvent.drop(input, {
+            dataTransfer: { files: [new File(['pdf'], '报告.pdf', { type: 'application/pdf' })] },
+        });
+        await waitFor(() =>
+            expect(store.getSnapshot().account.drafts['private:12'].attachments).toMatchObject([
+                { type: 'file', name: '报告.pdf', path: 'C:\\cache\\报告.pdf' },
+            ]),
+        );
+        expect(stage).toHaveBeenCalledWith('报告.pdf', 'cGRm');
     });
 });

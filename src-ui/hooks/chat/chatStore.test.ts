@@ -1311,10 +1311,10 @@ describe('chat message transfer', () => {
         await store.connect();
         await expect(
             store.forward(
-                Array.from({ length: 21 }, (_, index) => `message/${index}`),
+                Array.from({ length: 101 }, (_, index) => `message/${index}`),
                 destination,
             ),
-        ).rejects.toThrow('1–20');
+        ).rejects.toThrow('1–100');
         await expect(
             store.forward(['group:12/2'], {
                 key: 'private:44',
@@ -1443,4 +1443,149 @@ describe('chat message transfer', () => {
         await store.history('group:12');
         expect(transport.call.mock.calls[2][2]).toMatchObject({ message_seq: oldest?.id });
     });
+});
+
+describe('chat reconnect and attachment progress', () => {
+    it('retries a failed subscription while viewed and cancels retries on disconnect', async () => {
+        vi.useFakeTimers();
+        const { store, transport } = setup();
+        const unlisten = store.subscribe(() => {});
+        transport.subscribe.mockRejectedValueOnce(new Error('WebUI 未就绪'));
+        try {
+            await store.connect();
+            expect(store.getSnapshot().connection.state).toBe('stopped');
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(transport.subscribe).toHaveBeenCalledTimes(2);
+            expect(store.getSnapshot().connection.state).toBe('connected');
+            await store.disconnect();
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(transport.subscribe).toHaveBeenCalledTimes(2);
+        } finally {
+            unlisten();
+            await store.disconnect();
+            vi.useRealTimers();
+        }
+    });
+    it('keeps a live connection event when subscribe returns an older connecting state', async () => {
+        const { store, transport } = setup();
+        transport.subscribe.mockImplementationOnce(async (_bot, batch) => {
+            batch({
+                v: 1,
+                bot_id: 'bot',
+                events: [
+                    { seq: 1, at_ms: 1, body: { kind: 'receiver', state: { state: 'connected' } } },
+                ],
+            });
+            return {
+                ...subscription,
+                receiver: { ...subscription.receiver, state: { state: 'connecting' } },
+            };
+        });
+        await store.connect();
+        expect(store.getSnapshot().connection.state).toBe('connected');
+        await store.disconnect();
+    });
+    it('shows stream progress during upload and removes it when the message settles', async () => {
+        const { store, transport } = setup();
+        await store.connect();
+        store.open({ key: 'group:12', type: 'group', id: '12', name: '群' });
+        store.draft('group:12', {
+            text: '',
+            reply: null,
+            attachments: [{ key: 'file', type: 'file', name: 'a.zip', path: 'C:\\a.zip' }],
+        });
+        const call = vi.fn(
+            async (
+                _bot: string,
+                _action: string,
+                _params: unknown,
+                requestId?: string,
+                onProgress?: (
+                    progress: import('../../core/ipc/generated/debug/DebugStreamProgress').DebugStreamProgress,
+                ) => void,
+            ) => {
+                onProgress?.({
+                    v: 1,
+                    request_id: requestId!,
+                    stage: 'uploading',
+                    file_name: 'a.zip',
+                    done_bytes: 50,
+                    total_bytes: 100,
+                    done_chunks: 1,
+                    total_chunks: 2,
+                });
+                expect(store.getSnapshot().sendProgress[requestId!].done_bytes).toBe(50);
+                return ok({ file_id: 'file-id' });
+            },
+        );
+        transport.call = call;
+        await store.send('group:12');
+        expect(store.getSnapshot().sendProgress).toEqual({});
+        expect(store.getSnapshot().account.messages.at(-1)?.status).toBe('sent');
+    });
+});
+
+describe('individual message forwarding', () => {
+    it('sends in source order and preserves the destination draft', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        const progress = vi.fn();
+        await store.forward(['group:12/3', 'group:12/2'], destination, 'individual', progress);
+        expect(transport.call.mock.calls.map((call) => call[1])).toEqual([
+            'send_private_msg',
+            'send_private_msg',
+        ]);
+        expect(
+            transport.call.mock.calls.map(
+                (call) =>
+                    (call[2] as { message: { data: { text: string } }[] }).message[0].data.text,
+            ),
+        ).toEqual(['原消息 2', '原消息 3']);
+        expect(store.getSnapshot().account.drafts[destination.key].text).toBe('目标会话草稿');
+        expect(progress.mock.calls).toEqual([
+            [1, 2],
+            [2, 2],
+        ]);
+    });
+    it('stops after a failure and reports the completed count', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        transport.call
+            .mockResolvedValueOnce(ok({ message_id: 88 }))
+            .mockRejectedValueOnce(new Error('网络中断'));
+        await expect(
+            store.forward(['group:12/2', 'group:12/3'], destination, 'individual'),
+        ).rejects.toThrow('已转发 1/2 条');
+        expect(transport.call).toHaveBeenCalledTimes(2);
+        expect(
+            store
+                .getSnapshot()
+                .account.messages.filter((row) => row.session === destination.key)
+                .map((row) => row.status),
+        ).toEqual(['sent', 'unknown']);
+        expect(store.isSending()).toBe(false);
+    });
+});
+
+it('accepts exactly 100 merged messages', async () => {
+    const { store, transport, destination } = transferSetup();
+    await store.connect();
+    let account = emptyAccount('99');
+    for (let index = 1; index <= 100; index++)
+        account = ingestMessage(account, {
+            message_type: 'group',
+            group_id: 12,
+            user_id: 20,
+            message_id: index,
+            time: index,
+            message: `消息 ${index}`,
+        });
+    store.getSnapshot().account = account;
+    await store.forward(
+        account.archiveMessages!.map((row) => row.key),
+        destination,
+    );
+    expect(transport.call).toHaveBeenCalledTimes(1);
+    expect(transport.call.mock.calls[0][2]).toMatchObject({ messages: expect.any(Array) });
+    expect((transport.call.mock.calls[0][2] as { messages: unknown[] }).messages).toHaveLength(100);
 });

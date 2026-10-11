@@ -36,6 +36,7 @@ import {
     ContextMenuTrigger,
 } from '../../shared/ui/ContextMenu';
 import { draftWithMention } from './messageActions';
+import { useChatClipboard } from '../../hooks/chat/useChatClipboard';
 import { errorText } from '../../core/domain/errors';
 import {
     canForwardMessage,
@@ -128,7 +129,9 @@ export function ChatMessageActions({
     onToggleSelection,
     children,
 }: Props) {
+    const copyMessage = useChatClipboard(store);
     const [copied, setCopied] = useState(false);
+    const copyInFlight = useRef(false);
     const [recalling, setRecalling] = useState(false);
     const recallInFlight = useRef(false);
     const [repeating, setRepeating] = useState(false);
@@ -313,12 +316,16 @@ export function ChatMessageActions({
         !!favoriteStates[index] ||
         Object.values(favoriteStates).includes('saving');
     const copy = async () => {
+        if (copyInFlight.current) return;
+        copyInFlight.current = true;
         setCopied(false);
         try {
-            await navigator.clipboard.writeText(messagePreview(message.segments));
+            await copyMessage(contact, message);
             setCopied(true);
-        } catch {
-            onError('复制失败，请重试或选择消息文字后复制');
+        } catch (error) {
+            onError(`复制失败：${errorText(error)}`);
+        } finally {
+            copyInFlight.current = false;
         }
     };
     const selectDraftAction = (action: () => void) => {
