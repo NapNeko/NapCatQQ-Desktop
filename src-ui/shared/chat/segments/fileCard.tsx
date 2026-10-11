@@ -5,44 +5,51 @@ import {
     FileAudio,
     FileCode2,
     FileImage,
+    FileSpreadsheet,
     FileText,
     FileVideo,
     File,
+    Package,
+    Presentation,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { fileKind, type FileKind } from '../../../core/domain/chat/groupFiles';
 import { fileSizeLabel } from '../../../core/domain/debug/chatFormat';
 import { useChatView } from '../chatContext';
 import { str } from './model';
 import './fileCard.css';
 
+const ICONS: Record<FileKind, LucideIcon> = {
+    archive: FileArchive,
+    image: FileImage,
+    audio: FileAudio,
+    video: FileVideo,
+    code: FileCode2,
+    doc: FileText,
+    sheet: FileSpreadsheet,
+    slide: Presentation,
+    app: Package,
+    other: File,
+};
+
 export function FileCard({ data }: { data: Record<string, unknown> }) {
     const name = str(data.name) || str(data.file_name) || str(data.file) || '文件';
     const size = fileSizeLabel(data.file_size ?? data.size);
     const { fileAction } = useChatView();
-    const extension = name.split('.').pop()?.toLowerCase() ?? '';
-    const category = /^(zip|rar|7z|tar|gz)$/.test(extension)
-        ? 'archive'
-        : /^(png|jpe?g|gif|webp|bmp|svg)$/.test(extension)
-          ? 'image'
-          : /^(mp3|wav|ogg|flac|m4a|silk)$/.test(extension)
-            ? 'audio'
-            : /^(mp4|mkv|mov|webm|avi)$/.test(extension)
-              ? 'video'
-              : /^(json|js|ts|py|rs|html|css|xml|yaml|yml)$/.test(extension)
-                ? 'code'
-                : /^(pdf|docx?|xlsx?|pptx?|txt|md)$/.test(extension)
-                  ? 'document'
-                  : 'file';
-    const Icon = {
-        archive: FileArchive,
-        image: FileImage,
-        audio: FileAudio,
-        video: FileVideo,
-        code: FileCode2,
-        document: FileText,
-        file: File,
-    }[category];
+    const extension = name
+        .trim()
+        .match(/\.([a-z][a-z0-9]{0,9})$/i)?.[1]
+        .toUpperCase();
+    const category = fileKind(name.trim());
+    const Icon = ICONS[category];
     return (
-        <span className="chat-file-card" data-category={category}>
+        <span
+            className="chat-file-card"
+            data-category={category}
+            data-extension={extension}
+            role="group"
+            aria-label={name}
+        >
             <span className="chat-file-card-icon">
                 <Icon size={24} strokeWidth={1.6} aria-hidden />
             </span>
@@ -51,7 +58,7 @@ export function FileCard({ data }: { data: Record<string, unknown> }) {
                     {name}
                 </span>
                 <span className="chat-file-card-meta">
-                    {extension && extension.length <= 10 ? extension.toUpperCase() : '文件'}
+                    {extension || '文件'}
                     {size ? ` · ${size}` : ''}
                 </span>
                 {fileAction && <span className="chat-file-card-actions">{fileAction(data)}</span>}
