@@ -162,6 +162,57 @@ pub(crate) async fn read_docker_imported_network(
     }
 }
 
+/// NapCat 镜像里 webui.json 的固定位置（entrypoint.sh CONFIG_PATH）
+pub(crate) const NAPCAT_DOCKER_WEBUI_JSON: &str = "/app/napcat/config/webui.json";
+
+/// 容器里 NapCat 实际认的 WebUI token。entrypoint 只在 webui.json 不存在时写
+/// WEBUI_TOKEN，导入 / 重装 / 换电脑后本机 SecretStore 那份多半对不上。
+/// 先 docker exec（宿主机目录可能是旧部署残留），再读宿主机 bind 目录；都没有返回 None。
+/// 失败只打 debug，任何分支都不记 token 本身
+pub(crate) async fn read_napcat_docker_webui_token(
+    host: &dyn Host,
+    cli: Option<&DockerCli<'_>>,
+    container: &str,
+) -> Option<String> {
+    if let Some(cli) = cli {
+        match cli
+            .exec_read_file(container, NAPCAT_DOCKER_WEBUI_JSON)
+            .await
+        {
+            Ok(text) => {
+                if let Some(token) = ncd_backend_napcat::parse_webui_json_token(&text) {
+                    return Some(token);
+                }
+                tracing::debug!(
+                    target: "ncd_runtime::remote",
+                    %container,
+                    "容器内 webui.json 没有可用 token"
+                );
+            }
+            Err(error) => tracing::debug!(
+                target: "ncd_runtime::remote",
+                %container,
+                %error,
+                "docker exec 读 webui.json 失败，改读宿主机目录"
+            ),
+        }
+    }
+    let project_dir = ncd_deploy::docker_project_dir(host, container).await.ok()?;
+    let path = format!("{project_dir}/napcat/config/webui.json");
+    match host.read_file(&HostPath::from_posix(&path)).await {
+        Ok(bytes) => ncd_backend_napcat::parse_webui_json_token(&String::from_utf8_lossy(&bytes)),
+        Err(error) => {
+            tracing::debug!(
+                target: "ncd_runtime::remote",
+                %path,
+                %error,
+                "宿主机 webui.json 不可读"
+            );
+            None
+        }
+    }
+}
+
 async fn read_json_if_exists(host: &dyn Host, path: &str) -> Result<Option<Value>, String> {
     match host.read_file(&HostPath::from_posix(path)).await {
         Ok(bytes) => serde_json::from_slice(&bytes)
@@ -262,4 +313,202 @@ async fn read_existing_docker_snowluma_config(
         Err(error) => return Err(BotBackendError::Io(error.to_string())),
     }
     Ok(existing)
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::path::Path;
+
+    use async_trait::async_trait;
+    use bytes::Bytes;
+    use ncd_host::{
+        Arch, ArchiveKind, CommandOutput, DirEntry, HostCommand, HostProcess, HostShell, Locality,
+        Os, ShellKind,
+    };
+
+    struct NoopShell;
+    impl HostShell for NoopShell {
+        fn kind(&self) -> ShellKind {
+            ShellKind::Bash
+        }
+        fn escape(&self, arg: &str) -> String {
+            arg.to_string()
+        }
+        fn line_separator(&self) -> &'static str {
+            "\n"
+        }
+    }
+    static NOOP_SHELL: NoopShell = NoopShell;
+
+    /// exec_stdout=None 表示 docker exec 失败（容器没起 / 没有该文件）
+    pub(crate) struct TokenHost {
+        exec_stdout: Option<String>,
+        files: HashMap<String, Vec<u8>>,
+    }
+
+    const CONTAINER: &str = "ncbot-10001";
+
+    fn bind_path() -> String {
+        format!(
+            "{}/napcat/config/webui.json",
+            ncd_domain::remote_paths::docker_bot_project_dir("/home/u", CONTAINER)
+        )
+    }
+
+    fn output(code: i32, stdout: &str) -> CommandOutput {
+        CommandOutput {
+            exit_code: Some(code),
+            stdout: stdout.into(),
+            stderr: String::new(),
+        }
+    }
+
+    #[async_trait]
+    impl Host for TokenHost {
+        fn os(&self) -> Os {
+            Os::Linux
+        }
+        fn arch(&self) -> Arch {
+            Arch::X86_64
+        }
+        fn locality(&self) -> Locality {
+            Locality::Remote
+        }
+        fn id(&self) -> &str {
+            "token-mock"
+        }
+        fn shell(&self) -> &dyn HostShell {
+            &NOOP_SHELL
+        }
+        async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+            self.files
+                .get(path.as_posix())
+                .cloned()
+                .map(Bytes::from)
+                .ok_or_else(|| HostError::PathNotFound { path: path.clone() })
+        }
+        async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn create_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            Ok(())
+        }
+        async fn remove_file(&self, _: &HostPath) -> Result<(), HostError> {
+            Ok(())
+        }
+        async fn remove_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            Ok(())
+        }
+        async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
+            Ok(self.files.contains_key(path.as_posix()))
+        }
+        async fn upload(&self, _: &Path, _: &HostPath) -> Result<(), HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn download(&self, _: &HostPath, _: &Path) -> Result<(), HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn extract_archive(
+            &self,
+            _: &HostPath,
+            _: &HostPath,
+            _: ArchiveKind,
+        ) -> Result<(), HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+            if cmd.program == "sh" && cmd.args == ["-c", "echo $HOME"] {
+                return Ok(output(0, "/home/u\n"));
+            }
+            if cmd.program != "docker" {
+                return Ok(output(0, ""));
+            }
+            match cmd.args.first().map(String::as_str) {
+                Some("version") | Some("info") => Ok(output(0, "27.0.0\n")),
+                Some("exec") => {
+                    assert_eq!(
+                        cmd.args,
+                        ["exec", CONTAINER, "cat", NAPCAT_DOCKER_WEBUI_JSON]
+                    );
+                    match &self.exec_stdout {
+                        Some(stdout) => Ok(output(0, stdout)),
+                        None => Ok(output(1, "")),
+                    }
+                }
+                _ => Ok(output(0, "")),
+            }
+        }
+    }
+
+    pub(crate) fn host(exec: Option<&str>, bind: Option<&str>) -> TokenHost {
+        let mut files = HashMap::new();
+        if let Some(body) = bind {
+            files.insert(bind_path(), body.as_bytes().to_vec());
+        }
+        TokenHost {
+            exec_stdout: exec.map(str::to_string),
+            files,
+        }
+    }
+
+    #[tokio::test]
+    async fn read_token_prefers_docker_exec() {
+        let h = host(
+            Some(r#"{"token":"in-container","loginRate":3}"#),
+            Some(r#"{"token":"stale-bind"}"#),
+        );
+        let cli = DockerCli::new(&h);
+        assert_eq!(
+            read_napcat_docker_webui_token(&h, Some(&cli), CONTAINER)
+                .await
+                .as_deref(),
+            Some("in-container")
+        );
+    }
+
+    #[tokio::test]
+    async fn read_token_falls_back_to_host_bind() {
+        let h = host(None, Some(r#"{"token":"from-bind"}"#));
+        let cli = DockerCli::new(&h);
+        assert_eq!(
+            read_napcat_docker_webui_token(&h, Some(&cli), CONTAINER)
+                .await
+                .as_deref(),
+            Some("from-bind")
+        );
+        // daemon 没就绪(cli=None)时直接读宿主机
+        assert_eq!(
+            read_napcat_docker_webui_token(&h, None, CONTAINER)
+                .await
+                .as_deref(),
+            Some("from-bind")
+        );
+    }
+
+    #[tokio::test]
+    async fn read_token_none_when_both_missing() {
+        let h = host(None, None);
+        let cli = DockerCli::new(&h);
+        assert_eq!(
+            read_napcat_docker_webui_token(&h, Some(&cli), CONTAINER).await,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn read_token_none_for_blank_token() {
+        let h = host(Some(r#"{"token":""}"#), Some(r#"{"token":"  "}"#));
+        let cli = DockerCli::new(&h);
+        assert_eq!(
+            read_napcat_docker_webui_token(&h, Some(&cli), CONTAINER).await,
+            None
+        );
+    }
 }

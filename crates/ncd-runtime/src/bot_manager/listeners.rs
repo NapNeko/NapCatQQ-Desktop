@@ -199,6 +199,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     host_port,
                     token: token.clone(),
                     online: None,
+                    auth_issue: None,
                 },
             )
             .await;
@@ -285,6 +286,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let mut unavailable_sub = self.event_bus.subscribe(EventFilter::kind(
             DomainEventKind::NapCatLoginProbeUnavailable,
         ));
+        let mut auth_sub = self
+            .event_bus
+            .subscribe(EventFilter::kind(DomainEventKind::NapCatWebuiAuthChanged));
         if let Some(tx) = ready {
             let _ = tx.send(());
         }
@@ -321,6 +325,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 ev = unavailable_sub.next() => match ev {
                     Some(DomainEvent::NapCatLoginProbeUnavailable { bot_id }) => {
                         self.napcat_endpoints.set_online(&bot_id, None).await;
+                    }
+                    Some(_) => continue,
+                    None => break,
+                },
+                ev = auth_sub.next() => match ev {
+                    Some(DomainEvent::NapCatWebuiAuthChanged { bot_id, issue }) => {
+                        self.napcat_endpoints.set_auth_issue(&bot_id, issue).await;
                     }
                     Some(_) => continue,
                     None => break,

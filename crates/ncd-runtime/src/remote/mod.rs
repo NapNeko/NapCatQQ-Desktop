@@ -2,6 +2,7 @@
 
 pub mod bot_log_follow;
 pub mod docker_session;
+mod docker_webui_token;
 pub mod import_network;
 pub mod importable_bots;
 pub mod inventory;

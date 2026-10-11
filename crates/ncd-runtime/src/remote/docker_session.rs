@@ -11,7 +11,9 @@ use ncd_backend_snowluma::{
 };
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
-use ncd_deploy::{DockerDeployment, NapcatLogNoiseFilter, resolve_bot_container_name};
+use ncd_deploy::{
+    DockerDeployment, NapcatLogNoiseFilter, parse_napcat_webui_line, resolve_bot_container_name,
+};
 use ncd_domain::docker::DockerDeploySpec;
 use ncd_domain::{BackendType, BotConfig, DeploymentType};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
@@ -20,8 +22,13 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use super::docker_webui_token::{TokenRecheck, token_to_publish};
+use crate::events::{
+    BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter, EventSubscription,
+    NapCatWebuiAuthIssue,
+};
 use crate::native_deployment_adapter::EventBusSink;
+use crate::native_deployment_adapter::docker_helpers::read_napcat_docker_webui_token;
 use ncd_domain::ids::BotId;
 
 /// SnowLuma Docker:本机隧道上的 WebUI / noVNC 端口
@@ -70,6 +77,83 @@ impl<'h> ContainerPorts<'h> {
         }
         spec.host_port_for_container(container_port)
             .unwrap_or(container_port)
+    }
+
+    /// 复用已探测过提权的 cli 读容器 webui.json
+    async fn napcat_webui_token(&self, host: &dyn Host) -> Option<String> {
+        read_napcat_docker_webui_token(host, self.cli.as_ref(), self.container).await
+    }
+}
+
+/// 运行中跟着 NapCat 实际 token 走：日志里冒出新 token、或 poller 报 token 被拒时重读。
+/// 规则见 docker_webui_token
+struct NapcatTokenWatch {
+    container: String,
+    local_port: u16,
+    remote_webui: u16,
+    published: Option<String>,
+    latest_log: Arc<std::sync::Mutex<Option<String>>>,
+    recheck: TokenRecheck,
+}
+
+impl NapcatTokenWatch {
+    async fn tick(&mut self, host: &dyn Host, bus: &BroadcastEventBus, bot_id: &BotId) {
+        let from_log = self
+            .latest_log
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if !self
+            .recheck
+            .should_check(self.published.as_deref(), from_log.as_deref())
+        {
+            return;
+        }
+        let cli = DockerCli::new(host);
+        let ready = cli.ensure_daemon_ready().await.is_ok();
+        let from_file =
+            read_napcat_docker_webui_token(host, ready.then_some(&cli), &self.container).await;
+        self.recheck
+            .checked(from_file.as_deref(), from_log.as_deref());
+        // 被拒时只信文件：日志里那条可能正是被拒的旧值
+        let from_log = if self.recheck.log_fallback_allowed() {
+            from_log
+        } else {
+            None
+        };
+        let Some(token) = token_to_publish(
+            self.published.as_deref(),
+            from_file.as_deref(),
+            from_log.as_deref(),
+        ) else {
+            return;
+        };
+        tracing::info!(
+            target: "ncd_runtime::docker_bot_session",
+            bot_id = %bot_id,
+            from_file = from_file.is_some(),
+            "NapCat Docker: WebUI token 已变化，重新发布"
+        );
+        bus.publish(DomainEvent::napcat_webui_available_remote(
+            bot_id.clone(),
+            self.local_port,
+            self.remote_webui,
+            token.clone(),
+        ));
+        self.published = Some(token);
+    }
+}
+
+async fn wait_auth_issue(sub: Option<&mut EventSubscription>) -> Option<NapCatWebuiAuthIssue> {
+    let Some(sub) = sub else {
+        return std::future::pending().await;
+    };
+    loop {
+        match sub.next().await {
+            Some(DomainEvent::NapCatWebuiAuthChanged { issue, .. }) => return issue,
+            Some(_) => continue,
+            None => return std::future::pending().await,
+        }
     }
 }
 
@@ -185,15 +269,37 @@ impl DockerBotSessionRegistry {
 
         let mut tunnels = Vec::new();
         let mut snowluma_eps = None;
+        let mut napcat_token_watch = None;
+        let latest_log_token: Arc<std::sync::Mutex<Option<String>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        // 先订阅再发 webui_available，poller 第一次就被拒也收得到
+        let mut auth_sub = (config.bot.backend_type == BackendType::NapCat).then(|| {
+            bus.subscribe(EventFilter {
+                bot_id: Some(bot_id.clone()),
+                kind: Some(DomainEventKind::NapCatWebuiAuthChanged),
+            })
+        });
         let ports = ContainerPorts::probe(host.as_ref(), &container).await;
 
         match config.bot.backend_type {
             BackendType::NapCat => {
                 let remote_webui = ports.host_port(&spec, 6099).await;
+                // 容器 webui.json 才是 NapCat 认的；SecretStore 那份只在读不到时兜底
+                let from_container = ports.napcat_webui_token(host.as_ref()).await;
+                let from_store = napcat_webui_token.filter(|t| !t.trim().is_empty());
+                if from_container.is_some() && from_store.is_some() && from_container != from_store
+                {
+                    tracing::info!(
+                        target: "ncd_runtime::docker_bot_session",
+                        bot_id = %bot_id,
+                        "NapCat Docker: 容器 webui.json 的 token 与本机记录不同，以容器为准"
+                    );
+                }
+                let initial = from_container.or(from_store);
                 if let Ok(handle) = open_loopback_tunnel(host.as_ref(), remote_webui).await {
                     let local_port = handle.local_port();
                     tunnels.push(handle);
-                    if let Some(token) = napcat_webui_token.filter(|t| !t.trim().is_empty()) {
+                    if let Some(token) = initial.clone() {
                         bus.publish(DomainEvent::napcat_webui_available_remote(
                             bot_id.clone(),
                             local_port,
@@ -201,6 +307,14 @@ impl DockerBotSessionRegistry {
                             token,
                         ));
                     }
+                    napcat_token_watch = Some(NapcatTokenWatch {
+                        container: container.clone(),
+                        local_port,
+                        remote_webui,
+                        published: initial,
+                        latest_log: Arc::clone(&latest_log_token),
+                        recheck: TokenRecheck::default(),
+                    });
                 } else {
                     warn!(
                         target: "ncd_runtime::docker_bot_session",
@@ -246,6 +360,7 @@ impl DockerBotSessionRegistry {
         let bot_log = bot_id.clone();
         let sink_log = Arc::clone(&sink);
         let is_napcat = config.bot.backend_type == BackendType::NapCat;
+        let log_token = Arc::clone(&latest_log_token);
         let log_task = tokio::spawn(async move {
             let cli = DockerCli::new(host_log.as_ref());
             // logs_follow callback 串行调用；poison 时 recover 后继续滤，避免脏行放行
@@ -257,6 +372,12 @@ impl DockerBotSessionRegistry {
                         StreamSource::Stderr => "stderr",
                     };
                     if is_napcat {
+                        // 原始行先抓 token，噪声过滤可能改写这一行
+                        if let Some((_, token)) = parse_napcat_webui_line(&line) {
+                            *log_token
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(token);
+                        }
                         let mut guard = noise
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -278,10 +399,23 @@ impl DockerBotSessionRegistry {
         let stop_flag = Arc::clone(&stop_expected);
         let watch_task = tokio::spawn(async move {
             let deployment = ncd_deploy::DockerDeployment::new();
+            let mut token_watch = napcat_token_watch;
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {}
+                    issue = wait_auth_issue(auth_sub.as_mut()) => {
+                        if let Some(watch) = token_watch.as_mut() {
+                            watch.recheck.on_auth_issue(issue);
+                        }
+                    }
+                }
                 if stop_flag.load(Ordering::SeqCst) {
                     break;
+                }
+                if let Some(watch) = token_watch.as_mut() {
+                    watch
+                        .tick(host_watch.as_ref(), &bus_watch, &bot_watch)
+                        .await;
                 }
                 let state = deployment.observe(host_watch.as_ref(), &bot_watch).await;
                 let stopped = matches!(
@@ -389,3 +523,7 @@ async fn build_and_spawn_snowluma_poller(
 }
 
 pub use ncd_domain::bot_config::{is_remote_docker_config, is_remote_native_napcat_config};
+
+#[cfg(test)]
+#[path = "docker_session_tests.rs"]
+mod tests;

@@ -11,7 +11,7 @@ pub use ncd_traits::events::{
 
 // re-export 向后兼容: DomainEvent 数据类型
 pub use ncd_domain::domain_event::{DOMAIN_EVENT_ENVELOPE_VERSION, DomainEvent, DomainEventKind};
-pub use ncd_domain::napcat_events::NapCatLoginInvalidationReason;
+pub use ncd_domain::napcat_events::{NapCatLoginInvalidationReason, NapCatWebuiAuthIssue};
 
 #[cfg(test)]
 mod tests {
@@ -116,6 +116,34 @@ mod tests {
     }
 
     #[test]
+    fn napcat_webui_auth_changed_round_trips() {
+        for issue in [
+            Some(NapCatWebuiAuthIssue::TokenRejected),
+            Some(NapCatWebuiAuthIssue::RateLimited),
+            Some(NapCatWebuiAuthIssue::TwoFactorRequired),
+            Some(NapCatWebuiAuthIssue::Unreachable),
+            None,
+        ] {
+            assert_round_trip(DomainEvent::napcat_webui_auth_changed("10001", issue));
+        }
+        let value = serde_json::to_value(DomainEvent::napcat_webui_auth_changed(
+            "10001",
+            Some(NapCatWebuiAuthIssue::TokenRejected),
+        ))
+        .unwrap();
+        assert_eq!(value["kind"], "napcat_webui_auth_changed");
+        assert_eq!(value["issue"], "token_rejected");
+        let cleared: DomainEvent =
+            serde_json::from_str(r#"{"kind":"napcat_webui_auth_changed","bot_id":"1"}"#).unwrap();
+        assert_eq!(cleared, DomainEvent::napcat_webui_auth_changed("1", None));
+        assert_eq!(
+            cleared.kind(),
+            DomainEventKind::NapCatWebuiAuthChanged,
+            "kind 与事件名同源"
+        );
+    }
+
+    #[test]
     fn napcat_login_invalidation_reason_serializes_snake_case() {
         assert_eq!(
             serde_json::to_string(&NapCatLoginInvalidationReason::Kicked).unwrap(),
@@ -129,7 +157,11 @@ mod tests {
 
     #[test]
     fn napcat_login_event_name_literals_are_stable() {
-        let cases: [(DomainEvent, &str); 5] = [
+        let cases: [(DomainEvent, &str); 6] = [
+            (
+                DomainEvent::napcat_webui_auth_changed("10001", None),
+                "napcat_webui_auth_changed",
+            ),
             (
                 DomainEvent::napcat_login_qrcode("10001", "url"),
                 "napcat_login_qrcode",
@@ -197,6 +229,10 @@ as a quoted string",
             DomainEvent::napcat_login_online("10001", true),
             DomainEvent::napcat_login_probe_unavailable("10001"),
             DomainEvent::napcat_login_invalidated("10001", NapCatLoginInvalidationReason::Kicked),
+            DomainEvent::napcat_webui_auth_changed(
+                "10001",
+                Some(NapCatWebuiAuthIssue::TokenRejected),
+            ),
             DomainEvent::snowluma_daemon_state_changed(
                 DaemonState::Ready,
                 1,

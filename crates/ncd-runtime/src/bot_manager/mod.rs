@@ -1583,6 +1583,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .collect()
     }
 
+    /// 当前换不到 WebUI 凭据的 Bot 及原因;和 list_napcat_webui_endpoints 一起给前端回填
+    pub async fn list_napcat_webui_auth_issues(
+        &self,
+    ) -> HashMap<BotId, ncd_domain::NapCatWebuiAuthIssue> {
+        self.napcat_endpoints
+            .list_all()
+            .await
+            .into_iter()
+            .filter_map(|(id, ep)| ep.auth_issue.map(|issue| (id, issue)))
+            .collect()
+    }
+
     /// SnowLuma UI 会话态快照(daemon + per-bot 登录/隧道),冷启动 hydrate 用
     pub async fn list_snowluma_ui_snapshot(&self) -> crate::snowluma_ui_state::SnowLumaUiSnapshot {
         self.snowluma_ui.snapshot().await
@@ -2564,6 +2576,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             token,
             host_port: _,
             online: _,
+            auth_issue: _,
         } = endpoint;
         let credential = match self.webui_client.fetch_credential(port, &token).await {
             Ok(c) => c,
