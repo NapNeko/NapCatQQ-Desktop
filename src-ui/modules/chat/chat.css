@@ -463,8 +463,8 @@
 .native-chat-account-picker > button {
     height: 34px;
     max-width: none;
-    padding-left: 0;
-    padding-right: 4px;
+    padding-left: 10px;
+    padding-right: 8px;
     border-color: transparent;
     background: transparent;
 }
@@ -472,6 +472,20 @@
 .native-chat-account-picker > button[data-state="open"] {
     border-color: transparent;
     background: var(--chat-hover);
+}
+.native-chat-account-status {
+    display: grid;
+    place-items: center;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    color: color-mix(in srgb, var(--state-danger) 80%, var(--text-primary));
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 24%, transparent);
+}
+.native-chat-account-status[data-connected="true"] {
+    color: color-mix(in srgb, var(--state-success) 80%, var(--text-primary));
 }
 .native-chat-message-pane {
     position: relative;

@@ -1,6 +1,6 @@
 // 主窗口内的原生双栏聊天。
 import { useEffect, useState } from 'react';
-import { MessagesSquare } from 'lucide-react';
+import { Check, MessagesSquare, Minus } from 'lucide-react';
 import {
     reconcileChatAccounts,
     restoreChatView,
@@ -12,7 +12,6 @@ import { useChatTargets } from '../../hooks/chat/useChatConversations';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import { accountKey } from '../../core/domain/chat/model';
 import type { ChatTrayNavigation } from '../../core/ipc/generated/chat/ChatTrayNavigation';
-import { cn } from '../../shared/utils/cn';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { BotPicker } from '../debug';
 import { ChatWorkspace } from './ChatWorkspace';
@@ -104,11 +103,15 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
                     role="img"
                     aria-label={label}
                     title={label}
-                    className={cn(
-                        'h-[7px] w-[7px] shrink-0 rounded-full',
-                        connected ? 'bg-success' : 'bg-danger',
+                    className="native-chat-account-status"
+                    data-connected={connected}
+                >
+                    {connected ? (
+                        <Check size={12} strokeWidth={2.5} aria-hidden />
+                    ) : (
+                        <Minus size={12} strokeWidth={2.5} aria-hidden />
                     )}
-                />
+                </span>
             }
             targets={targets.data ?? []}
             selected={target ?? null}
