@@ -25,6 +25,7 @@ const DOMAIN_EVENT_NAMES = [
     'napcat_login_online',
     'napcat_login_probe_unavailable',
     'napcat_login_invalidated',
+    'napcat_webui_auth_changed',
     'snowluma_daemon_state_changed',
     'snowluma_bot_injected',
     'snowluma_uin_detected',

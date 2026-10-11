@@ -171,6 +171,7 @@ export function BotListGrid({
                                     qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
                                     isOnline={napcatBot?.online ?? null}
                                     invalidationReason={napcatBot?.invalidationReason ?? null}
+                                    napcatAuthIssue={napcatBot?.authIssue ?? null}
                                     napcatBinding={napcatBot?.webui ?? null}
                                     snowlumaDaemonState={snowlumaDaemonState}
                                     snowlumaDockerEndpointsReady={

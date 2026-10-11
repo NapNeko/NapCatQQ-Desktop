@@ -96,6 +96,79 @@ describe('buildBotListCardStatus', () => {
         expect(s.session).toBeNull();
     });
 
+    it('NC running + token_rejected 显示 WebUI 鉴权失败', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: false,
+            isOnline: null,
+            napcatAuthIssue: 'token_rejected',
+        });
+        expect(s.session?.label).toBe('WebUI 鉴权失败');
+        expect(s.session?.tone).toBe('danger');
+    });
+
+    it('NC running + rate_limited 显示 WebUI 登录受限', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: false,
+            isOnline: null,
+            napcatAuthIssue: 'rate_limited',
+        });
+        expect(s.session?.label).toBe('WebUI 登录受限');
+    });
+
+    it('NC running + unreachable 显示 WebUI 不可用', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: false,
+            isOnline: null,
+            napcatAuthIssue: 'unreachable',
+        });
+        expect(s.session?.label).toBe('WebUI 不可用');
+    });
+
+    it('NC 待扫码优先于鉴权问题', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: true,
+            isOnline: null,
+            napcatAuthIssue: 'token_rejected',
+        });
+        expect(s.session?.label).toBe('待扫码');
+    });
+
+    it('NC online=true 优先于鉴权问题', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: false,
+            isOnline: true,
+            napcatAuthIssue: 'token_rejected',
+        });
+        expect(s.session?.label).toBe('QQ 已登录');
+    });
+
+    it('NC 无鉴权问题仍显示探测登录', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: false,
+            isOnline: null,
+            napcatAuthIssue: null,
+        });
+        expect(s.session?.label).toBe('探测登录');
+    });
+
     it('待重启独立第三枚徽章', () => {
         const s = buildBotListCardStatus({
             state: 'running',

@@ -8,6 +8,7 @@
 import type { BotActorState } from '../../ipc/generated/BotActorState';
 import type { SnowLumaLoginState } from '../../ipc/generated/SnowLumaLoginState';
 import type { DaemonState } from '../../ipc/generated/DaemonState';
+import type { NapCatWebuiAuthIssue } from '../../ipc/generated/NapCatWebuiAuthIssue';
 import type { Flavor } from './flavor';
 import { botStateBadge } from './status';
 
@@ -63,12 +64,33 @@ const SESSION_LABELS = {
     disconnected: 'QQ 已掉线',
     webuiDown: 'WebUI 不可用',
     waitWebui: '等待 WebUI',
+    authRejected: 'WebUI 鉴权失败',
+    authRateLimited: 'WebUI 登录受限',
+    authTwoFactor: 'WebUI 需两步验证',
 } as const;
+
+function napcatAuthIssueBadge(issue: NapCatWebuiAuthIssue): StatusBadgeSpec {
+    switch (issue) {
+        case 'token_rejected':
+            return { tone: 'danger', label: SESSION_LABELS.authRejected };
+        case 'rate_limited':
+            return { tone: 'warning', label: SESSION_LABELS.authRateLimited };
+        case 'two_factor_required':
+            return { tone: 'warning', label: SESSION_LABELS.authTwoFactor };
+        case 'unreachable':
+            return { tone: 'warning', label: SESSION_LABELS.webuiDown };
+        default: {
+            const _exhaustive: never = issue;
+            return _exhaustive;
+        }
+    }
+}
 
 function napcatSessionBadge(args: {
     state: BotActorState;
     isOnline: boolean | null | undefined;
     needsQrLogin: boolean;
+    authIssue: NapCatWebuiAuthIssue | null | undefined;
 }): StatusBadgeSpec | null {
     if (args.state !== 'running' && args.state !== 'starting') {
         return null;
@@ -82,6 +104,9 @@ function napcatSessionBadge(args: {
         }
         if (args.isOnline === false) {
             return { tone: 'warning', label: SESSION_LABELS.notLoggedIn };
+        }
+        if (args.authIssue) {
+            return napcatAuthIssueBadge(args.authIssue);
         }
         return { tone: 'info', label: SESSION_LABELS.probing };
     }
@@ -144,6 +169,7 @@ export function botSessionBadge(args: {
     state: BotActorState;
     needsQrLogin: boolean;
     isOnline?: boolean | null;
+    napcatAuthIssue?: NapCatWebuiAuthIssue | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
     snowlumaDaemonState?: DaemonState | null;
     snowlumaProbeUnavailable?: boolean;
@@ -154,6 +180,7 @@ export function botSessionBadge(args: {
             state: args.state,
             isOnline: args.isOnline,
             needsQrLogin: args.needsQrLogin,
+            authIssue: args.napcatAuthIssue,
         });
     }
     if (args.flavor === 'snowluma') {
@@ -184,6 +211,7 @@ export function buildBotListCardStatus(args: {
     pendingRestart: boolean;
     needsQrLogin: boolean;
     isOnline?: boolean | null;
+    napcatAuthIssue?: NapCatWebuiAuthIssue | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
     snowlumaDaemonState?: DaemonState | null;
     snowlumaProbeUnavailable?: boolean;
@@ -196,6 +224,7 @@ export function buildBotListCardStatus(args: {
             state: args.state,
             needsQrLogin: args.needsQrLogin,
             isOnline: args.isOnline,
+            napcatAuthIssue: args.napcatAuthIssue,
             snowlumaLoginState: args.snowlumaLoginState,
             snowlumaDaemonState: args.snowlumaDaemonState,
             snowlumaProbeUnavailable: args.snowlumaProbeUnavailable,

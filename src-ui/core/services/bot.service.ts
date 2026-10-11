@@ -16,6 +16,7 @@ import type { BotRuntimeMetrics } from '../ipc/generated/domain/BotRuntimeMetric
 import type { MetricsHistoryPoint } from '../ipc/generated/domain/MetricsHistoryPoint';
 import type { SnowLumaAgreementsPayload } from '../ipc/generated/SnowLumaAgreementsPayload';
 import type { QQProcessInfo } from '../ipc/generated/QQProcessInfo';
+import type { NapcatWebuiBindingDto } from '../ipc/generated/NapcatWebuiBindingDto';
 import {
     buildMockBotConfig,
     mockBatchDelete,
@@ -193,9 +194,7 @@ export const botService = {
     },
 
     /** 内存中的 NapCat WebUI 端点(多实例 port 可能 +1);冷启动 hydrate 用 */
-    listNapcatWebuiBindings: async (): Promise<
-        Array<{ bot_id: string; port: number; token: string; online: boolean | null }>
-    > => {
+    listNapcatWebuiBindings: async (): Promise<NapcatWebuiBindingDto[]> => {
         if (isTauri) {
             return invoke('list_napcat_webui_bindings');
         }

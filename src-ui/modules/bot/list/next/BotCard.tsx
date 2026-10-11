@@ -33,6 +33,7 @@ import type {
     BotActorSnapshot,
     DaemonState,
     NapCatLoginInvalidationReason,
+    NapCatWebuiAuthIssue,
     SnowLumaLoginState,
 } from '../../../../core/ipc/types';
 import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
@@ -89,6 +90,7 @@ interface BotCardProps {
     qrcodeUrl?: string | null;
     isOnline?: boolean | null;
     invalidationReason?: NapCatLoginInvalidationReason | null;
+    napcatAuthIssue?: NapCatWebuiAuthIssue | null;
     napcatBinding?: NapcatWebuiBinding | null;
     /** 仅用于 WebUI 可用性判断，不在卡片上展示 */
     snowlumaDaemonState?: DaemonState | null;
@@ -126,6 +128,7 @@ export function BotCard({
     qrcodeUrl,
     isOnline,
     invalidationReason,
+    napcatAuthIssue,
     napcatBinding,
     snowlumaDaemonState,
     snowlumaDockerEndpointsReady,
@@ -229,6 +232,7 @@ export function BotCard({
         pendingRestart: !!bot.pending_restart,
         needsQrLogin,
         isOnline,
+        napcatAuthIssue,
         snowlumaLoginState,
         snowlumaDaemonState,
         snowlumaProbeUnavailable,

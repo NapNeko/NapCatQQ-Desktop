@@ -7,17 +7,23 @@
 //   - napcat_login_online        → online: bool
 //   - napcat_login_probe_unavailable → 连续探测失败，在线态回到 unknown
 //   - napcat_login_invalidated   → reason: kicked | logged_out
+//   - napcat_webui_auth_changed  → 换不到 WebUI 凭据的原因，null 表示恢复
 //
 // 这里把它们 reducer 化，输入是事件，输出是稳定的 `NapcatLoginState`。
 // React hook 只负责把它们绑到 useReducer / useState 上。
 
-import type { DomainEvent, NapCatLoginInvalidationReason } from '../../ipc/types';
+import type {
+    DomainEvent,
+    NapCatLoginInvalidationReason,
+    NapCatWebuiAuthIssue,
+} from '../../ipc/types';
 
 export interface NapcatBotLogin {
     webui: { port: number; token: string } | null;
     qrcodeUrl: string | null;
     online: boolean | null;
     invalidationReason: NapCatLoginInvalidationReason | null;
+    authIssue: NapCatWebuiAuthIssue | null;
 }
 
 export interface NapcatLoginState {
@@ -37,10 +43,20 @@ const emptyBotLogin: NapcatBotLogin = {
     qrcodeUrl: null,
     online: null,
     invalidationReason: null,
+    authIssue: null,
 };
 
 function ensureBot(state: NapcatLoginState, botId: string): NapcatBotLogin {
     return state.byBot[botId] ?? emptyBotLogin;
+}
+
+function isSessionCleared(login: NapcatBotLogin): boolean {
+    return (
+        login.webui === null &&
+        login.qrcodeUrl === null &&
+        login.online === null &&
+        login.authIssue === null
+    );
 }
 
 export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): NapcatLoginState {
@@ -59,6 +75,8 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
                         online: sameBinding ? previous.online : null,
                         qrcodeUrl: sameBinding ? previous.qrcodeUrl : null,
                         invalidationReason: sameBinding ? previous.invalidationReason : null,
+                        // token 换了（如改读容器 webui.json）旧的鉴权失败不再成立
+                        authIssue: sameBinding ? previous.authIssue : null,
                     },
                 },
             };
@@ -67,7 +85,7 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
         case 'bot_process_exited': {
             const prev = state.byBot[event.bot_id];
             if (!prev) return state;
-            if (prev.webui === null && prev.qrcodeUrl === null && prev.online === null) {
+            if (isSessionCleared(prev)) {
                 return state;
             }
             return {
@@ -79,6 +97,7 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
                         webui: null,
                         qrcodeUrl: null,
                         online: null,
+                        authIssue: null,
                     },
                 },
             };
@@ -94,7 +113,7 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
             const botId = event.snapshot.bot_id;
             const cur = state.byBot[botId];
             if (!cur) return state;
-            if (cur.webui === null && cur.qrcodeUrl === null && cur.online === null) {
+            if (isSessionCleared(cur)) {
                 return state;
             }
             return {
@@ -106,6 +125,7 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
                         webui: null,
                         qrcodeUrl: null,
                         online: null,
+                        authIssue: null,
                     },
                 },
             };
@@ -119,6 +139,7 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
                     [event.bot_id]: {
                         ...ensureBot(state, event.bot_id),
                         qrcodeUrl: event.qrcode_url,
+                        authIssue: null,
                     },
                 },
             };
@@ -143,6 +164,7 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
                     [event.bot_id]: {
                         ...ensureBot(state, event.bot_id),
                         online: event.online,
+                        authIssue: null,
                     },
                 },
             };
@@ -158,6 +180,19 @@ export function reduceNapcatLogin(state: NapcatLoginState, event: DomainEvent): 
                     },
                 },
             };
+
+        case 'napcat_webui_auth_changed': {
+            const prev = ensureBot(state, event.bot_id);
+            const issue = event.issue ?? null;
+            if (prev.authIssue === issue && state.byBot[event.bot_id]) return state;
+            return {
+                ...state,
+                byBot: {
+                    ...state.byBot,
+                    [event.bot_id]: { ...prev, authIssue: issue },
+                },
+            };
+        }
 
         case 'napcat_login_invalidated': {
             const epoch = (state.invalidationEpoch[event.bot_id] ?? 0) + 1;

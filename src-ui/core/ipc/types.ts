@@ -430,6 +430,8 @@ export interface BatchResultResponse {
 }
 
 export type NapCatLoginInvalidationReason = 'kicked' | 'logged_out';
+export type { NapCatWebuiAuthIssue } from './generated/NapCatWebuiAuthIssue';
+import type { NapCatWebuiAuthIssue } from './generated/NapCatWebuiAuthIssue';
 
 // SnowLuma 后端类型—— re-export ts-rs 生成产物
 export type { DaemonState } from './generated/DaemonState';
@@ -507,6 +509,11 @@ type DomainEventBody =
           kind: 'napcat_login_invalidated';
           bot_id: string;
           reason: NapCatLoginInvalidationReason;
+      }
+    | {
+          kind: 'napcat_webui_auth_changed';
+          bot_id: string;
+          issue: NapCatWebuiAuthIssue | null;
       }
     | {
           kind: 'snowluma_daemon_state_changed';

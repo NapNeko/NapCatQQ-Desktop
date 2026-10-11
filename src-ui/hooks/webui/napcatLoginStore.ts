@@ -20,7 +20,7 @@ import {
     reduceNapcatLogin,
     type NapcatLoginState,
 } from '../../core/domain/events/login-aggregator';
-import type { DomainEvent } from '../../core/ipc/types';
+import type { DomainEvent, NapCatWebuiAuthIssue } from '../../core/ipc/types';
 
 const store = createStore<NapcatLoginState>(initialNapcatLoginState);
 
@@ -53,6 +53,7 @@ function applyWebuiBinding(
     port: number,
     token: string,
     online: boolean | null,
+    authIssue: NapCatWebuiAuthIssue | null,
 ): void {
     let next = reduceNapcatLogin(store.getSnapshot(), {
         kind: 'napcat_webui_available',
@@ -66,6 +67,12 @@ function applyWebuiBinding(
             ? { kind: 'napcat_login_probe_unavailable', bot_id: botId }
             : { kind: 'napcat_login_online', bot_id: botId, online },
     );
+    // online 事件会清 authIssue，后端表才是权威，最后再盖一次
+    next = reduceNapcatLogin(next, {
+        kind: 'napcat_webui_auth_changed',
+        bot_id: botId,
+        issue: authIssue,
+    });
     store.setState(next);
 }
 
@@ -76,16 +83,18 @@ async function hydrateFromBackend(): Promise<void> {
             if (!row.bot_id || !row.port || !row.token) continue;
             const current = store.getSnapshot().byBot[row.bot_id];
             const cur = current?.webui;
+            const authIssue = row.auth_issue ?? null;
             if (
                 cur &&
                 cur.port === row.port &&
                 cur.token === row.token &&
-                current.online === row.online
+                current.online === row.online &&
+                current.authIssue === authIssue
             ) {
                 continue;
             }
             // 后端表是权威源(stdout 解析的真实口)
-            applyWebuiBinding(row.bot_id, row.port, row.token, row.online);
+            applyWebuiBinding(row.bot_id, row.port, row.token, row.online, authIssue);
         }
         // bootstrap/reconcile 可能仍在写 endpoint:空表时退避再试,有数据后停
         if (rows.length === 0 && hydrateAttempts < MAX_EMPTY_HYDRATE_RETRIES) {

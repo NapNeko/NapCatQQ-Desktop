@@ -58,4 +58,77 @@ describe('reduceNapcatLogin', () => {
 
         expect(state.byBot['10001']?.online).toBeNull();
     });
+
+    it('napcat_webui_auth_changed 设置 authIssue', () => {
+        let state = reduceNapcatLogin(initialNapcatLoginState, {
+            kind: 'napcat_webui_auth_changed',
+            bot_id: '10001',
+            issue: 'token_rejected',
+        });
+        expect(state.byBot['10001']?.authIssue).toBe('token_rejected');
+
+        state = reduceNapcatLogin(state, {
+            kind: 'napcat_webui_auth_changed',
+            bot_id: '10001',
+            issue: null,
+        });
+        expect(state.byBot['10001']?.authIssue).toBeNull();
+    });
+
+    it('online 事件清除 authIssue', () => {
+        let state = reduceNapcatLogin(initialNapcatLoginState, {
+            kind: 'napcat_webui_auth_changed',
+            bot_id: '10001',
+            issue: 'rate_limited',
+        });
+        state = reduceNapcatLogin(state, {
+            kind: 'napcat_login_online',
+            bot_id: '10001',
+            online: true,
+        });
+        expect(state.byBot['10001']?.authIssue).toBeNull();
+    });
+
+    it('换绑定清除 authIssue，同绑定保留', () => {
+        let state = reduceNapcatLogin(initialNapcatLoginState, {
+            kind: 'napcat_webui_available',
+            bot_id: '10001',
+            port: 58408,
+            token: 'wrong',
+        });
+        state = reduceNapcatLogin(state, {
+            kind: 'napcat_webui_auth_changed',
+            bot_id: '10001',
+            issue: 'token_rejected',
+        });
+
+        state = reduceNapcatLogin(state, {
+            kind: 'napcat_webui_available',
+            bot_id: '10001',
+            port: 58408,
+            token: 'wrong',
+        });
+        expect(state.byBot['10001']?.authIssue).toBe('token_rejected');
+
+        state = reduceNapcatLogin(state, {
+            kind: 'napcat_webui_available',
+            bot_id: '10001',
+            port: 58408,
+            token: 'from-container',
+        });
+        expect(state.byBot['10001']?.authIssue).toBeNull();
+    });
+
+    it('进程退出清除 authIssue', () => {
+        let state = reduceNapcatLogin(initialNapcatLoginState, {
+            kind: 'napcat_webui_auth_changed',
+            bot_id: '10001',
+            issue: 'unreachable',
+        });
+        state = reduceNapcatLogin(state, {
+            kind: 'bot_process_exited',
+            bot_id: '10001',
+        });
+        expect(state.byBot['10001']?.authIssue).toBeNull();
+    });
 });
