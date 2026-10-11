@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyAccount, ingestMessage, openConversation } from './model';
 import { archiveOf, restoreArchive, mergeRecentConversations } from './archive';
+import type { Segment } from '../debug/segments';
 
 const event = (id = 1, time = 100) => ({
     message_type: 'group',
@@ -11,6 +12,107 @@ const event = (id = 1, time = 100) => ({
     message: '你好',
 });
 describe('chat archive projection', () => {
+    it('cleans nested self-forwarded image sources while retaining protocol and recovery metadata', () => {
+        const content = [
+            {
+                type: 'node',
+                data: {
+                    message_id: '70',
+                    user_id: '99',
+                    nickname: '我',
+                    content: [
+                        {
+                            type: 'image',
+                            data: {
+                                file: 'ncd-inline-image://private',
+                                inline_ref: 'ncd-inline-image://private',
+                                local_file: 'base64://' + 'A'.repeat(64 * 1024),
+                                source_message_id: '70',
+                                source_image_index: 0,
+                                width: 800,
+                                height: 400,
+                            },
+                        },
+                        {
+                            type: 'forward',
+                            data: {
+                                id: 'nested-resource',
+                                messages: [
+                                    {
+                                        message_id: '71',
+                                        sender: { user_id: '22', nickname: '朋友' },
+                                        message: [
+                                            {
+                                                type: 'image',
+                                                data: {
+                                                    file: 'protocol-image',
+                                                    local_file: 'ncd-local-file://D:/private.png',
+                                                    url: 'https://cdn.example/recoverable.png',
+                                                    base64: 'R0lGODlh',
+                                                    source_message_id: '71',
+                                                    source_image_index: 1,
+                                                },
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            type: 'image',
+                            data: {
+                                file: 'ncd-local-file://D:/temporary.png',
+                                url: 'blob:private',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+        const state = ingestMessage(emptyAccount('99'), {
+            ...event(),
+            message: [{ type: 'forward', data: { id: 'root-resource', content } }],
+        });
+        const saved = archiveOf(state);
+        const serialized = JSON.stringify(saved);
+        expect(serialized).not.toMatch(
+            /ncd-inline-image|ncd-local-file|base64|blob:|inline_ref|local_file/,
+        );
+        expect(serialized.length).toBeLessThan(2048);
+        const root = saved.messages[0].segments[0];
+        const node = (root.data.content as typeof content)[0];
+        expect(node.data).toMatchObject({ message_id: '70', user_id: '99', nickname: '我' });
+        expect(node.data.content[0]).toEqual({
+            type: 'image',
+            data: { source_message_id: '70', source_image_index: 0, width: 800, height: 400 },
+        });
+        expect(serialized).toContain('protocol-image');
+        expect(serialized).toContain('https://cdn.example/recoverable.png');
+        expect(serialized).toContain('source_image_index');
+        expect(content[0].data.content[0].data.local_file).toContain('base64://');
+    });
+    it('bounds nested forward archive traversal without persisting an unvisited byte payload', () => {
+        let segment: Segment = { type: 'image', data: { file: 'base64://R0lGODlh' } };
+        for (let depth = 0; depth < 20; depth++) {
+            segment = {
+                type: 'forward',
+                data: {
+                    id: `resource-${depth}`,
+                    content: [
+                        {
+                            type: 'node',
+                            data: { message_id: `${depth + 1}`, content: [segment] },
+                        },
+                    ],
+                },
+            };
+        }
+        const state = ingestMessage(emptyAccount('99'), { ...event(), message: [segment] });
+        const saved = JSON.stringify(archiveOf(state));
+        expect(saved).not.toContain('base64://');
+        expect(saved).toContain('resource-19');
+        expect(saved).not.toContain('resource-0');
+    });
     it('persists recoverable protocol ids but never process-local image refs or inline bytes', () => {
         const state = ingestMessage(emptyAccount('99'), {
             ...event(),

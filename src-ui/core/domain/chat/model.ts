@@ -1,9 +1,8 @@
 // 聊天会话的内存投影；标识在协议边界统一为字符串。
 import { normalizeMessage, messagePreview, type Segment } from '../debug/segments';
-import { isLocalFileToken } from '../debug/streamActions';
 import type { Mention } from '../debug/composerModel';
 import { findDuplicateMessage, mergeMessageIdentity, sortMessages } from './messageIdentity';
-import { isInlineImageReference } from './imageSource';
+import { withLocalImageSources } from './imageSource';
 import {
     retainWorkingMessages,
     retainArchiveMessages,
@@ -106,7 +105,12 @@ export function mergeMessageRows(
                           ? savedMessage.segments
                           : message.segments,
                   }
-                : message,
+                : savedMessage
+                  ? {
+                        ...message,
+                        segments: withLocalImageSources(message.segments, savedMessage.segments),
+                    }
+                  : message,
         );
         if (message.id) byId.set(`${message.session}/${message.id}`, message.key);
     }
@@ -573,22 +577,4 @@ export function settleSend(
             messages,
         ),
     };
-}
-// 自己刚发的图以本机字节为准：回显/回包替换段时把本机来源挂到 local_file 上，展示与重发不再依赖协议回环。
-function withLocalImageSources(segments: Segment[], previous: Segment[]): Segment[] {
-    const locals = previous
-        .filter((s) => s.type === 'image')
-        .map((s) => text(s.data.inline_ref) || text(s.data.local_file) || text(s.data.file))
-        .filter(
-            (f) => f.startsWith('base64://') || isInlineImageReference(f) || isLocalFileToken(f),
-        );
-    if (!locals.length) return segments;
-    let index = 0;
-    return segments.map((segment) => {
-        if (segment.type !== 'image') return segment;
-        const local = locals[index++];
-        if (!local || text(segment.data.local_file)) return segment;
-        if (text(segment.data.file) === local) return segment;
-        return { ...segment, data: { ...segment.data, local_file: local } };
-    });
 }

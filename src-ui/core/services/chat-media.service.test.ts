@@ -741,4 +741,139 @@ describe('native chat media protocol', () => {
         ).resolves.toBe('data:image/gif;base64,R0lGODlh');
         expect(call).not.toHaveBeenCalled();
     });
+    it.each(['napcat', 'snowluma'] as const)(
+        'reads a local %s cache path before a stale display URL',
+        async (backend) => {
+            const call = vi
+                .fn()
+                .mockResolvedValue(
+                    ok({ file: 'C:\\bot\\cache\\sent.png', url: 'https://cdn.example/stale.png' }),
+                );
+            const readLocal = vi.fn().mockResolvedValue('iVBORw0KGgo=');
+            expect(
+                await createChatMediaService(call, readLocal).image(
+                    { ...target, backend },
+                    { file: 'sent-image' },
+                    true,
+                ),
+            ).toBe('data:image/png;base64,iVBORw0KGgo=');
+            expect(readLocal).toHaveBeenCalledWith('C:\\bot\\cache\\sent.png');
+        },
+    );
+    it('uses a returned URL when a local cache path is no longer readable', async () => {
+        const call = vi
+            .fn()
+            .mockResolvedValue(
+                ok({ path: 'C:\\bot\\gone.png', url: 'https://cdn.example/fresh.png' }),
+            );
+        const readLocal = vi.fn().mockRejectedValue(new Error('文件已清理'));
+        expect(
+            await createChatMediaService(call, readLocal).image(
+                { ...target, backend: 'snowluma' },
+                { file_id: 'resource' },
+                true,
+            ),
+        ).toBe('https://cdn.example/fresh.png');
+    });
+    it('does not read a remote SnowLuma host path on this computer', async () => {
+        const call = vi.fn().mockResolvedValue(ok({ file: 'C:\\remote\\private.png' }));
+        const readLocal = vi.fn();
+        await expect(
+            createChatMediaService(call, readLocal).image(
+                { ...target, backend: 'snowluma', host: { kind: 'remote', server_id: 'remote' } },
+                { file_id: 'resource' },
+                true,
+            ),
+        ).rejects.toThrow('图片地址');
+        expect(readLocal).not.toHaveBeenCalled();
+    });
+    it('recovers metadata-only archived images using the original message and image ordinal', async () => {
+        const call = vi.fn(async (_bot, action) =>
+            action === 'get_msg'
+                ? ok({
+                      message: [
+                          { type: 'image', data: { file_id: 'first' } },
+                          { type: 'image', data: { file_id: 'second' } },
+                      ],
+                  })
+                : ok({ base64: 'R0lGODlh' }),
+        );
+        expect(
+            await createChatMediaService(call).image(
+                target,
+                { source_message_id: '70', source_image_index: 1 },
+                false,
+                { context: { imageIndex: 0 } },
+            ),
+        ).toBe('data:image/gif;base64,R0lGODlh');
+        expect(call.mock.calls).toEqual([
+            ['bot', 'get_msg', { message_id: '70' }],
+            ['bot', 'get_image', { file_id: 'second' }],
+        ]);
+    });
+    it('recovers a removed self-send attachment without submitting the local token to get_image', async () => {
+        const call = vi
+            .fn()
+            .mockResolvedValue(
+                ok({
+                    message: [
+                        { type: 'image', data: { url: 'https://cdn.example/recovered.png' } },
+                    ],
+                }),
+            );
+        const readLocal = vi.fn().mockRejectedValue(new Error('本机原文件已删除'));
+        expect(
+            await createChatMediaService(call, readLocal).image(
+                target,
+                { file: 'ncd-local-file://D:/gone.png' },
+                true,
+                { context: { messageId: '70', imageIndex: 0 } },
+            ),
+        ).toBe('https://cdn.example/recovered.png');
+        expect(call.mock.calls).toEqual([['bot', 'get_msg', { message_id: '70' }]]);
+    });
+    it('keeps recovery coordinates on images in a self-forwarded preview', async () => {
+        const nodes = await createChatMediaService(vi.fn()).forward(target, {
+            content: [
+                {
+                    type: 'node',
+                    data: {
+                        message_id: '70',
+                        content: [
+                            { type: 'image', data: { file: 'first' } },
+                            { type: 'text', data: { text: '间隔' } },
+                            { type: 'image', data: { file: 'second' } },
+                        ],
+                    },
+                },
+            ],
+        });
+        expect(nodes[0].segments[0].data).toMatchObject({
+            source_message_id: '70',
+            source_image_index: 0,
+        });
+        expect(nodes[0].segments[2].data).toMatchObject({
+            source_message_id: '70',
+            source_image_index: 1,
+        });
+    });
+    it('previews and resends a carried local data URI without a protocol request', async () => {
+        const call = vi.fn();
+        const service = createChatMediaService(call);
+        const data = { local_file: 'data:image/gif;base64,R0lGODlh' };
+        expect(await service.image(target, data)).toBe(data.local_file);
+        expect((await service.imageForSend(target, data)).data.file).toBe('base64://R0lGODlh');
+        expect(call).not.toHaveBeenCalled();
+    });
+    it('accepts local image bytes above 12 MiB within the 16 MiB image budget', async () => {
+        const bytes = 'A'.repeat(4 * Math.ceil((13 * 1024 * 1024) / 3));
+        const call = vi.fn();
+        const readLocal = vi.fn().mockResolvedValue(bytes);
+        expect(
+            await createChatMediaService(call, readLocal).image(target, {
+                file: 'ncd-local-file://D:/large.png',
+            }),
+        ).toBe(`data:image/png;base64,${bytes}`);
+        expect(call).not.toHaveBeenCalled();
+    });
 });

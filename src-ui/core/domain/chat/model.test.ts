@@ -11,6 +11,7 @@ import {
     parseContact,
     setDraft,
     mergeArchiveMessages,
+    mergeMessageRows,
     trimAccountMessages,
 } from './model';
 import {
@@ -460,6 +461,21 @@ describe('group join notices', () => {
 });
 
 describe('local image source carry', () => {
+    it('retains local sources when history rows replace saved rows', () => {
+        const message = ingestMessage(emptyAccount('99'), payload({ user_id: 99 })).messages[0];
+        const saved = {
+            ...message,
+            segments: [{ type: 'image', data: { local_file: 'ncd-local-file://D:/sent.png' } }],
+        };
+        const history = {
+            ...message,
+            segments: [{ type: 'image', data: { file: 'server-image' } }],
+        };
+        expect(mergeMessageRows([saved], [history])[0].segments[0].data).toEqual({
+            file: 'server-image',
+            local_file: 'ncd-local-file://D:/sent.png',
+        });
+    });
     it('keeps a settled large pasted image while archiving only its metadata', () => {
         const file = 'base64://' + 'A'.repeat(7 * 1024 * 1024);
         let state = openConversation(emptyAccount('99'), {

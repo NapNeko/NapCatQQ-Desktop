@@ -136,4 +136,28 @@ describe('message identity across historical API versions', () => {
             sequence: '48',
         });
     });
+    it('preserves a local preview through canonical history deduplication', () => {
+        const message = ingestMessage(emptyAccount('99'), event(1234, 1234)).messages[0];
+        const local = {
+            ...message,
+            requestId: 'sent-request',
+            segments: [
+                {
+                    type: 'image',
+                    data: { file: 'digest.png', local_file: 'ncd-local-file://D:/sent.png' },
+                },
+            ],
+        };
+        const history = {
+            ...message,
+            segments: [
+                { type: 'image', data: { file: 'digest.png', url: 'https://cdn.example/new' } },
+            ],
+        };
+        expect(deduplicateMessages([local, history])[0].segments[0].data).toMatchObject({
+            file: 'digest.png',
+            url: 'https://cdn.example/new',
+            local_file: 'ncd-local-file://D:/sent.png',
+        });
+    });
 });
