@@ -132,7 +132,7 @@ pub use migration::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationReport, MigrationSource,
     MigrationStage, MigrationWarning,
 };
-pub use napcat_events::NapCatLoginInvalidationReason;
+pub use napcat_events::{NapCatLoginInvalidationReason, NapCatWebuiAuthIssue};
 pub use node_environment::{NodeEnvironmentCandidate, NodeProbeResult, NodeSourceKind};
 pub use offline_alert::{
     EnsureOneBotMessengerHttpResult, OfflineAlert, OfflineAlertKind, OfflineAlertSource,

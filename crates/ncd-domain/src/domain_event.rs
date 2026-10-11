@@ -11,7 +11,7 @@ use crate::bot_status::BotStatus;
 use crate::daemon_state::{DaemonState, SnowLumaLoginState};
 use crate::deployment_task::DeploymentTaskSnapshot;
 use crate::ids::BotId;
-use crate::napcat_events::NapCatLoginInvalidationReason;
+use crate::napcat_events::{NapCatLoginInvalidationReason, NapCatWebuiAuthIssue};
 use crate::progress::ProgressEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +35,8 @@ pub enum DomainEventKind {
     NapCatLoginProbeUnavailable,
     #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated,
+    #[serde(rename = "napcat_webui_auth_changed")]
+    NapCatWebuiAuthChanged,
     #[serde(rename = "snowluma_daemon_state_changed")]
     SnowLumaDaemonStateChanged,
     #[serde(rename = "snowluma_bot_injected")]
@@ -134,6 +136,13 @@ pub enum DomainEvent {
     NapCatLoginInvalidated {
         bot_id: BotId,
         reason: NapCatLoginInvalidationReason,
+    },
+    /// 换凭据失败原因变化；issue=None 表示恢复。只在值变化时发
+    #[serde(rename = "napcat_webui_auth_changed")]
+    NapCatWebuiAuthChanged {
+        bot_id: BotId,
+        #[serde(default)]
+        issue: Option<NapCatWebuiAuthIssue>,
     },
     #[serde(rename = "snowluma_daemon_state_changed")]
     SnowLumaDaemonStateChanged {
@@ -239,6 +248,7 @@ impl DomainEvent {
                 DomainEventKind::NapCatLoginProbeUnavailable
             }
             Self::NapCatLoginInvalidated { .. } => DomainEventKind::NapCatLoginInvalidated,
+            Self::NapCatWebuiAuthChanged { .. } => DomainEventKind::NapCatWebuiAuthChanged,
             Self::SnowLumaDaemonStateChanged { .. } => DomainEventKind::SnowLumaDaemonStateChanged,
             Self::SnowLumaBotInjected { .. } => DomainEventKind::SnowLumaBotInjected,
             Self::SnowLumaUinDetected { .. } => DomainEventKind::SnowLumaUinDetected,
@@ -279,6 +289,7 @@ impl DomainEvent {
             Self::NapCatLoginOnline { .. } => "napcat_login_online",
             Self::NapCatLoginProbeUnavailable { .. } => "napcat_login_probe_unavailable",
             Self::NapCatLoginInvalidated { .. } => "napcat_login_invalidated",
+            Self::NapCatWebuiAuthChanged { .. } => "napcat_webui_auth_changed",
             Self::SnowLumaDaemonStateChanged { .. } => "snowluma_daemon_state_changed",
             Self::SnowLumaBotInjected { .. } => "snowluma_bot_injected",
             Self::SnowLumaUinDetected { .. } => "snowluma_uin_detected",
@@ -315,6 +326,7 @@ impl DomainEvent {
             Self::NapCatLoginOnline { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginProbeUnavailable { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginInvalidated { bot_id, .. } => Some(bot_id),
+            Self::NapCatWebuiAuthChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaDaemonStateChanged { .. } => None,
             Self::SnowLumaBotInjected { bot_id, .. } => Some(bot_id),
             Self::SnowLumaUinDetected { bot_id, .. } => Some(bot_id),
@@ -476,6 +488,16 @@ impl DomainEvent {
         Self::NapCatLoginInvalidated {
             bot_id: bot_id.into(),
             reason,
+        }
+    }
+
+    pub fn napcat_webui_auth_changed(
+        bot_id: impl Into<BotId>,
+        issue: Option<NapCatWebuiAuthIssue>,
+    ) -> Self {
+        Self::NapCatWebuiAuthChanged {
+            bot_id: bot_id.into(),
+            issue,
         }
     }
 
