@@ -135,6 +135,15 @@ impl ActionRow {
         }
     }
 
+    pub fn with_height(mut self, height: f32) -> Self {
+        let offset = (height - self.rect.h) / 2.0;
+        self.rect.h = height;
+        if let Some(label) = self.label.as_mut() {
+            label.y += offset;
+        }
+        self
+    }
+
     /// hover / 键盘选中时底色 brand-soft，图标和文字都变 brand。
     pub fn paint(&self, canvas: &Canvas, theme: &Theme, hot: bool) {
         let (icon_c, text_c) = if hot {
@@ -146,7 +155,7 @@ impl ActionRow {
         canvas.icon(
             self.icon,
             self.rect.x + 10.0,
-            self.rect.y + 6.0,
+            self.rect.y + (self.rect.h - 14.0) / 2.0,
             14.0,
             1.9,
             icon_c,

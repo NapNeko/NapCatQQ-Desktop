@@ -213,3 +213,156 @@ mod tests {
         assert!(DibLayout::new(8193, 8192, 8193 * 8192 * 4).is_err());
     }
 }
+
+fn memory_bytes(bytes: &[u8]) -> Result<GlobalMemory, String> {
+    let memory = GlobalMemory::new(bytes.len())?;
+    {
+        let lock = memory.lock()?;
+        // SAFETY: 已分配并锁定 bytes.len() 字节，来源与目标不重叠。
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), lock.ptr, bytes.len());
+        }
+    }
+    Ok(memory)
+}
+
+/// 文本、文件列表和图片同次发布；粘贴目标自行选择支持的格式。
+/// CF_HDROP 不限制扩展名，GIF / 视频 / 语音 / 文档等保留原文件内容。
+pub fn copy_message(
+    hwnd: HWND,
+    text: &str,
+    paths: &[std::path::PathBuf],
+    image_path: Option<&std::path::Path>,
+) -> Result<(), String> {
+    use windows::Win32::Graphics::Gdi::{BI_BITFIELDS, BITMAPV5HEADER};
+    use windows::Win32::System::DataExchange::RegisterClipboardFormatW;
+    use windows::core::w;
+    // SAFETY: 查询句柄有效性，不保留指针。
+    if hwnd.is_invalid() || !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
+        return Err("聊天窗口已经关闭".into());
+    }
+    let mut formats: Vec<(u32, GlobalMemory)> = Vec::new();
+    let unicode: Vec<u8> = text
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    formats.push((13, memory_bytes(&unicode)?));
+    if !paths.is_empty() {
+        let mut files = vec![0u8; 20]; // DROPFILES，pFiles=20，fWide=TRUE
+        files[0..4].copy_from_slice(&20u32.to_le_bytes());
+        files[16..20].copy_from_slice(&1u32.to_le_bytes());
+        for path in paths {
+            use std::os::windows::ffi::OsStrExt as _;
+            for unit in path.as_os_str().encode_wide().chain(std::iter::once(0)) {
+                files.extend_from_slice(&unit.to_le_bytes());
+            }
+        }
+        files.extend_from_slice(&0u16.to_le_bytes());
+        formats.push((15, memory_bytes(&files)?));
+        // 明确请求复制，资源管理器粘贴时不应移动原附件。
+        // SAFETY: 静态 UTF-16 终止字符串，系统返回注册格式 ID。
+        let effect = unsafe { RegisterClipboardFormatW(w!("Preferred DropEffect")) };
+        if effect != 0 {
+            formats.push((effect, memory_bytes(&1u32.to_le_bytes())?));
+        }
+    }
+    if let Some(path) = image_path {
+        let mut reader = image::ImageReader::open(path)
+            .map_err(|e| e.to_string())?
+            .with_guessed_format()
+            .map_err(|e| e.to_string())?;
+        let mut limits = image::Limits::default();
+        limits.max_alloc = Some(64 * 1024 * 1024);
+        reader.limits(limits);
+        let decoded = reader.decode().map_err(|e| format!("读取图片失败：{e}"))?;
+        let rgba = decoded.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        DibLayout::new(width, height, rgba.len())?;
+        let pixels = rgba.len();
+        let memory = GlobalMemory::new(size_of::<BITMAPV5HEADER>() + pixels)?;
+        {
+            let lock = memory.lock()?;
+            let header = BITMAPV5HEADER {
+                bV5Size: size_of::<BITMAPV5HEADER>() as u32,
+                bV5Width: width as i32,
+                bV5Height: -(height as i32),
+                bV5Planes: 1,
+                bV5BitCount: 32,
+                bV5Compression: BI_BITFIELDS,
+                bV5SizeImage: pixels as u32,
+                bV5RedMask: 0x00ff0000,
+                bV5GreenMask: 0x0000ff00,
+                bV5BlueMask: 0x000000ff,
+                bV5AlphaMask: 0xff000000,
+                bV5CSType: 0x73524742,
+                bV5Intent: 4,
+                ..Default::default()
+            };
+            // SAFETY: 完整头部及像素区已分配；rgba 长度与尺寸已验证。
+            unsafe {
+                std::ptr::write_unaligned(lock.ptr.cast::<BITMAPV5HEADER>(), header);
+                let output = std::slice::from_raw_parts_mut(
+                    lock.ptr.add(size_of::<BITMAPV5HEADER>()),
+                    pixels,
+                );
+                for (input, output) in rgba.chunks_exact(4).zip(output.chunks_exact_mut(4)) {
+                    output.copy_from_slice(&[input[2], input[1], input[0], input[3]]);
+                }
+            }
+        }
+        formats.push((17, memory));
+        // 旧应用使用 24 位 DIB；透明像素合成到白底。
+        let layout = DibLayout::new(width, height, rgba.len())?;
+        let mut legacy = vec![0u8; layout.total_bytes];
+        let header = BITMAPINFOHEADER {
+            biSize: size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width as i32,
+            biHeight: height as i32,
+            biPlanes: 1,
+            biBitCount: 24,
+            biCompression: BI_RGB.0,
+            biSizeImage: layout.pixel_bytes as u32,
+            ..Default::default()
+        };
+        // SAFETY: legacy 容纳完整头部，使用未对齐写入 Vec<u8>。
+        unsafe {
+            std::ptr::write_unaligned(legacy.as_mut_ptr().cast::<BITMAPINFOHEADER>(), header);
+        }
+        let mut flattened = rgba.into_raw();
+        for pixel in flattened.chunks_exact_mut(4) {
+            let alpha = u16::from(pixel[3]);
+            for channel in &mut pixel[..3] {
+                *channel = ((u16::from(*channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
+            }
+        }
+        encode_bgr_rows(
+            width as usize,
+            height as usize,
+            layout.stride,
+            &flattened,
+            &mut legacy[size_of::<BITMAPINFOHEADER>()..],
+        );
+        formats.push((CF_DIB, memory_bytes(&legacy)?));
+        let mut png = std::io::Cursor::new(Vec::new());
+        decoded
+            .write_to(&mut png, image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+        // SAFETY: 静态 UTF-16 终止字符串；系统返回注册格式 ID。
+        let png_format = unsafe { RegisterClipboardFormatW(w!("PNG")) };
+        if png_format != 0 {
+            formats.push((png_format, memory_bytes(png.get_ref())?));
+        }
+    }
+    // 所有下载、编码和分配在清空前完成，准备失败不改变原剪贴板。
+    let _clipboard = ClipboardGuard::open(hwnd)?;
+    // SAFETY: 当前线程独占剪贴板。
+    unsafe { EmptyClipboard() }.map_err(|e| format!("清空剪贴板失败：{e}"))?;
+    for (format, memory) in formats {
+        // SAFETY: 仅成功发布后交出已解锁的 GMEM_MOVEABLE 所有权。
+        unsafe { SetClipboardData(format, Some(HANDLE(memory.handle.0))) }
+            .map_err(|e| format!("复制消息失败：{e}"))?;
+        memory.release();
+    }
+    Ok(())
+}

@@ -63,6 +63,7 @@ function base64Payload(result: Record<string, unknown>): string {
     for (const [key, value] of Object.entries(result)) {
         const raw = text(value).replace(/\s/g, '');
         if (!raw) continue;
+        if (/^data:image\/[^;,]+;base64,/i.test(raw)) return raw.slice(raw.indexOf(',') + 1);
         if (key === 'base64') return raw.replace(/^base64:\/\//i, '');
         if (/^base64:\/\//i.test(raw)) return raw.slice('base64://'.length);
     }
@@ -72,7 +73,9 @@ function imageBytes(result: Record<string, unknown>): string {
     const value = base64Payload(result);
     if (!value) return '';
     if (
-        value.length > 16 * 1024 * 1024 ||
+        value.length > Math.ceil((16 * 1024 * 1024) / 3) * 4 ||
+        (value.length * 3) / 4 - (value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0) >
+            16 * 1024 * 1024 ||
         value.length % 4 !== 0 ||
         !/^[A-Za-z0-9+/]+={0,2}$/.test(value)
     )
@@ -109,13 +112,22 @@ function forwardNodes(value: unknown): ForwardNode[] {
         const content = data.message ?? data.content ?? data.raw_message;
         const messageId = id(data.message_id);
         // NapCat 内嵌转发有时返回 node 段，保持为可按需展开的安全消息段。
-        const segments = normalizeMessage(content).map((segment) =>
-            segment.type === 'node'
-                ? { type: 'forward', data: { content: [segment] } }
-                : messageId && (segment.type === 'image' || segment.type === 'mface')
-                  ? { ...segment, data: { ...segment.data, source_message_id: messageId } }
-                  : segment,
-        );
+        let imageIndex = 0;
+        const segments = normalizeMessage(content).map((segment) => {
+            if (segment.type === 'node') return { type: 'forward', data: { content: [segment] } };
+            if (segment.type !== 'image' && segment.type !== 'mface') return segment;
+            const ordinal = imageIndex++;
+            return messageId
+                ? {
+                      ...segment,
+                      data: {
+                          ...segment.data,
+                          source_message_id: messageId,
+                          source_image_index: ordinal,
+                      },
+                  }
+                : segment;
+        });
         return {
             senderId,
             name:
@@ -227,6 +239,26 @@ export function createChatMediaService(
         [data.inline_ref, data.local_file, data.file, data.url, data.base64].find(
             isInlineImageReference,
         );
+    const recoverMessageImage = async (
+        target: DebugTarget,
+        data: Record<string, unknown>,
+        context: ImageSourceContext,
+    ): Promise<Record<string, unknown>> => {
+        const messageId = id(data.source_message_id) || id(context.messageId);
+        if (!messageId || messageId.startsWith('local:'))
+            throw new Error('原图片缓存已释放，请重新添加图片');
+        const rawIndex = Number(data.source_image_index ?? context.imageIndex ?? 0);
+        const imageIndex = Number.isInteger(rawIndex) && rawIndex >= 0 ? rawIndex : 0;
+        const result = record(
+            dataOf(await call(target.bot_id, 'get_msg', { message_id: messageId })),
+        );
+        const images = normalizeMessage(result.message ?? result.raw_message).filter(
+            (segment) => segment.type === 'image' || segment.type === 'mface',
+        );
+        const recovered = images[imageIndex]?.data;
+        if (!recovered || inlineReference(recovered)) throw new Error('原消息未返回可用的图片来源');
+        return recovered;
+    };
     const resolveImageSource = async (
         target: DebugTarget,
         data: Record<string, unknown>,
@@ -246,19 +278,7 @@ export function createChatMediaService(
             if (isInlineImageReference(resolved.url)) delete resolved.url;
             return resolved;
         }
-        if (!messageId || messageId.startsWith('local:'))
-            throw new Error('原图片缓存已释放，请重新添加图片');
-        const rawIndex = context.imageIndex ?? Number(data.source_image_index ?? 0);
-        const imageIndex = Number.isInteger(rawIndex) && rawIndex >= 0 ? rawIndex : 0;
-        const result = record(
-            dataOf(await call(target.bot_id, 'get_msg', { message_id: messageId })),
-        );
-        const images = normalizeMessage(result.message ?? result.raw_message).filter(
-            (segment) => segment.type === 'image' || segment.type === 'mface',
-        );
-        const recovered = images[imageIndex]?.data;
-        if (!recovered || inlineReference(recovered)) throw new Error('原消息未返回可用的图片来源');
-        return recovered;
+        return recoverMessageImage(target, data, context);
     };
     const resolveImage = async (
         target: DebugTarget,
@@ -270,7 +290,12 @@ export function createChatMediaService(
         const identifiers = [
             ...new Set(
                 [text(data.url), text(data.file_id), text(data.file)].filter(
-                    (value) => value && value !== '0' && !isInlineImageReference(value),
+                    (value) =>
+                        value &&
+                        value !== '0' &&
+                        !isInlineImageReference(value) &&
+                        !isLocalFileToken(value) &&
+                        !/^(base64:\/\/|data:image\/|blob:)/i.test(value),
                 ),
             ),
         ];
@@ -284,13 +309,18 @@ export function createChatMediaService(
                 if (signal?.aborted) throw imageCancelled();
                 const bytes = imageBytes(result);
                 if (bytes) return bytes;
+                const path = botFilePath(result.file) || botFilePath(result.path);
+                if (target.host.kind === 'local' && path) {
+                    try {
+                        const local = imageBytes({ base64: await readLocal(path) });
+                        if (signal?.aborted) throw imageCancelled();
+                        if (local) return local;
+                    } catch {
+                        if (signal?.aborted) throw imageCancelled();
+                    }
+                }
                 const url = playableUrl(result.url) || playableUrl(result.file);
                 if (url) return url;
-                const path = botFilePath(result.file);
-                if (target.backend === 'napcat' && target.host.kind === 'local' && path) {
-                    const local = imageBytes({ base64: await readLocal(path) });
-                    if (local) return local;
-                }
             } catch (error) {
                 if (signal?.aborted) throw imageCancelled();
                 failure = error;
@@ -373,8 +403,8 @@ export function createChatMediaService(
                 try {
                     const params = file === text(data.file_id) ? { file_id: file } : { file };
                     const result = record(dataOf(await call(target.bot_id, 'get_image', params)));
-                    const path = botFilePath(result.file);
-                    if (target.backend === 'napcat' && path) return outboundImage(data, path);
+                    const path = botFilePath(result.file) || botFilePath(result.path);
+                    if (path) return outboundImage(data, path);
                     const bytes = base64Payload(result);
                     if (bytes) {
                         imageBytes({ base64: bytes });
@@ -410,7 +440,10 @@ export function createChatMediaService(
             const token = localToken(data);
             const direct = token
                 ? ''
-                : playableUrl(data.url) || playableUrl(data.file) || imageBytes(data);
+                : playableUrl(data.local_file) ||
+                  playableUrl(data.url) ||
+                  playableUrl(data.file) ||
+                  imageBytes(data);
             if (!token && direct && !refresh) return direct;
             if (token.startsWith('base64://')) {
                 try {
@@ -428,8 +461,8 @@ export function createChatMediaService(
                 data.file,
                 data.url,
                 token.startsWith('base64://') ? '' : token,
-                options.context?.messageId ?? data.source_message_id,
-                options.context?.imageIndex ?? data.source_image_index,
+                data.source_message_id ?? options.context?.messageId,
+                data.source_image_index ?? options.context?.imageIndex,
             ]);
             const existing = pendingImages.get(key);
             if (existing && !existing.controller.signal.aborted)
@@ -446,10 +479,21 @@ export function createChatMediaService(
                         data = await resolveImageSource(target, data, options.context);
                         if (job.controller.signal.aborted) throw imageCancelled();
                     }
-                    if (token && !token.startsWith('base64://')) {
+                    const resolvedToken = localToken(data);
+                    if (resolvedToken.startsWith('base64://')) {
+                        try {
+                            const bytes = imageBytes({ base64: resolvedToken });
+                            if (bytes) return bytes;
+                        } catch {
+                            /* 无效本机字节仍可回退协议来源。 */
+                        }
+                    }
+                    if (resolvedToken && !resolvedToken.startsWith('base64://')) {
                         try {
                             const bytes = imageBytes({
-                                base64: await readLocal(token.slice(LOCAL_FILE_PREFIX.length)),
+                                base64: await readLocal(
+                                    resolvedToken.slice(LOCAL_FILE_PREFIX.length),
+                                ),
                             });
                             if (job.controller.signal.aborted) throw imageCancelled();
                             if (bytes) return bytes;
@@ -461,12 +505,31 @@ export function createChatMediaService(
                     if (!refresh) {
                         const fallback =
                             direct ||
+                            playableUrl(data.local_file) ||
                             playableUrl(data.url) ||
                             playableUrl(data.file) ||
                             imageBytes(data);
                         if (fallback) return fallback;
                     }
-                    return resolveImage(target, data, refresh, job.controller.signal);
+                    try {
+                        return await resolveImage(target, data, refresh, job.controller.signal);
+                    } catch (error) {
+                        if (job.controller.signal.aborted) throw imageCancelled();
+                        const messageId =
+                            id(data.source_message_id) || id(options.context?.messageId);
+                        if (!messageId || messageId.startsWith('local:') || reference) throw error;
+                        const recovered = await recoverMessageImage(
+                            target,
+                            data,
+                            options.context ?? {},
+                        );
+                        if (job.controller.signal.aborted) throw imageCancelled();
+                        const recoveredBytes = imageBytes(recovered);
+                        const recoveredUrl =
+                            playableUrl(recovered.url) || playableUrl(recovered.file);
+                        if (recoveredBytes || recoveredUrl) return recoveredBytes || recoveredUrl;
+                        return resolveImage(target, recovered, true, job.controller.signal);
+                    }
                 },
                 job.controller.signal,
                 () => {

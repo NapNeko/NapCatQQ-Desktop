@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tauri::Manager;
 
@@ -22,6 +23,7 @@ use crate::tray_avatars::{self, AvatarSlots};
 const WIDTH: f32 = 260.0;
 // .chat-tray-conversations 的 max-height 284：5 行（240）放得下，第 6 行就要滚动，原生版不做滚动
 const MAX_ROWS: usize = 5;
+const MIN_HEIGHT: f32 = 192.0;
 
 #[derive(Clone)]
 pub struct ConvItem {
@@ -115,6 +117,21 @@ struct Row {
 
 struct Layout {
     rows: Vec<Row>,
+    height: f32,
+}
+
+struct ModeTransition {
+    start: Instant,
+    duration_ms: u32,
+}
+
+impl ModeTransition {
+    fn progress(&self, now: Instant) -> f32 {
+        let t = (now.saturating_duration_since(self.start).as_secs_f32() * 1000.0
+            / self.duration_ms.max(1) as f32)
+            .min(1.0);
+        1.0 - (1.0 - t).powi(3)
+    }
 }
 
 /// 纯视图：不碰 AppHandle，测试直接构造。
@@ -127,6 +144,7 @@ pub(crate) struct ChatTrayView {
     // hovered 是键盘移过去的：会话行要画 focus-visible 的 brand-soft 底
     keyboard: bool,
     avatars: AvatarSlots,
+    mode_transition: Option<ModeTransition>,
 }
 
 impl ChatTrayView {
@@ -139,6 +157,7 @@ impl ChatTrayView {
             hovered: None,
             keyboard: false,
             avatars: AvatarSlots::default(),
+            mode_transition: None,
         }
     }
 
@@ -146,6 +165,40 @@ impl ChatTrayView {
         self.snapshot = snapshot;
         self.error = None;
         self.layout = None;
+    }
+
+    fn switch_mode(&mut self, mode: Mode, animate: bool) {
+        if self.mode == mode {
+            return;
+        }
+        let duration_ms = crate::native_panel::window::transition_duration();
+        let previous = self.layout.take();
+        self.mode_transition =
+            previous
+                .filter(|_| animate && duration_ms > 0)
+                .map(|_| ModeTransition {
+                    start: Instant::now(),
+                    duration_ms,
+                });
+        self.mode = mode;
+        self.hovered = None;
+        self.keyboard = false;
+    }
+
+    fn frame_height(&self) -> f32 {
+        self.layout
+            .as_ref()
+            .map_or_else(|| self.shared_height(), |l| l.height)
+    }
+
+    fn shared_height(&self) -> f32 {
+        (104.0 + 48.0 * self.shown_conversations().len() as f32).max(MIN_HEIGHT)
+    }
+
+    fn mode_changing(&self) -> bool {
+        self.mode_transition
+            .as_ref()
+            .is_some_and(|t| t.progress(Instant::now()) < 1.0)
     }
 
     fn shown_conversations(&self) -> &[ConvItem] {
@@ -170,6 +223,7 @@ impl ChatTrayView {
     }
 
     fn layout(&mut self, width: f32) -> f32 {
+        let height = self.shared_height();
         let s = &self.snapshot;
         let mut rows = Vec::new();
         rows.push(Row {
@@ -193,51 +247,56 @@ impl ChatTrayView {
 
         match self.mode {
             Mode::Menu => {
-                // 三组 px-1 py-0.5，最后一组 pt-0.5 pb-1，组间是 TrayPanelSeparator
-                y += 2.0;
-                let open = ActionRow::new(width, y, Icon::MessageCircle, "打开聊天", 0.0);
+                let action_h = ((height - 68.5) / 4.0).clamp(ACTION_H, 44.0);
+                let group_inset = (height - 68.5 - 4.0 * action_h) / 6.0;
+                y += 2.0 + group_inset;
+                let open = ActionRow::new(width, y, Icon::MessageCircle, "打开聊天", 0.0)
+                    .with_height(action_h);
                 let row = if s.notification_unread > 0 {
                     let badge = Badge::new(
                         s.notification_unread,
                         open.trailing_right(),
-                        y + ACTION_H / 2.0,
+                        y + action_h / 2.0,
                     );
                     // 角标宽度量出来之后再按它给文字让位
                     let open =
-                        ActionRow::new(width, y, Icon::MessageCircle, "打开聊天", badge.rect.w);
+                        ActionRow::new(width, y, Icon::MessageCircle, "打开聊天", badge.rect.w)
+                            .with_height(action_h);
                     menu_row(open, Trailing::Badge(badge), Action::Open)
                 } else {
                     menu_row(open, Trailing::None, Action::Open)
                 };
                 rows.push(row);
-                y += ACTION_H;
+                y += action_h;
                 rows.push(menu_row(
-                    ActionRow::new(width, y, Icon::Monitor, "打开控制台", 0.0),
+                    ActionRow::new(width, y, Icon::Monitor, "打开控制台", 0.0)
+                        .with_height(action_h),
                     Trailing::None,
                     Action::Console,
                 ));
-                y += ACTION_H + 2.0;
+                y += action_h + 2.0 + group_inset;
                 y = push_separator(&mut rows, width, y);
-                y += 2.0;
+                y += 2.0 + group_inset;
                 let check = if s.background {
                     Trailing::Check
                 } else {
                     Trailing::None
                 };
                 rows.push(menu_row(
-                    ActionRow::new(width, y, Icon::Radio, "后台接收消息", 14.0),
+                    ActionRow::new(width, y, Icon::Radio, "后台接收消息", 14.0)
+                        .with_height(action_h),
                     check,
                     Action::Background,
                 ));
-                y += ACTION_H + 2.0;
+                y += action_h + 2.0 + group_inset;
                 y = push_separator(&mut rows, width, y);
-                y += 2.0;
+                y += 2.0 + group_inset;
                 rows.push(menu_row(
-                    ActionRow::new(width, y, Icon::EyeOff, "隐藏此账号托盘", 0.0),
+                    ActionRow::new(width, y, Icon::EyeOff, "隐藏此账号托盘", 0.0)
+                        .with_height(action_h),
                     Trailing::None,
                     Action::HideTray,
                 ));
-                y += ACTION_H + 4.0;
             }
             Mode::Preview => {
                 // .chat-tray-heading：padding 2px 10px 4px，11px，行高 1.5
@@ -281,7 +340,6 @@ impl ChatTrayView {
                         kind: RowKind::Empty { label },
                         action: None,
                     });
-                    y += 88.0;
                 } else {
                     // .chat-tray-conversations：padding 2px 8px，gap 4；每行 min-height 44
                     y += 2.0;
@@ -300,8 +358,8 @@ impl ChatTrayView {
                             y += 4.0;
                         }
                     }
-                    y += 2.0;
                 }
+                y = height - SEPARATOR_H - 2.0 - ACTION_H - 4.0;
                 y = push_separator(&mut rows, width, y);
                 y += 2.0;
                 let label = if s.conversation_count > shown {
@@ -314,10 +372,11 @@ impl ChatTrayView {
                     Trailing::None,
                     Action::Open,
                 ));
-                y += ACTION_H + 4.0;
             }
         }
 
+        // 外框直接取共同尺寸；分组间距的浮点累加会让 ceil 多出一个物理像素。
+        y = height;
         if let Some(err) = self.error.as_deref().filter(|e| !e.is_empty()) {
             // mx-2 mb-1 px-2 py-1 leading-snug，右边 X 按钮（padding 2 + 13）和文字隔 5
             let rect = Rect::new(8.0, y, width - 16.0, 25.0);
@@ -337,11 +396,14 @@ impl ChatTrayView {
             y += rect.h + 4.0;
         }
 
-        self.layout = Some(Layout { rows });
+        self.layout = Some(Layout { rows, height: y });
         y
     }
 
     fn hit(&self, x: f32, y: f32) -> Option<usize> {
+        if self.mode_changing() {
+            return None;
+        }
         self.layout
             .as_ref()?
             .rows
@@ -363,6 +425,9 @@ impl ChatTrayView {
 
     /// 上下 / Home / End 在所有能点的行之间循环，和 WebView 的 data-tray-item 一样；打开时不预选。
     fn key(&mut self, vk: u16) -> bool {
+        if self.mode_changing() {
+            return false;
+        }
         let Some(layout) = self.layout.as_ref() else {
             return false;
         };
@@ -400,6 +465,10 @@ impl ChatTrayView {
         let Some(layout) = self.layout.as_ref() else {
             return;
         };
+        self.paint_layout(layout, canvas, theme);
+    }
+
+    fn paint_layout(&self, layout: &Layout, canvas: &Canvas, theme: &Theme) {
         for (i, row) in layout.rows.iter().enumerate() {
             let hot = self.hovered == Some(i);
             match &row.kind {
@@ -432,7 +501,7 @@ impl ChatTrayView {
                         Trailing::Check => canvas.icon(
                             Icon::Check,
                             action.trailing_right() - 14.0,
-                            action.rect.y + 6.0,
+                            action.rect.y + (action.rect.h - 14.0) / 2.0,
                             14.0,
                             1.9,
                             theme.brand,
@@ -582,6 +651,15 @@ pub struct ChatTrayPanelNative {
     panel: RefCell<Option<Rc<NativePanel>>>,
     // 每次 show 加一；快照回来时代次不对说明期间又开过别的（悬停后紧跟右键），丢掉
     generation: std::cell::Cell<u32>,
+    pending_hover: RefCell<Option<PendingHover>>,
+    opening: std::cell::Cell<Option<Mode>>,
+}
+
+struct PendingHover {
+    bot: String,
+    qq: String,
+    anchor: (i32, i32),
+    generation: u32,
 }
 
 thread_local! {
@@ -618,6 +696,8 @@ impl ChatTrayPanelNative {
             view: RefCell::new(ChatTrayView::new(Mode::Preview)),
             panel: RefCell::new(None),
             generation: std::cell::Cell::new(0),
+            pending_hover: RefCell::new(None),
+            opening: std::cell::Cell::new(None),
         }
     }
 
@@ -646,6 +726,77 @@ impl ChatTrayPanelNative {
         (bot, qq)
     }
 
+    fn next_generation(&self) -> u32 {
+        let generation = self.generation.get().wrapping_add(1);
+        self.generation.set(generation);
+        generation
+    }
+
+    fn cancel_pending_hover(&self) {
+        if self.pending_hover.borrow_mut().take().is_some() {
+            self.next_generation();
+        }
+    }
+
+    fn request_hover(self: &Rc<Self>, bot: String, qq: String, anchor: (i32, i32)) {
+        let panel = self.panel();
+        let mode = self
+            .view
+            .try_borrow()
+            .map(|v| v.mode)
+            .unwrap_or(Mode::Preview);
+        if mode == Mode::Menu && panel.as_ref().is_some_and(|p| p.is_shown()) {
+            return;
+        }
+        if self.ids() == (bot.clone(), qq.clone())
+            && let Some(panel) = panel.filter(|p| p.is_shown())
+        {
+            self.cancel_pending_hover();
+            if !panel.is_visible() {
+                panel.show_with(
+                    self.anchor.get(),
+                    false,
+                    crate::native_panel::window::hover_panel_xy,
+                );
+            }
+            return;
+        }
+        if self.ids() == (bot.clone(), qq.clone()) && self.opening.get().is_some() {
+            return;
+        }
+        if self
+            .pending_hover
+            .borrow()
+            .as_ref()
+            .is_some_and(|p| p.bot == bot && p.qq == qq)
+        {
+            return;
+        }
+        let generation = self.next_generation();
+        *self.pending_hover.borrow_mut() = Some(PendingHover {
+            bot,
+            qq,
+            anchor,
+            generation,
+        });
+        crate::tray_panel_native::schedule_release(&self.app);
+        let app = self.app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let _ = app.run_on_main_thread(move || {
+                with_content(|c| {
+                    if c.generation.get() != generation {
+                        return;
+                    }
+                    let pending = c.pending_hover.borrow_mut().take();
+                    if let Some(pending) = pending.filter(|p| cursor_on_icon(p.anchor)) {
+                        c.show(pending.bot, pending.qq, pending.anchor, Mode::Preview);
+                    }
+                });
+            });
+        });
+    }
+
     fn mark_dirty(&self) {
         self.with_view(|v| v.layout = None);
         if let Some(panel) = self.panel() {
@@ -672,8 +823,34 @@ impl ChatTrayPanelNative {
         if mode == Mode::Preview && menu_open {
             return;
         }
-        let generation = self.generation.get().wrapping_add(1);
-        self.generation.set(generation);
+        let panel = self.panel();
+        let same_account = self.ids() == (bot.clone(), qq.clone());
+        if mode == Mode::Menu && same_account {
+            if menu_open {
+                if let Some(panel) = panel {
+                    panel.focus();
+                }
+                return;
+            }
+            if self.opening.get() == Some(Mode::Menu) {
+                return;
+            }
+        }
+        self.cancel_pending_hover();
+        let shown = panel.as_ref().is_some_and(|p| p.is_shown());
+        if !same_account
+            && shown
+            && let Some(panel) = panel.as_ref()
+        {
+            panel.hide();
+        }
+        let anchor = if same_account && shown {
+            self.anchor.get()
+        } else {
+            anchor
+        };
+        let generation = self.next_generation();
+        self.opening.set(Some(mode));
         if let Ok(mut slot) = self.bot_id.try_borrow_mut() {
             slot.clone_from(&bot);
         }
@@ -681,13 +858,34 @@ impl ChatTrayPanelNative {
             slot.clone_from(&qq);
         }
         self.anchor.set(anchor);
+        let reuse = same_account && shown;
+        if !reuse {
+            crate::tray_panel_native::sync_ui_preferences(&self.app);
+        }
+        let animate_mode = same_account
+            && shown
+            && self.view.try_borrow().is_ok_and(|v| v.mode != mode)
+            && panel.as_ref().is_some_and(|panel| {
+                panel.crossfade_content(crate::native_panel::window::transition_duration())
+            });
         self.with_view(|v| {
-            v.mode = mode;
-            v.hovered = None;
-            v.keyboard = false;
-            v.layout = None;
+            if !same_account || !shown {
+                v.mode_transition = None;
+                v.layout = None;
+                v.hovered = None;
+                v.keyboard = false;
+            }
+            v.switch_mode(mode, animate_mode);
         });
-        crate::tray_panel_native::sync_ui_preferences(&self.app);
+        if reuse && let Some(panel) = panel {
+            panel.show_with(
+                anchor,
+                mode == Mode::Menu,
+                crate::native_panel::window::hover_panel_xy,
+            );
+            self.opening.set(None);
+            return;
+        }
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
             let snapshot = load_snapshot(&app, &bot, &qq).await;
@@ -696,8 +894,15 @@ impl ChatTrayPanelNative {
                     if c.generation.get() != generation {
                         return;
                     }
+                    c.opening.set(None);
+                    if snapshot.self_id != qq {
+                        return;
+                    }
+                    if mode == Mode::Preview && !reuse && !cursor_on_icon(anchor) {
+                        return;
+                    }
                     c.apply_snapshot(snapshot);
-                    if let Some(panel) = c.panel() {
+                    if !reuse && let Some(panel) = c.panel() {
                         panel.refresh_theme();
                         panel.show_with(
                             anchor,
@@ -716,11 +921,17 @@ impl ChatTrayPanelNative {
             return;
         }
         let (bot, qq) = self.ids();
+        let generation = self.generation.get();
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
             let snapshot = load_snapshot(&app, &bot, &qq).await;
             let _ = app.run_on_main_thread(move || {
-                with_content(|c| c.apply_snapshot(snapshot));
+                with_content(|c| {
+                    if c.generation.get() == generation && c.panel().is_some_and(|p| p.is_visible())
+                    {
+                        c.apply_snapshot(snapshot);
+                    }
+                });
             });
         });
     }
@@ -751,6 +962,7 @@ impl ChatTrayPanelNative {
                 });
             }
             Action::Background => {
+                let generation = self.generation.get();
                 let background_now = self
                     .view
                     .try_borrow()
@@ -767,6 +979,9 @@ impl ChatTrayPanelNative {
                     let snapshot = load_snapshot(&app, &bot, &qq).await;
                     let _ = app.run_on_main_thread(move || {
                         with_content(|c| {
+                            if c.generation.get() != generation {
+                                return;
+                            }
                             c.apply_snapshot(snapshot);
                             if let Err(e) = result {
                                 c.with_view(|v| v.error = Some(e.to_string()));
@@ -797,9 +1012,25 @@ impl ChatTrayPanelNative {
 pub struct ChatTrayPanelCell(pub Rc<ChatTrayPanelNative>);
 
 impl PanelContent for ChatTrayPanelCell {
+    fn finish_transition(&mut self) {
+        self.0.with_view(|view| view.mode_transition = None);
+    }
+
+    fn is_tray_menu(&self) -> bool {
+        self.0.view.try_borrow().is_ok_and(|v| v.mode == Mode::Menu)
+    }
+
     fn measure(&mut self, width: f32, _theme: &Theme) -> (f32, f32) {
         let width = if width <= 0.0 { WIDTH } else { width };
-        let height = self.0.with_view(|v| v.layout(width)).unwrap_or(172.5);
+        let height = self
+            .0
+            .with_view(|v| {
+                if v.layout.is_none() {
+                    v.layout(width);
+                }
+                v.frame_height()
+            })
+            .unwrap_or(MIN_HEIGHT);
         (WIDTH, height)
     }
 
@@ -827,7 +1058,20 @@ impl PanelContent for ChatTrayPanelCell {
         self.0.with_view(|v| v.hover(x, y, inside));
     }
 
+    fn update_hover(&mut self, x: f32, y: f32, inside: bool, _theme: &Theme) -> bool {
+        self.0
+            .with_view(|v| {
+                let before = (v.hovered, v.keyboard);
+                v.hover(x, y, inside);
+                before != (v.hovered, v.keyboard)
+            })
+            .unwrap_or(false)
+    }
+
     fn key(&mut self, vk: u16, _theme: &Theme) -> bool {
+        if self.0.view.try_borrow().is_ok_and(|v| v.mode_changing()) {
+            return false;
+        }
         if vk == 0x0D {
             // 先取出动作再放掉视图借用：do_action 会经 mark_dirty 再借一次
             let action = self
@@ -863,6 +1107,21 @@ impl PanelContent for ChatTrayPanelCell {
             let anchor = self.0.anchor.get();
             (anchor.0, anchor.1, 24)
         })
+    }
+
+    fn dismiss(&mut self) {
+        let ids = self.0.ids();
+        let next_account = self
+            .0
+            .pending_hover
+            .borrow()
+            .as_ref()
+            .is_some_and(|p| p.bot != ids.0 || p.qq != ids.1);
+        if !next_account {
+            self.0.cancel_pending_hover();
+            self.0.next_generation();
+        }
+        self.0.opening.set(None);
     }
 }
 
@@ -922,26 +1181,75 @@ fn connection_text_of(account: &ncd_domain::chat_desktop::ChatAccountStatus) -> 
 
 // ---------- 对外入口 ----------
 
+fn cursor_on_icon(anchor: (i32, i32)) -> bool {
+    let scale = crate::windows_ui::monitor_dpi_scale_at(anchor.0, anchor.1).max(0.25);
+    let radius = (20.0 * scale).ceil() as i32;
+    crate::native_panel::sys::cursor_pos()
+        .is_some_and(|(x, y)| (x - anchor.0).abs() <= radius && (y - anchor.1).abs() <= radius)
+}
+
+fn ensure_content(app: tauri::AppHandle, anchor: (i32, i32)) -> Option<Rc<ChatTrayPanelNative>> {
+    if let Some(content) = content() {
+        return Some(content);
+    }
+    crate::tray_panel_native::sync_ui_preferences(&app);
+    let content = Rc::new(ChatTrayPanelNative::new(app));
+    let cell = Box::new(ChatTrayPanelCell(content.clone())) as Box<dyn PanelContent>;
+    match NativePanel::create(anchor, WIDTH, cell) {
+        Ok(panel) => {
+            content.set_panel(Rc::new(panel));
+            CONTENT.with(|slot| *slot.borrow_mut() = Some(content.clone()));
+            Some(content)
+        }
+        Err(e) => {
+            tracing::warn!("native chat tray create: {e}");
+            None
+        }
+    }
+}
+
+pub fn hover(app: &tauri::AppHandle, bot: String, qq: String, anchor: (i32, i32)) {
+    let app_owned = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(content) = ensure_content(app_owned, anchor) {
+            content.request_hover(bot, qq, anchor);
+        }
+    });
+}
+
+pub fn cancel_hover(app: &tauri::AppHandle, bot: String, qq: String) {
+    let _ = app.run_on_main_thread(move || {
+        with_content(|c| {
+            let pending =
+                c.pending_hover.borrow().as_ref().is_some_and(|p| {
+                    p.bot == bot && p.qq == qq && p.generation == c.generation.get()
+                });
+            if pending {
+                c.cancel_pending_hover();
+            }
+            if c.ids() == (bot, qq)
+                && c.opening.get() == Some(Mode::Preview)
+                && !c.panel().is_some_and(|p| p.is_shown())
+            {
+                c.next_generation();
+                c.opening.set(None);
+            }
+        });
+    });
+}
+
 /// 右键菜单入口（menu=true）；悬停预览入口（menu=false）。
 pub fn show(app: &tauri::AppHandle, bot: String, qq: String, anchor: (i32, i32), menu: bool) {
+    if !menu {
+        hover(app, bot, qq, anchor);
+        return;
+    }
     crate::tray_panel_native::schedule_release(app);
     let app_owned = app.clone();
     let mode = if menu { Mode::Menu } else { Mode::Preview };
     let _ = app.run_on_main_thread(move || {
-        if let Some(content) = content() {
+        if let Some(content) = ensure_content(app_owned, anchor) {
             content.show(bot, qq, anchor, mode);
-            return;
-        }
-        crate::tray_panel_native::sync_ui_preferences(&app_owned);
-        let content = Rc::new(ChatTrayPanelNative::new(app_owned.clone()));
-        let cell = Box::new(ChatTrayPanelCell(content.clone())) as Box<dyn PanelContent>;
-        match NativePanel::create(anchor, WIDTH, cell) {
-            Ok(panel) => {
-                content.set_panel(Rc::new(panel));
-                CONTENT.with(|slot| *slot.borrow_mut() = Some(content.clone()));
-                content.show(bot, qq, anchor, mode);
-            }
-            Err(e) => tracing::warn!("native chat tray create: {e}"),
         }
     });
 }
@@ -951,7 +1259,10 @@ pub(crate) fn release_if_hidden() -> bool {
     let Some(content) = content() else {
         return true;
     };
-    if content.panel().is_some_and(|p| p.is_visible()) {
+    if content.panel().is_some_and(|p| p.is_shown())
+        || content.pending_hover.borrow().is_some()
+        || content.opening.get().is_some()
+    {
         return false;
     }
     if let Some(panel) = content.panel() {
@@ -965,6 +1276,9 @@ pub(crate) fn release_if_hidden() -> bool {
 pub fn hide(app: &tauri::AppHandle) {
     let _ = app.run_on_main_thread(move || {
         with_content(|c| {
+            c.cancel_pending_hover();
+            c.next_generation();
+            c.opening.set(None);
             if let Some(panel) = c.panel() {
                 panel.hide();
             }
@@ -994,6 +1308,67 @@ pub fn sync_theme(app: &tauri::AppHandle) {
 #[cfg(all(test, windows))]
 pub(crate) mod tests {
     use super::*;
+
+    pub(crate) struct MotionShot(pub ChatTrayView);
+
+    impl PanelContent for MotionShot {
+        fn measure(&mut self, width: f32, _: &Theme) -> (f32, f32) {
+            (WIDTH, self.0.layout(width))
+        }
+        fn paint(&mut self, canvas: &Canvas, _: f32, _: f32, _: f32, theme: &Theme) {
+            self.0.paint(canvas, theme);
+        }
+        fn click(&mut self, _: f32, _: f32, _: &Theme) -> bool {
+            false
+        }
+        fn hover(&mut self, x: f32, y: f32, inside: bool, _: &Theme) {
+            self.0.hover(x, y, inside);
+        }
+        fn key(&mut self, _: u16, _: &Theme) -> bool {
+            false
+        }
+        fn animate(&mut self, _: u32, _: &Theme) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn mode_transition_progress_finishes_without_a_timer_tick_count() {
+        let start = Instant::now();
+        let transition = ModeTransition {
+            start,
+            duration_ms: 180,
+        };
+        assert_eq!(transition.progress(start), 0.0);
+        assert_eq!(transition.progress(start + Duration::from_millis(180)), 1.0);
+        assert_eq!(transition.progress(start + Duration::from_millis(500)), 1.0);
+    }
+
+    #[test]
+    fn mode_transition_keeps_final_size_and_blocks_actions_while_the_body_crossfades() {
+        let mut view = ChatTrayView::new(Mode::Menu);
+        view.layout = Some(Layout {
+            rows: vec![Row {
+                rect: Rect::new(0.0, 0.0, WIDTH, 100.0),
+                kind: RowKind::Empty { label: None },
+                action: Some(Action::Open),
+            }],
+            height: 172.5,
+        });
+        view.mode_transition = Some(ModeTransition {
+            start: Instant::now(),
+            duration_ms: 180,
+        });
+        assert_eq!(
+            view.frame_height(),
+            172.5,
+            "crossfade must not resize each frame"
+        );
+        assert_eq!(view.hit(40.0, 50.0), None);
+        assert!(!view.key(0x28));
+        view.mode_transition = None;
+        assert_eq!(view.hit(40.0, 50.0), Some(0));
+    }
 
     pub(crate) fn conv(i: usize, group: bool, unread: u32) -> ConvItem {
         ConvItem {
@@ -1030,17 +1405,58 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn heights_match_webview_box_model() {
-        assert!((view_with(Mode::Menu, vec![], 0).layout(WIDTH) - 172.5).abs() < 0.01);
-        assert!((view_with(Mode::Preview, vec![], 0).layout(WIDTH) - 192.0).abs() < 0.01);
-        let three = (0..3).map(|i| conv(i, i == 1, 2)).collect();
-        assert!(
-            (view_with(Mode::Preview, three, 3).layout(WIDTH) - (104.0 + 48.0 * 3.0)).abs() < 0.01
-        );
-        let eight = (0..8).map(|i| conv(i, false, 1)).collect();
-        assert!(
-            (view_with(Mode::Preview, eight, 8).layout(WIDTH) - (104.0 + 48.0 * 5.0)).abs() < 0.01
-        );
+    fn preview_and_menu_share_height_for_every_conversation_count() {
+        for count in 0..=8 {
+            let conversations: Vec<_> = (0..count).map(|i| conv(i, i == 1, 2)).collect();
+            let mut preview = view_with(Mode::Preview, conversations.clone(), count);
+            let mut menu = view_with(Mode::Menu, conversations, count);
+            let expected = (104.0 + 48.0 * count.min(MAX_ROWS) as f32).max(MIN_HEIGHT);
+            for view in [&mut preview, &mut menu] {
+                let height = view.layout(WIDTH);
+                assert_eq!(height, expected, "count={count}");
+                for row in &view.layout.as_ref().unwrap().rows {
+                    assert!(row.rect.y >= 0.0 && row.rect.bottom() <= height);
+                }
+            }
+            preview.switch_mode(Mode::Menu, true);
+            assert!((preview.frame_height() - expected).abs() < 0.01);
+            assert_eq!(preview.layout(WIDTH), expected);
+            preview.mode_transition = None;
+            preview.switch_mode(Mode::Preview, false);
+            assert_eq!(preview.layout(WIDTH), expected);
+        }
+    }
+
+    #[test]
+    fn menu_uses_shared_space_without_stretching_actions_or_badges() {
+        let mut menu = view_with(Mode::Menu, (0..5).map(|i| conv(i, false, 1)).collect(), 5);
+        menu.layout(WIDTH);
+        for row in &menu.layout.as_ref().unwrap().rows {
+            if let RowKind::Menu {
+                row: action,
+                trailing,
+            } = &row.kind
+            {
+                assert!((action.rect.h - 44.0).abs() < 0.01);
+                assert_eq!(row.rect, action.rect);
+                if let Trailing::Badge(badge) = trailing {
+                    assert!(
+                        (badge.rect.y + badge.rect.h / 2.0 - action.rect.y - action.rect.h / 2.0)
+                            .abs()
+                            < 0.01
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn error_strip_keeps_preview_and_menu_the_same_height() {
+        let mut preview = view_with(Mode::Preview, vec![], 0);
+        let mut menu = view_with(Mode::Menu, vec![], 0);
+        preview.error = Some("操作失败".into());
+        menu.error = preview.error.clone();
+        assert_eq!(preview.layout(WIDTH), menu.layout(WIDTH));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 // OneBot 消息段：三种入参形态（数组 / 单个段 / CQ 码字符串）统一成数组，再给出一行文字预览。
 // 事件里的 message、send_* 调用参数里的 message、raw_message 都走这里，聊天气泡和搜索共用同一份预览。
 
-import { markdownContent, markdownPlainText } from './markdown';
+import { markdownContent, markdownKeyboard, markdownPlainText } from './markdown';
 
 export interface Segment {
     type: string;
@@ -137,6 +137,14 @@ export function segmentPreview(seg: Segment): string {
         }
         case 'markdown':
             return markdownPlainText(markdownContent(d)) || '[Markdown]';
+        case 'inline_keyboard': {
+            const keyboard = markdownKeyboard(d);
+            const labels = keyboard?.rows
+                .flat()
+                .map((button) => button.label)
+                .join(' · ');
+            return labels ? ` [按钮] ${clip(labels, 60)}` : ' [按钮]';
+        }
         case 'poke':
             return '[戳一戳]';
         case 'mface':

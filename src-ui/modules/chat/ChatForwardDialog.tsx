@@ -1,12 +1,14 @@
-import { useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { ArrowUpRight, List, MessagesSquare, Search } from 'lucide-react';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
+import { useMotion } from '../../hooks/preferences/useMotion';
 import { accountKey, type Contact } from '../../core/domain/chat/model';
-import { ChatForwardError } from '../../core/domain/chat/messageTransfer';
+import { type ForwardMode, ChatForwardError } from '../../core/domain/chat/messageTransfer';
 import { errorText } from '../../core/domain/errors';
 import { messagePreview } from '../../core/domain/debug/segments';
 import { Button } from '../../shared/ui/Button';
+import { ChatAvatar } from '../../shared/chat/ChatAvatar';
 import {
     Dialog,
     DialogContent,
@@ -29,8 +31,12 @@ export function ChatForwardDialog({
     onSent: () => void;
 }) {
     const snapshot = useChatSnapshot(store);
+    const motion = useMotion();
+    const modeName = useId();
     const [query, setQuery] = useState('');
     const [target, setTarget] = useState<Contact | null>(null);
+    const [mode, setMode] = useState<ForwardMode>('merged');
+    const [progress, setProgress] = useState(0);
     const [busy, setBusy] = useState(false);
     const [uncertain, setUncertain] = useState(false);
     const [error, setError] = useState('');
@@ -78,7 +84,7 @@ export function ChatForwardDialog({
         setBusy(true);
         setError('');
         try {
-            await store.forward(messageKeys, target);
+            await store.forward(messageKeys, target, mode, setProgress);
             onSent();
         } catch (failure) {
             setUncertain(failure instanceof ChatForwardError && failure.uncertain);
@@ -99,20 +105,69 @@ export function ChatForwardDialog({
                 size="md"
                 className="native-chat-forward-dialog"
                 dismissOnOutsideClick={!busy}
+                hideClose={busy}
+                style={
+                    { '--forward-switch-duration': `${motion.duration('fast')}s` } as CSSProperties
+                }
             >
                 <DialogHeader>
                     <DialogTitle>转发 {messageKeys.length} 条消息</DialogTitle>
                 </DialogHeader>
-                <div className="native-chat-forward-preview">
-                    {messages.slice(0, 3).map((message) => (
-                        <div key={message.key} className="truncate">
-                            <span className="text-text-secondary">{message.senderName}：</span>
-                            {messagePreview(message.segments)}
-                        </div>
+                <div
+                    className="native-chat-forward-modes"
+                    role="radiogroup"
+                    aria-label="转发方式"
+                    data-mode={mode}
+                    data-disabled={busy || uncertain}
+                >
+                    {(['merged', 'individual'] as const).map((value) => (
+                        <label key={value} className="native-chat-forward-mode">
+                            <input
+                                type="radio"
+                                name={modeName}
+                                value={value}
+                                checked={mode === value}
+                                disabled={busy || uncertain}
+                                onChange={() => setMode(value)}
+                            />
+                            <span>
+                                {value === 'merged' ? (
+                                    <MessagesSquare size={15} strokeWidth={1.7} aria-hidden />
+                                ) : (
+                                    <List size={15} strokeWidth={1.7} aria-hidden />
+                                )}
+                                {value === 'merged' ? '合并转发' : '逐条转发'}
+                            </span>
+                        </label>
                     ))}
-                    {messages.length > 3 && <span>还有 {messages.length - 3} 条消息</span>}
                 </div>
-                <div className="native-chat-search mt-4">
+                <section
+                    className="native-chat-forward-preview"
+                    aria-label="待转发消息"
+                    data-mode={mode}
+                >
+                    <div className="native-chat-forward-preview-title">
+                        {mode === 'merged' ? '聊天记录' : '逐条消息'}
+                    </div>
+                    <div className="native-chat-forward-preview-messages">
+                        {messages.slice(0, 3).map((message) => (
+                            <div key={message.key} className="native-chat-forward-preview-row">
+                                <span className="native-chat-forward-preview-sender">
+                                    {message.senderName}
+                                </span>
+                                <span className="native-chat-forward-preview-text">
+                                    {messagePreview(message.segments)}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    {messages.length > 3 && (
+                        <span className="native-chat-forward-preview-more">
+                            还有 {messages.length - 3} 条
+                        </span>
+                    )}
+                </section>
+                <div className="native-chat-search native-chat-forward-search">
                     <Search size={15} aria-hidden />
                     <input
                         aria-label="搜索转发目标"
@@ -131,7 +186,12 @@ export function ChatForwardDialog({
                         onKeyDown={navigation.onKeyDown}
                     />
                 </div>
-                <div className="native-chat-forward-contacts" aria-busy={busy}>
+                <fieldset
+                    className="native-chat-forward-contacts"
+                    disabled={busy || uncertain}
+                    aria-label="转发目标"
+                    aria-busy={busy}
+                >
                     {rows.length ? (
                         <ConversationList
                             rows={rows}
@@ -151,23 +211,41 @@ export function ChatForwardDialog({
                                   : '还没有联系人或会话'}
                         </div>
                     )}
-                </div>
-                <DialogFooter>
-                    <span
-                        className="mr-auto truncate text-[12px] text-text-tertiary"
-                        aria-live="polite"
-                    >
-                        {target ? `发给 ${target.name}` : '选择转发目标'}
+                </fieldset>
+                <DialogFooter className="native-chat-forward-footer">
+                    <span className="native-chat-forward-target" aria-live="polite">
+                        {target ? (
+                            <>
+                                <ChatAvatar contact={target} small />
+                                <span className="native-chat-forward-target-label">发给</span>
+                                <span
+                                    className="native-chat-forward-target-name"
+                                    title={target.name}
+                                >
+                                    {target.name}
+                                </span>
+                            </>
+                        ) : (
+                            '选择转发目标'
+                        )}
                     </span>
                     <Button variant="ghost" size="sm" disabled={busy} onClick={onClose}>
                         取消
                     </Button>
                     <Button
+                        variant="primary"
                         size="sm"
                         disabled={busy || uncertain || disconnected || !target}
                         onClick={() => void submit()}
                     >
-                        {busy ? '正在转发…' : uncertain ? '结果待确认' : '转发'}
+                        {!busy && !uncertain && <ArrowUpRight size={14} aria-hidden />}
+                        {busy
+                            ? mode === 'individual'
+                                ? `正在转发 ${progress}/${messageKeys.length}`
+                                : '正在转发…'
+                            : uncertain
+                              ? '结果待确认'
+                              : '转发'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

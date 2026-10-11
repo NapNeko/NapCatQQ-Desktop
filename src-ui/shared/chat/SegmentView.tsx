@@ -6,7 +6,6 @@
 import { memo } from 'react';
 import { Hand, Mic } from 'lucide-react';
 import type { Segment } from '../../core/domain/debug/segments';
-import { markdownContent } from '../../core/domain/debug/markdown';
 import { useQQFaceLookup } from '../../hooks/chat/useChatQqFaces';
 import { QQFace } from './media/QQFace';
 import { ChatRecord } from './media/ChatRecord';
@@ -23,7 +22,7 @@ import { Chip, MediaChip } from './segments/chips';
 import { FileCard } from './segments/fileCard';
 import { ForwardCard } from './segments/forwardCard';
 import { RichCard } from './segments/richCard';
-import { MarkdownSeg } from './segments/markdownSeg';
+import { MarkdownKeyboardView, MarkdownMessage } from './markdownMessage';
 import { UnknownChip } from './segments/unknownChip';
 
 export { isMediaOnly, isPictureOnly } from './segments/model';
@@ -137,7 +136,9 @@ function SegmentView({
         case 'xml':
             return <RichCard seg={seg} />;
         case 'markdown':
-            return <MarkdownSeg content={markdownContent(d)} />;
+            return <MarkdownMessage data={d} messageId={messageId} />;
+        case 'inline_keyboard':
+            return <MarkdownKeyboardView data={d} messageId={messageId} />;
         case 'poke':
             return <Chip icon={<Hand size={11} aria-hidden />}>戳了戳</Chip>;
         default:

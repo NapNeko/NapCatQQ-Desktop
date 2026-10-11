@@ -266,9 +266,7 @@ describe('ChatMessageActions', () => {
         vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
         const { onError } = setup();
         fireEvent.click(screen.getByRole('button', { name: '复制消息' }));
-        await waitFor(() =>
-            expect(onError).toHaveBeenCalledWith('复制失败，请重试或选择消息文字后复制'),
-        );
+        await waitFor(() => expect(onError).toHaveBeenCalledWith('复制失败：denied'));
         expect(screen.getByRole('status')).toBeEmptyDOMElement();
     });
     it('restores a failed message into the current draft without sending', async () => {

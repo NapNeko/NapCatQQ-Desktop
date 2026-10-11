@@ -7,6 +7,7 @@ type Listener = () => void;
 const listeners: Record<'close' | 'blocked', Listener[]> = { close: [], blocked: [] };
 const prepareExitDesktop = vi.fn<() => Promise<PrepareExitDesktopResponse>>();
 const requestExitApp = vi.fn<() => Promise<void>>();
+const consumePendingTrayExit = vi.fn<() => Promise<boolean>>();
 let holdListen: Promise<void> = Promise.resolve();
 
 function subscribe(kind: 'close' | 'blocked') {
@@ -29,6 +30,7 @@ vi.mock('../../core/services/desktop.service', () => ({
 vi.mock('../../core/services/exit.service', () => ({
     prepareExitDesktop: () => prepareExitDesktop(),
     requestExitApp: () => requestExitApp(),
+    consumePendingTrayExit: () => consumePendingTrayExit(),
 }));
 
 import { useDesktopExitGate } from './useDesktopExitGate';
@@ -45,6 +47,7 @@ beforeEach(() => {
     holdListen = Promise.resolve();
     prepareExitDesktop.mockReset();
     requestExitApp.mockReset();
+    consumePendingTrayExit.mockReset().mockResolvedValue(false);
 });
 
 describe('useDesktopExitGate', () => {
@@ -61,7 +64,7 @@ describe('useDesktopExitGate', () => {
         prepareExitDesktop.mockResolvedValue(stats(2));
         const { result } = renderHook(() => useDesktopExitGate());
         await waitFor(() => expect(listeners.blocked).toHaveLength(1));
-
+        consumePendingTrayExit.mockResolvedValueOnce(true);
         await act(async () => listeners.blocked[0]());
         expect(result.current).toMatchObject({ open: true, mode: 'blocked' });
     });
@@ -80,6 +83,37 @@ describe('useDesktopExitGate', () => {
         });
         expect(listeners.close).toHaveLength(0);
         expect(listeners.blocked).toHaveLength(0);
+        expect(consumePendingTrayExit).not.toHaveBeenCalled();
+    });
+
+    it('claims an exit requested before listener readiness exactly once', async () => {
+        prepareExitDesktop.mockResolvedValue(stats(2));
+        consumePendingTrayExit.mockResolvedValueOnce(true);
+        const { result } = renderHook(() => useDesktopExitGate());
+        await waitFor(() => expect(result.current.open).toBe(true));
+        await act(async () => listeners.blocked[0]());
+        expect(prepareExitDesktop).toHaveBeenCalledOnce();
+    });
+
+    it('retains a claim that finishes while the first gate is unmounted', async () => {
+        let resolve!: (pending: boolean) => void;
+        consumePendingTrayExit.mockImplementationOnce(
+            () =>
+                new Promise((r) => {
+                    resolve = r;
+                }),
+        );
+        prepareExitDesktop.mockResolvedValue(stats(2));
+        const first = renderHook(() => useDesktopExitGate());
+        await waitFor(() => expect(consumePendingTrayExit).toHaveBeenCalledOnce());
+        first.unmount();
+        await act(async () => {
+            resolve(true);
+        });
+        const next = renderHook(() => useDesktopExitGate());
+        await waitFor(() => expect(next.result.current.open).toBe(true));
+        expect(consumePendingTrayExit).toHaveBeenCalledOnce();
+        expect(prepareExitDesktop).toHaveBeenCalledOnce();
     });
 
     it('退出请求失败时恢复按钮，并重新问一遍后端', async () => {

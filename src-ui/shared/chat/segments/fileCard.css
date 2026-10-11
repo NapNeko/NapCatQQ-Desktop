@@ -1,0 +1,79 @@
+.chat-file-card {
+    display: flex;
+    box-sizing: border-box;
+    gap: 10px;
+    width: 280px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 12px;
+    margin-block: 2px;
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    background: var(--surface-card);
+    color: var(--text-primary);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.chat-file-card-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    height: 48px;
+    border-radius: 8px;
+    background: color-mix(
+        in srgb,
+        var(--file-card-color, var(--text-secondary)) 9%,
+        var(--surface-inset)
+    );
+    color: var(--file-card-color, var(--text-secondary));
+}
+.chat-file-card[data-category="archive"] .chat-file-card-icon {
+    --file-card-color: var(--state-warning);
+}
+.chat-file-card[data-category="image"] .chat-file-card-icon,
+.chat-file-card[data-category="video"] .chat-file-card-icon,
+.chat-file-card[data-category="app"] .chat-file-card-icon,
+.chat-file-card[data-category="doc"] .chat-file-card-icon,
+.chat-file-card[data-category="slide"] .chat-file-card-icon {
+    --file-card-color: var(--action-primary);
+}
+.chat-file-card[data-category="sheet"] .chat-file-card-icon {
+    --file-card-color: var(--state-success);
+}
+.chat-file-card[data-extension="PDF"] .chat-file-card-icon {
+    --file-card-color: var(--state-danger);
+}
+.chat-file-card-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 4px;
+}
+.chat-file-card-name {
+    display: block;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-file-card-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+.chat-file-card-actions {
+    min-width: 0;
+    margin-top: 2px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+}
+.chat-file-card-actions:empty {
+    display: none;
+}
+.chat-file-card-actions .native-group-file-transfer-row {
+    color: var(--text-secondary);
+}

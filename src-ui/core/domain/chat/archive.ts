@@ -1,6 +1,7 @@
 // 档案只包含会话与消息，运行期游标和草稿不跨启动恢复。
 import type { ChatArchive } from '../../ipc/generated/chat/ChatArchive';
-import { messagePreview, normalizeMessage } from '../debug/segments';
+import { messagePreview, normalizeMessage, type Segment } from '../debug/segments';
+import { isLocalFileToken } from '../debug/streamActions';
 import {
     id,
     record,
@@ -20,6 +21,61 @@ import { isInlineImageReference } from './imageSource';
 
 const sessionKey = (value: string): value is SessionKey => /^(group|private):[0-9]+$/.test(value);
 
+const FORWARD_ARCHIVE_DEPTH = 12;
+const nodeContentFields = ['message', 'content', 'raw_message'] as const;
+function archivedMediaData(source: Record<string, unknown>, nested: boolean) {
+    const data = { ...source };
+    delete data.inline_ref;
+    for (const field of ['file', 'local_file', 'url', 'base64']) {
+        if (
+            field === 'base64' ||
+            isInlineImageReference(data[field]) ||
+            /^(base64:\/\/|data:image\/)/i.test(text(data[field])) ||
+            (nested &&
+                (field === 'local_file' ||
+                    isLocalFileToken(text(data[field])) ||
+                    /^blob:/i.test(text(data[field]))))
+        )
+            delete data[field];
+    }
+    return data;
+}
+
+// 节点保留协议标识和恢复坐标；临时图片只能随当前会话存在。
+function archivedSegments(segments: Segment[], depth = 0): Segment[] {
+    return segments.map((segment) => {
+        const data = archivedMediaData(segment.data, depth > 0);
+        if (segment.type === 'forward') {
+            for (const field of ['content', 'messages']) {
+                const nodes = data[field];
+                if (!Array.isArray(nodes)) continue;
+                if (depth >= FORWARD_ARCHIVE_DEPTH) delete data[field];
+                else
+                    data[field] = nodes.map((node) => {
+                        const row = record(node);
+                        const wrapped = row.type === 'node';
+                        const content = archivedMediaData(wrapped ? record(row.data) : row, true);
+                        for (const key of nodeContentFields) {
+                            if (content[key] !== undefined)
+                                content[key] = archivedSegments(
+                                    normalizeMessage(content[key]),
+                                    depth + 1,
+                                );
+                        }
+                        return wrapped ? { ...row, data: content } : content;
+                    });
+            }
+        } else if (segment.type === 'node') {
+            for (const key of nodeContentFields) {
+                if (data[key] === undefined) continue;
+                if (depth >= FORWARD_ARCHIVE_DEPTH) delete data[key];
+                else data[key] = archivedSegments(normalizeMessage(data[key]), depth + 1);
+            }
+        }
+        return { ...segment, data };
+    });
+}
+
 export function archiveOf(account: Account): ChatArchive {
     const conversations = Object.values(account.conversations)
         .sort(
@@ -37,19 +93,7 @@ export function archiveOf(account: Account): ChatArchive {
             .slice(-MESSAGE_LIMIT)
             .map(({ gapBefore: _gapBefore, ...m }) => ({
                 ...m,
-                segments: m.segments.map((segment) => {
-                    const data = { ...segment.data };
-                    delete data.inline_ref;
-                    for (const field of ['file', 'local_file', 'url', 'base64']) {
-                        if (
-                            field === 'base64' ||
-                            isInlineImageReference(data[field]) ||
-                            /^(base64:\/\/|data:image\/)/i.test(text(data[field]))
-                        )
-                            delete data[field];
-                    }
-                    return { ...segment, data };
-                }),
+                segments: archivedSegments(m.segments),
                 status: m.status === 'sending' ? 'unknown' : m.status,
             })),
     };

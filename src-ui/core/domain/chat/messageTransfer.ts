@@ -1,6 +1,7 @@
 import type { Message } from './model';
 
-export const FORWARD_MESSAGE_LIMIT = 20;
+export const FORWARD_MESSAGE_LIMIT = 100;
+export type ForwardMode = 'merged' | 'individual';
 
 export function canForwardMessage(message: Message): boolean {
     return (

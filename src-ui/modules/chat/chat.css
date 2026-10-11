@@ -463,8 +463,8 @@
 .native-chat-account-picker > button {
     height: 34px;
     max-width: none;
-    padding-left: 0;
-    padding-right: 4px;
+    padding-left: 10px;
+    padding-right: 8px;
     border-color: transparent;
     background: transparent;
 }
@@ -472,6 +472,20 @@
 .native-chat-account-picker > button[data-state="open"] {
     border-color: transparent;
     background: var(--chat-hover);
+}
+.native-chat-account-status {
+    display: grid;
+    place-items: center;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    color: color-mix(in srgb, var(--state-danger) 80%, var(--text-primary));
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 24%, transparent);
+}
+.native-chat-account-status[data-connected="true"] {
+    color: color-mix(in srgb, var(--state-success) 80%, var(--text-primary));
 }
 .native-chat-message-pane {
     position: relative;
@@ -637,6 +651,83 @@
 .native-chat-skel-timeline {
     padding: 0 24px;
 }
+.native-chat-page-skeleton {
+    pointer-events: none;
+}
+.native-chat-skel-search {
+    display: block;
+    flex-shrink: 0;
+    height: 34px;
+    margin: 5px 0 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+}
+.native-chat-skel-tabs {
+    display: flex;
+    gap: 16px;
+    padding: 0 8px 14px;
+}
+.native-chat-skel-tabs .native-chat-skel-bar {
+    width: 32px;
+}
+.native-chat-page-skeleton .native-chat-skel-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.native-chat-skel-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 4px 4px;
+}
+.native-chat-skel-account .native-chat-skel-bar {
+    width: 72px;
+}
+.native-chat-skel-heading {
+    width: 116px;
+}
+.native-chat-skel-message-area {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 20px;
+}
+.native-chat-skel-composer {
+    position: relative;
+    flex-shrink: 0;
+    height: 126px;
+    margin: 12px 20px 18px;
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+.native-chat-skel-tools {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+.native-chat-skel-tools span,
+.native-chat-skel-send {
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-inset);
+}
+.native-chat-skel-send {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+}
+.native-chat-skel-composer > .native-chat-skel-bar {
+    width: 26%;
+}
+.native-chat-page-skeleton:not([data-motion="off"]) .native-chat-skel {
+    animation: native-chat-skel-pulse 1.8s ease-in-out infinite;
+}
 .native-chat-skel-timeline :is(.native-chat-skel-avatar, .native-chat-skel-bubble) {
     background: var(--chat-bubble-in);
 }
@@ -699,6 +790,29 @@
     position: relative;
     max-width: min(76%, 620px, calc(100% - 108px));
     min-width: 0;
+}
+.native-chat-timeline-frame {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.native-chat-timeline-frame[data-switching="true"] {
+    pointer-events: none;
+}
+.native-chat-timeline-wrap[data-chat-snapshot] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    contain: layout paint style;
+}
+.native-chat-timeline-wrap[data-chat-snapshot] * {
+    animation: none !important;
+    transition: none !important;
 }
 .native-chat-message-content-line {
     display: flex;
@@ -792,16 +906,26 @@
     transform: translateX(0);
     pointer-events: auto;
 }
-/* 发送结果只剩失败标记：一个右对齐的小感叹号，可点的版本带悬停底。 */
+.native-chat-delivery-slot {
+    position: relative;
+    align-self: center;
+    flex: 0 0 26px;
+    height: 26px;
+}
+.native-chat-delivery-slot > :is(.native-chat-send-status, .native-chat-send-progress) {
+    position: absolute;
+    inset: 0;
+}
 .native-chat-send-status {
-    display: block;
-    width: fit-content;
-    margin: 3px 0 0 auto;
-    padding: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    flex: 0 0 26px;
+    height: 26px;
     border-radius: var(--radius-xs);
     line-height: 0;
     color: var(--state-danger);
-    contain: inline-size;
 }
 button.native-chat-send-status:hover {
     background: var(--surface-inset);
@@ -1462,5 +1586,116 @@ button.native-chat-send-status:hover {
     .native-chat-details-body {
         transition: none !important;
         animation: none !important;
+    }
+}
+
+.native-chat-send-progress {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    flex: 0 0 26px;
+    height: 26px;
+    color: var(--text-secondary);
+}
+.native-chat-send-ring {
+    position: relative;
+    display: inline-flex;
+    color: var(--action-primary);
+}
+.native-chat-send-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+}
+.native-chat-send-cancel[data-cancellable="true"]:not(:disabled) {
+    cursor: pointer;
+}
+.native-chat-send-cancel:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+}
+.native-chat-send-cancel-icon {
+    position: absolute;
+    inset: 7px;
+    opacity: 0;
+    transform: none !important;
+    stroke: currentColor;
+}
+.native-chat-send-cancel:where(:hover, :focus-visible):not(:disabled)
+    .native-chat-send-ring
+    > span {
+    opacity: 0;
+}
+.native-chat-send-cancel:where(:hover, :focus-visible):not(:disabled)
+    .native-chat-send-cancel-icon {
+    opacity: 1;
+}
+.native-chat-send-cancel:where(:hover, :focus-visible):not(:disabled) {
+    background: color-mix(in srgb, var(--action-primary) 8%, transparent);
+}
+.native-chat-send-ring > svg:first-child {
+    transform: rotate(-90deg);
+    fill: none;
+    stroke-width: 2;
+}
+.native-chat-send-ring-track {
+    stroke: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+.native-chat-send-ring-value {
+    stroke: currentColor;
+    stroke-linecap: round;
+    transition: stroke-dashoffset var(--chat-motion-fast, 0s) ease-out;
+}
+.native-chat-send-ring > span {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--text-secondary);
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.native-chat-send-dots {
+    display: inline-flex;
+    gap: 3px;
+}
+.native-chat-send-dots i {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.55;
+}
+.native-chat-workspace:not([data-motion="off"]) .native-chat-send-dots i {
+    animation: native-chat-send-dot calc(var(--chat-motion-base, 0.36s) * 3.2) ease-in-out infinite;
+}
+.native-chat-send-dots i:nth-child(2) {
+    animation-delay: calc(var(--chat-motion-base, 0.36s) * 0.45);
+}
+.native-chat-send-dots i:nth-child(3) {
+    animation-delay: calc(var(--chat-motion-base, 0.36s) * 0.9);
+}
+.native-chat-workspace:not([data-motion="off"])
+    .native-chat-send-ring[data-indeterminate="true"]
+    > svg:first-child {
+    animation: native-chat-send-orbit calc(var(--chat-motion-base, 0.36s) * 3) linear infinite;
+}
+@keyframes native-chat-send-dot {
+    50% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+@keyframes native-chat-send-orbit {
+    to {
+        transform: rotate(270deg);
     }
 }

@@ -5,6 +5,7 @@
 // 回车发送、Shift + 回车换行、输入法选字时的回车不算；Ctrl + 回车也发（并拦下，免得中栏的发送也跟着触发）。
 // 发送途中还能接着打字：成功后只清掉发出去的那部分；失败时字都留着，下面写明原因。
 
+import { useCommittedCaret } from '../../../hooks/ui/useCommittedCaret';
 import {
     memo,
     useCallback,
@@ -160,6 +161,7 @@ export const Composer = memo(function Composer({
     const [picker, setPicker] = useState<PickerState | null>(null);
     const [builderOpen, setBuilderOpen] = useState(false);
     const areaRef = useRef<HTMLTextAreaElement>(null);
+    const commitCaret = useCommittedCaret(areaRef, draft.text);
 
     useEffect(() => {
         setError(null);
@@ -275,13 +277,10 @@ export const Composer = memo(function Composer({
             ...draft.mentions.filter((m) => m.label !== label || m.qq === opt.qq),
             { qq: opt.qq, label },
         ];
+        const pos = picker.start + label.length + 1;
+        commitCaret(text, pos);
         setDraft({ text, mentions: dedupe(mentions) });
         setPicker(null);
-        const pos = picker.start + label.length + 1;
-        requestAnimationFrame(() => {
-            el.focus();
-            el.setSelectionRange(pos, pos);
-        });
     };
 
     // ---- 发送

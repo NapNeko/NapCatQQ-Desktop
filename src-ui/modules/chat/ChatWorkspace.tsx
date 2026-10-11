@@ -20,6 +20,10 @@ import { useConversationNavigation } from './ConversationList';
 import { ChatListPane } from './ChatListPane';
 import { ChatConversationPane } from './ChatConversationPane';
 import { ChatSearchDialog } from './ChatSearchDialog';
+import {
+    conversationSwitchDirection,
+    useConversationTransition,
+} from './useConversationTransition';
 
 export function ChatWorkspace({
     target,
@@ -101,11 +105,7 @@ export function ChatWorkspace({
         `${tab}/${inGroupBox}/${unread}/${narrowFocus}`,
         '.native-chat-conversations, .native-chat-list-empty',
     );
-    useChatPaneMotion(
-        workspace,
-        `${account.active ?? ''}/${narrowFocus}`,
-        '.native-chat-conversation-surface',
-    );
+    const switchConversation = useConversationTransition(workspace, account.active);
     const messages = useMemo(
         () => account.messages.filter((m) => m.session === account.active),
         [account.messages, account.active],
@@ -188,11 +188,17 @@ export function ChatWorkspace({
         if (contact.type === 'group' && hidden.has(contact.key))
             void notifications.mute(contact.id, false, true);
         setConversationHidden(identity, contact.key, false);
-        store.open(contact);
-        setTimelineEntry((value) => value + 1);
-        setInGroupBox(contact.type === 'group');
-        setTab('messages');
-        setNarrowFocus(true);
+        switchConversation(
+            contact.key,
+            () => {
+                setInGroupBox(contact.type === 'group');
+                setTab('messages');
+                setNarrowFocus(true);
+                store.open(contact);
+                focusComposer();
+            },
+            conversationSwitchDirection(rows, account.active, contact.key),
+        );
     };
     const hide = (contact: Contact) => {
         if (contact.type === 'group') void notifications.mute(contact.id, true, true);
@@ -284,6 +290,7 @@ export function ChatWorkspace({
                     return;
                 if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
                     e.preventDefault();
+                    switchConversation.cancel();
                     setNarrowFocus(false);
                     setInGroupBox(false);
                     store.setReading(null);
@@ -368,6 +375,7 @@ export function ChatWorkspace({
                 reveal={reveal}
                 preventRecall={notifications.preventRecall}
                 onBack={() => {
+                    switchConversation.cancel();
                     setNarrowFocus(false);
                     store.setReading(null);
                 }}

@@ -9,18 +9,19 @@ import {
     type MutableRefObject,
     type ReactNode,
 } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
 import { ArrowDown } from 'lucide-react';
-import { ChatViewContext, useChatView } from '../../shared/chat/chatContext';
+import { ChatViewContext, useChatView, type MarkdownCommand } from '../../shared/chat/chatContext';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
-import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
+import { accountKey, EMPTY_DRAFT, type Contact, type Message } from '../../core/domain/chat/model';
 import { useChatMedia } from '../../hooks/chat/useChatMedia';
 import { useChatSend } from '../../hooks/chat/useChatSend';
 import { ChatImageViewer } from '../../shared/chat/ChatImageViewer';
 import { ChatAvatar as Avatar } from '../../shared/chat/ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
+import { messagePreview } from '../../core/domain/debug/segments';
 import { cn } from '../../shared/utils/cn';
 import { useHistoryPaging } from './useHistoryPaging';
 import { ChatMessageActions } from './ChatMessageActions';
@@ -32,6 +33,7 @@ import { ChatSendStatus } from './ChatSendStatus';
 import { useTimelinePosition } from './useTimelinePosition';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { errorText } from '../../core/domain/errors';
+import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
 import { useSmoothWheel } from './useSmoothWheel';
 import { useLatestScroll } from './useLatestScroll';
 import { ChatFileAction } from './files/ChatFileAction';
@@ -39,6 +41,7 @@ import { FORWARD_MESSAGE_LIMIT } from '../../core/domain/chat/messageTransfer';
 import { ChatForwardDialog } from './ChatForwardDialog';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ChatSelectionBar } from './ChatSelectionBar';
+import { recordConversationTimelineMount } from './conversationMotionProbe';
 
 export function NativeTimeline({
     store,
@@ -62,6 +65,15 @@ export function NativeTimeline({
     onSelectionChange?: (selecting: boolean) => void;
 }) {
     const scroll = useRef<HTMLDivElement>(null);
+    const initialMessages = useRef<Set<string> | null>(null);
+    const mountRecorded = useRef(false);
+    useEffect(() => {
+        if (mountRecorded.current) return;
+        mountRecorded.current = true;
+        recordConversationTimelineMount(
+            scroll.current?.closest<HTMLElement>('.native-chat-timeline-frame') ?? null,
+        );
+    }, []);
     const latest = useRef(messages);
     latest.current = messages;
     const canPinToEnd = useRef<() => boolean>(() => true);
@@ -76,6 +88,12 @@ export function NativeTimeline({
     const media = useChatMedia(() => store.target);
     const chatSend = useChatSend(store);
     const history = snapshot.history[contact.key];
+    if (initialMessages.current === null && (messages.length || history?.loaded))
+        initialMessages.current = new Set(
+            messages
+                .filter((message) => message.status !== 'sending')
+                .map((message) => message.key),
+        );
     useEffect(() => {
         void store.ensureHistory(contact.key);
     }, [store, contact.key, snapshot.connection.state, history]);
@@ -91,11 +109,16 @@ export function NativeTimeline({
         sending;
     const getMessageKey = useCallback((index: number) => messages[index]?.key ?? index, [messages]);
     // 按消息 key 锚定 prepend 和异步行高变化，避免额外 scrollHeight 补偿重复移动视口。
-    const pinLatest = useCallback(() => {
-        const element = scroll.current;
-        if (element && canPinToEnd.current())
-            element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    }, []);
+    const pinLatest = useCallback(
+        (instance: Virtualizer<HTMLDivElement, Element>, scrolling: boolean) => {
+            const element = scroll.current;
+            if (!element || scrolling || !canPinToEnd.current()) return;
+            // 滚动通知不再反向写 scrollTop；直接用已算出的容器高度，避免强制测整条时间线。
+            const end = Math.max(0, instance.getTotalSize() - element.clientHeight);
+            if (Math.abs(element.scrollTop - end) > 1) element.scrollTop = end;
+        },
+        [],
+    );
     const virtual = useVirtualizer({
         count: messages.length,
         getScrollElement: () => scroll.current,
@@ -106,6 +129,7 @@ export function NativeTimeline({
         paddingEnd: selecting ? 96 : 24,
         anchorTo: 'end',
         directDomUpdates: true,
+        useFlushSync: false,
         onChange: pinLatest,
     });
     // 消息插入时先提交新容器高度，防止旧页锚点被旧 scrollHeight 截断。
@@ -273,6 +297,36 @@ export function NativeTimeline({
             readRecord: media.record,
             readVideo: media.video,
             readRecordText: media.transcript,
+            onMarkdownCommand: async (command: MarkdownCommand) => {
+                if (store.getSnapshot().account.active !== contact.key)
+                    throw new Error('请在原会话操作这个按钮');
+                if (command.reply && !command.messageId)
+                    throw new Error('这条消息没有可引用的标识');
+                if (command.enter) {
+                    await store.command(
+                        contact.key,
+                        command.text,
+                        command.reply ? command.messageId : undefined,
+                    );
+                } else {
+                    const draft = store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
+                    const source = command.messageId
+                        ? messageById.get(command.messageId)
+                        : undefined;
+                    store.draft(contact.key, {
+                        ...draft,
+                        text: draft.text ? `${draft.text}\n${command.text}` : command.text,
+                        reply: command.reply
+                            ? {
+                                  id: command.messageId!,
+                                  name: source?.senderName ?? '引用消息',
+                                  preview: source ? messagePreview(source.segments) : '',
+                              }
+                            : draft.reply,
+                    });
+                }
+                onFocusComposer?.();
+            },
             fileAction: (data: Record<string, unknown>) => (
                 <ChatFileAction data={data} target={store.target} contact={contact} />
             ),
@@ -305,7 +359,17 @@ export function NativeTimeline({
                 return true;
             },
         }),
-        [fallback, senderNames, messageById, revealRef, store, contact, media, chatSend],
+        [
+            fallback,
+            senderNames,
+            messageById,
+            revealRef,
+            store,
+            contact,
+            media,
+            chatSend,
+            onFocusComposer,
+        ],
     );
     const latestLabel = stick.unseen > 0 ? `回到最新，${stick.unseen} 条新消息` : '回到最新';
     return (
@@ -404,6 +468,12 @@ export function NativeTimeline({
                                         store={store}
                                         contact={contact}
                                         message={message}
+                                        animateEntry={!initialMessages.current?.has(message.key)}
+                                        progress={
+                                            message.requestId
+                                                ? snapshot.sendProgress?.[message.requestId]
+                                                : undefined
+                                        }
                                         previous={messages[row.index - 1]}
                                         highlighted={highlight === message.key}
                                         retryDisabled={retryDisabled}
@@ -496,6 +566,8 @@ const TimelineMessage = memo(function TimelineMessage({
     store,
     contact,
     message,
+    animateEntry,
+    progress,
     previous,
     highlighted,
     retryDisabled,
@@ -518,6 +590,8 @@ const TimelineMessage = memo(function TimelineMessage({
     store: ChatAccountStore;
     contact: Contact;
     message: Message;
+    animateEntry: boolean;
+    progress?: DebugStreamProgress;
     previous?: Message;
     highlighted: boolean;
     retryDisabled: boolean;
@@ -587,6 +661,7 @@ const TimelineMessage = memo(function TimelineMessage({
                 enter={enter}
                 takeEnter={takeEnter}
                 order={order}
+                animate={animateEntry}
             >
                 <ChatMessageActions
                     store={store}
@@ -642,30 +717,47 @@ const TimelineMessage = memo(function TimelineMessage({
                                             preventRecall={preventRecall}
                                         />,
                                     )}
+                                    {message.mine && (
+                                        <span className="native-chat-delivery-slot">
+                                            <ChatSendStatus
+                                                status={message.status}
+                                                progress={progress}
+                                                onCancel={
+                                                    selecting
+                                                        ? undefined
+                                                        : async () => {
+                                                              try {
+                                                                  await store.cancelSend(
+                                                                      message.key,
+                                                                  );
+                                                              } catch (error) {
+                                                                  onError(errorText(error));
+                                                                  throw error;
+                                                              }
+                                                          }
+                                                }
+                                                error={message.error}
+                                                retryDisabled={retryDisabled || selecting}
+                                                onRetry={
+                                                    message.recalled ||
+                                                    message.segments.some(
+                                                        (segment) => segment.type === 'forward',
+                                                    )
+                                                        ? undefined
+                                                        : () => {
+                                                              onError('');
+                                                              void store
+                                                                  .retry(message.key)
+                                                                  .catch((error) =>
+                                                                      onError(errorText(error)),
+                                                                  );
+                                                          }
+                                                }
+                                            />
+                                        </span>
+                                    )}
                                     {controls}
                                 </div>
-                                {message.mine && (
-                                    <ChatSendStatus
-                                        status={message.status}
-                                        error={message.error}
-                                        retryDisabled={retryDisabled || selecting}
-                                        onRetry={
-                                            message.recalled ||
-                                            message.segments.some(
-                                                (segment) => segment.type === 'forward',
-                                            )
-                                                ? undefined
-                                                : () => {
-                                                      onError('');
-                                                      void store
-                                                          .retry(message.key)
-                                                          .catch((error) =>
-                                                              onError(errorText(error)),
-                                                          );
-                                                  }
-                                        }
-                                    />
-                                )}
                             </div>
                         </article>
                     )}

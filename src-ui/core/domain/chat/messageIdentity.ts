@@ -1,5 +1,6 @@
 // 旧私聊历史把 message_id 当作序号；只合并能唯一对应的旧、新表示。
 import type { Message } from './model';
+import { withLocalImageSources } from './imageSource';
 
 const hasSequence = (message: Message) =>
     !!message.sequence && message.sequence !== '0' && message.sequence !== message.id;
@@ -67,7 +68,7 @@ export function mergeMessageIdentity(existing: Message, incoming: Message): Mess
         segments:
             existing.recalled && existing.segments.length
                 ? existing.segments
-                : authoritative.segments,
+                : withLocalImageSources(authoritative.segments, existing.segments),
     };
 }
 

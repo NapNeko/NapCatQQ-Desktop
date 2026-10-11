@@ -16,8 +16,7 @@ export function useChatSend(store: ChatAccountStore) {
         (messageKeys: readonly string[], contact: Contact) => store.forward(messageKeys, contact),
         [store],
     );
-    // 附件选择是发给后端的取文件命令；群文件的真实上传已在 hooks/chat/fileTransfers
-    // 里有各自的进度流，这里不重复承载。
+    // 这里只处理附件入口；消息上传进度由 store 承载，群文件由 fileTransfers 承载。
     const { mutateAsync } = useMutation({
         mutationFn: () => chatService.pickFile(),
     });
@@ -26,7 +25,18 @@ export function useChatSend(store: ChatAccountStore) {
     // 截图附件的本地预览图读取；与 pickFile/openLink 同类薄转发，不让模块层直连 service。
     const readLocalImage = useCallback((path: string) => chatService.readLocalImage(path), []);
     return useMemo(
-        () => ({ send, recall, retry, poke, forward, pickFile, openLink, readLocalImage }),
+        () => ({
+            send,
+            recall,
+            retry,
+            poke,
+            forward,
+            pickFile,
+            openLink,
+            readLocalImage,
+            onFileDragDrop: chatService.onFileDragDrop,
+            stageAttachment: chatService.stageAttachment,
+        }),
         [send, recall, retry, poke, forward, pickFile, openLink, readLocalImage],
     );
 }
