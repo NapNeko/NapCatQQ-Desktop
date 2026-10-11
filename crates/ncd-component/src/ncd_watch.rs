@@ -253,23 +253,9 @@ impl NcdWatchComponent {
             message: format!("上传 ncd-watch → {}", dest.as_posix()),
         })
         .await;
-        let upload = host.upload(&local_tmp, &dest).await;
+        let placed = install_binary_file(host, &local_tmp, &dest).await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
-        upload.map_err(|e| ActionError::install_step("upload", e.to_string()))?;
-
-        let dest_s = dest.as_posix();
-        let chmod = HostCommand::new("chmod").arg("+x").arg(dest_s);
-        let out = host
-            .run_to_string(chmod)
-            .await
-            .map_err(|e| ActionError::install_step("chmod", e.to_string()))?;
-        if !out.success() {
-            return Err(ActionError::install_step(
-                "chmod",
-                format!("exit={:?} {}", out.exit_code, out.stderr.trim()),
-            ));
-        }
-        Ok(())
+        placed
     }
 
     async fn write_default_watch_json(&self, host: &dyn Host) -> Result<(), ActionError> {
@@ -303,48 +289,20 @@ impl NcdWatchComponent {
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
         let home = self.require_home()?;
-        let bin = format!("{home}/{INSTALL_DIR_NAME}/bin/{BIN_NAME}");
-        let root = format!("{home}/{INSTALL_DIR_NAME}");
+        // 自定义安装根(库存选的目录)时 unit 也要指向它,否则服务跑的还是旧路径
+        let bin = self.bin_path()?.as_posix().to_string();
+        let root = self.root_path()?.as_posix().to_string();
         let unit_dir = HostPath::from_posix(format!("{home}/.config/systemd/user"));
         host.create_dir_all(&unit_dir)
             .await
             .map_err(|e| ActionError::install_step("mkdir systemd user", e.to_string()))?;
         let unit_path = unit_dir.join("ncd-watch.service");
-        // HOME 里带空格时不加引号 systemd 会把路径拆成几个参数,服务起不来
-        let unit_bin = systemd_quote(&bin);
-        let unit_root = systemd_quote(&root);
-        let unit = format!(
-            "[Unit]\n\
-             Description=NapCatQQ Desktop remote watch\n\
-             After=network-online.target\n\
-             \n\
-             [Service]\n\
-             Type=simple\n\
-             ExecStart={unit_bin} --root {unit_root} run\n\
-             Restart=on-failure\n\
-             RestartSec=5\n\
-             Environment=RUST_LOG=info\n\
-             \n\
-             [Install]\n\
-             WantedBy=default.target\n"
-        );
+        let unit = unit_text(&bin, &root);
         host.write_file(&unit_path, unit.as_bytes())
             .await
             .map_err(|e| ActionError::install_step("write unit", e.to_string()))?;
 
-        // enable --now 在已 active 时不会换二进制;更新后必须 restart
-        let q_bin = shell_single_quote(&bin);
-        let q_root = shell_single_quote(&root);
-        let script = format!(
-            "if command -v systemctl >/dev/null 2>&1; then \
-               systemctl --user daemon-reload && \
-               systemctl --user enable ncd-watch.service && \
-               systemctl --user restart ncd-watch.service; \
-             else \
-               pkill -f {q_bin} 2>/dev/null || true; \
-               nohup {q_bin} --root {q_root} run >/dev/null 2>&1 & \
-             fi"
-        );
+        let script = start_script(&bin, &root);
         ctx.emit(ProgressKind::Log {
             level: ProgressLogLevel::Info,
             message: "启动/重启 ncd-watch(systemd --user 或 nohup)".into(),
@@ -355,15 +313,14 @@ impl NcdWatchComponent {
             .await
             .map_err(|e| ActionError::install_step("start watch", e.to_string()))?;
         if !out.success() {
-            ctx.emit(ProgressKind::Log {
-                level: ProgressLogLevel::Warn,
-                message: format!(
-                    "自动启动未完全成功(exit={:?}): {} — 可稍后手动 systemctl --user restart ncd-watch",
+            return Err(ActionError::install_step(
+                "start watch",
+                format!(
+                    "ncd-watch 未能启动(exit={:?}): {}",
                     out.exit_code,
                     out.stderr.trim()
                 ),
-            })
-            .await;
+            ));
         }
         Ok(())
     }
@@ -432,17 +389,8 @@ impl Component for NcdWatchComponent {
         self.ensure_layout(host).await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // 覆盖安装/更新:先停再写,避免 ETXTBSY / 旧进程占文件
-        let home = self.require_home()?;
-        let root = format!("{home}/{INSTALL_DIR_NAME}");
-        // 整条路径只加一层引号;转义结果再套一层单引号,HOME 带空格时 pkill 会拿到两个参数
-        let pattern = shell_single_quote(&format!("{root}/bin/{BIN_NAME}"));
-        let stop = format!(
-            "systemctl --user stop ncd-watch.service 2>/dev/null || true; \
-             pkill -x '{BIN_NAME}' 2>/dev/null || true; \
-             pkill -f {pattern} 2>/dev/null || true; \
-             sleep 0.3; true"
-        );
+        // 覆盖安装/更新:先停再换。二进制本身走同目录 rename,旧进程没退干净也不会 ETXTBSY
+        let stop = stop_script();
         ctx.emit(ProgressKind::Log {
             level: ProgressLogLevel::Info,
             message: "停止 ncd-watch 以便覆盖二进制".into(),
@@ -487,17 +435,15 @@ impl Component for NcdWatchComponent {
 
     async fn uninstall(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 2 }).await;
-        let home = self.require_home()?;
-        let root = format!("{home}/{INSTALL_DIR_NAME}");
+        let root = self.root_path()?;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "停止服务".into(),
         })
         .await;
-        let pattern = shell_single_quote(&format!("{root}/bin/{BIN_NAME}"));
         let stop = format!(
-            "systemctl --user disable --now ncd-watch.service 2>/dev/null || \
-             pkill -f {pattern} 2>/dev/null || true"
+            "systemctl --user disable --now ncd-watch.service 2>/dev/null || true; {}",
+            stop_script()
         );
         let _ = host
             .run_to_string(HostCommand::new("sh").arg("-c").arg(&stop))
@@ -509,7 +455,7 @@ impl Component for NcdWatchComponent {
             message: "删除安装目录".into(),
         })
         .await;
-        host.remove_dir_all(&HostPath::from_posix(&root))
+        host.remove_dir_all(&root)
             .await
             .map_err(|e| ActionError::install_step("remove", e.to_string()))?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
@@ -537,9 +483,8 @@ impl Component for NcdWatchComponent {
         _host: &dyn Host,
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
-        let home = self.require_home()?;
-        let bin = format!("{home}/{INSTALL_DIR_NAME}/bin/{BIN_NAME}");
-        let root = format!("{home}/{INSTALL_DIR_NAME}");
+        let bin = self.bin_path()?.as_posix().to_string();
+        let root = self.root_path()?.as_posix().to_string();
         let cmd = HostCommand::new(bin).arg("--root").arg(root).arg("run");
         Ok(args.apply_to(cmd))
     }
@@ -667,7 +612,98 @@ pub fn ncd_watch_asset_name(tag: &str, arch: Arch) -> Option<String> {
     Some(format!("ncd-watch-{ver}-{triple}"))
 }
 
-/// 开发期本机 cargo 产物探测(仅调试;正式安装/更新不走这条)
+/// 同目录暂存名;rename 只在同一文件系统上原子
+const STAGING_SUFFIX: &str = ".new";
+
+/// 先传到同目录 `ncd-watch.new` 再 rename 覆盖。直接 SFTP create 截断正在跑的
+/// 可执行文件会 ETXTBSY(旧进程收到 SIGTERM 后还要跑完这一轮探活才退)
+async fn install_binary_file(
+    host: &dyn Host,
+    local: &std::path::Path,
+    bin: &HostPath,
+) -> Result<(), ActionError> {
+    let staging = HostPath::from_posix(format!("{}{STAGING_SUFFIX}", bin.as_posix()));
+    if let Err(error) = host.upload(local, &staging).await {
+        let _ = host.remove_file(&staging).await;
+        return Err(ActionError::install_step("upload", error.to_string()));
+    }
+
+    let chmod = HostCommand::new("chmod").arg("+x").arg(staging.as_posix());
+    let chmod_err = match host.run_to_string(chmod).await {
+        Ok(out) if out.success() => None,
+        Ok(out) => Some(format!("exit={:?} {}", out.exit_code, out.stderr.trim())),
+        Err(e) => Some(e.to_string()),
+    };
+    if let Some(detail) = chmod_err {
+        let _ = host.remove_file(&staging).await;
+        return Err(ActionError::install_step("chmod", detail));
+    }
+
+    if let Err(e) = host.rename(&staging, bin).await {
+        let _ = host.remove_file(&staging).await;
+        return Err(ActionError::install_step("replace", e.to_string()));
+    }
+    Ok(())
+}
+
+/// 停当前用户的 ncd-watch 并最多等 5s。不用 `pkill -f <路径>`:那条命令行本身就在
+/// `sh -c` 参数里,会把执行脚本的 shell 一起杀掉
+fn stop_script() -> String {
+    format!(
+        "systemctl --user stop ncd-watch.service 2>/dev/null || true; \
+         pkill -x -u \"$(id -u)\" {BIN_NAME} 2>/dev/null || true; \
+         i=0; \
+         while pgrep -x -u \"$(id -u)\" {BIN_NAME} >/dev/null 2>&1 && [ \"$i\" -lt 5 ]; do \
+           sleep 1; i=$((i+1)); \
+         done; \
+         true"
+    )
+}
+
+/// systemd --user 只有用户总线连得上才用(root / 无 logind 会话的 SSH exec 连不上),
+/// 否则或 systemd 这条失败时回退 nohup。最后确认进程真在跑,不在就 exit 3
+/// 让调用方报出来,免得「更新了但 watch 没在跑」
+fn start_script(bin: &str, root: &str) -> String {
+    let q_bin = shell_single_quote(bin);
+    let q_root = shell_single_quote(root);
+    // enable --now 在已 active 时不会换二进制;更新后必须 restart
+    format!(
+        "if command -v systemctl >/dev/null 2>&1 \
+            && systemctl --user show-environment >/dev/null 2>&1 \
+            && systemctl --user daemon-reload \
+            && systemctl --user enable ncd-watch.service >/dev/null 2>&1 \
+            && systemctl --user restart ncd-watch.service; then \
+           :; \
+         else \
+           pkill -x -u \"$(id -u)\" {BIN_NAME} 2>/dev/null || true; \
+           nohup {q_bin} --root {q_root} run >/dev/null 2>&1 </dev/null & \
+         fi; \
+         sleep 1; \
+         pgrep -x -u \"$(id -u)\" {BIN_NAME} >/dev/null 2>&1 || exit 3"
+    )
+}
+
+fn unit_text(bin: &str, root: &str) -> String {
+    // HOME 里带空格时不加引号 systemd 会把路径拆成几个参数,服务起不来
+    let unit_bin = systemd_quote(bin);
+    let unit_root = systemd_quote(root);
+    format!(
+        "[Unit]\n\
+         Description=NapCatQQ Desktop remote watch\n\
+         After=network-online.target\n\
+         \n\
+         [Service]\n\
+         Type=simple\n\
+         ExecStart={unit_bin} --root {unit_root} run\n\
+         Restart=on-failure\n\
+         RestartSec=5\n\
+         Environment=RUST_LOG=info\n\
+         \n\
+         [Install]\n\
+         WantedBy=default.target\n"
+    )
+}
+
 /// systemd unit 里 ExecStart 的一个参数:双引号包起来,里面的 \ 和 " 转义,
 /// % 与 $ 写两遍,免得被当成 specifier / 环境变量展开
 fn systemd_quote(arg: &str) -> String {
@@ -690,6 +726,7 @@ fn systemd_quote(arg: &str) -> String {
     out
 }
 
+/// 开发期本机 cargo 产物探测，正式安装和更新不走这条。
 pub fn discover_local_ncd_watch_binary() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
@@ -785,5 +822,252 @@ mod tests {
     #[test]
     fn discover_does_not_panic() {
         let _ = discover_local_ncd_watch_binary();
+    }
+
+    #[test]
+    fn stop_script_never_uses_pkill_f() {
+        let s = stop_script();
+        assert!(!s.contains("pkill -f"), "{s}");
+        assert!(s.contains("pkill -x -u \"$(id -u)\" ncd-watch"), "{s}");
+        assert!(s.contains("pgrep -x -u \"$(id -u)\" ncd-watch"), "{s}");
+    }
+
+    #[test]
+    fn start_script_checks_user_bus_and_falls_back_to_nohup() {
+        let s = start_script("/home/u/ncd-watch/bin/ncd-watch", "/home/u/ncd-watch");
+        assert!(!s.contains("pkill -f"), "{s}");
+        let bus = s
+            .find("systemctl --user show-environment")
+            .expect("user bus probe");
+        let restart = s.find("systemctl --user restart").expect("restart");
+        assert!(bus < restart, "先探用户总线再 restart: {s}");
+        assert!(s.contains("else"), "{s}");
+        assert!(
+            s.contains("nohup '/home/u/ncd-watch/bin/ncd-watch' --root '/home/u/ncd-watch' run"),
+            "{s}"
+        );
+        assert!(s.trim_end().ends_with("|| exit 3"), "{s}");
+    }
+
+    #[test]
+    fn scripts_quote_spaced_paths() {
+        let s = start_script("/home/a b/ncd-watch/bin/ncd-watch", "/home/a b/ncd-watch");
+        assert!(s.contains("'/home/a b/ncd-watch/bin/ncd-watch'"), "{s}");
+        assert!(s.contains("--root '/home/a b/ncd-watch'"), "{s}");
+        let unit = unit_text("/home/a b/ncd-watch/bin/ncd-watch", "/home/a b/ncd-watch");
+        assert!(
+            unit.contains(
+                "ExecStart=\"/home/a b/ncd-watch/bin/ncd-watch\" --root \"/home/a b/ncd-watch\" run"
+            ),
+            "{unit}"
+        );
+    }
+
+    #[test]
+    fn custom_install_root_is_used_for_unit_and_launch() {
+        let c = NcdWatchComponent::new(Some("/home/u".into()))
+            .with_install_root(HostPath::from_posix("/opt/w"));
+        let host = RecordingHost::default();
+        let cmd = c
+            .launch_command(&host, &LaunchArgs::default())
+            .expect("launch");
+        assert_eq!(cmd.program, "/opt/w/bin/ncd-watch");
+        assert_eq!(cmd.args, ["--root", "/opt/w", "run"]);
+        let bin = c.bin_path().unwrap();
+        let root = c.root_path().unwrap();
+        let unit = unit_text(bin.as_posix(), root.as_posix());
+        assert!(
+            unit.contains("ExecStart=\"/opt/w/bin/ncd-watch\" --root \"/opt/w\" run"),
+            "{unit}"
+        );
+    }
+
+    #[tokio::test]
+    async fn install_binary_file_uploads_to_staging_then_renames() {
+        let host = RecordingHost::default();
+        let bin = HostPath::from_posix("/home/u/ncd-watch/bin/ncd-watch");
+        install_binary_file(&host, std::path::Path::new("local-bin"), &bin)
+            .await
+            .expect("install");
+        let log = host.log.lock().unwrap().clone();
+        assert_eq!(
+            log,
+            vec![
+                "upload /home/u/ncd-watch/bin/ncd-watch.new".to_string(),
+                "run chmod +x /home/u/ncd-watch/bin/ncd-watch.new".to_string(),
+                "rename /home/u/ncd-watch/bin/ncd-watch.new -> /home/u/ncd-watch/bin/ncd-watch"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn install_binary_file_cleans_staging_when_rename_fails() {
+        let host = RecordingHost {
+            fail_rename: true,
+            ..RecordingHost::default()
+        };
+        let bin = HostPath::from_posix("/home/u/ncd-watch/bin/ncd-watch");
+        let err = install_binary_file(&host, std::path::Path::new("local-bin"), &bin)
+            .await
+            .expect_err("rename failure must surface");
+        assert!(err.to_string().contains("replace"), "{err}");
+        let log = host.log.lock().unwrap().clone();
+        assert_eq!(
+            log.last().map(String::as_str),
+            Some("remove /home/u/ncd-watch/bin/ncd-watch.new")
+        );
+    }
+
+    #[tokio::test]
+    async fn install_binary_file_cleans_incomplete_upload() {
+        let host = RecordingHost {
+            fail_upload: true,
+            ..RecordingHost::default()
+        };
+        let bin = HostPath::from_posix("/home/u/ncd-watch/bin/ncd-watch");
+        let err = install_binary_file(&host, std::path::Path::new("local-bin"), &bin)
+            .await
+            .expect_err("upload failure must surface");
+        assert!(err.to_string().contains("upload"), "{err}");
+        assert_eq!(
+            host.log.lock().unwrap().last().map(String::as_str),
+            Some("remove /home/u/ncd-watch/bin/ncd-watch.new")
+        );
+    }
+
+    #[tokio::test]
+    async fn service_start_failure_is_reported_as_install_failure() {
+        let host = RecordingHost {
+            fail_start: true,
+            ..RecordingHost::default()
+        };
+        let component = NcdWatchComponent::new(Some("/home/u".into()));
+        let (mut ctx, _rx) = ActionCtx::new();
+        let err = component
+            .write_and_start_systemd(&host, &mut ctx)
+            .await
+            .expect_err("a stopped watch must not be reported as successfully installed");
+        assert!(err.to_string().contains("start watch"), "{err}");
+    }
+
+    use async_trait::async_trait;
+    use bytes::Bytes;
+    use ncd_host::{
+        ArchiveKind, CommandOutput, DirEntry, HostError, HostProcess, HostShell, ShellKind,
+    };
+    use std::sync::Mutex;
+
+    struct NoopShell;
+    impl HostShell for NoopShell {
+        fn kind(&self) -> ShellKind {
+            ShellKind::Bash
+        }
+        fn escape(&self, arg: &str) -> String {
+            arg.to_string()
+        }
+        fn line_separator(&self) -> &'static str {
+            "\n"
+        }
+    }
+    static NOOP_SHELL: NoopShell = NoopShell;
+
+    #[derive(Default)]
+    struct RecordingHost {
+        log: Mutex<Vec<String>>,
+        fail_rename: bool,
+        fail_upload: bool,
+        fail_start: bool,
+    }
+
+    impl RecordingHost {
+        fn push(&self, entry: String) {
+            self.log.lock().unwrap().push(entry);
+        }
+    }
+
+    #[async_trait]
+    impl Host for RecordingHost {
+        fn os(&self) -> Os {
+            Os::Linux
+        }
+        fn arch(&self) -> Arch {
+            Arch::X86_64
+        }
+        fn locality(&self) -> Locality {
+            Locality::Remote
+        }
+        fn id(&self) -> &str {
+            "recording"
+        }
+        fn shell(&self) -> &dyn HostShell {
+            &NOOP_SHELL
+        }
+        async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
+            Ok(())
+        }
+        async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn create_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            Ok(())
+        }
+        async fn remove_file(&self, path: &HostPath) -> Result<(), HostError> {
+            self.push(format!("remove {}", path.as_posix()));
+            Ok(())
+        }
+        async fn remove_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            Ok(())
+        }
+        async fn rename(&self, from: &HostPath, to: &HostPath) -> Result<(), HostError> {
+            self.push(format!("rename {} -> {}", from.as_posix(), to.as_posix()));
+            if self.fail_rename {
+                return Err(HostError::Unsupported {
+                    operation: "rename",
+                });
+            }
+            Ok(())
+        }
+        async fn exists(&self, _: &HostPath) -> Result<bool, HostError> {
+            Ok(false)
+        }
+        async fn upload(&self, _: &std::path::Path, remote: &HostPath) -> Result<(), HostError> {
+            self.push(format!("upload {}", remote.as_posix()));
+            if self.fail_upload {
+                return Err(HostError::Unsupported {
+                    operation: "upload",
+                });
+            }
+            Ok(())
+        }
+        async fn download(&self, _: &HostPath, _: &std::path::Path) -> Result<(), HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn extract_archive(
+            &self,
+            _: &HostPath,
+            _: &HostPath,
+            _: ArchiveKind,
+        ) -> Result<(), HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+            Err(HostError::Unsupported { operation: "mock" })
+        }
+        async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+            self.push(format!("run {} {}", cmd.program, cmd.args.join(" ")));
+            Ok(CommandOutput {
+                exit_code: Some(if self.fail_start && cmd.program == "sh" {
+                    3
+                } else {
+                    0
+                }),
+                stdout: String::new(),
+                stderr: String::new(),
+            })
+        }
     }
 }
