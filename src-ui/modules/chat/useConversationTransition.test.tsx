@@ -11,12 +11,16 @@ vi.mock('../../hooks/preferences/useMotion', () => ({
         ease: { exit: 'power2.in', damped: 'power3.out' },
     }),
 }));
-import { useConversationTransition } from './useConversationTransition';
+import {
+    conversationSwitchDirection,
+    useConversationTransition,
+} from './useConversationTransition';
 
 let scope: { current: HTMLDivElement };
 let queued: Map<number, FrameRequestCallback>;
 let animations: Array<{
     element: HTMLElement;
+    keyframes: Keyframe[];
     finish: () => void;
     cancel: ReturnType<typeof vi.fn>;
 }>;
@@ -43,7 +47,7 @@ beforeEach(() => {
     originalAnimate = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'animate');
     Object.defineProperty(HTMLElement.prototype, 'animate', {
         configurable: true,
-        value: function (this: HTMLElement) {
+        value: function (this: HTMLElement, keyframes: Keyframe[]) {
             let resolve!: () => void;
             let reject!: (error: unknown) => void;
             const finished = new Promise<void>((yes, no) => {
@@ -51,7 +55,7 @@ beforeEach(() => {
                 reject = no;
             });
             const cancel = vi.fn(() => reject(new DOMException('Cancelled', 'AbortError')));
-            animations.push({ element: this, finish: resolve, cancel });
+            animations.push({ element: this, keyframes, finish: resolve, cancel });
             return { finished, cancel };
         },
     });
@@ -73,6 +77,29 @@ afterEach(() => {
 });
 
 describe('composited conversation handoff', () => {
+    it.each([
+        { order: ['private:1', 'private:2', 'private:3'], next: 'private:3', shift: -400 },
+        { order: ['private:1', 'private:2', 'private:3'], next: 'private:1', shift: 400 },
+        { order: ['private:3', 'private:2', 'private:1'], next: 'private:3', shift: 400 },
+        { order: ['private:1', 'private:3'], next: 'private:3', shift: -400 },
+    ])('uses the visible list order $order when opening $next', ({ order, next, shift }) => {
+        const { result, rerender } = renderHook(
+            ({ token }) => useConversationTransition(scope, token),
+            { initialProps: { token: 'private:2' } },
+        );
+        const direction = conversationSwitchDirection(
+            order.map((key) => ({ key })),
+            'private:2',
+            next,
+        );
+        act(() => result.current(next, vi.fn(), direction));
+        frame();
+        expect(animations[0].keyframes[1].transform).toBe(`translate3d(0,${shift}px,0)`);
+        frame();
+        rerender({ token: next });
+        expect(animations[1].keyframes[0].transform).toBe(`translate3d(0,${-shift}px,0)`);
+    });
+
     it('coalesces rapid selections and commits before the outgoing animation finishes', async () => {
         const { result, rerender } = renderHook(
             ({ token }) => useConversationTransition(scope, token),
@@ -84,10 +111,11 @@ describe('composited conversation handoff', () => {
         const latest = vi.fn();
         act(() => {
             result.current('private:2', first);
-            result.current('private:3', latest);
+            result.current('private:3', latest, 'down');
         });
         frame();
         expect(animations).toHaveLength(1);
+        expect(animations[0].keyframes[1].transform).toBe('translate3d(0,400px,0)');
         const snapshot = scope.current.querySelector('[data-chat-snapshot]');
         expect(snapshot).toHaveAttribute('aria-hidden', 'true');
         expect(snapshot?.querySelector('[id]')).toBeNull();
@@ -96,6 +124,7 @@ describe('composited conversation handoff', () => {
         expect(latest).toHaveBeenCalledOnce();
         rerender({ token: 'private:3' });
         expect(animations).toHaveLength(2);
+        expect(animations[1].keyframes[0].transform).toBe('translate3d(0,-400px,0)');
         expect(animations[1].element).not.toHaveAttribute('data-chat-snapshot');
         act(() => result.current('private:3', vi.fn()));
         expect(animations[1].cancel).not.toHaveBeenCalled();
@@ -125,6 +154,20 @@ describe('composited conversation handoff', () => {
         rerender({ token: 'private:3' });
         expect(scope.current.querySelectorAll('[data-chat-snapshot]')).toHaveLength(1);
         expect(animations).toHaveLength(3);
+    });
+
+    it('does not reuse a previous list direction for external navigation', () => {
+        const { result, rerender } = renderHook(
+            ({ token }) => useConversationTransition(scope, token),
+            { initialProps: { token: 'private:1' } },
+        );
+        act(() => result.current('private:2', vi.fn(), 'down'));
+        frame();
+        frame();
+        rerender({ token: 'private:2' });
+        expect(animations[1].keyframes[0].transform).toBe('translate3d(0,-400px,0)');
+        rerender({ token: 'private:4' });
+        expect(animations[2].keyframes[0].transform).toBe('translate3d(0,400px,0)');
     });
 
     it.each([null, 'private:4'])(

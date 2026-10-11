@@ -20,7 +20,10 @@ import { useConversationNavigation } from './ConversationList';
 import { ChatListPane } from './ChatListPane';
 import { ChatConversationPane } from './ChatConversationPane';
 import { ChatSearchDialog } from './ChatSearchDialog';
-import { useConversationTransition } from './useConversationTransition';
+import {
+    conversationSwitchDirection,
+    useConversationTransition,
+} from './useConversationTransition';
 
 export function ChatWorkspace({
     target,
@@ -185,13 +188,17 @@ export function ChatWorkspace({
         if (contact.type === 'group' && hidden.has(contact.key))
             void notifications.mute(contact.id, false, true);
         setConversationHidden(identity, contact.key, false);
-        switchConversation(contact.key, () => {
-            setInGroupBox(contact.type === 'group');
-            setTab('messages');
-            setNarrowFocus(true);
-            store.open(contact);
-            focusComposer();
-        });
+        switchConversation(
+            contact.key,
+            () => {
+                setInGroupBox(contact.type === 'group');
+                setTab('messages');
+                setNarrowFocus(true);
+                store.open(contact);
+                focusComposer();
+            },
+            conversationSwitchDirection(rows, account.active, contact.key),
+        );
     };
     const hide = (contact: Contact) => {
         if (contact.type === 'group') void notifications.mute(contact.id, true, true);

@@ -4,6 +4,18 @@ import { cssEase } from '../../core/design/cssEase';
 import { startConversationMotionProbe } from './conversationMotionProbe';
 import { createConversationSnapshot } from './conversationSnapshot';
 
+export type ConversationSwitchDirection = 'up' | 'down';
+
+export function conversationSwitchDirection(
+    rows: readonly { key: string }[],
+    current: string | null,
+    next: string,
+): ConversationSwitchDirection {
+    const from = rows.findIndex((row) => row.key === current);
+    const to = rows.findIndex((row) => row.key === next);
+    return from >= 0 && to >= 0 && to < from ? 'down' : 'up';
+}
+
 // 旧画面只留一份惰性 DOM 快照；合成器播放过渡，React 不必等退场才挂新会话。
 export function useConversationTransition(scope: RefObject<HTMLDivElement>, token: string | null) {
     const motion = useMotion();
@@ -12,7 +24,12 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
     const current = useRef(token);
     current.current = token;
     const previous = useRef(token);
-    const pending = useRef<{ token: string; commit: () => void } | null>(null);
+    const pending = useRef<{
+        token: string;
+        commit: () => void;
+        direction: ConversationSwitchDirection;
+    } | null>(null);
+    const entry = useRef<{ token: string; direction: ConversationSwitchDirection } | null>(null);
     const incoming = useRef<Animation | null>(null);
     const outgoing = useRef<Animation | null>(null);
     const snapshot = useRef<HTMLElement | null>(null);
@@ -49,6 +66,7 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
         snapshot.current = null;
         probe.current?.finish();
         probe.current = null;
+        entry.current = null;
         unlock();
     }, [unlock]);
 
@@ -56,7 +74,10 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
         scheduled.current = 0;
         const request = pending.current;
         pending.current = null;
-        if (alive.current) request?.commit();
+        if (alive.current && request) {
+            entry.current = { token: request.token, direction: request.direction };
+            request.commit();
+        }
     }, []);
 
     const cancelPending = useCallback(() => {
@@ -65,14 +86,14 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
     }, [clear]);
 
     const switchTo = useCallback(
-        (next: string, commit: () => void) => {
+        (next: string, commit: () => void, direction: ConversationSwitchDirection = 'up') => {
             if (!alive.current) return;
             if (next === current.current) {
                 if (pending.current) cancelPending();
                 commit();
                 return;
             }
-            pending.current = { token: next, commit };
+            pending.current = { token: next, commit, direction };
             const elements = surface();
             const env = settings.current;
             if (
@@ -105,11 +126,12 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
                     snapshot.current = frozen;
                     probe.current.captured(frozen.querySelectorAll('*').length);
                     const height = source.frame.clientHeight;
+                    const shift = pending.current.direction === 'up' ? -height : height;
                     const animation = frozen.animate(
                         [
                             { transform: 'translate3d(0,0,0)', opacity: 1 },
                             {
-                                transform: `translate3d(0,${env.level === 'elegant' ? 0 : -height}px,0)`,
+                                transform: `translate3d(0,${env.level === 'elegant' ? 0 : shift}px,0)`,
                                 opacity: 0,
                             },
                         ],
@@ -144,6 +166,8 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
     useLayoutEffect(() => {
         if (previous.current === token) return;
         previous.current = token;
+        const direction = entry.current?.token === token ? entry.current.direction : 'up';
+        entry.current = null;
         // 关闭会话或搜索直接跳转优先于尚未提交的列表点击。
         if (pending.current) cancelPending();
         incoming.current?.cancel();
@@ -164,10 +188,12 @@ export function useConversationTransition(scope: RefObject<HTMLDivElement>, toke
         elements.frame.inert = true;
         elements.frame.dataset.switching = 'true';
         elements.body.style.visibility = 'visible';
+        const height = elements.frame.clientHeight;
+        const shift = direction === 'up' ? height : -height;
         const animation = elements.body.animate(
             [
                 {
-                    transform: `translate3d(0,${env.level === 'elegant' ? 0 : elements.frame.clientHeight}px,0)`,
+                    transform: `translate3d(0,${env.level === 'elegant' ? 0 : shift}px,0)`,
                     opacity: 0,
                 },
                 { transform: 'translate3d(0,0,0)', opacity: 1 },
