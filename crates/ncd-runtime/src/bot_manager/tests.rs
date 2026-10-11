@@ -89,3 +89,6 @@ fn dot_path_non_numeric_array_segment_errors() {
     let err = set_value_at_dot_path(&mut root, "list.foo.x", serde_json::json!(2)).unwrap_err();
     assert!(err.contains("不是合法下标"));
 }
+
+#[path = "host_connection_tests.rs"]
+mod host_connection_tests;

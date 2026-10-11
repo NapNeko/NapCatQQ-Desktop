@@ -3,7 +3,7 @@ use super::*;
 use std::collections::VecDeque;
 
 use async_trait::async_trait;
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, Notify};
 
 use crate::snowluma::error::SnowLumaWebUiError;
 use crate::snowluma::proc_tree::MockProcessTreeProbe;
@@ -27,12 +27,19 @@ fn is_real_uin_handles_edge_cases() {
 
 #[derive(Default)]
 struct MockBehavior {
+    processes_gate: Option<Arc<ProcessRequestGate>>,
     processes_responses: VecDeque<Result<Vec<HookProcessInfo>, SnowLumaWebUiError>>,
     qq_responses: VecDeque<Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError>>,
     probe_responses: VecDeque<Result<Option<QqPortLoginInfo>, SnowLumaWebUiError>>,
     last_processes: Option<Result<Vec<HookProcessInfo>, SnowLumaWebUiError>>,
     last_qq: Option<Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError>>,
     last_probe: Option<Result<Option<QqPortLoginInfo>, SnowLumaWebUiError>>,
+}
+
+#[derive(Default)]
+struct ProcessRequestGate {
+    started: Notify,
+    release: Notify,
 }
 
 fn clone_webui_error(e: &SnowLumaWebUiError) -> SnowLumaWebUiError {
@@ -127,6 +134,11 @@ impl SnowLumaWebUiClient for MockClient {
         Ok(())
     }
     async fn list_processes(&self) -> Result<Vec<HookProcessInfo>, SnowLumaWebUiError> {
+        let gate = self.behavior.lock().await.processes_gate.take();
+        if let Some(gate) = gate {
+            gate.started.notify_one();
+            gate.release.notified().await;
+        }
         let mut behavior = self.behavior.lock().await;
         if let Some(front) = behavior.processes_responses.pop_front() {
             behavior.last_processes = Some(clone_proc_result(&front));
@@ -992,6 +1004,196 @@ async fn recovered_probe_republishes_same_confirmed_state() {
     publish_login_state_if_needed(&bot_id, &deps, &mut state, SnowLumaLoginState::LoggedIn);
     let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
     assert!(r.is_err());
+}
+
+#[tokio::test(start_paused = true)]
+async fn same_confirmed_state_replays_uin_and_login_after_first_notifications_are_lost() {
+    let (client, behavior) = MockClient::new();
+    {
+        let mut b = behavior.lock().await;
+        b.processes_responses
+            .push_back(Ok(vec![proc(12346, "100200", HookProcessStatus::Online)]));
+        b.qq_responses.push_back(Ok(vec![instance("100200")]));
+    }
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([12346u32]));
+    let (deps, bus) = build_test_deps(client, probe);
+    let bot_id = BotId::new("100200");
+    let mut state = PollerState::new(12346);
+
+    // 订阅晚于首次确认，模拟 runtime/UI 没收到账号与登录通知。
+    tick_once(&bot_id, &deps, &mut state).await;
+    let mut sub = bus.subscribe(EventFilter::all());
+    tick_once(&bot_id, &deps, &mut state).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(1), sub.next())
+            .await
+            .is_err(),
+        "unchanged state must remain quiet before the replay interval"
+    );
+
+    tokio::time::advance(STATE_REPLAY_INTERVAL - Duration::from_millis(1)).await;
+    tick_once(&bot_id, &deps, &mut state).await;
+    let uin_event = tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("account replay")
+        .expect("subscription open");
+    assert!(matches!(
+        uin_event,
+        DomainEvent::SnowLumaUinDetected { bot_id: id, uin }
+            if id == bot_id && uin == "100200"
+    ));
+    let state_event = tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("login replay")
+        .expect("subscription open");
+    assert!(matches!(
+        state_event,
+        DomainEvent::SnowLumaLoginStateChanged { bot_id: id, state: SnowLumaLoginState::LoggedIn }
+            if id == bot_id
+    ));
+
+    tick_once(&bot_id, &deps, &mut state).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(1), sub.next())
+            .await
+            .is_err(),
+        "replay must reset its interval"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn failed_probe_does_not_replay_stale_logged_in_after_interval() {
+    let (client, behavior) = MockClient::new();
+    {
+        let mut b = behavior.lock().await;
+        b.processes_responses
+            .push_back(Ok(vec![proc(12346, "100200", HookProcessStatus::Online)]));
+        b.qq_responses.push_back(Ok(vec![instance("100200")]));
+    }
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([12346u32]));
+    let (deps, bus) = build_test_deps(client, probe);
+    let bot_id = BotId::new("100200");
+    let mut state = PollerState::new(12346);
+    tick_once(&bot_id, &deps, &mut state).await;
+    let mut sub = bus.subscribe(EventFilter::all());
+    {
+        let mut b = behavior.lock().await;
+        b.processes_responses
+            .push_back(Err(SnowLumaWebUiError::Timeout {
+                endpoint: "/api/processes".into(),
+            }));
+        b.qq_responses.push_back(Err(SnowLumaWebUiError::Timeout {
+            endpoint: "/api/qq-list".into(),
+        }));
+    }
+
+    tokio::time::advance(STATE_REPLAY_INTERVAL).await;
+    tick_once(&bot_id, &deps, &mut state).await;
+    tick_once(&bot_id, &deps, &mut state).await;
+    let event = tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("probe unavailable")
+        .expect("subscription open");
+    assert!(matches!(
+        event,
+        DomainEvent::SnowLumaLoginProbeUnavailable { bot_id: id } if id == bot_id
+    ));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(1), sub.next())
+            .await
+            .is_err(),
+        "failed requests must not replay the previous trusted login"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn unavailable_probe_replays_after_first_failure_notification_is_lost() {
+    let (client, behavior) = MockClient::new();
+    {
+        let mut b = behavior.lock().await;
+        b.processes_responses
+            .push_back(Err(SnowLumaWebUiError::Timeout {
+                endpoint: "/api/processes".into(),
+            }));
+        b.qq_responses.push_back(Err(SnowLumaWebUiError::Timeout {
+            endpoint: "/api/qq-list".into(),
+        }));
+    }
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::new());
+    let (deps, bus) = build_test_deps(client, probe);
+    let bot_id = BotId::new("100200");
+    let mut state = PollerState::new(12346);
+    state.last_state = Some(SnowLumaLoginState::LoggedIn);
+    for _ in 0..MAX_CONSECUTIVE_FAILURES {
+        tick_once(&bot_id, &deps, &mut state).await;
+    }
+
+    let mut sub = bus.subscribe(EventFilter::all());
+    tick_once(&bot_id, &deps, &mut state).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(1), sub.next())
+            .await
+            .is_err(),
+        "ongoing failures must remain quiet before the replay interval"
+    );
+
+    tokio::time::advance(STATE_REPLAY_INTERVAL - Duration::from_millis(1)).await;
+    tick_once(&bot_id, &deps, &mut state).await;
+    let event = tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("probe unavailable replay")
+        .expect("subscription open");
+    assert!(matches!(
+        event,
+        DomainEvent::SnowLumaLoginProbeUnavailable { bot_id: id } if id == bot_id
+    ));
+
+    tick_once(&bot_id, &deps, &mut state).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(1), sub.next())
+            .await
+            .is_err(),
+        "failure replay must reset its interval without replaying old login state"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn disposing_poller_cancels_in_flight_tick_without_late_events() {
+    let (client, behavior) = MockClient::new();
+    let gate = Arc::new(ProcessRequestGate::default());
+    {
+        let mut b = behavior.lock().await;
+        b.processes_gate = Some(Arc::clone(&gate));
+        b.processes_responses
+            .push_back(Ok(vec![proc(12346, "100200", HookProcessStatus::Online)]));
+        b.qq_responses.push_back(Ok(vec![instance("100200")]));
+    }
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([12346u32]));
+    let (deps, bus) = build_test_deps(client, probe);
+    let bot_id = BotId::new("100200");
+    let mut sub = bus.subscribe(EventFilter::all());
+    let cancel = CancellationToken::new();
+    let poller = SnowLumaStatusPoller {
+        bot_id: bot_id.clone(),
+        cancel: cancel.clone(),
+    };
+    let task = tokio::spawn(run_poller(bot_id, 12346, deps, cancel));
+    tokio::time::timeout(START_DELAY + POLL_INTERVAL, gate.started.notified())
+        .await
+        .expect("request entered the blocked tick");
+
+    poller.dispose();
+    tokio::time::timeout(Duration::from_millis(1), task)
+        .await
+        .expect("dispose must end the task without waiting for HTTP")
+        .expect("poller task completed");
+    gate.release.notify_one();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(1), sub.next())
+            .await
+            .is_err(),
+        "cancelled old requests must not publish late state events"
+    );
 }
 
 /// 曾在线(LoggedIn)后全信号消失:matched 空 + qq-list 空 + probe 无。

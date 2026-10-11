@@ -460,7 +460,6 @@ pub fn run() {
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
     let bot_manager_offline_listener = Arc::clone(&bot_manager);
     let bot_manager_host_recovery_listener = Arc::clone(&bot_manager);
-    let bot_manager_host_lost_listener = Arc::clone(&bot_manager);
     let bot_manager_auto_restart = Arc::clone(&bot_manager);
     let onebot_debug_listener = Arc::clone(&onebot_debug);
     let onebot_debug_sweeper = Arc::clone(&onebot_debug);
@@ -599,6 +598,7 @@ pub fn run() {
             // event emit 的 subscribe 在上面已同步完成(spawn 前 register)。
             let (login_ready_tx, login_ready_rx) = tokio::sync::oneshot::channel::<()>();
             let (sl_ready_tx, sl_ready_rx) = tokio::sync::oneshot::channel::<()>();
+            let (host_ready_tx, host_ready_rx) = tokio::sync::oneshot::channel::<()>();
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_listener)
                     .clone()
@@ -619,19 +619,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_host_recovery_listener)
                     .clone()
-                    .run_host_connection_recovered_listener()
+                    .run_host_connection_listener(Some(host_ready_tx))
                     .await;
             });
             tauri::async_runtime::spawn(async move {
                 app_manager_host_recovery
                     .run_host_connection_recovered_listener()
-                    .await;
-            });
-            // SSH 断开时立刻拆远端隧道,避免死隧道 accept 循环刷 session poisoned
-            tauri::async_runtime::spawn(async move {
-                (*bot_manager_host_lost_listener)
-                    .clone()
-                    .run_host_connection_lost_listener()
                     .await;
             });
             // 调试台：Bot 停了就收掉它的事件接收器和会话；没人看的接收器 30 分钟后清掉。
@@ -669,6 +662,13 @@ pub fn run() {
                         "WARN",
                         "ncd::bot_manager",
                         "snowluma listener ready signal dropped; bootstrap continues",
+                    );
+                }
+                if host_ready_rx.await.is_err() {
+                    desktop_log::write_session_line(
+                        "WARN",
+                        "ncd::bot_manager",
+                        "host listener ready signal dropped; bootstrap continues",
                     );
                 }
                 // 未同意当前 Desktop 协议时只恢复 Actor / reconcile，不 auto_start

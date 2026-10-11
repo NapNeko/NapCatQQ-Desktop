@@ -747,23 +747,23 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(done.into_iter().collect())
     }
 
-    /// 监听 HostConnectionRecovered：启动时序里 bootstrap reconcile 先于 SSH 连接完成时，
-    /// 远端运行态恢复会以「主机未连接」跳过；这里在主机连上后把欠的那轮补跑掉。
-    /// 30s 去抖，避免健康探活反复触发全量探测。
-    pub async fn run_host_connection_recovered_listener(self) {
+    /// 按事件顺序清理与恢复，避免迟到的断线清理取消刚重建的登录探测器。
+    pub async fn run_host_connection_listener(
+        self,
+        ready: Option<tokio::sync::oneshot::Sender<()>>,
+    ) {
         let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        let mut last_reconciled: HashMap<String, tokio::time::Instant> = HashMap::new();
+        if let Some(tx) = ready {
+            let _ = tx.send(());
+        }
         while let Some(event) = subscription.next().await {
+            if let DomainEvent::HostConnectionLost { server_id, .. } = &event {
+                self.detach_remote_snowluma_sessions(server_id).await;
+                continue;
+            }
             let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
                 continue;
             };
-            let now = tokio::time::Instant::now();
-            if let Some(prev) = last_reconciled.get(&server_id) {
-                if now.duration_since(*prev) < Duration::from_secs(30) {
-                    continue;
-                }
-            }
-            last_reconciled.insert(server_id.clone(), now);
             match self.reconcile_remote_runtimes_for_server(&server_id).await {
                 Ok(done) if !done.is_empty() => info!(
                     target: "ncd_runtime::bot_manager",
@@ -782,35 +782,27 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 监听 HostConnectionLost：SSH 断开时立刻拆掉该主机的 SSH 隧道并清 daemon 的
-    /// tunnel_eps 缓存。否则旧 TunnelHandle 的 accept 循环会一直对已 poison 的 session
-    /// 打 channel_open_direct_tcpip，刷 "tunnel open skipped: session poisoned"，
-    /// 且热推送若拿到死隧道端点会直接连失败。
-    /// 恢复路径(run_host_connection_recovered_listener → replace_host)会重开隧道。
-    pub async fn run_host_connection_lost_listener(self) {
-        let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        while let Some(event) = subscription.next().await {
-            let DomainEvent::HostConnectionLost { server_id, .. } = event else {
-                continue;
-            };
-            // 1. 拆掉隧道注册表里该主机的所有隧道句柄(drop 会停 accept 循环)
-            self.remote_snowluma_tunnels.drop_server(&server_id).await;
-            // 2. 清共享 daemon 的 tunnel_eps 缓存,让下次热推送/ensure 走重建
-            let daemon = {
-                let daemons = self.remote_snowluma_daemons.lock().await;
-                daemons.get(&server_id).cloned()
-            };
-            if let Some(daemon) = daemon {
-                daemon.detach_local_sessions().await;
-            }
-            // 3. 远端 NapCat native:每 Bot 独立 session,tunnel_slot 在 session 内
-            // 自行管理(收到 unreachable hook 已清 endpoint+poller),这里不重复处理
-            info!(
-                target: "ncd_runtime::bot_manager",
-                server_id = %server_id,
-                "主机连接丢失：已拆远端 SnowLuma 隧道并清 tunnel_eps"
-            );
+    async fn detach_remote_snowluma_sessions(&self, server_id: &str) {
+        let backend = {
+            let backends = self.remote_snowluma_backends.lock().await;
+            backends.get(server_id).cloned()
+        };
+        if let Some(backend) = backend {
+            backend.detach_login_pollers().await;
         }
+        self.remote_snowluma_tunnels.drop_server(server_id).await;
+        let daemon = {
+            let daemons = self.remote_snowluma_daemons.lock().await;
+            daemons.get(server_id).cloned()
+        };
+        if let Some(daemon) = daemon {
+            daemon.detach_local_sessions().await;
+        }
+        info!(
+            target: "ncd_runtime::bot_manager",
+            server_id,
+            "主机连接丢失：已拆远端 SnowLuma 隧道并清 tunnel_eps"
+        );
     }
 
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。

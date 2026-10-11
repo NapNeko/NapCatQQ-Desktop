@@ -119,6 +119,27 @@ impl RemoteSnowLumaBackend {
         }
     }
 
+    pub async fn detach_login_pollers(&self) {
+        let mut pollers = self.pollers.lock().await;
+        for (bot_id, poller) in pollers.drain() {
+            poller.dispose();
+            self.event_bus
+                .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+        }
+    }
+
+    async fn replace_poller(&self, bot_id: BotId, pid: u32, deps: PollerDeps) {
+        let mut pollers = self.pollers.lock().await;
+        // 重接管时端口可能相同，但旧客户端仍可能保留失效密码或登录锁。
+        if let Some(old) = pollers.remove(&bot_id) {
+            old.dispose();
+        }
+        pollers.insert(
+            bot_id.clone(),
+            SnowLumaStatusPoller::spawn(bot_id, pid, deps),
+        );
+    }
+
     /// 供 bootstrap reconcile 取日志 follow 路径,不暴露整个 daemon
     pub fn daemon_paths(&self) -> &SnowLumaRemotePaths {
         self.daemon.paths()
@@ -190,9 +211,6 @@ impl RemoteSnowLumaBackend {
                 bot_id: bot_id.clone(),
             });
 
-        if self.pollers.lock().await.contains_key(&bot_id) {
-            return Ok(());
-        }
         let poller_deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
             http,
@@ -201,8 +219,7 @@ impl RemoteSnowLumaBackend {
             )),
             expected_uin: Some(qq_id),
         };
-        let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
-        self.pollers.lock().await.insert(bot_id, poller);
+        self.replace_poller(bot_id, pid, poller_deps).await;
         Ok(())
     }
 }
@@ -371,11 +388,7 @@ impl BotBackend for RemoteSnowLumaBackend {
             )),
             expected_uin: Some(qq_id_str.clone()),
         };
-        {
-            self.dispose_poller(&bot_id).await;
-            let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
-            self.pollers.lock().await.insert(bot_id.clone(), poller);
-        }
+        self.replace_poller(bot_id.clone(), pid, poller_deps).await;
 
         self.event_bus
             .publish(DomainEvent::SnowLumaDockerEndpointsReady {
@@ -481,3 +494,7 @@ impl BotBackend for RemoteSnowLumaBackend {
         })
     }
 }
+
+#[cfg(all(test, windows))]
+#[path = "backend_tests.rs"]
+mod tests;
