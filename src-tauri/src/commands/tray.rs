@@ -12,6 +12,21 @@ use crate::window_events::{DESKTOP_EXIT_BLOCKED, DesktopExitBlocked};
 
 static TRAY_ATTACHED: AtomicBool = AtomicBool::new(false);
 
+#[derive(Default)]
+struct PendingTrayExit(AtomicBool);
+
+impl PendingTrayExit {
+    fn request(&self) -> bool {
+        !self.0.swap(true, Ordering::SeqCst)
+    }
+
+    fn take(&self) -> bool {
+        self.0.swap(false, Ordering::SeqCst)
+    }
+}
+
+static PENDING_TRAY_EXIT: PendingTrayExit = PendingTrayExit(AtomicBool::new(false));
+
 pub const TRAY_ID: &str = "main-tray";
 
 fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -87,6 +102,14 @@ pub async fn tray_panel_quit(app: AppHandle) -> Result<(), String> {
     quit_from_tray(app).await
 }
 
+/// 重建主窗时通知可能早于 React 监听；监听就绪后再原子领取一次退出请求。
+#[tauri::command]
+pub fn consume_pending_tray_exit(window: WebviewWindow) -> bool {
+    window.label() == crate::lightweight::MAIN_WINDOW_LABEL
+        && window.is_visible().unwrap_or(false)
+        && PENDING_TRAY_EXIT.take()
+}
+
 /// 托盘面板「释放界面内存」:进轻量模式销毁主 WebView。
 pub async fn tray_panel_enter_lightweight(app: AppHandle) -> Result<(), String> {
     crate::chat_window::release_control_panel(&app).await
@@ -96,10 +119,48 @@ async fn quit_from_tray(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let local_active = exit::local_active_bots(&state).await?;
     if local_active > 0 {
-        let _ = window_show(app.clone()).await;
-        let _ = app.emit(DESKTOP_EXIT_BLOCKED, DesktopExitBlocked::new(local_active));
+        if PENDING_TRAY_EXIT.request() {
+            if let Err(error) = window_show(app.clone()).await {
+                PENDING_TRAY_EXIT.take();
+                tracing::warn!(%error, "tray exit: main window could not be restored");
+                return Err(error);
+            }
+            if let Err(error) = app.emit_to(
+                crate::lightweight::MAIN_WINDOW_LABEL,
+                DESKTOP_EXIT_BLOCKED,
+                DesktopExitBlocked::new(local_active),
+            ) {
+                tracing::warn!(%error, "tray exit: confirmation notification failed");
+            }
+        }
         return Err(exit::exit_blocked_message(local_active));
     }
+    PENDING_TRAY_EXIT.take();
     exit::shutdown_and_exit(&app, &state, "tray_panel_quit").await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PendingTrayExit;
+
+    #[test]
+    fn pending_tray_exit_is_delivered_once_after_rebuilding_the_window() {
+        let pending = PendingTrayExit::default();
+        assert!(!pending.take());
+        assert!(pending.request());
+        assert!(
+            !pending.request(),
+            "repeated clicks keep the pending request"
+        );
+        assert!(
+            pending.take(),
+            "listener-ready or live notification claims it"
+        );
+        assert!(
+            !pending.take(),
+            "the other notification must not reopen the gate"
+        );
+        assert!(pending.request(), "a later exit request can be delivered");
+    }
 }

@@ -67,10 +67,6 @@ pub async fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    if !is_lightweight_mode() {
-        return Err("主窗口未找到且当前非轻量模式".to_string());
-    }
-
     let conf = main_window_config(app)?;
     let window = WebviewWindowBuilder::from_config(app, &conf)
         .map_err(|e| e.to_string())?
@@ -95,6 +91,24 @@ pub async fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn should_prevent_exit(_app: &AppHandle) -> bool {
-    is_lightweight_mode()
+pub fn should_prevent_exit(_app: &AppHandle, code: Option<i32>) -> bool {
+    prevent_implicit_exit(is_lightweight_mode(), code)
+}
+
+fn prevent_implicit_exit(lightweight: bool, code: Option<i32>) -> bool {
+    // 释放最后一个 WebView 要保住托盘；完成收尾后的 app.exit(0) 必须放行。
+    lightweight && code.is_none()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::prevent_implicit_exit;
+
+    #[test]
+    fn lightweight_keeps_the_tray_alive_but_allows_explicit_exit() {
+        assert!(prevent_implicit_exit(true, None));
+        assert!(!prevent_implicit_exit(true, Some(0)));
+        assert!(!prevent_implicit_exit(true, Some(1)));
+        assert!(!prevent_implicit_exit(false, None));
+    }
 }

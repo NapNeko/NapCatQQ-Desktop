@@ -1096,6 +1096,7 @@ pub fn run() {
             commands::docker::ops::docker_compose_down,
             commands::tray::window_show,
             commands::tray::window_hide_to_tray,
+            commands::tray::consume_pending_tray_exit,
             commands::exit::prepare_exit_desktop,
             commands::exit::request_exit_app,
             commands::window::show_main_window,
@@ -1196,8 +1197,8 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                if lightweight::should_prevent_exit(app) {
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if lightweight::should_prevent_exit(app, code) {
                     api.prevent_exit();
                 }
             }

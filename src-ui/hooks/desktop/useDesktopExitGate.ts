@@ -4,7 +4,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isTauri } from '../../core/domain/runtime/env';
 import { windowEventService } from '../../core/services/desktop.service';
-import { prepareExitDesktop, requestExitApp } from '../../core/services/exit.service';
+import {
+    consumePendingTrayExit,
+    prepareExitDesktop,
+    requestExitApp,
+} from '../../core/services/exit.service';
 import type { PrepareExitDesktopResponse } from '../../core/ipc/types';
 
 export type ExitDialogMode = 'confirm' | 'blocked';
@@ -16,6 +20,21 @@ export interface DesktopExitGate {
     exiting: boolean;
     setOpen: (open: boolean) => void;
     confirmExit: () => void;
+}
+
+// StrictMode 重新挂载时，已从后端领取的通知要留给下一份监听。
+let claimedTrayExit = false;
+let claimingTrayExit: Promise<void> | null = null;
+async function claimTrayExit() {
+    if (claimedTrayExit) return;
+    claimingTrayExit ??= consumePendingTrayExit()
+        .then((pending) => {
+            claimedTrayExit ||= pending;
+        })
+        .finally(() => {
+            claimingTrayExit = null;
+        });
+    await claimingTrayExit;
 }
 
 export function useDesktopExitGate(): DesktopExitGate {
@@ -46,8 +65,20 @@ export function useDesktopExitGate(): DesktopExitGate {
         };
         const onSignal = () => void runExitFlow();
         const onListenFailed = (err: unknown) => console.error('退出闸门监听窗口通知失败:', err);
-        windowEventService.onRequestClose(onSignal).then(keep, onListenFailed);
-        windowEventService.onExitBlocked(onSignal).then(keep, onListenFailed);
+        const consumeTrayExit = async () => {
+            if (cancelled) return;
+            await claimTrayExit();
+            if (cancelled || !claimedTrayExit) return;
+            claimedTrayExit = false;
+            await runExitFlow();
+        };
+        const onTraySignal = () => void consumeTrayExit().catch(onListenFailed);
+        Promise.all([
+            windowEventService.onRequestClose(onSignal).then(keep),
+            windowEventService.onExitBlocked(onTraySignal).then(keep),
+        ]).then(() => {
+            if (!cancelled) void consumeTrayExit().catch(onListenFailed);
+        }, onListenFailed);
         return () => {
             cancelled = true;
             for (const u of unsubs) u();
