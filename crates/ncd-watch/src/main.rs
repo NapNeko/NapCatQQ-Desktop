@@ -6,6 +6,7 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use ncd_watch::config::{NotifyConfig, WatchConfig, WatchPaths};
 use ncd_watch::edge::EdgeTracker;
+use ncd_watch::login_probe::WebUiLoginCache;
 use ncd_watch::probe::HostProber;
 use ncd_watch::run::{run_loop, run_once};
 use tracing_subscriber::EnvFilter;
@@ -78,7 +79,16 @@ async fn main() {
                 .clamp();
             let notify = NotifyConfig::load_or_default(&paths.notify_json).unwrap_or_default();
             let mut edges = EdgeTracker::load(&paths.edge_state, watch.debounce_secs);
-            let out = run_once(&paths, &watch, &notify, &HostProber, &mut edges).await;
+            let mut login_cache = WebUiLoginCache::new();
+            let out = run_once(
+                &paths,
+                &watch,
+                &notify,
+                &HostProber,
+                &mut edges,
+                &mut login_cache,
+            )
+            .await;
             println!(
                 "probed={} fired={} debounced={} desktop_present_skip={} errors={:?}",
                 out.probed,

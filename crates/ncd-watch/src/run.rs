@@ -14,7 +14,7 @@ use ncd_domain::OfflineAlertKind;
 use crate::config::{NotifyConfig, WatchConfig, WatchPaths};
 use crate::edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
 use crate::email::send_watch_email;
-use crate::login_probe::{has_webui_probe, probe_login_status};
+use crate::login_probe::{WebUiLoginCache, has_webui_probe, probe_login_status};
 use crate::metrics::{MetricsRunState, WatchMetricsConfig, sample_metrics_once};
 use crate::onebot::send_watch_onebot;
 use crate::present::desktop_is_present;
@@ -47,6 +47,7 @@ pub async fn run_once(
     notify: &NotifyConfig,
     prober: &dyn Prober,
     edges: &mut EdgeTracker,
+    login_cache: &mut WebUiLoginCache,
 ) -> RunOnceOutcome {
     let mut out = RunOnceOutcome::default();
     let desktop_online = desktop_is_present(&paths.desktop_present, watch.desktop_present_ttl_secs);
@@ -76,7 +77,7 @@ pub async fn run_once(
 
         // 有 WebUI 凭据就探账号态(不要求进程 Online;进程在也不等于已登录)
         if has_webui_probe(bot) {
-            let (login, detail) = probe_login_status(bot).await;
+            let (login, detail) = probe_login_status(bot, login_cache).await;
             result.login = login;
             if !detail.is_empty() {
                 result.detail = format!("{}; {detail}", result.detail);
@@ -251,6 +252,8 @@ pub async fn run_loop(
             .debounce_secs,
     );
     let mut metrics_state = MetricsRunState::default();
+    // 跨轮持有,凭据复用与登录退避靠它
+    let mut login_cache = WebUiLoginCache::new();
 
     loop {
         let watch = WatchConfig::load_or_default(&paths.watch_json)
@@ -264,7 +267,15 @@ pub async fn run_loop(
             NotifyConfig::default()
         });
 
-        let out = run_once(&paths, &watch, &notify, prober.as_ref(), &mut edges).await;
+        let out = run_once(
+            &paths,
+            &watch,
+            &notify,
+            prober.as_ref(),
+            &mut edges,
+            &mut login_cache,
+        )
+        .await;
         tracing::debug!(
             probed = out.probed,
             fired = out.fired,
