@@ -710,6 +710,31 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
+    /// `docker exec <container> cat <path>`，返回文件文本。只对运行中的容器有效。
+    /// 读凭据类文件（webui.json）用这个而不是 `docker cp`：走 stdout 不落临时文件，
+    /// token 不会经过全局可读的 /tmp
+    pub async fn exec_read_file(
+        &self,
+        container: &str,
+        path: &str,
+    ) -> Result<String, DockerCliError> {
+        let cmd = self
+            .docker_cmd()
+            .arg("exec")
+            .arg(container)
+            .arg("cat")
+            .arg(path);
+        let out = self.host.run_to_string(cmd).await?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: format!("docker exec {container} cat {path}"),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        Ok(out.stdout)
+    }
+
     /// 删掉 `copy_from_container` 的临时文件。提权拷出来的要用 sudo rm。
     pub async fn remove_copied_file(&self, dest: &str) {
         if self.is_elevated() {

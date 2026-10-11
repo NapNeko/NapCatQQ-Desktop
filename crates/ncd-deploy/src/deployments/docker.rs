@@ -793,6 +793,7 @@ mod tests {
                 }
                 Some("rm") => Ok(output(0, "", "")),
                 Some("stop") => Ok(output(0, "ncbot-10001\n", "")),
+                Some("exec") => Ok(output(0, r#"{"token":"from-container"}"#, "")),
                 _ => Ok(output(0, "", "")),
             }
         }
@@ -909,6 +910,50 @@ mod tests {
             !host.commands().iter().any(|c| c.program == "chmod"),
             "未提权时不必 chmod"
         );
+    }
+
+    #[tokio::test]
+    async fn exec_read_file_uses_arg_separated_docker_exec() {
+        let host = MockHost::new();
+        let cli = DockerCli::new(&host);
+        let text = cli
+            .exec_read_file("ncbot-10001", "/app/napcat/config/webui.json")
+            .await
+            .unwrap();
+        assert_eq!(text, r#"{"token":"from-container"}"#);
+        let exec = host
+            .docker_commands()
+            .into_iter()
+            .find(|c| c.args.first().map(String::as_str) == Some("exec"))
+            .expect("docker exec");
+        assert_eq!(
+            exec.args,
+            [
+                "exec",
+                "ncbot-10001",
+                "cat",
+                "/app/napcat/config/webui.json"
+            ]
+        );
+        assert!(!exec.elevated);
+    }
+
+    #[tokio::test]
+    async fn exec_read_file_is_elevated_when_docker_needs_sudo() {
+        let host = MockHost::elevated_docker();
+        let cli = DockerCli::new(&host);
+        cli.ensure_daemon_ready().await.unwrap();
+        let text = cli
+            .exec_read_file("ncbot-10001", "/app/napcat/config/webui.json")
+            .await
+            .unwrap();
+        assert!(text.contains("from-container"));
+        let exec = host
+            .docker_commands()
+            .into_iter()
+            .find(|c| c.args.first().map(String::as_str) == Some("exec"))
+            .expect("docker exec");
+        assert!(exec.elevated, "探测判定要 sudo 后 exec 也要 sudo");
     }
 
     #[tokio::test]
