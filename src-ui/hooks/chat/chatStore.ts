@@ -1166,6 +1166,42 @@ export class ChatAccountStore {
                 });
         await this.runSends(key, operations);
     }
+
+    async command(key: SessionKey, value: string, replyId?: string): Promise<void> {
+        this.requireConnected();
+        if (!value.trim()) throw new Error('按钮指令为空');
+        if (this.sends.get(key) === this.epoch) throw new Error('此会话仍有消息正在发送');
+        const epoch = this.epoch;
+        const group = key.startsWith('group:');
+        const segments = buildMessageSegments(value, []);
+        if (replyId)
+            segments.unshift({ type: 'reply', data: { id: this.protocolMessageId(replyId) } });
+        this.sends.set(key, epoch);
+        try {
+            await this.runSends(
+                key,
+                [
+                    {
+                        action: group ? 'send_group_msg' : 'send_private_msg',
+                        params: {
+                            [group ? 'group_id' : 'user_id']: this.peer(key),
+                            message: segments,
+                        },
+                        segments,
+                    },
+                ],
+                undefined,
+                true,
+                true,
+                '发送',
+            );
+        } finally {
+            if (this.sends.get(key) === epoch) this.sends.delete(key);
+            if (this.releaseWhenIdle && !this.isSending() && !this.hasViewers())
+                void releaseChatAccount(this).catch(() => {});
+        }
+    }
+
     async poke(key: SessionKey, userId: string) {
         if (
             !this.target.running ||
@@ -1595,6 +1631,7 @@ export class ChatAccountStore {
         retryKey?: string,
         preserveDraft = false,
         forwarding = false,
+        operationLabel = '转发',
     ) {
         const epoch = this.epoch;
         const scope = accountKey(this.target.bot_id, String(this.target.qq_id));
@@ -1653,7 +1690,8 @@ export class ChatAccountStore {
                             error: '发送已中止，此条尚未提交',
                         }),
                     );
-                    if (forwarding) throw new ChatForwardError('连接已改变，转发已停止', true);
+                    if (forwarding)
+                        throw new ChatForwardError(`连接已改变，${operationLabel}已停止`, true);
                     continue;
                 }
                 if (
@@ -1692,7 +1730,8 @@ export class ChatAccountStore {
                         continue;
                     }
                     if (!this.actionIsCurrent(epoch, scope)) {
-                        if (forwarding) throw new ChatForwardError('连接已改变，转发已停止', true);
+                        if (forwarding)
+                            throw new ChatForwardError(`连接已改变，${operationLabel}已停止`, true);
                         continue;
                     }
                 }
@@ -1735,7 +1774,10 @@ export class ChatAccountStore {
                         }
                         if (!this.actionIsCurrent(epoch, scope)) {
                             if (forwarding)
-                                throw new ChatForwardError('连接已改变，转发已停止', true);
+                                throw new ChatForwardError(
+                                    `连接已改变，${operationLabel}已停止`,
+                                    true,
+                                );
                             continue;
                         }
                         params = { ...record(params), message: segments };
@@ -1791,7 +1833,8 @@ export class ChatAccountStore {
                         },
                     );
                     if (!this.actionIsCurrent(epoch, scope)) {
-                        if (forwarding) throw new ChatForwardError('连接已改变，转发已停止', true);
+                        if (forwarding)
+                            throw new ChatForwardError(`连接已改变，${operationLabel}已停止`, true);
                         continue;
                     }
                     if (response.result.kind === 'err') {
@@ -1852,7 +1895,7 @@ export class ChatAccountStore {
                     );
                     if (!this.actionIsCurrent(epoch, scope) || message?.status !== 'sent')
                         throw new ChatForwardError(
-                            message?.error || '转发结果待确认',
+                            message?.error || `${operationLabel}结果待确认`,
                             completedOperations > 0 || message?.status !== 'failed',
                         );
                     completedOperations++;

@@ -12,6 +12,14 @@ import type { ForwardNode, ImageReadOptions } from '../../core/domain/chat/media
 /** 「同意 / 拒绝」的结果：失败给一句原因 */
 export type RequestHandleResult = { ok: true } | { ok: false; reason: string };
 
+export interface MarkdownCommand {
+    text: string;
+    enter: boolean;
+    reply: boolean;
+    messageId?: string;
+    botAppid?: string;
+}
+
 export interface ChatViewApi {
     /** 按 message_id 找消息（在整条时间线里找，不受筛选影响）；找不到是 undefined */
     findMessage: (messageId: number) => MessageItem | undefined;
@@ -47,6 +55,7 @@ export interface ChatViewApi {
     readRecord?: (data: Record<string, unknown>) => Promise<string>;
     readVideo?: (data: Record<string, unknown>, refresh?: boolean) => Promise<string>;
     readRecordText?: (messageId: string) => Promise<string>;
+    onMarkdownCommand?: (command: MarkdownCommand) => Promise<void>;
     /** 文件卡片下方的下载 / 进度；调试台不给，卡片只展示 */
     fileAction?: (data: Record<string, unknown>) => ReactNode;
     /** 滚到被回复的那条消息并闪一下；它不在当前列表里时返回 false */

@@ -1,12 +1,11 @@
-// 轻量 Markdown 展示：标题 / 列表 / 引用 / 表格 / 粗体 / 行内代码 / 链接。
-// 解析逻辑在 core/domain/release/release-notes-markdown.ts（可单测）。
-// 给协议正文、Release notes 等「人写的短 Markdown」用，不引入 marked/rehype。
+// 安全展示 Markdown 正文，链接与图片交由宿主打开。
 
 import type { ReactNode } from 'react';
 import {
     parseMarkdownBlocks,
     tokenizeInlineMarkdown,
     type InlineToken,
+    type MarkdownBlock,
 } from '../../core/domain/release/release-notes-markdown';
 import { cn } from '../utils/cn';
 
@@ -20,6 +19,7 @@ export interface SimpleMarkdownProps {
      * 调用方应走 openExternalUrl / useOpenExternal。
      */
     onOpenLink?: (url: string) => void;
+    onOpenImage?: (url: string) => void;
 }
 
 export function SimpleMarkdown({
@@ -27,8 +27,9 @@ export function SimpleMarkdown({
     className,
     emptyFallback = '暂无内容',
     onOpenLink,
+    onOpenImage,
 }: SimpleMarkdownProps) {
-    const blocks = parseMarkdownBlocks(text);
+    const blocks = parseDisplayBlocks(text);
     if (blocks.length === 0) {
         return <p className={cn('text-sm text-text-tertiary', className)}>{emptyFallback}</p>;
     }
@@ -36,6 +37,16 @@ export function SimpleMarkdown({
     return (
         <div className={cn('space-y-2 text-sm leading-6 text-text-secondary', className)}>
             {blocks.map((block, index) => {
+                if (block.kind === 'code_block') {
+                    return (
+                        <pre
+                            key={index}
+                            className="max-w-full overflow-x-auto rounded-sm bg-inset p-3 font-mono text-xs leading-5 text-text"
+                        >
+                            <code data-language={block.language || undefined}>{block.text}</code>
+                        </pre>
+                    );
+                }
                 if (block.kind === 'heading') {
                     const classNameByLevel =
                         block.level === 1
@@ -47,7 +58,7 @@ export function SimpleMarkdown({
                                 : 'mt-2 text-sm font-medium text-text first:mt-0';
                     return (
                         <h4 key={index} className={classNameByLevel}>
-                            {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
+                            {renderInlineMarkdown(block.text, onOpenLink, onOpenImage)}
                         </h4>
                     );
                 }
@@ -63,7 +74,7 @@ export function SimpleMarkdown({
                                 <span className="mt-[0.7em] h-1 w-1 shrink-0 rounded-full bg-text-tertiary" />
                             )}
                             <p className="min-w-0 whitespace-pre-wrap break-words">
-                                {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
+                                {renderInlineMarkdown(block.text, onOpenLink, onOpenImage)}
                             </p>
                         </div>
                     );
@@ -74,7 +85,7 @@ export function SimpleMarkdown({
                             key={index}
                             className="border-l-2 border-border pl-3 text-text-tertiary"
                         >
-                            {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
+                            {renderInlineMarkdown(block.text, onOpenLink, onOpenImage)}
                         </blockquote>
                     );
                 }
@@ -92,9 +103,10 @@ export function SimpleMarkdown({
                                                 key={ci}
                                                 className="border-b border-border-subtle px-2.5 py-1.5 font-medium text-text"
                                             >
-                                                {renderInlineTokens(
-                                                    tokenizeInlineMarkdown(cell),
+                                                {renderInlineMarkdown(
+                                                    cell,
                                                     onOpenLink,
+                                                    onOpenImage,
                                                 )}
                                             </th>
                                         ))}
@@ -111,9 +123,10 @@ export function SimpleMarkdown({
                                                     key={ci}
                                                     className="px-2.5 py-1.5 align-top font-mono text-[0.8rem] text-text-secondary"
                                                 >
-                                                    {renderInlineTokens(
-                                                        tokenizeInlineMarkdown(cell),
+                                                    {renderInlineMarkdown(
+                                                        cell,
                                                         onOpenLink,
+                                                        onOpenImage,
                                                     )}
                                                 </td>
                                             ))}
@@ -126,12 +139,105 @@ export function SimpleMarkdown({
                 }
                 return (
                     <p key={index} className="whitespace-pre-wrap break-words">
-                        {renderInlineTokens(tokenizeInlineMarkdown(block.text), onOpenLink)}
+                        {renderInlineMarkdown(block.text, onOpenLink, onOpenImage)}
                     </p>
                 );
             })}
         </div>
     );
+}
+
+type DisplayBlock = MarkdownBlock | { kind: 'code_block'; text: string; language: string };
+
+function parseDisplayBlocks(text: string): DisplayBlock[] {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const blocks: DisplayBlock[] = [];
+    let markdown: string[] = [];
+    const flush = () => {
+        blocks.push(...parseMarkdownBlocks(markdown.join('\n')));
+        markdown = [];
+    };
+    for (let index = 0; index < lines.length; index++) {
+        const fence = /^ {0,3}(`{3,}|~{3,})([^`~]*)$/.exec(lines[index]);
+        if (!fence) {
+            markdown.push(lines[index]);
+            continue;
+        }
+        flush();
+        const body: string[] = [];
+        const closing = new RegExp(`^ {0,3}${fence[1][0]}{${fence[1].length},}\\s*$`);
+        while (++index < lines.length && !closing.test(lines[index])) body.push(lines[index]);
+        blocks.push({ kind: 'code_block', text: body.join('\n'), language: fence[2].trim() });
+    }
+    flush();
+    return blocks;
+}
+
+function renderInlineMarkdown(
+    text: string,
+    onOpenLink?: (url: string) => void,
+    onOpenImage?: (url: string) => void,
+): ReactNode[] {
+    // 行内代码先隔开，里面的图片语法必须原样保留。
+    const runs = text.split(/(`[^`]*`)/g);
+    return runs.flatMap((run, runIndex) => {
+        if (run.startsWith('`') && run.endsWith('`')) {
+            return [
+                <code
+                    key={`code-${runIndex}`}
+                    className="rounded-xs bg-muted px-1 py-0.5 font-mono text-[0.85em] text-text"
+                >
+                    {run.slice(1, -1)}
+                </code>,
+            ];
+        }
+        const parts: ReactNode[] = [];
+        const images = /!\[([^\]\n]*)\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)/gi;
+        let offset = 0;
+        for (let match = images.exec(run); match; match = images.exec(run)) {
+            parts.push(
+                <span key={`text-${runIndex}-${offset}`}>
+                    {renderInlineTokens(
+                        tokenizeInlineMarkdown(run.slice(offset, match.index)),
+                        onOpenLink,
+                    )}
+                </span>,
+            );
+            const source = match[2];
+            const label = match[1].replace(/\s+#\d+px/g, '').trim() || '图片';
+            const image = (
+                <img
+                    src={source}
+                    alt={label}
+                    loading="lazy"
+                    decoding="async"
+                    className="inline-block max-h-80 max-w-full rounded-sm object-contain align-middle"
+                />
+            );
+            parts.push(
+                onOpenImage ? (
+                    <button
+                        key={`image-${runIndex}-${match.index}`}
+                        type="button"
+                        onClick={() => onOpenImage(source)}
+                        aria-label={`查看图片：${label}`}
+                        className="inline-block max-w-full rounded-sm align-middle focus-visible:outline-2 focus-visible:outline-brand"
+                    >
+                        {image}
+                    </button>
+                ) : (
+                    <span key={`image-${runIndex}-${match.index}`}>{image}</span>
+                ),
+            );
+            offset = match.index + match[0].length;
+        }
+        parts.push(
+            <span key={`text-${runIndex}-${offset}`}>
+                {renderInlineTokens(tokenizeInlineMarkdown(run.slice(offset)), onOpenLink)}
+            </span>,
+        );
+        return parts;
+    });
 }
 
 function renderInlineTokens(

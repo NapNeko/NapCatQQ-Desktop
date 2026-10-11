@@ -11,16 +11,17 @@ import {
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown } from 'lucide-react';
-import { ChatViewContext, useChatView } from '../../shared/chat/chatContext';
+import { ChatViewContext, useChatView, type MarkdownCommand } from '../../shared/chat/chatContext';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
-import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
+import { accountKey, EMPTY_DRAFT, type Contact, type Message } from '../../core/domain/chat/model';
 import { useChatMedia } from '../../hooks/chat/useChatMedia';
 import { useChatSend } from '../../hooks/chat/useChatSend';
 import { ChatImageViewer } from '../../shared/chat/ChatImageViewer';
 import { ChatAvatar as Avatar } from '../../shared/chat/ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
+import { messagePreview } from '../../core/domain/debug/segments';
 import { cn } from '../../shared/utils/cn';
 import { useHistoryPaging } from './useHistoryPaging';
 import { ChatMessageActions } from './ChatMessageActions';
@@ -273,6 +274,36 @@ export function NativeTimeline({
             readRecord: media.record,
             readVideo: media.video,
             readRecordText: media.transcript,
+            onMarkdownCommand: async (command: MarkdownCommand) => {
+                if (store.getSnapshot().account.active !== contact.key)
+                    throw new Error('请在原会话操作这个按钮');
+                if (command.reply && !command.messageId)
+                    throw new Error('这条消息没有可引用的标识');
+                if (command.enter) {
+                    await store.command(
+                        contact.key,
+                        command.text,
+                        command.reply ? command.messageId : undefined,
+                    );
+                } else {
+                    const draft = store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
+                    const source = command.messageId
+                        ? messageById.get(command.messageId)
+                        : undefined;
+                    store.draft(contact.key, {
+                        ...draft,
+                        text: draft.text ? `${draft.text}\n${command.text}` : command.text,
+                        reply: command.reply
+                            ? {
+                                  id: command.messageId!,
+                                  name: source?.senderName ?? '引用消息',
+                                  preview: source ? messagePreview(source.segments) : '',
+                              }
+                            : draft.reply,
+                    });
+                }
+                onFocusComposer?.();
+            },
             fileAction: (data: Record<string, unknown>) => (
                 <ChatFileAction data={data} target={store.target} contact={contact} />
             ),
@@ -305,7 +336,17 @@ export function NativeTimeline({
                 return true;
             },
         }),
-        [fallback, senderNames, messageById, revealRef, store, contact, media, chatSend],
+        [
+            fallback,
+            senderNames,
+            messageById,
+            revealRef,
+            store,
+            contact,
+            media,
+            chatSend,
+            onFocusComposer,
+        ],
     );
     const latestLabel = stick.unseen > 0 ? `回到最新，${stick.unseen} 条新消息` : '回到最新';
     return (
