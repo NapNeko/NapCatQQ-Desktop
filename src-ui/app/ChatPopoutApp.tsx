@@ -11,6 +11,7 @@ import { InfoBarStack } from '../shared/ui/InfoBarStack';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { useChatPopoutBridge } from '../hooks/desktop/useChatPopoutBridge';
 import { useChatNotice } from '../hooks/chat/useChatNotice';
+import { ChatPageSkeleton } from '../modules/chat/ChatSkeleton';
 
 const ChatPage = lazy(() =>
     import('../modules/chat/ChatPage').then((m) => ({ default: m.ChatPage })),
@@ -65,9 +66,7 @@ export function ChatPopoutApp() {
                 </div>
                 <main className="flex min-h-0 flex-1 flex-col">
                     <RouteErrorBoundary title="聊天界面加载失败">
-                        <Suspense
-                            fallback={<div className="native-chat-welcome">正在加载聊天…</div>}
-                        >
+                        <Suspense fallback={<ChatPageSkeleton />}>
                             {mounted && <ChatPage onNavigate={() => void showMainWindow()} />}
                         </Suspense>
                     </RouteErrorBoundary>

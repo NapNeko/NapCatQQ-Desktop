@@ -1,5 +1,9 @@
 // 首屏骨架：会话/消息还没读到时的占位。色块静态，rich 档整行轻脉冲（chat.css 按 data-motion 门控）。
 import { cn } from '../../shared/utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
+import { useChatPreferences } from './chatPreferences';
+import type { CSSProperties } from 'react';
+import './chat.css';
 
 const CONVERSATION_ROWS = [82, 64, 74, 56, 70, 60];
 const MESSAGE_ROWS: ReadonlyArray<{ mine: boolean; width: number }> = [
@@ -9,6 +13,55 @@ const MESSAGE_ROWS: ReadonlyArray<{ mine: boolean; width: number }> = [
     { mine: false, width: 34 },
     { mine: true, width: 48 },
 ];
+
+export function ChatPageSkeleton() {
+    const motion = useMotion();
+    const preferences = useChatPreferences();
+    return (
+        <section className="native-chat" role="status" aria-label="正在读取聊天">
+            <span className="sr-only">正在读取聊天</span>
+            <div
+                className="native-chat-workspace native-chat-page-skeleton"
+                data-motion={motion.enabled ? motion.level : 'off'}
+                style={{ '--chat-list-width': `${preferences.listWidth}px` } as CSSProperties}
+                aria-hidden
+            >
+                <aside className="native-chat-list-pane">
+                    <span className="native-chat-skel-search" />
+                    <div className="native-chat-skel-tabs">
+                        <span className="native-chat-skel-bar" />
+                        <span className="native-chat-skel-bar" />
+                    </div>
+                    <ConversationSkeleton />
+                    <div className="native-chat-skel-account">
+                        <span className="native-chat-skel-avatar" />
+                        <span className="native-chat-skel-bar" />
+                    </div>
+                </aside>
+                <main className="native-chat-message-pane">
+                    <div className="native-chat-conversation-surface">
+                        <header className="native-chat-conversation-header">
+                            <span className="native-chat-skel-avatar" />
+                            <span className="native-chat-skel-bar native-chat-skel-heading" />
+                        </header>
+                        <div className="native-chat-skel-message-area">
+                            <MessageSkeleton />
+                        </div>
+                        <div className="native-chat-skel-composer">
+                            <div className="native-chat-skel-tools">
+                                {[0, 1, 2, 3].map((key) => (
+                                    <span key={key} />
+                                ))}
+                            </div>
+                            <span className="native-chat-skel-bar" />
+                            <span className="native-chat-skel-send" />
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </section>
+    );
+}
 
 export function ConversationSkeleton() {
     return (

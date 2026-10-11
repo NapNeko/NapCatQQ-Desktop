@@ -9,7 +9,7 @@ import {
     type MutableRefObject,
     type ReactNode,
 } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
 import { ArrowDown } from 'lucide-react';
 import { ChatViewContext, useChatView, type MarkdownCommand } from '../../shared/chat/chatContext';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
@@ -41,6 +41,7 @@ import { FORWARD_MESSAGE_LIMIT } from '../../core/domain/chat/messageTransfer';
 import { ChatForwardDialog } from './ChatForwardDialog';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ChatSelectionBar } from './ChatSelectionBar';
+import { recordConversationTimelineMount } from './conversationMotionProbe';
 
 export function NativeTimeline({
     store,
@@ -64,6 +65,15 @@ export function NativeTimeline({
     onSelectionChange?: (selecting: boolean) => void;
 }) {
     const scroll = useRef<HTMLDivElement>(null);
+    const initialMessages = useRef<Set<string> | null>(null);
+    const mountRecorded = useRef(false);
+    useEffect(() => {
+        if (mountRecorded.current) return;
+        mountRecorded.current = true;
+        recordConversationTimelineMount(
+            scroll.current?.closest<HTMLElement>('.native-chat-timeline-frame') ?? null,
+        );
+    }, []);
     const latest = useRef(messages);
     latest.current = messages;
     const canPinToEnd = useRef<() => boolean>(() => true);
@@ -78,6 +88,12 @@ export function NativeTimeline({
     const media = useChatMedia(() => store.target);
     const chatSend = useChatSend(store);
     const history = snapshot.history[contact.key];
+    if (initialMessages.current === null && (messages.length || history?.loaded))
+        initialMessages.current = new Set(
+            messages
+                .filter((message) => message.status !== 'sending')
+                .map((message) => message.key),
+        );
     useEffect(() => {
         void store.ensureHistory(contact.key);
     }, [store, contact.key, snapshot.connection.state, history]);
@@ -93,11 +109,16 @@ export function NativeTimeline({
         sending;
     const getMessageKey = useCallback((index: number) => messages[index]?.key ?? index, [messages]);
     // 按消息 key 锚定 prepend 和异步行高变化，避免额外 scrollHeight 补偿重复移动视口。
-    const pinLatest = useCallback(() => {
-        const element = scroll.current;
-        if (element && canPinToEnd.current())
-            element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    }, []);
+    const pinLatest = useCallback(
+        (instance: Virtualizer<HTMLDivElement, Element>, scrolling: boolean) => {
+            const element = scroll.current;
+            if (!element || scrolling || !canPinToEnd.current()) return;
+            // 滚动通知不再反向写 scrollTop；直接用已算出的容器高度，避免强制测整条时间线。
+            const end = Math.max(0, instance.getTotalSize() - element.clientHeight);
+            if (Math.abs(element.scrollTop - end) > 1) element.scrollTop = end;
+        },
+        [],
+    );
     const virtual = useVirtualizer({
         count: messages.length,
         getScrollElement: () => scroll.current,
@@ -108,6 +129,7 @@ export function NativeTimeline({
         paddingEnd: selecting ? 96 : 24,
         anchorTo: 'end',
         directDomUpdates: true,
+        useFlushSync: false,
         onChange: pinLatest,
     });
     // 消息插入时先提交新容器高度，防止旧页锚点被旧 scrollHeight 截断。
@@ -446,6 +468,7 @@ export function NativeTimeline({
                                         store={store}
                                         contact={contact}
                                         message={message}
+                                        animateEntry={!initialMessages.current?.has(message.key)}
                                         progress={
                                             message.requestId
                                                 ? snapshot.sendProgress?.[message.requestId]
@@ -543,6 +566,7 @@ const TimelineMessage = memo(function TimelineMessage({
     store,
     contact,
     message,
+    animateEntry,
     progress,
     previous,
     highlighted,
@@ -566,6 +590,7 @@ const TimelineMessage = memo(function TimelineMessage({
     store: ChatAccountStore;
     contact: Contact;
     message: Message;
+    animateEntry: boolean;
     progress?: DebugStreamProgress;
     previous?: Message;
     highlighted: boolean;
@@ -636,6 +661,7 @@ const TimelineMessage = memo(function TimelineMessage({
                 enter={enter}
                 takeEnter={takeEnter}
                 order={order}
+                animate={animateEntry}
             >
                 <ChatMessageActions
                     store={store}

@@ -16,6 +16,7 @@ import { cn } from '../../shared/utils/cn';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { BotPicker } from '../debug';
 import { ChatWorkspace } from './ChatWorkspace';
+import { ChatPageSkeleton } from './ChatSkeleton';
 import './chat.css';
 
 let lastBot = '';
@@ -120,12 +121,7 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
             onManageBots={() => onNavigate('bots')}
         />
     );
-    if (!restored)
-        return (
-            <section className="native-chat">
-                <div className="native-chat-welcome">正在恢复聊天…</div>
-            </section>
-        );
+    if (!restored || (targets.isLoading && !target)) return <ChatPageSkeleton />;
     return (
         <section className="native-chat">
             {target ? (

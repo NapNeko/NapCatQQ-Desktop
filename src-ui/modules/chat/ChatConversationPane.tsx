@@ -191,30 +191,32 @@ export function ChatConversationPane({
                                 initialMemberId={memberFocus}
                             />
                         )}
-                        <NativeTimeline
-                            key={`timeline:${active.key}:${timelineEntry}`}
-                            store={store}
-                            contact={active}
-                            messages={messages}
-                            preventRecall={preventRecall}
-                            revealRef={reveal}
-                            visible={narrowFocus}
-                            onFocusComposer={onFocusComposer}
-                            onSelectionChange={onSelectionChange}
-                            renderAvatar={(message, avatar) => (
-                                <ChatGroupMemberMenu
-                                    target={target}
-                                    store={store}
-                                    contact={active}
-                                    message={message}
-                                    onMessage={onOpen}
-                                    onViewMember={onShowMembers}
-                                    onFocusComposer={onFocusComposer}
-                                >
-                                    {avatar}
-                                </ChatGroupMemberMenu>
-                            )}
-                        />
+                        <div className="native-chat-timeline-frame">
+                            <NativeTimeline
+                                key={`timeline:${active.key}:${timelineEntry}`}
+                                store={store}
+                                contact={active}
+                                messages={messages}
+                                preventRecall={preventRecall}
+                                revealRef={reveal}
+                                visible={narrowFocus}
+                                onFocusComposer={onFocusComposer}
+                                onSelectionChange={onSelectionChange}
+                                renderAvatar={(message, avatar) => (
+                                    <ChatGroupMemberMenu
+                                        target={target}
+                                        store={store}
+                                        contact={active}
+                                        message={message}
+                                        onMessage={onOpen}
+                                        onViewMember={onShowMembers}
+                                        onFocusComposer={onFocusComposer}
+                                    >
+                                        {avatar}
+                                    </ChatGroupMemberMenu>
+                                )}
+                            />
+                        </div>
                         <ChatComposer
                             key={`composer:${active.key}`}
                             store={store}

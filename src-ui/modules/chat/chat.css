@@ -637,6 +637,83 @@
 .native-chat-skel-timeline {
     padding: 0 24px;
 }
+.native-chat-page-skeleton {
+    pointer-events: none;
+}
+.native-chat-skel-search {
+    display: block;
+    flex-shrink: 0;
+    height: 34px;
+    margin: 5px 0 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+}
+.native-chat-skel-tabs {
+    display: flex;
+    gap: 16px;
+    padding: 0 8px 14px;
+}
+.native-chat-skel-tabs .native-chat-skel-bar {
+    width: 32px;
+}
+.native-chat-page-skeleton .native-chat-skel-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.native-chat-skel-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 4px 4px;
+}
+.native-chat-skel-account .native-chat-skel-bar {
+    width: 72px;
+}
+.native-chat-skel-heading {
+    width: 116px;
+}
+.native-chat-skel-message-area {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 20px;
+}
+.native-chat-skel-composer {
+    position: relative;
+    flex-shrink: 0;
+    height: 126px;
+    margin: 12px 20px 18px;
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+.native-chat-skel-tools {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+.native-chat-skel-tools span,
+.native-chat-skel-send {
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-inset);
+}
+.native-chat-skel-send {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+}
+.native-chat-skel-composer > .native-chat-skel-bar {
+    width: 26%;
+}
+.native-chat-page-skeleton:not([data-motion="off"]) .native-chat-skel {
+    animation: native-chat-skel-pulse 1.8s ease-in-out infinite;
+}
 .native-chat-skel-timeline :is(.native-chat-skel-avatar, .native-chat-skel-bubble) {
     background: var(--chat-bubble-in);
 }
@@ -699,6 +776,29 @@
     position: relative;
     max-width: min(76%, 620px, calc(100% - 108px));
     min-width: 0;
+}
+.native-chat-timeline-frame {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.native-chat-timeline-frame[data-switching="true"] {
+    pointer-events: none;
+}
+.native-chat-timeline-wrap[data-chat-snapshot] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    contain: layout paint style;
+}
+.native-chat-timeline-wrap[data-chat-snapshot] * {
+    animation: none !important;
+    transition: none !important;
 }
 .native-chat-message-content-line {
     display: flex;

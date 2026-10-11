@@ -150,6 +150,7 @@ export function ChatMessageEntrance({
     enter,
     takeEnter,
     order = 0,
+    animate = true,
     children,
 }: {
     messageKey: string;
@@ -157,6 +158,7 @@ export function ChatMessageEntrance({
     enter: boolean;
     takeEnter: (key: string) => boolean;
     order?: number;
+    animate?: boolean;
     children: ReactNode;
 }) {
     const motion = useMotion();
@@ -167,7 +169,7 @@ export function ChatMessageEntrance({
     useGSAP(
         () => {
             const pending = takeEnter(messageKey);
-            eligible.current ??= enter || pending;
+            eligible.current ??= animate && (enter || pending);
             const element = body.current;
             if (
                 !eligible.current ||
