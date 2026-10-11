@@ -717,6 +717,243 @@ async fn set_ob11_config_other_business_error_preserves_code_and_message() {
     }
 }
 
+// -------- 上游失败信封(HTTP 200 + {code:-1,message}) --------
+//
+// 形态取自 NapCatQQ packages/napcat-webui-backend:utils/response.ts sendError、
+// api/Auth.ts LoginHandler、middleware/auth.ts。以前严格结构体解析会把这些都报成
+// "error decoding response body"(issue #154)
+
+async fn login_with_body(body: serde_json::Value) -> Result<String, NapCatWebUiError> {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    Mock::given(method("POST"))
+        .and(path("/api/auth/login"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&server)
+        .await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    client.fetch_credential(port, "abc").await
+}
+
+#[tokio::test]
+async fn fetch_credential_token_invalid_envelope_maps_to_rejected() {
+    let err = login_with_body(serde_json::json!({ "code": -1, "message": "token is invalid" }))
+        .await
+        .expect_err("token is invalid must fail");
+    match err {
+        NapCatWebUiError::Rejected(msg) => assert_eq!(msg, "token is invalid"),
+        other => panic!("expected Rejected, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn fetch_credential_token_empty_maps_to_rejected() {
+    let err = login_with_body(serde_json::json!({ "code": -1, "message": "token is empty" }))
+        .await
+        .expect_err("token is empty must fail");
+    assert!(matches!(err, NapCatWebUiError::Rejected(_)), "got {err:?}");
+}
+
+#[tokio::test]
+async fn fetch_credential_server_token_not_initialized_maps_to_rejected() {
+    let err = login_with_body(serde_json::json!({
+        "code": -1,
+        "message": "Server token not initialized"
+    }))
+    .await
+    .expect_err("must fail");
+    assert!(matches!(err, NapCatWebUiError::Rejected(_)), "got {err:?}");
+}
+
+#[tokio::test]
+async fn fetch_credential_login_rate_limit_maps_to_rate_limited() {
+    let err = login_with_body(serde_json::json!({ "code": -1, "message": "login rate limit" }))
+        .await
+        .expect_err("rate limit must fail");
+    assert!(matches!(err, NapCatWebUiError::RateLimited), "got {err:?}");
+}
+
+#[tokio::test]
+async fn fetch_credential_require_2fa_maps_to_two_factor() {
+    let err = login_with_body(serde_json::json!({
+        "code": 0,
+        "message": "success",
+        "data": { "require2FA": true, "message": "Please enter your authenticator code" }
+    }))
+    .await
+    .expect_err("2FA without code must fail");
+    assert!(
+        matches!(err, NapCatWebUiError::TwoFactorRequired),
+        "got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn fetch_credential_code_zero_without_credential_maps_to_decode() {
+    let err = login_with_body(serde_json::json!({ "code": 0, "message": "success", "data": {} }))
+        .await
+        .expect_err("missing Credential must fail");
+    assert!(matches!(err, NapCatWebUiError::Decode(_)), "got {err:?}");
+}
+
+#[tokio::test]
+async fn fetch_credential_unknown_business_error_keeps_message() {
+    let err = login_with_body(serde_json::json!({
+        "code": -1,
+        "message": "Invalid or expired code"
+    }))
+    .await
+    .expect_err("must fail");
+    match err {
+        NapCatWebUiError::BusinessCode { code, message } => {
+            assert_eq!(code, -1);
+            assert_eq!(message, "Invalid or expired code");
+        }
+        other => panic!("expected BusinessCode, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn fetch_credential_success_envelope_with_code_returns_credential() {
+    let credential = login_with_body(serde_json::json!({
+        "code": 0,
+        "message": "success",
+        "data": { "Credential": "eyJEYXRhIjp7fX0=" }
+    }))
+    .await
+    .expect("success envelope");
+    assert_eq!(credential, "eyJEYXRhIjp7fX0=");
+}
+
+#[tokio::test]
+async fn fetch_credential_html_body_maps_to_decode_with_content_type() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    Mock::given(method("POST"))
+        .and(path("/api/auth/login"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("<html>secret-ish</html>", "text/html; charset=utf-8"),
+        )
+        .mount(&server)
+        .await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    let err = client
+        .fetch_credential(port, "abc")
+        .await
+        .expect_err("html must fail");
+    match err {
+        NapCatWebUiError::Decode(msg) => {
+            assert!(msg.contains("text/html"), "decode detail: {msg}");
+            assert!(
+                !msg.contains("secret-ish"),
+                "body must not be echoed: {msg}"
+            );
+        }
+        other => panic!("expected Decode, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn fetch_credential_403_access_denied_maps_to_unauthorized() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    Mock::given(method("POST"))
+        .and(path("/api/auth/login"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("Access Denied"))
+        .mount(&server)
+        .await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    let err = client
+        .fetch_credential(port, "abc")
+        .await
+        .expect_err("403 must fail");
+    assert!(
+        matches!(err, NapCatWebUiError::Unauthorized(403)),
+        "got {err:?}"
+    );
+}
+
+async fn mount_unauthorized_envelope(server: &MockServer, api: &str) {
+    Mock::given(method("POST"))
+        .and(path(api))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "code": -1,
+            "message": "Unauthorized"
+        })))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn check_login_status_unauthorized_envelope_maps_to_unauthorized() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    mount_unauthorized_envelope(&server, "/api/QQLogin/CheckLoginStatus").await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    let err = client
+        .check_login_status(port, "stale")
+        .await
+        .expect_err("must fail");
+    assert!(
+        matches!(err, NapCatWebUiError::Unauthorized(200)),
+        "got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn check_online_status_unauthorized_envelope_maps_to_unauthorized() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    mount_unauthorized_envelope(&server, "/api/QQLogin/GetQQLoginInfo").await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    let err = client
+        .check_online_status(port, "stale")
+        .await
+        .expect_err("must fail");
+    assert!(
+        matches!(err, NapCatWebUiError::Unauthorized(200)),
+        "got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn set_ob11_config_unauthorized_envelope_maps_to_unauthorized() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    mount_unauthorized_envelope(&server, "/api/OB11Config/SetConfig").await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    let err = client
+        .set_ob11_config(port, "stale", r#"{}"#)
+        .await
+        .expect_err("must fail");
+    assert!(
+        matches!(err, NapCatWebUiError::Unauthorized(200)),
+        "got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn check_login_status_upstream_shape_with_login_error_decodes() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+    Mock::given(method("POST"))
+        .and(path("/api/QQLogin/CheckLoginStatus"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "code": 0,
+            "message": "success",
+            "data": { "isLogin": true, "isOffline": false, "qrcodeurl": "", "loginError": "" }
+        })))
+        .mount(&server)
+        .await;
+    let client = ReqwestNapCatWebUiClient::new().expect("build client");
+    let data = client
+        .check_login_status(port, "tok")
+        .await
+        .expect("upstream shape must decode");
+    assert!(data.is_login);
+}
+
 #[tokio::test]
 async fn set_ob11_config_401_still_maps_to_unauthorized() {
     let server = MockServer::start().await;

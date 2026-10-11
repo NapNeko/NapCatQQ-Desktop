@@ -3,6 +3,7 @@
 //! 暴露 [NapCatLoginPoller] 与其依赖:[PollerConfig],[PollerDeps],
 //! [RestartHandle]。状态转移见 `transitions`；主循环见 `loop_`。
 
+mod backoff;
 mod loop_;
 mod transitions;
 mod types;
@@ -11,6 +12,8 @@ pub use types::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 
 // 测试文件用 `use super::*` 对齐旧单体模块可见性
 // 仅 re-export 测试实际用到的符号,避免 unused_imports 噪声
+#[cfg(test)]
+pub(crate) use backoff::{AuthFailureKind, issue_for, refresh_allowed, retry_delay};
 #[cfg(test)]
 pub(crate) use loop_::{adjust_status_interval, do_auth_refresh, do_status_poll};
 #[cfg(test)]
@@ -56,3 +59,7 @@ mod transition_tests;
 #[cfg(test)]
 #[path = "tests_property.rs"]
 mod property_tests;
+
+#[cfg(test)]
+#[path = "tests_backoff.rs"]
+mod backoff_tests;

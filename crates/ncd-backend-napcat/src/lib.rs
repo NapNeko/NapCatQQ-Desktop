@@ -10,3 +10,4 @@ pub use napcat::endpoint_table::NapCatEndpointTable;
 pub use napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 pub use napcat::offline_notifier::{NoopOfflineNotifier, OfflineNoticeKind, OfflineNotifier};
 pub use napcat::webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCatWebUiClient};
+pub use napcat::webui_config::parse_webui_json_token;

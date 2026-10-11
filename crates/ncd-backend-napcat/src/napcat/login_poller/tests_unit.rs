@@ -326,8 +326,8 @@ async fn do_auth_refresh_success_writes_auth_and_updates_timestamp() {
     assert!(!state.auth_refresh_throttle_elapsed(cfg.auth_refresh_throttle));
 }
 
-/// fetch_credential 失败仅 tracing::warn!,
-/// 不发布 DomainEvent::BotError,不修改 state.auth,但 timestamp
+/// 首次暂时性失败(Timeout)只记日志和退避,
+/// 不发布任何事件(含 BotError),不修改 state.auth,但 timestamp
 /// 仍在调用前被刷新(节流计时从「尝试」时刻起算,与失败无关)
 #[tokio::test]
 async fn do_auth_refresh_failure_leaves_auth_untouched_and_emits_no_bot_error() {
@@ -380,9 +380,8 @@ async fn do_auth_refresh_success_overwrites_previous_auth() {
     assert_eq!(state.auth.as_deref(), Some("new-credential"));
 }
 
-/// 边界:Unauthorized 错误也走 tracing::warn! 路径,行为与
-/// 其它错误一致——do_auth_refresh 内部对错误类型不做分支
-/// (内部只要求「仅日志」),分流由 caller 负责
+/// 边界:Unauthorized 只影响退避分类与鉴权问题广播,
+/// 不清 state.auth——旧凭据是否作废由 caller 决定
 #[tokio::test]
 async fn do_auth_refresh_unauthorized_error_does_not_modify_auth() {
     let bot_id = BotId::new("auth-unauth");
@@ -406,10 +405,8 @@ async fn do_auth_refresh_unauthorized_error_does_not_modify_auth() {
 /// 第二次命令到达时 elapsed() < throttle 必命中节流分支被忽略,
 /// state.auth 保持调用前的值不动
 ///
-/// 注:state.last_auth_refresh_attempt_at 使用 std::time::Instant
-/// (wall-clock),不受 tokio::time::pause 影响,因此本测试只覆盖
-/// 「窗口内必须忽略」语义;「窗口外允许刷新」由端到端测试覆盖
-/// (在那里通过真实时间或专用 mock clock 推进)
+/// 本测试只覆盖「窗口内必须忽略」语义;「窗口外允许刷新」与退避
+/// 由 tests_backoff 里暂停时钟的 run_poller 用例覆盖
 #[tokio::test]
 async fn request_auth_refresh_throttle_skips_within_window() {
     // throttle 设大到 60s,保证 ms 级测试内绝不可能自然过期

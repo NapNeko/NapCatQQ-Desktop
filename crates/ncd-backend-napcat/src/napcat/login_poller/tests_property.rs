@@ -445,9 +445,7 @@ proptest! {
 // ∀ 任意 RequestAuthRefresh 到达时间序列:被动路径触发的相邻两次
 // 实际 refresh 间隔必 ≥ auth_refresh_throttle(默认 5s)
 //
-// 备注(来自 prompt):state.last_auth_refresh_attempt_at 用
-// std::time::Instant(wall-clock),不受 tokio::time::pause 影响
-// 因此本属性把节流决策抽象成纯函数 simulate_passive_refresh_throttle
+// 本属性把节流决策抽象成纯函数 simulate_passive_refresh_throttle
 // 直接驱动——把任意「到达时间序列 + 节流阈值」喂给它,断言输出的
 // 实际 refresh 序列两两间隔 ≥ 阈值这准确镜像了 run_poller 中
 // RequestAuthRefresh 分支的判定语义:

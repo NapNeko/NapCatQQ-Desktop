@@ -23,6 +23,27 @@ pub struct AuthLoginData {
     pub credential: String,
 }
 
+/// NapCat WebUI 通用信封。上游 sendError 一律 HTTP 200 + {code:-1,message} 且没有 data，
+/// 所以先按信封解，再看 code；code 缺省按 0 兼容老版本 / 老测试
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct WebUiEnvelope<T> {
+    #[serde(default)]
+    pub code: i64,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default = "Option::default")]
+    pub data: Option<T>,
+}
+
+/// /api/auth/login 成功或 2FA 时的 data；开了 2FA 且没带 totpCode 时没有 Credential
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+pub(crate) struct LoginEnvelopeData {
+    #[serde(rename = "Credential", default)]
+    pub credential: Option<String>,
+    #[serde(rename = "require2FA", default)]
+    pub require_2fa: bool,
+}
+
 /// POST /api/QQLogin/CheckLoginStatus 响应体(顶层)
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct CheckLoginStatusResponse {

@@ -3,12 +3,12 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 
 use super::error::NapCatWebUiError;
 use super::payloads::{
-    AuthLoginRequest, AuthLoginResponse, CheckLoginStatusData, CheckLoginStatusResponse,
-    GetQQLoginInfoData, GetQQLoginInfoResponse,
+    AuthLoginRequest, CheckLoginStatusData, GetQQLoginInfoData, LoginEnvelopeData, WebUiEnvelope,
 };
 use super::trait_::NapCatWebUiClient;
 
@@ -19,6 +19,12 @@ pub(crate) fn login_hash(token: &str) -> String {
     hasher.update(token.as_bytes());
     hasher.update(b".napcat");
     hex::encode(hasher.finalize())
+}
+
+/// 上游 auth 中间件拒绝时的 message（HTTP 仍是 200）
+fn is_unauthorized_message(message: &str) -> bool {
+    let m = message.trim();
+    m.eq_ignore_ascii_case("Unauthorized") || m.eq_ignore_ascii_case("Server token not initialized")
 }
 
 /// [NapCatWebUiClient] 的默认实现（reqwest + rustls，仅 loopback）
@@ -50,6 +56,76 @@ impl ReqwestNapCatWebUiClient {
             _ => None,
         }
     }
+
+    /// 先读字节再解信封：reqwest 的 json() 失败只会给 "error decoding response body"，
+    /// 把上游真实 message 吞掉。非 JSON 时只报 content-type 和长度，不回显 body
+    async fn read_envelope<T: DeserializeOwned>(
+        resp: reqwest::Response,
+    ) -> Result<WebUiEnvelope<T>, NapCatWebUiError> {
+        if let Some(err) = Self::handle_unauth(resp.status()) {
+            return Err(err);
+        }
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("-")
+            .to_string();
+        let bytes = resp.bytes().await?;
+        serde_json::from_slice::<WebUiEnvelope<T>>(&bytes).map_err(|e| {
+            NapCatWebUiError::Decode(format!(
+                "响应不是预期 JSON（content-type: {content_type}，{} 字节）: {e}",
+                bytes.len()
+            ))
+        })
+    }
+
+    /// 带鉴权接口：信封 Unauthorized 归成 Unauthorized(200) 让 poller 重新换凭据
+    fn authed_data<T>(envelope: WebUiEnvelope<T>) -> Result<T, NapCatWebUiError> {
+        if envelope.code != 0 {
+            if is_unauthorized_message(&envelope.message) {
+                return Err(NapCatWebUiError::Unauthorized(200));
+            }
+            return Err(NapCatWebUiError::BusinessCode {
+                code: envelope.code,
+                message: envelope.message,
+            });
+        }
+        envelope
+            .data
+            .ok_or_else(|| NapCatWebUiError::Decode("响应缺少 data".into()))
+    }
+
+    /// /api/auth/login 失败形态见上游 api/Auth.ts LoginHandler
+    pub(crate) fn credential_from_login(
+        envelope: WebUiEnvelope<LoginEnvelopeData>,
+    ) -> Result<String, NapCatWebUiError> {
+        if envelope.code != 0 {
+            let message = envelope.message.trim();
+            if message.eq_ignore_ascii_case("login rate limit") {
+                return Err(NapCatWebUiError::RateLimited);
+            }
+            if message.eq_ignore_ascii_case("token is invalid")
+                || message.eq_ignore_ascii_case("token is empty")
+                || message.eq_ignore_ascii_case("Server token not initialized")
+                || message.eq_ignore_ascii_case("Unauthorized")
+            {
+                return Err(NapCatWebUiError::Rejected(message.to_string()));
+            }
+            return Err(NapCatWebUiError::BusinessCode {
+                code: envelope.code,
+                message: message.to_string(),
+            });
+        }
+        let data = envelope.data.unwrap_or_default();
+        if let Some(credential) = data.credential.filter(|c| !c.is_empty()) {
+            return Ok(credential);
+        }
+        if data.require_2fa {
+            return Err(NapCatWebUiError::TwoFactorRequired);
+        }
+        Err(NapCatWebUiError::Decode("登录响应缺少 Credential".into()))
+    }
 }
 
 #[async_trait]
@@ -62,14 +138,8 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
             .json(&AuthLoginRequest { hash })
             .send()
             .await?;
-        if let Some(err) = Self::handle_unauth(resp.status()) {
-            return Err(err);
-        }
-        let body: AuthLoginResponse = resp
-            .json()
-            .await
-            .map_err(|e| NapCatWebUiError::Decode(e.to_string()))?;
-        Ok(body.data.credential)
+        let envelope = Self::read_envelope::<LoginEnvelopeData>(resp).await?;
+        Self::credential_from_login(envelope)
     }
 
     async fn check_login_status(
@@ -83,14 +153,7 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
             .bearer_auth(auth)
             .send()
             .await?;
-        if let Some(err) = Self::handle_unauth(resp.status()) {
-            return Err(err);
-        }
-        let body: CheckLoginStatusResponse = resp
-            .json()
-            .await
-            .map_err(|e| NapCatWebUiError::Decode(e.to_string()))?;
-        Ok(body.data)
+        Self::authed_data(Self::read_envelope::<CheckLoginStatusData>(resp).await?)
     }
 
     async fn check_online_status(
@@ -104,14 +167,7 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
             .bearer_auth(auth)
             .send()
             .await?;
-        if let Some(err) = Self::handle_unauth(resp.status()) {
-            return Err(err);
-        }
-        let body: GetQQLoginInfoResponse = resp
-            .json()
-            .await
-            .map_err(|e| NapCatWebUiError::Decode(e.to_string()))?;
-        Ok(body.data)
+        Self::authed_data(Self::read_envelope::<GetQQLoginInfoData>(resp).await?)
     }
 
     async fn set_ob11_config(
@@ -128,29 +184,21 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
             .json(&body)
             .send()
             .await?;
-        if let Some(err) = Self::handle_unauth(resp.status()) {
-            return Err(err);
-        }
-        let status = resp.status();
-        if !status.is_success() {
-            return Err(NapCatWebUiError::Status(status.as_u16()));
-        }
-        let payload: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| NapCatWebUiError::Decode(e.to_string()))?;
-        let code = payload.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
-        if code == 0 {
+        // 成功时 data 是 null，只关心 code / message
+        let envelope = Self::read_envelope::<serde::de::IgnoredAny>(resp).await?;
+        if envelope.code == 0 {
             return Ok(());
         }
-        let message = payload
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let message = envelope.message.trim();
         if message.eq_ignore_ascii_case("Not Login") {
             return Err(NapCatWebUiError::NotLogin);
         }
-        Err(NapCatWebUiError::BusinessCode { code, message })
+        if is_unauthorized_message(message) {
+            return Err(NapCatWebUiError::Unauthorized(200));
+        }
+        Err(NapCatWebUiError::BusinessCode {
+            code: envelope.code,
+            message: envelope.message,
+        })
     }
 }

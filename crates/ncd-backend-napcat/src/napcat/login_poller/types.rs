@@ -1,15 +1,18 @@
 //! Poller 配置、状态、依赖与句柄
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use async_trait::async_trait;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
+use super::backoff::{AuthFailureKind, refresh_allowed};
 use super::loop_::run_poller;
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
 use ncd_domain::ids::BotId;
+use ncd_domain::napcat_events::NapCatWebuiAuthIssue;
 use ncd_traits::events::BroadcastEventBus;
 
 /// 单个 Poller 的运行参数
@@ -55,7 +58,17 @@ pub(crate) struct LoginState {
     /// 避免探测持续失败时重复广播 unknown。
     pub probe_unavailable_published: bool,
     /// None = 从未尝试,首次必过节流(避免 Instant::checked_sub 短 uptime 失败)
+    /// 用 tokio Instant:暂停时钟的测试才能推进退避窗口
     pub last_auth_refresh_attempt_at: Option<Instant>,
+    /// 最近一段连续换凭据失败的类别与次数;类别变了从 1 重新计
+    pub auth_failure_kind: Option<AuthFailureKind>,
+    pub auth_failure_streak: u32,
+    /// 下一次被动换凭据前至少要等多久(与 auth_refresh_throttle 取大)
+    pub auth_retry_delay: Duration,
+    /// 已广播的鉴权问题,只在值变化时再发
+    pub auth_issue_published: Option<NapCatWebuiAuthIssue>,
+    /// 状态查询一段连续失败只 warn 第一次
+    pub status_error_warned: bool,
 }
 
 impl LoginState {
@@ -72,14 +85,30 @@ impl LoginState {
             consecutive_probe_failures: 0,
             probe_unavailable_published: false,
             last_auth_refresh_attempt_at: None,
+            auth_failure_kind: None,
+            auth_failure_streak: 0,
+            auth_retry_delay: Duration::ZERO,
+            auth_issue_published: None,
+            status_error_warned: false,
         }
     }
 
+    // 主循环已改用 auth_refresh_allowed;只剩单测看固定节流
+    #[cfg(test)]
     pub(crate) fn auth_refresh_throttle_elapsed(&self, throttle: Duration) -> bool {
         match self.last_auth_refresh_attempt_at {
             None => true,
             Some(at) => at.elapsed() >= throttle,
         }
+    }
+
+    /// 被动刷新门槛:max(固定节流, 当前退避)
+    pub(crate) fn auth_refresh_allowed(&self, throttle: Duration) -> bool {
+        refresh_allowed(
+            self.last_auth_refresh_attempt_at.map(|at| at.elapsed()),
+            throttle,
+            self.auth_retry_delay,
+        )
     }
 }
 

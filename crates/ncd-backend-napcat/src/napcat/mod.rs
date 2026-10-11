@@ -15,5 +15,6 @@ pub mod endpoint_table;
 pub mod login_poller;
 pub mod offline_notifier;
 pub mod webui_client;
+pub mod webui_config;
 
 pub use debug_client::{NapCatDebugClient, NapCatDebugError};

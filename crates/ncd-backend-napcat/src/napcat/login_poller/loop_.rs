@@ -1,11 +1,12 @@
 //! 主循环：auth/status ticker、credential 刷新、status poll
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tokio::sync::mpsc;
-use tokio::time::{Interval, MissedTickBehavior, interval};
+use tokio::time::{Instant, Interval, MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
 
+use super::backoff::{AuthFailureKind, hint, issue_for, retry_delay};
 use super::transitions::{
     apply_login_status, apply_online_status, mark_probe_unavailable, online_from_login_status,
 };
@@ -57,7 +58,7 @@ pub(crate) async fn run_poller(
             Some(cmd) = cmd_rx.recv() => {
                 match cmd {
                     PollerCommand::RequestAuthRefresh => {
-                        if state.auth_refresh_throttle_elapsed(cfg.auth_refresh_throttle) {
+                        if state.auth_refresh_allowed(cfg.auth_refresh_throttle) {
                             state.auth = None;
                             do_auth_refresh(&bot_id, port, &token, &cfg, &deps, &mut state)
                                 .await;
@@ -105,14 +106,86 @@ pub(crate) async fn do_auth_refresh(
     match deps.http.fetch_credential(port, token).await {
         Ok(credential) => {
             state.auth = Some(credential);
+            if state.auth_failure_kind.is_some() {
+                tracing::info!(
+                    bot_id = %bot_id,
+                    failures = state.auth_failure_streak,
+                    "NapCat WebUI 登录凭证已恢复"
+                );
+            }
+            state.auth_failure_kind = None;
+            state.auth_failure_streak = 0;
+            state.auth_retry_delay = Duration::ZERO;
+            if state.auth_issue_published.take().is_some() {
+                deps.event_bus
+                    .publish(DomainEvent::napcat_webui_auth_changed(bot_id.clone(), None));
+            }
         }
-        Err(err) => {
-            tracing::warn!(
-                bot_id = %bot_id,
-                error = ?err,
-                "NapCat WebUI 刷新登录凭证失败"
-            );
-        }
+        // 失败不清 state.auth:旧凭据可能还有效,是否作废由 caller 决定
+        Err(err) => record_auth_failure(bot_id, deps, state, &err),
+    }
+}
+
+fn record_auth_failure(
+    bot_id: &BotId,
+    deps: &PollerDeps,
+    state: &mut LoginState,
+    err: &NapCatWebUiError,
+) {
+    let kind = AuthFailureKind::from_error(err);
+    let kind_changed = state.auth_failure_kind != Some(kind);
+    let streak = if kind_changed {
+        1
+    } else {
+        state.auth_failure_streak.saturating_add(1)
+    };
+    state.auth_failure_kind = Some(kind);
+    state.auth_failure_streak = streak;
+    state.auth_retry_delay = retry_delay(kind, streak);
+    let retry_in_secs = state.auth_retry_delay.as_secs();
+
+    // 同类失败只在第一次 warn,其余降 debug,避免每 5s 刷一条
+    if kind_changed {
+        tracing::warn!(
+            bot_id = %bot_id,
+            error = %err,
+            reason = hint(kind),
+            retry_in_secs,
+            "NapCat WebUI 刷新登录凭证失败"
+        );
+    } else {
+        tracing::debug!(
+            bot_id = %bot_id,
+            error = %err,
+            failures = streak,
+            retry_in_secs,
+            "NapCat WebUI 刷新登录凭证仍失败"
+        );
+    }
+
+    // 暂时性失败没到阈值时保留上一次已发的问题,不来回闪
+    let issue = issue_for(kind, streak);
+    if issue.is_some() && issue != state.auth_issue_published {
+        state.auth_issue_published = issue;
+        deps.event_bus
+            .publish(DomainEvent::napcat_webui_auth_changed(
+                bot_id.clone(),
+                issue,
+            ));
+    }
+}
+
+fn note_status_error(
+    bot_id: &BotId,
+    state: &mut LoginState,
+    what: &'static str,
+    err: &NapCatWebUiError,
+) {
+    if state.status_error_warned {
+        tracing::debug!(%bot_id, error = %err, "{what}");
+    } else {
+        state.status_error_warned = true;
+        tracing::warn!(%bot_id, error = %err, "{what}");
     }
 }
 
@@ -135,6 +208,7 @@ pub(crate) async fn do_status_poll(
     let (login_res, online_res) = tokio::join!(login_fut, online_fut);
 
     let mut observed_online = None;
+    let mut query_failed = false;
     match login_res {
         Ok(data) => {
             observed_online = online_from_login_status(&data);
@@ -146,7 +220,13 @@ pub(crate) async fn do_status_poll(
             return;
         }
         Err(err) => {
-            tracing::warn!(?err, %bot_id, "NapCat 登录态查询失败（check_login_status）");
+            query_failed = true;
+            note_status_error(
+                bot_id,
+                state,
+                "NapCat 登录态查询失败（check_login_status）",
+                &err,
+            );
         }
     }
 
@@ -160,8 +240,17 @@ pub(crate) async fn do_status_poll(
             let _ = cmd_tx.try_send(PollerCommand::RequestAuthRefresh);
         }
         Err(err) => {
-            tracing::warn!(?err, %bot_id, "NapCat 在线状态查询失败（check_online_status）");
+            query_failed = true;
+            note_status_error(
+                bot_id,
+                state,
+                "NapCat 在线状态查询失败（check_online_status）",
+                &err,
+            );
         }
+    }
+    if !query_failed {
+        state.status_error_warned = false;
     }
 
     if let Some(online) = observed_online {

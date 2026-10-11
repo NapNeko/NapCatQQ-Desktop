@@ -25,6 +25,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use ncd_domain::ids::BotId;
+use ncd_domain::napcat_events::NapCatWebuiAuthIssue;
 
 /// 单个 NapCat bot 的 WebUI 接入信息
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +39,8 @@ pub struct NapCatEndpoint {
     pub token: String,
     /// 最近一次可信登录探测；None 表示尚未探测或连续探测失败。
     pub online: Option<bool>,
+    /// 换凭据失败原因（镜像 napcat_webui_auth_changed）；轻量模式重建 WebView 后回填用
+    pub auth_issue: Option<NapCatWebuiAuthIssue>,
 }
 
 impl NapCatEndpoint {
@@ -84,6 +87,13 @@ impl NapCatEndpointTable {
         }
     }
 
+    /// 同 set_online：端点已回收时忽略迟到事件
+    pub async fn set_auth_issue(&self, bot_id: &BotId, issue: Option<NapCatWebuiAuthIssue>) {
+        if let Some(endpoint) = self.inner.write().await.get_mut(bot_id) {
+            endpoint.auth_issue = issue;
+        }
+    }
+
     /// 列出当前全部端点(冷启动 hydrate / 前端补齐 WebUI 按钮用)
     pub async fn list_all(&self) -> Vec<(BotId, NapCatEndpoint)> {
         self.inner
@@ -111,6 +121,7 @@ mod tests {
                     host_port: None,
                     token: "tok".into(),
                     online: None,
+                    auth_issue: None,
                 },
             )
             .await;
@@ -127,6 +138,7 @@ mod tests {
             host_port: Some(6099),
             token: "t".into(),
             online: Some(true),
+            auth_issue: None,
         };
         assert_eq!(ep.watch_port(), 6099);
     }
@@ -143,6 +155,7 @@ mod tests {
                     host_port: None,
                     token: "a".into(),
                     online: None,
+                    auth_issue: None,
                 },
             )
             .await;
@@ -163,6 +176,7 @@ mod tests {
                     host_port: None,
                     token: "a".into(),
                     online: Some(true),
+                    auth_issue: None,
                 },
             )
             .await;
@@ -174,6 +188,7 @@ mod tests {
                     host_port: Some(6100),
                     token: "b".into(),
                     online: Some(false),
+                    auth_issue: None,
                 },
             )
             .await;
@@ -199,6 +214,7 @@ mod tests {
                 host_port: Some(6099),
                 token: "x".into(),
                 online: None,
+                auth_issue: None,
             },
         )
         .await;
@@ -217,6 +233,7 @@ mod tests {
                     host_port: None,
                     token: "tok".into(),
                     online: None,
+                    auth_issue: None,
                 },
             )
             .await;
@@ -226,5 +243,56 @@ mod tests {
 
         assert_eq!(table.snapshot(&id).await.unwrap().online, Some(true));
         assert_eq!(table.list_all().await.len(), 1);
+    }
+
+    fn endpoint(token: &str) -> NapCatEndpoint {
+        NapCatEndpoint {
+            port: 6099,
+            host_port: None,
+            token: token.into(),
+            online: None,
+            auth_issue: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn set_auth_issue_updates_existing_endpoint_only() {
+        let table = NapCatEndpointTable::new();
+        let id = BotId::new("10001");
+        table.insert(id.clone(), endpoint("tok")).await;
+
+        table
+            .set_auth_issue(&id, Some(NapCatWebuiAuthIssue::TokenRejected))
+            .await;
+        table
+            .set_auth_issue(
+                &BotId::new("missing"),
+                Some(NapCatWebuiAuthIssue::RateLimited),
+            )
+            .await;
+
+        assert_eq!(
+            table.snapshot(&id).await.unwrap().auth_issue,
+            Some(NapCatWebuiAuthIssue::TokenRejected)
+        );
+        assert_eq!(table.list_all().await.len(), 1);
+
+        table.set_auth_issue(&id, None).await;
+        assert_eq!(table.snapshot(&id).await.unwrap().auth_issue, None);
+    }
+
+    #[tokio::test]
+    async fn insert_resets_auth_issue() {
+        // token 修正后会话重发 webui_available,新端点不能带着旧的鉴权问题
+        let table = NapCatEndpointTable::new();
+        let id = BotId::new("10001");
+        table.insert(id.clone(), endpoint("old")).await;
+        table
+            .set_auth_issue(&id, Some(NapCatWebuiAuthIssue::TokenRejected))
+            .await;
+        table.insert(id.clone(), endpoint("new")).await;
+        let snap = table.snapshot(&id).await.unwrap();
+        assert_eq!(snap.token, "new");
+        assert_eq!(snap.auth_issue, None);
     }
 }
