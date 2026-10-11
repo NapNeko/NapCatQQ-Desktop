@@ -166,24 +166,7 @@ pub async fn list_napcat_webui_bindings(
         .collect())
 }
 
-/// SnowLuma UI 会话态(daemon + per-bot 登录/隧道);冷启动 hydrate 用
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SnowlumaUiBotDto {
-    pub bot_id: String,
-    pub injected: bool,
-    pub uin: Option<String>,
-    pub login_state: Option<ncd_domain::daemon_state::SnowLumaLoginState>,
-    pub endpoints_ready: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SnowlumaUiSnapshotDto {
-    /// 兼容旧前端：仅表示本机 daemon。
-    pub daemon_state: Option<ncd_domain::daemon_state::DaemonState>,
-    /// `local` 或 SSH server_id → 各自主机上的 daemon 状态。
-    pub daemon_states: HashMap<String, ncd_domain::daemon_state::DaemonState>,
-    pub bots: Vec<SnowlumaUiBotDto>,
-}
+pub use ncd_domain::snowluma_ui::{SnowlumaUiBotDto, SnowlumaUiSnapshotDto};
 
 #[tauri::command]
 pub async fn list_snowluma_ui_snapshot(
@@ -206,6 +189,7 @@ pub async fn list_snowluma_ui_snapshot(
                 uin: b.uin,
                 login_state: b.login_state,
                 endpoints_ready: b.endpoints_ready,
+                probe_unavailable: b.probe_unavailable,
             })
             .collect(),
     })

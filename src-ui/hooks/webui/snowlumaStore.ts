@@ -62,7 +62,7 @@ async function hydrateFromBackend(): Promise<void> {
                 uin: row.uin,
                 loginState: isLoginState(row.login_state) ? row.login_state : null,
                 dockerEndpointsReady: row.endpoints_ready,
-                probeUnavailable: false,
+                probeUnavailable: row.probe_unavailable === true,
             };
         }
 
@@ -107,8 +107,9 @@ function scheduleHydrate(): Promise<void> {
 }
 
 function onDomainEvent(event: DomainEvent): void {
-    eventRevision += 1;
-    const next = reduceSnowluma(store.getSnapshot(), event);
+    const current = store.getSnapshot();
+    const next = reduceSnowluma(current, event);
+    if (next !== current) eventRevision += 1;
     store.setState(next);
 
     // reconcile/start 完成后后端表才有值;再拉一次补 UI

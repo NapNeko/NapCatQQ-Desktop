@@ -41,6 +41,7 @@ pub mod remote_paths;
 pub mod runtime_scenario;
 pub mod snowluma_linux_package;
 pub mod snowluma_start_mode;
+pub mod snowluma_ui;
 pub mod terminal;
 
 // 向后兼容: 下游 crate 仍可 use ncd_domain::{models::*, report::*}
@@ -163,6 +164,7 @@ pub use remote_paths::{
 pub use runtime_scenario::RuntimeScenario;
 pub use snowluma_linux_package::{SnowLumaLinuxPackage, SnowLumaPackage};
 pub use snowluma_start_mode::SnowLumaStartMode;
+pub use snowluma_ui::{SnowlumaUiBotDto, SnowlumaUiSnapshotDto};
 pub use terminal::{
     LocalShellKind, LocalShellOption, ServerStats, TERMINAL_EVENT_VERSION, TerminalDirListing,
     TerminalEvent, TerminalEventEnvelope, TerminalFeatures, TerminalFileEntry, TerminalHostOs,
