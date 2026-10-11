@@ -33,6 +33,7 @@ import { ChatSendStatus } from './ChatSendStatus';
 import { useTimelinePosition } from './useTimelinePosition';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { errorText } from '../../core/domain/errors';
+import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
 import { useSmoothWheel } from './useSmoothWheel';
 import { useLatestScroll } from './useLatestScroll';
 import { ChatFileAction } from './files/ChatFileAction';
@@ -445,6 +446,11 @@ export function NativeTimeline({
                                         store={store}
                                         contact={contact}
                                         message={message}
+                                        progress={
+                                            message.requestId
+                                                ? snapshot.sendProgress?.[message.requestId]
+                                                : undefined
+                                        }
                                         previous={messages[row.index - 1]}
                                         highlighted={highlight === message.key}
                                         retryDisabled={retryDisabled}
@@ -537,6 +543,7 @@ const TimelineMessage = memo(function TimelineMessage({
     store,
     contact,
     message,
+    progress,
     previous,
     highlighted,
     retryDisabled,
@@ -559,6 +566,7 @@ const TimelineMessage = memo(function TimelineMessage({
     store: ChatAccountStore;
     contact: Contact;
     message: Message;
+    progress?: DebugStreamProgress;
     previous?: Message;
     highlighted: boolean;
     retryDisabled: boolean;
@@ -683,37 +691,47 @@ const TimelineMessage = memo(function TimelineMessage({
                                             preventRecall={preventRecall}
                                         />,
                                     )}
+                                    {message.mine && (
+                                        <span className="native-chat-delivery-slot">
+                                            <ChatSendStatus
+                                                status={message.status}
+                                                progress={progress}
+                                                onCancel={
+                                                    selecting
+                                                        ? undefined
+                                                        : async () => {
+                                                              try {
+                                                                  await store.cancelSend(
+                                                                      message.key,
+                                                                  );
+                                                              } catch (error) {
+                                                                  onError(errorText(error));
+                                                                  throw error;
+                                                              }
+                                                          }
+                                                }
+                                                error={message.error}
+                                                retryDisabled={retryDisabled || selecting}
+                                                onRetry={
+                                                    message.recalled ||
+                                                    message.segments.some(
+                                                        (segment) => segment.type === 'forward',
+                                                    )
+                                                        ? undefined
+                                                        : () => {
+                                                              onError('');
+                                                              void store
+                                                                  .retry(message.key)
+                                                                  .catch((error) =>
+                                                                      onError(errorText(error)),
+                                                                  );
+                                                          }
+                                                }
+                                            />
+                                        </span>
+                                    )}
                                     {controls}
                                 </div>
-                                {message.mine && (
-                                    <ChatSendStatus
-                                        status={message.status}
-                                        progress={
-                                            message.requestId
-                                                ? store.getSnapshot().sendProgress?.[
-                                                      message.requestId
-                                                  ]
-                                                : undefined
-                                        }
-                                        error={message.error}
-                                        retryDisabled={retryDisabled || selecting}
-                                        onRetry={
-                                            message.recalled ||
-                                            message.segments.some(
-                                                (segment) => segment.type === 'forward',
-                                            )
-                                                ? undefined
-                                                : () => {
-                                                      onError('');
-                                                      void store
-                                                          .retry(message.key)
-                                                          .catch((error) =>
-                                                              onError(errorText(error)),
-                                                          );
-                                                  }
-                                        }
-                                    />
-                                )}
                             </div>
                         </article>
                     )}

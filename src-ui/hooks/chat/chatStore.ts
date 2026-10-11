@@ -1202,6 +1202,14 @@ export class ChatAccountStore {
         }
     }
 
+    async cancelSend(messageKey: string): Promise<void> {
+        const message = this.findMessage(messageKey);
+        if (!message?.requestId || message.status !== 'sending') return;
+        const progress = this.snapshot.sendProgress[message.requestId];
+        if (!progress || progress.stage === 'calling') return;
+        await chatService.cancel(message.requestId);
+    }
+
     async poke(key: SessionKey, userId: string) {
         if (
             !this.target.running ||

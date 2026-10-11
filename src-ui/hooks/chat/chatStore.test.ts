@@ -3,6 +3,7 @@ import { ChatAccountStore } from './chatStore';
 import { archiveOf } from '../../core/domain/chat/archive';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import { inlineImageService } from '../../core/services/inline-image.service';
+import { chatService } from '../../core/services/chat.service';
 import {
     emptyAccount,
     ingestMessage,
@@ -1588,4 +1589,88 @@ it('accepts exactly 100 merged messages', async () => {
     expect(transport.call).toHaveBeenCalledTimes(1);
     expect(transport.call.mock.calls[0][2]).toMatchObject({ messages: expect.any(Array) });
     expect((transport.call.mock.calls[0][2] as { messages: unknown[] }).messages).toHaveLength(100);
+});
+
+describe('message button commands and cancellation', () => {
+    it('sends a command with its reply while preserving the composer draft', async () => {
+        const { store, transport } = setup();
+        await store.connect();
+        store.open({ key: 'group:12', type: 'group', id: '12', name: '群' });
+        store.draft('group:12', { text: '已有草稿', reply: null, attachments: [] });
+        transport.call.mockClear().mockResolvedValue(ok({ message_id: 89 }));
+        await store.command('group:12', '/闭关', '88');
+        expect(transport.call).toHaveBeenCalledWith(
+            target.bot_id,
+            'send_group_msg',
+            {
+                group_id: '12',
+                message: [
+                    { type: 'reply', data: { id: '88' } },
+                    { type: 'text', data: { text: '/闭关' } },
+                ],
+            },
+            expect.any(String),
+            expect.any(Function),
+        );
+        expect(store.getSnapshot().account.drafts['group:12'].text).toBe('已有草稿');
+        expect(store.isSending()).toBe(false);
+    });
+
+    it('reports an uncertain command result instead of treating a dropped response as success', async () => {
+        const { store, transport } = setup();
+        await store.connect();
+        transport.call.mockRejectedValueOnce(new Error('网络中断'));
+        await expect(store.command('private:2', '/help')).rejects.toMatchObject({
+            uncertain: true,
+        });
+        expect(store.getSnapshot().account.messages.at(-1)?.status).toBe('unknown');
+        expect(store.isSending()).toBe(false);
+    });
+
+    it('cancels only the matching attachment request before the calling stage', async () => {
+        const { store } = setup();
+        const cancel = vi.spyOn(chatService, 'cancel').mockResolvedValue(undefined);
+        const message: Message = {
+            key: 'pending-upload',
+            session: 'private:2',
+            requestId: 'upload-request',
+            senderId: '99',
+            senderName: '测试',
+            mine: true,
+            at: 0,
+            status: 'sending',
+            segments: [{ type: 'file', data: { name: '文件.zip' } }],
+        };
+        store.getSnapshot().account.messages = [message];
+        store.getSnapshot().sendProgress['upload-request'] = {
+            v: 1,
+            request_id: 'upload-request',
+            stage: 'uploading',
+            file_name: '文件.zip',
+            done_bytes: 20,
+            total_bytes: 100,
+            done_chunks: 1,
+            total_chunks: 5,
+        };
+        await store.cancelSend(message.key);
+        expect(cancel).toHaveBeenCalledWith('upload-request');
+        store.getSnapshot().sendProgress['upload-request'].stage = 'calling';
+        await store.cancelSend(message.key);
+        expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it('keeps original message IDs in self-created forward preview nodes', async () => {
+        const { store, destination } = transferSetup();
+        await store.connect();
+        await store.forward(['group:12/2'], destination);
+        const outgoing = store
+            .getSnapshot()
+            .account.messages.find(
+                (message) =>
+                    message.mine &&
+                    message.session === destination.key &&
+                    message.segments[0]?.type === 'forward',
+            );
+        expect(outgoing?.segments[0].data.content).toMatchObject([{ data: { message_id: '2' } }]);
+    });
 });

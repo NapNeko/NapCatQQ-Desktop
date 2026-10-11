@@ -792,16 +792,26 @@
     transform: translateX(0);
     pointer-events: auto;
 }
-/* 发送结果只剩失败标记：一个右对齐的小感叹号，可点的版本带悬停底。 */
+.native-chat-delivery-slot {
+    position: relative;
+    align-self: center;
+    flex: 0 0 26px;
+    height: 26px;
+}
+.native-chat-delivery-slot > :is(.native-chat-send-status, .native-chat-send-progress) {
+    position: absolute;
+    inset: 0;
+}
 .native-chat-send-status {
-    display: block;
-    width: fit-content;
-    margin: 3px 0 0 auto;
-    padding: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    flex: 0 0 26px;
+    height: 26px;
     border-radius: var(--radius-xs);
     line-height: 0;
     color: var(--state-danger);
-    contain: inline-size;
 }
 button.native-chat-send-status:hover {
     background: var(--surface-inset);
@@ -1466,22 +1476,112 @@ button.native-chat-send-status:hover {
 }
 
 .native-chat-send-progress {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    max-width: 280px;
-    margin-top: 5px;
-    color: var(--text-tertiary);
-    font-size: 11px;
+    justify-content: center;
+    align-self: center;
+    flex: 0 0 26px;
+    height: 26px;
+    color: var(--text-secondary);
 }
-.native-chat-send-progress > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.native-chat-send-ring {
+    position: relative;
+    display: inline-flex;
+    color: var(--action-primary);
 }
-.native-chat-send-progress progress {
-    width: 54px;
-    height: 4px;
-    flex-shrink: 0;
-    accent-color: var(--brand);
+.native-chat-send-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+}
+.native-chat-send-cancel[data-cancellable="true"]:not(:disabled) {
+    cursor: pointer;
+}
+.native-chat-send-cancel:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+}
+.native-chat-send-cancel-icon {
+    position: absolute;
+    inset: 7px;
+    opacity: 0;
+    transform: none !important;
+    stroke: currentColor;
+}
+.native-chat-send-cancel:where(:hover, :focus-visible):not(:disabled)
+    .native-chat-send-ring
+    > span {
+    opacity: 0;
+}
+.native-chat-send-cancel:where(:hover, :focus-visible):not(:disabled)
+    .native-chat-send-cancel-icon {
+    opacity: 1;
+}
+.native-chat-send-cancel:where(:hover, :focus-visible):not(:disabled) {
+    background: color-mix(in srgb, var(--action-primary) 8%, transparent);
+}
+.native-chat-send-ring > svg:first-child {
+    transform: rotate(-90deg);
+    fill: none;
+    stroke-width: 2;
+}
+.native-chat-send-ring-track {
+    stroke: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+.native-chat-send-ring-value {
+    stroke: currentColor;
+    stroke-linecap: round;
+    transition: stroke-dashoffset var(--chat-motion-fast, 0s) ease-out;
+}
+.native-chat-send-ring > span {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--text-secondary);
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.native-chat-send-dots {
+    display: inline-flex;
+    gap: 3px;
+}
+.native-chat-send-dots i {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.55;
+}
+.native-chat-workspace:not([data-motion="off"]) .native-chat-send-dots i {
+    animation: native-chat-send-dot calc(var(--chat-motion-base, 0.36s) * 3.2) ease-in-out infinite;
+}
+.native-chat-send-dots i:nth-child(2) {
+    animation-delay: calc(var(--chat-motion-base, 0.36s) * 0.45);
+}
+.native-chat-send-dots i:nth-child(3) {
+    animation-delay: calc(var(--chat-motion-base, 0.36s) * 0.9);
+}
+.native-chat-workspace:not([data-motion="off"])
+    .native-chat-send-ring[data-indeterminate="true"]
+    > svg:first-child {
+    animation: native-chat-send-orbit calc(var(--chat-motion-base, 0.36s) * 3) linear infinite;
+}
+@keyframes native-chat-send-dot {
+    50% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+@keyframes native-chat-send-orbit {
+    to {
+        transform: rotate(270deg);
+    }
 }
