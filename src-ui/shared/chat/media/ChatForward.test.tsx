@@ -91,6 +91,7 @@ describe('forward record navigation', () => {
             await screen.findByText('旧正文');
             fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
             await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            await screen.findByRole('button', { name: '查看聊天记录' });
             clock.mockReturnValue(now + 5 * 60_000 + 1);
             fireEvent.click(screen.getByRole('button', { name: '查看聊天记录' }));
             await screen.findByText('新正文');

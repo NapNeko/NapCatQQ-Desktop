@@ -68,10 +68,11 @@ describe('chat forwarding dialog', () => {
         const merged = await screen.findByRole('radio', { name: '合并转发' });
         const individual = screen.getByRole('radio', { name: '逐条转发' });
         expect(merged).toBeChecked();
+        await waitFor(() => expect(merged).toHaveFocus());
         await user.click(merged);
         await user.keyboard('{ArrowRight}');
         expect(individual).toBeChecked();
-        expect(individual).toHaveFocus();
+        await waitFor(() => expect(individual).toHaveFocus());
         expect(
             within(screen.getByRole('region', { name: '待转发消息' })).getByText('逐条消息'),
         ).toBeInTheDocument();
