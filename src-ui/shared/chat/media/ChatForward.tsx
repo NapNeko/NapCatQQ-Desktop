@@ -368,6 +368,8 @@ function ForwardDialog({
     const positionReader = useRef<(() => ForwardPosition) | null>(null);
     const frame = frames[frames.length - 1];
     const [image, showImage] = useState('');
+    const openRef = useRef(open);
+    openRef.current = open;
     const view = useChatView();
     const mediaView = useMemo(() => ({ ...view, openImage: showImage }), [view]);
     const summary = useMemo(() => {
@@ -450,7 +452,6 @@ function ForwardDialog({
             onOpenChange={(next) => {
                 if (!next) {
                     showImage('');
-                    setFrames([]);
                 }
                 onOpenChange(next);
             }}
@@ -458,6 +459,9 @@ function ForwardDialog({
             <DialogContent
                 size="sheet"
                 className="native-chat-forward-dialog"
+                onExited={() => {
+                    if (!openRef.current) setFrames([]);
+                }}
                 onEscapeKeyDown={(event) => {
                     if (image) {
                         event.preventDefault();

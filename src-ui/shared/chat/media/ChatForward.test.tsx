@@ -20,6 +20,26 @@ function Records({
     );
 }
 describe('forward record navigation', () => {
+    it('retains the loaded body through the closing animation instead of flashing the loading view', async () => {
+        const read = vi.fn().mockResolvedValue([
+            {
+                senderId: '12',
+                name: '甲',
+                segments: [{ type: 'text', data: { text: '关闭期间保留的正文' } }],
+            },
+        ]);
+        render(<Records read={read} scope="forward-test/exit-retention" />);
+        fireEvent.click(screen.getByRole('button', { name: '查看聊天记录' }));
+        await screen.findByText('关闭期间保留的正文');
+        const body = screen.getByLabelText('转发消息记录');
+        body.scrollTop = 100;
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+        expect(body).toBeInTheDocument();
+        expect(body).toHaveTextContent('关闭期间保留的正文');
+        expect(body).not.toHaveTextContent('正在读取聊天记录');
+        expect(body.scrollTop).toBe(100);
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
     it('deduplicates a changing reader within one account and isolates the next account', async () => {
         const first = vi.fn().mockResolvedValue([
             {
