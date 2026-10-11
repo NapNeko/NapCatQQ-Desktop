@@ -314,26 +314,27 @@ async fn create(
         .on_tray_icon_event(move |tray, event| {
             let app = tray.app_handle().clone();
             match event {
-                TrayIconEvent::Enter { position, .. } => {
+                TrayIconEvent::Enter { position, rect, .. }
+                | TrayIconEvent::Move { position, rect, .. } => {
                     #[cfg(windows)]
-                    crate::chat_tray_panel_native::show(
+                    crate::chat_tray_panel_native::hover(
                         &app,
                         bot.clone(),
                         qq.clone(),
-                        (position.x as i32, position.y as i32),
-                        false,
+                        tray_anchor(&rect, position),
                     );
                 }
-                // 不处理 Leave：光标离开图标去点菜单 / 预览时也会触发；预览的收起由面板自己的
-                // 光标轮询管（图标 + 面板范围外 320ms），菜单失焦才收
+                TrayIconEvent::Leave { .. } => {
+                    #[cfg(windows)]
+                    crate::chat_tray_panel_native::cancel_hover(&app, bot.clone(), qq.clone());
+                }
                 TrayIconEvent::Click {
                     button,
                     button_state: MouseButtonState::Up,
                     position,
+                    rect,
                     ..
                 } => {
-                    #[cfg(windows)]
-                    crate::chat_tray_panel_native::hide(&app);
                     let bot = bot.clone();
                     let qq = qq.clone();
                     tauri::async_runtime::spawn(async move {
@@ -344,13 +345,15 @@ async fn create(
                                     &app,
                                     bot,
                                     qq,
-                                    (position.x as i32, position.y as i32),
+                                    tray_anchor(&rect, position),
                                     true,
                                 );
                                 #[cfg(not(windows))]
                                 let _ = position;
                             }
                             MouseButton::Left => {
+                                #[cfg(windows)]
+                                crate::chat_tray_panel_native::hide(&app);
                                 if let Err(e) =
                                     crate::chat_window::open_from_tray(app, bot, qq, None).await
                                 {
@@ -367,6 +370,22 @@ async fn create(
         .build(app)
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(windows)]
+fn tray_anchor(rect: &tauri::Rect, position: tauri::PhysicalPosition<f64>) -> (i32, i32) {
+    let scale =
+        crate::windows_ui::monitor_dpi_scale_at(position.x as i32, position.y as i32).max(0.25);
+    let origin = rect.position.to_physical::<i32>(scale);
+    let size = rect.size.to_physical::<u32>(scale);
+    if size.width == 0 || size.height == 0 {
+        (position.x as i32, position.y as i32)
+    } else {
+        (
+            origin.x + size.width as i32 / 2,
+            origin.y + size.height as i32 / 2,
+        )
+    }
 }
 
 fn update_window(app: &AppHandle, row: Option<&ChatAccountStatus>) -> Result<(), String> {
@@ -545,6 +564,22 @@ pub fn spawn(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn tray_anchor_is_independent_of_cursor_movement_inside_the_icon() {
+        let rect = tauri::Rect {
+            position: tauri::PhysicalPosition::new(100, 200).into(),
+            size: tauri::PhysicalSize::new(32, 32).into(),
+        };
+        assert_eq!(
+            tray_anchor(&rect, tauri::PhysicalPosition::new(101.0, 202.0)),
+            (116, 216)
+        );
+        assert_eq!(
+            tray_anchor(&rect, tauri::PhysicalPosition::new(130.0, 230.0)),
+            (116, 216)
+        );
+    }
     #[test]
     fn unread_marker_is_red_in_the_lower_right_and_offline_stays_gray() {
         let original = Image::new_owned([120, 70, 20, 255].repeat(32 * 32), 32, 32);

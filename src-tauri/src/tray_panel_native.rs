@@ -686,6 +686,7 @@ fn with_content(f: impl FnOnce(&Rc<TrayPanelNative>)) {
 
 /// 打开面板前读一次 app-settings 的主题和圆角，WebView 版也是展开时从磁盘读的。
 pub(crate) fn sync_ui_preferences(app: &tauri::AppHandle) {
+    let started = std::time::Instant::now();
     let Some(state) = app.try_state::<crate::AppState>() else {
         return;
     };
@@ -695,6 +696,10 @@ pub(crate) fn sync_ui_preferences(app: &tauri::AppHandle) {
         theme: ui.theme,
         radius_style: ui.radius_style,
     });
+    tracing::debug!(
+        elapsed_us = started.elapsed().as_micros(),
+        "native tray preference sync"
+    );
 }
 
 fn deliver_avatar(key: AvatarKey, pixels: Option<Arc<AvatarPixels>>) {
@@ -759,6 +764,10 @@ impl TrayPanelNative {
     /// 先拿上一次的快照（第一次是空快照）立刻显示，免得用户觉得点了没反应；
     /// 数据回来后只重排：面板还开着就按锚点重新摆，已经收起的不会被弹回来。只从主线程调用。
     fn open_at(self: &Rc<Self>, anchor: (i32, i32)) {
+        if let Some(panel) = self.panel().filter(|p| p.is_visible()) {
+            panel.focus();
+            return;
+        }
         sync_ui_preferences(&self.app);
         self.with_view(|v| {
             v.page = 1;
@@ -905,6 +914,10 @@ async fn start_stop(app: &tauri::AppHandle, bot_id: &str, running_now: bool) -> 
 pub struct TrayPanelCell(pub Rc<TrayPanelNative>);
 
 impl PanelContent for TrayPanelCell {
+    fn is_tray_menu(&self) -> bool {
+        true
+    }
+
     fn measure(&mut self, width: f32, _theme: &Theme) -> (f32, f32) {
         let width = if width <= 0.0 { WIDTH } else { width };
         let height = self.0.with_view(|v| v.layout(width)).unwrap_or(137.5);
@@ -935,6 +948,16 @@ impl PanelContent for TrayPanelCell {
 
     fn hover(&mut self, x: f32, y: f32, inside: bool, _theme: &Theme) {
         self.0.with_view(|v| v.hover(x, y, inside));
+    }
+
+    fn update_hover(&mut self, x: f32, y: f32, inside: bool, _theme: &Theme) -> bool {
+        self.0
+            .with_view(|v| {
+                let before = v.hovered;
+                v.hover(x, y, inside);
+                before != v.hovered
+            })
+            .unwrap_or(false)
     }
 
     fn key(&mut self, vk: u16, _theme: &Theme) -> bool {
@@ -1104,7 +1127,7 @@ pub(crate) fn release_if_hidden() -> bool {
     let Some(content) = content() else {
         return true;
     };
-    if content.panel().is_some_and(|p| p.is_visible()) {
+    if content.panel().is_some_and(|p| p.is_shown()) {
         return false;
     }
     if let Some(panel) = content.panel() {

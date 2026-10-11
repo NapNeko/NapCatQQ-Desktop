@@ -24,7 +24,8 @@ use windows::Win32::Graphics::Direct2D::{
     D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_ROUNDED_RECT, D2D1_STROKE_STYLE_PROPERTIES1,
     D2D1_STROKE_TRANSFORM_TYPE_NORMAL, D2D1_SWEEP_DIRECTION_CLOCKWISE,
     D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory1,
-    ID2D1PathGeometry1, ID2D1RenderTarget, ID2D1SolidColorBrush, ID2D1StrokeStyle1,
+    ID2D1HwndRenderTarget, ID2D1PathGeometry1, ID2D1RenderTarget, ID2D1SolidColorBrush,
+    ID2D1StrokeStyle1,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_CONTAINER_TYPE_WOFF2, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_METRICS,
@@ -40,7 +41,7 @@ use windows::core::{HSTRING, Interface, Result, w};
 use windows_numerics::{Matrix3x2, Vector2};
 
 use super::icons::{self, Icon};
-use super::sys::{ClipGuard, DrawGuard, TransformGuard};
+use super::sys::{ClipGuard, DrawGuard, OpacityGuard, TransformGuard};
 use super::theme::Rgba;
 
 const INTER: &[u8] = include_bytes!("../../assets/fonts/inter-latin-wght-normal.woff2");
@@ -498,6 +499,8 @@ pub struct Canvas {
     shared: std::rc::Rc<Shared>,
     brush: ID2D1SolidColorBrush,
     bitmaps: RefCell<BitmapCache>,
+    #[cfg(test)]
+    resize_calls: u32,
     pub scale: f32,
 }
 
@@ -514,6 +517,8 @@ impl Canvas {
             shared,
             brush,
             bitmaps: RefCell::new(HashMap::new()),
+            #[cfg(test)]
+            resize_calls: 0,
             scale,
         })
     }
@@ -523,10 +528,40 @@ impl Canvas {
         DrawGuard::begin(&self.rt)
     }
 
+    pub fn translate(&self, x: f32, y: f32) -> TransformGuard<'_> {
+        TransformGuard::concat(
+            &self.rt,
+            &Matrix3x2 {
+                M11: 1.0,
+                M22: 1.0,
+                M31: x,
+                M32: y,
+                ..Default::default()
+            },
+        )
+    }
+
     pub fn set_scale(&mut self, scale: f32) {
         self.scale = scale;
         // SAFETY: 设置渲染目标 DPI，不涉及外部内存。
         unsafe { self.rt.SetDpi(96.0 * scale, 96.0 * scale) };
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) -> bool {
+        #[cfg(test)]
+        {
+            self.resize_calls += 1;
+        }
+        let Ok(target) = self.rt.cast::<ID2D1HwndRenderTarget>() else {
+            return false;
+        };
+        // SAFETY: 渲染目标属于当前 HWND；尺寸按当前客户区给，设备丢失由调用方重建。
+        unsafe { target.Resize(&D2D_SIZE_U { width, height }) }.is_ok()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn target_diagnostics(&self) -> (usize, u32) {
+        (self.rt.as_raw() as usize, self.resize_calls)
     }
 
     /// 坐标按设备像素取整，画 1px 线和贴边的块时用
@@ -670,7 +705,7 @@ impl Canvas {
             M31: offset.0,
             M32: offset.1,
         };
-        let _transform = TransformGuard::set(&self.rt, &transform);
+        let _transform = TransformGuard::concat(&self.rt, &transform);
         // SAFETY: 几何、画刷和描边样式都是本线程持有的活 COM 引用。
         unsafe {
             self.rt
@@ -768,7 +803,7 @@ impl Canvas {
             M31: x,
             M32: y,
         };
-        let _transform = TransformGuard::set(&self.rt, &transform);
+        let _transform = TransformGuard::concat(&self.rt, &transform);
         let brush = self.paint(c);
         // SAFETY: D2D 绘制调用，几何、画刷、描边样式都是活着的 COM 引用。
         unsafe {
@@ -807,7 +842,7 @@ impl Canvas {
             M31: cx - (12.0 * k * cos - 12.0 * k * s),
             M32: cy - (12.0 * k * s + 12.0 * k * cos),
         };
-        let _transform = TransformGuard::set(&self.rt, &m);
+        let _transform = TransformGuard::concat(&self.rt, &m);
         // SAFETY: D2D 绘制调用，几何、画刷、描边样式都是活着的 COM 引用。
         unsafe {
             self.rt
@@ -952,6 +987,10 @@ impl Canvas {
     /// 裁到 `r`，返回的守卫离开作用域时弹出。
     pub fn clip(&self, r: Rect) -> ClipGuard<'_> {
         ClipGuard::push(&self.rt, self.snap_rect(r).d2d())
+    }
+
+    pub fn opacity(&self, bounds: Rect, opacity: f32) -> OpacityGuard<'_> {
+        OpacityGuard::push(&self.rt, bounds.d2d(), opacity)
     }
 }
 
