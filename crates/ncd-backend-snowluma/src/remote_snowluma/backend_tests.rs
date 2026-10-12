@@ -111,6 +111,16 @@ async fn replacing_remote_poller_uses_new_endpoint_and_credentials() {
         next_state(&mut sub, &bot).await,
         SnowLumaLoginState::WaitingForQrScan
     );
+    let qr_client = backend
+        .login_clients
+        .lock()
+        .await
+        .get(&bot)
+        .cloned()
+        .expect("replacement provides the QR gate client");
+    let processes = qr_client.list_processes().await.unwrap();
+    assert_eq!(processes.len(), 1);
+    assert_eq!(processes[0].pid, 20);
     let old_requests = old_server.received_requests().await.unwrap().len();
     tokio::time::sleep(Duration::from_millis(2100)).await;
     assert_eq!(
@@ -140,6 +150,14 @@ async fn detach_remote_pollers_clears_both_bots_and_allows_same_state_on_reconne
         SnowLumaLoginState::LoggedIn
     );
 
+    let qr_a = Arc::new(QrActivity::new());
+    let qr_b = Arc::new(QrActivity::new());
+    {
+        let mut activities = backend.qr_activity.lock().await;
+        activities.insert(bot_a.clone(), Arc::clone(&qr_a));
+        activities.insert(bot_b.clone(), Arc::clone(&qr_b));
+    }
+
     backend.detach_login_pollers().await;
     let mut unavailable = std::collections::HashSet::new();
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -154,6 +172,9 @@ async fn detach_remote_pollers_clears_both_bots_and_allows_same_state_on_reconne
     assert!(unavailable.contains(&bot_a));
     assert!(unavailable.contains(&bot_b));
     assert!(backend.pollers.lock().await.is_empty());
+    assert!(backend.login_clients.lock().await.is_empty());
+    assert!(qr_a.cancel.is_cancelled());
+    assert!(qr_b.cancel.is_cancelled());
 
     let (_new_server, new_deps) = deps(Arc::clone(&bus), "10001", 10, "online", "second").await;
     backend.replace_poller(bot_a.clone(), 10, new_deps).await;
@@ -161,5 +182,39 @@ async fn detach_remote_pollers_clears_both_bots_and_allows_same_state_on_reconne
         next_state(&mut sub, &bot_a).await,
         SnowLumaLoginState::LoggedIn
     );
+    backend.detach_login_pollers().await;
+}
+
+#[tokio::test]
+async fn disposing_poller_invalidates_only_its_qr_client_and_activity() {
+    let bus = Arc::new(BroadcastEventBus::default());
+    let backend = backend(Arc::clone(&bus));
+    let bot_a = BotId::new("10001");
+    let bot_b = BotId::new("10002");
+    let (_server_a, deps_a) = deps(Arc::clone(&bus), "10001", 10, "loaded", "first").await;
+    let (_server_b, deps_b) = deps(Arc::clone(&bus), "10002", 20, "loaded", "second").await;
+    backend.replace_poller(bot_a.clone(), 10, deps_a).await;
+    backend.replace_poller(bot_b.clone(), 20, deps_b).await;
+    let qr_a = Arc::new(QrActivity::new());
+    let qr_b = Arc::new(QrActivity::new());
+    {
+        let mut activities = backend.qr_activity.lock().await;
+        activities.insert(bot_a.clone(), Arc::clone(&qr_a));
+        activities.insert(bot_b.clone(), Arc::clone(&qr_b));
+    }
+
+    backend.dispose_poller(&bot_a).await;
+    assert!(qr_a.cancel.is_cancelled());
+    assert!(!qr_b.cancel.is_cancelled());
+    {
+        let clients = backend.login_clients.lock().await;
+        assert!(!clients.contains_key(&bot_a));
+        assert!(clients.contains_key(&bot_b));
+    }
+    {
+        let pollers = backend.pollers.lock().await;
+        assert!(!pollers.contains_key(&bot_a));
+        assert!(pollers.contains_key(&bot_b));
+    }
     backend.detach_login_pollers().await;
 }

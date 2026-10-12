@@ -789,6 +789,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     async fn detach_remote_snowluma_sessions(&self, server_id: &str) {
+        self.docker_sessions.detach_snowluma_server(server_id).await;
         let backend = {
             let backends = self.remote_snowluma_backends.lock().await;
             backends.get(server_id).cloned()

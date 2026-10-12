@@ -15,7 +15,7 @@ use ncd_deploy::{
     DockerDeployment, NapcatLogNoiseFilter, parse_napcat_webui_line, resolve_bot_container_name,
 };
 use ncd_domain::docker::DockerDeploySpec;
-use ncd_domain::{BackendType, BotConfig, DeploymentType};
+use ncd_domain::{BackendType, BotConfig, DeploymentType, RuntimeScenario};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError, StreamSource};
 use tokio::sync::Mutex;
@@ -171,6 +171,8 @@ struct SessionInner {
 }
 
 pub struct DockerBotSession {
+    server_id: String,
+    backend: BackendType,
     inner: Mutex<SessionInner>,
 }
 
@@ -182,6 +184,9 @@ impl DockerBotSession {
     pub async fn shutdown(&self) {
         let mut inner = self.inner.lock().await;
         inner.stop_expected.store(true, Ordering::SeqCst);
+        inner.qr_generation = inner.qr_generation.wrapping_add(1);
+        inner.qr_login_detected = false;
+        inner.qr_refresh_pending = false;
         if let Some(p) = inner.snowluma_poller.take() {
             p.dispose();
         }
@@ -302,6 +307,23 @@ impl DockerBotSessionRegistry {
         }
     }
 
+    pub async fn detach_snowluma_server(&self, server_id: &str) {
+        let sessions: Vec<_> = self
+            .sessions
+            .lock()
+            .await
+            .values()
+            .filter(|session| {
+                session.server_id == server_id && session.backend == BackendType::SnowLuma
+            })
+            .cloned()
+            .collect();
+        for session in sessions {
+            // 只释放桌面端持有的资源；容器由原启动进程继续运行。
+            session.shutdown().await;
+        }
+    }
+
     pub async fn shutdown_all(&self) {
         let mut guard = self.sessions.lock().await;
         for (_, s) in guard.drain() {
@@ -326,6 +348,11 @@ impl DockerBotSessionRegistry {
         if config.bot.runtime_target.is_local() {
             return;
         }
+        let Ok(RuntimeScenario::RemoteDocker { server_id, .. }) =
+            RuntimeScenario::from_config(&config)
+        else {
+            return;
+        };
 
         self.shutdown_bot(&bot_id).await;
 
@@ -517,6 +544,8 @@ impl DockerBotSessionRegistry {
         });
 
         let session = Arc::new(DockerBotSession {
+            server_id,
+            backend: config.bot.backend_type,
             inner: Mutex::new(SessionInner {
                 tunnels,
                 log_task: Some(log_task),
