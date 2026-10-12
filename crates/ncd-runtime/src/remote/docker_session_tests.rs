@@ -90,3 +90,70 @@ async fn auth_subscription_delivers_rejection_and_recovery_for_its_bot() {
     bus.publish(DomainEvent::napcat_webui_auth_changed("10001", None));
     assert_eq!(wait_auth_issue(Some(&mut sub)).await, None);
 }
+
+#[tokio::test]
+async fn closing_scan_invalidates_late_generation_and_session_shutdown_removes_client() {
+    let registry = DockerBotSessionRegistry::new();
+    let bot_id = BotId::new("10001");
+    let client: Arc<dyn SnowLumaWebUiClient> =
+        Arc::new(ReqwestSnowLumaWebUiClient::new(9, String::new()).expect("client construction"));
+    registry.sessions.lock().await.insert(
+        bot_id.clone(),
+        Arc::new(DockerBotSession {
+            inner: Mutex::new(SessionInner {
+                tunnels: Vec::new(),
+                log_task: None,
+                watch_task: None,
+                snowluma: None,
+                snowluma_poller: None,
+                snowluma_client: Some(Arc::clone(&client)),
+                qr_generation: 0,
+                qr_login_detected: false,
+                qr_refresh_pending: false,
+                stop_expected: Arc::new(AtomicBool::new(false)),
+            }),
+        }),
+    );
+    let (_, generation, _) = registry
+        .snowluma_client(&bot_id)
+        .await
+        .expect("active session");
+    registry.request_qr_refresh(&bot_id).await;
+    assert_eq!(
+        registry.take_qr_refresh(&bot_id, generation, &client).await,
+        Some(true)
+    );
+    assert_eq!(
+        registry.take_qr_refresh(&bot_id, generation, &client).await,
+        Some(false)
+    );
+    registry.cancel_qr_login(&bot_id).await;
+    registry
+        .mark_qr_login_detected(&bot_id, generation, &client)
+        .await;
+    let (_, current, detected) = registry
+        .snowluma_client(&bot_id)
+        .await
+        .expect("active session");
+    assert_ne!(generation, current);
+    assert!(
+        !detected,
+        "late prior-session status cannot update the current scan"
+    );
+    assert_eq!(
+        registry.take_qr_refresh(&bot_id, generation, &client).await,
+        None
+    );
+    registry
+        .mark_qr_login_detected(&bot_id, current, &client)
+        .await;
+    assert!(
+        registry
+            .snowluma_client(&bot_id)
+            .await
+            .expect("active session")
+            .2
+    );
+    registry.shutdown_bot(&bot_id).await;
+    assert!(registry.snowluma_client(&bot_id).await.is_none());
+}

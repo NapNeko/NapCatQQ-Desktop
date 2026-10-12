@@ -100,6 +100,8 @@ mod tests {
         let cfg = SnowLumaAppConfig {
             webui_port: 5200,
             webui_password_override: "  manual  ".into(),
+            remote_qr_login_enabled: false,
+            local_qr_login_enabled: false,
         };
         write(
             &paths.snowluma_data_dir().join("app-config.json"),

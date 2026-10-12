@@ -163,6 +163,10 @@ struct SessionInner {
     watch_task: Option<JoinHandle<()>>,
     snowluma: Option<SnowLumaDockerEndpoints>,
     snowluma_poller: Option<SnowLumaStatusPoller>,
+    snowluma_client: Option<Arc<dyn SnowLumaWebUiClient>>,
+    qr_generation: u64,
+    qr_login_detected: bool,
+    qr_refresh_pending: bool,
     stop_expected: Arc<AtomicBool>,
 }
 
@@ -189,6 +193,7 @@ impl DockerBotSession {
         }
         inner.tunnels.clear();
         inner.snowluma = None;
+        inner.snowluma_client = None;
     }
 }
 
@@ -223,6 +228,72 @@ impl DockerBotSessionRegistry {
         let guard = self.sessions.lock().await;
         let s = guard.get(bot_id)?;
         s.snowluma_endpoints_async().await
+    }
+
+    pub async fn snowluma_client(
+        &self,
+        bot_id: &BotId,
+    ) -> Option<(Arc<dyn SnowLumaWebUiClient>, u64, bool)> {
+        let session = self.sessions.lock().await.get(bot_id).cloned()?;
+        let inner = session.inner.lock().await;
+        Some((
+            inner.snowluma_client.clone()?,
+            inner.qr_generation,
+            inner.qr_login_detected,
+        ))
+    }
+
+    pub async fn mark_qr_login_detected(
+        &self,
+        bot_id: &BotId,
+        generation: u64,
+        client: &Arc<dyn SnowLumaWebUiClient>,
+    ) {
+        if let Some(session) = self.sessions.lock().await.get(bot_id).cloned() {
+            let mut inner = session.inner.lock().await;
+            if inner.qr_generation == generation
+                && inner
+                    .snowluma_client
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, client))
+            {
+                inner.qr_login_detected = true;
+            }
+        }
+    }
+
+    pub async fn cancel_qr_login(&self, bot_id: &BotId) {
+        if let Some(session) = self.sessions.lock().await.get(bot_id).cloned() {
+            let mut inner = session.inner.lock().await;
+            inner.qr_generation = inner.qr_generation.wrapping_add(1);
+            inner.qr_login_detected = false;
+            inner.qr_refresh_pending = false;
+        }
+    }
+
+    pub async fn request_qr_refresh(&self, bot_id: &BotId) {
+        if let Some(session) = self.sessions.lock().await.get(bot_id).cloned() {
+            session.inner.lock().await.qr_refresh_pending = true;
+        }
+    }
+
+    pub async fn take_qr_refresh(
+        &self,
+        bot_id: &BotId,
+        generation: u64,
+        client: &Arc<dyn SnowLumaWebUiClient>,
+    ) -> Option<bool> {
+        let session = self.sessions.lock().await.get(bot_id).cloned()?;
+        let mut inner = session.inner.lock().await;
+        if inner.qr_generation != generation
+            || !inner
+                .snowluma_client
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(current, client))
+        {
+            return None;
+        }
+        Some(std::mem::take(&mut inner.qr_refresh_pending))
     }
 
     pub async fn shutdown_bot(&self, bot_id: &BotId) {
@@ -452,6 +523,10 @@ impl DockerBotSessionRegistry {
                 watch_task: Some(watch_task),
                 snowluma: snowluma_eps,
                 snowluma_poller: None,
+                snowluma_client: None,
+                qr_generation: 0,
+                qr_login_detected: false,
+                qr_refresh_pending: false,
                 stop_expected,
             }),
         });
@@ -465,13 +540,14 @@ impl DockerBotSessionRegistry {
                 let bot_id_log = bot_id_init.clone();
                 match build_and_spawn_snowluma_poller(bot_id_init, port, pwd, qq_id, bus_init).await
                 {
-                    Ok(poller) => {
+                    Ok((poller, client)) => {
                         let mut inner = session_for_init.inner.lock().await;
                         if inner.stop_expected.load(Ordering::SeqCst) {
                             // init 期间 session 已 shutdown(容器挂/用户停),直接 dispose 防泄漏
                             poller.dispose();
                         } else {
                             inner.snowluma_poller = Some(poller);
+                            inner.snowluma_client = Some(client);
                         }
                     }
                     Err(e) => warn!(
@@ -505,7 +581,7 @@ async fn build_and_spawn_snowluma_poller(
     webui_password: String,
     qq_id: u64,
     event_bus: Arc<BroadcastEventBus>,
-) -> Result<SnowLumaStatusPoller, String> {
+) -> Result<(SnowLumaStatusPoller, Arc<dyn SnowLumaWebUiClient>), String> {
     let client =
         ReqwestSnowLumaWebUiClient::new(webui_port, webui_password).map_err(|e| e.to_string())?;
     client
@@ -513,13 +589,14 @@ async fn build_and_spawn_snowluma_poller(
         .await
         .map_err(|e| e.to_string())?;
     client.login().await.map_err(|e| e.to_string())?;
+    let client: Arc<dyn SnowLumaWebUiClient> = Arc::new(client);
     let deps = PollerDeps {
         event_bus,
-        http: Arc::new(client),
+        http: Arc::clone(&client),
         proc_tree: Arc::new(LinuxSinglePidProbe::new(0)),
         expected_uin: Some(qq_id.to_string()),
     };
-    Ok(SnowLumaStatusPoller::spawn(bot_id, 0, deps))
+    Ok((SnowLumaStatusPoller::spawn(bot_id, 0, deps), client))
 }
 
 pub use ncd_domain::bot_config::{is_remote_docker_config, is_remote_native_napcat_config};

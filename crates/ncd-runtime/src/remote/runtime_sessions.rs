@@ -281,6 +281,32 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
         self.docker_sessions.snowluma_endpoints(bot_id).await
     }
 
+    pub async fn snowluma_docker_client(
+        &self,
+        bot_id: &BotId,
+    ) -> Option<(
+        Arc<dyn ncd_backend_snowluma::SnowLumaWebUiClient>,
+        u64,
+        bool,
+    )> {
+        self.docker_sessions.snowluma_client(bot_id).await
+    }
+
+    pub async fn cancel_docker_qr_login(&self, bot_id: &BotId) {
+        self.docker_sessions.cancel_qr_login(bot_id).await;
+    }
+
+    pub async fn mark_docker_qr_login_detected(
+        &self,
+        bot_id: &BotId,
+        generation: u64,
+        client: &Arc<dyn ncd_backend_snowluma::SnowLumaWebUiClient>,
+    ) {
+        self.docker_sessions
+            .mark_qr_login_detected(bot_id, generation, client)
+            .await;
+    }
+
     async fn resolve_remote_host(&self, bot_id: &BotId, server_id: &str) -> Option<Arc<dyn Host>> {
         let resolver = match self.host_resolver.as_ref() {
             Some(resolver) => resolver,

@@ -42,6 +42,7 @@ static NOOP_SHELL: NoopShell = NoopShell;
 #[derive(Clone)]
 struct RecordedWrite {
     path: String,
+    text: String,
 }
 
 struct DockerRuntimeMockHost {
@@ -49,6 +50,7 @@ struct DockerRuntimeMockHost {
     commands: Mutex<Vec<HostCommand>>,
     writes: Mutex<Vec<RecordedWrite>>,
     created_dirs: Mutex<Vec<String>>,
+    fail_login_overlay: bool,
 }
 
 impl DockerRuntimeMockHost {
@@ -58,6 +60,7 @@ impl DockerRuntimeMockHost {
             commands: Mutex::new(Vec::new()),
             writes: Mutex::new(Vec::new()),
             created_dirs: Mutex::new(Vec::new()),
+            fail_login_overlay: false,
         }
     }
 
@@ -107,10 +110,19 @@ impl Host for DockerRuntimeMockHost {
     }
 
     async fn write_file(&self, path: &HostPath, bytes: &[u8]) -> Result<(), HostError> {
-        let _ = bytes;
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        let fail_overlay = self.fail_login_overlay
+            && path.as_posix().ends_with("/docker-compose.yml")
+            && text.contains("/ncd-login-assist");
         self.writes.lock().unwrap().push(RecordedWrite {
             path: path.as_posix().to_string(),
+            text,
         });
+        if fail_overlay {
+            return Err(HostError::Unsupported {
+                operation: "mock overlay write failure",
+            });
+        }
         Ok(())
     }
 
@@ -134,8 +146,13 @@ impl Host for DockerRuntimeMockHost {
         Ok(())
     }
 
-    async fn exists(&self, _: &HostPath) -> Result<bool, HostError> {
-        Ok(false)
+    async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
+        Ok(self
+            .created_dirs
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|dir| dir == path.as_posix()))
     }
 
     async fn upload(&self, _: &Path, _: &HostPath) -> Result<(), HostError> {
@@ -168,8 +185,18 @@ impl Host for DockerRuntimeMockHost {
             return Ok(command_output(0, "", ""));
         }
         match cmd.args.first().map(String::as_str) {
+            Some("version" | "info") => Ok(command_output(0, "27.3.1\n", "")),
             Some("ps") => Ok(command_output(0, self.ps_json.clone(), "")),
             Some("logs") => Ok(command_output(0, "legacy-line-a\nlegacy-line-b\n", "")),
+            Some("run") if self.fail_login_overlay && cmd.args.iter().any(|arg| arg == "--probe") => {
+                Ok(command_output(0, r#"{"available":true}"#, ""))
+            }
+            Some("run") if self.fail_login_overlay => Ok(command_output(0, json!({
+                "arch": "x64",
+                "qq_exe": "/opt/QQ/qq",
+                "supervisor": "[program:qq]\ncommand=qq --no-sandbox\nuser=snowluma\n[program:snowluma]\ncommand=node /app/runtime/index.mjs\n",
+                "uid_remap": true, "uid": 1001, "gid": 1001,
+            }).to_string(), "")),
             _ => Ok(command_output(0, "", "")),
         }
     }
@@ -362,6 +389,132 @@ async fn docker_tail_log_falls_back_to_flavor_name_when_container_is_absent() {
         logs_cmd.args.last().map(String::as_str),
         Some("ncbot-10001")
     );
+}
+
+#[tokio::test]
+async fn docker_login_start_never_recreates_active_containers() {
+    for state in ["running", "paused", "restarting"] {
+        let host = Arc::new(DockerRuntimeMockHost::new(format!(
+            r#"{{"ID":"abc123","Names":"slbot-10001","Image":"motricseven7/snowluma:latest","State":"{state}","Status":"active","Ports":""}}"#,
+        )));
+        let backend = DockerDeploymentBackend::new(
+            Arc::new(DockerDeployment::with_sl_secrets("test-vnc", "test-webui")),
+            host.clone(),
+            BotId::new("docker"),
+            BotFlavor::SnowLuma,
+        )
+        .with_snowluma_qr_login(true);
+        let config = docker_config(BackendType::SnowLuma);
+        let ctx = BotStartCtx {
+            config: BotRuntimeConfig::default_path("/data", "10001").with_bot_config(&config),
+            bot_config: Some(config),
+        };
+        let result = backend.start(&ctx).await;
+        assert_eq!(result.is_ok(), state == "running");
+        assert!(host.writes().is_empty());
+        assert!(host.created_dirs().is_empty());
+        assert!(host.commands().iter().all(|cmd| {
+            cmd.program == "docker"
+                && matches!(
+                    cmd.args.first().map(String::as_str),
+                    Some("version" | "info" | "compose" | "ps")
+                )
+        }));
+        assert!(!host.commands().iter().any(|cmd| {
+            cmd.args
+                .iter()
+                .any(|arg| matches!(arg.as_str(), "run" | "up" | "rm" | "pull"))
+        }));
+    }
+}
+
+#[tokio::test]
+async fn docker_login_snapshot_waits_for_the_shared_lifecycle_lock() {
+    let host = Arc::new(DockerRuntimeMockHost::new(""));
+    let lock = Arc::new(tokio::sync::Mutex::new(()));
+    let guard = lock.lock().await;
+    let backend = Arc::new(
+        DockerDeploymentBackend::new(
+            Arc::new(DockerDeployment::new()),
+            host.clone(),
+            "docker",
+            BotFlavor::SnowLuma,
+        )
+        .with_snowluma_qr_login(true)
+        .with_qr_login_lock(lock.clone()),
+    );
+    let pending =
+        tokio::spawn(async move { backend.qr_login_snapshot(&BotId::new("10001"), false).await });
+    tokio::task::yield_now().await;
+    assert!(host.commands().is_empty());
+    assert!(!pending.is_finished());
+    drop(guard);
+    assert!(pending.await.unwrap().unwrap().qrcode_payload.is_none());
+    assert!(
+        host.commands()
+            .iter()
+            .any(|command| command.program == "sh")
+    );
+}
+
+#[tokio::test]
+async fn docker_login_prepare_or_overlay_failure_still_launches_with_vnc() {
+    for fail_login_overlay in [false, true] {
+        let mut mock = DockerRuntimeMockHost::new("");
+        mock.fail_login_overlay = fail_login_overlay;
+        let host = Arc::new(mock);
+        let backend = DockerDeploymentBackend::new(
+            Arc::new(DockerDeployment::with_sl_secrets("test-vnc", "test-webui")),
+            host.clone(),
+            "docker",
+            BotFlavor::SnowLuma,
+        )
+        .with_snowluma_qr_login(true);
+        let config = docker_config(BackendType::SnowLuma);
+        let result = backend
+            .start(&BotStartCtx {
+                config: BotRuntimeConfig::default_path("/data", "10001").with_bot_config(&config),
+                bot_config: Some(config),
+            })
+            .await;
+        assert!(result.is_ok());
+        let writes = host.writes();
+        let compose = writes
+            .iter()
+            .filter(|write| write.path.ends_with("/docker-compose.yml"))
+            .collect::<Vec<_>>();
+        assert_eq!(compose.len(), if fail_login_overlay { 3 } else { 1 });
+        assert!(!compose.last().unwrap().text.contains("/ncd-login-assist"));
+        assert!(compose.last().unwrap().text.contains("VNC_PASSWD"));
+        assert!(
+            host.commands()
+                .iter()
+                .any(|command| command.program == "docker"
+                    && command.args.starts_with(&["compose".into(), "up".into()]))
+        );
+        if fail_login_overlay {
+            assert!(compose[1].text.contains("/ncd-login-assist"));
+            assert!(host.commands().iter().any(|command| {
+                command.program == "docker"
+                    && command.args.first().map(String::as_str) == Some("run")
+                    && command.args.iter().any(|arg| arg == "/usr/bin/python3")
+                    && command.args.iter().any(|arg| arg == "--probe")
+            }));
+            assert!(host.commands().iter().any(|command| {
+                command.program == "chown"
+                    && command.args.iter().any(|arg| arg == "1000:1000")
+                    && command.args.iter().any(|arg| arg.ends_with("/ncd-login/assets"))
+            }));
+            assert!(host.commands().iter().any(|command| {
+                command.program == "rm"
+                    && command.args.first().map(String::as_str) == Some("-f")
+                    && command
+                        .args
+                        .iter()
+                        .any(|arg| arg.ends_with("/libentry-overlay.so"))
+            }));
+        }
+    }
 }
 
 #[test]
