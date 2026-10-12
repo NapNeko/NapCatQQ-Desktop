@@ -4,13 +4,14 @@
 
 ## 使用 Desktop
 
-| 目标                                        | 文档                                    |
-| :------------------------------------------ | :-------------------------------------- |
-| 首次安装、创建 Bot、备份与常见问题          | [用户指南](user/README.md)              |
-| 安装应用端、导入项目与对接 Bot              | [应用端实例](user/app-instances.md)     |
-| 聊天、媒体、群文件、截图与账号托盘          | [聊天与截图](user/chat.md)              |
-| 添加 SSH 主机、原生 / Docker 部署与远端排错 | [远端 Linux 管理](user/remote-linux.md) |
-| Desktop 退出后的监控与通知                  | [ncd-watch 远端值守](user/ncd-watch.md) |
+| 目标                                        | 文档                                             |
+| :------------------------------------------ | :----------------------------------------------- |
+| 首次安装、创建 Bot、备份与常见问题          | [用户指南](user/README.md)                       |
+| 安装应用端、导入项目与对接 Bot              | [应用端实例](user/app-instances.md)              |
+| 聊天、媒体、群文件、截图与账号托盘          | [聊天与截图](user/chat.md)                       |
+| 添加 SSH 主机、原生 / Docker 部署与远端排错 | [远端 Linux 管理](user/remote-linux.md)          |
+| Desktop 退出后的监控与通知                  | [ncd-watch 远端值守](user/ncd-watch.md)          |
+| SnowLuma 扫码登录                           | [简化扫码登录](user/snowluma-remote-qr-login.md) |
 
 ## 参与开发
 

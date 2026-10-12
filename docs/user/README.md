@@ -32,7 +32,7 @@ NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 桌面控制台。可以管�
 
 先在「远端」页添加 SSH 主机并测试连接，再在「组件」页选中这台主机准备环境。新建 Bot 时选择对应远端主机，可选原生或 Docker 部署。
 
-环境准备、登录与排错见 [远端 Linux 管理](remote-linux.md)。
+环境准备、登录与排错见 [远端 Linux 管理](remote-linux.md)。SnowLuma 的扫码入口、环境要求与回退方式见 [简化扫码登录](snowluma-remote-qr-login.md)。
 
 ## 按任务找入口
 
