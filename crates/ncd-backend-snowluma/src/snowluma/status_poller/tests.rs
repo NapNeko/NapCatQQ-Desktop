@@ -220,6 +220,9 @@ fn proc(pid: u32, uin: &str, status: HookProcessStatus) -> HookProcessInfo {
         path: "C:/qq".into(),
         uin: uin.into(),
         status,
+        logged_in: None,
+        connected: None,
+        injected: None,
         error: String::new(),
     }
 }

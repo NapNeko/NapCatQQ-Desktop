@@ -14,6 +14,10 @@ pub mod runtime_backend;
 pub mod session;
 pub mod status_poller;
 pub mod webui_client;
+#[cfg(windows)]
+mod windows_qr_capture;
+#[cfg(windows)]
+mod windows_qr_login;
 
 // ---- error.rs ----
 pub use error::{SnowLumaDaemonError, SnowLumaWebUiError};

@@ -4,4 +4,4 @@ import type { HookProcessStatus } from "./HookProcessStatus";
 /**
  * SnowLuma WebUI /api/processes 单条记录
  */
-export type HookProcessInfo = { pid: number, name: string, path: string, uin: string, status: HookProcessStatus, error: string, };
+export type HookProcessInfo = { pid: number, name: string, path: string, uin: string, status: HookProcessStatus, loggedIn?: boolean, connected?: boolean, injected?: boolean, error: string, };

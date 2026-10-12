@@ -3309,6 +3309,7 @@ dependencies = [
  "bytes",
  "chrono",
  "hex",
+ "image",
  "keyring",
  "ncd-component",
  "ncd-deploy",
@@ -3332,6 +3333,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "ts-rs",
+ "windows 0.61.3",
  "wiremock",
 ]
 

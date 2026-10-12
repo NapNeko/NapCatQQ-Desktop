@@ -26,6 +26,15 @@ pub struct HookProcessInfo {
     pub path: String,
     pub uin: String,
     pub status: HookProcessStatus,
+    #[serde(default, rename = "loggedIn", skip_serializing_if = "Option::is_none")]
+    #[ts(rename = "loggedIn", optional)]
+    pub logged_in: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub connected: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub injected: Option<bool>,
     #[serde(default)]
     pub error: String,
 }
@@ -126,4 +135,32 @@ pub struct RecordConsentResponse {
     pub message: String,
     #[serde(default, rename = "currentVersion")]
     pub current_version: Option<String>,
+}
+
+#[cfg(test)]
+mod login_state_tests {
+    use super::HookProcessInfo;
+
+    #[test]
+    fn absent_login_state_remains_unknown() {
+        let process: HookProcessInfo = serde_json::from_str(
+            r#"{"pid":1,"name":"QQ.exe","path":"QQ.exe","uin":"","status":"loaded"}"#,
+        )
+        .expect("legacy process payload");
+        assert_eq!(process.logged_in, None);
+        assert_eq!(process.connected, None);
+        assert_eq!(process.injected, None);
+        assert!(serde_json::to_value(&process).expect("legacy serialization").get("loggedIn").is_none());
+    }
+
+    #[test]
+    fn explicit_logged_out_state_is_preserved() {
+        let process: HookProcessInfo = serde_json::from_str(
+            r#"{"pid":1,"name":"QQ.exe","path":"QQ.exe","uin":"","status":"loaded","loggedIn":false,"connected":true,"injected":true}"#,
+        )
+        .expect("current process payload");
+        assert_eq!(process.logged_in, Some(false));
+        assert_eq!(process.connected, Some(true));
+        assert_eq!(process.injected, Some(true));
+    }
 }
