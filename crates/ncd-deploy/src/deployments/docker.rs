@@ -28,8 +28,8 @@ use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
 };
 use crate::docker::{
-    DockerCli, DockerMetricsOverlay,
-    compose::{render_compose_with_metrics, render_snowluma_compose_with_metrics},
+    DockerCli, DockerLoginOverlay, DockerMetricsOverlay,
+    compose::{render_compose_with_metrics, render_snowluma_compose_with_overlays},
 };
 
 /// Docker 部署实装
@@ -44,6 +44,7 @@ pub struct DockerDeployment {
     allow_test_default_token: bool,
     /// 可选实例指标:compose 注入 NCD_METRICS_* + bind 卷
     metrics_overlay: Option<DockerMetricsOverlay>,
+    login_overlay: Option<DockerLoginOverlay>,
 }
 
 impl DockerDeployment {
@@ -55,6 +56,7 @@ impl DockerDeployment {
             sl_webui_bootstrap: None,
             allow_test_default_token: false,
             metrics_overlay: None,
+            login_overlay: None,
         }
     }
 
@@ -89,6 +91,11 @@ impl DockerDeployment {
     /// 附加实例指标 compose overlay(None = 关,与现网 compose 一致)
     pub fn with_metrics_overlay(mut self, overlay: Option<DockerMetricsOverlay>) -> Self {
         self.metrics_overlay = overlay;
+        self
+    }
+
+    pub fn with_login_overlay(mut self, overlay: Option<DockerLoginOverlay>) -> Self {
+        self.login_overlay = overlay;
         self
     }
 
@@ -153,6 +160,10 @@ impl DockerDeployment {
             spec.qq_id = Some(qq);
         }
         spec
+    }
+
+    pub fn container_uid_gid(host: &dyn Host) -> (u32, u32) {
+        default_uid_gid(host)
     }
 }
 
@@ -293,16 +304,17 @@ impl Deployment for DockerDeployment {
             .await
             .map_err(|e| DeploymentError::InstallFailed(format!("写 Docker .env 失败: {e}")))?;
 
-        let (uid, gid) = default_uid_gid(host);
+        let (uid, gid) = Self::container_uid_gid(host);
         let metrics = self.metrics_overlay.as_ref();
         let yaml = if backend == BackendType::SnowLuma {
-            render_snowluma_compose_with_metrics(
+            render_snowluma_compose_with_overlays(
                 &spec,
                 "VNC_PASSWD",
                 "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
                 uid,
                 gid,
                 metrics,
+                self.login_overlay.as_ref(),
             )
         } else {
             render_compose_with_metrics(&spec, env_var, uid, gid, metrics)

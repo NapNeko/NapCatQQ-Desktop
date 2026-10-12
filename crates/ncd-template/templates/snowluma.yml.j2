@@ -28,6 +28,10 @@ services:
       - {{ name }}-qq-data:/app/.local/share
 {% if metrics %}      - {{ metrics.metrics_volume }}
 {% endif %}
+{% if login %}      - {{ login.assets_volume|tojson }}
+      - {{ login.launcher_volume|tojson }}
+      - {{ login.supervisor_volume|tojson }}
+{% endif %}
 volumes:
   {{ name }}-data:
   {{ name }}-qq-config:

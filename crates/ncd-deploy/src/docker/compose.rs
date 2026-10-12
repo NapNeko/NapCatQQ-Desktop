@@ -28,6 +28,14 @@ pub const DOCKER_NAPCAT_LOAD_CONTAINER_PATH: &str = "/opt/QQ/resources/app/loadN
 /// 官方镜像内 napcat 入口 URI
 pub const DOCKER_NAPCAT_MJS_URI: &str = "file:///app/napcat/napcat.mjs";
 
+/// 为 QQ 准备同用户的可访问性会话，不改变容器内 SL 入口。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DockerLoginOverlay {
+    pub assets_volume: String,
+    pub launcher_volume: String,
+    pub supervisor_volume: String,
+}
+
 /// compose 可选 metrics 注入(路径均为容器内语义; volume 行为 host:container)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DockerMetricsOverlay {
@@ -203,6 +211,28 @@ pub fn render_snowluma_compose_with_metrics(
     )
 }
 
+pub fn render_snowluma_compose_with_overlays(
+    spec: &DockerDeploySpec,
+    vnc_var: &str,
+    webui_bootstrap_var: &str,
+    uid: u32,
+    gid: u32,
+    metrics: Option<&DockerMetricsOverlay>,
+    login: Option<&DockerLoginOverlay>,
+) -> String {
+    render_snowluma(
+        spec,
+        ComposeSecret::EnvRef { variable: vnc_var },
+        Some(ComposeSecret::EnvRef {
+            variable: webui_bootstrap_var,
+        }),
+        uid,
+        gid,
+        metrics,
+        login,
+    )
+}
+
 fn render_compose_with_secret(
     spec: &DockerDeploySpec,
     secret: ComposeSecret<'_>,
@@ -213,9 +243,15 @@ fn render_compose_with_secret(
 ) -> String {
     match spec.flavor {
         DockerFlavor::NapCat => render_napcat(spec, secret, uid, gid, metrics),
-        DockerFlavor::SnowLuma => {
-            render_snowluma(spec, secret, snowluma_webui_bootstrap, uid, gid, metrics)
-        }
+        DockerFlavor::SnowLuma => render_snowluma(
+            spec,
+            secret,
+            snowluma_webui_bootstrap,
+            uid,
+            gid,
+            metrics,
+            None,
+        ),
     }
 }
 
@@ -279,6 +315,7 @@ fn render_snowluma(
     uid: u32,
     gid: u32,
     metrics: Option<&DockerMetricsOverlay>,
+    login: Option<&DockerLoginOverlay>,
 ) -> String {
     #[derive(Serialize)]
     struct Ctx<'a> {
@@ -290,6 +327,7 @@ fn render_snowluma(
         webui_bootstrap: Option<String>,
         ports: Vec<PortView>,
         metrics: Option<&'a DockerMetricsOverlay>,
+        login: Option<&'a DockerLoginOverlay>,
     }
 
     let ctx = Ctx {
@@ -301,6 +339,7 @@ fn render_snowluma(
         webui_bootstrap: webui_bootstrap.map(|s| s.snowluma_webui_bootstrap()),
         ports: port_views(spec),
         metrics,
+        login,
     };
 
     #[allow(clippy::expect_used)]
@@ -539,5 +578,29 @@ mod tests {
         assert!(!yaml.contains("loadNapCat.js"));
         let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("yaml");
         assert!(parsed.get("services").is_some());
+    }
+
+    #[test]
+    fn snowluma_login_overlay_adds_only_private_mounts() {
+        let overlay = DockerLoginOverlay {
+            assets_volume: "/home/u/private/assets:/ncd-login-assist".into(),
+            launcher_volume: "/home/u/private/launch.sh:/ncd-login-launch.sh:ro".into(),
+            supervisor_volume: "/home/u/private/supervisord.conf:/etc/supervisord.conf:ro".into(),
+        };
+        let yaml = render_snowluma_compose_with_overlays(
+            &DockerDeploySpec::snowluma_default(),
+            "VNC_PASSWD",
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
+            1000,
+            1000,
+            None,
+            Some(&overlay),
+        );
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let service = &parsed["services"]["snowluma"];
+        assert_eq!(service["volumes"].as_sequence().unwrap().len(), 6);
+        assert!(service["environment"].get("LD_PRELOAD").is_none());
+        assert_eq!(service["ports"].as_sequence().unwrap().len(), 5);
+        assert!(yaml.contains("/ncd-login-launch.sh:ro"));
     }
 }
