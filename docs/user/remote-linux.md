@@ -22,7 +22,7 @@ SSH 用户需要对安装目录有读写权限；安装系统依赖需要相应�
 
 常见 Linux 环境可从 Ubuntu / Debian 开始；QQ 所需动态库、Node / Python 版本及架构按具体框架和组件检测结果处理。容器内依赖由镜像提供，不要把宿主机原生依赖清单当成所有部署方式的必装项。
 
-NapCat 使用 WebUI 完成配置和登录相关操作；SnowLuma 通常通过 QQ 图形界面 / VNC 登录。
+NapCat 使用 WebUI 完成配置和登录相关操作；SnowLuma 可使用默认开启的 [简化扫码登录](snowluma-remote-qr-login.md)，环境不支持时仍可通过 QQ 图形界面 / VNC 登录。
 
 ## 启动失败怎么查
 
