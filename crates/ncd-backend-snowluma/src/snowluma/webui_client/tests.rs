@@ -84,7 +84,7 @@ fn mock_server_port(server: &MockServer) -> u16 {
     addr.port()
 }
 
-/// /api/status 任意 HTTP 响应即视为 ready这里直接 200 OK
+/// /api/status 成功响应表示 WebUI 已就绪。
 #[tokio::test]
 async fn wait_ready_succeeds_when_status_endpoint_responds() {
     let server = MockServer::start().await;
@@ -105,6 +105,46 @@ async fn wait_ready_succeeds_when_status_endpoint_responds() {
         result.is_ok(),
         "wait_ready should succeed when /api/status responds: {result:?}"
     );
+}
+
+#[tokio::test]
+async fn wait_ready_accepts_webui_auth_challenge() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/status"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "status": "failed", "message": "Unauthorized"
+        })))
+        .mount(&server)
+        .await;
+    let client = ReqwestSnowLumaWebUiClient::new(mock_server_port(&server), "pwd".into())
+        .expect("build client");
+    assert!(
+        client
+            .wait_ready(Duration::from_secs(2), Box::new(|| false))
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn wait_ready_rejects_websocket_upgrade_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/status"))
+        .respond_with(ResponseTemplate::new(426).set_body_string("Upgrade Required"))
+        .mount(&server)
+        .await;
+    let client = ReqwestSnowLumaWebUiClient::new(mock_server_port(&server), "pwd".into())
+        .expect("build client");
+    let error = client
+        .wait_ready(Duration::from_millis(300), Box::new(|| false))
+        .await
+        .expect_err("WebSocket is not the WebUI");
+    let SnowLumaWebUiError::NotReady(_, errors) = error else {
+        panic!("unexpected error: {error:?}");
+    };
+    assert!(errors.values().any(|error| error.contains("426")));
 }
 
 /// dead_check 第一轮即返回 true → wait_ready 立即 Ok(()),不发任何 HTTP
