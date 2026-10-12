@@ -15,6 +15,7 @@ use crate::docker_bot_session::DockerBotSessionRegistry;
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 // PollerConfig/PollerDeps 仅 listeners 建 poller 用；RestartHandle 在本文件 impl。
+use crate::launch::router::DockerQrLoginLocks;
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
@@ -42,6 +43,7 @@ pub mod auto_restart;
 mod debug_port;
 mod helpers;
 mod listeners;
+mod qr_login;
 mod remote_network;
 pub mod runtime_gate;
 use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
@@ -195,6 +197,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// token,不能从 QQ 号或容器名派生;这里按 Bot 持久化,保证重启后 token 稳定
     docker_webui_secret_store: Option<Arc<dyn SecretStore + Send + Sync>>,
     docker_sessions: Arc<DockerBotSessionRegistry>,
+    docker_qr_login_locks: DockerQrLoginLocks,
     remote_native_napcat_sessions: Arc<RemoteNativeNapcatSessionRegistry>,
     remote_bot_log_follow: Arc<RemoteBotLogFollowRegistry>,
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
@@ -239,6 +242,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             host_resolver: self.host_resolver.clone(),
             docker_webui_secret_store: self.docker_webui_secret_store.clone(),
             docker_sessions: Arc::clone(&self.docker_sessions),
+            docker_qr_login_locks: Arc::clone(&self.docker_qr_login_locks),
             remote_native_napcat_sessions: Arc::clone(&self.remote_native_napcat_sessions),
             remote_bot_log_follow: Arc::clone(&self.remote_bot_log_follow),
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
@@ -298,6 +302,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             host_resolver: None,
             docker_webui_secret_store: None,
             docker_sessions: Arc::new(DockerBotSessionRegistry::new()),
+            docker_qr_login_locks: Arc::new(Mutex::new(HashMap::new())),
             remote_native_napcat_sessions: Arc::new(RemoteNativeNapcatSessionRegistry::new()),
             remote_bot_log_follow: Arc::new(RemoteBotLogFollowRegistry::new()),
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
@@ -604,7 +609,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.remote_snowluma_backends),
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
-        );
+        )
+        .with_docker_qr_login_locks(Arc::clone(&self.docker_qr_login_locks));
         if let Some(mgr) = &self.server_manager {
             router = router.with_server_manager(Arc::clone(mgr));
         }

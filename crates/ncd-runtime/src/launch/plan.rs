@@ -170,6 +170,13 @@ impl RuntimeLaunchPlan {
                 cfg.environment = plan.environment;
             }
             RuntimeLaunchPlan::SnowLuma(plan) => {
+                let local_qr_enabled = cfg!(windows)
+                    && crate::snowluma::session::load_snowluma_app_config(&plan.snowluma_data_root)
+                        .local_qr_login_enabled;
+                cfg.environment.insert(
+                    "SNOWLUMA_LOCAL_QR_LOGIN_ENABLED".to_string(),
+                    if local_qr_enabled { "1" } else { "0" }.to_string(),
+                );
                 // SnowLuma 启动语义由 SnowLumaRuntimeBackend 自己处理(spawn QQ.exe +
                 // daemon load_process),不通过 BotRuntimeConfig.launch_command 触发外部
                 // 进程working_dir 设为 snowluma_data_root,便于运行时调试与日志关联

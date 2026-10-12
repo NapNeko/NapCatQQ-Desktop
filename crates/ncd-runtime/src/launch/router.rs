@@ -22,6 +22,8 @@ use ncd_host::{Host, Os};
 use ncd_traits::SecretStore;
 use ncd_traits::runtime_backend::BotBackend;
 
+pub(crate) type DockerQrLoginLocks = Arc<Mutex<HashMap<(String, u64), Arc<Mutex<()>>>>>;
+
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeRouterError {
     #[error(transparent)]
@@ -124,6 +126,7 @@ pub(crate) struct RuntimeBackendRouter {
     remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
     /// 本机 SnowLuma 数据根（app-config 固定密码），远端接管启动时读取
     snowluma_data_root: Option<PathBuf>,
+    docker_qr_login_locks: DockerQrLoginLocks,
 }
 
 impl RuntimeBackendRouter {
@@ -154,6 +157,7 @@ impl RuntimeBackendRouter {
             server_manager: None,
             remote_inventory: None,
             snowluma_data_root: None,
+            docker_qr_login_locks: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -167,6 +171,11 @@ impl RuntimeBackendRouter {
 
     pub fn with_snowluma_data_root(mut self, path: impl Into<PathBuf>) -> Self {
         self.snowluma_data_root = Some(path.into());
+        self
+    }
+
+    pub(crate) fn with_docker_qr_login_locks(mut self, locks: DockerQrLoginLocks) -> Self {
+        self.docker_qr_login_locks = locks;
         self
     }
 
@@ -224,6 +233,21 @@ impl RuntimeBackendRouter {
                 };
                 let mut backend =
                     DockerDeploymentBackend::new(deployment, host, backend_id, flavor);
+                if flavor == BotFlavor::SnowLuma {
+                    let enabled = self.snowluma_data_root.as_ref().is_some_and(|root| {
+                        ncd_backend_snowluma::snowluma::session::load_snowluma_app_config(root)
+                            .remote_qr_login_enabled
+                    });
+                    backend = backend.with_snowluma_qr_login(enabled);
+                    let lock = self
+                        .docker_qr_login_locks
+                        .lock()
+                        .await
+                        .entry((server_id.clone(), qq_id))
+                        .or_insert_with(|| Arc::new(Mutex::new(())))
+                        .clone();
+                    backend = backend.with_qr_login_lock(lock);
+                }
                 if let Some((data_root, prefs)) = self.docker_metrics.clone() {
                     backend = backend.with_metrics(data_root, prefs);
                 }

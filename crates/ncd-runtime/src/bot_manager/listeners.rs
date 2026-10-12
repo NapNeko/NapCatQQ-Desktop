@@ -40,6 +40,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
                 DomainEvent::SnowLumaLoginStateChanged { bot_id, state } => {
                     self.snowluma_ui.set_login_state(bot_id, *state).await;
+                    if *state == ncd_domain::SnowLumaLoginState::LoggedIn {
+                        let _ = self.close_remote_snowluma_qr_login(bot_id).await;
+                    }
                 }
                 DomainEvent::SnowLumaLoginProbeUnavailable { bot_id } => {
                     self.snowluma_ui.clear_login_state(bot_id).await;

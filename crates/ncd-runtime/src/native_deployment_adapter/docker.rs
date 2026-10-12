@@ -6,13 +6,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{
-    Deployment, DeploymentHandle, DockerDeployment, NullProgressSink, bot_docker_container_name,
-    resolve_bot_container_name,
+    Deployment, DeploymentHandle, DockerDeployment, NullProgressSink,
+    bot_docker_container_candidates, bot_docker_container_name, resolve_bot_container_name,
 };
 use ncd_domain::bot_status::BotStatus;
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, StopMode};
-use ncd_domain::{BackendType, BotFlavor};
+use ncd_domain::{BackendType, BotFlavor, ContainerState, SnowLumaQrLoginSnapshot};
 use ncd_host::Host;
 use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
@@ -33,6 +33,8 @@ pub struct DockerDeploymentBackend {
     /// 本机 data_root：写出探针再 upload；未设则不注入 metrics
     local_data_root: Option<PathBuf>,
     metrics_prefs: BotRuntimeMetricsPrefs,
+    snowluma_qr_login: bool,
+    qr_login_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl DockerDeploymentBackend {
@@ -49,6 +51,8 @@ impl DockerDeploymentBackend {
             flavor,
             local_data_root: None,
             metrics_prefs: BotRuntimeMetricsPrefs::default(),
+            snowluma_qr_login: false,
+            qr_login_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -59,6 +63,16 @@ impl DockerDeploymentBackend {
     ) -> Self {
         self.local_data_root = Some(local_data_root.into());
         self.metrics_prefs = prefs;
+        self
+    }
+
+    pub fn with_snowluma_qr_login(mut self, enabled: bool) -> Self {
+        self.snowluma_qr_login = enabled;
+        self
+    }
+
+    pub fn with_qr_login_lock(mut self, lock: Arc<tokio::sync::Mutex<()>>) -> Self {
+        self.qr_login_lock = lock;
         self
     }
 
@@ -145,23 +159,110 @@ impl BotBackend for DockerDeploymentBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        let _qr_guard = self.qr_login_lock.lock().await;
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
+        let cli = DockerCli::new(self.host.as_ref());
+        cli.ensure_daemon_ready()
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        let candidates =
+            bot_docker_container_candidates(bot_config.bot.backend_type, bot_config.bot.qq_id);
+        let containers = cli
+            .list_containers()
+            .await
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        if containers.iter().any(|c| {
+            candidates.contains(&c.name)
+                && matches!(c.state, ContainerState::Paused | ContainerState::Restarting)
+        }) {
+            return Err(BotBackendError::InvalidConfig(
+                "容器处于暂停或重启中，请先恢复或停止该容器".into(),
+            ));
+        }
+        if containers
+            .iter()
+            .any(|c| candidates.contains(&c.name) && c.state == ContainerState::Running)
+        {
+            let started_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            return Ok(BotStatus::running(ctx.config.bot_id.clone(), 0, started_at));
+        }
         render_docker_config_on_host(self.host.as_ref(), &ctx.config.bot_id, &bot_config).await?;
 
         // 指标：上传探针 + 写 NC load 覆盖；clone deployment 挂 overlay 再 install
         // 失败只 warn，不阻断启动（与远端原生一致）
-        let deployment = self.deployment_with_metrics(&bot_config).await;
-
+        let mut deployment = self.deployment_with_metrics(&bot_config).await;
         let sink = NullProgressSink;
-        deployment
+        if let Err(err) = deployment
             .install(self.host.as_ref(), &bot_config, &sink)
             .await
-            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        {
+            if self.flavor == BotFlavor::SnowLuma {
+                let _ = ncd_backend_snowluma::docker_login::DockerLoginSession::close(
+                    self.host.as_ref(),
+                    &ctx.config.bot_id,
+                )
+                .await;
+            }
+            return Err(BotBackendError::Io(err.to_string()));
+        }
 
-        let handle = deployment
-            .launch(self.host.as_ref(), &bot_config)
+        if self.snowluma_qr_login && self.flavor == BotFlavor::SnowLuma {
+            match ncd_backend_snowluma::docker_login::DockerLoginSession::prepare(
+                self.host.as_ref(),
+                &bot_config,
+            )
             .await
-            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+            {
+                Ok(Some(overlay)) => {
+                    let base_deployment = Arc::clone(&deployment);
+                    deployment = Arc::new((*deployment).clone().with_login_overlay(Some(overlay)));
+                    if deployment
+                        .install(self.host.as_ref(), &bot_config, &sink)
+                        .await
+                        .is_err()
+                    {
+                        let _ =
+                            ncd_backend_snowluma::docker_login::DockerLoginSession::abort_prepare(
+                                self.host.as_ref(),
+                                &ctx.config.bot_id,
+                            )
+                            .await;
+                        deployment = base_deployment;
+                        deployment
+                            .install(self.host.as_ref(), &bot_config, &sink)
+                            .await
+                            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+                        warn!(target: "ncd_runtime::docker_login", "Docker 扫码挂载未就绪，已恢复 VNC 登录");
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    let _ = ncd_backend_snowluma::docker_login::DockerLoginSession::abort_prepare(
+                        self.host.as_ref(),
+                        &ctx.config.bot_id,
+                    )
+                    .await;
+                    warn!(target: "ncd_runtime::docker_login", "Docker 扫码辅助未就绪，保留 VNC 登录");
+                }
+            }
+        }
+
+        let handle = match deployment.launch(self.host.as_ref(), &bot_config).await {
+            Ok(handle) => handle,
+            Err(err) => {
+                if self.flavor == BotFlavor::SnowLuma {
+                    let _ = ncd_backend_snowluma::docker_login::DockerLoginSession::close(
+                        self.host.as_ref(),
+                        &ctx.config.bot_id,
+                    )
+                    .await;
+                }
+                return Err(BotBackendError::Io(err.to_string()));
+            }
+        };
 
         match handle {
             DeploymentHandle::Docker { started_at, .. } => {
@@ -172,10 +273,57 @@ impl BotBackend for DockerDeploymentBackend {
     }
 
     async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError> {
+        let _qr_guard = self.qr_login_lock.lock().await;
+        if self.flavor == BotFlavor::SnowLuma {
+            let _ = ncd_backend_snowluma::docker_login::DockerLoginSession::close(
+                self.host.as_ref(),
+                &bot_id,
+            )
+            .await;
+        }
         self.deployment
             .stop(self.host.as_ref(), &bot_id, mode)
             .await
-            .map_err(|err| BotBackendError::Io(err.to_string()))
+            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        if self.flavor == BotFlavor::SnowLuma {
+            ncd_backend_snowluma::docker_login::DockerLoginSession::close(
+                self.host.as_ref(),
+                &bot_id,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn qr_login_snapshot(
+        &self,
+        bot_id: &BotId,
+        refresh: bool,
+    ) -> Result<SnowLumaQrLoginSnapshot, BotBackendError> {
+        let _qr_guard = self.qr_login_lock.lock().await;
+        if self.flavor != BotFlavor::SnowLuma || !self.snowluma_qr_login {
+            return Ok(SnowLumaQrLoginSnapshot::unavailable(
+                "此容器未启用简化扫码，请使用 VNC",
+            ));
+        }
+        ncd_backend_snowluma::docker_login::DockerLoginSession::snapshot(
+            self.host.as_ref(),
+            bot_id,
+            refresh,
+        )
+        .await
+    }
+
+    async fn close_qr_login(&self, bot_id: &BotId) -> Result<(), BotBackendError> {
+        let _qr_guard = self.qr_login_lock.lock().await;
+        if self.flavor == BotFlavor::SnowLuma {
+            ncd_backend_snowluma::docker_login::DockerLoginSession::close(
+                self.host.as_ref(),
+                bot_id,
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {

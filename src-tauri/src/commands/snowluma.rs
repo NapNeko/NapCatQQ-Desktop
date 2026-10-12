@@ -61,7 +61,47 @@ pub async fn set_snowluma_app_config(
     state: State<'_, AppState>,
     config: ncd_domain::SnowLumaAppConfig,
 ) -> Result<(), String> {
-    write_snowluma_app_config(&state.data_root, &config)
+    let previous = read_snowluma_app_config(&state.data_root);
+    let qr_disabled = (previous.remote_qr_login_enabled && !config.remote_qr_login_enabled)
+        || (previous.local_qr_login_enabled && !config.local_qr_login_enabled);
+    write_snowluma_app_config(&state.data_root, &config)?;
+    if qr_disabled {
+        state
+            .bot_manager
+            .close_all_remote_snowluma_qr_logins()
+            .await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remote_snowluma_qr_login_enabled(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state.bot_manager.remote_snowluma_qr_login_enabled())
+}
+
+#[tauri::command]
+pub async fn remote_snowluma_qr_login_snapshot(
+    state: State<'_, AppState>,
+    bot_id: String,
+    refresh: bool,
+) -> Result<ncd_domain::SnowLumaQrLoginSnapshot, String> {
+    state
+        .bot_manager
+        .remote_snowluma_qr_login_snapshot(&ncd_domain::BotId::new(bot_id), refresh)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn close_remote_snowluma_qr_login(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<(), String> {
+    state
+        .bot_manager
+        .close_remote_snowluma_qr_login(&ncd_domain::BotId::new(bot_id))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 前端用来填 HOT 模式 attach_pid 时的 QQ 进程信息
