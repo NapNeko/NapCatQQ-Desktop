@@ -135,9 +135,19 @@ describe('SL QR dialog status', () => {
             );
             await waitFor(() => expect(screen.getByRole('status').textContent).toBe(label));
             expect(screen.queryByRole('img', { name: 'QQ 登录二维码' })).toBeNull();
-            expect(
-                (screen.getByRole('button', { name: '刷新二维码' }) as HTMLButtonElement).disabled,
-            ).toBe(true);
+            if (state === 'logged_in' || state === 'cleanup_failed') {
+                expect(screen.queryByRole('button', { name: '刷新二维码' })).toBeNull();
+                expect(
+                    state === 'logged_in'
+                        ? screen.getByRole('button', { name: '完成' })
+                        : screen.getByText('关闭', { selector: 'button' }),
+                ).toBeTruthy();
+            } else {
+                expect(
+                    (screen.getByRole('button', { name: '刷新二维码' }) as HTMLButtonElement)
+                        .disabled,
+                ).toBe(true);
+            }
             unmount();
         },
     );
@@ -186,6 +196,56 @@ describe('SL QR dialog status', () => {
         await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
         expect(api.qrLoginSnapshot).not.toHaveBeenCalled();
         expect(screen.queryByRole('img', { name: 'QQ 登录二维码' })).toBeNull();
+        unmount();
+    });
+
+    it('closes the completed login instead of offering another refresh', async () => {
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({ ...material, state: 'logged_in' as const })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const onOpenChange = vi.fn();
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={onOpenChange}
+                onOpenVnc={vi.fn()}
+                api={api}
+            />,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: '完成' })).toBeTruthy());
+        expect(screen.queryByRole('button', { name: '打开 QQ 界面' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '完成' }));
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+        unmount();
+    });
+
+    it('opens the fallback after closing an unavailable scan session', async () => {
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({ ...material, state: 'unavailable' as const })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const onOpenChange = vi.fn();
+        const onOpenVnc = vi.fn();
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={onOpenChange}
+                onOpenVnc={onOpenVnc}
+                api={api}
+            />,
+        );
+        await waitFor(() =>
+            expect(screen.getByRole('status').textContent).toBe('请打开 QQ 界面继续登录'),
+        );
+        expect(screen.queryByRole('button', { name: '刷新二维码' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '打开 QQ 界面' }));
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+        expect(onOpenVnc).toHaveBeenCalledTimes(1);
         unmount();
     });
 });

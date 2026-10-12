@@ -1,6 +1,7 @@
 // 扫码材料只在可见弹窗中展示，手机确认和登录终态不保留二维码。
 import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { Check, Monitor, RefreshCw, X } from 'lucide-react';
 import {
     Button,
     Dialog,
@@ -87,6 +88,14 @@ export function RemoteSnowLumaQrLoginDialog({
     useEffect(() => setImageUnavailable(false), [snapshot?.qrcode_payload]);
     const state = snapshot?.state;
     const canRefresh = !paused && (state === 'waiting_for_qr' || state === 'expired');
+    const completed = isOnline || state === 'logged_in';
+    const fallbackOnly =
+        Boolean(error) ||
+        state === 'disabled' ||
+        state === 'unavailable' ||
+        state === 'cancelled' ||
+        state === 'account_mismatch' ||
+        state === 'cleanup_failed';
     const confirmation =
         state === 'scanned' ||
         state === 'login_detected' ||
@@ -137,25 +146,46 @@ export function RemoteSnowLumaQrLoginDialog({
                         {status}
                     </p>
                 </div>
-                <DialogFooter>
-                    {onOpenVnc && (
+                <DialogFooter className="mt-4 justify-between gap-3 border-t border-border-subtle pt-4">
+                    {onOpenVnc && !completed ? (
                         <Button
-                            variant="secondary"
+                            variant={fallbackOnly ? 'primary' : 'ghost'}
+                            size="md"
                             onClick={() => {
                                 onOpenChange(false);
                                 onOpenVnc();
                             }}
                         >
+                            <Monitor size={16} aria-hidden />
                             打开 QQ 界面
                         </Button>
+                    ) : null}
+                    {completed || fallbackOnly ? (
+                        <Button
+                            variant={completed ? 'primary' : 'secondary'}
+                            size="md"
+                            className="ml-auto min-w-28"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            {completed ? (
+                                <Check size={16} aria-hidden />
+                            ) : (
+                                <X size={16} aria-hidden />
+                            )}
+                            {completed ? '完成' : '关闭'}
+                        </Button>
+                    ) : (
+                        <Button
+                            variant={state === 'expired' ? 'primary' : 'secondary'}
+                            size="md"
+                            className="ml-auto min-w-28"
+                            disabled={!canRefresh || refreshing || requesting}
+                            onClick={() => void refresh()}
+                        >
+                            <RefreshCw size={16} aria-hidden />
+                            {refreshing ? '正在刷新' : '刷新二维码'}
+                        </Button>
                     )}
-                    <Button
-                        variant="primary"
-                        disabled={!canRefresh || refreshing || requesting}
-                        onClick={() => void refresh()}
-                    >
-                        {refreshing ? '正在刷新' : '刷新二维码'}
-                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
