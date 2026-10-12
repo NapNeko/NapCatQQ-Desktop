@@ -101,7 +101,7 @@ export function RemoteSnowLumaQrLoginDialog({
                 ? LABELS[state]
                 : imageUnavailable
                   ? '二维码无法显示，请刷新或在 QQ 界面继续登录'
-                  : requesting && !snapshot?.qrcode_payload
+                  : (refreshing || (requesting && !snapshot)) && !snapshot?.qrcode_payload
                     ? '正在获取二维码'
                     : state === 'waiting_for_qr' && !snapshot?.qrcode_payload
                       ? '正在等待 QQ 生成二维码'

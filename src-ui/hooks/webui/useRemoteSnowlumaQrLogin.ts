@@ -174,7 +174,7 @@ export function useRemoteSnowlumaQrLogin(
                 const state =
                     session.current.loginDetected && !terminal
                         ? 'login_detected'
-                        : session.current.scanned && next.state === 'waiting_for_qr'
+                        : session.current.scanned && !terminal
                           ? 'scanned'
                           : next.state;
                 setSnapshot({
