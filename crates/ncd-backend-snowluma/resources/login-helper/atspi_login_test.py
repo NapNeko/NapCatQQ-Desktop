@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('atspi_login', Path(__file__).with_name('atspi-login.py'))
 helper = importlib.util.module_from_spec(spec)
@@ -57,6 +58,115 @@ class ContractTests(unittest.TestCase):
         tree.nodes = [{'obj': 17, 'role': 'push button', 'name': '扫码登录'}]
         tree.invoke('扫码登录', lambda: None)
         self.assertEqual(tree.lib.called, [1])
+
+    def test_account_selector_routes_through_other_methods_then_qr(self):
+        pages = [
+            [{'name': '其他登录方式', 'role': 'link'}, {'name': '登录', 'role': 'push button'}],
+            [{'name': '扫码登录', 'role': 'push button'}, {'name': '账号管理', 'role': 'link'}],
+            [{'name': '手机QQ扫码登录', 'role': 'label'}, {'name': '二维码', 'role': 'image'}],
+        ]
+        calls = []
+        class Page:
+            main_interface = False
+            def __init__(self, nodes): self.nodes = nodes
+            def invoke(self, name, check): check(); calls.append(name)
+            def close(self): pass
+        def next_page(): return Page(pages.pop(0))
+        with mock.patch.object(helper.time, 'sleep'):
+            page = helper.reach_qr_page(next_page, lambda: None, True)
+        self.assertTrue(helper.qr_page(page.nodes))
+        self.assertEqual(calls, ['其他登录方式', '扫码登录'])
+
+    def test_quick_login_and_account_management_are_not_navigation(self):
+        nodes = [{'name': name, 'role': 'push button'} for name in ('登录', '账号管理', '添加账号')]
+        self.assertIsNone(helper.next_login_control(nodes, set()))
+        self.assertIsNone(helper.next_login_control([{'name': '扫码登录', 'role': 'label'}], set()))
+        self.assertIsNone(helper.next_login_control([{'name': '其他登录方式', 'role': 'link'}], {'其他登录方式'}))
+
+    def test_confirmation_and_main_stop_navigation(self):
+        class Page:
+            def __init__(self, main):
+                self.main_interface = main
+                self.nodes = [{'name': '其他登录方式', 'role': 'link'}, {'name': '请在手机上确认登录', 'role': 'label'}]
+            def invoke(self, *_): raise AssertionError('confirmation must stop actions')
+            def close(self): pass
+        for main in (False, True):
+            page = Page(main)
+            self.assertIs(helper.reach_qr_page(lambda: page, lambda: None, True), page)
+
+    def test_ordinary_poll_does_not_refresh_existing_qr(self):
+        class Page:
+            main_interface = False
+            nodes = [{'name': '手机QQ扫码登录', 'role': 'label'}, {'name': '刷新二维码', 'role': 'push button'}]
+            def invoke(self, *_): raise AssertionError('poll must not refresh')
+            def close(self): pass
+        page = Page()
+        self.assertIs(helper.reach_qr_page(lambda: page, lambda: None, False), page)
+
+    def test_two_panel_login_uses_qr_image_and_short_refresh_button(self):
+        nodes = [{'name': '扫码登录', 'role': 'static'}, {'name': '二维码', 'role': 'image'},
+                 {'name': '刷新', 'role': 'push button'}, {'name': '二维码已过期', 'role': 'static'}]
+        self.assertTrue(helper.qr_page(nodes))
+        calls = []
+        class Page:
+            main_interface = False
+            def __init__(self, values): self.nodes = values
+            def invoke(self, name, check): calls.append(name)
+            def close(self): pass
+        pages = [Page(nodes), Page(nodes[:2])]
+        with mock.patch.object(helper.time, 'sleep'):
+            result = helper.reach_qr_page(lambda: pages.pop(0), lambda: None, True)
+        self.assertTrue(helper.qr_page(result.nodes))
+        self.assertEqual(calls, ['刷新'])
+
+    def test_static_navigation_climbs_only_to_small_owned_click_target(self):
+        class Library:
+            called = []
+            def actionable(self, obj): return True
+            def action(self, obj): return obj
+            def action_count(self, obj, error): return 2
+            def action_name(self, obj, index, error):
+                return (['clickAncestor', 'showContextMenu'] if obj == 17 else ['click', 'showContextMenu'])[index]
+            def text(self, value): return value
+            def parent(self, obj, error): return 19
+            def pid(self, obj, error): return 13
+            def name(self, obj, error): return ''
+            def role(self, obj, error): return 'section'
+            def bounds(self, obj): return [399, 235, 81, 30]
+            def do(self, obj, index, error): self.called.append((obj, index)); return 1
+            def unref(self, value): pass
+        tree = helper.Tree.__new__(helper.Tree)
+        tree.lib = Library(); tree.main_interface = False; tree.pid = 13
+        tree.nodes = [{'obj': 17, 'role': 'static', 'name': '账密登录', 'box': [407, 240, 65, 19]}]
+        tree.invoke('账密登录', lambda: None)
+        self.assertEqual(tree.lib.called, [(19, 0)])
+        tree.lib.bounds = lambda _: [300, 140, 680, 440]
+        with self.assertRaises(RuntimeError): tree.invoke('账密登录', lambda: None)
+        self.assertEqual(tree.lib.called, [(19, 0)])
+
+    def test_login_document_or_submit_button_cannot_be_navigation_ancestor(self):
+        small = [399, 235, 81, 30]; label = [407, 240, 65, 19]
+        self.assertTrue(helper.navigation_ancestor('section', '', small, '账密登录', label))
+        self.assertFalse(helper.navigation_ancestor('push button', '登录', small, '账密登录', label))
+        self.assertFalse(helper.navigation_ancestor('document web', '', small, '账密登录', label))
+
+    def test_dead_session_bus_is_reported_before_accessibility(self):
+        connection = mock.MagicMock()
+        connection.__enter__.return_value = connection
+        connection.connect.side_effect = FileNotFoundError()
+        with mock.patch.object(helper.socket, 'socket', return_value=connection), mock.patch.object(helper.socket, 'AF_UNIX', 1, create=True):
+            with self.assertRaises(helper.DesktopSessionUnavailable):
+                helper.verify_session_bus({'bus': 'unix:path=/tmp/missing-bus', 'uid': 22})
+
+    def test_bus_peer_must_belong_to_bound_user(self):
+        connection = mock.MagicMock()
+        connection.__enter__.return_value = connection
+        with mock.patch.object(helper.socket, 'socket', return_value=connection), mock.patch.object(helper.socket, 'AF_UNIX', 1, create=True), mock.patch.object(helper.socket, 'SO_PEERCRED', 17, create=True):
+            connection.getsockopt.return_value = helper.struct.pack('3i', 123, 23, 23)
+            with self.assertRaises(helper.DesktopSessionUnavailable):
+                helper.verify_session_bus({'bus': 'unix:path=/tmp/private-bus', 'uid': 22})
+            connection.getsockopt.return_value = helper.struct.pack('3i', 123, 22, 22)
+            helper.verify_session_bus({'bus': 'unix:path=/tmp/private-bus', 'uid': 22})
 
 
 if __name__ == '__main__': unittest.main()

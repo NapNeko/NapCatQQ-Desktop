@@ -16,8 +16,8 @@ use super::layout::{
     RemoteSnowLumaLayout, SnowLumaRemotePaths,
 };
 use super::stack::{
-    LOG_PREV_MAX_BYTES, ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,
-    wait_webui_tcp as wait_webui_tcp_on_host,
+    LOG_PREV_MAX_BYTES, ensure_dbus_env, ensure_stack_running, is_stack_ready, run_remote_bash,
+    stack_stop, wait_webui_tcp as wait_webui_tcp_on_host,
 };
 
 fn display_str(num: i32) -> String {
@@ -295,8 +295,12 @@ pub(crate) fn bot_cold_start_script(
         r#"umask 077
 mkdir -p {rt} {log_dir}
 if [ -f {dbus} ]; then . {dbus}; fi
-if [ "${{NCD_QR_ACCESSIBILITY:-}}" = 1 ] && command -v gdbus >/dev/null 2>&1; then
-  gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus --method org.freedesktop.DBus.Properties.Set org.a11y.Status IsEnabled '<true>' >/dev/null 2>&1 || true
+if [ "${{NCD_QR_ACCESSIBILITY:-}}" = 1 ]; then
+  if command -v gdbus >/dev/null 2>&1; then
+    timeout 3 gdbus call --session --timeout 2 --dest org.a11y.Bus --object-path /org/a11y/bus --method org.freedesktop.DBus.Properties.Set org.a11y.Status IsEnabled '<true>' >/dev/null 2>&1 || true
+  elif command -v dbus-send >/dev/null 2>&1; then
+    timeout 3 dbus-send --session --print-reply --reply-timeout=1500 --dest=org.a11y.Bus /org/a11y/bus org.freedesktop.DBus.Properties.Set string:org.a11y.Status string:IsEnabled variant:boolean:true >/dev/null 2>&1 || true
+  fi
 fi
 DISPLAY="{display}" nohup env {ld_fragment}{qq_invoke} > {log} 2>&1 </dev/null &
 echo $! > {pidfile}
@@ -391,6 +395,9 @@ fi
     // Also try to grant cap_sys_ptrace to the remote node binary (best-effort).
     // This complements lowering ptrace_scope and is recommended in our own error messages.
     try_grant_node_ptrace_cap(host).await;
+
+    // 共享 daemon 就绪不代表保存的 bus 还活着；仅新 QQ 读取修复后的环境。
+    ensure_dbus_env(host, paths).await?;
 
     let rt = shell_single_quote(&paths.runtime_dir);
     let log_dir = shell_single_quote(&paths.log_dir);

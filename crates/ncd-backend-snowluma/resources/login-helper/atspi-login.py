@@ -6,17 +6,24 @@ import json
 import os
 from pathlib import Path
 import signal
+import socket
 import stat
 import struct
 import sys
 import threading
 import time
 import zlib
+from urllib.parse import unquote
 
 P, I, U, W = C.c_void_p, C.c_int, C.c_uint, C.c_ulong
 ALLOWED_ACTIONS = {'snapshot', 'refresh', 'close'}
-ALLOWED_BUTTONS = {'账密登录', '扫码登录', '刷新二维码'}
+ALLOWED_BUTTONS = {'其他登录方式', '账密登录', '扫码登录', '刷新二维码', '刷新'}
+CONTROL_ROLES = {'push button', 'link', 'static'}
 MAX_PAYLOAD = 128 * 1024
+
+
+class DesktopSessionUnavailable(ValueError):
+    pass
 
 
 def signature(lib, name, result, arguments):
@@ -55,6 +62,36 @@ def verify_binding(binding):
     actual = bind_process(binding['pid'], binding['exe'])
     if any(actual.get(key) != binding.get(key) for key in actual):
         raise ValueError('ProcessIdentityChanged')
+
+
+def verify_session_bus(binding):
+    addresses = binding['bus'].split(';')
+    if len(addresses) > 4:
+        raise DesktopSessionUnavailable('DesktopSessionUnavailable')
+    for address in addresses:
+        if not address.startswith('unix:'):
+            continue
+        values = dict(item.split('=', 1) for item in address[5:].split(',') if '=' in item)
+        if 'path' in values:
+            target = unquote(values['path'])
+            if not target.startswith('/'):
+                continue
+        elif 'abstract' in values:
+            target = '\0' + unquote(values['abstract'])
+        else:
+            continue
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(0.4)
+                connection.connect(target)
+                if hasattr(socket, 'SO_PEERCRED'):
+                    peer = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+                    if struct.unpack('3i', peer)[1] != binding['uid']:
+                        continue
+                return
+        except (OSError, ValueError):
+            continue
+    raise DesktopSessionUnavailable('DesktopSessionUnavailable')
 
 
 def validate_request(request):
@@ -96,6 +133,64 @@ def classify(nodes, main_interface):
     return 'waiting_for_qr'
 
 
+def qr_page(nodes):
+    names = {node['name'] for node in nodes}
+    images = [node for node in nodes if node['name'] == '二维码' and node.get('role') == 'image']
+    return '手机QQ扫码登录' in names or ('扫码登录' in names and len(images) == 1)
+
+
+def navigation_ancestor(role, name, box, label, label_box):
+    return (role in {'section', 'panel', 'push button', 'link'} and name in {'', label}
+            and box is not None and label_box is not None
+            and 0 < box[2] <= 256 and 0 < box[3] <= 64
+            and box[0] <= label_box[0] and box[1] <= label_box[1]
+            and box[0] + box[2] >= label_box[0] + label_box[2]
+            and box[1] + box[3] >= label_box[1] + label_box[3])
+
+
+def next_login_control(nodes, performed):
+    if qr_page(nodes):
+        return None
+    controls = {node['name'] for node in nodes if node.get('role') in CONTROL_ROLES}
+    for name in ('扫码登录', '其他登录方式', '账密登录'):
+        if name in controls and name not in performed:
+            return name
+    return None
+
+
+def reach_qr_page(make_tree, check, refresh):
+    current, performed = make_tree(), set()
+    try:
+        while True:
+            state = classify(current.nodes, current.main_interface)
+            if state in {'login_detected', 'scanned'} or (state == 'expired' and not refresh):
+                return current
+            if qr_page(current.nodes):
+                refresh_control = next((name for name in ('刷新二维码', '刷新')
+                                        if any(node['name'] == name and node['role'] in CONTROL_ROLES
+                                               for node in current.nodes)), None)
+                if refresh and refresh_control:
+                    current.invoke(refresh_control, check)
+                    current.close(); time.sleep(0.15); current = make_tree()
+                return current
+            control = next_login_control(current.nodes, performed)
+            if control is None:
+                return current
+            previous = {(node['name'], node['role']) for node in current.nodes}
+            current.invoke(control, check)
+            performed.add(control)
+            current.close()
+            while True:
+                check(); time.sleep(0.1); current = make_tree()
+                if (classify(current.nodes, current.main_interface) in {'login_detected', 'scanned'}
+                        or {(node['name'], node['role']) for node in current.nodes} != previous):
+                    break
+                current.close()
+    except BaseException:
+        current.close()
+        raise
+
+
 class Rect(C.Structure):
     _fields_ = [('x', I), ('y', I), ('width', I), ('height', I)]
 
@@ -132,6 +227,7 @@ class Libraries:
         self.desktop = signature(at, 'atspi_get_desktop', P, [I])
         self.count = signature(at, 'atspi_accessible_get_child_count', I, [P, P])
         self.child = signature(at, 'atspi_accessible_get_child_at_index', P, [P, I, P])
+        self.parent = signature(at, 'atspi_accessible_get_parent', P, [P, P])
         self.pid = signature(at, 'atspi_accessible_get_process_id', U, [P, P])
         self.name = signature(at, 'atspi_accessible_get_name', P, [P, P])
         self.role = signature(at, 'atspi_accessible_get_role_name', P, [P, P])
@@ -193,10 +289,20 @@ class Libraries:
         finally:
             self.unref(states)
 
+    def visible(self, obj):
+        states = self.states(obj)
+        if not states:
+            return False
+        try:
+            return (not self.has_state(states, 6) and self.has_state(states, 25)
+                    and self.has_state(states, 30))
+        finally:
+            self.unref(states)
+
 
 class Tree:
     def __init__(self, lib, pid, check):
-        self.lib, self.refs, self.nodes, self.main_interface = lib, [], [], False
+        self.lib, self.refs, self.nodes, self.main_interface, self.pid = lib, [], [], False, pid
         try:
             for _ in range(50):
                 if not lib.iterate(None, 0):
@@ -220,7 +326,8 @@ class Tree:
                     obj, depth = pending.pop(0)
                     count += 1
                     name, role = lib.text(lib.name(obj, None)), lib.text(lib.role(obj, None))
-                    if role == 'toggle button':
+                    visible = lib.visible(obj)
+                    if visible and role == 'toggle button':
                         if name == '联系人': main.add('contacts')
                         if name.startswith('消息'): main.add('messages')
                         if len(main) == 2:
@@ -230,7 +337,7 @@ class Tree:
                     relevant = (name in ALLOWED_BUTTONS | {'手机QQ扫码登录', '二维码', '已扫码', '已扫描', '扫码成功', '扫描成功'}
                                 or ('二维码' in name and ('过期' in name or '失效' in name))
                                 or ('手机' in name and '确认' in name))
-                    if relevant:
+                    if relevant and visible:
                         self.nodes.append({'obj': obj, 'name': name, 'role': role, 'box': lib.bounds(obj)})
                     if depth < 24:
                         for child_index in range(min(max(lib.count(obj, None), 0), 64)):
@@ -250,26 +357,47 @@ class Tree:
     def invoke(self, name, check):
         if name not in ALLOWED_BUTTONS or self.main_interface:
             raise RuntimeError('ActionRejected')
-        matches = [node for node in self.nodes if node['name'] == name and node['role'] == 'push button']
+        if name == '刷新' and not qr_page(self.nodes):
+            raise RuntimeError('ActionRejected')
+        matches = [node for node in self.nodes if node['name'] == name and node['role'] in CONTROL_ROLES]
         if len(matches) != 1:
             raise RuntimeError('ActionNotUnique')
-        check()
-        if not self.lib.actionable(matches[0]['obj']):
-            raise RuntimeError('ControlNotActionable')
-        action = self.lib.action(matches[0]['obj'])
-        if not action:
-            raise RuntimeError('ActionMissing')
+        node, target, action, ancestors = matches[0], matches[0]['obj'], None, []
         try:
-            names = [self.lib.text(self.lib.action_name(action, index, None))
-                     for index in range(min(max(self.lib.action_count(action, None), 0), 8))]
-            index = default_action_index(names)
-            check()
-            if not self.lib.actionable(matches[0]['obj']):
-                raise RuntimeError('ControlNotActionable')
-            if not self.lib.do(action, index, None):
-                raise RuntimeError('ActionRejected')
+            for depth in range(5):
+                check()
+                if depth and (self.lib.pid(target, None) != self.pid
+                              or not navigation_ancestor(self.lib.text(self.lib.role(target, None)),
+                                                         self.lib.text(self.lib.name(target, None)),
+                                                         self.lib.bounds(target), name, node['box'])):
+                    raise RuntimeError('ActionRejected')
+                if not self.lib.actionable(target):
+                    raise RuntimeError('ControlNotActionable')
+                action = self.lib.action(target)
+                if not action:
+                    raise RuntimeError('ActionMissing')
+                names = [self.lib.text(self.lib.action_name(action, index, None))
+                         for index in range(min(max(self.lib.action_count(action, None), 0), 8))]
+                try:
+                    index = default_action_index(names)
+                except RuntimeError as error:
+                    if str(error) != 'DefaultActionUnavailable' or names.count('clickAncestor') != 1:
+                        raise
+                    self.lib.unref(action); action = None
+                    parent = self.lib.parent(target, None)
+                    if not parent: raise RuntimeError('ActionMissing')
+                    ancestors.append(parent); target = parent
+                    continue
+                check()
+                if not self.lib.actionable(target):
+                    raise RuntimeError('ControlNotActionable')
+                if not self.lib.do(action, index, None):
+                    raise RuntimeError('ActionRejected')
+                return
+            raise RuntimeError('ActionMissing')
         finally:
-            self.lib.unref(action)
+            if action: self.lib.unref(action)
+            for parent in reversed(ancestors): self.lib.unref(parent)
 
 
 class OwnedDisplay:
@@ -398,6 +526,7 @@ def request_snapshot(request):
     check()
     if request['action'] == 'close': return 'cancelled', None
     if request.get('scanned'): return 'scanned', None
+    verify_session_bus(binding)
     os.environ['DISPLAY'], os.environ['DBUS_SESSION_BUS_ADDRESS'] = binding['display'], binding['bus']
     for key, value in [('XAUTHORITY', binding.get('xauthority')), ('XDG_RUNTIME_DIR', binding.get('runtime_dir'))]:
         if value: os.environ[key] = value
@@ -410,37 +539,15 @@ def request_snapshot(request):
         initialized = True; lib.timeouts(300, 500)
         def tree():
             check(); return Tree(lib, binding['pid'], check)
-        current = tree()
+        current = reach_qr_page(tree, check, request['action'] == 'refresh')
         try:
             state = classify(current.nodes, current.main_interface)
             if state in {'login_detected', 'scanned'}: return state, None
-            if request['action'] == 'refresh':
-                names = {node['name'] for node in current.nodes}
-                if '手机QQ扫码登录' not in names:
-                    first = '扫码登录' if '扫码登录' in names else '账密登录'
-                    current.invoke(first, check); current.close()
-                    expected = '扫码登录' if first == '账密登录' else '二维码'
-                    while True:
-                        current = tree()
-                        if classify(current.nodes, current.main_interface) in {'login_detected', 'scanned'}:
-                            return classify(current.nodes, current.main_interface), None
-                        if any(node['name'] == expected for node in current.nodes): break
-                        current.close(); time.sleep(0.1)
-                    if first == '账密登录':
-                        current.invoke('扫码登录', check); current.close()
-                        while True:
-                            current = tree()
-                            if classify(current.nodes, current.main_interface) in {'login_detected', 'scanned'}:
-                                return classify(current.nodes, current.main_interface), None
-                            if any(node['name'] == '二维码' for node in current.nodes): break
-                            current.close(); time.sleep(0.1)
-                elif any(node['name'] == '刷新二维码' for node in current.nodes):
-                    current.invoke('刷新二维码', check); current.close(); time.sleep(0.15); current = tree()
             state = classify(current.nodes, current.main_interface)
             if state != 'waiting_for_qr': return state, None
             images = [node for node in current.nodes if node['name'] == '二维码' and node['role'] == 'image' and node['box']]
-            if '手机QQ扫码登录' not in {node['name'] for node in current.nodes} or len(images) != 1:
-                return 'unavailable', None
+            if not qr_page(current.nodes) or len(images) != 1:
+                return 'waiting_for_qr', None
             box = images[0]['box']; display = OwnedDisplay(lib, binding)
             payload, ratio = display.png(box, check)
             if not 0.08 <= ratio <= 0.7: return 'waiting_for_qr', None
@@ -449,7 +556,7 @@ def request_snapshot(request):
                 state = classify(after.nodes, after.main_interface)
                 if state != 'waiting_for_qr': return state, None
                 boxes = [node['box'] for node in after.nodes if node['name'] == '二维码' and node['role'] == 'image']
-                if boxes != [box] or '手机QQ扫码登录' not in {node['name'] for node in after.nodes}:
+                if boxes != [box] or not qr_page(after.nodes):
                     return 'unavailable', None
             finally: after.close()
             check(); return 'waiting_for_qr', payload
@@ -465,21 +572,29 @@ def main():
     if '--bind' in sys.argv:
         pid = int(sys.argv[sys.argv.index('--pid') + 1])
         exe = sys.argv[sys.argv.index('--exe') + 1]
-        print(json.dumps({'binding': bind_process(pid, exe)})); return
+        binding = bind_process(pid, exe)
+        verify_session_bus(binding)
+        print(json.dumps({'binding': binding})); return
     raw = sys.stdin.buffer.read(8193)
     if len(raw) > 8192: raise ValueError('RequestBudgetExceeded')
     request = json.loads(raw)
     validate_request(request)
+    message = None
     try:
         state, payload = request_snapshot(request)
     except InterruptedError:
         state, payload = 'cancelled', None
-    except (RuntimeError, ValueError, OSError, TimeoutError, KeyError):
+    except DesktopSessionUnavailable:
+        state, payload = 'unavailable', None
+        message = 'QQ 桌面会话已失效，请重新启动此 Bot'
+    except TimeoutError:
+        state, payload = 'waiting_for_qr', None
+    except (RuntimeError, ValueError, OSError, KeyError):
         state, payload = 'unavailable', None
     print(json.dumps({'session_id': request['session_id'], 'v': 1, 'state': state,
                       'qq_pid': request['binding']['pid'], 'qrcode_payload': payload,
                       'uin': None, 'observer_removed': True,
-                      'message': '扫码控件或窗口不可用，请打开 QQ 界面' if state == 'unavailable' else None}, ensure_ascii=False))
+                      'message': message or ('扫码控件或窗口不可用，请打开 QQ 界面' if state == 'unavailable' else None)}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
@@ -492,5 +607,7 @@ if __name__ == '__main__':
             signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError('RequestTimeout')))
             signal.alarm(7)
         main()
+    except DesktopSessionUnavailable:
+        print(json.dumps({'error': 'DesktopSessionUnavailable'})); sys.exit(1)
     except BaseException:
         print(json.dumps({'error': 'LoginHelperUnavailable'})); sys.exit(1)
