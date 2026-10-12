@@ -9,6 +9,7 @@ mod config;
 mod daemon;
 mod helpers;
 mod inject;
+mod login_helper;
 mod probe;
 mod remote_bash;
 

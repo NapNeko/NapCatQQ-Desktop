@@ -4,20 +4,73 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::snowluma::SnowLumaWebUiClient;
 use async_trait::async_trait;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::kinds::BackendKind;
-use ncd_domain::{BotConfig, BotFlavor, BotId, SnowLumaStartMode};
+use ncd_domain::{
+    BotConfig, BotFlavor, BotId, SnowLumaQrLoginSnapshot, SnowLumaQrLoginState, SnowLumaStartMode,
+};
 use ncd_host::{Host, HostPath};
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
     TailOpts,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
+
+struct QrActivity {
+    cancel: CancellationToken,
+    operation: Mutex<()>,
+    scanned: AtomicBool,
+    login_detected: AtomicBool,
+    opened_at: Instant,
+    terminal: Mutex<Option<SnowLumaQrLoginSnapshot>>,
+    cleanup_failed: AtomicBool,
+    refresh_pending: AtomicBool,
+}
+
+fn closed_snapshot(
+    previous: Option<SnowLumaQrLoginSnapshot>,
+    mut closed: SnowLumaQrLoginSnapshot,
+) -> SnowLumaQrLoginSnapshot {
+    closed.qrcode_payload = None;
+    if let Some(mut previous) = previous.filter(|value| {
+        matches!(
+            value.state,
+            SnowLumaQrLoginState::LoggedIn | SnowLumaQrLoginState::AccountMismatch
+        )
+    }) {
+        previous.qrcode_payload = None;
+        previous.observer_removed = closed.observer_removed;
+        return previous;
+    }
+    closed
+}
+
+impl QrActivity {
+    fn new() -> Self {
+        Self {
+            cancel: CancellationToken::new(),
+            operation: Mutex::new(()),
+            scanned: AtomicBool::new(false),
+            login_detected: AtomicBool::new(false),
+            opened_at: Instant::now(),
+            terminal: Mutex::new(None),
+            cleanup_failed: AtomicBool::new(false),
+            refresh_pending: AtomicBool::new(false),
+        }
+    }
+}
 
 use super::layout::SnowLumaRemotePaths;
-use super::orchestrator::{bot_cold_start, bot_stop, remember_remote_bot_pid};
+use super::login_helper::{self, LoginSession};
+use super::orchestrator::{
+    bot_cold_start_with_login, bot_pid_if_running, bot_stop, remember_remote_bot_pid,
+};
 use super::tunnel::RemoteSnowLumaTunnelRegistry;
 use crate::snowluma::log_noise::prepare_snowluma_bot_history_lines;
 use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
@@ -55,6 +108,9 @@ pub struct RemoteSnowLumaBackend {
     metrics_injector: Option<Arc<dyn RemoteSlMetricsInjector>>,
     /// 本机 `state/snowluma`，用来读全局 WebUI 固定密码覆盖
     snowluma_data_root: Option<PathBuf>,
+    login_sessions: Mutex<HashMap<BotId, LoginSession>>,
+    login_clients: Mutex<HashMap<BotId, Arc<dyn SnowLumaWebUiClient>>>,
+    qr_activity: Mutex<HashMap<BotId, Arc<QrActivity>>>,
 }
 
 impl RemoteSnowLumaBackend {
@@ -94,12 +150,242 @@ impl RemoteSnowLumaBackend {
             qq_entry_coordinator,
             metrics_injector,
             snowluma_data_root: None,
+            login_sessions: Mutex::new(HashMap::new()),
+            login_clients: Mutex::new(HashMap::new()),
+            qr_activity: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn with_snowluma_data_root(mut self, path: impl Into<PathBuf>) -> Self {
         self.snowluma_data_root = Some(path.into());
         self
+    }
+
+    pub fn qr_login_enabled(&self) -> bool {
+        self.snowluma_data_root.as_ref().is_some_and(|root| {
+            crate::snowluma::session::load_snowluma_app_config(root).remote_qr_login_enabled
+        })
+    }
+
+    pub async fn qr_login_snapshot(
+        &self,
+        bot_id: &BotId,
+        refresh: bool,
+    ) -> SnowLumaQrLoginSnapshot {
+        let session = self.login_sessions.lock().await.get(bot_id).cloned();
+        let Some(mut session) = session else {
+            return SnowLumaQrLoginSnapshot::unavailable(
+                "此 QQ 进程没有扫码通道，请打开 QQ 界面；下次启动后生效",
+            );
+        };
+        let host = self.daemon.current_host().await;
+        let mut activity = self
+            .qr_activity
+            .lock()
+            .await
+            .entry(bot_id.clone())
+            .or_insert_with(|| Arc::new(QrActivity::new()))
+            .clone();
+        let serial_activity = Arc::clone(&activity);
+        let _serial_operation = serial_activity.operation.lock().await;
+        if self
+            .qr_activity
+            .lock()
+            .await
+            .get(bot_id)
+            .is_some_and(|current| !Arc::ptr_eq(current, &serial_activity))
+        {
+            let mut result = SnowLumaQrLoginSnapshot::unavailable("扫码会话已更新");
+            result.state = SnowLumaQrLoginState::Starting;
+            return result;
+        }
+        if refresh
+            && activity.cancel.is_cancelled()
+            && activity
+                .terminal
+                .lock()
+                .await
+                .as_ref()
+                .is_some_and(|snapshot| snapshot.state == SnowLumaQrLoginState::Cancelled)
+        {
+            if session.renew(host.as_ref()).await.is_err() {
+                return SnowLumaQrLoginSnapshot::unavailable("请使用 QQ 界面继续登录");
+            }
+            self.login_sessions
+                .lock()
+                .await
+                .insert(bot_id.clone(), session.clone());
+            activity = Arc::new(QrActivity::new());
+            self.qr_activity
+                .lock()
+                .await
+                .insert(bot_id.clone(), activity.clone());
+        }
+        let _renewed_operation = if Arc::ptr_eq(&activity, &serial_activity) {
+            None
+        } else {
+            Some(activity.operation.lock().await)
+        };
+        if let Some(terminal) = activity.terminal.lock().await.clone() {
+            return terminal;
+        }
+        if refresh {
+            activity.refresh_pending.store(true, Ordering::SeqCst);
+        }
+        let blank = |state| SnowLumaQrLoginSnapshot {
+            v: 1,
+            state,
+            qq_pid: Some(session.pid()),
+            qrcode_payload: None,
+            uin: None,
+            observer_removed: true,
+            message: None,
+        };
+        if activity.cancel.is_cancelled()
+            || activity.opened_at.elapsed() >= Duration::from_secs(600)
+        {
+            activity.cancel.cancel();
+            return blank(SnowLumaQrLoginState::Cancelled);
+        }
+        let Some(client) = self.login_clients.lock().await.get(bot_id).cloned() else {
+            return blank(SnowLumaQrLoginState::Starting);
+        };
+        let before = match client.list_processes().await {
+            Ok(processes) => processes,
+            Err(_) => return blank(SnowLumaQrLoginState::Starting),
+        };
+        if let Some(mut gated) = crate::qr_guard::process_gate(
+            before.iter().find(|p| p.pid == session.pid()),
+            session.pid(),
+            bot_id.as_str(),
+        ) {
+            if gated.state == SnowLumaQrLoginState::LoginDetected {
+                activity.login_detected.store(true, Ordering::SeqCst);
+            }
+            if gated.state == SnowLumaQrLoginState::Starting
+                && activity.login_detected.load(Ordering::SeqCst)
+            {
+                gated.state = SnowLumaQrLoginState::LoginDetected;
+            }
+            if matches!(
+                gated.state,
+                SnowLumaQrLoginState::LoggedIn | SnowLumaQrLoginState::AccountMismatch
+            ) {
+                activity.cancel.cancel();
+                *activity.terminal.lock().await = Some(gated.clone());
+                session.remove_assets(host.as_ref()).await;
+            }
+            return gated;
+        }
+        if activity.login_detected.load(Ordering::SeqCst) {
+            return blank(SnowLumaQrLoginState::LoginDetected);
+        }
+        if activity.scanned.load(Ordering::SeqCst) {
+            return blank(SnowLumaQrLoginState::Scanned);
+        }
+        let mut snapshot = match session
+            .request_with_cancel(
+                host.as_ref(),
+                if activity.refresh_pending.swap(false, Ordering::SeqCst) {
+                    "refresh"
+                } else {
+                    "snapshot"
+                },
+                activity.cancel.clone(),
+                false,
+            )
+            .await
+        {
+            Ok(snapshot) => snapshot,
+            Err(_) => {
+                return SnowLumaQrLoginSnapshot::unavailable("扫码通道不可用，请打开 QQ 界面");
+            }
+        };
+        activity
+            .cleanup_failed
+            .store(!snapshot.observer_removed, Ordering::SeqCst);
+        if activity.cancel.is_cancelled() {
+            return blank(SnowLumaQrLoginState::Cancelled);
+        }
+        if self
+            .qr_activity
+            .lock()
+            .await
+            .get(bot_id)
+            .is_some_and(|current| !Arc::ptr_eq(current, &activity))
+        {
+            return blank(SnowLumaQrLoginState::Cancelled);
+        }
+        let after = match client.list_processes().await {
+            Ok(processes) => processes,
+            Err(_) => return blank(SnowLumaQrLoginState::Starting),
+        };
+        if let Some(gated) = crate::qr_guard::process_gate(
+            after.iter().find(|p| p.pid == session.pid()),
+            session.pid(),
+            bot_id.as_str(),
+        ) {
+            snapshot = gated;
+        }
+        if activity.cancel.is_cancelled() {
+            return blank(SnowLumaQrLoginState::Cancelled);
+        }
+        match snapshot.state {
+            SnowLumaQrLoginState::Scanned => {
+                activity.scanned.store(true, Ordering::SeqCst);
+                snapshot.qrcode_payload = None;
+            }
+            SnowLumaQrLoginState::LoginDetected => {
+                activity.login_detected.store(true, Ordering::SeqCst);
+                snapshot.qrcode_payload = None;
+            }
+            state if state.is_terminal() => {
+                snapshot.qrcode_payload = None;
+                activity.cancel.cancel();
+                *activity.terminal.lock().await = Some(snapshot.clone());
+                if snapshot.observer_removed {
+                    session.remove_assets(host.as_ref()).await;
+                }
+            }
+            _ => {}
+        }
+        snapshot
+    }
+
+    pub async fn close_qr_login(&self, bot_id: &BotId) -> Result<(), BotBackendError> {
+        let activity = self
+            .qr_activity
+            .lock()
+            .await
+            .entry(bot_id.clone())
+            .or_insert_with(|| Arc::new(QrActivity::new()))
+            .clone();
+        activity.cancel.cancel();
+        let _operation = activity.operation.lock().await;
+        let session = self.login_sessions.lock().await.get(bot_id).cloned();
+        if let Some(session) = session {
+            let host = self.daemon.current_host().await;
+            let mut snapshot = session.request(host.as_ref(), "close").await?;
+            if activity.cleanup_failed.load(Ordering::SeqCst) {
+                snapshot.state = SnowLumaQrLoginState::CleanupFailed;
+                snapshot.observer_removed = false;
+            }
+            let previous = activity.terminal.lock().await.clone();
+            let snapshot = closed_snapshot(previous, snapshot);
+            *activity.terminal.lock().await = Some(snapshot.clone());
+            if !snapshot.observer_removed {
+                return Err(BotBackendError::Io("扫码观察器未能移除".into()));
+            }
+            session.remove_assets(host.as_ref()).await;
+        }
+        Ok(())
+    }
+
+    pub async fn close_all_qr_logins(&self) {
+        let ids: Vec<_> = self.login_sessions.lock().await.keys().cloned().collect();
+        for id in ids {
+            let _ = self.close_qr_login(&id).await;
+        }
     }
 
     fn webui_password_override(&self) -> Option<String> {
@@ -137,6 +423,23 @@ impl RemoteSnowLumaBackend {
     ) -> Result<(), BotBackendError> {
         let qq_id = config.bot.qq_id.to_string();
         let host = self.daemon.current_host().await;
+        if let Ok(Some(session)) = LoginSession::recover(
+            host.as_ref(),
+            self.daemon.paths(),
+            &bot_id,
+            pid,
+            &self.daemon.layout().node_bin,
+        )
+        .await
+        {
+            self.login_sessions
+                .lock()
+                .await
+                .insert(bot_id.clone(), session);
+            if !self.qr_login_enabled() {
+                let _ = self.close_qr_login(&bot_id).await;
+            }
+        }
         if let Err(err) =
             remember_remote_bot_pid(host.as_ref(), self.daemon.paths(), &qq_id, pid).await
         {
@@ -195,13 +498,14 @@ impl RemoteSnowLumaBackend {
         }
         let poller_deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
-            http,
+            http: Arc::clone(&http),
             proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
                 pid,
             )),
             expected_uin: Some(qq_id),
         };
         let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
+        self.login_clients.lock().await.insert(bot_id.clone(), http);
         self.pollers.lock().await.insert(bot_id, poller);
         Ok(())
     }
@@ -221,6 +525,18 @@ impl BotBackend for RemoteSnowLumaBackend {
         BotFlavor::SnowLuma
     }
 
+    async fn qr_login_snapshot(
+        &self,
+        bot_id: &BotId,
+        refresh: bool,
+    ) -> Result<SnowLumaQrLoginSnapshot, BotBackendError> {
+        Ok(RemoteSnowLumaBackend::qr_login_snapshot(self, bot_id, refresh).await)
+    }
+
+    async fn close_qr_login(&self, bot_id: &BotId) -> Result<(), BotBackendError> {
+        RemoteSnowLumaBackend::close_qr_login(self, bot_id).await
+    }
+
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let config = ctx
             .bot_config
@@ -229,6 +545,10 @@ impl BotBackend for RemoteSnowLumaBackend {
         let qq_id = config.bot.qq_id;
         let qq_id_str = qq_id.to_string();
         let bot_id = ctx.config.bot_id.clone();
+        if let Some(activity) = self.qr_activity.lock().await.remove(&bot_id) {
+            activity.cancel.cancel();
+        }
+        self.login_clients.lock().await.remove(&bot_id);
         let start_mode = resolve_start_mode(config);
 
         // 指标资产先上传，再随 node 第一次拉起带上 env，避免先听口再 SIGTERM 重启
@@ -320,8 +640,61 @@ impl BotBackend for RemoteSnowLumaBackend {
                     )));
                 }
 
-                match bot_cold_start(host.as_ref(), layout, &qq_id_str, &qq_id_str).await {
-                    Ok(pid) => pid,
+                let already_running = bot_pid_if_running(host.as_ref(), paths, &qq_id_str)
+                    .await?
+                    .is_some();
+                let prepared = if self.qr_login_enabled() && !already_running {
+                    match login_helper::prepare(host.as_ref(), paths, layout, &bot_id, qq_id).await
+                    {
+                        Ok(prepared) => prepared,
+                        Err(_) => {
+                            tracing::warn!(bot_id = %bot_id, "扫码辅助不可用，继续使用 QQ 图形界面");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                match bot_cold_start_with_login(
+                    host.as_ref(),
+                    layout,
+                    &qq_id_str,
+                    &qq_id_str,
+                    prepared.as_ref(),
+                )
+                .await
+                {
+                    Ok(pid) => {
+                        if let Some(prepared) = prepared {
+                            let mut session = prepared.session;
+                            match session.bind(host.as_ref(), pid).await {
+                                Ok(()) => {
+                                    self.login_sessions
+                                        .lock()
+                                        .await
+                                        .insert(bot_id.clone(), session);
+                                }
+                                Err(_) => {
+                                    let _ = session.request(host.as_ref(), "close").await;
+                                    tracing::warn!(bot_id = %bot_id, "无法保存扫码会话绑定，已请求关闭扫码通道");
+                                }
+                            }
+                        } else if let Ok(Some(session)) = LoginSession::recover(
+                            host.as_ref(),
+                            paths,
+                            &bot_id,
+                            pid,
+                            &layout.node_bin,
+                        )
+                        .await
+                        {
+                            self.login_sessions
+                                .lock()
+                                .await
+                                .insert(bot_id.clone(), session);
+                        }
+                        pid
+                    }
                     Err(e) => {
                         self.daemon.release().await;
                         return Err(e);
@@ -339,6 +712,7 @@ impl BotBackend for RemoteSnowLumaBackend {
             Ok(c) => c,
             Err(e) => {
                 if start_mode.is_cold() {
+                    let _ = self.close_qr_login(&bot_id).await;
                     let _ = bot_stop(host.as_ref(), paths, &qq_id_str).await;
                     if let Ok(tail) =
                         read_remote_log_tail(host.as_ref(), &paths.log_bot_path(&qq_id_str), 40)
@@ -363,6 +737,10 @@ impl BotBackend for RemoteSnowLumaBackend {
             .await
             .insert(bot_id.clone(), start_mode);
 
+        self.login_clients
+            .lock()
+            .await
+            .insert(bot_id.clone(), Arc::clone(&http));
         let poller_deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
             http,
@@ -386,6 +764,8 @@ impl BotBackend for RemoteSnowLumaBackend {
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        let _ = self.close_qr_login(&bot_id).await;
+        self.login_clients.lock().await.remove(&bot_id);
         let qq_id_str = bot_id.as_str();
         let paths = self.daemon.paths();
         let start_mode = self
@@ -400,6 +780,10 @@ impl BotBackend for RemoteSnowLumaBackend {
         if start_mode.is_cold() {
             let host = self.daemon.current_host().await;
             let _ = bot_stop(host.as_ref(), paths, qq_id_str).await;
+        }
+        if let Some(session) = self.login_sessions.lock().await.remove(&bot_id) {
+            let host = self.daemon.current_host().await;
+            session.remove_all(host.as_ref()).await;
         }
         self.daemon.release().await;
         Ok(())
@@ -479,5 +863,27 @@ impl BotBackend for RemoteSnowLumaBackend {
             lines,
             total_lines: total,
         })
+    }
+}
+
+#[cfg(test)]
+mod qr_close_tests {
+    use super::*;
+
+    #[test]
+    fn closing_does_not_reopen_verified_login_or_wrong_account() {
+        for state in [
+            SnowLumaQrLoginState::LoggedIn,
+            SnowLumaQrLoginState::AccountMismatch,
+        ] {
+            let mut previous = SnowLumaQrLoginSnapshot::unavailable("fixture");
+            previous.state = state;
+            previous.qrcode_payload = Some("private".into());
+            let mut closed = SnowLumaQrLoginSnapshot::unavailable("closed");
+            closed.state = SnowLumaQrLoginState::Cancelled;
+            let result = closed_snapshot(Some(previous), closed);
+            assert_eq!(result.state, state);
+            assert!(result.qrcode_payload.is_none());
+        }
     }
 }

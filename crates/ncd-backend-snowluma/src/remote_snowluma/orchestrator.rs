@@ -261,7 +261,7 @@ fi
     )
 }
 
-async fn bot_pid_if_running(
+pub(crate) async fn bot_pid_if_running(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
     qq_id: &str,
@@ -295,6 +295,9 @@ pub(crate) fn bot_cold_start_script(
         r#"umask 077
 mkdir -p {rt} {log_dir}
 if [ -f {dbus} ]; then . {dbus}; fi
+if [ "${{NCD_QR_ACCESSIBILITY:-}}" = 1 ] && command -v gdbus >/dev/null 2>&1; then
+  gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus --method org.freedesktop.DBus.Properties.Set org.a11y.Status IsEnabled '<true>' >/dev/null 2>&1 || true
+fi
 DISPLAY="{display}" nohup env {ld_fragment}{qq_invoke} > {log} 2>&1 </dev/null &
 echo $! > {pidfile}
 sleep 0.5
@@ -320,6 +323,16 @@ pub async fn bot_cold_start(
     layout: &RemoteSnowLumaLayout,
     qq_id: &str,
     uin: &str,
+) -> Result<u32, BotBackendError> {
+    bot_cold_start_with_login(host, layout, qq_id, uin, None).await
+}
+
+pub(crate) async fn bot_cold_start_with_login(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    qq_id: &str,
+    uin: &str,
+    login: Option<&super::login_helper::PreparedLogin>,
 ) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     if let Some(pid) = bot_pid_if_running(host, paths, qq_id).await? {
@@ -364,6 +377,11 @@ fi
     launch_args
         .extra_env
         .push(("DISPLAY".to_string(), display_str(DEFAULT_DISPLAY_NUM)));
+    if login.is_some() {
+        launch_args
+            .extra_args
+            .push("--force-renderer-accessibility".into());
+    }
     let cmd = qq
         .launch_command(host, &launch_args)
         .map_err(|e| BotBackendError::InvalidConfig(e.to_string()))?;
@@ -385,14 +403,19 @@ fi
     }
     let qq_invoke = qq_parts.join(" ");
     let display = display_str(DEFAULT_DISPLAY_NUM);
-    let ld_fragment = ld_preload
+    let mut ld_fragment = ld_preload
         .as_ref()
         .map(|p| format!("LD_PRELOAD={} ", shell_single_quote(p)))
         .unwrap_or_default();
+    if let Some(login) = login {
+        for (key, value) in &login.environment {
+            ld_fragment.push_str(&format!("{key}={} ", shell_single_quote(value)));
+        }
+    }
     let dbus = shell_single_quote(&paths.dbus_env);
     let qq_bin = shell_single_quote(&cmd.program);
 
-    let script = bot_cold_start_script(
+    let mut script = bot_cold_start_script(
         &rt,
         &log_dir,
         &log,
@@ -403,6 +426,9 @@ fi
         &dbus,
         &qq_bin,
     );
+    if login.is_some() {
+        script = format!("NCD_QR_ACCESSIBILITY=1\n{script}");
+    }
     let out = run_remote_bash(host, &script).await?;
     let pid: u32 = out
         .lines()

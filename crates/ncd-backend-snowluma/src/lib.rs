@@ -1,3 +1,5 @@
+pub mod docker_login;
+pub mod qr_guard;
 pub mod remote_snowluma;
 pub mod snowluma;
 

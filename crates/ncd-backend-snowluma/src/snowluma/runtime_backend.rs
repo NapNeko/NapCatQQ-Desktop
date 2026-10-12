@@ -50,6 +50,33 @@ struct SnowLumaProcessRecord {
     uin: Option<String>,
     #[allow(dead_code)]
     ancillary_pids: HashSet<u32>,
+    #[cfg(windows)]
+    qr_binding: Option<super::windows_qr_login::ProcessBinding>,
+    #[cfg(windows)]
+    qr_process_cancel: tokio_util::sync::CancellationToken,
+}
+
+#[cfg(windows)]
+struct LocalQrSession {
+    cancel: tokio_util::sync::CancellationToken,
+    operation: tokio::sync::Mutex<()>,
+    opened_at: std::time::Instant,
+    scanned: std::sync::atomic::AtomicBool,
+    login_detected: std::sync::atomic::AtomicBool,
+    active: std::sync::atomic::AtomicBool,
+    refresh_pending: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(windows)]
+struct WindowCaptureJob(Arc<LocalQrSession>);
+
+#[cfg(windows)]
+impl Drop for WindowCaptureJob {
+    fn drop(&mut self) {
+        self.0
+            .active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 pub struct SnowLumaRuntimeBackend {
@@ -62,6 +89,8 @@ pub struct SnowLumaRuntimeBackend {
     zombies: Arc<RwLock<Vec<tokio::process::Child>>>,
     /// 可注入 ProcessTreeProbe,便于测试覆盖 HotStart PID 校验路径
     proc_tree: Arc<dyn ProcessTreeProbe>,
+    #[cfg(windows)]
+    qr_sessions: tokio::sync::Mutex<HashMap<BotId, Arc<LocalQrSession>>>,
 }
 
 impl SnowLumaRuntimeBackend {
@@ -78,6 +107,8 @@ impl SnowLumaRuntimeBackend {
             pollers: Arc::new(RwLock::new(HashMap::new())),
             zombies: Arc::new(RwLock::new(Vec::new())),
             proc_tree: Arc::new(SysinfoProcessTreeProbe::new()),
+            #[cfg(windows)]
+            qr_sessions: tokio::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -87,6 +118,208 @@ impl SnowLumaRuntimeBackend {
     pub(crate) fn with_proc_tree(mut self, probe: Arc<dyn ProcessTreeProbe>) -> Self {
         self.proc_tree = probe;
         self
+    }
+
+    #[cfg(windows)]
+    async fn local_qr_snapshot(
+        &self,
+        bot_id: &BotId,
+        refresh: bool,
+    ) -> Result<ncd_domain::SnowLumaQrLoginSnapshot, BotBackendError> {
+        use super::windows_qr_login::CaptureOutcome;
+        use ncd_domain::{SnowLumaQrLoginSnapshot, SnowLumaQrLoginState};
+        let (binding, expected_uin, process_cancel) = {
+            let processes = self.processes.read().await;
+            let Some(record) = processes.get(bot_id) else {
+                return Ok(SnowLumaQrLoginSnapshot::unavailable("请先启动 Bot"));
+            };
+            let Some(binding) = record.qr_binding.clone() else {
+                return Ok(SnowLumaQrLoginSnapshot::unavailable(
+                    "请启用 Windows 简化扫码后冷启动 Bot",
+                ));
+            };
+            (
+                binding,
+                read_qq_id(&record.config).map(|uin| uin.to_string()),
+                record.qr_process_cancel.clone(),
+            )
+        };
+        let session = {
+            let mut sessions = self.qr_sessions.lock().await;
+            let replace = refresh
+                && sessions
+                    .get(bot_id)
+                    .is_some_and(|session| session.cancel.is_cancelled());
+            if replace {
+                sessions.remove(bot_id);
+            }
+            Arc::clone(sessions.entry(bot_id.clone()).or_insert_with(|| {
+                Arc::new(LocalQrSession {
+                    cancel: process_cancel.child_token(),
+                    operation: tokio::sync::Mutex::new(()),
+                    opened_at: std::time::Instant::now(),
+                    scanned: std::sync::atomic::AtomicBool::new(false),
+                    login_detected: std::sync::atomic::AtomicBool::new(false),
+                    active: std::sync::atomic::AtomicBool::new(false),
+                    refresh_pending: std::sync::atomic::AtomicBool::new(false),
+                })
+            }))
+        };
+        let _operation = session.operation.lock().await;
+        if refresh {
+            session
+                .refresh_pending
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        let snapshot = |state, payload, uin| SnowLumaQrLoginSnapshot {
+            v: 1,
+            state,
+            qq_pid: Some(binding.pid),
+            qrcode_payload: payload,
+            uin,
+            observer_removed: true,
+            message: None,
+        };
+        if session.cancel.is_cancelled() || session.opened_at.elapsed() > Duration::from_secs(600) {
+            session.cancel.cancel();
+            return Ok(snapshot(SnowLumaQrLoginState::Cancelled, None, None));
+        }
+        let client = match self.daemon.current_client().await {
+            Ok(client) => client,
+            Err(_) => {
+                return Ok(snapshot(SnowLumaQrLoginState::Starting, None, None));
+            }
+        };
+        let processes = match client.list_processes().await {
+            Ok(list) => list,
+            Err(_) => {
+                return Ok(snapshot(SnowLumaQrLoginState::Starting, None, None));
+            }
+        };
+        let Some(process) = processes.iter().find(|process| process.pid == binding.pid) else {
+            return Ok(snapshot(SnowLumaQrLoginState::Starting, None, None));
+        };
+        if process.logged_in == Some(true) {
+            let matches = expected_uin.as_deref() == Some(process.uin.as_str());
+            if process.uin.is_empty() {
+                session
+                    .login_detected
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            } else {
+                session.cancel.cancel();
+            }
+            return Ok(snapshot(
+                if matches {
+                    SnowLumaQrLoginState::LoggedIn
+                } else if process.uin.is_empty() {
+                    SnowLumaQrLoginState::LoginDetected
+                } else {
+                    SnowLumaQrLoginState::AccountMismatch
+                },
+                None,
+                Some(process.uin.clone()),
+            ));
+        }
+        if process.logged_in != Some(false)
+            || process.connected != Some(true)
+            || process.injected != Some(true)
+        {
+            return Ok(snapshot(SnowLumaQrLoginState::Starting, None, None));
+        }
+        if session
+            .login_detected
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Ok(snapshot(SnowLumaQrLoginState::LoginDetected, None, None));
+        }
+        if session.scanned.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok(snapshot(SnowLumaQrLoginState::Scanned, None, None));
+        }
+        let worker_binding = binding.clone();
+        let cancel = session.cancel.clone();
+        session
+            .active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let active = WindowCaptureJob(Arc::clone(&session));
+        let effective_refresh = session
+            .refresh_pending
+            .swap(false, std::sync::atomic::Ordering::SeqCst);
+        let worker = tokio::task::spawn_blocking(move || {
+            let _active = active;
+            super::windows_qr_login::capture(worker_binding, effective_refresh, cancel)
+        });
+        let outcome = match tokio::time::timeout(Duration::from_secs(7), worker).await {
+            Ok(Ok(outcome)) => outcome,
+            _ => {
+                session.cancel.cancel();
+                let mut result = snapshot(SnowLumaQrLoginState::CleanupFailed, None, None);
+                result.observer_removed = false;
+                return Ok(result);
+            }
+        };
+        if session.cancel.is_cancelled() {
+            return Ok(snapshot(SnowLumaQrLoginState::Cancelled, None, None));
+        }
+        let after = match client.list_processes().await {
+            Ok(list) => list,
+            Err(_) => {
+                session.cancel.cancel();
+                return Ok(SnowLumaQrLoginSnapshot::unavailable("无法确认 SL 登录状态"));
+            }
+        };
+        let Some(process) = after.iter().find(|process| process.pid == binding.pid) else {
+            session.cancel.cancel();
+            return Ok(SnowLumaQrLoginSnapshot::unavailable("QQ 会话已结束"));
+        };
+        if process.logged_in == Some(true) {
+            if process.uin.is_empty() {
+                session
+                    .login_detected
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            } else {
+                session.cancel.cancel();
+            }
+            let state = if expected_uin.as_deref() == Some(process.uin.as_str()) {
+                SnowLumaQrLoginState::LoggedIn
+            } else if process.uin.is_empty() {
+                SnowLumaQrLoginState::LoginDetected
+            } else {
+                SnowLumaQrLoginState::AccountMismatch
+            };
+            return Ok(snapshot(state, None, Some(process.uin.clone())));
+        }
+        if process.logged_in != Some(false)
+            || process.connected != Some(true)
+            || process.injected != Some(true)
+        {
+            return Ok(snapshot(SnowLumaQrLoginState::Starting, None, None));
+        }
+        if session.cancel.is_cancelled() {
+            return Ok(snapshot(SnowLumaQrLoginState::Cancelled, None, None));
+        }
+        Ok(match outcome {
+            CaptureOutcome::Image(payload) => {
+                snapshot(SnowLumaQrLoginState::WaitingForQr, Some(payload), None)
+            }
+            CaptureOutcome::Expired => snapshot(SnowLumaQrLoginState::Expired, None, None),
+            CaptureOutcome::Scanned => {
+                session
+                    .scanned
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                snapshot(SnowLumaQrLoginState::Scanned, None, None)
+            }
+            CaptureOutcome::LoginDetected => {
+                session
+                    .login_detected
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                snapshot(SnowLumaQrLoginState::LoginDetected, None, None)
+            }
+            CaptureOutcome::Loading => snapshot(SnowLumaQrLoginState::WaitingForQr, None, None),
+            CaptureOutcome::Unavailable => {
+                session.cancel.cancel();
+                SnowLumaQrLoginSnapshot::unavailable("请在 QQ 窗口中继续登录")
+            }
+        })
     }
 }
 
@@ -173,6 +406,13 @@ async fn spawn_cold_qq(
     let qq_path = PathBuf::from(qq_path);
 
     let mut qq_cmd = tokio::process::Command::new(&qq_path);
+    if config
+        .environment
+        .get("SNOWLUMA_LOCAL_QR_LOGIN_ENABLED")
+        .is_some_and(|value| value == "1")
+    {
+        qq_cmd.arg("--force-renderer-accessibility");
+    }
     qq_cmd
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -300,6 +540,26 @@ impl BotBackend for SnowLumaRuntimeBackend {
                 }
             };
 
+            let qr_binding = if start_mode.is_cold()
+                && ctx
+                    .config
+                    .environment
+                    .get("SNOWLUMA_LOCAL_QR_LOGIN_ENABLED")
+                    .is_some_and(|value| value == "1")
+            {
+                ctx.config
+                    .environment
+                    .get("SNOWLUMA_QQ_EXE")
+                    .and_then(|exe| {
+                        super::windows_qr_login::bind(qq_pid, std::path::Path::new(exe)).ok()
+                    })
+            } else {
+                None
+            };
+            if let Some(old) = self.qr_sessions.lock().await.remove(&bot_id) {
+                old.cancel.cancel();
+            }
+
             // === Phase C:daemon.ensure_running + client.load_process ===
             let client = match self.daemon.ensure_running(DAEMON_ENSURE_TIMEOUT).await {
                 Ok(c) => c,
@@ -368,6 +628,8 @@ impl BotBackend for SnowLumaRuntimeBackend {
                         start_mode,
                         uin: None,
                         ancillary_pids: HashSet::new(),
+                        qr_binding,
+                        qr_process_cancel: tokio_util::sync::CancellationToken::new(),
                     },
                 );
             }
@@ -377,6 +639,7 @@ impl BotBackend for SnowLumaRuntimeBackend {
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        self.close_qr_login(&bot_id).await?;
         // 取出 process record
         let record = {
             let mut processes = self.processes.write().await;
@@ -395,6 +658,11 @@ impl BotBackend for SnowLumaRuntimeBackend {
             // 幂等:未在跑过直接 Ok
             return Ok(());
         };
+        #[cfg(windows)]
+        {
+            record.qr_process_cancel.cancel();
+            self.qr_sessions.lock().await.remove(&bot_id);
+        }
 
         // unload + kill 进程树(COLD)
         let qq_pid = record.qq_pid;
@@ -425,6 +693,41 @@ impl BotBackend for SnowLumaRuntimeBackend {
             Some(rec) => Ok(BotStatus::running(bot_id, rec.qq_pid, rec.started_at)),
             None => Ok(BotStatus::stopped(bot_id)),
         }
+    }
+
+    async fn qr_login_snapshot(
+        &self,
+        bot_id: &BotId,
+        refresh: bool,
+    ) -> Result<ncd_domain::SnowLumaQrLoginSnapshot, BotBackendError> {
+        #[cfg(not(windows))]
+        {
+            let _ = (bot_id, refresh);
+            Ok(ncd_domain::SnowLumaQrLoginSnapshot::unavailable(
+                "请在 QQ 窗口中继续登录",
+            ))
+        }
+        #[cfg(windows)]
+        {
+            self.local_qr_snapshot(bot_id, refresh).await
+        }
+    }
+
+    async fn close_qr_login(&self, bot_id: &BotId) -> Result<(), BotBackendError> {
+        #[cfg(windows)]
+        if let Some(session) = self.qr_sessions.lock().await.get(bot_id).cloned() {
+            session.cancel.cancel();
+            tokio::time::timeout(Duration::from_secs(7), async {
+                while session.active.load(std::sync::atomic::Ordering::SeqCst) {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .map_err(|_| BotBackendError::Io("扫码捕获尚未结束".into()))?;
+        }
+        #[cfg(not(windows))]
+        let _ = bot_id;
+        Ok(())
     }
 
     async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
