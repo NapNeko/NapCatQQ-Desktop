@@ -1,67 +1,44 @@
 # NapCatQQ Desktop 文档
 
-## 目录结构
+[项目首页](../README.md) · [下载安装包](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest) · [更新日志](https://github.com/NapNeko/NapCatQQ-Desktop/releases)
 
-```
-docs/
-├── context/           # Agent/开发活上下文（进 git；codemap 等）
-│   └── codemap.md     # 功能域 → 代码落点
-├── releases/          # 发版策展正文（进 git；CI / 本地 preview）
-│   ├── README.md      # 写法与 pnpm release:notes:* 流程
-│   └── vX.Y.Z.md      # Desktop；watch-vX.Y.Z.md 为 ncd-watch
-├── user/              # 用户文档（进 git，对外公开）
-│   └── README.md
-└── dev/               # 开发文档（不进 git，内部使用）
-    ├── troubleshooting/
-    ├── architecture/
-    ├── workflow/
-    └── archive/
-```
+## 使用 Desktop
 
-## 文档分类
+| 目标                                        | 文档                                    |
+| :------------------------------------------ | :-------------------------------------- |
+| 首次安装、创建 Bot、备份与常见问题          | [用户指南](user/README.md)              |
+| 安装应用端、导入项目与对接 Bot              | [应用端实例](user/app-instances.md)     |
+| 聊天、媒体、群文件、截图与账号托盘          | [聊天与截图](user/chat.md)              |
+| 添加 SSH 主机、原生 / Docker 部署与远端排错 | [远端 Linux 管理](user/remote-linux.md) |
+| Desktop 退出后的监控与通知                  | [ncd-watch 远端值守](user/ncd-watch.md) |
 
-### 上下文文档 (docs/context/)
-- **进 git 仓库**
-- 给开发者与 AI 助手的活地图：功能域 → 代码落点（codemap.md）
-- 旧实现对照根：仓库外/本地 .references/NapCatQQ-Desktop-main
+## 参与开发
 
-### 用户文档 (`docs/user/`)
-- **进 git 仓库**，对外公开
-- 面向最终用户：安装、配置、使用指南
-- 语言：简体中文为主
-- 保持简洁、易懂
+| 目标                            | 文档                                    |
+| :------------------------------ | :-------------------------------------- |
+| 配置开发环境、运行检查、提交 PR | [贡献指南](../CONTRIBUTING.md)          |
+| 按功能定位源码                  | [代码地图](context/codemap.md)          |
+| 查找已有后端能力                | [后端能力速查](context/capabilities.md) |
+| 了解前端分层与组件约定          | [前端约定](context/frontend.md)         |
+| 查阅历史问题与约束              | [开发经验](context/lessons.md)          |
+| 编写和预览发布说明              | [发版说明维护](releases/README.md)      |
 
-### 发版说明 (`docs/releases/`)
-- **进 git 仓库**
-- 每版用户向更新内容（策展）；安装/资源表由 `scripts/release-notes.mjs` 拼装
-- 本地：`pnpm run release:notes:draft` → 编辑 → `pnpm run release:notes:preview`
-- CI Release 工作流 `render` 优先读本目录，避免把原始 git log 当更新日志
+完整版本更新以 [GitHub Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 为准。`docs/releases/` 保存各版策展正文，`v*.*.*` 对应 Desktop，`watch-v*` 对应远端监控组件。
 
-### 开发文档 (`docs/dev/`)
-- **不进 git 仓库**（已在 .gitignore）
-- 面向开发者：问题排查、架构设计、开发流程
-- 包含内部调试信息、临时笔记、问题记录
-- 不保存凭据、访问令牌或其他敏感数据；忽略规则不等于安全保护，无法限制文件访问或阻止其他方式上传。
+## 文档维护
 
-### 归档文档 (`docs/dev/archive/`)
-- **不进 git 仓库**
-- 存放已完成或已废弃的历史设计文档
-- 按类别子目录组织（如 `bugfix/`、`feature/` 等）
-- 归档文档保留供未来参考和演进追踪，不再日常更新
-- 在对应上层目录的 README 中保留索引和简要说明
+| 目录        | 内容                               | 版本控制 |
+| :---------- | :--------------------------------- | :------- |
+| `user/`     | 面向用户的操作步骤、限制与排错     | 入库     |
+| `context/`  | 可复用的代码地图、架构与开发约定   | 入库     |
+| `releases/` | 各版本发布说明及维护流程           | 入库     |
+| `assets/`   | 文档使用的截图等资源               | 入库     |
+| `dev/`      | 本地计划、排查记录、临时报告与归档 | 默认忽略 |
 
-### 本地 Agent 工作记录
-
-- 工作计划、会话日志、临时报告、排查记录及一次性设计草案只留本地，优先放在已忽略的 `docs/dev/`；工具已有的 `work/`、`docs/superpowers/` 也只作本地记录使用。
-- `docs/context/` 中有意共享的代码地图、能力速查、前端约定和踩坑教训继续入库；只维护可复用的项目知识。
-- `.gitignore` 不会让已跟踪文件自动退出版本控制。确认属于本地记录并检查引用后，用 `git rm --cached -- <具体文件路径>` 取消跟踪，保留本地文件，再补精确忽略规则。用途不明的文件先确认。
-- 提交前检查 `git status --short` 和 `git diff --cached --name-status`，按具体路径暂存正式文档，不对本地记录使用 `git add -f`。
-
-## 维护原则
-
-1. 用户文档保持最新，随版本更新
-2. 开发文档按需记录，不强制完整
-3. 问题排查记录及时归档到 `dev/troubleshooting/`
-4. 架构设计完成后，考虑是否需要归档至 `dev/archive/<category>/`
-5. 废弃文档及时删除，不要留空文件
-6. 归档时更新对应目录的 README 索引，说明归档原因和位置
+- README 负责介绍产品与入口，操作细节写进用户文档，通过链接引用。
+- 功能变化时同步对应指南；注明版本、权限和运行条件，不把计划中的能力写成已发布功能。
+- 截图优先使用演示数据并说明来源，不上传账号凭据、真实消息或私人服务器信息。
+- 本地工作记录留在已忽略的 `docs/dev/`；`work/`、`docs/superpowers/` 也只作本地记录。`.gitignore` 不会使已跟踪文件自动退出版本控制。
+- 本地笔记也不保存凭据或访问令牌，忽略规则不限制文件访问，也不能阻止其他方式上传。
+- 取消跟踪已入库的本地记录前，确认用途并检查引用，再用 `git rm --cached -- <具体路径>` 保留本地副本。
+- 正式文档按具体路径暂存；提交前检查改动和链接，不强制添加被忽略的本地记录。
