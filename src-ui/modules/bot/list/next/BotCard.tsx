@@ -61,6 +61,8 @@ import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesS
 import { useDebugConsoleEnabled } from '../../../../hooks/debug/useDebugConsoleEnabled';
 import { openDebugConsole } from '../../../../hooks/debug/debugNav';
 import { QrCodeDialog } from './QrCodeDialog';
+import { RemoteSnowLumaQrLoginDialog } from './RemoteSnowLumaQrLoginDialog';
+import { useRemoteSnowlumaQrEnabled } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
 import {
@@ -149,6 +151,18 @@ export function BotCard({
     onRetrySnowlumaUi,
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
+    const [remoteQrOpen, setRemoteQrOpen] = useState(false);
+    const localQrEligible =
+        config?.bot.backend_type === 'snowluma' &&
+        isRuntimeTargetLocal(config.bot.runtime_target) &&
+        config.bot.deploymentType === 'native' &&
+        (config.bot.snowlumaStartMode?.mode ?? 'cold_start') === 'cold_start';
+    const remoteQrEnabled = useRemoteSnowlumaQrEnabled(
+        localQrEligible ||
+            (config?.bot.backend_type === 'snowluma' &&
+                !isRuntimeTargetLocal(config.bot.runtime_target)),
+        localQrEligible,
+    );
     const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
     const debugEnabled = useDebugConsoleEnabled();
     const { enabled: metricsEnabled, metrics: runtimeMetrics } = useBotRuntimeMetrics(bot.bot_id);
@@ -255,6 +269,13 @@ export function BotCard({
     });
 
     const novncAvailable = isSnowlumaRemoteTunnelUi && snowlumaTunnelReady && isActive;
+    const remoteQrAvailable =
+        remoteQrEnabled && bot.state === 'running' && snowlumaLoginState !== 'logged_in';
+    useEffect(() => {
+        if (!remoteQrEnabled || bot.state !== 'running' || snowlumaLoginState === 'logged_in') {
+            setRemoteQrOpen(false);
+        }
+    }, [bot.state, remoteQrEnabled, snowlumaLoginState]);
     const snowlumaUiRetryAvailable = isSnowlumaRemoteUiRetryAvailable({
         config: config ?? null,
         active: bot.state === 'running',
@@ -530,6 +551,19 @@ export function BotCard({
                                         </IconButton>
                                     )}
                                     <IconButton
+                                        visible={remoteQrAvailable}
+                                        tooltip="扫码登录"
+                                        onClick={stopAction(() => setRemoteQrOpen(true))}
+                                        tone="brand"
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={QrCode}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    <IconButton
                                         visible={debugEnabled && bot.state === 'running'}
                                         tooltip="调试"
                                         onClick={stopAction(() => openDebugConsole(bot.bot_id))}
@@ -650,6 +684,12 @@ export function BotCard({
                         <span>打开 noVNC 桌面</span>
                     </ContextMenuItem>
                 )}
+                {remoteQrAvailable && (
+                    <ContextMenuItem onClick={() => setRemoteQrOpen(true)}>
+                        <QrCode size={13} className="text-brand" />
+                        <span>扫码登录</span>
+                    </ContextMenuItem>
+                )}
                 {snowlumaUiRetryAvailable && onRetrySnowlumaUi && (
                     <ContextMenuItem
                         disabled={retryingSnowlumaUi}
@@ -738,6 +778,18 @@ export function BotCard({
                     setQrOpen(false);
                 }}
             />
+            {remoteQrEnabled && (
+                <RemoteSnowLumaQrLoginDialog
+                    initialRefresh
+                    botId={bot.bot_id}
+                    open={remoteQrOpen && bot.state === 'running'}
+                    onOpenChange={setRemoteQrOpen}
+                    isOnline={snowlumaLoginState === 'logged_in'}
+                    onOpenVnc={
+                        novncAvailable && onOpenNovnc ? () => onOpenNovnc(bot.bot_id) : undefined
+                    }
+                />
+            )}
         </ContextMenu>
     );
 }

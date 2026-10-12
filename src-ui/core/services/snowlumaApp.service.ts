@@ -4,12 +4,19 @@ import type { SnowLumaAppConfig } from '../ipc/generated/domain/SnowLumaAppConfi
 const defaultConfig = (): SnowLumaAppConfig => ({
     snowlumaWebuiPasswordOverride: '',
     snowlumaWebuiPort: 5099,
+    snowlumaRemoteQrLoginEnabled: true,
+    snowlumaLocalQrLoginEnabled: true,
 });
 
 export const snowlumaAppService = {
     get: async (): Promise<SnowLumaAppConfig> => {
         if (!isTauri) return defaultConfig();
-        return invoke<SnowLumaAppConfig>('get_snowluma_app_config');
+        const config = await invoke<SnowLumaAppConfig>('get_snowluma_app_config');
+        return {
+            ...config,
+            snowlumaRemoteQrLoginEnabled: config.snowlumaRemoteQrLoginEnabled ?? true,
+            snowlumaLocalQrLoginEnabled: config.snowlumaLocalQrLoginEnabled ?? true,
+        };
     },
 
     set: async (config: SnowLumaAppConfig): Promise<void> => {

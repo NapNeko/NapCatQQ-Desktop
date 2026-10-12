@@ -3,12 +3,19 @@
 // 这里不新增 core/services import。
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+    LOCAL_SL_QR_ENABLED_KEY,
+    REMOTE_SL_QR_ENABLED_KEY,
+} from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
 import type { SnowLumaAppConfig } from '../../../../core/ipc/generated/domain/SnowLumaAppConfig';
 import { pushErrorBar } from '../../../../hooks/ui/pushErrorBar';
 
 const defaultSnowlumaAppConfig = (): SnowLumaAppConfig => ({
     snowlumaWebuiPasswordOverride: '',
     snowlumaWebuiPort: 5099,
+    snowlumaRemoteQrLoginEnabled: true,
+    snowlumaLocalQrLoginEnabled: true,
 });
 
 export interface BotConfigSnowlumaAppDeps {
@@ -27,6 +34,7 @@ export interface BotConfigSnowlumaApp {
 
 export function useBotConfigSnowlumaApp(deps: BotConfigSnowlumaAppDeps): BotConfigSnowlumaApp {
     const { load, persist } = deps;
+    const queryClient = useQueryClient();
     const [snowlumaApp, setSnowlumaApp] = useState<SnowLumaAppConfig>(defaultSnowlumaAppConfig);
     const [snowlumaAppPristine, setSnowlumaAppPristine] =
         useState<SnowLumaAppConfig>(defaultSnowlumaAppConfig);
@@ -40,7 +48,12 @@ export function useBotConfigSnowlumaApp(deps: BotConfigSnowlumaAppDeps): BotConf
             setSnowlumaAppLoading(true);
             setSnowlumaAppLoadError(null);
             try {
-                const loaded = await load();
+                const value = await load();
+                const loaded = {
+                    ...value,
+                    snowlumaRemoteQrLoginEnabled: value.snowlumaRemoteQrLoginEnabled ?? true,
+                    snowlumaLocalQrLoginEnabled: value.snowlumaLocalQrLoginEnabled ?? true,
+                };
                 if (cancelled) return;
                 setSnowlumaApp(loaded);
                 setSnowlumaAppPristine(loaded);
@@ -68,7 +81,9 @@ export function useBotConfigSnowlumaApp(deps: BotConfigSnowlumaAppDeps): BotConf
         if (JSON.stringify(snowlumaApp) === JSON.stringify(snowlumaAppPristine)) return;
         await persist(snowlumaApp);
         setSnowlumaAppPristine(snowlumaApp);
-    }, [persist, snowlumaApp, snowlumaAppPristine]);
+        await queryClient.invalidateQueries({ queryKey: REMOTE_SL_QR_ENABLED_KEY });
+        await queryClient.invalidateQueries({ queryKey: LOCAL_SL_QR_ENABLED_KEY });
+    }, [persist, snowlumaApp, snowlumaAppPristine, queryClient]);
 
     return {
         snowlumaApp,
