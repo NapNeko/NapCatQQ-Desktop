@@ -104,6 +104,8 @@ jobs:
               - 'src-tauri/tauri.conf.json'
               - 'src-tauri/capabilities/**'
               - 'src-tauri/resources/**'
+              - 'crates/ncd-backend-snowluma/resources/login-helper/**'
+              - 'scripts/build-snowluma-login-helper.mjs'
               - '.github/workflows/ci.yml'
 
   frontend:
@@ -132,6 +134,11 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Python for external login helper
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Check version metadata
         run: pnpm run check:versions
 
@@ -144,6 +151,12 @@ jobs:
       # OneBot 探针是注入用户 Bot 进程的脚本，只能靠线级回归守住
       - name: Probe tests
         run: pnpm run test:probe
+
+      - name: Validate external SnowLuma login helper assets
+        run: pnpm run build:sl-login-helper
+
+      - name: External SnowLuma login helper tests
+        run: pnpm run test:sl-login-helper
 
   rust-core:
     name: Rust core (Windows)

@@ -160,6 +160,7 @@ KB：`.claude/kb/napcat-runtime.md`
 | 进程树 / login probe | `.../snowluma/proc_tree.rs`, `qq_login_probe.rs`, `linux_proc_probe.rs` |
 | 本机 runtime backend | `.../snowluma/runtime_backend.rs` |
 | 远端 backend 总装 | `.../remote_snowluma/`（backend/daemon/inject/config/helpers） |
+| 扫码登录 | 远端 `.../remote_snowluma/login_helper.rs` / `.../docker_login.rs` + `resources/login-helper/atspi-login.py`（短期 AT-SPI / X11、PID/starttime/UID/display绑定）；Windows `.../snowluma/windows_qr_login.rs`（UIA） / `windows_qr_capture.rs`（WGC 单帧） + `runtime_backend.rs`；`qr_guard.rs`（SL 显式状态与账号门控）→ `ncd-domain/src/snowluma_login.rs` / `ncd-traits/BotBackend` → `ncd-runtime/src/bot_manager/qr_login.rs` → `commands/snowluma.rs`；Docker 复用 `remote/docker_session.rs` 已认证 client；UI `useRemoteSnowlumaQrLogin` / `RemoteSnowLumaQrLoginDialog`；本机与远端独立开关，默认开启、显式关闭保留、冷启动生效，保留 QQ / VNC 回退 |
 | 远端编排 / 栈 / 布局 / 隧道 / 日志 | `.../remote_snowluma/{orchestrator,stack,layout,tunnel,log}.rs`；远端 bash 路径 `remote_bash.rs`（经 `Host::which` 按连接记住，不放进程级 static） |
 | 协议同意 / consent 文件 | `crates/ncd-runtime/src/snowluma/{agreements,consent_files}.rs` |
 | Tauri SL 命令 | `src-tauri/src/commands/snowluma.rs` |
