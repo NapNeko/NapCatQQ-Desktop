@@ -388,3 +388,36 @@ fn parse_bound_webui_port_from_unknown_level_loopback_line() {
     ];
     assert_eq!(parse_bound_webui_port_from_logs(lines), Some(13105));
 }
+
+#[test]
+fn parse_bound_webui_port_ignores_onebot_listeners_after_webui() {
+    let lines = [
+        "12:57:09 INFO [WebUI] listening http://127.0.0.1:13105",
+        "12:57:10 OK [2707600964] [OneBot.WS-Server] [ws-default] listening 127.0.0.1:13106/",
+        "12:57:10 OK [2550419068] [OneBot.HTTP] [http-default] listening http://0.0.0.0:3000/",
+        "12:57:10 OK [2550419068] [OneBot.WS-Server] [ws-default] listening ws://0.0.0.0:3001/",
+        "12:57:11 WARN [OneBot.HTTP] port 3000 is in use, using 3002 instead",
+    ];
+    assert_eq!(parse_bound_webui_port_from_logs(lines), Some(13105));
+}
+
+#[test]
+fn parse_bound_webui_port_uses_latest_binding_after_an_old_port_change() {
+    let lines = [
+        "INFO [WebUI] port 5099 is in use, using 5100 instead",
+        "INFO [WebUI] listening http://127.0.0.1:5100",
+        "INFO [WebUI] listening http://127.0.0.1:13105/",
+    ];
+    assert_eq!(parse_bound_webui_port_from_logs(lines), Some(13105));
+}
+
+#[test]
+fn parse_bound_webui_port_rejects_unscoped_or_non_http_listeners() {
+    let lines = [
+        "INFO listening http://127.0.0.1:3000",
+        "INFO [OneBot.WS-Server] listening 127.0.0.1:13106/",
+        "INFO [WebUI] listening ws://127.0.0.1:3001/",
+        "INFO [WebUI] listening http://127.0.0.1:99999/",
+    ];
+    assert_eq!(parse_bound_webui_port_from_logs(lines), None);
+}

@@ -454,8 +454,14 @@ dump_listen_ports() {{
 grep_webui_ports() {{
   f="$1"
   [ -f "$f" ] || return 0
-  grep -oE 'is in use, using [0-9]+ instead' "$f" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+$' || true
-  grep -oE 'listening https?://[^[:space:]]+' "$f" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+$' || true
+  grep -iF '[WebUI]' "$f" 2>/dev/null \
+    | grep -oiE 'is in use, using [0-9]+ instead|listening https?://[^[:space:]]+' \
+    | tail -n 1 \
+    | awk '{{
+        if (tolower($1) == "is") port = $5;
+        else {{ port = $2; sub(/^.*:/, "", port); sub(/[^0-9].*$/, "", port); }}
+        if (port+0 > 0 && port+0 <= 65535) print port+0;
+      }}'
 }}
 preferred_ports() {{
   grep_webui_ports "$LOG"

@@ -334,10 +334,16 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
                 let http = { self.inner.read().await.http.clone() };
                 let result = http.get(&url).timeout(DEFAULT_REQUEST_TIMEOUT).send().await;
                 match result {
-                    Ok(_resp) => {
+                    Ok(resp)
+                        if resp.status().is_success()
+                            || matches!(resp.status().as_u16(), 401 | 403) =>
+                    {
                         let mut inner = self.inner.write().await;
                         inner.host = host.clone();
                         return Ok(());
+                    }
+                    Ok(resp) => {
+                        last_errors.insert(host.clone(), format!("HTTP {}", resp.status()));
                     }
                     Err(e) => {
                         last_errors.insert(host.clone(), e.to_string());

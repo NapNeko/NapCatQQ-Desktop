@@ -287,23 +287,25 @@ fn first_available_port(
 /// - `port 5099 is in use, using 5100 instead`
 /// - `listening http://0.0.0.0:5100` / `listening https://127.0.0.1:5100`
 ///
-/// 优先取 "using N instead"（明确换口），否则取最近一条 listening 行的端口。
+/// 只读 WebUI 日志，取最近一次换口或监听结果，避免混入 OneBot 的端口。
 pub fn parse_bound_webui_port_from_logs<I, S>(lines: I) -> Option<u16>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    let mut listening_port: Option<u16> = None;
+    let mut bound_port = None;
     for line in lines {
         let line = line.as_ref();
-        if let Some(port) = parse_port_in_use_using_instead(line) {
-            return Some(port);
+        if !line.to_ascii_lowercase().contains("[webui]") {
+            continue;
         }
-        if let Some(port) = parse_listening_url_port(line) {
-            listening_port = Some(port);
+        if let Some(port) =
+            parse_port_in_use_using_instead(line).or_else(|| parse_listening_url_port(line))
+        {
+            bound_port = Some(port);
         }
     }
-    listening_port
+    bound_port
 }
 
 fn parse_port_in_use_using_instead(line: &str) -> Option<u16> {
@@ -324,14 +326,12 @@ fn parse_listening_url_port(line: &str) -> Option<u16> {
     let lower = line.to_ascii_lowercase();
     let listen_idx = lower.find("listening ")?;
     let rest = &line[listen_idx + "listening ".len()..];
-    // 取最后一个 ':' 后的端口数字（IPv6 URL 也是 scheme://host:port）
-    let colon = rest.rfind(':')?;
-    let tail = &rest[colon + 1..];
-    let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
-    if digits.is_empty() {
+    let address = rest.split_whitespace().next()?;
+    let url = reqwest::Url::parse(address).ok()?;
+    if !matches!(url.scheme(), "http" | "https") {
         return None;
     }
-    let port: u16 = digits.parse().ok()?;
+    let port = url.port_or_known_default()?;
     (port > 0).then_some(port)
 }
 
