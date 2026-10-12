@@ -1,74 +1,75 @@
 # NapCatQQ Desktop 用户文档
 
+[项目首页](../../README.md) · [下载 Desktop](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest) · [全部文档](../README.md)
+
+NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 桌面控制台。可以管理本机与远端 Bot、安装应用端、聊天和截图，也提供日志、监控、OneBot 调试台与终端。
+
 ## 快速开始
 
-NapCatQQ Desktop 是 NapCat 和 SnowLuma 的桌面管理工具，支持本地和远程部署。
+### 安装 Desktop
 
-### 系统要求
+从 [最新发布页](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest) 下载 `NapCatQQ-Desktop-<版本>-x64.msi`，双击安装。`NapCatQQ-Desktop-x64.msi` 是同内容别名；带 `watch-v` 的发布是远端组件。
 
-#### Windows 本地
-- Windows 10/11
-- 8GB+ 内存
+| 环境       | 要求                                                           |
+| :--------- | :------------------------------------------------------------- |
+| 桌面客户端 | Windows 10 / 11 x64，或 Windows Server 2016+；需要 WebView2    |
+| 本机终端   | Windows 10 1809 / Server 2019+；更早的系统不能使用 ConPTY 终端 |
+| 远端主机   | 可通过 SSH 访问的 Linux；Docker 部署还需 Docker 环境           |
+| 资源       | QQ、协议端和应用端共同占用 CPU / 内存，按实例数与框架需求预留  |
 
-#### Linux 远端（推荐用于远程部署）
-- Ubuntu 20.04+ / Debian 11+
-- 2GB+ 内存
-- 必需软件包（见下方）
+安装包会在缺少 WebView2 时处理安装。Desktop 目前不提供 Linux / macOS 客户端，本机 Docker 与远端 Windows 也不在支持范围内。
 
----
+### 本机创建 Bot
 
-## Linux 远端依赖安装
+1. 在「组件」页选择本机，安装 QQ 和需要的协议端及运行时。NapCat 与 SnowLuma 都可使用。
+2. 在「机器人」页新建 Bot，填写 QQ 号与名称，运行位置选择本机，保存配置。
+3. 启动 Bot，按协议端提供的 WebUI 或 QQ 入口完成登录。
+4. 查看卡片登录状态与日志。需要连接应用端时再配置 OneBot，或使用应用端的对接入口。
 
-远端 Linux 服务器需要安装以下依赖才能运行 QQ 和 SnowLuma：
+组件页安装的 QQ 程序与日常使用的系统 QQ 分开；如果选择使用系统 QQ，按启动前提示核对。程序文件分开不等于 QQ 登录数据完全隔离。
 
-### 必需依赖
+### 远端创建 Bot
 
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  libatspi2.0-0 \
-  libgtk-3-0 \
-  libasound2 \
-  libgbm1 \
-  libnss3 \
-  libnotify4 \
-  libsecret-1-0 \
-  libxss1 \
-  libxtst6 \
-  libxkbfile1 \
-  xvfb \
-  x11vnc \
-  openbox \
-  dbus-user-session \
-  fonts-wqy-zenhei
-```
+先在「远端」页添加 SSH 主机并测试连接，再在「组件」页选中这台主机准备环境。新建 Bot 时选择对应远端主机，可选原生或 Docker 部署。
 
-### 可选依赖（推荐）
+环境准备、登录与排错见 [远端 Linux 管理](remote-linux.md)。
 
-```bash
-sudo apt-get install -y \
-  curl \
-  wget \
-  ffmpeg \
-  git
-```
+## 按任务找入口
 
----
+| 想做什么                   | 入口 / 说明                                               |
+| :------------------------- | :-------------------------------------------------------- |
+| 安装运行时、QQ 与框架      | 「组件」，先选择主机                                      |
+| 管理 Bot、连接、登录和日志 | 「机器人」，打开卡片上的对应操作                          |
+| 安装应用端或导入已有项目   | [应用端实例](app-instances.md)                            |
+| 私聊、群聊、群文件与截图   | [聊天与截图](chat.md)                                     |
+| 调用 OneBot 接口、查看事件 | 「调试台」或 Bot 卡片「调试」                             |
+| 打开终端                   | 标题栏终端按钮、卡片入口，或 `Ctrl+反引号`                |
+| 查看安装 / 部署进度        | 「任务」                                                  |
+| 配置掉线通知               | 「设置 → 通知」；远端独立值守见 [ncd-watch](ncd-watch.md) |
+| 调整主题、侧栏或功能开关   | 「设置 → 外观 / 功能」                                    |
+
+功能入口可由设置中的开关隐藏。聊天的后台接收、账号托盘按账号单独设置，应用端的运行面板按框架和版本提供。
+
+## 数据与升级
+
+默认数据根为 `%ProgramData%\NapCatQQ Desktop`，可在「设置 → 数据」查看。需要换盘时使用「数据根目录」旁的「迁移」。直接安装新版 MSI 可以覆盖升级，也可从应用内检查更新。
+
+升级或换机前建议导出配置。恢复范围和敏感信息说明如下。
 
 ## 备份与恢复配置
 
 打开「设置 → 数据」，点击「导出 ZIP」保存当前已保存的配置。新的配置包覆盖：
 
-| 内容 | 恢复范围 |
-| --- | --- |
-| 应用设置与 Bot 配置 | 外观、功能开关、运行与通知设置、Bot 连接配置 |
-| 远端服务器 | 服务器档案与连接参数 |
-| 应用实例 | 实例档案、Bot 关联、领养时保存的回滚快照 |
-| 框架配置 | Karin、NoneBot2、AstrBot、MaiBot、Koishi、云崽、NeoBot 的核心设置、模型与插件配置；麦麦自定义提示词及版本 |
-| 聊天 | 账号用途、后台接收、托盘通知、忽略与隐藏群、界面布局 |
-| API 调试台 | 工作区、标签页草稿、布局、收藏与文件夹 |
-| SnowLuma | 全局 WebUI 端口与密码覆盖设置 |
-| 界面与终端 | 终端设置、常用命令、布局、Bot 手动排序、麦麦聊天昵称 |
+| 内容                | 恢复范围                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| 应用设置与 Bot 配置 | 外观、功能开关、运行与通知设置、Bot 连接配置                                                              |
+| 远端服务器          | 服务器档案与连接参数                                                                                      |
+| 应用实例            | 实例档案、Bot 关联、领养时保存的回滚快照                                                                  |
+| 框架配置            | Karin、NoneBot2、AstrBot、MaiBot、Koishi、云崽、NeoBot 的核心设置、模型与插件配置；麦麦自定义提示词及版本 |
+| 聊天                | 账号用途、后台接收、托盘通知、忽略与隐藏群、界面布局                                                      |
+| API 调试台          | 工作区、标签页草稿、布局、收藏与文件夹                                                                    |
+| SnowLuma            | 全局 WebUI 端口与密码覆盖设置                                                                             |
+| 界面与终端          | 终端设置、常用命令、布局、Bot 手动排序、麦麦聊天昵称                                                      |
 
 导入时选择配置 ZIP，或拖入配置文件夹。导入向导先校验来源并列出将恢复的项目，确认后备份目标现有配置，再一次写入；校验失败不会覆盖配置，写入失败会回滚。缺少的项目保留目标原配置。旧版 ZIP 和扁平配置文件夹继续支持；新包使用 v2 格式，并保留旧版四个文件的名称。
 
@@ -84,39 +85,7 @@ sudo apt-get install -y \
 
 ### 远端 Bot 启动失败
 
-**现象**: Desktop 显示"启动失败"或"启动后立即退出"
-
-**排查步骤**:
-
-1. **检查依赖是否安装**
-   ```bash
-   ldd ~/Napcat/opt/QQ/qq | grep "not found"
-   ```
-   如果有 `not found`，说明缺少依赖，请安装上述必需依赖。
-
-2. **检查 Node.js 版本**
-   ```bash
-   ~/snowluma-remote/workspace/node/bin/node --version
-   ```
-   应该显示 `v22.12.0` 或更高版本。
-
-3. **查看启动日志**
-   ```bash
-   # SnowLuma daemon 日志
-   tail -50 ~/snowluma-remote/workspace/log/daemon.log
-   
-   # Bot QQ 进程日志
-   tail -50 ~/snowluma-remote/workspace/log/bot_<你的QQ号>.log
-   ```
-
-4. **手动测试启动**
-   ```bash
-   # 测试 SnowLuma WebUI
-   cd ~/snowluma-remote/workspace/snowluma
-   DISPLAY=:0 ~/snowluma-remote/workspace/node/bin/node --experimental-sqlite index.mjs
-   
-   # 如果成功，按 Ctrl+C 退出，然后在 Desktop 中重新启动
-   ```
+先区分安装失败、进程退出、QQ 未登录和 WebUI 鉴权失败，查看组件检测、任务队列和 Bot 日志，再按运行方式排查。步骤见 [远端启动排错](remote-linux.md#启动失败怎么查)。
 
 ### 在远端 WebUI 里改的网络配置被还原了
 
@@ -132,5 +101,6 @@ Desktop 每次启动远端 Bot 都会按自己保存的配置重写远端的 one
 
 ## 更多帮助
 
-- GitHub Issues: https://github.com/NapNeko/NapCatQQ-Desktop/issues
-- 文档问题：提交 Issue 或 PR
+- [GitHub Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues)：附 Desktop / 协议端版本、运行方式、复现步骤与日志，隐藏 token、密码和密钥。
+- [QQ 群](https://qm.qq.com/q/8UK5ecfDyw)：使用交流。
+- 文档问题也可以提交 Issue 或 PR。
