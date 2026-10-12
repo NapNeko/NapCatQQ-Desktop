@@ -28,6 +28,8 @@ interface AdvancedTabProps {
     onWebuiPasswordTakeoverChange: (v: boolean) => void;
     snowlumaAppLoadError?: string | null;
     snowlumaAppLoading?: boolean;
+    remoteTarget?: boolean;
+    localNative?: boolean;
 }
 
 const LOG_LEVEL_ITEMS = [
@@ -75,6 +77,8 @@ export function AdvancedTab({
     snowlumaAppLoading,
     webuiPasswordTakeover,
     onWebuiPasswordTakeoverChange,
+    remoteTarget = false,
+    localNative = false,
 }: AdvancedTabProps) {
     const isSnowLuma = backendType === 'snowluma';
     const sc = statusCommand ?? DEFAULT_STATUS_COMMAND;
@@ -91,6 +95,36 @@ export function AdvancedTab({
                     onChange={onSnowlumaAppConfigChange}
                     loadError={snowlumaAppLoadError}
                     loading={snowlumaAppLoading}
+                />
+            )}
+
+            {isSnowLuma && localNative && (
+                <Switch
+                    label="Windows 简化扫码（全局）"
+                    hint="下次冷启动生效；打开扫码会恢复 QQ 登录窗口，需保持桌面会话可用。"
+                    checked={snowlumaAppConfig.snowlumaLocalQrLoginEnabled}
+                    disabled={snowlumaAppLoading || !!snowlumaAppLoadError}
+                    onCheckedChange={(enabled) =>
+                        onSnowlumaAppConfigChange({
+                            ...snowlumaAppConfig,
+                            snowlumaLocalQrLoginEnabled: enabled,
+                        })
+                    }
+                />
+            )}
+
+            {isSnowLuma && remoteTarget && (
+                <Switch
+                    label="简化扫码登录（全局）"
+                    hint="下次冷启动 QQ 生效；登录后自动关闭扫码通道。"
+                    checked={snowlumaAppConfig.snowlumaRemoteQrLoginEnabled}
+                    disabled={snowlumaAppLoading || !!snowlumaAppLoadError}
+                    onCheckedChange={(enabled) =>
+                        onSnowlumaAppConfigChange({
+                            ...snowlumaAppConfig,
+                            snowlumaRemoteQrLoginEnabled: enabled,
+                        })
+                    }
                 />
             )}
 

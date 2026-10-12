@@ -325,6 +325,11 @@ export function BotConfigPageNext({
                                 onChange={updateAdvanced}
                                 backendType={formData.bot.backend_type}
                                 statusCommand={formData.statusCommand ?? null}
+                                remoteTarget={formData.bot.runtime_target !== 'local'}
+                                localNative={
+                                    formData.bot.runtime_target === 'local' &&
+                                    formData.bot.deploymentType === 'native'
+                                }
                                 onStatusCommandChange={updateStatusCommand}
                                 webuiPasswordTakeover={formData.bot.webuiPasswordTakeover}
                                 onWebuiPasswordTakeoverChange={(v) =>

@@ -2,6 +2,7 @@
 
 import type { DesktopExitBlocked } from '../ipc/generated/DesktopExitBlocked';
 import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoint';
+import type { SnowLumaQrLoginSnapshot } from '../ipc/generated/domain/SnowLumaQrLoginSnapshot';
 import type { WindowSignal } from '../ipc/generated/WindowSignal';
 import type { LogSnapshot } from '../ipc/types';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
@@ -180,6 +181,12 @@ export const desktopLogService = {
 };
 
 export const snowlumaService = {
+    remoteQrLoginEnabled: (): Promise<boolean> =>
+        isTauri ? invoke<boolean>('remote_snowluma_qr_login_enabled') : Promise.resolve(false),
+    qrLoginSnapshot: (botId: string, refresh = false): Promise<SnowLumaQrLoginSnapshot> =>
+        invoke<SnowLumaQrLoginSnapshot>('remote_snowluma_qr_login_snapshot', { botId, refresh }),
+    closeQrLogin: (botId: string): Promise<void> =>
+        invoke<void>('close_remote_snowluma_qr_login', { botId }),
     openWebui: (botId: string): Promise<SnowLumaWebuiEndpoint> =>
         invoke<SnowLumaWebuiEndpoint>('open_snowluma_webui', { botId }),
     openNovnc: (botId: string): Promise<SnowLumaWebuiEndpoint> =>
