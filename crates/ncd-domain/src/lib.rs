@@ -40,6 +40,7 @@ pub mod remote_inventory;
 pub mod remote_paths;
 pub mod runtime_scenario;
 pub mod snowluma_linux_package;
+pub mod snowluma_login;
 pub mod snowluma_start_mode;
 pub mod terminal;
 
@@ -162,6 +163,7 @@ pub use remote_paths::{
 };
 pub use runtime_scenario::RuntimeScenario;
 pub use snowluma_linux_package::{SnowLumaLinuxPackage, SnowLumaPackage};
+pub use snowluma_login::{SnowLumaQrLoginSnapshot, SnowLumaQrLoginState};
 pub use snowluma_start_mode::SnowLumaStartMode;
 pub use terminal::{
     LocalShellKind, LocalShellOption, ServerStats, TERMINAL_EVENT_VERSION, TerminalDirListing,

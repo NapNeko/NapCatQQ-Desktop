@@ -139,6 +139,20 @@ pub trait BotBackend: Send + Sync {
     fn kind(&self) -> BackendKind;
     fn flavor(&self) -> BotFlavor;
 
+    async fn qr_login_snapshot(
+        &self,
+        _bot_id: &BotId,
+        _refresh: bool,
+    ) -> Result<ncd_domain::SnowLumaQrLoginSnapshot, BotBackendError> {
+        Ok(ncd_domain::SnowLumaQrLoginSnapshot::unavailable(
+            "此运行方式请使用 QQ 界面扫码",
+        ))
+    }
+
+    async fn close_qr_login(&self, _bot_id: &BotId) -> Result<(), BotBackendError> {
+        Ok(())
+    }
+
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError>;
     async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError>;
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError>;

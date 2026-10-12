@@ -101,6 +101,10 @@ pub struct SnowLumaAppConfig {
     /// SnowLuma daemon WebUI 端口
     #[serde(default = "default_snowluma_port", rename = "snowlumaWebuiPort")]
     pub webui_port: u16,
+    #[serde(default = "default_true", rename = "snowlumaRemoteQrLoginEnabled")]
+    pub remote_qr_login_enabled: bool,
+    #[serde(default = "default_true", rename = "snowlumaLocalQrLoginEnabled")]
+    pub local_qr_login_enabled: bool,
 }
 
 impl Default for SnowLumaAppConfig {
@@ -108,6 +112,8 @@ impl Default for SnowLumaAppConfig {
         Self {
             webui_password_override: String::new(),
             webui_port: default_snowluma_port(),
+            remote_qr_login_enabled: true,
+            local_qr_login_enabled: true,
         }
     }
 }
@@ -661,7 +667,8 @@ mod tests {
     #[test]
     fn ui_preferences_missing_sidebar_style_defaults_floating() {
         // 旧配置（无 sidebarStyle 键）覆盖更新后自动获得悬浮侧栏，0 成本迁移。
-        let prefs: AppUiPreferences = serde_json::from_str(r#"{"theme":"auto","showMascot":true}"#).unwrap();
+        let prefs: AppUiPreferences =
+            serde_json::from_str(r#"{"theme":"auto","showMascot":true}"#).unwrap();
         assert_eq!(prefs.sidebar_style, "floating");
         let round: AppUiPreferences =
             serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
@@ -730,8 +737,7 @@ mod tests {
     }
 
     /// SnowLuma 默认 JSON 字面量
-    const SNOWLUMA_DEFAULT_CANONICAL_JSON: &str =
-        r#"{"snowlumaWebuiPasswordOverride":"","snowlumaWebuiPort":5099}"#;
+    const SNOWLUMA_DEFAULT_CANONICAL_JSON: &str = r#"{"snowlumaWebuiPasswordOverride":"","snowlumaWebuiPort":5099,"snowlumaRemoteQrLoginEnabled":true,"snowlumaLocalQrLoginEnabled":true}"#;
 
     /// SnowLuma 默认值字节稳定
     #[test]
@@ -767,8 +773,7 @@ mod tests {
     /// #[serde(default)] 单独缺失 + 字符串字段非空两种条件
     #[test]
     fn snowluma_custom_password_override_with_default_port_round_trips() {
-        let canonical =
-            r#"{"snowlumaWebuiPasswordOverride":"hunter2!@#","snowlumaWebuiPort":5099}"#;
+        let canonical = r#"{"snowlumaWebuiPasswordOverride":"hunter2!@#","snowlumaWebuiPort":5099,"snowlumaRemoteQrLoginEnabled":false,"snowlumaLocalQrLoginEnabled":true}"#;
         let parsed: SnowLumaAppConfig = serde_json::from_str(canonical).expect("反序列化失败");
         assert_eq!(parsed.webui_password_override, "hunter2!@#");
         assert_eq!(parsed.webui_port, 5099);
@@ -793,7 +798,7 @@ mod tests {
     /// #[serde(default = "...")] 单独缺失 + 端口字段被显式设置两种条件
     #[test]
     fn snowluma_default_password_override_with_custom_port_round_trips() {
-        let canonical = r#"{"snowlumaWebuiPasswordOverride":"","snowlumaWebuiPort":6000}"#;
+        let canonical = r#"{"snowlumaWebuiPasswordOverride":"","snowlumaWebuiPort":6000,"snowlumaRemoteQrLoginEnabled":false,"snowlumaLocalQrLoginEnabled":true}"#;
         let parsed: SnowLumaAppConfig = serde_json::from_str(canonical).expect("反序列化失败");
         assert_eq!(parsed.webui_password_override, "");
         assert_eq!(parsed.webui_port, 6000);

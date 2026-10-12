@@ -11,4 +11,4 @@ snowlumaWebuiPasswordOverride: string,
 /**
  * SnowLuma daemon WebUI 端口
  */
-snowlumaWebuiPort: number, };
+snowlumaWebuiPort: number, snowlumaRemoteQrLoginEnabled: boolean, snowlumaLocalQrLoginEnabled: boolean, };
