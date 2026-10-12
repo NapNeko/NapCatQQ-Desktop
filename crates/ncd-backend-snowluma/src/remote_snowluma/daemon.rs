@@ -1,9 +1,10 @@
 //! 远端主机共享 SnowLuma daemon（图形栈 + node + 隧道）
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use ncd_domain::BotId;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_host::Host;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
@@ -22,7 +23,7 @@ use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
 
-use super::config::ensure_remote_daemon_prereqs;
+use super::config::{ensure_remote_daemon_prereqs, take_over_remote_webui_credentials};
 use super::helpers::read_remote_file_trimmed;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,18 +55,55 @@ pub(crate) fn webui_port_plan(
     WebuiPortPlan::ResolveExisting
 }
 
+#[derive(Default)]
+struct DaemonLeases {
+    anonymous: u32,
+    bots: HashSet<BotId>,
+}
+
+impl DaemonLeases {
+    fn count(&self) -> u32 {
+        self.anonymous
+            .saturating_add(u32::try_from(self.bots.len()).unwrap_or(u32::MAX))
+    }
+
+    fn acquire(&mut self, bot_id: Option<&BotId>) {
+        if let Some(bot_id) = bot_id {
+            self.bots.insert(bot_id.clone());
+        } else {
+            self.anonymous = self.anonymous.saturating_add(1);
+        }
+    }
+
+    fn release(&mut self, bot_id: Option<&BotId>) -> bool {
+        if let Some(bot_id) = bot_id {
+            self.bots.remove(bot_id)
+        } else if self.anonymous > 0 {
+            self.anonymous -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn has_other_bots(&self, bot_id: &BotId) -> bool {
+        self.bots.iter().any(|active| active != bot_id)
+    }
+}
+
 /// 单台远端主机共享的 SL daemon(单例图形栈 + node);多 Bot 共用,按 qq_id 分别启停 QQ
 pub struct RemoteSnowLumaDaemon {
     pub(crate) host: Mutex<Arc<dyn Host>>,
     layout: RemoteSnowLumaLayout,
     server_id: String,
-    refcount: Mutex<u32>,
+    leases: Mutex<DaemonLeases>,
     /// 同一 SSH 主机上多 Bot 并发 start 时,整段启栈(Xvfb/x11vnc/node)单飞,避免抢 5900 等端口
     stack_bootstrap: Mutex<()>,
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     event_bus: Arc<BroadcastEventBus>,
     tunnel_eps: Mutex<Option<RemoteSnowLumaTunnelEndpoints>>,
-    /// 最近一次应用到共享 node 的 metrics env（多 bot 时后启动者覆盖，与本机 daemon 一致）
+    tunnel_remote_ports: Mutex<Option<(u16, u16)>>,
+    /// 仅在共享 node 真正启动或显式重载时更新，其他 Bot 启动保留现有探针。
     metrics_node_env: Mutex<Option<BTreeMap<String, String>>>,
 }
 
@@ -93,11 +131,12 @@ impl RemoteSnowLumaDaemon {
             host: Mutex::new(host),
             layout,
             server_id,
-            refcount: Mutex::new(0),
+            leases: Mutex::new(DaemonLeases::default()),
             stack_bootstrap: Mutex::new(()),
             tunnels,
             event_bus,
             tunnel_eps: Mutex::new(None),
+            tunnel_remote_ports: Mutex::new(None),
             metrics_node_env: Mutex::new(None),
         }
     }
@@ -109,6 +148,7 @@ impl RemoteSnowLumaDaemon {
     /// SSH 重连后 ServerManager 会换新 Host，并把旧 session 毒死。
     /// daemon / 隧道若仍握旧句柄，accept 循环会每 2s 打一次 poisoned。
     pub async fn replace_host(&self, host: Arc<dyn Host>) {
+        let _stack_guard = self.stack_bootstrap.lock().await;
         {
             let mut guard = self.host.lock().await;
             if Arc::ptr_eq(&*guard, &host) {
@@ -118,6 +158,7 @@ impl RemoteSnowLumaDaemon {
         }
         self.tunnels.drop_server(&self.server_id).await;
         *self.tunnel_eps.lock().await = None;
+        *self.tunnel_remote_ports.lock().await = None;
         tracing::info!(
             target: "ncd_backend_snowluma::remote",
             server_id = %self.server_id,
@@ -131,6 +172,7 @@ impl RemoteSnowLumaDaemon {
         &self,
         env: Option<BTreeMap<String, String>>,
     ) -> Result<(), BotBackendError> {
+        let _stack_guard = self.stack_bootstrap.lock().await;
         {
             let guard = self.metrics_node_env.lock().await;
             if *guard == env {
@@ -186,6 +228,36 @@ impl RemoteSnowLumaDaemon {
             .await
     }
 
+    pub async fn has_other_bot_leases(&self, bot_id: &BotId) -> bool {
+        self.leases.lock().await.has_other_bots(bot_id)
+    }
+
+    pub async fn ensure_running_for_bot(
+        &self,
+        bot_id: &BotId,
+        metrics_env: Option<BTreeMap<String, String>>,
+        takeover_requested: bool,
+        password_override: Option<&str>,
+    ) -> Result<(), BotBackendError> {
+        let _stack_guard = self.stack_bootstrap.lock().await;
+        let takeover = takeover_requested && !self.has_other_bot_leases(bot_id).await;
+        let webui_password = if takeover {
+            let host = self.current_host().await;
+            Some(
+                take_over_remote_webui_credentials(
+                    host.as_ref(),
+                    &self.layout.paths,
+                    password_override,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        self.ensure_running_locked(takeover, metrics_env, webui_password, Some(bot_id))
+            .await
+    }
+
     async fn ensure_running_ex(
         &self,
         restart_node: bool,
@@ -193,15 +265,17 @@ impl RemoteSnowLumaDaemon {
         webui_password: Option<String>,
     ) -> Result<(), BotBackendError> {
         let _stack_guard = self.stack_bootstrap.lock().await;
+        self.ensure_running_locked(restart_node, metrics_env, webui_password, None)
+            .await
+    }
 
-        self.event_bus
-            .publish(DomainEvent::snowluma_daemon_state_changed(
-                DaemonState::Starting,
-                0,
-                None,
-                Some(self.server_id.clone()),
-            ));
-
+    async fn ensure_running_locked(
+        &self,
+        restart_node: bool,
+        metrics_env: Option<BTreeMap<String, String>>,
+        webui_password: Option<String>,
+        bot_id: Option<&BotId>,
+    ) -> Result<(), BotBackendError> {
         let host = self.current_host().await;
         let creds = ensure_remote_daemon_prereqs(
             host.as_ref(),
@@ -212,27 +286,37 @@ impl RemoteSnowLumaDaemon {
         .await?;
 
         let stack_up = remote_daemon_already_ready(host.as_ref(), &self.layout.paths).await?;
-        let env_changed = {
-            let guard = self.metrics_node_env.lock().await;
-            *guard != metrics_env
-        };
         let restart_node = restart_node || (creds.wrote && stack_up);
+        if !stack_up || restart_node {
+            self.event_bus
+                .publish(DomainEvent::snowluma_daemon_state_changed(
+                    DaemonState::Starting,
+                    self.leases.lock().await.count(),
+                    None,
+                    Some(self.server_id.clone()),
+                ));
+        } else if *self.metrics_node_env.lock().await != metrics_env {
+            // 指标输出路径按 Bot 不同；为它重启会断掉其他 QQ 的共享 SL 通道。
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                server_id = %self.server_id,
+                "复用共享 SnowLuma node，保留现有指标环境，新环境在共享 node 重载时应用"
+            );
+        }
         let known_port = if !stack_up {
             Some(daemon_start(host.as_ref(), &self.layout, metrics_env.as_ref()).await?)
         } else {
-            if restart_node || env_changed {
-                if restart_node {
-                    tracing::info!(
-                        target: "ncd_backend_snowluma::remote",
-                        server_id = %self.server_id,
-                        "接管 WebUI 密码后重启已运行的 SnowLuma node，使新哈希生效"
-                    );
-                }
+            if restart_node {
+                tracing::info!(
+                    target: "ncd_backend_snowluma::remote",
+                    server_id = %self.server_id,
+                    "接管 WebUI 密码后重启已运行的 SnowLuma node，使新哈希生效"
+                );
                 restart_node_with_env(host.as_ref(), &self.layout, metrics_env.as_ref()).await?;
             }
             None
         };
-        let node_restarted = stack_up && (restart_node || env_changed);
+        let node_restarted = stack_up && restart_node;
         let webui_port = match webui_port_plan(!stack_up, node_restarted, known_port) {
             WebuiPortPlan::UseKnown(port) => port,
             WebuiPortPlan::WaitAfterRestart => {
@@ -260,11 +344,13 @@ impl RemoteSnowLumaDaemon {
             });
         self.open_tunnels(webui_port, tunnel_password.as_deref())
             .await?;
-        *self.metrics_node_env.lock().await = metrics_env;
+        if !stack_up || restart_node {
+            *self.metrics_node_env.lock().await = metrics_env;
+        }
 
-        let mut guard = self.refcount.lock().await;
-        *guard = guard.saturating_add(1);
-        let rc = *guard;
+        let mut guard = self.leases.lock().await;
+        guard.acquire(bot_id);
+        let rc = guard.count();
         drop(guard);
 
         self.event_bus
@@ -278,21 +364,29 @@ impl RemoteSnowLumaDaemon {
     }
 
     pub async fn release(&self) {
-        let mut guard = self.refcount.lock().await;
-        if *guard == 0 {
+        self.release_lease(None).await;
+    }
+
+    pub async fn release_bot(&self, bot_id: &BotId) {
+        self.release_lease(Some(bot_id)).await;
+    }
+
+    async fn release_lease(&self, bot_id: Option<&BotId>) {
+        let _stack_guard = self.stack_bootstrap.lock().await;
+        let mut guard = self.leases.lock().await;
+        if !guard.release(bot_id) {
             return;
         }
-        *guard -= 1;
-        let rc = *guard;
+        let rc = guard.count();
         let stop_daemon = rc == 0;
         drop(guard);
 
-        self.tunnels.release(&self.server_id).await;
-
         if stop_daemon {
+            self.tunnels.release(&self.server_id).await;
             let host = self.current_host().await;
             let _ = daemon_stop(host.as_ref(), &self.layout.paths).await;
             *self.tunnel_eps.lock().await = None;
+            *self.tunnel_remote_ports.lock().await = None;
             self.event_bus
                 .publish(DomainEvent::snowluma_daemon_state_changed(
                     DaemonState::Stopped,
@@ -309,13 +403,31 @@ impl RemoteSnowLumaDaemon {
 
     /// 桌面退出:只拆掉本机 SSH 隧道,不 stop 远端 daemon / QQ
     pub async fn detach_local_sessions(&self) {
-        *self.tunnel_eps.lock().await = None;
-        self.tunnels.release(&self.server_id).await;
+        let _stack_guard = self.stack_bootstrap.lock().await;
+        if self.tunnel_eps.lock().await.take().is_some() {
+            self.tunnels.release(&self.server_id).await;
+        }
+        *self.tunnel_remote_ports.lock().await = None;
     }
 
     /// 导入/冷启动 reconcile：只接管已在跑的 node，不新拉图形栈、不写死 WebUI 端口。
     /// node 不在则跳过隧道（QQ 进程仍可由调用方标成运行中）。
     pub async fn ensure_running_for_reconcile(&self) -> Result<(), BotBackendError> {
+        self.ensure_running_for_reconcile_lease(None).await
+    }
+
+    pub async fn ensure_running_for_reconcile_bot(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<(), BotBackendError> {
+        self.ensure_running_for_reconcile_lease(Some(bot_id)).await
+    }
+
+    async fn ensure_running_for_reconcile_lease(
+        &self,
+        bot_id: Option<&BotId>,
+    ) -> Result<(), BotBackendError> {
+        let _stack_guard = self.stack_bootstrap.lock().await;
         let host = self.current_host().await;
         if !remote_daemon_already_ready(host.as_ref(), &self.layout.paths).await? {
             tracing::info!(
@@ -331,16 +443,17 @@ impl RemoteSnowLumaDaemon {
             .await;
         self.open_tunnels(webui_port, None).await?;
 
-        let mut guard = self.refcount.lock().await;
-        if *guard == 0 {
-            *guard = 1;
+        let mut guard = self.leases.lock().await;
+        if bot_id.is_some() || guard.count() == 0 {
+            guard.acquire(bot_id);
         }
+        let rc = guard.count();
         drop(guard);
 
         self.event_bus
             .publish(DomainEvent::snowluma_daemon_state_changed(
                 DaemonState::Ready,
-                *self.refcount.lock().await,
+                rc,
                 None,
                 Some(self.server_id.clone()),
             ));
@@ -409,7 +522,18 @@ impl RemoteSnowLumaDaemon {
         // noVNC 口动态探测：外来图形栈的 websockify 常不在默认 6081
         let novnc_port = resolve_remote_novnc_port(host.as_ref()).await;
 
-        let eps = self
+        let previous_ports = *self.tunnel_remote_ports.lock().await;
+        let previous_eps = self.tunnel_eps.lock().await.clone();
+        if let Some(previous) = previous_eps.as_ref() {
+            if previous_ports == Some((webui_port, novnc_port))
+                && (webui_plain.is_empty() || previous.webui_password == webui_plain)
+                && (vnc_plain.is_empty() || previous.vnc_password == vnc_plain)
+            {
+                return Ok(());
+            }
+        }
+
+        let opened = self
             .tunnels
             .acquire(
                 &self.server_id,
@@ -419,9 +543,21 @@ impl RemoteSnowLumaDaemon {
                 webui_port,
                 novnc_port,
             )
-            .await
-            .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
+            .await;
+        let eps = match opened {
+            Ok(eps) => eps,
+            Err(error) => {
+                *self.tunnel_eps.lock().await = None;
+                *self.tunnel_remote_ports.lock().await = None;
+                return Err(BotBackendError::Io(format!("SnowLuma SSH 隧道: {error}")));
+            }
+        };
+        // daemon 持有一个 bundle 引用；端口变动时 registry 已替换旧 bundle。
+        if previous_eps.is_some() && previous_ports == Some((webui_port, novnc_port)) {
+            self.tunnels.release(&self.server_id).await;
+        }
         *self.tunnel_eps.lock().await = Some(eps);
+        *self.tunnel_remote_ports.lock().await = Some((webui_port, novnc_port));
         Ok(())
     }
 }
@@ -460,5 +596,61 @@ mod tests {
             webui_port_plan(false, false, None),
             WebuiPortPlan::ResolveExisting
         );
+    }
+
+    #[test]
+    fn reconciled_bots_each_hold_one_shared_daemon_lease() {
+        let mut leases = DaemonLeases::default();
+        for id in ["bot-a", "bot-b", "bot-c"] {
+            leases.acquire(Some(&BotId::new(id)));
+        }
+        assert_eq!(leases.count(), 3);
+    }
+
+    #[test]
+    fn repeated_reconcile_does_not_duplicate_a_bot_lease() {
+        let mut leases = DaemonLeases::default();
+        let bot = BotId::new("bot-a");
+        for _ in 0..3 {
+            leases.acquire(Some(&bot));
+        }
+        assert_eq!(leases.count(), 1);
+    }
+
+    #[test]
+    fn stopping_one_reconciled_bot_keeps_the_other_two_leases() {
+        let mut leases = DaemonLeases::default();
+        let stopped = BotId::new("bot-a");
+        leases.acquire(Some(&stopped));
+        leases.acquire(Some(&BotId::new("bot-b")));
+        leases.acquire(Some(&BotId::new("bot-c")));
+        assert!(leases.release(Some(&stopped)));
+        assert_eq!(leases.count(), 2);
+        assert!(leases.has_other_bots(&stopped));
+    }
+
+    #[test]
+    fn failed_start_returns_only_its_own_lease() {
+        let mut leases = DaemonLeases::default();
+        let existing = BotId::new("existing");
+        let failed = BotId::new("failed");
+        leases.acquire(Some(&existing));
+        leases.acquire(Some(&failed));
+        assert!(leases.release(Some(&failed)));
+        assert!(!leases.release(Some(&failed)));
+        assert_eq!(leases.count(), 1);
+        assert!(leases.bots.contains(&existing));
+    }
+
+    #[test]
+    fn bot_cleanup_does_not_consume_anonymous_preflight_leases() {
+        let mut leases = DaemonLeases::default();
+        let bot = BotId::new("bot-a");
+        leases.acquire(None);
+        leases.acquire(Some(&bot));
+        assert!(leases.release(Some(&bot)));
+        assert_eq!(leases.count(), 1);
+        assert!(leases.release(None));
+        assert_eq!(leases.count(), 0);
     }
 }

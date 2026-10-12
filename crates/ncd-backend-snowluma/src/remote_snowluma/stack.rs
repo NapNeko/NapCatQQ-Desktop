@@ -149,15 +149,52 @@ pub async fn ensure_dbus_env(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
 ) -> Result<(), BotBackendError> {
-    let dbus = shell_single_quote(&paths.dbus_env);
-    let script = format!(
-        r#"if [ ! -f {dbus} ] || ! pgrep -f 'dbus-daemon.*--config-file' >/dev/null 2>&1; then
-  dbus-launch --sh-syntax --exit-with-session > {dbus}
-fi
-"#
-    );
+    let script = ensure_dbus_env_script(paths);
     run_remote_bash(host, &script).await?;
     Ok(())
+}
+
+pub(crate) fn ensure_dbus_env_script(paths: &SnowLumaRemotePaths) -> String {
+    let dbus = shell_single_quote(&paths.dbus_env);
+    let runtime = shell_single_quote(&paths.runtime_dir);
+    format!(
+        r#"set -e
+umask 077
+mkdir -p {runtime}
+ncd_dbus_env={dbus}
+ncd_uid=$(id -u)
+exec 9>"$ncd_dbus_env.lock"
+flock -w 10 9 || {{ echo 'D-Bus 环境锁超时' >&2; exit 1; }}
+bus_alive() {{
+  case "${{DBUS_SESSION_BUS_ADDRESS:-}}" in unix:*) ;; *) return 1 ;; esac
+  case "${{DBUS_SESSION_BUS_PID:-}}" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$(stat -c %u "/proc/$DBUS_SESSION_BUS_PID" 2>/dev/null)" = "$ncd_uid" ] || return 1
+  if command -v dbus-send >/dev/null 2>&1; then
+    timeout 3 dbus-send --bus="$DBUS_SESSION_BUS_ADDRESS" --print-reply --reply-timeout=1500 --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetId >/dev/null 2>&1
+  elif command -v gdbus >/dev/null 2>&1; then
+    timeout 3 gdbus call --address "$DBUS_SESSION_BUS_ADDRESS" --timeout 2 --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetId >/dev/null 2>&1
+  else
+    return 1
+  fi
+}}
+unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
+if [ -f "$ncd_dbus_env" ] && [ ! -L "$ncd_dbus_env" ] && [ "$(stat -c %u "$ncd_dbus_env")" = "$ncd_uid" ]; then
+  . "$ncd_dbus_env"
+  if bus_alive; then exit 0; fi
+fi
+unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID
+ncd_dbus_tmp=$(mktemp "$ncd_dbus_env.tmp.XXXXXX")
+trap 'rm -f "$ncd_dbus_tmp"' EXIT
+ncd_dbus_output=$(timeout 5 dbus-daemon --session --fork --print-address=1 --print-pid=1 9>&-) || {{ echo '无法建立 QQ 会话 D-Bus' >&2; exit 1; }}
+mapfile -t ncd_dbus_lines <<< "$ncd_dbus_output"
+DBUS_SESSION_BUS_ADDRESS="${{ncd_dbus_lines[0]:-}}"
+DBUS_SESSION_BUS_PID="${{ncd_dbus_lines[1]:-}}"
+bus_alive || {{ echo 'QQ 会话 D-Bus 未响应' >&2; exit 1; }}
+printf 'export DBUS_SESSION_BUS_ADDRESS=%q\nexport DBUS_SESSION_BUS_PID=%q\n' "$DBUS_SESSION_BUS_ADDRESS" "$DBUS_SESSION_BUS_PID" > "$ncd_dbus_tmp"
+chmod 600 "$ncd_dbus_tmp"
+mv -f "$ncd_dbus_tmp" "$ncd_dbus_env"
+"#
+    )
 }
 
 fn source_dbus_prefix(paths: &SnowLumaRemotePaths) -> String {
