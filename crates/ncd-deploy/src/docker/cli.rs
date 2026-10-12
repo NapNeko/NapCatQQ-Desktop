@@ -57,16 +57,21 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// 按当前提权标志构造一条 docker 命令,elevated=true 时打 .elevated() 标,
+    /// 按当前提权标志构造命令；调用前先 ensure_ready / ensure_daemon_ready。
+    /// elevated=true 时打 .elevated() 标,
     /// Host 层用注入的 sudo 密码走 sudo -S/-n;否则裸 docker,所有 docker 操作
     /// 都经这里,保证「探测判定要 sudo」,后续操作就一致地 sudo,不会探测过了部署却挂
-    fn docker_cmd(&self) -> HostCommand {
+    pub fn command(&self) -> HostCommand {
         let cmd = HostCommand::new("docker");
         if self.elevated.load(std::sync::atomic::Ordering::Relaxed) {
             cmd.elevated()
         } else {
             cmd
         }
+    }
+
+    fn docker_cmd(&self) -> HostCommand {
+        self.command()
     }
 
     /// 探测 docker 是否可用,任何一步失败都退化成"未装/未就绪",不报错——

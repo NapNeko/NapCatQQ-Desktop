@@ -19,8 +19,9 @@ pub mod pull_failure;
 pub use cli::{DockerCli, DockerCliError, LayerPhase, PullProgress};
 pub use compose::{
     DOCKER_METRICS_CONTAINER_ROOT, DOCKER_NAPCAT_LOAD_CONTAINER_PATH, DOCKER_NAPCAT_MJS_URI,
-    DockerMetricsOverlay, render_compose, render_compose_with_env, render_compose_with_metrics,
-    render_snowluma_compose_with_env, render_snowluma_compose_with_metrics,
+    DockerLoginOverlay, DockerMetricsOverlay, render_compose, render_compose_with_env,
+    render_compose_with_metrics, render_snowluma_compose_with_env,
+    render_snowluma_compose_with_metrics, render_snowluma_compose_with_overlays,
 };
 pub use install::{DockerInstallOutcome, install_docker};
 pub use install_progress::{
