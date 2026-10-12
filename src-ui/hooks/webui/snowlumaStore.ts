@@ -26,6 +26,10 @@ let unsubDomain: (() => void) | null = null;
 let hydrateInFlight: Promise<void> | null = null;
 let hydrateAttempts = 0;
 let eventRevision = 0;
+let hydrateEpoch = 0;
+let fullHydratePending = false;
+const hydrateTargets = new Set<string>();
+let hydrateRetryTimer: number | null = null;
 const MAX_EMPTY_HYDRATE_RETRIES = 10;
 
 function ensureSubscribed(): void {
@@ -46,29 +50,41 @@ function isLoginState(v: unknown): v is SnowLumaLoginState {
     );
 }
 
-async function hydrateFromBackend(): Promise<void> {
+async function hydrateFromBackend(
+    targets: ReadonlySet<string> | null,
+    epoch: number,
+): Promise<void> {
     const revisionAtStart = eventRevision;
     try {
         const snap = await botService.listSnowlumaUiSnapshot();
         // hydrate 期间若收到更新事件，不能让较旧 command 响应覆盖实时状态。
-        if (eventRevision !== revisionAtStart) return;
+        if (eventRevision !== revisionAtStart || hydrateEpoch !== epoch) return;
 
-        const nextByBot: Record<string, SnowlumaBotState> = {};
+        const current = store.getSnapshot();
+        const nextByBot: Record<string, SnowlumaBotState> = { ...current.byBot };
 
         for (const row of snap.bots) {
-            if (!row.bot_id) continue;
-            nextByBot[row.bot_id] = {
+            if (!row.bot_id || (targets && !targets.has(row.bot_id))) continue;
+            const previous = current.byBot[row.bot_id];
+            const next: SnowlumaBotState = {
                 injected: row.injected,
                 uin: row.uin,
                 loginState: isLoginState(row.login_state) ? row.login_state : null,
                 dockerEndpointsReady: row.endpoints_ready,
                 probeUnavailable: row.probe_unavailable === true,
             };
+            // 失败/缺席快照不是退出事件，不能清掉仍然有效的账号确认。
+            nextByBot[row.bot_id] =
+                previous?.loginState === 'logged_in' && next.loginState === null
+                    ? { ...previous, probeUnavailable: next.probeUnavailable }
+                    : next;
         }
 
-        const daemonStates: Record<string, DaemonState> = {};
+        const daemonStates: Record<string, DaemonState> = { ...current.daemonStates };
         for (const [scope, state] of Object.entries(snap.daemon_states ?? {})) {
-            if (scope && isDaemonState(state)) daemonStates[scope] = state;
+            if (scope && isDaemonState(state) && (!targets || !daemonStates[scope])) {
+                daemonStates[scope] = state;
+            }
         }
         // 兼容旧 Desktop command 响应。
         if (!daemonStates.local && isDaemonState(snap.daemon_state)) {
@@ -84,32 +100,57 @@ async function hydrateFromBackend(): Promise<void> {
             Object.keys(daemonStates).length > 0 ||
             snap.bots.some((b) => b.injected || b.endpoints_ready || b.login_state || b.uin);
         // reconcile 可能仍在写表:空时退避再试,有数据后停
-        if (!hasAny && hydrateAttempts < MAX_EMPTY_HYDRATE_RETRIES) {
+        if (!targets && !hasAny && hydrateAttempts < MAX_EMPTY_HYDRATE_RETRIES) {
             hydrateAttempts += 1;
             const delayMs = Math.min(250 * hydrateAttempts, 2000);
-            window.setTimeout(() => {
+            hydrateRetryTimer = window.setTimeout(() => {
+                hydrateRetryTimer = null;
                 void scheduleHydrate();
             }, delayMs);
         } else if (hasAny) {
             hydrateAttempts = MAX_EMPTY_HYDRATE_RETRIES;
+            if (hydrateRetryTimer !== null) window.clearTimeout(hydrateRetryTimer);
+            hydrateRetryTimer = null;
         }
     } catch (err) {
         console.warn('[snowlumaStore] hydrate ui snapshot failed:', err);
     }
 }
 
-function scheduleHydrate(): Promise<void> {
+function scheduleHydrate(botId?: string): Promise<void> {
+    if (botId) hydrateTargets.add(botId);
+    else fullHydratePending = true;
     if (hydrateInFlight) return hydrateInFlight;
-    hydrateInFlight = hydrateFromBackend().finally(() => {
+    const epoch = hydrateEpoch;
+    const task = (async () => {
+        while (hydrateEpoch === epoch && (fullHydratePending || hydrateTargets.size > 0)) {
+            const targets = fullHydratePending ? null : new Set(hydrateTargets);
+            fullHydratePending = false;
+            hydrateTargets.clear();
+            await hydrateFromBackend(targets, epoch);
+        }
+    })().finally(() => {
+        if (hydrateInFlight !== task) return;
         hydrateInFlight = null;
+        if (fullHydratePending || hydrateTargets.size > 0) {
+            void scheduleHydrate(hydrateTargets.values().next().value);
+        }
     });
-    return hydrateInFlight;
+    hydrateInFlight = task;
+    return task;
 }
 
 function onDomainEvent(event: DomainEvent): void {
     const current = store.getSnapshot();
     const next = reduceSnowluma(current, event);
-    if (next !== current) eventRevision += 1;
+    if (
+        next !== current ||
+        event.kind === 'bot_process_exited' ||
+        (event.kind === 'bot_state_changed' &&
+            (event.snapshot.state === 'stopped' || event.snapshot.state === 'crashed'))
+    ) {
+        eventRevision += 1;
+    }
     store.setState(next);
 
     // reconcile/start 完成后后端表才有值;再拉一次补 UI
@@ -117,7 +158,7 @@ function onDomainEvent(event: DomainEvent): void {
         event.kind === 'bot_state_changed' &&
         (event.snapshot.state === 'running' || event.snapshot.state === 'starting')
     ) {
-        void scheduleHydrate();
+        void scheduleHydrate(event.snapshot.bot_id);
     }
 }
 
@@ -141,7 +182,12 @@ export const snowlumaStore = {
         }
         hydrateAttempts = 0;
         eventRevision = 0;
+        hydrateEpoch += 1;
         hydrateInFlight = null;
+        fullHydratePending = false;
+        hydrateTargets.clear();
+        if (hydrateRetryTimer !== null) window.clearTimeout(hydrateRetryTimer);
+        hydrateRetryTimer = null;
         store._reset();
     },
 };

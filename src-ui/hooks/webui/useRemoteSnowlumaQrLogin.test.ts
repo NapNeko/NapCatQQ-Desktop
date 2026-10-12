@@ -144,6 +144,29 @@ describe('remote SL QR lifecycle', () => {
         unmount();
     });
 
+    it('keeps phone confirmation stable across a transient starting probe', async () => {
+        vi.useFakeTimers();
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce({ ...snapshot, state: 'scanned' })
+                .mockResolvedValue({ ...snapshot, state: 'starting' }),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { result, unmount } = renderHook(() => useRemoteSnowlumaQrLogin('123456', true, api));
+        await act(async () => {});
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1000);
+        });
+        expect(result.current.snapshot?.state).toBe('scanned');
+        expect(result.current.snapshot?.qrcode_payload).toBeNull();
+        await act(async () => {
+            await result.current.refresh();
+        });
+        expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(2);
+        unmount();
+    });
+
     it('pauses requests and clears the visible QR while the page is hidden', async () => {
         vi.useFakeTimers();
         const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
