@@ -168,14 +168,103 @@ struct Page {
     expired: bool,
     scanned: bool,
     phone_label: bool,
+    other_methods: Option<IUIAutomationElement>,
     password: Option<IUIAutomationElement>,
     scan: Option<IUIAutomationElement>,
     refresh: Option<IUIAutomationElement>,
     login_detected: bool,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LoginAction {
+    OtherMethods,
+    Password,
+    Scan,
+    Refresh,
+}
+fn login_action(name: &str, kind: UIA_CONTROLTYPE_ID) -> Option<LoginAction> {
+    if kind != UIA_ButtonControlTypeId && kind != UIA_HyperlinkControlTypeId {
+        return None;
+    }
+    match name {
+        "其他登录方式" => Some(LoginAction::OtherMethods),
+        "账密登录" => Some(LoginAction::Password),
+        "扫码登录" => Some(LoginAction::Scan),
+        "刷新二维码" => Some(LoginAction::Refresh),
+        _ => None,
+    }
+}
+#[derive(Clone, Copy, Default)]
+struct LoginControls {
+    other_methods: bool,
+    password: bool,
+    scan: bool,
+    qr: bool,
+    scanned: bool,
+    login_detected: bool,
+}
+impl Page {
+    fn controls(&self) -> LoginControls {
+        LoginControls {
+            other_methods: self.other_methods.is_some(),
+            password: self.password.is_some(),
+            scan: self.scan.is_some(),
+            qr: self.qr.is_some(),
+            scanned: self.scanned,
+            login_detected: self.login_detected,
+        }
+    }
+
+    fn control_mut(&mut self, action: LoginAction) -> &mut Option<IUIAutomationElement> {
+        match action {
+            LoginAction::OtherMethods => &mut self.other_methods,
+            LoginAction::Password => &mut self.password,
+            LoginAction::Scan => &mut self.scan,
+            LoginAction::Refresh => &mut self.refresh,
+        }
+    }
+}
+#[derive(Default)]
+struct LoginNavigation {
+    attempted: u8,
+    pending: Option<(LoginAction, LoginControls)>,
+}
+impl LoginNavigation {
+    fn next_action(&mut self, controls: LoginControls) -> Option<LoginAction> {
+        if controls.qr || controls.scanned || controls.login_detected {
+            return None;
+        }
+        if let Some((action, previous)) = self.pending {
+            let transitioned = match action {
+                LoginAction::OtherMethods => {
+                    (controls.scan && !previous.scan) || (controls.password && !previous.password)
+                }
+                LoginAction::Password => controls.scan && !previous.scan,
+                LoginAction::Scan | LoginAction::Refresh => false,
+            };
+            if !transitioned {
+                return None;
+            }
+            self.pending = None;
+        }
+        for (action, available, bit) in [
+            (LoginAction::Scan, controls.scan, 1),
+            (LoginAction::Password, controls.password, 2),
+            (LoginAction::OtherMethods, controls.other_methods, 4),
+        ] {
+            if available && self.attempted & bit == 0 {
+                self.attempted |= bit;
+                self.pending = Some((action, controls));
+                return Some(action);
+            }
+        }
+        None
+    }
+}
 fn checkpoint(deadline: Instant, cancel: &CancellationToken) -> Result<(), String> {
-    if cancel.is_cancelled() || Instant::now() >= deadline {
+    if cancel.is_cancelled() {
         Err("capture_cancelled".into())
+    } else if Instant::now() >= deadline {
+        Err("capture_timed_out".into())
     } else {
         Ok(())
     }
@@ -220,6 +309,7 @@ fn page(
             expired: false,
             scanned: false,
             phone_label: false,
+            other_methods: None,
             password: None,
             scan: None,
             refresh: None,
@@ -267,28 +357,19 @@ fn page(
                 "已扫码" | "已扫描" | "扫码成功" | "扫描成功" | "请在手机上确认登录" => {
                     result.scanned = true
                 }
-                "账密登录"
-                    if kind == UIA_ButtonControlTypeId
-                        && element.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) =>
-                {
-                    result.password = Some(element)
-                }
-                "扫码登录"
-                    if kind == UIA_ButtonControlTypeId
-                        && element.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) =>
-                {
-                    result.scan = Some(element)
-                }
-                "刷新二维码"
-                    if kind == UIA_ButtonControlTypeId
-                        && element.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) =>
-                {
-                    result.refresh = Some(element)
-                }
                 _ => {}
             }
             if kind == UIA_TextControlTypeId && name.contains("手机") && name.contains("确认") {
                 result.scanned = true;
+            }
+            if let Some(action) = login_action(&name, kind)
+                && element.CurrentIsEnabled().is_ok_and(|v| v.as_bool())
+            {
+                let control = result.control_mut(action);
+                if control.is_some() {
+                    return Err("ambiguous_login_control".into());
+                }
+                *control = Some(element);
             }
         }
         Ok(result)
@@ -296,13 +377,41 @@ fn page(
 }
 fn invoke(
     element: Option<IUIAutomationElement>,
+    action: LoginAction,
+    binding: &ProcessBinding,
     deadline: Instant,
     cancel: &CancellationToken,
 ) -> Result<(), String> {
     checkpoint(deadline, cancel)?;
+    verify(binding)?;
     let element = element.ok_or("login_control_missing")?;
     // SAFETY: 仅允许 page() 白名单收集的切页和刷新控件，不触碰缓存账号登录按钮。
     unsafe {
+        if element
+            .CurrentProcessId()
+            .map_err(|_| "login_control_unavailable")?
+            != binding.pid as i32
+            || element
+                .CurrentIsOffscreen()
+                .map_err(|_| "login_control_unavailable")?
+                .as_bool()
+            || !element
+                .CurrentIsEnabled()
+                .map_err(|_| "login_control_unavailable")?
+                .as_bool()
+            || login_action(
+                &element
+                    .CurrentName()
+                    .map_err(|_| "login_control_unavailable")?
+                    .to_string(),
+                element
+                    .CurrentControlType()
+                    .map_err(|_| "login_control_unavailable")?,
+            ) != Some(action)
+        {
+            return Err("login_control_changed".into());
+        }
+        checkpoint(deadline, cancel)?;
         element
             .GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId)
             .and_then(|pattern| pattern.Invoke())
@@ -317,7 +426,11 @@ pub(super) fn capture(
 ) -> CaptureOutcome {
     match capture_inner(&binding, refresh, &cancel) {
         Ok(outcome) => outcome,
-        Err(error) if error == "not_login_window" || error == "ambiguous_login_window" => {
+        Err(error)
+            if error == "not_login_window"
+                || error == "ambiguous_login_window"
+                || error == "capture_timed_out" =>
+        {
             CaptureOutcome::Loading
         }
         Err(_) => CaptureOutcome::Unavailable,
@@ -381,28 +494,44 @@ fn capture_inner(
         }
         if before.qr.is_some() {
             if before.refresh.is_some() {
-                invoke(before.refresh.take(), deadline, cancel)?;
+                invoke(
+                    before.refresh.take(),
+                    LoginAction::Refresh,
+                    binding,
+                    deadline,
+                    cancel,
+                )?;
             } else if before.expired {
                 return Ok(CaptureOutcome::Expired);
             }
         } else {
-            if before.scan.is_none() {
-                invoke(before.password.take(), deadline, cancel)?;
-            }
+            let mut navigation = LoginNavigation::default();
             loop {
-                before = page(&automation, hwnd, binding.pid, deadline, cancel)?;
                 if before.login_detected {
                     return Ok(CaptureOutcome::LoginDetected);
                 }
                 if before.scanned {
                     return Ok(CaptureOutcome::Scanned);
                 }
-                if before.scan.is_some() {
+                if before.qr.is_some() {
                     break;
                 }
+                if let Some(action) = navigation.next_action(before.controls()) {
+                    invoke(
+                        before.control_mut(action).take(),
+                        action,
+                        binding,
+                        deadline,
+                        cancel,
+                    )?;
+                } else if navigation.pending.is_none() {
+                    return Ok(CaptureOutcome::Unavailable);
+                }
+                checkpoint(deadline, cancel)?;
                 std::thread::sleep(Duration::from_millis(20));
+                verify(binding)?;
+                before = page(&automation, hwnd, binding.pid, deadline, cancel)?;
             }
-            invoke(before.scan.take(), deadline, cancel)?;
         }
         loop {
             checkpoint(deadline, cancel)?;
@@ -412,6 +541,9 @@ fn capture_inner(
             }
             if before.scanned {
                 return Ok(CaptureOutcome::Scanned);
+            }
+            if before.expired {
+                return Ok(CaptureOutcome::Expired);
             }
             if before.phone_label && before.qr.is_some() && !before.expired {
                 break;
@@ -428,6 +560,7 @@ fn capture_inner(
     if !before.phone_label || before.qr.is_none() {
         return Ok(CaptureOutcome::Unavailable);
     }
+    verify(binding)?;
     let frame = super::windows_qr_capture::capture(hwnd, deadline, cancel)?;
     verify(binding)?;
     let after = page(&automation, hwnd, binding.pid, deadline, cancel)?;
@@ -512,6 +645,103 @@ fn capture_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_account_submit_and_management_controls_are_never_invoked() {
+        for name in ["登录", "账号管理", "删除账号", "添加账号", "+"] {
+            assert_eq!(login_action(name, UIA_ButtonControlTypeId), None);
+        }
+    }
+
+    #[test]
+    fn other_methods_link_can_start_account_picker_navigation() {
+        assert_eq!(
+            login_action("其他登录方式", UIA_HyperlinkControlTypeId),
+            Some(LoginAction::OtherMethods)
+        );
+    }
+
+    #[test]
+    fn matching_navigation_caption_is_not_an_action() {
+        assert_eq!(login_action("其他登录方式", UIA_TextControlTypeId), None);
+    }
+
+    #[test]
+    fn account_picker_navigation_waits_for_each_actual_page_transition() {
+        let mut navigation = LoginNavigation::default();
+        let accounts = LoginControls {
+            other_methods: true,
+            ..LoginControls::default()
+        };
+        assert_eq!(
+            navigation.next_action(accounts),
+            Some(LoginAction::OtherMethods)
+        );
+        assert_eq!(navigation.next_action(accounts), None);
+        let password = LoginControls {
+            password: true,
+            ..LoginControls::default()
+        };
+        assert_eq!(
+            navigation.next_action(password),
+            Some(LoginAction::Password)
+        );
+        assert_eq!(navigation.next_action(password), None);
+        let scan = LoginControls {
+            scan: true,
+            ..LoginControls::default()
+        };
+        assert_eq!(navigation.next_action(scan), Some(LoginAction::Scan));
+        assert_eq!(navigation.next_action(scan), None);
+    }
+
+    #[test]
+    fn direct_scan_entry_does_not_detour_through_saved_accounts() {
+        let mut navigation = LoginNavigation::default();
+        assert_eq!(
+            navigation.next_action(LoginControls {
+                scan: true,
+                password: true,
+                other_methods: true,
+                ..LoginControls::default()
+            }),
+            Some(LoginAction::Scan)
+        );
+    }
+
+    #[test]
+    fn qr_confirmation_and_logged_in_pages_stop_navigation() {
+        for terminal in [
+            LoginControls {
+                qr: true,
+                ..LoginControls::default()
+            },
+            LoginControls {
+                scanned: true,
+                ..LoginControls::default()
+            },
+            LoginControls {
+                login_detected: true,
+                ..LoginControls::default()
+            },
+        ] {
+            let mut navigation = LoginNavigation::default();
+            assert_eq!(
+                navigation.next_action(LoginControls {
+                    other_methods: true,
+                    ..LoginControls::default()
+                }),
+                Some(LoginAction::OtherMethods)
+            );
+            assert_eq!(
+                navigation.next_action(LoginControls {
+                    scan: true,
+                    ..terminal
+                }),
+                None
+            );
+        }
+    }
 
     #[test]
     fn process_binding_rejects_a_reused_identity() {
