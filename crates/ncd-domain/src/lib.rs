@@ -36,6 +36,7 @@ pub mod onebot_debug;
 pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;
+pub mod relogin;
 pub mod remote_inventory;
 pub mod remote_paths;
 pub mod runtime_scenario;

@@ -39,4 +39,4 @@ server_id?: string | null,
 /**
  * 分组展示:「本机」或服务器名 / user@host
  */
-server_label: string, };
+server_label: string, has_relogin_ws: boolean, };

@@ -378,6 +378,8 @@ pub struct OfflineOneBotSettings {
         default = "default_onebot_message_template"
     )]
     pub message_template: String,
+    #[serde(default)]
+    pub relogin: crate::relogin::ReloginSettings,
 }
 
 fn default_onebot_target_type() -> String {
@@ -391,6 +393,7 @@ fn default_onebot_message_template() -> String {
 impl Default for OfflineOneBotSettings {
     fn default() -> Self {
         Self {
+            relogin: Default::default(),
             enabled: false,
             messenger_bot_id: String::new(),
             messenger_bot_ids: Vec::new(),
@@ -405,6 +408,7 @@ impl Default for OfflineOneBotSettings {
 impl OfflineOneBotSettings {
     /// 合并旧单值字段、去重、镜像回单值,保证读写 round-trip 稳定
     pub fn normalize(&mut self) {
+        self.relogin.normalize();
         let mut messengers = self
             .messenger_bot_ids
             .iter()
@@ -543,6 +547,8 @@ pub struct OneBotMessengerCandidate {
     pub server_id: Option<String>,
     /// 分组展示:「本机」或服务器名 / user@host
     pub server_label: String,
+    #[serde(default)]
+    pub has_relogin_ws: bool,
 }
 
 /// 为发送方自动补齐本机 HTTP 后的结果
@@ -695,6 +701,7 @@ mod tests {
         let mut settings = OfflineOneBotSettings {
             enabled: true,
             messenger_bot_id: "10002, 10003".into(),
+            relogin: Default::default(),
             messenger_bot_ids: Vec::new(),
             target_type: "group".into(),
             target_id: 20001,
@@ -718,6 +725,7 @@ mod tests {
         let mut settings = OfflineOneBotSettings {
             enabled: true,
             messenger_bot_id: "legacy".into(),
+            relogin: Default::default(),
             messenger_bot_ids: vec![" 10002 ".into(), "10003".into(), "10002".into(), "".into()],
             target_type: "PRIVATE".into(),
             target_id: 9,
