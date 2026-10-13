@@ -174,7 +174,6 @@ export function BotListPageNext({
                 data-tour-id="bot-list-header"
             >
                 <div>
-                    <p className="text-2xs uppercase tracking-widest text-text-tertiary">bots</p>
                     <h1 className="font-display text-xl font-semibold text-text">Bot 实例</h1>
                     <p className="mt-1 text-sm text-text-secondary">
                         管理本机和远端 Bot 配置、生命周期与登录态。
