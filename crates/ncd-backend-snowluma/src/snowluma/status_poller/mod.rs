@@ -160,7 +160,12 @@ async fn run_poller(
         break;
         }
         _ = ticker.tick() => {
-        tick_once(&bot_id, &deps, &mut state).await;
+            // 重连替换 poller 时，旧 HTTP 请求不能在新状态之后迟到写回。
+            tokio::select! {
+                biased;
+                _ = cancel.cancelled() => break,
+                _ = tick_once(&bot_id, &deps, &mut state) => {}
+            }
         }
         }
     }

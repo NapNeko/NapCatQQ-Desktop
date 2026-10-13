@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 from unittest import mock
+from contextlib import nullcontext
 
 spec = importlib.util.spec_from_file_location('atspi_login', Path(__file__).with_name('atspi-login.py'))
 helper = importlib.util.module_from_spec(spec)
@@ -10,6 +11,35 @@ spec.loader.exec_module(helper)
 
 
 class ContractTests(unittest.TestCase):
+    def test_shared_refresh_cooldown_reads_current_code_without_clicking(self):
+        request = self.request(); request['action'] = 'refresh'
+        with mock.patch.object(helper, 'verify_binding'), mock.patch.object(helper, 'process_lease', return_value=nullcontext(7)), \
+             mock.patch.object(helper.os, 'pread', return_value=b'95', create=True), \
+             mock.patch.object(helper.time, 'monotonic', return_value=100), \
+             mock.patch.object(helper, 'snapshot_locked', return_value=('waiting_for_qr', None)) as capture:
+            helper.request_snapshot(request)
+            self.assertEqual(capture.call_args[0][0]['action'], 'snapshot')
+
+    def test_refresh_after_cooldown_updates_lease_before_capture(self):
+        request = self.request(); request['action'] = 'refresh'
+        with mock.patch.object(helper, 'verify_binding'), mock.patch.object(helper, 'process_lease', return_value=nullcontext(7)), \
+             mock.patch.object(helper.os, 'pread', return_value=b'50', create=True), \
+             mock.patch.object(helper.os, 'ftruncate') as truncate, \
+             mock.patch.object(helper.os, 'pwrite', create=True) as write, \
+             mock.patch.object(helper.time, 'monotonic', return_value=100), \
+             mock.patch.object(helper, 'snapshot_locked', return_value=('scanned', None)) as capture:
+            self.assertEqual(helper.request_snapshot(request), ('scanned', None))
+            truncate.assert_called_once_with(7, 0)
+            write.assert_called_once_with(7, b'100', 0)
+            self.assertEqual(capture.call_args[0][0]['action'], 'refresh')
+
+    def test_busy_process_never_enters_capture(self):
+        with mock.patch.object(helper, 'verify_binding'), \
+             mock.patch.object(helper, 'process_lease', side_effect=BlockingIOError), \
+             mock.patch.object(helper, 'snapshot_locked') as capture:
+            with self.assertRaises(BlockingIOError): helper.request_snapshot(self.request())
+            capture.assert_not_called()
+
     def request(self):
         return {'v': 1, 'action': 'snapshot', 'session_id': 'a' * 32, 'scanned': False,
                 'binding': {'pid': 13, 'start_time': '1234', 'exe': '/opt/QQ/qq'}}

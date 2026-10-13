@@ -556,6 +556,11 @@ impl RemoteSnowLumaBackend {
         }
     }
 
+    pub async fn detach_status_poller(&self, bot_id: &BotId) {
+        self.dispose_poller(bot_id).await;
+        self.login_clients.lock().await.remove(bot_id);
+    }
+
     /// 供 bootstrap reconcile 取日志 follow 路径,不暴露整个 daemon
     pub fn daemon_paths(&self) -> &SnowLumaRemotePaths {
         self.daemon.paths()
@@ -572,6 +577,9 @@ impl RemoteSnowLumaBackend {
         pid: u32,
         config: &BotConfig,
     ) -> Result<(), BotBackendError> {
+        // SSH 重连可能换了本地端口；旧 poller 存在不代表仍能访问新的隧道。
+        self.dispose_poller(&bot_id).await;
+        self.login_clients.lock().await.remove(&bot_id);
         let qq_id = config.bot.qq_id.to_string();
         let host = self.daemon.current_host().await;
         self.remember_login_pid(&bot_id, host.as_ref(), pid).await;
@@ -645,9 +653,6 @@ impl RemoteSnowLumaBackend {
                 bot_id: bot_id.clone(),
             });
 
-        if self.pollers.lock().await.contains_key(&bot_id) {
-            return Ok(());
-        }
         let poller_deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
             http: Arc::clone(&http),

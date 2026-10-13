@@ -97,6 +97,7 @@ fn clone_probe_result(
 
 struct MockClient {
     behavior: Arc<TokioMutex<MockBehavior>>,
+    requested: tokio::sync::Notify,
 }
 
 impl MockClient {
@@ -105,6 +106,7 @@ impl MockClient {
         (
             Arc::new(Self {
                 behavior: Arc::clone(&behavior),
+                requested: tokio::sync::Notify::new(),
             }),
             behavior,
         )
@@ -127,6 +129,7 @@ impl SnowLumaWebUiClient for MockClient {
         Ok(())
     }
     async fn list_processes(&self) -> Result<Vec<HookProcessInfo>, SnowLumaWebUiError> {
+        self.requested.notify_one();
         let mut behavior = self.behavior.lock().await;
         if let Some(front) = behavior.processes_responses.pop_front() {
             behavior.last_processes = Some(clone_proc_result(&front));
@@ -199,6 +202,29 @@ impl SnowLumaWebUiClient for MockClient {
     ) -> Result<bool, SnowLumaWebUiError> {
         Ok(true)
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn replacing_poller_cancels_stalled_requests_before_they_publish_old_state() {
+    let (client, behavior) = MockClient::new();
+    let blocked = behavior.lock().await;
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([42]));
+    let (deps, bus) = build_test_deps(client.clone(), probe);
+    let mut events = bus.subscribe(EventFilter::all());
+    let cancel = CancellationToken::new();
+    let task = tokio::spawn(run_poller(BotId::new("10001"), 42, deps, cancel.clone()));
+    client.requested.notified().await;
+    cancel.cancel();
+    tokio::time::timeout(Duration::from_secs(1), task)
+        .await
+        .expect("旧 poller 应立即退出，不等旧 HTTP 请求返回")
+        .unwrap();
+    drop(blocked);
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), events.next())
+            .await
+            .is_err()
+    );
 }
 
 fn proc(pid: u32, uin: &str, status: HookProcessStatus) -> HookProcessInfo {

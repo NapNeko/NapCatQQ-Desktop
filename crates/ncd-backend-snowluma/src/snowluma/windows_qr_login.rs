@@ -573,7 +573,20 @@ fn capture_inner(
     if after.expired {
         return Ok(CaptureOutcome::Expired);
     }
-    if !after.phone_label || after.qr != before.qr {
+    if !after.phone_label
+        || after.qr != before.qr
+        || (
+            after.bounds.left,
+            after.bounds.top,
+            after.bounds.right,
+            after.bounds.bottom,
+        ) != (
+            before.bounds.left,
+            before.bounds.top,
+            before.bounds.right,
+            before.bounds.bottom,
+        )
+    {
         return Ok(CaptureOutcome::Unavailable);
     }
     let rect = after.qr.ok_or("login_window_unavailable")?;
@@ -639,6 +652,8 @@ fn capture_inner(
     if payload.len() > 128 * 1024 {
         return Err("qr_payload_too_large".into());
     }
+    checkpoint(deadline, cancel)?;
+    verify(binding)?;
     Ok(CaptureOutcome::Image(payload))
 }
 

@@ -1,5 +1,6 @@
 # Bounded, external QQ login controls and a single owned X11 QR rectangle.
 import base64
+from contextlib import contextmanager
 import ctypes as C
 import ctypes.util
 import json
@@ -507,7 +508,57 @@ class OwnedDisplay:
             self.lib.destroy(image)
 
 
+@contextmanager
+def process_lease(binding):
+    import fcntl
+    # SSH 辅助与容器内 watch 使用相同 UID / 进程代次的内核锁，退出即释放。
+    directory = '/tmp/ncd-qr-%d' % os.getuid()
+    try:
+        os.mkdir(directory, 0o700)
+    except FileExistsError:
+        pass
+    root = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    lock = None
+    try:
+        info = os.fstat(root)
+        if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise ValueError('InvalidLeaseDirectory')
+        name = '%d-%s.lock' % (binding['pid'], binding['start_time'])
+        lock = os.open(name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=root)
+        info = os.fstat(lock)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            raise ValueError('InvalidLease')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield lock
+    finally:
+        if lock is not None:
+            os.close(lock)
+        os.close(root)
+
+
 def request_snapshot(request):
+    verify_binding(request['binding'])
+    if request['action'] == 'close':
+        return 'cancelled', None
+    with process_lease(request['binding']) as lock:
+        current = dict(request)
+        if current['action'] == 'refresh':
+            # 只存刷新时间，不落二维码；另一端刚刷新过时复用当前页面。
+            raw = os.pread(lock, 64, 0)
+            try:
+                previous = float(raw.decode('ascii')) if raw else 0
+            except ValueError:
+                previous = 0
+            now = time.monotonic()
+            if 0 <= now - previous < 30:
+                current['action'] = 'snapshot'
+            else:
+                os.ftruncate(lock, 0)
+                os.pwrite(lock, str(now).encode('ascii'), 0)
+        return snapshot_locked(current)
+
+
+def snapshot_locked(request):
     binding, initialized, display = request['binding'], False, None
     deadline = time.monotonic() + 5.5
     last_identity_check = [0.0]

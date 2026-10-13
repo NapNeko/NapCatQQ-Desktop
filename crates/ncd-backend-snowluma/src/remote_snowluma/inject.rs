@@ -38,6 +38,13 @@ pub async fn remote_qq_running_pid_with_hint(
         .run_to_string(cmd)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    if !out.success() {
+        return Err(BotBackendError::Io(format!(
+            "远端 QQ 进程探测失败: exit={:?} stderr={}",
+            out.exit_code,
+            out.stderr.trim()
+        )));
+    }
     let line = out.stdout.lines().next().unwrap_or("").trim();
     if line.is_empty() {
         return Ok(None);
