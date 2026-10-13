@@ -22,6 +22,9 @@ impl BotManagerOneBotEndpointResolver {
 
 #[async_trait]
 impl OneBotEndpointResolver for BotManagerOneBotEndpointResolver {
+    async fn watch_owns_relogin(&self, bot_id: &BotId) -> bool {
+        self.bot_manager.watch_owns_relogin(bot_id).await
+    }
     async fn resolve(
         &self,
         messenger_bot_id: &str,
@@ -36,6 +39,9 @@ impl OneBotEndpointResolver for BotManagerOneBotEndpointResolver {
         };
         let snap = self.bot_manager.get_snapshot(&bot_id).await.ok()?;
         let cfg = self.bot_manager.get_bot_config(&bot_id).await.ok()??;
+        if cfg.bot.runtime_target.server_id().is_some() {
+            return None;
+        }
         let servers: Vec<LocalHttpServerCandidate> = cfg
             .connect
             .http_servers

@@ -566,6 +566,7 @@ fn build_onebot_candidate(
         state: state_label.to_string(),
         backend_type: backend_type.to_string(),
         has_local_http,
+        has_relogin_ws: ncd_runtime::ncd_watch_sync::watch_event_endpoint(cfg).is_some(),
         http_port,
         // Desktop 只对本机 Running+HTTP 当场发;远端 eligible 恒 false(watch 用 has_local_http)
         eligible: is_local && is_running && has_local_http,

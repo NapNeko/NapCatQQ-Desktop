@@ -41,7 +41,13 @@ async fn build_notify_for_server(
         settings.offline_onebot,
         webui,
     );
-    build_notify_config_with_extras(server_id, bots, &settings.offline_webhook, &extras)
+    let mut notify =
+        build_notify_config_with_extras(server_id, bots, &settings.offline_webhook, &extras);
+    if notify.onebot.relogin.settings.enabled {
+        notify.onebot.relogin.login_targets =
+            state.bot_manager.watch_login_targets(server_id, bots).await;
+    }
+    notify
 }
 
 /// 将当前 App 通知设置 + 该 server 上的 Bot 列表写入远端 notify.json
@@ -66,6 +72,24 @@ pub async fn sync_ncd_watch_notify(
         .map_err(|e| e.to_string())?;
     let notify = build_notify_for_server(state.inner(), &server_id, &bots).await;
     write_notify_json_merged(host.as_ref(), home, &notify).await?;
+    if notify.onebot.relogin.settings.enabled {
+        let loaded = ncd_runtime::ncd_watch_sync::relogin_loaded(host.as_ref(), home).await?;
+        state
+            .bot_manager
+            .confirm_watch_relogin(&server_id, loaded.as_ref())
+            .await;
+        if loaded
+            .as_ref()
+            .is_some_and(|c| c.onebot.relogin.event_endpoints.is_empty())
+        {
+            return Err("watch 尚无可收发指令的互助 Bot".into());
+        }
+    } else {
+        state
+            .bot_manager
+            .confirm_watch_relogin(&server_id, None)
+            .await;
+    }
     // 实例指标：同步 metrics.json 供 Desktop 退出后 ncd-watch 续采
     {
         use ncd_runtime::ncd_watch_sync::{
@@ -216,6 +240,19 @@ async fn push_notify_for_server(
             }
         }
         return Err(());
+    }
+    if notify.onebot.relogin.settings.enabled {
+        if let Ok(loaded) = ncd_runtime::ncd_watch_sync::relogin_loaded(host.as_ref(), home).await {
+            state
+                .bot_manager
+                .confirm_watch_relogin(&profile.id, loaded.as_ref())
+                .await;
+        }
+    } else {
+        state
+            .bot_manager
+            .confirm_watch_relogin(&profile.id, None)
+            .await;
     }
     // 与手动 sync_ncd_watch_notify 对齐：设置保存 / 心跳也下发 metrics.json
     if let Err(e) =

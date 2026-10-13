@@ -72,6 +72,18 @@ pub async fn list_bot_snapshots(
     Ok(state.bot_manager.list_snapshots().await)
 }
 
+#[tauri::command]
+pub async fn refresh_bot_statuses(
+    state: State<'_, AppState>,
+) -> Result<BatchResultResponse, String> {
+    state
+        .bot_manager
+        .refresh_statuses()
+        .await
+        .map(batch_to_response)
+        .map_err(map_err)
+}
+
 /// 对照各主机库存里的 Bot 指纹与本机 bot.json，列出可导入项。不额外 SSH。
 #[tauri::command]
 pub async fn list_importable_remote_bots(
