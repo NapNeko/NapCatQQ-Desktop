@@ -263,14 +263,19 @@ export function BotConfigPageNext({
                 isEditMode={isEditMode}
                 tourDemoMode={tourDemoMode}
                 botId={botId}
+                qqId={formData.bot.QQID}
+                botName={formData.bot.name}
                 backendType={formData.bot.backend_type}
                 runtimeTarget={formData.bot.runtime_target}
+                deploymentType={formData.bot.deploymentType}
+                botState={currentSnapshot?.state ?? null}
+                pendingRestart={!!currentSnapshot?.pending_restart}
                 onBack={onBack}
                 onRequestDelete={() => setDeleteDialogOpen(true)}
             />
 
             {/* ────── Tabs + 主体 ────── */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2">
+            <div className="scrollbar-hide flex min-h-0 flex-1 flex-col overflow-y-auto px-2">
                 <div className="flex flex-1 flex-col">
                     <Tabs
                         value={activeTab}
@@ -298,7 +303,7 @@ export function BotConfigPageNext({
                             />
                         </div>
 
-                        <TabsContent value="identity" className="pb-8 pt-2">
+                        <TabsContent value="identity" className="w-full pb-8 pt-4">
                             <IdentityTab
                                 data={formData.bot}
                                 onChange={updateBot}
@@ -306,9 +311,12 @@ export function BotConfigPageNext({
                                 isRunning={isRunning}
                             />
                         </TabsContent>
-                        <TabsContent value="connections" className="pb-8 pt-2">
+                        <TabsContent value="connections" className="w-full pb-8 pt-4">
                             {/* 锚点必须在 TabsContent 子树内：TabsContent 非激活不挂载，且 asChild 不转发 data-tour-id */}
-                            <div data-tour-id="bot-connections-body" className="min-h-[12rem]">
+                            <div
+                                data-tour-id="bot-connections-body"
+                                className="min-h-[12rem] w-full"
+                            >
                                 <ConnectionsTab
                                     data={formData.connect}
                                     onChange={updateConnect}
@@ -319,7 +327,7 @@ export function BotConfigPageNext({
                                 />
                             </div>
                         </TabsContent>
-                        <TabsContent value="advanced" className="pb-8 pt-2">
+                        <TabsContent value="advanced" className="w-full pb-8 pt-4">
                             <AdvancedTab
                                 data={formData.advanced}
                                 onChange={updateAdvanced}

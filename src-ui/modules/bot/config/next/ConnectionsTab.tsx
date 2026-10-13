@@ -157,18 +157,21 @@ export function ConnectionsTab({
     return (
         <TooltipProvider delayDuration={200}>
             {total === 0 ? (
-                // 空态：磁贴上下左右居中在剩余空间里
-                <div className="flex min-h-[60vh] flex-1 items-center justify-center">
-                    <div className="w-full max-w-xs rounded-md border border-dashed border-border-subtle bg-canvas/60 px-5 py-6 text-center">
-                        <p className="text-sm font-medium text-text-secondary">暂无协议连接</p>
-                        <p className="mt-1 text-2xs text-text-tertiary leading-relaxed">
-                            Bot 启动后无法与外部 OneBot 客户端通信
+                <div className="flex min-h-[52vh] flex-1 items-center justify-center">
+                    <div className="flex w-full max-w-xs flex-col items-center rounded-md border border-dashed border-border-subtle bg-field/30 px-5 py-7 text-center">
+                        <span className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft/60 text-brand">
+                            <Link2 size={16} strokeWidth={2.2} />
+                        </span>
+                        <p className="text-sm font-medium text-text">暂无协议连接</p>
+                        <p className="mt-1 text-2xs leading-relaxed text-text-tertiary">
+                            从下方工具条添加连接或对接应用端后，Bot 才能与外部通信
                         </p>
                     </div>
                 </div>
             ) : (
                 <div className="flex flex-col gap-8 pb-2">
                     <FormSection
+                        title="协议连接"
                         actions={<span className="text-2xs text-text-tertiary">{total} 项</span>}
                     >
                         <ConnectionList
@@ -325,8 +328,8 @@ function FloatingAddBar({
         </Button>
     );
     return (
-        <div className="flex justify-center px-6 pb-3">
-            <div className="inline-flex items-center gap-1 rounded-pill bg-elevated/95 px-2 py-1 shadow-popover ring-1 ring-border-subtle backdrop-blur-sm">
+        <div className="flex justify-center px-4 pb-3 sm:px-6">
+            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl bg-elevated/95 px-2 py-1 shadow-popover ring-1 ring-border-subtle backdrop-blur-sm sm:rounded-pill">
                 {appsEnabled && (
                     <>
                         {canLinkApp ? (
@@ -412,19 +415,24 @@ interface ConnectionListProps {
 }
 
 function ConnectionList({ data, onStartEdit, onDelete }: ConnectionListProps) {
+    const items = CONNECTION_KINDS.flatMap((meta) =>
+        (data[CONNECTION_GROUP_KEY[meta.kind]] as ConnectionConfig[]).map((item, idx) => ({
+            meta,
+            item,
+            idx,
+        })),
+    );
     return (
-        <div className="flex flex-col gap-2">
-            {CONNECTION_KINDS.flatMap((meta) =>
-                (data[CONNECTION_GROUP_KEY[meta.kind]] as ConnectionConfig[]).map((item, idx) => (
-                    <ConnectionRow
-                        key={`${meta.kind}-${idx}-${item.name}`}
-                        kind={meta.kind}
-                        item={item}
-                        onStartEdit={() => onStartEdit(meta.kind, idx)}
-                        onDelete={() => onDelete(meta.kind, idx, item.name)}
-                    />
-                )),
-            )}
+        <div className="flex flex-col gap-2.5">
+            {items.map(({ meta, item, idx }) => (
+                <ConnectionRow
+                    key={`${meta.kind}-${idx}-${item.name}`}
+                    kind={meta.kind}
+                    item={item}
+                    onStartEdit={() => onStartEdit(meta.kind, idx)}
+                    onDelete={() => onDelete(meta.kind, idx, item.name)}
+                />
+            ))}
         </div>
     );
 }

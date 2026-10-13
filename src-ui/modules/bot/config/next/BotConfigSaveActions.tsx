@@ -1,5 +1,6 @@
-// 粘性工具条上的保存/撤销区与连接数徽章。从配置页壳外提，纯展示。
+// 粘性工具条上的保存/撤销区与连接数徽章，支持 Ctrl+S 快捷键保存。
 
+import { useEffect, useRef } from 'react';
 import { AlertCircle, Check, Save } from 'lucide-react';
 import { Button, Spinner } from '../../../../shared/ui';
 import { ActionMotionIcon, infoToneMotion } from '../../../../shared/ui/motion';
@@ -10,7 +11,7 @@ export function ConnectionCountBadge({ config }: { config: BotConfig }) {
     const count = countConnections(config);
     if (count === 0) return null;
     return (
-        <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-pill bg-info-soft px-1 text-2xs font-medium text-info">
+        <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-pill bg-brand-soft px-1.5 font-mono text-2xs font-medium tabular-nums text-brand">
             {count}
         </span>
     );
@@ -31,6 +32,22 @@ export function SaveActions({
     onCancel,
     tourDemoMode = false,
 }: SaveActionsProps) {
+    const onSaveRef = useRef(onSave);
+    onSaveRef.current = onSave;
+
+    useEffect(() => {
+        if ((!dirty && !tourDemoMode) || saving) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey)
+                return;
+            if (e.target instanceof Element && e.target.closest('[role="dialog"], .xterm')) return;
+            e.preventDefault();
+            onSaveRef.current();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [dirty, tourDemoMode, saving]);
+
     return (
         <div className="flex shrink-0 items-center gap-3 pr-1" data-tour-id="bot-save-actions">
             <span className="hidden text-xs sm:inline-flex sm:items-center sm:gap-1.5">
@@ -42,10 +59,10 @@ export function SaveActions({
                             icon={AlertCircle}
                             size={12}
                             strokeWidth={2.4}
-                            motion={infoToneMotion('info')}
-                            className="text-info"
+                            motion={infoToneMotion('warning')}
+                            className="text-warning"
                         />
-                        <span className="text-info">未保存</span>
+                        <span className="text-warning">未保存</span>
                     </>
                 ) : (
                     <>
@@ -71,6 +88,7 @@ export function SaveActions({
                 <Button
                     variant="primary"
                     size="sm"
+                    title="Ctrl+S"
                     onClick={onSave}
                     disabled={(!dirty && !tourDemoMode) || saving}
                 >

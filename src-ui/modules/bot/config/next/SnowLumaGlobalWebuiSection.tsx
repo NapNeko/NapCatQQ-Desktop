@@ -37,19 +37,22 @@ export function SnowLumaGlobalWebuiSection({
             title="SnowLuma WebUI（全局）"
             description="本机与远端接管共用；留空则本机用 session，远端接管每次生成"
         >
-            <NumberField
-                label="WebUI 监听端口"
-                value={value.snowlumaWebuiPort}
-                onValueChange={(v) => onChange({ ...value, snowlumaWebuiPort: v ?? 5099 })}
-                min={1}
-                max={65535}
-                hint="被占用时改用附近端口，需重启守护进程"
-            />
-            <TextField
-                label="WebUI 登录密码（可选覆盖）"
-                value={value.snowlumaWebuiPasswordOverride}
-                onValueChange={(v) => onChange({ ...value, snowlumaWebuiPasswordOverride: v })}
-            />
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <NumberField
+                    label="WebUI 监听端口"
+                    value={value.snowlumaWebuiPort}
+                    onValueChange={(v) => onChange({ ...value, snowlumaWebuiPort: v ?? 5099 })}
+                    min={1}
+                    max={65535}
+                    hint="被占用时改用附近端口，需重启守护进程"
+                />
+                <TextField
+                    label="WebUI 登录密码（可选覆盖）"
+                    value={value.snowlumaWebuiPasswordOverride}
+                    onValueChange={(v) => onChange({ ...value, snowlumaWebuiPasswordOverride: v })}
+                    placeholder="留空自动生成或沿用"
+                />
+            </div>
         </FormSection>
     );
 }

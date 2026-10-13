@@ -1,16 +1,29 @@
 // 身份 Tab：账号、底座、运行宿主与自愈。
 
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ComponentType, type ReactNode } from 'react';
 import {
-    TextField,
+    AlertTriangle,
+    Box,
+    CheckCircle2,
+    CircleHelp,
+    Flame,
+    Info,
+    Monitor,
+    Server,
+    Snowflake,
+    Terminal,
+    type LucideProps,
+} from 'lucide-react';
+import {
+    Badge,
+    FormSection,
     NumberField,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
     Select,
     Switch,
-    RadioGroup,
-    FormSection,
-    Popover,
-    PopoverTrigger,
-    PopoverContent,
+    TextField,
 } from '../../../../shared/ui';
 import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
 import { AutoRestartScheduleEditor } from './AutoRestartScheduleEditor';
@@ -23,15 +36,16 @@ import {
 } from '../../../../hooks/components/useRuntimeReadiness';
 import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import { describeBlocking } from '../../../../core/domain/components/readiness';
-import { isRuntimeTargetConcreteRemote } from '../../../../core/domain/bot/runtime-target';
-import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
 import {
     RUNTIME_TARGET_REMOTE_PLACEHOLDER,
+    isRuntimeTargetConcreteRemote,
     isRuntimeTargetLocal,
-    runtimeModeForTarget,
     remoteHostIdFromRuntimeTarget,
+    runtimeModeForTarget,
     serverProfileIdFromRuntimeTarget,
 } from '../../../../core/domain/bot/runtime-target';
+import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
+import { cn } from '../../../../shared/utils/cn';
 import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { DeploymentType } from '../../../../core/ipc/generated/domain/DeploymentType';
@@ -45,19 +59,56 @@ interface IdentityTabProps {
     isRunning: boolean;
 }
 
-const BACKEND_ITEMS = [
-    { value: 'napcat' as BackendType, label: 'NapCat（不带 QQ GUI）' },
-    { value: 'snowluma' as BackendType, label: 'SnowLuma（带 QQ GUI）' },
+const BACKEND_ITEMS: ReadonlyArray<{
+    value: BackendType;
+    label: string;
+    badge: string;
+    summary: string;
+    tone: 'brand' | 'info';
+}> = [
+    {
+        value: 'napcat',
+        label: 'NapCat',
+        badge: '不带 QQ GUI',
+        summary: '运行时关闭 QQ 客户端窗口，纯后台轻量托管',
+        tone: 'brand',
+    },
+    {
+        value: 'snowluma',
+        label: 'SnowLuma',
+        badge: '带 QQ GUI',
+        summary: '保留 QQ 客户端窗口，支持桌面交互与远端 VNC',
+        tone: 'info',
+    },
 ];
 
-const RUNTIME_ITEMS = [
-    { value: 'local', label: '本机' },
-    { value: 'remote', label: '远程主机' },
+const RUNTIME_ITEMS: ReadonlyArray<{
+    value: 'local' | 'remote';
+    label: string;
+    summary: string;
+    icon: ComponentType<LucideProps>;
+}> = [
+    {
+        value: 'local',
+        label: '本机',
+        summary: '当前 Windows 桌面直接运行',
+        icon: Monitor,
+    },
+    {
+        value: 'remote',
+        label: '远程主机',
+        summary: '经 SSH 部署并托管 Linux 主机',
+        icon: Server,
+    },
 ];
 
-const DEPLOYMENT_ITEMS = [
-    { value: 'native' as DeploymentType, label: '直接运行' },
-    { value: 'docker' as DeploymentType, label: 'Docker' },
+const DEPLOYMENT_ITEMS: ReadonlyArray<{
+    value: DeploymentType;
+    label: string;
+    icon: ComponentType<LucideProps>;
+}> = [
+    { value: 'native', label: '直接运行', icon: Terminal },
+    { value: 'docker', label: 'Docker', icon: Box },
 ];
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
@@ -116,7 +167,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         return blocking ? `远程主机${blocking}，请到「组件」页安装` : null;
     }, [isRemote, deploymentType, remoteHostId, remoteReadiness.readiness, componentNames]);
 
-    const onRuntimeModeChange = (mode: string) => {
+    const onRuntimeModeChange = (mode: 'local' | 'remote') => {
         if (mode === 'local') {
             onChange({ runtime_target: 'local', deploymentType: 'native' });
         } else {
@@ -169,9 +220,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     }, [isRemote, data.runtime_target, data.backend_type, deploymentType]);
 
     return (
-        <div className="flex flex-col gap-14">
+        <div className="flex w-full flex-col gap-6">
             <div data-tour-id="bot-identity-section">
-                <FormSection title="账号身份">
+                <FormSection title="账号与底座">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <NumberField
                             label="QQ 账号"
@@ -180,7 +231,6 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                             onValueChange={(v) => onChange({ QQID: v ?? 0 })}
                             placeholder="例如：10001"
                             disabled={isEditMode}
-                            hint={isEditMode ? '编辑模式下不可修改' : undefined}
                         />
                         <TextField
                             label="实例名称"
@@ -189,14 +239,65 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                             placeholder={namePlaceholder}
                         />
                     </div>
-                    <Select
-                        label="底座类型"
-                        items={backendItems}
-                        value={data.backend_type}
-                        onValueChange={(v) => onChange({ backend_type: v })}
-                        disabled={isRunning}
-                        hint={isRunning ? '运行中需先停止再切换底座' : undefined}
-                    />
+
+                    <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-text-secondary">
+                                底座类型
+                            </span>
+                            {isRunning && (
+                                <span className="text-2xs text-text-tertiary">
+                                    运行中需先停止再切换底座
+                                </span>
+                            )}
+                        </div>
+                        <div
+                            role="radiogroup"
+                            aria-label="底座类型"
+                            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                        >
+                            {backendItems.map((item) => {
+                                const selected = data.backend_type === item.value;
+                                return (
+                                    <button
+                                        key={item.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={selected}
+                                        disabled={isRunning}
+                                        onClick={() => onChange({ backend_type: item.value })}
+                                        className={cn(
+                                            'group relative flex h-full min-w-0 flex-col justify-between gap-1 rounded-md border px-3.5 py-2.5 text-left transition-all',
+                                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                                            'disabled:cursor-not-allowed disabled:opacity-60',
+                                            selected
+                                                ? 'border-brand/70 bg-brand-soft/20 shadow-xs ring-1 ring-brand/25'
+                                                : 'border-border-subtle bg-field/45 hover:border-border hover:bg-field/80',
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <span className="truncate text-sm font-semibold text-text">
+                                                    {item.label}
+                                                </span>
+                                                <Badge
+                                                    tone={item.tone}
+                                                    appearance="soft"
+                                                    className="shrink-0 text-[11px]"
+                                                >
+                                                    {item.badge}
+                                                </Badge>
+                                            </div>
+                                            <SelectionDot selected={selected} />
+                                        </div>
+                                        <p className="text-2xs leading-relaxed text-text-tertiary">
+                                            {item.summary}
+                                        </p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </FormSection>
             </div>
 
@@ -210,42 +311,125 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         ) : undefined
                     }
                 >
-                    <RadioGroup
-                        label="运行宿主"
-                        items={RUNTIME_ITEMS}
-                        value={runtimeMode}
-                        onValueChange={onRuntimeModeChange}
-                        orientation="horizontal"
-                        name="runtime-target"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                        <span className="text-xs font-medium text-text-secondary">运行宿主</span>
+                        <div
+                            role="radiogroup"
+                            aria-label="运行宿主"
+                            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                        >
+                            {RUNTIME_ITEMS.map((item) => {
+                                const selected = runtimeMode === item.value;
+                                const Icon = item.icon;
+                                return (
+                                    <button
+                                        key={item.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={selected}
+                                        onClick={() => onRuntimeModeChange(item.value)}
+                                        className={cn(
+                                            'flex h-full min-w-0 items-center justify-between gap-3 rounded-md border px-3.5 py-2.5 text-left transition-all',
+                                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                                            selected
+                                                ? 'border-brand/70 bg-brand-soft/20 shadow-xs ring-1 ring-brand/25'
+                                                : 'border-border-subtle bg-field/45 hover:border-border hover:bg-field/80',
+                                        )}
+                                    >
+                                        <div className="flex min-w-0 items-center gap-2.5">
+                                            <span
+                                                className={cn(
+                                                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border transition-colors',
+                                                    selected
+                                                        ? 'border-brand/30 bg-brand-soft text-brand'
+                                                        : 'border-border-subtle bg-inset text-text-secondary',
+                                                )}
+                                            >
+                                                <Icon size={15} strokeWidth={2.1} />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-medium text-text">
+                                                    {item.label}
+                                                </div>
+                                                <div className="truncate text-2xs text-text-tertiary">
+                                                    {item.summary}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <SelectionDot selected={selected} />
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
 
                     <GsapPresence visible={isRemote}>
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 rounded-md border border-border-subtle/80 bg-field/30 p-3.5">
                             {!hasRemoteHosts && !serversLoading && (
                                 <InlineNotice tone="warn">
                                     请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
                                 </InlineNotice>
                             )}
-                            {hasRemoteHosts && serverItems.length > 0 && (
-                                <Select
-                                    label="远程主机"
-                                    items={serverItems}
-                                    value={remoteHostSelectValue}
-                                    onValueChange={(v) => onChange({ runtime_target: v })}
-                                    placeholder="选择主机"
-                                />
-                            )}
+                            <div
+                                className={cn(
+                                    'grid grid-cols-1 gap-3',
+                                    hasRemoteHosts && serverItems.length > 0 && 'sm:grid-cols-2',
+                                )}
+                            >
+                                {hasRemoteHosts && serverItems.length > 0 && (
+                                    <Select
+                                        label="目标远程主机"
+                                        items={serverItems}
+                                        value={remoteHostSelectValue}
+                                        onValueChange={(v) => onChange({ runtime_target: v })}
+                                        placeholder="选择主机"
+                                    />
+                                )}
 
-                            <RadioGroup
-                                label="启动方式"
-                                items={DEPLOYMENT_ITEMS}
-                                value={deploymentType}
-                                onValueChange={(v) =>
-                                    onChange({ deploymentType: v as DeploymentType })
-                                }
-                                orientation="horizontal"
-                                name="deployment-type"
-                            />
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        启动方式
+                                    </span>
+                                    <div
+                                        role="radiogroup"
+                                        aria-label="启动方式"
+                                        className="grid h-[38px] grid-cols-2 gap-1 rounded-sm border border-border-subtle bg-inset p-0.5"
+                                    >
+                                        {DEPLOYMENT_ITEMS.map((item) => {
+                                            const selected = deploymentType === item.value;
+                                            const Icon = item.icon;
+                                            return (
+                                                <button
+                                                    key={item.value}
+                                                    type="button"
+                                                    role="radio"
+                                                    aria-checked={selected}
+                                                    onClick={() =>
+                                                        onChange({ deploymentType: item.value })
+                                                    }
+                                                    className={cn(
+                                                        'inline-flex items-center justify-center gap-1.5 rounded-xs px-2.5 text-xs font-medium transition-all',
+                                                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
+                                                        selected
+                                                            ? 'border border-border/50 bg-surface text-text shadow-xs'
+                                                            : 'border border-transparent text-text-tertiary hover:text-text',
+                                                    )}
+                                                >
+                                                    <Icon
+                                                        size={13}
+                                                        className={
+                                                            selected
+                                                                ? 'text-brand'
+                                                                : 'text-text-tertiary'
+                                                        }
+                                                    />
+                                                    <span>{item.label}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
 
                             <GsapPresence visible={!!showDockerBlock && !!remoteHostId}>
                                 <div>
@@ -317,48 +501,85 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                             }
                             return null;
                         })()}
+
+                    {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
+                        <div className="flex flex-col gap-1.5">
+                            <span className="text-xs font-medium text-text-secondary">
+                                SnowLuma 启动模式
+                            </span>
+                            <SnowLumaStartModeBlock data={data} onChange={onChange} />
+                        </div>
+                    )}
                 </FormSection>
             </div>
 
-            {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
-                <FormSection
-                    title="SnowLuma 启动模式"
-                    description="冷启动由桌面端拉起 QQ；热启动附加到已登录此号的 QQ 进程"
-                >
-                    <SnowLumaStartModeBlock data={data} onChange={onChange} />
-                </FormSection>
-            )}
-
-            <FormSection title="附加服务" description="仅发送音乐卡片时需要">
-                <TextField
-                    label="音乐签名接口"
-                    value={data.musicSignUrl}
-                    onValueChange={(v) => onChange({ musicSignUrl: v })}
-                    placeholder="http://127.0.0.1:8081/sign"
-                />
-            </FormSection>
-
-            <FormSection title="自愈与定时重启">
-                <Switch
-                    label="掉线自动重启"
-                    checked={data.offlineAutoRestart}
-                    onCheckedChange={(v) => onChange({ offlineAutoRestart: v })}
-                />
-                <Switch
-                    label="定时自动重启"
-                    checked={data.autoRestartSchedule.enable}
-                    onCheckedChange={(v) => patchSchedule({ enable: v })}
-                />
+            <FormSection title="自愈与附加服务">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
+                        <div className="w-full">
+                            <Switch
+                                label="掉线自动重启"
+                                hint="进程异常退出或掉线时自动拉起"
+                                checked={data.offlineAutoRestart}
+                                onCheckedChange={(v) => onChange({ offlineAutoRestart: v })}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
+                        <div className="w-full">
+                            <Switch
+                                label="定时自动重启"
+                                hint="按固定间隔或 Cron 计划重启实例"
+                                checked={data.autoRestartSchedule.enable}
+                                onCheckedChange={(v) => patchSchedule({ enable: v })}
+                            />
+                        </div>
+                    </div>
+                </div>
                 {data.autoRestartSchedule.enable && (
-                    <div className="ml-7">
+                    <div className="rounded-md border border-border-subtle/70 bg-field/30 px-3.5 py-3">
                         <AutoRestartScheduleEditor
                             schedule={data.autoRestartSchedule}
                             onChange={patchSchedule}
                         />
                     </div>
                 )}
+                <div className="grid grid-cols-1 items-center gap-3 rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5 sm:grid-cols-2">
+                    <div className="min-w-0">
+                        <div className="text-sm font-medium text-text">音乐签名接口</div>
+                        <div className="text-2xs text-text-tertiary">
+                            仅发送音乐卡片时需要，留空则不启用
+                        </div>
+                    </div>
+                    <TextField
+                        aria-label="音乐签名接口"
+                        value={data.musicSignUrl}
+                        onValueChange={(v) => onChange({ musicSignUrl: v })}
+                        placeholder="http://127.0.0.1:8081/sign"
+                        className="font-mono"
+                    />
+                </div>
             </FormSection>
         </div>
+    );
+}
+
+function SelectionDot({ selected }: { selected: boolean }) {
+    return (
+        <span
+            aria-hidden
+            className={cn(
+                'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                selected ? 'border-brand bg-brand/10' : 'border-border-strong bg-field',
+            )}
+        >
+            <span
+                className={cn(
+                    'h-2 w-2 rounded-full bg-brand transition-transform duration-150',
+                    selected ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
+                )}
+            />
+        </span>
     );
 }
 
@@ -371,13 +592,25 @@ function InlineNotice({
 }) {
     const cls =
         tone === 'ok'
-            ? 'bg-success-soft text-success'
+            ? 'border-success/25 bg-success-soft/60 text-success'
             : tone === 'danger'
-              ? 'bg-danger-soft text-danger'
+              ? 'border-danger/25 bg-danger-soft/60 text-danger'
               : tone === 'warn'
-                ? 'bg-warning-soft text-warning'
-                : 'bg-inset text-text-tertiary';
-    return <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>{children}</p>;
+                ? 'border-warning/25 bg-warning-soft/60 text-warning'
+                : 'border-border-subtle bg-inset text-text-secondary';
+    const Icon =
+        tone === 'ok' ? CheckCircle2 : tone === 'danger' || tone === 'warn' ? AlertTriangle : Info;
+    return (
+        <div
+            className={cn(
+                'flex items-start gap-2 rounded-sm border px-3 py-2 text-2xs leading-relaxed',
+                cls,
+            )}
+        >
+            <Icon size={13} className="mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">{children}</div>
+        </div>
+    );
 }
 
 function SceneExplainerPopover({ children }: { children: ReactNode }) {
@@ -388,7 +621,8 @@ function SceneExplainerPopover({ children }: { children: ReactNode }) {
                     type="button"
                     className="inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[11px] text-text-tertiary transition-colors hover:bg-inset hover:text-text"
                 >
-                    机制说明
+                    <CircleHelp size={12} />
+                    <span>机制说明</span>
                 </button>
             </PopoverTrigger>
             <PopoverContent side="bottom" align="end" sideOffset={6}>
@@ -421,6 +655,26 @@ function DockerReadinessLine({
     return <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>;
 }
 
+const SL_MODE_ITEMS: ReadonlyArray<{
+    value: 'cold_start' | 'hot_start';
+    label: string;
+    summary: string;
+    icon: ComponentType<LucideProps>;
+}> = [
+    {
+        value: 'cold_start',
+        label: '冷启动（默认）',
+        summary: '由桌面端拉起并托管 QQ 进程',
+        icon: Snowflake,
+    },
+    {
+        value: 'hot_start',
+        label: '热启动',
+        summary: '附加到已登录此号的 QQ 进程',
+        icon: Flame,
+    },
+];
+
 function SnowLumaStartModeBlock({
     data,
     onChange,
@@ -438,16 +692,55 @@ function SnowLumaStartModeBlock({
     };
 
     return (
-        <>
-            <RadioGroup
-                items={[
-                    { value: 'cold_start', label: '冷启动（默认）' },
-                    { value: 'hot_start', label: '热启动' },
-                ]}
-                value={mode}
-                onValueChange={setMode}
-                name="snowluma-mode"
-            />
+        <div className="flex flex-col gap-2.5">
+            <div
+                role="radiogroup"
+                aria-label="SnowLuma 启动模式"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+            >
+                {SL_MODE_ITEMS.map((item) => {
+                    const selected = mode === item.value;
+                    const Icon = item.icon;
+                    return (
+                        <button
+                            key={item.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => setMode(item.value)}
+                            className={cn(
+                                'flex h-full min-w-0 items-center justify-between gap-3 rounded-md border px-3.5 py-2.5 text-left transition-all',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                                selected
+                                    ? 'border-brand/70 bg-brand-soft/20 shadow-xs ring-1 ring-brand/25'
+                                    : 'border-border-subtle bg-field/45 hover:border-border hover:bg-field/80',
+                            )}
+                        >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                                <span
+                                    className={cn(
+                                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border transition-colors',
+                                        selected
+                                            ? 'border-brand/30 bg-brand-soft text-brand'
+                                            : 'border-border-subtle bg-inset text-text-secondary',
+                                    )}
+                                >
+                                    <Icon size={15} strokeWidth={2.1} />
+                                </span>
+                                <div className="min-w-0">
+                                    <div className="text-sm font-medium text-text">
+                                        {item.label}
+                                    </div>
+                                    <div className="truncate text-2xs text-text-tertiary">
+                                        {item.summary}
+                                    </div>
+                                </div>
+                            </div>
+                            <SelectionDot selected={selected} />
+                        </button>
+                    );
+                })}
+            </div>
             {mode === 'hot_start' && (
                 <InlineNotice tone="neutral">
                     启动前需在此 QQ 号（
@@ -455,6 +748,6 @@ function SnowLumaStartModeBlock({
                     ）下登录 QQ；找不到匹配进程时启动会失败
                 </InlineNotice>
             )}
-        </>
+        </div>
     );
 }
