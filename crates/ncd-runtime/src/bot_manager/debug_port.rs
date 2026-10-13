@@ -24,14 +24,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         snapshot: Option<BotActorSnapshot>,
     ) -> DebugBotView {
         let bot_id = BotId::new(config.bot.qq_id.to_string());
-        // NapCat 的登录态来自 WebUI 端点表的探测；SnowLuma 这边没有同等的逐 Bot 字段
         let online = match config.bot.backend_type {
             BackendType::NapCat => self
                 .napcat_endpoints
                 .snapshot(&bot_id)
                 .await
                 .and_then(|ep| ep.online),
-            BackendType::SnowLuma => None,
+            BackendType::SnowLuma => self.snowluma_ui.online(&bot_id).await,
         };
         DebugBotView {
             config,

@@ -44,6 +44,7 @@ mod debug_port;
 mod helpers;
 mod host_recovery;
 mod listeners;
+mod novnc;
 mod qr_login;
 mod refresh;
 mod remote_network;
@@ -201,6 +202,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     docker_webui_secret_store: Option<Arc<dyn SecretStore + Send + Sync>>,
     docker_sessions: Arc<DockerBotSessionRegistry>,
     docker_qr_login_locks: DockerQrLoginLocks,
+    qr_login_restarts: qr_login::QrRestartTable,
     remote_native_napcat_sessions: Arc<RemoteNativeNapcatSessionRegistry>,
     remote_bot_log_follow: Arc<RemoteBotLogFollowRegistry>,
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
@@ -249,6 +251,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             docker_webui_secret_store: self.docker_webui_secret_store.clone(),
             docker_sessions: Arc::clone(&self.docker_sessions),
             docker_qr_login_locks: Arc::clone(&self.docker_qr_login_locks),
+            qr_login_restarts: Arc::clone(&self.qr_login_restarts),
             remote_native_napcat_sessions: Arc::clone(&self.remote_native_napcat_sessions),
             remote_bot_log_follow: Arc::clone(&self.remote_bot_log_follow),
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
@@ -312,6 +315,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             docker_webui_secret_store: None,
             docker_sessions: Arc::new(DockerBotSessionRegistry::new()),
             docker_qr_login_locks: Arc::new(Mutex::new(HashMap::new())),
+            qr_login_restarts: Arc::new(Mutex::new(HashMap::new())),
             remote_native_napcat_sessions: Arc::new(RemoteNativeNapcatSessionRegistry::new()),
             remote_bot_log_follow: Arc::new(RemoteBotLogFollowRegistry::new()),
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
@@ -718,23 +722,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.reconcile_remote_runtime_for(std::slice::from_ref(bot_id))
             .await?;
 
-        let ready = match RuntimeScenario::from_config(&config)? {
-            RuntimeScenario::RemoteDocker { .. } => {
-                self.snowluma_docker_endpoints(bot_id).await.is_some()
-            }
-            RuntimeScenario::RemoteNative { ref server_id, .. } => self
-                .snowluma_native_endpoints_for_server(server_id)
-                .await
-                .is_some(),
-            _ => false,
-        };
-        if ready {
-            Ok(())
-        } else {
-            Err(BotManagerError::Render(
-                "远端 SnowLuma WebUI/noVNC 隧道仍未就绪，请检查主机连接与远端日志".to_string(),
-            ))
-        }
+        self.prepare_snowluma_novnc(bot_id).await.map(|_| ())
     }
 
     /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。
@@ -764,41 +752,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .reconcile_bootstrap_bots(&subset, &[], &snowluma_counts)
             .await;
         Ok(done.into_iter().collect())
-    }
-
-    /// 按事件顺序清理与恢复，避免迟到的断线清理取消刚重建的登录探测器。
-    pub async fn run_host_connection_listener(
-        self,
-        ready: Option<tokio::sync::oneshot::Sender<()>>,
-    ) {
-        let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        if let Some(tx) = ready {
-            let _ = tx.send(());
-        }
-        while let Some(event) = subscription.next().await {
-            if let DomainEvent::HostConnectionLost { server_id, .. } = &event {
-                self.detach_remote_snowluma_sessions(server_id).await;
-                continue;
-            }
-            let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
-                continue;
-            };
-            match self.reconcile_remote_runtimes_for_server(&server_id).await {
-                Ok(done) if !done.is_empty() => info!(
-                    target: "ncd_runtime::bot_manager",
-                    server_id = %server_id,
-                    reconciled = done.len(),
-                    "主机连接恢复：已补跑远端运行态接管"
-                ),
-                Ok(_) => {}
-                Err(err) => warn!(
-                    target: "ncd_runtime::bot_manager",
-                    server_id = %server_id,
-                    err = %err,
-                    "主机连接恢复后的远端运行态接管失败"
-                ),
-            }
-        }
     }
 
     async fn detach_remote_snowluma_sessions(&self, server_id: &str) {

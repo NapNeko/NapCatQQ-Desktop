@@ -1,7 +1,39 @@
-// 远端扫码命令只访问已有会话，不隐含启动或重启 QQ。
+// 扫码会话及错号恢复；只重启由 Desktop 管理的冷启动 Bot。
 use super::*;
 use ncd_domain::DeploymentType;
 use ncd_domain::{SnowLumaQrLoginSnapshot, SnowLumaQrLoginState};
+
+pub(super) struct QrRestart {
+    pid: u32,
+    revision: u64,
+    result: Option<Result<(), String>>,
+}
+
+pub(super) type QrRestartTable = Arc<Mutex<HashMap<BotId, QrRestart>>>;
+
+fn restarting_snapshot() -> SnowLumaQrLoginSnapshot {
+    let mut snapshot = SnowLumaQrLoginSnapshot::unavailable("登录账号不一致，正在重启 Bot");
+    snapshot.state = SnowLumaQrLoginState::Starting;
+    snapshot
+}
+
+fn mismatch_restart_pid(config: &BotConfig, snapshot: &SnowLumaQrLoginSnapshot) -> Option<u32> {
+    let cold = config
+        .bot
+        .snowluma_start_mode
+        .unwrap_or(ncd_domain::SnowLumaStartMode::ColdStart)
+        .is_cold();
+    (config.bot.backend_type == BackendType::SnowLuma
+        && cold
+        && snapshot.state == SnowLumaQrLoginState::AccountMismatch
+        && snapshot.observer_removed
+        && snapshot.uin.as_ref().is_some_and(|uin| {
+            !uin.is_empty() && uin != "0" && uin != &config.bot.qq_id.to_string()
+        }))
+    .then_some(snapshot.qq_pid)
+    .flatten()
+    .filter(|pid| *pid > 0)
+}
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub fn local_snowluma_qr_login_enabled(&self) -> bool {
@@ -23,6 +55,85 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     pub async fn remote_snowluma_qr_login_snapshot(
+        &self,
+        bot_id: &BotId,
+        refresh: bool,
+    ) -> Result<SnowLumaQrLoginSnapshot, BotManagerError> {
+        if self
+            .qr_login_restarts
+            .lock()
+            .await
+            .get(bot_id)
+            .is_some_and(|restart| restart.result.is_none())
+        {
+            return Ok(restarting_snapshot());
+        }
+        let mut snapshot = self
+            .snowluma_qr_login_snapshot_inner(bot_id, refresh)
+            .await?;
+        let config = self.get_required_bot_config(bot_id).await?;
+        let Some(pid) = mismatch_restart_pid(&config, &snapshot) else {
+            return Ok(snapshot);
+        };
+        let before = self.get_snapshot(bot_id).await?;
+        if before.state != BotActorState::Running {
+            return Ok(snapshot);
+        }
+        {
+            let mut restarts = self.qr_login_restarts.lock().await;
+            if let Some(previous) = restarts.get(bot_id) {
+                if previous.result.is_none() {
+                    return Ok(restarting_snapshot());
+                }
+                if previous.pid == pid {
+                    snapshot.message = Some(match &previous.result {
+                        Some(Err(error)) => format!("登录账号不一致，重启失败：{error}"),
+                        _ => "登录账号不一致，请手动重启此 Bot".into(),
+                    });
+                    return Ok(snapshot);
+                }
+            }
+            restarts.insert(
+                bot_id.clone(),
+                QrRestart {
+                    pid,
+                    revision: before.revision,
+                    result: None,
+                },
+            );
+        }
+        let manager = self.clone();
+        let bot_id = bot_id.clone();
+        tokio::spawn(async move {
+            // 用户在排队期间停止/重启过 Bot 时，旧扫码结果不得再启动它。
+            let current = manager.get_snapshot(&bot_id).await;
+            let result = if current.is_ok_and(|value| value == before) {
+                manager
+                    .restart_bot(&bot_id)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            } else {
+                Err("Bot 状态已改变，请重新打开扫码".into())
+            };
+            if let Err(error) = &result {
+                manager.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    error.clone(),
+                    Some("错号登录恢复失败，请手动重启此 Bot".into()),
+                ));
+            }
+            if let Some(restart) = manager.qr_login_restarts.lock().await.get_mut(&bot_id)
+                && restart.pid == pid
+                && restart.revision == before.revision
+            {
+                restart.result = Some(result);
+            }
+        });
+        Ok(restarting_snapshot())
+    }
+
+    async fn snowluma_qr_login_snapshot_inner(
         &self,
         bot_id: &BotId,
         refresh: bool,
@@ -197,6 +308,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         bot_id: &BotId,
     ) -> Result<(), BotManagerError> {
+        // 重启已经负责关闭旧观察器；弹窗因 Stopping 卸载不能取消下一代会话。
+        if self
+            .qr_login_restarts
+            .lock()
+            .await
+            .get(bot_id)
+            .is_some_and(|restart| restart.result.is_none())
+        {
+            return Ok(());
+        }
         self.remote_runtime_sessions()
             .cancel_docker_qr_login(bot_id)
             .await;
@@ -246,6 +367,46 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     let _ = self.close_remote_snowluma_qr_login(&bot_id).await;
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mismatch_restart_requires_owned_process_and_confirmed_wrong_account() {
+        let mut config = ncd_test_support::BotConfigBuilder::new()
+            .backend_type(BackendType::SnowLuma)
+            .build();
+        let mut snapshot = SnowLumaQrLoginSnapshot::unavailable("test");
+        snapshot.state = SnowLumaQrLoginState::AccountMismatch;
+        snapshot.qq_pid = Some(42);
+        snapshot.uin = Some("9999999999".into());
+        assert_eq!(mismatch_restart_pid(&config, &snapshot), Some(42));
+        config.bot.snowluma_start_mode = Some(ncd_domain::SnowLumaStartMode::HotStart);
+        assert_eq!(mismatch_restart_pid(&config, &snapshot), None);
+        config.bot.snowluma_start_mode = Some(ncd_domain::SnowLumaStartMode::ColdStart);
+        snapshot.observer_removed = false;
+        assert_eq!(mismatch_restart_pid(&config, &snapshot), None);
+        snapshot.observer_removed = true;
+        snapshot.uin = Some(config.bot.qq_id.to_string());
+        assert_eq!(mismatch_restart_pid(&config, &snapshot), None);
+        snapshot.uin = None;
+        assert_eq!(mismatch_restart_pid(&config, &snapshot), None);
+        snapshot.uin = Some("9999999999".into());
+        snapshot.qq_pid = None;
+        assert_eq!(mismatch_restart_pid(&config, &snapshot), None);
+        snapshot.qq_pid = Some(42);
+        for state in [
+            SnowLumaQrLoginState::Scanned,
+            SnowLumaQrLoginState::LoginDetected,
+            SnowLumaQrLoginState::LoggedIn,
+            SnowLumaQrLoginState::Unavailable,
+        ] {
+            snapshot.state = state;
+            assert_eq!(mismatch_restart_pid(&config, &snapshot), None);
         }
     }
 }

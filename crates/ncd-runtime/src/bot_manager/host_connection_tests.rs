@@ -101,7 +101,7 @@ impl HostResolver for ObservedResolver {
 }
 
 #[tokio::test(start_paused = true)]
-async fn remote_snowluma_listener_is_ready_and_serializes_fast_second_recovery() {
+async fn remote_snowluma_listener_is_ready_and_cancels_old_recovery_before_cleanup() {
     let root = tempfile::tempdir().unwrap();
     let server_id = "server-snowluma";
     let target = RuntimeTarget::server(server_id);
@@ -113,7 +113,7 @@ async fn remote_snowluma_listener_is_ready_and_serializes_fast_second_recovery()
     let bus = Arc::new(BroadcastEventBus::default());
     let store = Arc::new(crate::LocalConfigStore::new(root.path()));
     let (calls_tx, mut calls_rx) = mpsc::unbounded_channel();
-    let (first_release, first_gate) = oneshot::channel();
+    let (mut first_release, first_gate) = oneshot::channel();
     let resolver = Arc::new(ObservedResolver {
         calls: calls_tx,
         first_gate: Mutex::new(Some(first_gate)),
@@ -167,7 +167,9 @@ async fn remote_snowluma_listener_is_ready_and_serializes_fast_second_recovery()
         server_id: server_id.into(),
         latency_ms: 2,
     });
-    first_release.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(1), first_release.closed())
+        .await
+        .expect("connection loss must cancel the old recovery without waiting for SSH timeout");
     assert!(
         tokio::time::timeout(Duration::from_millis(10), calls_rx.recv())
             .await

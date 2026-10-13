@@ -39,26 +39,20 @@ fn host_task(
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
-    pub async fn run_host_connection_listener(self) {
+    pub async fn run_host_connection_listener(
+        self,
+        ready: Option<tokio::sync::oneshot::Sender<()>>,
+    ) {
         let subscription = self.event_bus.subscribe(EventFilter::all());
+        if let Some(tx) = ready {
+            let _ = tx.send(());
+        }
         run_host_changes(subscription, move |server_id, change| {
             let manager = self.clone();
             Box::pin(async move {
                 match change {
                     HostChange::Lost => {
-                        manager
-                            .remote_snowluma_tunnels
-                            .drop_server(&server_id)
-                            .await;
-                        let daemon = manager
-                            .remote_snowluma_daemons
-                            .lock()
-                            .await
-                            .get(&server_id)
-                            .cloned();
-                        if let Some(daemon) = daemon {
-                            daemon.detach_local_sessions().await;
-                        }
+                        manager.detach_remote_snowluma_sessions(&server_id).await;
                     }
                     HostChange::Recovered => {
                         let started = tokio::time::Instant::now();

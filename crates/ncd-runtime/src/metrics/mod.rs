@@ -6,6 +6,9 @@ mod inject;
 mod paths;
 mod probe_parse;
 mod remote;
+mod remote_read;
+
+pub use remote_read::remote_metrics_read_failure;
 
 pub use docker::prepare_docker_metrics_overlay;
 pub use history::{append_history_point, load_history, prune_history_file};

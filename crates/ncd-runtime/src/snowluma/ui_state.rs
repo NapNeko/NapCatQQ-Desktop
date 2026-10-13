@@ -87,11 +87,50 @@ impl SnowLumaUiStateTable {
     pub async fn snapshot(&self) -> SnowLumaUiSnapshot {
         self.inner.read().await.clone()
     }
+
+    pub async fn online(&self, bot_id: &BotId) -> Option<bool> {
+        let guard = self.inner.read().await;
+        let bot = guard.by_bot.get(bot_id)?;
+        if bot.probe_unavailable {
+            return None;
+        }
+        match bot.login_state? {
+            SnowLumaLoginState::LoggedIn => Some(true),
+            SnowLumaLoginState::WaitingForQrScan | SnowLumaLoginState::Disconnected => Some(false),
+            SnowLumaLoginState::Starting => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn online_tracks_kick_relogin_and_unavailable_probe_per_bot() {
+        let table = SnowLumaUiStateTable::new();
+        let bot = BotId::new("10001");
+        let other = BotId::new("10002");
+        assert_eq!(table.online(&bot).await, None);
+        table
+            .set_login_state(&other, SnowLumaLoginState::LoggedIn)
+            .await;
+        for (state, expected) in [
+            (SnowLumaLoginState::Starting, None),
+            (SnowLumaLoginState::LoggedIn, Some(true)),
+            (SnowLumaLoginState::Disconnected, Some(false)),
+            (SnowLumaLoginState::WaitingForQrScan, Some(false)),
+            (SnowLumaLoginState::LoggedIn, Some(true)),
+        ] {
+            table.set_login_state(&bot, state).await;
+            assert_eq!(table.online(&bot).await, expected);
+            assert_eq!(table.online(&other).await, Some(true));
+        }
+        table.clear_login_state(&bot).await;
+        assert_eq!(table.online(&bot).await, None);
+        table.clear_bot(&other).await;
+        assert_eq!(table.online(&other).await, None);
+    }
 
     #[tokio::test]
     async fn mirror_and_clear_bot() {
