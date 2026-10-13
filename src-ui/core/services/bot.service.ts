@@ -44,6 +44,11 @@ export const botService = {
         return [];
     },
 
+    refreshStatuses: async (): Promise<BatchResultResponse> => {
+        if (isTauri) return invoke<BatchResultResponse>('refresh_bot_statuses');
+        return { succeeded: mockSnapshots.map((bot) => bot.bot_id), failed: [] };
+    },
+
     retrySnowlumaUi: async (botId: string): Promise<void> => {
         if (isTauri) await invoke('retry_snowluma_ui', { botId });
     },

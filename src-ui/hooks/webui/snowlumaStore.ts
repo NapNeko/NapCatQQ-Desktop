@@ -164,6 +164,7 @@ function onDomainEvent(event: DomainEvent): void {
 
 export const snowlumaStore = {
     getSnapshot: store.getSnapshot,
+    refresh: scheduleHydrate,
 
     subscribe(listener: () => void): () => void {
         ensureSubscribed();

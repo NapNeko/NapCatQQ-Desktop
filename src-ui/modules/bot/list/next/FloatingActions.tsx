@@ -24,6 +24,7 @@ interface FloatingActionsProps {
     onRefresh: () => void;
     onEnterBatch: () => void;
     busy?: boolean;
+    refreshing?: boolean;
 }
 
 export function FloatingActions({
@@ -33,6 +34,7 @@ export function FloatingActions({
     onRefresh,
     onEnterBatch,
     busy = false,
+    refreshing = false,
 }: FloatingActionsProps) {
     const m = useMotion();
     const groupRef = useRef<HTMLDivElement>(null);
@@ -81,14 +83,14 @@ export function FloatingActions({
                     />
                 </CircleButton>
                 <CircleButton
-                    tooltip="刷新列表"
+                    tooltip={refreshing ? '正在刷新状态' : '刷新状态'}
                     onClick={onRefresh}
-                    disabled={busy}
+                    disabled={busy || refreshing}
                     variant="ghost"
                 >
                     <MotionIcon
                         icon={RefreshCw}
-                        motion={refreshMotion(busy ?? false)}
+                        motion={refreshMotion(refreshing)}
                         size={18}
                         strokeWidth={2.2}
                         playEnter={false}
@@ -173,6 +175,7 @@ function CircleButton({
                     type="button"
                     onClick={onClick}
                     disabled={disabled}
+                    aria-label={tooltip}
                     data-tour-id={dataTourId}
                     className={cn(
                         'pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-full',

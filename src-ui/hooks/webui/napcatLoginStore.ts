@@ -141,6 +141,7 @@ function ensureSubscribed(): void {
 
 export const napcatLoginStore = {
     getSnapshot: store.getSnapshot,
+    refresh: scheduleHydrate,
 
     subscribe(listener: () => void): () => void {
         ensureSubscribed();

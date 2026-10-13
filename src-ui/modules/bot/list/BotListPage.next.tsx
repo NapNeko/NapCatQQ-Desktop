@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Counter } from '../../../shared/ui/motion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
+import { useRefreshBotStatuses } from '../../../hooks/bot/useRefreshBotStatuses';
 import { useSortedBots } from '../../../hooks/bot/useBotSort';
 import { useSyncRemoteRuntimes } from '../../../hooks/bot/useSyncRemoteRuntimes';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
@@ -44,7 +45,8 @@ export function BotListPageNext({
     onViewMetrics,
     onNavigate,
 }: BotListPageNextProps) {
-    const { data: rawBotSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
+    const { data: rawBotSnapshots = [], isLoading, error } = useBotSnapshots();
+    const { refresh, refreshing } = useRefreshBotStatuses();
     const flavorByBot = useBotFlavorMap(rawBotSnapshots);
     const configByBot = useBotConfigsMap(rawBotSnapshots);
     const { sortedBots: botSnapshots, reorderBots } = useSortedBots(rawBotSnapshots);
@@ -197,7 +199,7 @@ export function BotListPageNext({
                 {isLoading ? (
                     <LoadingState />
                 ) : error ? (
-                    <ErrorState onRetry={() => refetch()} />
+                    <ErrorState onRetry={() => void refresh()} />
                 ) : botSnapshots.length === 0 ? (
                     <EmptyState onCreate={onCreateBot} onImport={onImportBots} />
                 ) : (
@@ -243,9 +245,10 @@ export function BotListPageNext({
             <FloatingActions
                 visible={!batch.isBatchMode}
                 busy={mutations.isPending}
+                refreshing={refreshing}
                 onCreate={onCreateBot}
                 onImport={onImportBots}
-                onRefresh={() => refetch()}
+                onRefresh={() => void refresh()}
                 onEnterBatch={batch.toggleBatch}
             />
             <BatchBottomBar
