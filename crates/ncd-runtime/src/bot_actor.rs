@@ -44,6 +44,11 @@ enum BotActorCommand {
     ConfirmStopped {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
     },
+    ReconcileObserved {
+        revision: u64,
+        running: bool,
+        reply: oneshot::Sender<Result<Option<BotActorSnapshot>, BotActorError>>,
+    },
     RequestRestart {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
     },
@@ -137,6 +142,19 @@ impl BotActorHandle {
     pub async fn request_restart(&self) -> Result<BotActorSnapshot, BotActorError> {
         self.send_snapshot_command(|reply| BotActorCommand::RequestRestart { reply })
             .await
+    }
+
+    pub(crate) async fn reconcile_observed(
+        &self,
+        revision: u64,
+        running: bool,
+    ) -> Result<Option<BotActorSnapshot>, BotActorError> {
+        self.send_command(|reply| BotActorCommand::ReconcileObserved {
+            revision,
+            running,
+            reply,
+        })
+        .await
     }
 
     pub async fn mark_crashed(
@@ -270,6 +288,30 @@ async fn run_actor(
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
                 let _ = reply.send(result.map(|_| snapshot.clone()));
+            }
+            BotActorCommand::ReconcileObserved {
+                revision,
+                running,
+                reply,
+            } => {
+                // 探测期间发生的启停优先，旧结果不能推进新的启动或覆盖停止请求。
+                let accepted = snapshot.revision == revision
+                    && matches!(
+                        snapshot.state,
+                        BotActorState::Stopped | BotActorState::Running | BotActorState::Crashed
+                    );
+                if accepted {
+                    if running && snapshot.state != BotActorState::Running {
+                        reset_token(&mut snapshot, &cancellation_token);
+                        snapshot.clear_error();
+                        snapshot.advance(BotActorState::Running, "runtime_refreshed");
+                    } else if !running && snapshot.state == BotActorState::Running {
+                        cancel_current_token(&cancellation_token);
+                        snapshot.advance(BotActorState::Stopped, "runtime_refreshed");
+                    }
+                    let _ = snapshot_tx.send(snapshot.clone());
+                }
+                let _ = reply.send(Ok(accepted.then(|| snapshot.clone())));
             }
             BotActorCommand::MarkCrashed { reason, reply } => {
                 let reason_for_log = reason.clone();
@@ -515,6 +557,59 @@ fn cancel_current_token(cancellation_token: &Arc<Mutex<CancellationToken>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn refresh_observation_cannot_override_newer_lifecycle() {
+        let actor = BotActorHandle::spawn("10001");
+        let old = actor.snapshot();
+        actor.request_start().await.unwrap();
+        assert!(
+            actor
+                .reconcile_observed(old.revision, true)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let starting = actor.snapshot();
+        assert!(
+            actor
+                .reconcile_observed(starting.revision, false)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        actor.confirm_running().await.unwrap();
+        let running = actor.snapshot();
+        actor.request_stop().await.unwrap();
+        assert!(
+            actor
+                .reconcile_observed(running.revision, true)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(actor.snapshot().state, BotActorState::Stopping);
+    }
+
+    #[tokio::test]
+    async fn refresh_observation_updates_stable_states_without_restart() {
+        let actor = BotActorHandle::spawn("10001");
+        let running = actor.reconcile_observed(0, true).await.unwrap().unwrap();
+        assert_eq!(running.state, BotActorState::Running);
+        let unchanged = actor
+            .reconcile_observed(running.revision, true)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchanged.revision, running.revision);
+        let stopped = actor
+            .reconcile_observed(running.revision, false)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.state, BotActorState::Stopped);
+        assert!(!stopped.pending_restart);
+    }
 
     #[tokio::test]
     async fn bot_actor_handles_start_stop_cycle() {

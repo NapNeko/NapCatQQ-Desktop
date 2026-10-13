@@ -10,6 +10,7 @@ use ncd_domain::bot_actor::BotActorSnapshot;
 use ncd_domain::bot_config::{BackendType, BotConfig};
 use ncd_domain::ids::BotId;
 use ncd_traits::{BotConfigRepo, ConfigStore};
+use tokio::sync::Mutex;
 use tracing::warn;
 
 use super::BotManager;
@@ -122,18 +123,22 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> DebugBotPort for BotM
             return Err("Bot 没有在运行".into());
         }
         // Chat 与调试台可同时发现同一主机断线，只接管一轮，失败交回现有 SSH 冷却策略。
-        let Ok(mut recent) = Arc::clone(&self.debug_recovery).try_lock_owned() else {
+        let gate = {
+            let mut gates = self.debug_recovery.lock().await;
+            Arc::clone(
+                gates
+                    .entry(server_id.clone())
+                    .or_insert_with(|| Arc::new(Mutex::new(None))),
+            )
+        };
+        let Ok(mut recent) = gate.try_lock_owned() else {
             return Ok(());
         };
         let now = tokio::time::Instant::now();
-        if recent
-            .get(server_id)
-            .is_some_and(|at| now.duration_since(*at) < std::time::Duration::from_secs(5))
-        {
+        if recent.is_some_and(|at| now.duration_since(at) < std::time::Duration::from_secs(5)) {
             return Ok(());
         }
-        recent.retain(|_, at| now.duration_since(*at) < std::time::Duration::from_secs(60));
-        recent.insert(server_id.clone(), now);
+        *recent = Some(now);
         let manager = self.clone();
         let server_id = server_id.clone();
         // 接收器的一次连接有超时；已开始的 SSH 恢复必须能完成，而不能每次都被半途取消。

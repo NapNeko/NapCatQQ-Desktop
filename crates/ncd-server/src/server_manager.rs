@@ -848,6 +848,17 @@ impl ServerManager {
         password: Option<String>,
         log_probe: bool,
     ) -> Result<ProbeReport, String> {
+        let lock = self.connect_lock_for(id).await;
+        let _guard = lock.lock().await;
+        self.test_connection_inner(id, password, log_probe).await
+    }
+
+    async fn test_connection_inner(
+        &self,
+        id: &str,
+        password: Option<String>,
+        log_probe: bool,
+    ) -> Result<ProbeReport, String> {
         let all = self.repo.load().await;
         let profile = all
             .iter()
@@ -868,14 +879,25 @@ impl ServerManager {
             );
         }
         let credentials = self.build_credentials(&profile, password.as_deref())?;
+        let connect_timeout = std::time::Duration::from_secs(if log_probe { 30 } else { 10 });
         let config = ConnectionConfig::new(
             &profile.host,
             profile.port,
             credentials,
             self.host_key_policy(),
-        );
+        )
+        .with_connect_timeout(connect_timeout);
 
-        let host = match RemoteLinuxHost::connect(&profile.id, config).await {
+        // 同时约束握手和认证，断网时不能让认证无限占住该主机的连接锁。
+        let connected = tokio::time::timeout(
+            connect_timeout,
+            RemoteLinuxHost::connect(&profile.id, config),
+        )
+        .await
+        .unwrap_or(Err(HostError::Timeout {
+            operation: "ssh connect",
+        }));
+        let host = match connected {
             Ok(h) => h,
             Err(err) => {
                 self.update_state(id, ServerState::Failed).await;
@@ -892,6 +914,10 @@ impl ServerManager {
                     consecutive = h.consecutive_failures;
                 })
                 .await;
+                self.auto_connect_cooldown_until.write().await.insert(
+                    id.to_string(),
+                    std::time::Instant::now() + auto_connect_retry_delay(&err, consecutive),
+                );
                 self.publish_host_lost(id, Some(err_text), consecutive);
 
                 let (error, host_key_prompt, host_key_mismatch) = classify_connect_error(&err);
@@ -917,7 +943,11 @@ impl ServerManager {
 
         // 拿 OS 信息
         let os_info = match host
-            .run_to_string(ncd_host::HostCommand::new("uname").arg("-a"))
+            .run_to_string(
+                ncd_host::HostCommand::new("uname")
+                    .arg("-a")
+                    .timeout(std::time::Duration::from_secs(3)),
+            )
             .await
         {
             Ok(out) if out.success() => Some(out.stdout.trim().to_string()),
@@ -942,6 +972,7 @@ impl ServerManager {
 
         self.inject_elevation_password(id, host.as_ref()).await;
         self.hosts.write().await.insert(profile.id.clone(), host);
+        self.auto_connect_cooldown_until.write().await.remove(id);
         self.update_state(id, ServerState::Connected).await;
 
         // 更新 health 成功时间 + 归零失败计数 + 发布恢复事件
@@ -1058,21 +1089,7 @@ impl ServerManager {
 
         self.prune_expired_auto_connect_cooldowns().await;
 
-        const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(90);
-        if let Some(until) = self
-            .auto_connect_cooldown_until
-            .read()
-            .await
-            .get(id)
-            .copied()
-        {
-            if until > std::time::Instant::now() {
-                return Err(
-                    "远端尚未连接（请去远端页测试连接）；近期自动连接失败，已暂停自动重试"
-                        .to_string(),
-                );
-            }
-        }
+        self.check_auto_connect_cooldown(id).await?;
 
         info!(
             target: "ncd_runtime::server_manager",
@@ -1086,8 +1103,10 @@ impl ServerManager {
         if let Some(host) = self.get_host(id).await {
             return Ok(host);
         }
+        // 排队者也要复查失败结果，否则断网时每个调用者都会再等一轮 SSH 超时。
+        self.check_auto_connect_cooldown(id).await?;
 
-        match self.test_connection(id, None, false).await {
+        match self.test_connection_inner(id, None, false).await {
             Ok(report) if report.success => {
                 self.auto_connect_cooldown_until.write().await.remove(id);
                 self.get_host(id)
@@ -1096,10 +1115,6 @@ impl ServerManager {
             }
             Ok(report) => {
                 let err = report.error.unwrap_or_else(|| "未知错误".into());
-                self.auto_connect_cooldown_until
-                    .write()
-                    .await
-                    .insert(id.to_string(), std::time::Instant::now() + COOLDOWN);
                 tracing::warn!(
                     target: "ncd_runtime::server_manager",
                     server_id = %id,
@@ -1109,10 +1124,10 @@ impl ServerManager {
                 Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
             }
             Err(err) => {
-                self.auto_connect_cooldown_until
-                    .write()
-                    .await
-                    .insert(id.to_string(), std::time::Instant::now() + COOLDOWN);
+                self.auto_connect_cooldown_until.write().await.insert(
+                    id.to_string(),
+                    std::time::Instant::now() + std::time::Duration::from_secs(90),
+                );
                 tracing::warn!(
                     target: "ncd_runtime::server_manager",
                     server_id = %id,
@@ -1124,6 +1139,19 @@ impl ServerManager {
                 ))
             }
         }
+    }
+
+    async fn check_auto_connect_cooldown(&self, id: &str) -> Result<(), String> {
+        if self
+            .auto_connect_cooldown_until
+            .read()
+            .await
+            .get(id)
+            .is_some_and(|until| *until > std::time::Instant::now())
+        {
+            return Err("远端连接暂不可用，稍后自动重试；也可在远端页立即测试连接".into());
+        }
+        Ok(())
     }
 
     /// 取(或惰性创建)某服务器的连接单飞锁
@@ -1195,22 +1223,36 @@ impl ServerManager {
             );
         }
 
-        // 2. 走 ensure 建立新连接
-        let host = self.ensure_connected(id).await?;
+        // 建连成功已经发布恢复事件；重复发布会再次拆掉 Chat 刚建好的连接。
+        self.ensure_connected(id).await
+    }
 
-        // 3. 成功后补一个轻量健康标记(ensure 内部已更新 state,这里只补 health 成功时间)
-        let now = chrono::Utc::now().to_rfc3339();
-        self.update_health_fields(id, |h| {
-            h.last_success_at = Some(now.clone());
-            h.consecutive_failures = 0;
-            // last_failure_* 保留上次失败信息,供前端诊断
-        })
-        .await;
-
-        // 4. 发布恢复事件(刷新成功即视为一次恢复)
-        self.publish_host_recovered(id, 0);
-
-        Ok(host)
+    /// 手动刷新先用真实 SSH 命令检查缓存；断线时立即重连，不等自动重试冷却。
+    pub async fn probe_for_refresh(&self, id: &str) -> Result<(), String> {
+        let lock = self.connect_lock_for(id).await;
+        let _guard = lock.lock().await;
+        if let Some(host) = self.get_host(id).await {
+            let started = std::time::Instant::now();
+            let budget = std::time::Duration::from_secs(3);
+            let probe = tokio::time::timeout(
+                budget,
+                host.run_to_string(ncd_host::HostCommand::new("true").timeout(budget)),
+            )
+            .await;
+            if matches!(probe, Ok(Ok(ref output)) if output.success()) {
+                self.update_health_success(id, started.elapsed().as_millis() as u64)
+                    .await;
+                return Ok(());
+            }
+            self.mark_unhealthy_internal(id, Some("手动刷新时 SSH 探测失败".into()))
+                .await;
+        }
+        let report = self.test_connection_inner(id, None, false).await?;
+        if report.success {
+            Ok(())
+        } else {
+            Err(report.error.unwrap_or_else(|| "远端连接失败".into()))
+        }
     }
 
     /// 显式标记该 server 的缓存连接不可用立即从 hosts 表移除,并把状态置 Disconnected
@@ -1399,15 +1441,12 @@ impl ServerManager {
                             target: "ncd_runtime::server_manager",
                             "health probe disabled by settings; skip this tick"
                         );
-                        // 仍需尊重当前 interval(下轮再判断),避免 CPU 空转
-                        ticker = interval(std::time::Duration::from_millis(interval_ms));
-                        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-                        continue;
                     }
 
-                    // 应用当前 interval(若设置变化)
-                    ticker = interval(std::time::Duration::from_millis(interval_ms));
-                    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                    update_health_probe_interval(&mut ticker, interval_ms);
+                    if !enabled {
+                        continue;
+                    }
 
                     // 枚举所有 profiles,筛选 state == Connected
                     let profiles = self.repo.load().await;
@@ -1423,6 +1462,8 @@ impl ServerManager {
 
                     // 对每个 connected id:若缓存命中则做廉价 is_healthy;失败则 mark_unhealthy
                     for id in connected_ids {
+                        let lock = self.connect_lock_for(&id).await;
+                        let Ok(_guard) = lock.try_lock() else { continue; };
                         // 快速检查缓存
                         let host_opt = self.hosts.read().await.get(&id).cloned();
                         let Some(host) = host_opt else {
@@ -1529,10 +1570,117 @@ fn ssh_key_fingerprint(key_b64: &str) -> String {
     format!("SHA256:{encoded}")
 }
 
+fn update_health_probe_interval(ticker: &mut tokio::time::Interval, interval_ms: u64) {
+    let period = std::time::Duration::from_millis(
+        ncd_domain::app_config::clamp_remote_host_health_probe_interval_ms(interval_ms),
+    );
+    // interval 的第一拍立即就绪；每轮重建会使禁用或空列表时忙轮询。
+    if ticker.period() != period {
+        *ticker = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    }
+}
+
+fn auto_connect_retry_delay(err: &HostError, failures: u32) -> std::time::Duration {
+    let transient = match err {
+        HostError::Timeout { .. } | HostError::RemoteDisconnected { .. } | HostError::Io(_) => true,
+        HostError::RemoteConnection { reason } => reason.starts_with("ssh connect failed:"),
+        _ => false,
+    };
+    let seconds = if transient {
+        (5_u64 << failures.saturating_sub(1).min(3)).min(30)
+    } else {
+        90
+    };
+    std::time::Duration::from_secs(seconds)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[tokio::test(start_paused = true)]
+    async fn health_probe_waits_between_ticks_even_when_settings_change() {
+        use std::time::Duration;
+        let mut ticker = interval(Duration::from_secs(30));
+        ticker.tick().await;
+        for millis in [30_000, 10_000, 0, 300_000] {
+            let started = tokio::time::Instant::now();
+            update_health_probe_interval(&mut ticker, millis);
+            ticker.tick().await;
+            assert_eq!(started.elapsed(), ticker.period());
+        }
+    }
+
+    #[test]
+    fn transport_failures_retry_soon_but_credentials_and_host_keys_keep_cooling_down() {
+        use std::time::Duration;
+        let timeout = HostError::Timeout {
+            operation: "ssh connect",
+        };
+        for (attempt, expected) in [(1, 5), (2, 10), (3, 20), (4, 30), (100, 30)] {
+            assert_eq!(
+                auto_connect_retry_delay(&timeout, attempt),
+                Duration::from_secs(expected)
+            );
+        }
+        for reason in [
+            "password rejected",
+            "publickey rejected",
+            "password auth: rejected",
+        ] {
+            assert_eq!(
+                auto_connect_retry_delay(
+                    &HostError::RemoteConnection {
+                        reason: reason.into()
+                    },
+                    1
+                ),
+                Duration::from_secs(90)
+            );
+        }
+        assert_eq!(
+            auto_connect_retry_delay(
+                &HostError::HostKeyMismatch {
+                    host: "fixture".into(),
+                    port: 22,
+                    key_kind: "ssh-ed25519".into(),
+                    key_b64: "fixture".into(),
+                },
+                1
+            ),
+            Duration::from_secs(90)
+        );
+    }
+
+    #[tokio::test]
+    async fn queued_connect_attempts_recheck_the_failure_cooldown() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        let mgr = Arc::new(mgr);
+        let gate = mgr.connect_lock_for("offline").await;
+        let guard = gate.lock().await;
+        let mut attempts = Vec::new();
+        for _ in 0..2 {
+            let mgr = Arc::clone(&mgr);
+            attempts.push(tokio::spawn(async move {
+                mgr.ensure_connected("offline").await.err().unwrap()
+            }));
+        }
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while Arc::strong_count(&gate) < 4 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        mgr.test_seed_auto_connect_cooldown("offline").await;
+        drop(guard);
+        for task in attempts {
+            assert!(task.await.unwrap().contains("稍后自动重试"));
+        }
+    }
 
     fn make_profile(id: &str, name: &str) -> ServerProfile {
         ServerProfile {
@@ -1550,6 +1698,23 @@ mod tests {
             path_overrides: None,
             inventory: None,
         }
+    }
+
+    #[tokio::test]
+    async fn manual_refresh_bypasses_auto_connection_cooldown() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        mgr.test_seed_auto_connect_cooldown("missing").await;
+        assert!(
+            mgr.ensure_connected("missing")
+                .await
+                .err()
+                .unwrap()
+                .contains("稍后自动重试")
+        );
+        // 能走到配置校验，而不是被自动退避挡住；测试不依赖外部 SSH。
+        let err = mgr.probe_for_refresh("missing").await.unwrap_err();
+        assert!(err.contains("server not found"), "{err}");
     }
 
     fn make_mgr(root: &Path) -> (ServerManager, Arc<InMemoryCredentialStore>) {

@@ -25,6 +25,9 @@ use super::webhook::send_offline_webhook;
 /// 解析 messenger bot 的 HTTP 端点(由 wiring 注入)
 #[async_trait]
 pub trait OneBotEndpointResolver: Send + Sync {
+    async fn watch_owns_relogin(&self, _bot_id: &BotId) -> bool {
+        false
+    }
     async fn resolve(
         &self,
         messenger_bot_id: &str,
@@ -64,6 +67,9 @@ impl SwappableOneBotEndpointResolver {
 
 #[async_trait]
 impl OneBotEndpointResolver for SwappableOneBotEndpointResolver {
+    async fn watch_owns_relogin(&self, bot_id: &BotId) -> bool {
+        self.inner.read().await.watch_owns_relogin(bot_id).await
+    }
     async fn resolve(
         &self,
         messenger_bot_id: &str,
@@ -240,8 +246,11 @@ impl CompositeOfflineNotifier {
         let webhook_cfg = self.webhook.read().await.clone();
         let email_cfg = self.email.read().await.clone();
         let onebot_cfg = self.onebot.read().await.clone();
+        let watch_owned = onebot_cfg.enabled
+            && onebot_cfg.relogin.monitors(alert.bot_id.as_str())
+            && self.onebot_resolver.watch_owns_relogin(&alert.bot_id).await;
 
-        if poller.offline_webhook_notice {
+        if poller.offline_webhook_notice && !watch_owned {
             match send_offline_webhook(&webhook_cfg, &alert).await {
                 Ok(()) => {
                     tracing::info!(bot_id = %alert.bot_id, "offline webhook sent");
@@ -255,7 +264,7 @@ impl CompositeOfflineNotifier {
             }
         }
 
-        if poller.offline_email_notice {
+        if poller.offline_email_notice && !watch_owned {
             let alert_clone = alert.clone();
             let email_cfg = email_cfg.clone();
             match tokio::task::spawn_blocking(move || send_offline_email(&email_cfg, &alert_clone))
@@ -278,7 +287,7 @@ impl CompositeOfflineNotifier {
             }
         }
 
-        if onebot_cfg.enabled {
+        if onebot_cfg.enabled && !watch_owned {
             let messenger_ids = onebot_cfg.effective_messenger_ids();
             if messenger_ids.is_empty() {
                 tracing::debug!(
@@ -403,6 +412,44 @@ mod tests {
             source: OfflineAlertSource::NapCat,
             at: "now".into(),
         }
+    }
+
+    #[tokio::test]
+    async fn confirmed_watch_owner_suppresses_desktop_network_delivery() {
+        struct WatchOwner;
+        #[async_trait]
+        impl OneBotEndpointResolver for WatchOwner {
+            async fn watch_owns_relogin(&self, _: &BotId) -> bool {
+                true
+            }
+            async fn resolve(&self, _: &str, _: &BotId) -> Option<OneBotMessenger> {
+                panic!("Desktop must not choose a messenger for a watch-owned incident")
+            }
+        }
+        let mut poller = WebUiPollerSettings::default();
+        poller.offline_webhook_notice = true;
+        poller.offline_email_notice = true;
+        poller.offline_notify_behavior.delivery_history_limit = 10;
+        let mut onebot = OfflineOneBotSettings::default();
+        onebot.enabled = true;
+        onebot.relogin.enabled = true;
+        onebot.relogin.administrator_ids = vec![99];
+        let notifier = CompositeOfflineNotifier::new(
+            None,
+            Arc::new(RwLock::new(poller)),
+            Arc::new(RwLock::new(OfflineWebhookSettings::default())),
+            Arc::new(RwLock::new(OfflineEmailSettings::default())),
+            Arc::new(RwLock::new(onebot)),
+            Arc::new(WatchOwner),
+        );
+        notifier
+            .deliver(sample_alert(OfflineAlertKind::Manual))
+            .await;
+        let history = notifier.delivery_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].onebot, OfflineDeliveryChannelResult::Skipped);
+        assert_eq!(history[0].email, OfflineDeliveryChannelResult::Skipped);
+        assert_eq!(history[0].webhook, OfflineDeliveryChannelResult::Skipped);
     }
 
     #[tokio::test]

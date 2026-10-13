@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
-use tracing::{info, warn};
+use futures_util::stream::{self, StreamExt};
+use tokio::sync::{Mutex, RwLock};
+use tracing::warn;
 
-use crate::bot_actor::BotActorHandle;
+use crate::bot_actor::{BotActorHandle, BotActorState};
 use crate::bot_manager::BotManagerError;
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::host_resolver::HostResolver;
@@ -14,13 +15,12 @@ use ncd_backend_napcat::remote_native_launch::remote_napcat_running_pid;
 use ncd_backend_snowluma::remote_snowluma::remote_qq_running_pid_with_hint;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
 use ncd_domain::bot_status::BotStatus;
-use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, RuntimeTarget};
+use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario};
 use ncd_traits::BotConfigRepo;
 
-/// server_id → 该主机上配置的 RemoteNative SnowLuma Bot 数。单 Bot 主机才允许
-/// 「整机唯一 QQ 主进程」归因兜底；多 Bot 主机证据不足时不猜。
+/// 单 Bot 主机才允许「整机唯一 QQ 主进程」归因兜底；多 Bot 主机证据不足时不猜。
 pub(crate) fn count_native_snowluma_bots(configs: &[BotConfig]) -> HashMap<String, usize> {
-    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut counts = HashMap::new();
     for config in configs {
         if let Ok(RuntimeScenario::RemoteNative {
             server_id,
@@ -33,12 +33,15 @@ pub(crate) fn count_native_snowluma_bots(configs: &[BotConfig]) -> HashMap<Strin
     counts
 }
 
+pub(crate) type ReconcileLocks = Arc<Mutex<HashMap<BotId, Arc<Mutex<()>>>>>;
+
 pub(crate) struct BootstrapReconciler<R: BotConfigRepo + 'static> {
     actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
     host_resolver: Option<Arc<dyn HostResolver>>,
     event_bus: Arc<BroadcastEventBus>,
     runtime_router: RuntimeBackendRouter,
     remote_sessions: RemoteRuntimeSessions<R>,
+    locks: ReconcileLocks,
 }
 
 impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
@@ -48,6 +51,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         event_bus: Arc<BroadcastEventBus>,
         runtime_router: RuntimeBackendRouter,
         remote_sessions: RemoteRuntimeSessions<R>,
+        locks: ReconcileLocks,
     ) -> Self {
         Self {
             actors,
@@ -55,6 +59,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             event_bus,
             runtime_router,
             remote_sessions,
+            locks,
         }
     }
 
@@ -64,333 +69,193 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         skipped: &[BotId],
         snowluma_counts: &HashMap<String, usize>,
     ) -> HashSet<BotId> {
+        let mut tasks = stream::iter(configs.to_vec())
+            .map(|config| async move {
+                let bot_id = BotId::new(config.bot.qq_id.to_string());
+                if skipped.contains(&bot_id) || config.bot.runtime_target.is_local() {
+                    return None;
+                }
+                match self.reconcile_bot(&config, snowluma_counts, false).await {
+                    Ok(true) => Some(bot_id),
+                    Ok(false) => None,
+                    Err(err) => {
+                        warn!(target: "ncd_runtime::bootstrap_reconcile", %bot_id, %err,
+                            "远端运行态恢复失败");
+                        None
+                    }
+                }
+            })
+            .buffer_unordered(4);
         let mut reconciled = HashSet::new();
-        let resolver = match &self.host_resolver {
-            Some(resolver) => resolver,
-            None => return reconciled,
-        };
-
-        for config in configs {
-            let bot_id = BotId::new(config.bot.qq_id.to_string());
-            if skipped.contains(&bot_id) {
-                continue;
-            }
-            let handle = match self.get_actor(&bot_id).await {
-                Some(handle) => handle,
-                None => continue,
-            };
-            let scenario = match RuntimeScenario::from_config(config) {
-                Ok(scenario) => scenario,
-                Err(err) => {
-                    warn!(
-                        target: "ncd_runtime::bootstrap_reconcile",
-                        bot_id = %bot_id,
-                        err = %err,
-                        "bootstrap reconcile: runtime matrix 无效，跳过"
-                    );
-                    continue;
-                }
-            };
-
-            match scenario {
-                RuntimeScenario::RemoteDocker { server_id, .. } => {
-                    if self
-                        .reconcile_remote_docker(
-                            &bot_id,
-                            &handle,
-                            config,
-                            resolver.as_ref(),
-                            &server_id,
-                        )
-                        .await
-                    {
-                        reconciled.insert(bot_id);
-                    }
-                }
-                RuntimeScenario::RemoteNative {
-                    server_id,
-                    backend: BackendType::NapCat,
-                } => {
-                    if self
-                        .reconcile_remote_native_napcat(
-                            &bot_id,
-                            &handle,
-                            config,
-                            resolver.as_ref(),
-                            &server_id,
-                        )
-                        .await
-                    {
-                        reconciled.insert(bot_id);
-                    }
-                }
-                RuntimeScenario::RemoteNative {
-                    server_id,
-                    backend: BackendType::SnowLuma,
-                } => {
-                    if self
-                        .reconcile_remote_native_snowluma(
-                            &bot_id,
-                            &handle,
-                            config,
-                            resolver.as_ref(),
-                            &server_id,
-                            snowluma_counts,
-                        )
-                        .await
-                    {
-                        reconciled.insert(bot_id);
-                    }
-                }
-                RuntimeScenario::LocalNative { .. } => {}
+        while let Some(bot_id) = tasks.next().await {
+            if let Some(bot_id) = bot_id {
+                reconciled.insert(bot_id);
             }
         }
         reconciled
     }
 
-    async fn reconcile_remote_docker(
+    pub(crate) async fn reconcile_bot(
         &self,
-        bot_id: &BotId,
-        handle: &BotActorHandle,
         config: &BotConfig,
-        resolver: &dyn HostResolver,
-        server_id: &str,
-    ) -> bool {
-        let target = RuntimeTarget::server(server_id.to_string());
-        let host = match resolver.resolve(&target).await {
-            Ok(host) => host,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端主机未连接，跳过"
-                );
-                return false;
-            }
-        };
-
-        let deployment = DockerDeployment::new();
-        let state = match deployment.observe(host.as_ref(), bot_id).await {
-            Ok(state) => state,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: observe 失败"
-                );
-                return false;
-            }
-        };
-        if state != DeploymentState::Running {
-            return false;
-        }
-
-        if let Err(err) = self.mark_reconciled_running(bot_id, handle, 0).await {
-            warn!(
-                target: "ncd_runtime::bootstrap_reconcile",
-                bot_id = %bot_id,
-                err = %err,
-                "bootstrap reconcile: Docker actor 状态失败"
-            );
-            return false;
-        }
-        self.remote_sessions
-            .attach_remote_docker(bot_id, config, host)
-            .await;
-        info!(
-            target: "ncd_runtime::bootstrap_reconcile",
-            bot_id = %bot_id,
-            "bootstrap reconcile: 已恢复远端 Docker 运行态"
-        );
-        true
-    }
-
-    async fn reconcile_remote_native_napcat(
-        &self,
-        bot_id: &BotId,
-        handle: &BotActorHandle,
-        config: &BotConfig,
-        resolver: &dyn HostResolver,
-        server_id: &str,
-    ) -> bool {
-        let target = RuntimeTarget::server(server_id.to_string());
-        let host = match resolver.resolve(&target).await {
-            Ok(host) => host,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 NapCat Native 主机未连接，跳过"
-                );
-                return false;
-            }
-        };
-
-        let pid = match remote_napcat_running_pid(host.as_ref(), config.bot.qq_id).await {
-            Ok(Some(pid)) => pid,
-            Ok(None) => return false,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 NapCat pgrep 失败"
-                );
-                return false;
-            }
-        };
-
-        if let Err(err) = self.mark_reconciled_running(bot_id, handle, pid).await {
-            warn!(
-                target: "ncd_runtime::bootstrap_reconcile",
-                bot_id = %bot_id,
-                err = %err,
-                "bootstrap reconcile: 远端 NapCat Native actor 状态失败"
-            );
-            return false;
-        }
-        self.remote_sessions
-            .attach_remote_native_napcat(bot_id, config, host)
-            .await;
-        info!(
-            target: "ncd_runtime::bootstrap_reconcile",
-            bot_id = %bot_id,
-            pid,
-            "bootstrap reconcile: 已恢复远端 NapCat Native 运行态"
-        );
-        true
-    }
-
-    async fn reconcile_remote_native_snowluma(
-        &self,
-        bot_id: &BotId,
-        handle: &BotActorHandle,
-        config: &BotConfig,
-        resolver: &dyn HostResolver,
-        server_id: &str,
         snowluma_counts: &HashMap<String, usize>,
-    ) -> bool {
-        let target = RuntimeTarget::server(server_id.to_string());
-        let host = match resolver.resolve(&target).await {
-            Ok(host) => host,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 SnowLuma 主机未连接，跳过"
-                );
-                return false;
-            }
+        refresh_stopped: bool,
+    ) -> Result<bool, BotManagerError> {
+        let bot_id = BotId::new(config.bot.qq_id.to_string());
+        let gate = {
+            let mut locks = self.locks.lock().await;
+            Arc::clone(
+                locks
+                    .entry(bot_id.clone())
+                    .or_insert_with(|| Arc::new(Mutex::new(()))),
+            )
         };
-
-        let sl_backend = match self
-            .runtime_router
-            .remote_snowluma_backend_for_server(server_id, Arc::clone(&host))
+        let _guard = gate.lock().await;
+        let handle = self
+            .actors
+            .read()
             .await
-        {
-            Ok(backend) => backend,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 SnowLuma backend 初始化失败"
-                );
-                return false;
-            }
-        };
-
-        let pid_hint = sl_backend
-            .daemon_paths()
-            .pid_bot_path(&config.bot.qq_id.to_string());
-        // 单 Bot 主机才允许「整机唯一 QQ 主进程」归因兜底（实测：systemd 自启的 QQ
-        // 无 -q、ptlogin 未开，任何账号证据都拿不到）；多 Bot 主机不猜
-        let allow_single_main = snowluma_counts.get(server_id).copied().unwrap_or(0) == 1;
-        let pid = match remote_qq_running_pid_with_hint(
-            host.as_ref(),
-            config.bot.qq_id,
-            Some(pid_hint.as_str()),
-            Some(sl_backend.qq_bin()),
-            allow_single_main,
-        )
-        .await
-        {
-            Ok(Some(pid)) => pid,
-            Ok(None) => return false,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 QQ 进程探测失败"
-                );
-                return false;
-            }
-        };
-
-        let sl_paths = sl_backend.daemon_paths().clone();
-        if let Err(err) = sl_backend
-            .attach_reconciled_running(bot_id.clone(), pid, config)
+            .get(&bot_id)
+            .cloned()
+            .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))?;
+        let before = handle.snapshot();
+        if !matches!(
+            before.state,
+            BotActorState::Stopped | BotActorState::Running | BotActorState::Crashed
+        ) {
+            return Err(BotManagerError::RemoteRead(
+                "Bot 正在启停或修复，请稍后刷新".into(),
+            ));
+        }
+        let resolver = self
+            .host_resolver
+            .as_ref()
+            .ok_or_else(|| BotManagerError::RemoteRead("远端连接服务未就绪".into()))?;
+        let host = resolver
+            .resolve(&config.bot.runtime_target)
             .await
-        {
-            warn!(
-                target: "ncd_runtime::bootstrap_reconcile",
-                bot_id = %bot_id,
-                err = %err,
-                "bootstrap reconcile: 远端 SnowLuma WebUI 接管失败，仍按 QQ 进程标为运行中"
-            );
+            .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;
+        let scenario = RuntimeScenario::from_config(config)?;
+        let mut sl_backend = None;
+        let pid = match &scenario {
+            RuntimeScenario::RemoteDocker { .. } => {
+                let state = DockerDeployment::new()
+                    .observe(host.as_ref(), &bot_id)
+                    .await
+                    .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;
+                match state {
+                    DeploymentState::Running => Some(0),
+                    DeploymentState::Stopped => None,
+                    DeploymentState::Failed { reason } => {
+                        return Err(BotManagerError::RemoteRead(reason));
+                    }
+                    _ => {
+                        return Err(BotManagerError::RemoteRead(
+                            "容器状态正在变化，请稍后刷新".into(),
+                        ));
+                    }
+                }
+            }
+            RuntimeScenario::RemoteNative {
+                backend: BackendType::NapCat,
+                ..
+            } => remote_napcat_running_pid(host.as_ref(), config.bot.qq_id)
+                .await
+                .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?,
+            RuntimeScenario::RemoteNative {
+                server_id,
+                backend: BackendType::SnowLuma,
+            } => {
+                let backend = self
+                    .runtime_router
+                    .remote_snowluma_backend_for_server(server_id, Arc::clone(&host))
+                    .await?;
+                let hint = backend
+                    .daemon_paths()
+                    .pid_bot_path(&config.bot.qq_id.to_string());
+                let pid = remote_qq_running_pid_with_hint(
+                    host.as_ref(),
+                    config.bot.qq_id,
+                    Some(hint.as_str()),
+                    Some(backend.qq_bin()),
+                    snowluma_counts.get(server_id).copied().unwrap_or(0) == 1,
+                )
+                .await
+                .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;
+                sl_backend = Some(backend);
+                pid
+            }
+            RuntimeScenario::LocalNative { .. } => return Ok(false),
+        };
+        if pid.is_none() && !refresh_stopped {
+            return Ok(false);
         }
-
-        if let Err(err) = self.mark_reconciled_running(bot_id, handle, pid).await {
-            warn!(
-                target: "ncd_runtime::bootstrap_reconcile",
-                bot_id = %bot_id,
-                err = %err,
-                "bootstrap reconcile: 远端 SnowLuma actor 状态失败"
-            );
-            return false;
-        }
-        self.remote_sessions
-            .attach_remote_native_snowluma_log_follow(bot_id, config, host, &sl_paths)
-            .await;
-        info!(
-            target: "ncd_runtime::bootstrap_reconcile",
-            bot_id = %bot_id,
-            pid,
-            "bootstrap reconcile: 已恢复远端 SnowLuma Native 运行态"
-        );
-        true
-    }
-
-    async fn mark_reconciled_running(
-        &self,
-        bot_id: &BotId,
-        handle: &BotActorHandle,
-        pid: u32,
-    ) -> Result<(), BotManagerError> {
-        let (starting, advanced) = handle.request_start_transition().await?;
-        if advanced {
-            self.publish_state_change(&starting, "bootstrap_reconcile");
-        }
-        let running = handle.confirm_running().await?;
-        self.publish_state_change(&running, "bootstrap_reconcile");
+        let snapshot = handle
+            .reconcile_observed(before.revision, pid.is_some())
+            .await?
+            .ok_or_else(|| {
+                BotManagerError::RemoteRead("探测期间 Bot 状态已变化，请稍后刷新".into())
+            })?;
+        self.event_bus.publish(DomainEvent::bot_state_changed(
+            snapshot,
+            "runtime_refreshed",
+        ));
+        let Some(pid) = pid else {
+            if let Some(backend) = sl_backend {
+                backend.detach_status_poller(&bot_id).await;
+            }
+            self.remote_sessions.shutdown_bot(&bot_id).await;
+            self.event_bus.publish(DomainEvent::bot_status_changed(
+                BotStatus::stopped(bot_id),
+                "runtime_refreshed",
+            ));
+            return Ok(false);
+        };
         self.event_bus.publish(DomainEvent::bot_status_changed(
             BotStatus::running(bot_id.clone(), pid, 0),
-            "bootstrap_reconcile",
+            "runtime_refreshed",
         ));
-        Ok(())
-    }
-
-    async fn get_actor(&self, bot_id: &BotId) -> Option<BotActorHandle> {
-        self.actors.read().await.get(bot_id).cloned()
-    }
-
-    fn publish_state_change(&self, snapshot: &crate::bot_actor::BotActorSnapshot, reason: &str) {
-        self.event_bus
-            .publish(DomainEvent::bot_state_changed(snapshot.clone(), reason));
+        match scenario {
+            RuntimeScenario::RemoteDocker { .. } => {
+                self.remote_sessions
+                    .attach_remote_docker(&bot_id, config, host)
+                    .await;
+            }
+            RuntimeScenario::RemoteNative {
+                backend: BackendType::NapCat,
+                ..
+            } => {
+                self.remote_sessions
+                    .attach_remote_native_napcat(&bot_id, config, host)
+                    .await;
+            }
+            RuntimeScenario::RemoteNative {
+                backend: BackendType::SnowLuma,
+                ..
+            } => {
+                if let Some(backend) = sl_backend {
+                    let result = backend
+                        .attach_reconciled_running(bot_id.clone(), pid, config)
+                        .await;
+                    self.remote_sessions
+                        .attach_remote_native_snowluma_log_follow(
+                            &bot_id,
+                            config,
+                            host,
+                            backend.daemon_paths(),
+                        )
+                        .await;
+                    // 进程状态已确认；UI 接管失败仍须反馈给手动刷新调用方。
+                    if refresh_stopped {
+                        result?;
+                    } else if let Err(err) = result {
+                        warn!(target: "ncd_runtime::bootstrap_reconcile", %bot_id, %err,
+                            "远端 SnowLuma WebUI 接管失败，QQ 进程仍在运行");
+                    }
+                }
+            }
+            RuntimeScenario::LocalNative { .. } => {}
+        }
+        Ok(true)
     }
 }

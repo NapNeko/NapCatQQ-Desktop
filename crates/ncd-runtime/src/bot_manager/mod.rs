@@ -42,10 +42,13 @@ use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 pub mod auto_restart;
 mod debug_port;
 mod helpers;
+mod host_recovery;
 mod listeners;
 mod qr_login;
+mod refresh;
 mod remote_network;
 pub mod runtime_gate;
+mod watch_relogin;
 use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 
@@ -203,6 +206,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
     /// 远端 SnowLuma:按 server_id 共享 daemon(多 Bot 同一 SSH 主机)
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
+    watch_relogin_owners: Arc<Mutex<HashMap<String, Vec<String>>>>,
     /// 远端 SL backend 单例缓存:持有 status poller,绝不能每次 start 新建
     remote_snowluma_backends: Arc<
         Mutex<HashMap<String, Arc<ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaBackend>>>,
@@ -213,7 +217,9 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
-    debug_recovery: Arc<Mutex<HashMap<String, tokio::time::Instant>>>,
+    debug_recovery: host_recovery::DebugRecoveryGates,
+    reconcile_locks: crate::bootstrap_reconcile::ReconcileLocks,
+    refresh_lock: Arc<Mutex<()>>,
     /// 和组件执行器共用的远端库存副本;启动路由按它取选中路径,装卸后的重探对这边也生效
     remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
     /// 启动前的框架 / 依赖预检;None 不检查(测试与纯本机 wiring)
@@ -247,11 +253,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_bot_log_follow: Arc::clone(&self.remote_bot_log_follow),
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
             remote_snowluma_daemons: Arc::clone(&self.remote_snowluma_daemons),
+            watch_relogin_owners: Arc::clone(&self.watch_relogin_owners),
             remote_snowluma_backends: Arc::clone(&self.remote_snowluma_backends),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
             server_manager: self.server_manager.clone(),
             debug_recovery: Arc::clone(&self.debug_recovery),
+            reconcile_locks: Arc::clone(&self.reconcile_locks),
+            refresh_lock: Arc::clone(&self.refresh_lock),
             remote_inventory: self.remote_inventory.clone(),
             runtime_gate: self.runtime_gate.clone(),
         }
@@ -307,11 +316,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_bot_log_follow: Arc::new(RemoteBotLogFollowRegistry::new()),
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
             remote_snowluma_daemons: Arc::new(Mutex::new(HashMap::new())),
+            watch_relogin_owners: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_backends: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
             server_manager: None,
             debug_recovery: Arc::new(Mutex::new(HashMap::new())),
+            reconcile_locks: Arc::new(Mutex::new(HashMap::new())),
+            refresh_lock: Arc::new(Mutex::new(())),
             remote_inventory: None,
             runtime_gate: None,
         }
@@ -665,6 +677,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.event_bus),
             self.runtime_router(),
             self.remote_runtime_sessions(),
+            Arc::clone(&self.reconcile_locks),
         )
     }
 
@@ -751,72 +764,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .reconcile_bootstrap_bots(&subset, &[], &snowluma_counts)
             .await;
         Ok(done.into_iter().collect())
-    }
-
-    /// 监听 HostConnectionRecovered：启动时序里 bootstrap reconcile 先于 SSH 连接完成时，
-    /// 远端运行态恢复会以「主机未连接」跳过；这里在主机连上后把欠的那轮补跑掉。
-    /// 30s 去抖，避免健康探活反复触发全量探测。
-    pub async fn run_host_connection_recovered_listener(self) {
-        let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        let mut last_reconciled: HashMap<String, tokio::time::Instant> = HashMap::new();
-        while let Some(event) = subscription.next().await {
-            let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
-                continue;
-            };
-            let now = tokio::time::Instant::now();
-            if let Some(prev) = last_reconciled.get(&server_id) {
-                if now.duration_since(*prev) < Duration::from_secs(30) {
-                    continue;
-                }
-            }
-            last_reconciled.insert(server_id.clone(), now);
-            match self.reconcile_remote_runtimes_for_server(&server_id).await {
-                Ok(done) if !done.is_empty() => info!(
-                    target: "ncd_runtime::bot_manager",
-                    server_id = %server_id,
-                    reconciled = done.len(),
-                    "主机连接恢复：已补跑远端运行态接管"
-                ),
-                Ok(_) => {}
-                Err(err) => warn!(
-                    target: "ncd_runtime::bot_manager",
-                    server_id = %server_id,
-                    err = %err,
-                    "主机连接恢复后的远端运行态接管失败"
-                ),
-            }
-        }
-    }
-
-    /// 监听 HostConnectionLost：SSH 断开时立刻拆掉该主机的 SSH 隧道并清 daemon 的
-    /// tunnel_eps 缓存。否则旧 TunnelHandle 的 accept 循环会一直对已 poison 的 session
-    /// 打 channel_open_direct_tcpip，刷 "tunnel open skipped: session poisoned"，
-    /// 且热推送若拿到死隧道端点会直接连失败。
-    /// 恢复路径(run_host_connection_recovered_listener → replace_host)会重开隧道。
-    pub async fn run_host_connection_lost_listener(self) {
-        let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        while let Some(event) = subscription.next().await {
-            let DomainEvent::HostConnectionLost { server_id, .. } = event else {
-                continue;
-            };
-            // 1. 拆掉隧道注册表里该主机的所有隧道句柄(drop 会停 accept 循环)
-            self.remote_snowluma_tunnels.drop_server(&server_id).await;
-            // 2. 清共享 daemon 的 tunnel_eps 缓存,让下次热推送/ensure 走重建
-            let daemon = {
-                let daemons = self.remote_snowluma_daemons.lock().await;
-                daemons.get(&server_id).cloned()
-            };
-            if let Some(daemon) = daemon {
-                daemon.detach_local_sessions().await;
-            }
-            // 3. 远端 NapCat native:每 Bot 独立 session,tunnel_slot 在 session 内
-            // 自行管理(收到 unreachable hook 已清 endpoint+poller),这里不重复处理
-            info!(
-                target: "ncd_runtime::bot_manager",
-                server_id = %server_id,
-                "主机连接丢失：已拆远端 SnowLuma 隧道并清 tunnel_eps"
-            );
-        }
     }
 
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。
@@ -1021,6 +968,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 停止指定 Bot
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
+        if let Ok(Some(config)) = self.get_bot_config(bot_id).await {
+            self.write_watch_intent(&config, false).await;
+        }
         self.remote_runtime_sessions()
             .mark_remote_docker_stop_expected(bot_id)
             .await;
@@ -2072,6 +2022,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         handle: &BotActorHandle,
         config: &BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
+        self.write_watch_intent(config, true).await;
         // 取消令牌:stop_bot 在 Starting 阶段会 cancel,检测到后静默退出,避免重复报错
         let cancel = handle.cancellation_token();
 

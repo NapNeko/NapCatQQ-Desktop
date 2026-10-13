@@ -766,6 +766,82 @@ async fn snowluma_login_reconnects_the_stream_without_a_gap() {
 // ─── NapCat 调试适配器 ───────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn host_recovery_replaces_nc_and_sl_streams_without_losing_subscribers_or_history() {
+    for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+        let h = harness();
+        let first = Upstream::start().await;
+        let next = Upstream::start().await;
+        let mut config = remote_bot(20_002, DeploymentType::Native);
+        config.bot.backend_type = backend;
+        let bot = h.bots.add(config, true);
+        match backend {
+            BackendType::NapCat => h.bots.set_napcat(&bot, first.port),
+            BackendType::SnowLuma => h.bots.set_snowluma(&bot, first.port),
+        }
+        let (sink, subscription) = subscribe(&h, &bot, DebugChannelId::Internal).await;
+        wait_until("旧主机连接就绪", || sink.connected_count() == 1).await;
+        let frame = match backend {
+            BackendType::NapCat => group_message(1),
+            BackendType::SnowLuma => {
+                json!({"kind":"event", "uin":"20002", "event":group_message(1)})
+            }
+        };
+        first.push(frame);
+        wait_until("旧连接的消息已缓存", || sink.ob11().len() == 1).await;
+        let epoch = h.manager.epoch();
+        match backend {
+            BackendType::NapCat => h.bots.set_napcat(&bot, next.port),
+            BackendType::SnowLuma => h.bots.set_snowluma(&bot, next.port),
+        }
+        h.manager
+            .on_bot_event(&DomainEvent::HostConnectionRecovered {
+                server_id: "vps".into(),
+                latency_ms: 1,
+            })
+            .await;
+        wait_until("主机恢复后立即替换事件流", || {
+            next.streams() == 1 && sink.connected_count() == 2
+        })
+        .await;
+        assert!(
+            h.manager.stopped_since(&bot, &epoch),
+            "旧请求不能重新写回旧隧道"
+        );
+        assert_eq!(sink.ob11().len(), 1, "恢复保留消息缓冲");
+        assert_eq!(h.manager.receivers().await[0].viewers, 1);
+        assert!(strictly_increasing(&seqs(&sink.events())));
+        h.manager.unsubscribe(&subscription.subscription_id).await;
+    }
+}
+
+#[tokio::test]
+async fn host_recovery_cancels_a_stalled_connection_attempt() {
+    let h = harness();
+    let up = Upstream::start().await;
+    let bot = h.bots.add(remote_bot(10_001, DeploymentType::Docker), true);
+    h.bots.set_napcat(&bot, up.port);
+    let (sink, _) = subscribe(&h, &bot, DebugChannelId::Internal).await;
+    wait_until("首次连接完成", || sink.connected_count() == 1).await;
+    h.bots.set_lookup_delay(Duration::from_secs(60));
+    let event = DomainEvent::HostConnectionRecovered {
+        server_id: "vps".into(),
+        latency_ms: 1,
+    };
+    h.manager.on_bot_event(&event).await;
+    wait_until("新尝试卡在旧主机查询", || {
+        sink.states().iter().rev().next() == Some(&DebugReceiverState::Connecting)
+    })
+    .await;
+    h.bots.set_lookup_delay(Duration::ZERO);
+    h.manager.on_bot_event(&event).await;
+    wait_until("再次恢复不等旧尝试超时", || {
+        sink.connected_count() == 2
+    })
+    .await;
+    assert_eq!(up.streams(), 2);
+}
+
+#[tokio::test]
 async fn napcat_adapter_events_arrive_without_raw() {
     let h = harness();
     let up = Upstream::start().await;

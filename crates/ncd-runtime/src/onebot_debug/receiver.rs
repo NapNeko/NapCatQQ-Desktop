@@ -505,6 +505,18 @@ impl Receiver {
         }
     }
 
+    fn restart_after_host_recovery(&self) -> Option<PumpStart> {
+        let mut inner = self.lock();
+        if inner.closed {
+            return None;
+        }
+        let since = inner.disconnected_at.unwrap_or_else(now_ms);
+        let source = inner.source.clone();
+        let pump = inner.next_pump(&self.bot_id, &self.stop, source);
+        inner.disconnected_at = Some(since);
+        Some(pump)
+    }
+
     /// 给每个窗口发一个空批次，摘掉已经走了的。没有事件的接收器（安静的群、停下的接收器）
     /// 不会触发推送，不这样探一下，关掉的窗口会一直占着「有人在看」
     fn probe_sinks(&self) {
@@ -850,6 +862,21 @@ impl DebugManager {
         let receiver = lock_std(&self.receivers).live.get(bot_id).cloned();
         if let Some(receiver) = receiver.filter(|r| r.source() == DebugChannelId::Internal) {
             receiver.kick_if_waiting();
+        }
+    }
+
+    pub(super) fn restart_receiver_after_host_recovery(self: &Arc<Self>, bot_id: &BotId) {
+        let receiver = lock_std(&self.receivers).live.get(bot_id).cloned();
+        if let Some(receiver) = receiver {
+            if let Some(pump) = receiver.restart_after_host_recovery() {
+                tokio::spawn(run_pump(
+                    Arc::downgrade(self),
+                    receiver,
+                    pump,
+                    self.epoch(),
+                    Arc::clone(&self.own_calls),
+                ));
+            }
         }
     }
 }

@@ -46,7 +46,7 @@ impl DebugManager {
         }
     }
 
-    pub(super) async fn on_bot_event(&self, event: &DomainEvent) {
+    pub(super) async fn on_bot_event(self: &Arc<Self>, event: &DomainEvent) {
         match event {
             DomainEvent::BotStateChanged { snapshot, reason } => {
                 let gone = matches!(
@@ -72,11 +72,17 @@ impl DebugManager {
                 // 接收器可能正因为 WebUI 还没就绪在等重连，不必等满退避
                 self.hurry_internal_receiver(bot_id);
             }
+            DomainEvent::SnowLumaDockerEndpointsReady { bot_id } => {
+                self.hurry_internal_receiver(bot_id);
+            }
             DomainEvent::HostConnectionRecovered { server_id, .. } => {
                 for view in self.bots.list_bots().await {
                     if matches!(&view.config.bot.runtime_target, ncd_domain::RuntimeTarget::Server(id) if id == server_id)
                     {
-                        self.hurry_internal_receiver(&view.bot_id());
+                        let bot_id = view.bot_id();
+                        // 端口和配置不变也可能换过 SSH。丢掉旧隧道，并阻止在途请求写回旧会话。
+                        self.drop_session(&bot_id).await;
+                        self.restart_receiver_after_host_recovery(&bot_id);
                     }
                 }
             }

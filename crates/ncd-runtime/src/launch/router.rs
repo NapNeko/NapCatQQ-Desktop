@@ -325,10 +325,10 @@ impl RuntimeBackendRouter {
         host: Arc<dyn Host>,
     ) -> Result<Arc<RemoteSnowLumaDaemon>, RuntimeRouterError> {
         let sid = server_id.to_string();
-        let mut guard = self.remote_snowluma_daemons.lock().await;
-        if let Some(daemon) = guard.get(&sid) {
+        let cached = self.remote_snowluma_daemons.lock().await.get(&sid).cloned();
+        if let Some(daemon) = cached {
             daemon.replace_host(Arc::clone(&host)).await;
-            return Ok(Arc::clone(daemon));
+            return Ok(daemon);
         }
         let daemon = if let Some(inv) = self.ensure_inventory(&sid, host.as_ref()).await.ok() {
             let layout =
@@ -357,7 +357,12 @@ impl RuntimeBackendRouter {
                 .map_err(|e| RuntimeRouterError::Render(e.to_string()))?,
             )
         };
-        guard.insert(sid, Arc::clone(&daemon));
+        // 探测远端时不占整张表的锁；同主机并发探测时仍只保留一个 daemon。
+        let daemon = {
+            let mut guard = self.remote_snowluma_daemons.lock().await;
+            Arc::clone(guard.entry(sid).or_insert(daemon))
+        };
+        daemon.replace_host(host).await;
         Ok(daemon)
     }
 

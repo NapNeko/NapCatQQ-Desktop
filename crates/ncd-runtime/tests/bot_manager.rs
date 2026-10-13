@@ -528,6 +528,148 @@ async fn napcat_launch_plan_reports_missing_qq_exe() {
 // ─── 4 开上限 ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn manual_refresh_probes_backend_without_starting_or_stopping_bots() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let id = BotId::new("10001");
+    manager
+        .upsert_bot_config(bot_config(10001, "refresh"))
+        .await
+        .unwrap();
+    backend.running.lock().await.insert(id.clone());
+    let result = manager.refresh_statuses().await.unwrap();
+    assert_eq!(result.succeeded, vec![id.clone()]);
+    assert!(result.failed.is_empty());
+    assert_eq!(
+        manager.get_snapshot(&id).await.unwrap().state,
+        BotActorState::Running
+    );
+    backend.running.lock().await.remove(&id);
+    assert!(manager.refresh_statuses().await.unwrap().failed.is_empty());
+    assert_eq!(
+        manager.get_snapshot(&id).await.unwrap().state,
+        BotActorState::Stopped
+    );
+    assert_eq!(backend.start_count(id.clone()).await, 0);
+    assert_eq!(backend.stop_count(id).await, 0);
+}
+
+#[tokio::test]
+async fn manual_refresh_reports_remote_failures_and_keeps_successful_results() {
+    struct Offline;
+    #[async_trait]
+    impl HostResolver for Offline {
+        async fn resolve(
+            &self,
+            _: &ncd_runtime::RuntimeTarget,
+        ) -> Result<Arc<dyn ncd_host::Host>, ncd_runtime::HostResolveError> {
+            Err("fixture network offline".into())
+        }
+    }
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+    manager
+        .upsert_bot_config(bot_config(10001, "local"))
+        .await
+        .unwrap();
+    for (id, backend, deployment) in [
+        (10002, BackendType::NapCat, DeploymentType::Native),
+        (10003, BackendType::SnowLuma, DeploymentType::Native),
+        (10004, BackendType::NapCat, DeploymentType::Docker),
+    ] {
+        let mut config = bot_config(id, "offline");
+        config.bot.backend_type = backend;
+        config.bot.deployment_type = deployment;
+        config.bot.runtime_target = ncd_runtime::RuntimeTarget::server("offline");
+        manager.upsert_bot_config(config).await.unwrap();
+    }
+    let manager = manager.with_host_resolver(Arc::new(Offline));
+    let result = manager.refresh_statuses().await.unwrap();
+    assert_eq!(result.succeeded, vec![BotId::new("10001")]);
+    assert_eq!(result.failed.len(), 3);
+    assert!(
+        result
+            .failed
+            .iter()
+            .all(|(_, err)| err.to_string().contains("fixture network offline"))
+    );
+}
+
+#[tokio::test]
+async fn manual_refresh_timeout_preserves_state_and_releases_refresh_guard() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let id = BotId::new("10001");
+    manager
+        .upsert_bot_config(bot_config(10001, "stalled"))
+        .await
+        .unwrap();
+    let gate = backend.running.lock().await;
+    tokio::time::pause();
+    let result = manager.refresh_statuses().await.unwrap();
+    assert_eq!(result.failed.len(), 1);
+    assert!(result.failed[0].1.to_string().contains("超时"));
+    assert_eq!(
+        manager.get_snapshot(&id).await.unwrap().state,
+        BotActorState::Stopped
+    );
+    tokio::time::resume();
+    drop(gate);
+    assert!(manager.refresh_statuses().await.unwrap().failed.is_empty());
+}
+
+#[tokio::test]
+async fn remote_reconcile_probes_other_bots_while_one_host_is_stalled() {
+    struct StalledResolver {
+        calls: tokio::sync::mpsc::UnboundedSender<String>,
+        release: tokio::sync::Semaphore,
+    }
+    #[async_trait]
+    impl HostResolver for StalledResolver {
+        async fn resolve(
+            &self,
+            target: &ncd_runtime::RuntimeTarget,
+        ) -> Result<Arc<dyn ncd_host::Host>, ncd_runtime::HostResolveError> {
+            let ncd_runtime::RuntimeTarget::Server(id) = target else {
+                unreachable!()
+            };
+            self.calls.send(id.clone()).unwrap();
+            self.release.acquire().await.unwrap().forget();
+            Err("fixture host unavailable".into())
+        }
+    }
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+    for (qq, host) in [(10001, "slow"), (10002, "fast")] {
+        let mut config = bot_config(qq, host);
+        config.bot.runtime_target = ncd_runtime::RuntimeTarget::server(host);
+        manager.upsert_bot_config(config).await.unwrap();
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let resolver = Arc::new(StalledResolver {
+        calls: tx,
+        release: tokio::sync::Semaphore::new(0),
+    });
+    let manager = manager.with_host_resolver(resolver.clone());
+    let task = tokio::spawn(async move {
+        manager
+            .reconcile_remote_runtime_for(&[BotId::new("10001"), BotId::new("10002")])
+            .await
+    });
+    let mut seen = HashSet::new();
+    for _ in 0..2 {
+        let id = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        seen.insert(id);
+    }
+    assert_eq!(seen, HashSet::from(["slow".into(), "fast".into()]));
+    resolver.release.add_permits(2);
+    assert!(task.await.unwrap().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn upsert_enforces_4_bot_limit() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());

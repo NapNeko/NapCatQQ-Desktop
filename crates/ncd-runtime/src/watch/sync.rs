@@ -147,13 +147,57 @@ pub fn build_watch_onebot_for_server(
         }
     }
     let targets = onebot.effective_target_ids();
+    let messenger_ids = onebot.effective_messenger_ids();
+    let event_endpoints: Vec<_> = messenger_ids
+        .iter()
+        .filter_map(|id| {
+            all_bots.iter().find(|c| {
+                c.bot.runtime_target.server_id() == Some(server_id)
+                    && c.bot.qq_id.to_string() == *id
+            })
+        })
+        .filter_map(watch_event_endpoint)
+        .collect();
+    let enabled = (!messengers.is_empty() && !targets.is_empty())
+        || (onebot.relogin.enabled
+            && !onebot.relogin.administrator_ids.is_empty()
+            && !event_endpoints.is_empty());
     WatchOneBotSettings {
-        enabled: onebot.enabled && !messengers.is_empty() && !targets.is_empty(),
+        relogin: ncd_watch::relogin_config::WatchReloginConfig {
+            settings: onebot.relogin,
+            login_targets: Vec::new(),
+            event_endpoints,
+        },
+        enabled,
         messengers,
         target_type: onebot.target_type,
         target_ids: targets,
         message_template: onebot.message_template,
     }
+}
+
+pub fn watch_event_endpoint(
+    config: &BotConfig,
+) -> Option<ncd_watch::relogin_config::WatchEventEndpoint> {
+    let docker = config.bot.deployment_type == DeploymentType::Docker;
+    let server = config.connect.websocket_servers.iter().find(|s| {
+        s.base.enable
+            && s.port > 0
+            && (if docker {
+                is_any_addr(&s.host)
+            } else {
+                is_loopback_or_any(&s.host)
+            })
+            && matches!(s.role, ncd_domain::WsRole::Universal)
+    })?;
+    Some(ncd_watch::relogin_config::WatchEventEndpoint {
+        bot_id: config.bot.qq_id.to_string(),
+        port: server.port,
+        path: server.path.clone(),
+        token: server.base.token.clone(),
+        container_name: docker
+            .then(|| bot_docker_container_name(config.bot.backend_type, config.bot.qq_id)),
+    })
 }
 
 /// 把 BotConfig 投影成 watch 探活目标。
@@ -218,7 +262,7 @@ pub fn bot_to_notify_target_with_webui(
         process_match,
         webui_port,
         webui_token,
-        enabled: true,
+        enabled: config.advanced.offline_notice,
         webui_port_guessed,
     }
 }
@@ -271,6 +315,43 @@ pub fn build_notify_config_with_extras(
 /// 否则 Bot 重启后一段空窗内会把 notify.json 的 webui 清掉,登录踢号探活哑火。
 /// 按规则推出来的口也算没有:导入的容器可能映射到别的口,不能拿推测值冲掉之前拿到的真实口。
 pub fn merge_notify_preserve_webui(new: &mut NotifyConfig, prev: &NotifyConfig) {
+    for target in &mut new.onebot.relogin.login_targets {
+        let identity_unchanged = new
+            .bots
+            .iter()
+            .find(|b| b.bot_id == target.bot_id)
+            .zip(prev.bots.iter().find(|b| b.bot_id == target.bot_id))
+            .is_some_and(|(a, b)| a.backend == b.backend && a.deployment == b.deployment);
+        if !identity_unchanged {
+            continue;
+        }
+        if let Some(old) = prev
+            .onebot
+            .relogin
+            .login_targets
+            .iter()
+            .find(|t| t.bot_id == target.bot_id)
+        {
+            if target.webui_port == 0 {
+                target.webui_port = old.webui_port;
+            }
+            if target.webui_secret.is_empty() {
+                target.webui_secret.clone_from(&old.webui_secret);
+            }
+            if target.pid_file.is_none() {
+                target.pid_file.clone_from(&old.pid_file);
+            }
+            if target.expected_pid.is_none() {
+                target.expected_pid = old.expected_pid;
+            }
+            if target.container_name.is_none() {
+                target.container_name.clone_from(&old.container_name);
+            }
+            if target.container_webui_port.is_none() {
+                target.container_webui_port = old.container_webui_port;
+            }
+        }
+    }
     for bot in &mut new.bots {
         let has_port = !bot.webui_port_guessed && bot.webui_port.filter(|p| *p > 0).is_some();
         let has_token = bot
@@ -386,18 +467,98 @@ pub async fn write_notify_json(
         .await
         .map_err(|e| e.to_string())?;
     let path = config_dir.join("notify.json");
+    let permissions = host
+        .run_to_string(
+            ncd_host::HostCommand::new("chmod")
+                .arg("700")
+                .arg(config_dir.as_posix()),
+        )
+        .await
+        .map_err(|_| "无法限制通知目录权限")?;
+    if !permissions.success() {
+        return Err("无法限制通知目录权限".into());
+    }
+    if notify.onebot.relogin.settings.enabled {
+        let binary = root.join("bin").join("ncd-watch");
+        let output = host
+            .run_to_string(
+                ncd_host::HostCommand::new(binary.as_posix())
+                    .arg("capabilities")
+                    .timeout(std::time::Duration::from_secs(5)),
+            )
+            .await
+            .map_err(|_| "无法确认 watch 的重登能力，请先升级远端 ncd-watch")?;
+        #[derive(serde::Deserialize)]
+        struct Capabilities {
+            v: u32,
+            features: Vec<String>,
+        }
+        let capabilities = serde_json::from_str::<Capabilities>(&output.stdout).ok();
+        if !output.success()
+            || !capabilities.is_some_and(|c| {
+                c.v == 1
+                    && c.features
+                        .iter()
+                        .any(|f| f == ncd_watch::relogin_config::RELOGIN_CAPABILITY)
+            })
+        {
+            return Err("远端 ncd-watch 不支持重登通知，请先升级再同步".into());
+        }
+    }
     let body = serde_json::to_vec_pretty(notify).map_err(|e| e.to_string())?;
-    host.write_file(&path, &body)
+    let temporary = config_dir.join(&format!(".notify-{}.json", uuid::Uuid::new_v4()));
+    host.write_file(&temporary, &body)
         .await
         .map_err(|e| e.to_string())?;
-    let _ = host
+    let permissions = host
         .run_to_string(
             ncd_host::HostCommand::new("chmod")
                 .arg("600")
-                .arg(path.as_posix()),
+                .arg(temporary.as_posix()),
         )
-        .await;
+        .await
+        .map_err(|_| "无法限制通知配置权限")?;
+    if !permissions.success() {
+        let _ = host.remove_file(&temporary).await;
+        return Err("无法限制通知配置权限".into());
+    }
+    if let Err(error) = host.rename(&temporary, &path).await {
+        let _ = host.remove_file(&temporary).await;
+        return Err(error.to_string());
+    }
     Ok(())
+}
+
+pub async fn relogin_loaded(host: &dyn Host, home: &str) -> Result<Option<NotifyConfig>, String> {
+    let Some(config) = read_notify_json(host, home).await? else {
+        return Ok(None);
+    };
+    if !config.onebot.relogin.settings.enabled {
+        return Ok(None);
+    }
+    let path = remote_watch_root(home)
+        .join("state")
+        .join("relogin-status.json");
+    let bytes = host
+        .read_file(&path)
+        .await
+        .map_err(|_| "watch 尚未加载重登配置，请确认服务运行后重试")?;
+    if bytes.len() > 16384 {
+        return Err("watch 重登状态无效".into());
+    }
+    let status: ncd_watch::relogin_config::WatchReloginStatus =
+        serde_json::from_slice(&bytes).map_err(|_| "watch 重登状态无效")?;
+    let age = chrono::Utc::now()
+        .timestamp()
+        .saturating_sub(status.updated_at);
+    if status.v != 1
+        || !(0..=120).contains(&age)
+        || status.configuration
+            != ncd_watch::relogin_config::fingerprint(&config).map_err(|e| e.to_string())?
+    {
+        return Err("配置已写入，watch 尚未确认加载，请稍后重试".into());
+    }
+    Ok(Some(config))
 }
 
 /// 读旧 notify 合并 webui 后再写,避免心跳空窗擦掉登录探活凭据
@@ -522,6 +683,74 @@ mod tests {
         let got = bots_for_server("s1", &bots);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].bot.qq_id, 1);
+    }
+
+    #[test]
+    fn relogin_accepts_ws_only_messenger_and_does_not_require_legacy_targets() {
+        let mut bot = sample_remote("s1", 42);
+        bot.connect
+            .websocket_servers
+            .push(ncd_domain::WebsocketServerConfig {
+                base: NetworkBaseFields {
+                    enable: true,
+                    name: "watch".into(),
+                    message_post_format: MessagePostFormat::Array,
+                    token: "t".into(),
+                    debug: false,
+                },
+                host: "0.0.0.0".into(),
+                port: 3001,
+                report_self_message: false,
+                enable_force_push_event: false,
+                heart_interval: 30000,
+                path: "/".into(),
+                role: ncd_domain::WsRole::Universal,
+            });
+        let mut settings = OfflineOneBotSettings::default();
+        settings.enabled = true;
+        settings.messenger_bot_ids = vec!["42".into()];
+        settings.relogin.enabled = true;
+        settings.relogin.administrator_ids = vec![99];
+        let config = build_watch_onebot_for_server("s1", &[bot.clone()], &settings);
+        assert!(config.enabled);
+        assert_eq!(config.relogin.event_endpoints.len(), 1);
+        assert!(config.messengers.is_empty());
+        bot.connect.websocket_servers[0].role = ncd_domain::WsRole::Api;
+        assert!(watch_event_endpoint(&bot).is_none());
+        bot.connect.websocket_servers[0].role = ncd_domain::WsRole::Universal;
+        bot.connect.websocket_servers[0].host = "127.0.0.1".into();
+        assert!(watch_event_endpoint(&bot).is_none());
+    }
+
+    #[test]
+    fn merging_login_credentials_preserves_revocation_and_rejects_different_backend() {
+        use ncd_watch::relogin_config::WatchLoginTarget;
+        let mut old = build_notify_config(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+        );
+        old.onebot.relogin.login_targets.push(WatchLoginTarget {
+            bot_id: "9".into(),
+            webui_port: 5555,
+            webui_secret: "old".into(),
+            qr_enabled: true,
+            ..Default::default()
+        });
+        let mut new = old.clone();
+        new.onebot.relogin.login_targets[0] = WatchLoginTarget {
+            bot_id: "9".into(),
+            qr_enabled: false,
+            ..Default::default()
+        };
+        merge_notify_preserve_webui(&mut new, &old);
+        assert_eq!(new.onebot.relogin.login_targets[0].webui_secret, "old");
+        assert!(!new.onebot.relogin.login_targets[0].qr_enabled);
+        new.bots[0].backend = "snowluma".into();
+        new.onebot.relogin.login_targets[0].webui_secret.clear();
+        merge_notify_preserve_webui(&mut new, &old);
+        assert!(new.onebot.relogin.login_targets[0].webui_secret.is_empty());
+        assert!(!new.bots[0].enabled);
     }
 
     #[test]

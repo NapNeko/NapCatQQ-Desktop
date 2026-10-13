@@ -459,9 +459,6 @@ pub async fn remote_napcat_running_pid(
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     if !out.success() {
-        if out.stdout.trim().is_empty() {
-            return Ok(None);
-        }
         return Err(BotBackendError::Io(format!(
             "远端 QQ 进程探测失败: exit={:?} stderr={}",
             out.exit_code,
