@@ -3511,6 +3511,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-relogin"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "libc",
+ "ncd-domain",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "ncd-runtime"
 version = "0.1.0"
 dependencies = [
@@ -3693,11 +3709,17 @@ dependencies = [
 name = "ncd-watch"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "hex",
+ "image",
  "lettre",
  "ncd-domain",
+ "ncd-onebot",
+ "ncd-relogin",
+ "qrcode",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -3707,6 +3729,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "wiremock",
 ]
 
@@ -4686,6 +4709,15 @@ name = "pxfm"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+dependencies = [
+ "image",
+]
 
 [[package]]
 name = "quick-error"

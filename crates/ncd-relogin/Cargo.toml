@@ -1,0 +1,25 @@
+[package]
+name = "ncd-relogin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["time", "sync", "fs", "io-util"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+tracing = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt", "test-util"] }
+
+[lints]
+workspace = true
