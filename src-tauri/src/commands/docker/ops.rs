@@ -15,7 +15,10 @@ pub async fn docker_probe(
     state: State<'_, AppState>,
 ) -> Result<DockerStatus, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    Ok(DockerCli::new(host.as_ref()).probe().await)
+    DockerCli::new(host.as_ref())
+        .probe_checked()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -83,6 +86,7 @@ pub async fn docker_container_action(
     host_id: String,
     name: String,
     action: ContainerAction,
+    force: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
@@ -90,12 +94,9 @@ pub async fn docker_container_action(
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
-    let result = match action {
-        ContainerAction::Start => cli.lifecycle("start", &name).await,
-        ContainerAction::Stop => cli.lifecycle("stop", &name).await,
-        ContainerAction::Restart => cli.lifecycle("restart", &name).await,
-        ContainerAction::Remove => cli.remove(&name).await,
-    };
+    let result = cli
+        .container_action(action, &name, force.unwrap_or(false))
+        .await;
     result.map_err(|e| {
         error!(
             target: "ncd_tauri::docker",
@@ -150,6 +151,7 @@ pub async fn docker_compose_down(
     remove_volumes: bool,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    DockerCli::validate_project_name(&name).map_err(|e| e.to_string())?;
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let host_ref: &dyn Host = host.as_ref();
     let project_dir = resolve_project_dir(&host_id, host_ref, &state, &name).await?;

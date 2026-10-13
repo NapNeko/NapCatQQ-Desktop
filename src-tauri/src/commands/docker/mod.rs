@@ -7,5 +7,6 @@
 
 pub mod deploy;
 pub mod install;
+pub mod management;
 pub mod ops;
 mod progress;
