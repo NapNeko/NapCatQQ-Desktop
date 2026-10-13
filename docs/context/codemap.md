@@ -233,6 +233,8 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | hooks | `src-ui/hooks/docker/`, `task-queue/` |
 | 服务 | `docker.service.ts`, `deployment-task.service.ts` |
 
+管理页能力与边界：[docker-management.md](docker-management.md)。类型化详情、资源采样、网络 / 数据卷操作在 `ncd-domain/src/docker/management.rs`、`ncd-deploy/src/docker/management.rs` 与 `commands/docker/management.rs`。
+
 ---
 
 ### 8) 配置 / 设置 / 导入导出
