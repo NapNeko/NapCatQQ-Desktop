@@ -1,12 +1,7 @@
-// 主机切换条：组件页顶部一排可点的主机标签，一次只看一台机器的组件。
-//
-// 旧版把每台机器塞成一张大卡上下堆叠，机器一多就要滚很久、还难比较。改成
-// 切换条 + 单机视图：默认进来停在第一台（本机），点别的标签切过去。每个标签
-// 带连接点 + 已装/总数小计，不点开也能扫一眼哪台装得多。
-//
-// 只有一台机器时整条不渲染（没切换可言），由调用方决定。
+// 主机切换条：顶部可点击的分段主机标签栏，一次只看一台机器的组件。
 
 import React from 'react';
+import { Monitor, Server } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import type { MachineView } from '../../core/domain/components/types';
 import { machineSummary } from '../../core/domain/components/types';
@@ -66,7 +61,7 @@ export const HostSwitcher: React.FC<HostSwitcherProps> = ({ machines, activeHost
             role="tablist"
             aria-label="选择主机"
             data-tour-id="host-switcher"
-            className="flex shrink-0 flex-wrap items-center gap-2 pb-1"
+            className="inline-flex max-w-full shrink-0 flex-wrap items-center gap-1 rounded-md border border-border-subtle bg-inset/50 p-1"
             onKeyDown={handleKeyDown}
         >
             {machines.map((machine) => (
@@ -97,11 +92,7 @@ const HostTab = React.forwardRef<
     const isFailed = host.state === 'failed';
     const { installed, total } = machineSummary(machine);
     const tabId = `component-host-tab-${host.host_id}`;
-
-    // 失败时优先展示"连接中断"，不强求显示安装计数（探测被阻断）
-    const statusText = isFailed
-        ? '连接中断'
-        : `${host.os} · ${isRemote ? '远端' : '本机'} · ${installed}/${total}`;
+    const Icon = isRemote ? Server : Monitor;
 
     return (
         <button
@@ -116,52 +107,64 @@ const HostTab = React.forwardRef<
             tabIndex={active ? 0 : -1}
             onClick={onSelect}
             className={cn(
-                'group flex min-w-0 max-w-full flex-col gap-0.5 rounded-md border px-3 py-2 text-left transition-colors',
+                'group flex min-w-0 max-w-full items-center gap-2 rounded-sm border px-2.5 py-1.5 text-left transition-all duration-fast',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                 isFailed
-                    ? 'border-danger/40 bg-danger/5'
+                    ? active
+                        ? 'border-danger/45 bg-danger/12 text-danger shadow-xs'
+                        : 'border-transparent text-danger/85 hover:bg-danger/8'
                     : active
-                      ? 'border-brand/40 bg-brand/15'
-                      : 'border-border-subtle bg-inset/40 hover:bg-inset/70',
+                      ? 'border-border-subtle bg-elevated text-text shadow-xs'
+                      : 'border-transparent text-text-secondary hover:bg-surface/60 hover:text-text',
             )}
         >
-            {/* 圆点和主标题放同一 items-center 行,圆点严格对齐名字中线 —— 不再
-                跟"两行文本块"的中点对齐,避免中文字形偏上导致的错位观感。 */}
-            <span className="flex min-w-0 max-w-full items-center gap-2">
-                <span
-                    aria-hidden
-                    className={cn(
-                        'inline-block h-2 w-2 shrink-0 rounded-full',
-                        isFailed
-                            ? 'bg-danger'
-                            : isRemote
-                              ? 'bg-success shadow-glow-success'
-                              : 'bg-brand',
-                    )}
-                />
-                <span
-                    className={cn(
-                        'min-w-0 truncate text-[13px] font-medium leading-tight',
-                        isFailed
-                            ? 'text-danger'
-                            : active
-                              ? 'text-text'
-                              : 'text-text-secondary group-hover:text-text',
-                    )}
-                    title={host.display_name}
-                >
-                    {host.display_name}
-                </span>
-            </span>
-            {/* 副标题缩进对齐到主标题左缘(圆点 8px + gap 8px = ml-4)。 */}
             <span
+                aria-hidden
                 className={cn(
-                    'ml-4 max-w-full truncate text-[10px] uppercase leading-tight tracking-wider',
-                    isFailed ? 'text-danger/80' : 'text-text-tertiary',
+                    'inline-block h-1.5 w-1.5 shrink-0 rounded-full',
+                    isFailed
+                        ? 'bg-danger'
+                        : isRemote
+                          ? 'bg-success shadow-glow-success'
+                          : 'bg-brand',
                 )}
+            />
+            <Icon
+                size={13}
+                className={cn(
+                    'shrink-0',
+                    isFailed
+                        ? 'text-danger/80'
+                        : active
+                          ? 'text-brand'
+                          : 'text-text-tertiary group-hover:text-text-secondary',
+                )}
+            />
+            <span
+                className="min-w-0 max-w-[160px] truncate text-[12.5px] font-medium leading-none"
+                title={host.display_name}
             >
-                {statusText}
+                {host.display_name}
             </span>
+            <span className="shrink-0 font-mono text-[10px] uppercase leading-none text-text-tertiary">
+                {host.os}
+            </span>
+            {isFailed ? (
+                <span className="shrink-0 rounded-xs bg-danger/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-danger">
+                    中断
+                </span>
+            ) : (
+                <span
+                    className={cn(
+                        'shrink-0 rounded-xs px-1.5 py-0.5 font-mono text-[10px] leading-none tabular-nums',
+                        active
+                            ? 'bg-brand/15 text-brand'
+                            : 'bg-inset/80 text-text-tertiary group-hover:text-text-secondary',
+                    )}
+                >
+                    {installed}/{total}
+                </span>
+            )}
         </button>
     );
 });

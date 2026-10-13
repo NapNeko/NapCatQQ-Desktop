@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { PackageX, WifiOff, Wrench } from 'lucide-react';
-import { Button, FormSection } from '../../shared/ui';
+import { Button } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
@@ -29,6 +29,7 @@ import type {
     Os,
     StepKind,
 } from '../../core/ipc/types';
+
 interface HostComponentsViewProps {
     machine: MachineView;
     // 应用端（按实例安装的合成行）
@@ -129,7 +130,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
     // 主机级连接失败占位：远端且所有行都是 unknown + 原因指向连接失败时，
     // 直接在内容区给清晰提示 + 快捷操作，避免用户只看到一堆“探测失败，请看顶部”。
-    // 仅展示一个「重试探测」动作；“去远端页测试连接”是静态指引（用户可从侧边栏切换到远端页）。
     const allUnknown = allComponents.every((r) => r.status.state === 'unknown');
     const anyConnectivityFail = allComponents.some(
         (r) =>
@@ -213,6 +213,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     };
 
     const isDemo = host.host_id === 'tour:demo-remote'; // DEMO_REMOTE_HOST_ID
+    const showDocker = dockerApplicable && !isDemo;
 
     return (
         <div className="flex min-w-0 w-full max-w-full flex-col gap-6">
@@ -222,22 +223,25 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     ，不会连真机、也不写入远程档案。仅用于预览远端 NC / SL 的组件清单。
                 </p>
             ) : null}
-            <div className="flex w-full flex-col gap-3" data-tour-id="comp-group-framework">
-                <Group
-                    title="协议端"
-                    rows={machine.framework}
-                    hostId={host.host_id}
-                    disableActions={isDemo}
-                    lifecycleBlockedReason={lifecycleBlockedReason}
-                    latestVersionFor={latestVersionFor}
-                    latestReleaseFor={latestReleaseFor}
-                    getProgress={getProgress}
-                    onAction={onAction}
-                    onRetryDetect={onRetryDetect}
-                    onShowReleaseNotes={onShowReleaseNotes}
-                    trailingFor={isDemo ? undefined : deployButtonFor}
-                />
-            </div>
+
+            {machine.framework.length > 0 ? (
+                <div className="flex w-full flex-col" data-tour-id="comp-group-framework">
+                    <Group
+                        title="协议端"
+                        rows={machine.framework}
+                        hostId={host.host_id}
+                        disableActions={isDemo}
+                        lifecycleBlockedReason={lifecycleBlockedReason}
+                        latestVersionFor={latestVersionFor}
+                        latestReleaseFor={latestReleaseFor}
+                        getProgress={getProgress}
+                        onAction={onAction}
+                        onRetryDetect={onRetryDetect}
+                        onShowReleaseNotes={onShowReleaseNotes}
+                        trailingFor={isDemo ? undefined : deployButtonFor}
+                    />
+                </div>
+            ) : null}
 
             <AppFrameworkGroup
                 manifests={appFrameworks}
@@ -253,7 +257,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     rows={machine.runtimeDep}
                     hostId={host.host_id}
                     os={host.os}
-                    showDocker={dockerApplicable && !isDemo}
+                    showDocker={showDocker}
                     disableActions={isDemo}
                     lifecycleBlockedReason={lifecycleBlockedReason}
                     latestVersionFor={latestVersionFor}
@@ -273,22 +277,48 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 />
             </div>
 
-            <Group
-                title="桌面端"
-                rows={machine.selfApp}
-                hostId={host.host_id}
-                disableActions={false}
-                lifecycleBlockedReason={lifecycleBlockedReason}
-                latestVersionFor={latestVersionFor}
-                latestReleaseFor={latestReleaseFor}
-                getProgress={getProgress}
-                onAction={onAction}
-                onRetryDetect={onRetryDetect}
-                onShowReleaseNotes={onShowReleaseNotes}
-            />
+            {machine.selfApp.length > 0 ? (
+                <Group
+                    title="桌面端"
+                    rows={machine.selfApp}
+                    hostId={host.host_id}
+                    disableActions={false}
+                    lifecycleBlockedReason={lifecycleBlockedReason}
+                    latestVersionFor={latestVersionFor}
+                    latestReleaseFor={latestReleaseFor}
+                    getProgress={getProgress}
+                    onAction={onAction}
+                    onRetryDetect={onRetryDetect}
+                    onShowReleaseNotes={onShowReleaseNotes}
+                />
+            ) : null}
         </div>
     );
 };
+
+/// 轻量分组容器：对齐页面左右边缘，不带左侧竖线缩进。
+const ComponentSection: React.FC<{
+    title: string;
+    count: number;
+    description?: string;
+    children: React.ReactNode;
+}> = ({ title, count, description, children }) => (
+    <section className="flex flex-col gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+                <span aria-hidden className="h-3.5 w-1 rounded-full bg-brand/70" />
+                <h3 className="text-[13px] font-semibold tracking-tight text-text">{title}</h3>
+                <span className="rounded-xs bg-inset/80 px-1.5 py-0.5 font-mono text-[10px] leading-none text-text-tertiary tabular-nums">
+                    {count}
+                </span>
+            </div>
+            {description ? (
+                <span className="text-2xs text-text-tertiary">{description}</span>
+            ) : null}
+        </div>
+        {children}
+    </section>
+);
 
 /// 应用端组：每个框架一张卡，只列这台主机上的实例；不支持该主机 placement 的框架也保留卡片但标「不支持」。
 const AppFrameworkGroup: React.FC<{
@@ -303,10 +333,10 @@ const AppFrameworkGroup: React.FC<{
     const { host } = machine;
     return (
         <div data-tour-id="comp-group-app">
-            <FormSection
+            <ComponentSection
                 title="应用端"
+                count={manifests.length}
                 description="按实例安装；启停、对接与日志在「应用端」页"
-                layout="none"
             >
                 <div className={componentCardGridClass}>
                     {manifests.map((manifest) => (
@@ -333,7 +363,7 @@ const AppFrameworkGroup: React.FC<{
                         </div>
                     ))}
                 </div>
-            </FormSection>
+            </ComponentSection>
         </div>
     );
 };
@@ -380,7 +410,7 @@ const Group: React.FC<{
 }) => {
     if (rows.length === 0) return null;
     return (
-        <FormSection title={title} description={description} layout="none">
+        <ComponentSection title={title} count={rows.length} description={description}>
             <div className={componentCardGridClass}>
                 {rows.map((row) => (
                     <div
@@ -404,7 +434,7 @@ const Group: React.FC<{
                     </div>
                 ))}
             </div>
-        </FormSection>
+        </ComponentSection>
     );
 };
 
@@ -456,10 +486,10 @@ const RuntimeDepGroup: React.FC<{
     onOpenDockerDownload,
     trailingFor,
 }) => {
-    const hasRows = rows.length > 0 || showDocker;
-    if (!hasRows) return null;
+    const count = rows.length + (showDocker ? 1 : 0);
+    if (count === 0) return null;
     return (
-        <FormSection title="运行时依赖" layout="none">
+        <ComponentSection title="运行时依赖" count={count}>
             <div className={componentCardGridClass}>
                 {rows.map((row) => (
                     <div
@@ -497,7 +527,7 @@ const RuntimeDepGroup: React.FC<{
                     </div>
                 ) : null}
             </div>
-        </FormSection>
+        </ComponentSection>
     );
 };
 

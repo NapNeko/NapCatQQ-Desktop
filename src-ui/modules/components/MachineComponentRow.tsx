@@ -1,7 +1,17 @@
 // 机器卡里的一行：一个组件在这台机器上的状态 + 操作。
 
 import React, { useEffect, useState } from 'react';
-import { Copy, Download, ExternalLink, RefreshCw, ScrollText, Trash2, X, Zap } from 'lucide-react';
+import {
+    Copy,
+    Download,
+    ExternalLink,
+    MessageCircle,
+    RefreshCw,
+    ScrollText,
+    Trash2,
+    X,
+    Zap,
+} from 'lucide-react';
 import {
     Button,
     ContextMenu,
@@ -126,12 +136,6 @@ export const MachineComponentRowView: React.FC<Props> = ({
         </Button>
     ) : (
         <>
-            {canShowNotes ? (
-                <Button size="sm" variant="ghost" title="查看更新日志" onClick={onShowReleaseNotes}>
-                    <ScrollText size={13} strokeWidth={2} aria-hidden />
-                    日志
-                </Button>
-            ) : null}
             {trailingActions}
             <ActionButtons
                 status={status}
@@ -144,16 +148,39 @@ export const MachineComponentRowView: React.FC<Props> = ({
         </>
     );
 
-    const titleAside = info.repo_url ? (
-        <button
-            type="button"
-            onClick={() => openExternal(info.repo_url!)}
-            className="inline-flex items-center gap-0.5 text-2xs text-text-tertiary transition-colors hover:text-brand"
-        >
-            仓库
-            <ExternalLink size={11} strokeWidth={2} aria-hidden />
-        </button>
-    ) : undefined;
+    const titleAside =
+        canShowNotes || info.repo_url ? (
+            <div className="flex items-center gap-0.5">
+                {canShowNotes && (
+                    <button
+                        type="button"
+                        onClick={onShowReleaseNotes}
+                        title="查看发版日志"
+                        aria-label="查看发版日志"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text"
+                    >
+                        <ScrollText size={13} strokeWidth={2} aria-hidden />
+                    </button>
+                )}
+                {info.repo_url && (
+                    <button
+                        type="button"
+                        onClick={() => openExternal(info.repo_url!)}
+                        title="打开项目仓库"
+                        aria-label="打开项目仓库"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-brand"
+                    >
+                        <ExternalLink size={13} strokeWidth={2} aria-hidden />
+                    </button>
+                )}
+            </div>
+        ) : undefined;
+
+    const iconNode =
+        componentLogoIcon(info.id) ??
+        (info.id === 'qq' ? (
+            <MessageCircle size={18} strokeWidth={2} className="text-info" />
+        ) : undefined);
 
     const updatable =
         status.state === 'installed' &&
@@ -180,7 +207,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
-                <div className="min-w-0">
+                <div className="h-full min-w-0">
                     <ComponentManageCard
                         accent={inFlight ? 'brand' : 'none'}
                         statusBadge={hostComponentStatusBadge(status, {
@@ -188,7 +215,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
                             inFlight,
                         })}
                         title={info.display_name}
-                        icon={componentLogoIcon(info.id)}
+                        icon={iconNode}
                         titleAside={titleAside}
                         description={info.description || undefined}
                         meta={
@@ -445,13 +472,15 @@ const ActionButtons: React.FC<{
                     )}
                     {uninstallAction === 'task' && (
                         <Button
-                            size="sm"
+                            size="icon"
                             variant="ghost"
+                            className="h-7 w-7 text-text-tertiary hover:bg-danger-soft hover:text-danger"
                             disabled={lifecycleDisabled}
-                            title={lifecycleBlockedReason ?? undefined}
+                            title={lifecycleBlockedReason ?? '卸载组件'}
+                            aria-label="卸载组件"
                             onClick={() => onAction({ kind: 'uninstall' })}
                         >
-                            卸载
+                            <Trash2 size={13} strokeWidth={2} />
                         </Button>
                     )}
                     {uninstallAction === 'system' && (
@@ -459,9 +488,11 @@ const ActionButtons: React.FC<{
                         <Button
                             size="sm"
                             variant="ghost"
+                            className="h-7 px-2 text-xs text-text-tertiary hover:text-text"
+                            title="打开系统应用管理页进行卸载"
                             onClick={() => openSystemUninstallOrReport()}
                         >
-                            在系统中卸载…
+                            系统卸载
                         </Button>
                     )}
                 </>
@@ -480,7 +511,7 @@ const ActionButtons: React.FC<{
                 </Button>
             );
         case 'unsupported':
-            return <span className="text-2xs text-text-disabled">无可用操作</span>;
+            return null;
         case 'unknown':
             return (
                 <Button

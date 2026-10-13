@@ -1,5 +1,5 @@
 import React from 'react';
-import { Copy, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { Container, Copy, Download, ExternalLink, Loader2 } from 'lucide-react';
 import {
     Button,
     ContextMenu,
@@ -47,9 +47,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     const probing = isProbing && !status;
 
     const footer =
-        ready || probing ? (
-            <span className="text-2xs text-text-disabled">—</span>
-        ) : autoInstallable ? (
+        ready || probing ? null : autoInstallable ? (
             <Button size="sm" variant="primary" onClick={onInstall} disabled={isInstalling}>
                 {isInstalling && (
                     <MotionIcon icon={Loader2} motion="spin" playEnter={false} size={13} />
@@ -79,7 +77,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
-                <div className="min-w-0">
+                <div className="h-full min-w-0">
                     <ComponentManageCard
                         accent={isInstalling ? 'brand' : 'none'}
                         statusBadge={dockerRowStatusBadge({
@@ -88,14 +86,17 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                             inFlight: isInstalling,
                         })}
                         title="Docker"
+                        icon={<Container size={18} strokeWidth={2} className="text-info" />}
+                        description="Linux 容器引擎，支持容器化隔离运行 NapCat 与 SnowLuma"
                         titleAside={
                             <button
                                 type="button"
                                 onClick={() => openExternal('https://www.docker.com/')}
-                                className="inline-flex items-center gap-0.5 text-2xs text-text-tertiary transition-colors hover:text-brand"
+                                title="访问 Docker 官网"
+                                aria-label="访问 Docker 官网"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-brand"
                             >
-                                官网
-                                <ExternalLink size={11} strokeWidth={2} aria-hidden />
+                                <ExternalLink size={13} strokeWidth={2} aria-hidden />
                             </button>
                         }
                         meta={

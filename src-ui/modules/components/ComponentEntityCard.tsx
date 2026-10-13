@@ -1,6 +1,7 @@
-// 组件管理页实体卡：对齐 ServerCard / ContainerCard 的层次（徽章 + 标题 + 元信息 + 底栏操作）。
+// 组件管理页实体卡：统一图标槽 + 标题旁状态徽章 + 底栏左元信息右操作。
 
 import type { ReactNode } from 'react';
+import { Package } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import { Badge } from '../../shared/ui';
 import gridStyles from './componentCardGrid.module.css';
@@ -11,7 +12,7 @@ export const componentCardGridClass = gridStyles.componentCardGrid;
 export interface ComponentManageCardProps {
     statusBadge: StatusBadgeSpec;
     title: string;
-    /** 标题左侧的头图。不给就不占位——只有拿得到品牌图的组件才传 */
+    /** 标题左侧图标；缺省时回退通用组件图标以保持左缘严格对齐 */
     icon?: ReactNode;
     titleAside?: ReactNode;
     description?: string;
@@ -22,9 +23,9 @@ export interface ComponentManageCardProps {
 }
 
 const SHELL =
-    'relative isolate flex h-full w-full max-w-full min-w-0 flex-col overflow-hidden ' +
+    'group relative isolate flex h-full w-full max-w-full min-w-0 flex-col justify-between overflow-hidden ' +
     'rounded-md border border-border-subtle bg-surface shadow-card ' +
-    'transition-[box-shadow] duration-200 hover:shadow-popover';
+    'transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-popover';
 
 export function ComponentManageCard({
     statusBadge,
@@ -45,46 +46,41 @@ export function ComponentManageCard({
                 <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-brand" />
             ) : null}
 
-            <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pb-2 pt-3">
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                    {/* 无图标时不渲染；有图标时 24px，与标题行高接近，基本不改变卡片高度 */}
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                        {icon ? <span className="shrink-0">{icon}</span> : null}
-                        <h3 className="min-w-0 truncate font-display text-base font-semibold leading-snug text-text">
-                            {title}
-                        </h3>
-                    </div>
-                    {titleAside ? <div className="shrink-0">{titleAside}</div> : null}
-                </div>
+            <div className="flex min-w-0 items-start gap-3 px-3.5 pb-2.5 pt-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-subtle/80 bg-field/60 text-text-secondary">
+                    {icon ?? <Package size={18} strokeWidth={1.9} />}
+                </span>
 
-                <div className="min-w-0 space-y-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <h3 className="min-w-0 truncate font-display text-[14.5px] font-semibold leading-snug text-text">
+                                {title}
+                            </h3>
+                            <Badge
+                                tone={statusBadge.tone}
+                                appearance="soft"
+                                dot={statusBadge.dot}
+                                className="max-w-[9rem] shrink-0 truncate text-[11px]"
+                            >
+                                {statusBadge.label}
+                            </Badge>
+                        </div>
+                        {titleAside ? <div className="shrink-0">{titleAside}</div> : null}
+                    </div>
+
                     <p
-                        className={cn(
-                            'line-clamp-2 min-h-[2.25rem] text-xs leading-snug',
-                            desc ? 'text-text-secondary' : 'text-transparent select-none',
-                        )}
-                        aria-hidden={!desc}
+                        className="truncate text-xs leading-snug text-text-secondary"
                         title={desc ?? undefined}
                     >
-                        {desc ?? '占位'}
+                        {desc ?? '系统运行环境组件'}
                     </p>
                 </div>
-
-                <div className="min-h-[1.375rem] min-w-0">{meta}</div>
             </div>
 
-            <footer className="flex min-h-[2.75rem] shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-inset/40 px-3 py-2">
-                <Badge
-                    tone={statusBadge.tone}
-                    appearance="soft"
-                    dot={statusBadge.dot}
-                    className="shrink-0 max-w-[50%] truncate"
-                >
-                    {statusBadge.label}
-                </Badge>
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
-                    {footer}
-                </div>
+            <footer className="flex min-h-[2.375rem] shrink-0 items-center justify-between gap-3 border-t border-border-subtle/75 bg-inset/35 px-3.5 py-1.5">
+                <div className="min-w-0 flex-1">{meta}</div>
+                <div className="flex shrink-0 items-center justify-end gap-1.5">{footer}</div>
             </footer>
 
             {progressOverlay}

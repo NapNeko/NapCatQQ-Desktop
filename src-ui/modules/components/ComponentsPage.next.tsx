@@ -4,7 +4,7 @@
 // useDockerSudoOps（Docker 安装 + sudo 弹框）、useAppInstanceDialogs（应用端实例对话框）。
 
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
-import { Box, Loader2, RefreshCw } from 'lucide-react';
+import { Box, Loader2, Monitor, RefreshCw, Server } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../shared/ui';
 import { MotionIcon, refreshMotion } from '../../shared/ui/motion';
@@ -27,7 +27,7 @@ import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { CreateInstanceDialog, ImportInstanceDialog } from '../apps';
-import type { ComponentRow } from '../../core/domain/components/types';
+import { machineSummary, type ComponentRow } from '../../core/domain/components/types';
 import {
     getComponentsHostBridge,
     subscribeComponentsHostBridge,
@@ -182,15 +182,41 @@ export const ComponentsPageNext: React.FC = () => {
     );
 
     const allEmpty = machines.length === 0;
+    const singleMachineSummary =
+        machines.length === 1 && activeMachine ? machineSummary(activeMachine) : null;
 
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
-                <div>
-                    <p className="text-2xs uppercase tracking-widest text-text-tertiary">
-                        components
-                    </p>
+            <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 pb-3 pt-1">
+                <div className="flex flex-wrap items-center gap-3">
                     <h1 className="font-display text-xl font-semibold text-text">组件管理</h1>
+                    {machines.length === 1 && activeMachine && singleMachineSummary ? (
+                        <div className="inline-flex items-center gap-2 rounded-sm border border-border-subtle bg-inset/60 px-2.5 py-1 text-2xs text-text-secondary">
+                            <span
+                                aria-hidden
+                                className={cn(
+                                    'h-1.5 w-1.5 rounded-full',
+                                    activeMachine.host.locality === 'remote'
+                                        ? 'bg-success shadow-glow-success'
+                                        : 'bg-brand',
+                                )}
+                            />
+                            {activeMachine.host.locality === 'remote' ? (
+                                <Server size={12} className="text-text-tertiary" />
+                            ) : (
+                                <Monitor size={12} className="text-brand" />
+                            )}
+                            <span className="font-medium text-text">
+                                {activeMachine.host.display_name}
+                            </span>
+                            <span className="font-mono text-[10px] uppercase text-text-tertiary">
+                                {activeMachine.host.os}
+                            </span>
+                            <span className="rounded-xs bg-brand/12 px-1.5 py-0.5 font-mono text-[10px] leading-none text-brand tabular-nums">
+                                已装 {singleMachineSummary.installed}/{singleMachineSummary.total}
+                            </span>
+                        </div>
+                    ) : null}
                 </div>
                 <Button
                     size="sm"
@@ -209,16 +235,18 @@ export const ComponentsPageNext: React.FC = () => {
             </header>
 
             {machines.length > 1 && activeHostId ? (
-                <HostSwitcher
-                    machines={machines}
-                    activeHostId={activeHostId}
-                    onSelect={setActiveHostId}
-                />
+                <div className="pb-1">
+                    <HostSwitcher
+                        machines={machines}
+                        activeHostId={activeHostId}
+                        onSelect={setActiveHostId}
+                    />
+                </div>
             ) : null}
 
             <div
                 className={cn(
-                    'mt-3 flex min-h-0 min-w-0 flex-1 flex-col pb-6',
+                    'mt-2 flex min-h-0 min-w-0 flex-1 flex-col pb-6',
                     scrollStyles.componentsPageScroll,
                 )}
             >

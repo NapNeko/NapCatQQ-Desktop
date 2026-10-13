@@ -114,8 +114,15 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
 
     const footer = supported ? (
         <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="secondary" onClick={onImport} disabled={disabled}>
-                <ActionMotionIcon icon={Import} size={13} strokeWidth={2.4} />
+            <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-text-secondary hover:text-text"
+                onClick={onImport}
+                disabled={disabled}
+                title="导入已有实例目录"
+            >
+                <ActionMotionIcon icon={Import} size={13} strokeWidth={2.2} />
                 导入
             </Button>
             <Button size="sm" variant="primary" onClick={onCreate} disabled={disabled}>
@@ -128,9 +135,7 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
                 新建实例
             </Button>
         </div>
-    ) : (
-        <span className="text-2xs text-text-disabled">—</span>
-    );
+    ) : null;
 
     return (
         <ComponentManageCard
@@ -144,10 +149,11 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
                     <button
                         type="button"
                         onClick={() => openExternal(manifest.repo_url!)}
-                        className="inline-flex items-center gap-0.5 text-2xs text-text-tertiary transition-colors hover:text-brand"
+                        title="打开项目仓库"
+                        aria-label="打开项目仓库"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-brand"
                     >
-                        仓库
-                        <ExternalLink size={11} strokeWidth={2} aria-hidden />
+                        <ExternalLink size={13} strokeWidth={2} aria-hidden />
                     </button>
                 ) : undefined
             }
