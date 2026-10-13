@@ -766,6 +766,65 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(done.into_iter().collect())
     }
 
+    /// 按事件顺序清理与恢复，避免迟到的断线清理取消刚重建的登录探测器。
+    pub async fn run_host_connection_listener(
+        self,
+        ready: Option<tokio::sync::oneshot::Sender<()>>,
+    ) {
+        let mut subscription = self.event_bus.subscribe(EventFilter::all());
+        if let Some(tx) = ready {
+            let _ = tx.send(());
+        }
+        while let Some(event) = subscription.next().await {
+            if let DomainEvent::HostConnectionLost { server_id, .. } = &event {
+                self.detach_remote_snowluma_sessions(server_id).await;
+                continue;
+            }
+            let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
+                continue;
+            };
+            match self.reconcile_remote_runtimes_for_server(&server_id).await {
+                Ok(done) if !done.is_empty() => info!(
+                    target: "ncd_runtime::bot_manager",
+                    server_id = %server_id,
+                    reconciled = done.len(),
+                    "主机连接恢复：已补跑远端运行态接管"
+                ),
+                Ok(_) => {}
+                Err(err) => warn!(
+                    target: "ncd_runtime::bot_manager",
+                    server_id = %server_id,
+                    err = %err,
+                    "主机连接恢复后的远端运行态接管失败"
+                ),
+            }
+        }
+    }
+
+    async fn detach_remote_snowluma_sessions(&self, server_id: &str) {
+        self.docker_sessions.detach_snowluma_server(server_id).await;
+        let backend = {
+            let backends = self.remote_snowluma_backends.lock().await;
+            backends.get(server_id).cloned()
+        };
+        if let Some(backend) = backend {
+            backend.detach_login_pollers().await;
+        }
+        self.remote_snowluma_tunnels.drop_server(server_id).await;
+        let daemon = {
+            let daemons = self.remote_snowluma_daemons.lock().await;
+            daemons.get(server_id).cloned()
+        };
+        if let Some(daemon) = daemon {
+            daemon.detach_local_sessions().await;
+        }
+        info!(
+            target: "ncd_runtime::bot_manager",
+            server_id,
+            "主机连接丢失：已拆远端 SnowLuma 隧道并清 tunnel_eps"
+        );
+    }
+
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。
     async fn backend_for_config(
         &self,

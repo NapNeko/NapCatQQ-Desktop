@@ -598,6 +598,7 @@ pub fn run() {
             // event emit 的 subscribe 在上面已同步完成(spawn 前 register)。
             let (login_ready_tx, login_ready_rx) = tokio::sync::oneshot::channel::<()>();
             let (sl_ready_tx, sl_ready_rx) = tokio::sync::oneshot::channel::<()>();
+            let (host_ready_tx, host_ready_rx) = tokio::sync::oneshot::channel::<()>();
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_listener)
                     .clone()
@@ -618,7 +619,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_host_recovery_listener)
                     .clone()
-                    .run_host_connection_listener()
+                    .run_host_connection_listener(Some(host_ready_tx))
                     .await;
             });
             tauri::async_runtime::spawn(async move {
@@ -661,6 +662,13 @@ pub fn run() {
                         "WARN",
                         "ncd::bot_manager",
                         "snowluma listener ready signal dropped; bootstrap continues",
+                    );
+                }
+                if host_ready_rx.await.is_err() {
+                    desktop_log::write_session_line(
+                        "WARN",
+                        "ncd::bot_manager",
+                        "host listener ready signal dropped; bootstrap continues",
                     );
                 }
                 // 未同意当前 Desktop 协议时只恢复 Actor / reconcile，不 auto_start

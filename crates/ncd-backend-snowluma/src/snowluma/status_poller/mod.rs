@@ -1,10 +1,4 @@
-// 本文件只写 SnowLumaLoginState enum + ProcessTreeProbe async trait 占位
-// SnowLumaStatusPoller 主体(构造,主循环,UIN 锁定,状态合成,dispose)
-// 由 写
-//
-// 严格红线:SnowLumaLoginState 跨 Tauri 边界(DomainEvent::SnowLumaLoginStateChanged
-// 的 state 字段)必须 ts-rs 派生 + 导出,避免前后端类型漂移
-//
+// SnowLuma 登录轮询、账号绑定与当前状态快照发布。
 
 use std::collections::BTreeSet;
 
@@ -46,6 +40,9 @@ const START_DELAY: Duration = Duration::from_millis(500);
 
 /// 主循环 tick 周期
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+// Broadcast 无 backlog，定期重发当前快照可修复订阅迟到或事件丢失。
+const STATE_REPLAY_INTERVAL: Duration = Duration::from_secs(30);
 
 /// 连续 HTTP 失败门限：达到时把 UI 登录态降为未知，但绝不据此断言 QQ 掉线。
 /// 请求默认可能等待 5 秒，取 2 可避免旧绿色状态残留十几秒。
@@ -113,10 +110,12 @@ struct PollerState {
     uin: Option<String>,
     locked_pid: Option<u32>,
     last_state: Option<SnowLumaLoginState>,
+    last_state_published_at: Option<Instant>,
     last_pid_set: BTreeSet<u32>,
     consecutive_failures: u32,
-    /// 已发布探测不可用；恢复到可信状态前不重复发事件。
+    /// 失败通知需限频；恢复后即使登录态没变也要补发可信快照。
     probe_unavailable_published: bool,
+    last_probe_unavailable_published_at: Option<Instant>,
     /// 曾在线后连续"全信号消失"的 tick 数,达 NO_SIGNAL_THRESHOLD 才发 Disconnected
     consecutive_no_signal: u32,
 }
@@ -155,27 +154,29 @@ async fn run_poller(
 
     loop {
         tokio::select! {
-        biased;
-        _ = cancel.cancelled() => {
-        break;
+            biased;
+            _ = cancel.cancelled() => break,
+            _ = ticker.tick() => {}
         }
-        _ = ticker.tick() => {
-            // 重连替换 poller 时，旧 HTTP 请求不能在新状态之后迟到写回。
-            tokio::select! {
-                biased;
-                _ = cancel.cancelled() => break,
-                _ = tick_once(&bot_id, &deps, &mut state) => {}
-            }
-        }
+        // 重接管后旧请求不能迟到清空新 poller 已发布的登录快照。
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => break,
+            _ = tick_once(&bot_id, &deps, &mut state) => {}
         }
     }
 }
 
 fn publish_probe_unavailable_if_needed(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
-    if state.probe_unavailable_published {
+    let now = Instant::now();
+    let replay_due = state
+        .last_probe_unavailable_published_at
+        .is_some_and(|published_at| now.duration_since(published_at) >= STATE_REPLAY_INTERVAL);
+    if state.probe_unavailable_published && !replay_due {
         return;
     }
     state.probe_unavailable_published = true;
+    state.last_probe_unavailable_published_at = Some(now);
     deps.event_bus
         .publish(DomainEvent::snowluma_login_probe_unavailable(
             bot_id.clone(),
@@ -188,10 +189,20 @@ fn publish_login_state_if_needed(
     state: &mut PollerState,
     new_state: SnowLumaLoginState,
 ) {
+    let now = Instant::now();
+    let replay_due = state
+        .last_state_published_at
+        .is_some_and(|published_at| now.duration_since(published_at) >= STATE_REPLAY_INTERVAL);
     // 探测不可用期间 UI/runtime 已主动清成 unknown；即使状态值与上次相同，
     // 恢复后也必须重发一次可信快照。
-    if state.last_state == Some(new_state) && !state.probe_unavailable_published {
+    if state.last_state == Some(new_state) && !state.probe_unavailable_published && !replay_due {
         return;
+    }
+    if replay_due && let Some(uin) = state.uin.as_ref() {
+        deps.event_bus.publish(DomainEvent::snowluma_uin_detected(
+            bot_id.clone(),
+            uin.clone(),
+        ));
     }
     deps.event_bus
         .publish(DomainEvent::snowluma_login_state_changed(
@@ -199,6 +210,7 @@ fn publish_login_state_if_needed(
             new_state,
         ));
     state.last_state = Some(new_state);
+    state.last_state_published_at = Some(now);
     state.probe_unavailable_published = false;
 }
 
@@ -380,17 +392,17 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         synthesized
     };
 
-    if let Some(new_state) = new_state
-        && (state.last_state != Some(new_state) || state.probe_unavailable_published)
-    {
-        tracing::info!(
-            target: "ncd_runtime::snowluma_status_poller",
-            bot_id = %bot_id,
-            uin = %locked_uin,
-            locked_pid = ?locked_pid,
-            state = ?new_state,
-            "SnowLuma login state changed"
-        );
+    if let Some(new_state) = new_state {
+        if state.last_state != Some(new_state) {
+            tracing::info!(
+                target: "ncd_runtime::snowluma_status_poller",
+                bot_id = %bot_id,
+                uin = %locked_uin,
+                locked_pid = ?locked_pid,
+                state = ?new_state,
+                "SnowLuma login state changed"
+            );
+        }
         publish_login_state_if_needed(bot_id, deps, state, new_state);
     }
 

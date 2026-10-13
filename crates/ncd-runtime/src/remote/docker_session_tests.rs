@@ -100,6 +100,8 @@ async fn closing_scan_invalidates_late_generation_and_session_shutdown_removes_c
     registry.sessions.lock().await.insert(
         bot_id.clone(),
         Arc::new(DockerBotSession {
+            server_id: "remote-a".into(),
+            backend: BackendType::SnowLuma,
             inner: Mutex::new(SessionInner {
                 tunnels: Vec::new(),
                 log_task: None,
@@ -156,4 +158,66 @@ async fn closing_scan_invalidates_late_generation_and_session_shutdown_removes_c
     );
     registry.shutdown_bot(&bot_id).await;
     assert!(registry.snowluma_client(&bot_id).await.is_none());
+}
+
+#[tokio::test]
+async fn host_disconnect_invalidates_only_matching_snowluma_docker_sessions() {
+    let registry = DockerBotSessionRegistry::new();
+    let client: Arc<dyn SnowLumaWebUiClient> =
+        Arc::new(ReqwestSnowLumaWebUiClient::new(9, String::new()).expect("client construction"));
+    let session = |server: &str, backend: BackendType, has_client: bool| {
+        Arc::new(DockerBotSession {
+            server_id: server.into(),
+            backend,
+            inner: Mutex::new(SessionInner {
+                tunnels: Vec::new(),
+                log_task: None,
+                watch_task: None,
+                snowluma: None,
+                snowluma_poller: None,
+                snowluma_client: has_client.then(|| Arc::clone(&client)),
+                qr_generation: 7,
+                qr_login_detected: true,
+                qr_refresh_pending: true,
+                stop_expected: Arc::new(AtomicBool::new(false)),
+            }),
+        })
+    };
+    let target_id = BotId::new("10001");
+    let target = session("remote-a", BackendType::SnowLuma, true);
+    let initializing = session("remote-a", BackendType::SnowLuma, false);
+    let other_host = session("remote-b", BackendType::SnowLuma, true);
+    let napcat = session("remote-a", BackendType::NapCat, false);
+    registry.sessions.lock().await.extend([
+        (target_id.clone(), Arc::clone(&target)),
+        (BotId::new("10002"), Arc::clone(&initializing)),
+        (BotId::new("10003"), Arc::clone(&other_host)),
+        (BotId::new("10004"), Arc::clone(&napcat)),
+    ]);
+
+    registry.detach_snowluma_server("remote-a").await;
+
+    assert!(registry.snowluma_client(&target_id).await.is_none());
+    assert_eq!(registry.take_qr_refresh(&target_id, 7, &client).await, None);
+    registry
+        .mark_qr_login_detected(&target_id, 7, &client)
+        .await;
+    for detached in [target, initializing] {
+        let inner = detached.inner.lock().await;
+        assert_eq!(inner.qr_generation, 8);
+        assert!(!inner.qr_login_detected);
+        assert!(!inner.qr_refresh_pending);
+        assert!(inner.stop_expected.load(Ordering::SeqCst));
+    }
+    for untouched in [other_host, napcat] {
+        let inner = untouched.inner.lock().await;
+        assert_eq!(inner.qr_generation, 7);
+        assert!(!inner.stop_expected.load(Ordering::SeqCst));
+    }
+    assert!(
+        registry
+            .snowluma_client(&BotId::new("10003"))
+            .await
+            .is_some()
+    );
 }

@@ -20,6 +20,7 @@ pub struct SnowLumaUiBotSnapshot {
     pub injected: bool,
     pub uin: Option<String>,
     pub login_state: Option<SnowLumaLoginState>,
+    pub probe_unavailable: bool,
     /// Docker 或远端 Native 隧道就绪后 UI 可开 WebUI
     pub endpoints_ready: bool,
 }
@@ -58,12 +59,16 @@ impl SnowLumaUiStateTable {
 
     pub async fn set_login_state(&self, bot_id: &BotId, state: SnowLumaLoginState) {
         let mut guard = self.inner.write().await;
-        guard.by_bot.entry(bot_id.clone()).or_default().login_state = Some(state);
+        let bot = guard.by_bot.entry(bot_id.clone()).or_default();
+        bot.login_state = Some(state);
+        bot.probe_unavailable = false;
     }
 
     pub async fn clear_login_state(&self, bot_id: &BotId) {
         let mut guard = self.inner.write().await;
-        guard.by_bot.entry(bot_id.clone()).or_default().login_state = None;
+        let bot = guard.by_bot.entry(bot_id.clone()).or_default();
+        bot.login_state = None;
+        bot.probe_unavailable = true;
     }
 
     pub async fn mark_endpoints_ready(&self, bot_id: &BotId) {
@@ -132,5 +137,30 @@ mod tests {
             snap.daemon_states.get("server-b"),
             Some(&DaemonState::Ready)
         );
+    }
+
+    #[tokio::test]
+    async fn reconcile_keeps_probe_failure_until_login_detection_recovers() {
+        let table = SnowLumaUiStateTable::new();
+        let bot = BotId::new("10001");
+        table
+            .set_login_state(&bot, SnowLumaLoginState::LoggedIn)
+            .await;
+        table.clear_login_state(&bot).await;
+        table.mark_injected(&bot).await;
+        table.mark_endpoints_ready(&bot).await;
+
+        let failed = table.snapshot().await.by_bot[&bot].clone();
+        assert_eq!(failed.login_state, None);
+        assert!(failed.probe_unavailable);
+        assert!(failed.injected);
+        assert!(failed.endpoints_ready);
+
+        table
+            .set_login_state(&bot, SnowLumaLoginState::LoggedIn)
+            .await;
+        let recovered = table.snapshot().await.by_bot[&bot].clone();
+        assert_eq!(recovered.login_state, Some(SnowLumaLoginState::LoggedIn));
+        assert!(!recovered.probe_unavailable);
     }
 }

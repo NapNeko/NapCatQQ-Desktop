@@ -2,9 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DomainEvent } from '../../core/ipc/types';
-import type { botService } from '../../core/services/bot.service';
+import type { SnowlumaUiSnapshotDto } from '../../core/ipc/generated/domain/SnowlumaUiSnapshotDto';
 
-type SnowlumaUiSnapshotDto = Awaited<ReturnType<typeof botService.listSnowlumaUiSnapshot>>;
 const handlers = new Set<(event: DomainEvent) => void>();
 const snapshotMock = vi.fn<() => Promise<SnowlumaUiSnapshotDto>>();
 

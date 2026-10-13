@@ -551,9 +551,42 @@ impl RemoteSnowLumaBackend {
     }
 
     async fn dispose_poller(&self, bot_id: &BotId) {
-        if let Some(poller) = self.pollers.lock().await.remove(bot_id) {
+        let mut pollers = self.pollers.lock().await;
+        if let Some(poller) = pollers.remove(bot_id) {
             poller.dispose();
         }
+        self.login_clients.lock().await.remove(bot_id);
+        if let Some(activity) = self.qr_activity.lock().await.get(bot_id) {
+            activity.cancel.cancel();
+        }
+    }
+
+    pub async fn detach_login_pollers(&self) {
+        let mut pollers = self.pollers.lock().await;
+        for (bot_id, poller) in pollers.drain() {
+            poller.dispose();
+            self.event_bus
+                .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+        }
+        self.login_clients.lock().await.clear();
+        for activity in self.qr_activity.lock().await.values() {
+            activity.cancel.cancel();
+        }
+    }
+
+    async fn replace_poller(&self, bot_id: BotId, pid: u32, deps: PollerDeps) {
+        let mut pollers = self.pollers.lock().await;
+        if let Some(old) = pollers.remove(&bot_id) {
+            old.dispose();
+        }
+        self.login_clients
+            .lock()
+            .await
+            .insert(bot_id.clone(), Arc::clone(&deps.http));
+        pollers.insert(
+            bot_id.clone(),
+            SnowLumaStatusPoller::spawn(bot_id, pid, deps),
+        );
     }
 
     pub async fn detach_status_poller(&self, bot_id: &BotId) {
@@ -661,9 +694,7 @@ impl RemoteSnowLumaBackend {
             )),
             expected_uin: Some(qq_id),
         };
-        let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
-        self.login_clients.lock().await.insert(bot_id.clone(), http);
-        self.pollers.lock().await.insert(bot_id, poller);
+        self.replace_poller(bot_id, pid, poller_deps).await;
         Ok(())
     }
 }
@@ -877,10 +908,6 @@ impl BotBackend for RemoteSnowLumaBackend {
                 .insert(bot_id.clone(), start_mode);
             self.remember_login_pid(&bot_id, host.as_ref(), pid).await;
 
-            self.login_clients
-                .lock()
-                .await
-                .insert(bot_id.clone(), Arc::clone(&http));
             let poller_deps = PollerDeps {
                 event_bus: Arc::clone(&self.event_bus),
                 http,
@@ -889,11 +916,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                 )),
                 expected_uin: Some(qq_id_str.clone()),
             };
-            {
-                self.dispose_poller(&bot_id).await;
-                let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
-                self.pollers.lock().await.insert(bot_id.clone(), poller);
-            }
+            self.replace_poller(bot_id.clone(), pid, poller_deps).await;
 
             self.event_bus
                 .publish(DomainEvent::SnowLumaDockerEndpointsReady {
@@ -1012,6 +1035,10 @@ impl BotBackend for RemoteSnowLumaBackend {
         })
     }
 }
+
+#[cfg(all(test, windows))]
+#[path = "backend_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 mod qr_close_tests {

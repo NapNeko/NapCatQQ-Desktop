@@ -17,6 +17,7 @@ import type { MetricsHistoryPoint } from '../ipc/generated/domain/MetricsHistory
 import type { SnowLumaAgreementsPayload } from '../ipc/generated/SnowLumaAgreementsPayload';
 import type { QQProcessInfo } from '../ipc/generated/QQProcessInfo';
 import type { NapcatWebuiBindingDto } from '../ipc/generated/NapcatWebuiBindingDto';
+import type { SnowlumaUiSnapshotDto } from '../ipc/generated/domain/SnowlumaUiSnapshotDto';
 import {
     buildMockBotConfig,
     mockBatchDelete,
@@ -207,17 +208,7 @@ export const botService = {
     },
 
     /** SnowLuma daemon + per-bot 登录/隧道;冷启动 hydrate 用 */
-    listSnowlumaUiSnapshot: async (): Promise<{
-        daemon_state: import('../ipc/generated/DaemonState').DaemonState | null;
-        daemon_states: Record<string, import('../ipc/generated/DaemonState').DaemonState>;
-        bots: Array<{
-            bot_id: string;
-            injected: boolean;
-            uin: string | null;
-            login_state: import('../ipc/generated/SnowLumaLoginState').SnowLumaLoginState | null;
-            endpoints_ready: boolean;
-        }>;
-    }> => {
+    listSnowlumaUiSnapshot: async (): Promise<SnowlumaUiSnapshotDto> => {
         if (isTauri) {
             return invoke('list_snowluma_ui_snapshot');
         }
