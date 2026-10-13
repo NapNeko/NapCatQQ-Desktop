@@ -24,6 +24,161 @@ describe('remote SL QR lifecycle', () => {
     afterEach(() => {
         vi.useRealTimers();
     });
+
+    it('automatically replaces each expired code and only polls a valid code', async () => {
+        vi.useFakeTimers();
+        const expired = { ...snapshot, state: 'expired' as const, qrcode_payload: null };
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce(expired)
+                .mockResolvedValueOnce({ ...snapshot, qrcode_payload: 'new-code-1' })
+                .mockResolvedValueOnce(expired)
+                .mockResolvedValue({ ...snapshot, qrcode_payload: 'new-code-2' }),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { result, unmount } = renderHook(() => useRemoteSnowlumaQrLogin('123456', true, api));
+        await act(async () => {});
+        expect(result.current.snapshot?.qrcode_payload).toBeNull();
+        await act(async () => vi.advanceTimersByTimeAsync(1000));
+        expect(result.current.snapshot?.qrcode_payload).toBe('new-code-1');
+        await act(async () => vi.advanceTimersByTimeAsync(1000));
+        expect(result.current.snapshot?.state).toBe('expired');
+        await act(async () => vi.advanceTimersByTimeAsync(1000));
+        expect(result.current.snapshot?.qrcode_payload).toBe('new-code-2');
+        await act(async () => vi.advanceTimersByTimeAsync(1000));
+        expect(vi.mocked(api.qrLoginSnapshot).mock.calls.map(([, refresh]) => refresh)).toEqual([
+            false,
+            true,
+            false,
+            true,
+            false,
+        ]);
+        unmount();
+    });
+
+    it('backs off unsuccessful expiry refreshes and cancels the pending refresh on close', async () => {
+        vi.useFakeTimers();
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({
+                ...snapshot,
+                state: 'expired' as const,
+                qrcode_payload: null,
+            })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { rerender, unmount } = renderHook(
+            ({ open }) => useRemoteSnowlumaQrLogin('123456', open, api),
+            { initialProps: { open: true } },
+        );
+        await act(async () => {});
+        await act(async () => vi.advanceTimersByTimeAsync(1000));
+        expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(2);
+        await act(async () => vi.advanceTimersByTimeAsync(1999));
+        expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(2);
+        await act(async () => vi.advanceTimersByTimeAsync(1));
+        expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(3);
+        rerender({ open: false });
+        await act(async () => vi.advanceTimersByTimeAsync(10000));
+        expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(3);
+        unmount();
+    });
+
+    it('stops automatic refresh once QQ reports phone confirmation', async () => {
+        vi.useFakeTimers();
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce({ ...snapshot, state: 'expired' })
+                .mockResolvedValueOnce({ ...snapshot, state: 'scanned' })
+                .mockResolvedValueOnce({ ...snapshot, state: 'login_detected' })
+                .mockResolvedValue({ ...snapshot, state: 'expired' }),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { result, unmount } = renderHook(() => useRemoteSnowlumaQrLogin('123456', true, api));
+        await act(async () => {});
+        await act(async () => vi.advanceTimersByTimeAsync(5000));
+        expect(result.current.snapshot?.state).toBe('login_detected');
+        expect(result.current.snapshot?.qrcode_payload).toBeNull();
+        expect(
+            vi.mocked(api.qrLoginSnapshot).mock.calls.filter(([, refresh]) => refresh),
+        ).toHaveLength(1);
+        unmount();
+    });
+
+    it('recovers a transient capture failure by polling without refreshing a valid code', async () => {
+        vi.useFakeTimers();
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce({
+                    ...snapshot,
+                    state: 'starting',
+                    qrcode_payload: null,
+                    observer_removed: true,
+                })
+                .mockResolvedValue({ ...snapshot, observer_removed: true }),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { result, unmount } = renderHook(() =>
+            useRemoteSnowlumaQrLogin('123456', true, api, true),
+        );
+        await act(async () => {});
+        expect(result.current.snapshot?.state).toBe('starting');
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1000);
+        });
+        expect(result.current.snapshot?.qrcode_payload).toBe(snapshot.qrcode_payload);
+        expect(api.qrLoginSnapshot).toHaveBeenLastCalledWith('123456', false);
+        expect(api.closeQrLogin).not.toHaveBeenCalled();
+        unmount();
+    });
+
+    it.each(['unavailable', 'cancelled'] as const)(
+        'explicit retry renews a %s session without closing the new request',
+        async (state) => {
+            const api: RemoteQrLoginApi = {
+                qrLoginSnapshot: vi
+                    .fn()
+                    .mockResolvedValueOnce({
+                        ...snapshot,
+                        state,
+                        qrcode_payload: null,
+                        observer_removed: true,
+                    })
+                    .mockResolvedValue({ ...snapshot, observer_removed: true }),
+                closeQrLogin: vi.fn(async () => {}),
+            };
+            const { result, unmount } = renderHook(() =>
+                useRemoteSnowlumaQrLogin('123456', true, api),
+            );
+            await waitFor(() => expect(result.current.canRetry).toBe(true));
+            act(() => result.current.retry());
+            await waitFor(() =>
+                expect(result.current.snapshot?.qrcode_payload).toBe(snapshot.qrcode_payload),
+            );
+            expect(api.qrLoginSnapshot).toHaveBeenLastCalledWith('123456', true);
+            expect(api.closeQrLogin).not.toHaveBeenCalled();
+            unmount();
+        },
+    );
+
+    it('does not retry when a failed request has not confirmed cleanup', async () => {
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({
+                ...snapshot,
+                state: 'cleanup_failed' as const,
+                qrcode_payload: null,
+            })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { result, unmount } = renderHook(() => useRemoteSnowlumaQrLogin('123456', true, api));
+        await waitFor(() => expect(result.current.snapshot?.state).toBe('cleanup_failed'));
+        expect(result.current.canRetry).toBe(false);
+        act(() => result.current.retry());
+        expect(api.qrLoginSnapshot).toHaveBeenCalledOnce();
+        unmount();
+    });
     it('switches the local login page only on initial open and polls without refreshing it', async () => {
         const api: RemoteQrLoginApi = {
             qrLoginSnapshot: vi.fn(async () => snapshot),
@@ -116,6 +271,70 @@ describe('remote SL QR lifecycle', () => {
         expect(result.current.snapshot?.qrcode_payload).toBeNull();
         await act(async () => {
             await vi.advanceTimersByTimeAsync(5000);
+        });
+        expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(3);
+        unmount();
+    });
+
+    it.each(['scanned', 'login_detected'] as const)(
+        'releases %s confirmation when QQ changes process without closing the dialog',
+        async (state) => {
+            vi.useFakeTimers();
+            const api: RemoteQrLoginApi = {
+                qrLoginSnapshot: vi
+                    .fn()
+                    .mockResolvedValueOnce({ ...snapshot, state })
+                    .mockResolvedValueOnce({
+                        ...snapshot,
+                        state: 'starting',
+                        qq_pid: 20,
+                    })
+                    .mockResolvedValue({
+                        ...snapshot,
+                        qq_pid: 20,
+                        qrcode_payload: 'new-process-code',
+                    }),
+                closeQrLogin: vi.fn(async () => {}),
+            };
+            const { result, unmount } = renderHook(() =>
+                useRemoteSnowlumaQrLogin('123456', true, api, true),
+            );
+            await act(async () => {});
+            expect(result.current.snapshot?.state).toBe(state);
+            expect(result.current.snapshot?.qrcode_payload).toBeNull();
+            await act(async () => vi.advanceTimersByTimeAsync(1000));
+            expect(result.current.snapshot?.state).toBe('starting');
+            expect(result.current.snapshot?.qq_pid).toBe(20);
+            expect(result.current.snapshot?.qrcode_payload).toBeNull();
+            await act(async () => vi.advanceTimersByTimeAsync(1000));
+            expect(result.current.snapshot?.state).toBe('waiting_for_qr');
+            expect(result.current.snapshot?.qrcode_payload).toBe('new-process-code');
+            await act(async () => {
+                await result.current.refresh();
+            });
+            expect(api.qrLoginSnapshot).toHaveBeenLastCalledWith('123456', true);
+            expect(api.closeQrLogin).not.toHaveBeenCalled();
+            unmount();
+        },
+    );
+
+    it('keeps confirmation when a transient response has no QQ process identity', async () => {
+        vi.useFakeTimers();
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce({ ...snapshot, state: 'login_detected' })
+                .mockResolvedValueOnce({ ...snapshot, state: 'starting', qq_pid: null })
+                .mockResolvedValue(snapshot),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { result, unmount } = renderHook(() => useRemoteSnowlumaQrLogin('123456', true, api));
+        await act(async () => {});
+        await act(async () => vi.advanceTimersByTimeAsync(2000));
+        expect(result.current.snapshot?.state).toBe('login_detected');
+        expect(result.current.snapshot?.qrcode_payload).toBeNull();
+        await act(async () => {
+            await result.current.refresh();
         });
         expect(api.qrLoginSnapshot).toHaveBeenCalledTimes(3);
         unmount();

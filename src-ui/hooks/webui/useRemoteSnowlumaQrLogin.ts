@@ -52,6 +52,7 @@ export function useRemoteSnowlumaQrLogin(
     const [refreshing, setRefreshing] = useState(false);
     const [requesting, setRequesting] = useState(false);
     const [visible, setVisible] = useState(isPageVisible);
+    const [attempt, setAttempt] = useState(0);
     const epoch = useRef(0);
     const current = useRef({ botId, open });
     current.current = { botId, open };
@@ -63,6 +64,9 @@ export function useRemoteSnowlumaQrLogin(
         initialized: false,
         scanned: false,
         loginDetected: false,
+        qqPid: null as number | null,
+        attempt: 0,
+        forceRefresh: false,
     });
 
     useEffect(() => {
@@ -79,8 +83,18 @@ export function useRemoteSnowlumaQrLogin(
         let requestTimer: ReturnType<typeof setTimeout> | undefined;
         let cancelPending: (() => void) | undefined;
         let terminal = false;
+        let refreshExpired = false;
+        let expiredRefreshAttempts = 0;
         let closeRequested = false;
-        if (session.current.botId !== botId || session.current.open !== open) {
+        if (
+            session.current.botId !== botId ||
+            session.current.open !== open ||
+            session.current.attempt !== attempt
+        ) {
+            const forceRefresh =
+                session.current.botId === botId &&
+                session.current.open === open &&
+                session.current.attempt !== attempt;
             session.current = {
                 botId,
                 open,
@@ -88,6 +102,9 @@ export function useRemoteSnowlumaQrLogin(
                 initialized: false,
                 scanned: false,
                 loginDetected: false,
+                qqPid: null,
+                attempt,
+                forceRefresh,
             };
             setSnapshot(null);
         } else {
@@ -167,6 +184,15 @@ export function useRemoteSnowlumaQrLogin(
                     }),
                 ]);
                 if (!active || terminal || generation !== epoch.current || !isPageVisible()) return;
+                if (next.qq_pid !== null) {
+                    // QQ 退出账号可能更换进程，旧进程的手机确认不能锁住新扫码。
+                    if (session.current.qqPid !== null && session.current.qqPid !== next.qq_pid) {
+                        session.current.scanned = false;
+                        session.current.loginDetected = false;
+                        expiredRefreshAttempts = 0;
+                    }
+                    session.current.qqPid = next.qq_pid;
+                }
                 if (next.state === 'scanned') session.current.scanned = true;
                 if (next.state === 'login_detected') session.current.loginDetected = true;
                 if (next.state === 'expired') session.current.scanned = false;
@@ -177,6 +203,9 @@ export function useRemoteSnowlumaQrLogin(
                         : session.current.scanned && !terminal
                           ? 'scanned'
                           : next.state;
+                refreshExpired = state === 'expired';
+                if (refreshExpired && refresh) expiredRefreshAttempts += 1;
+                if (state === 'waiting_for_qr' && next.qrcode_payload) expiredRefreshAttempts = 0;
                 setSnapshot({
                     ...next,
                     state,
@@ -207,15 +236,23 @@ export function useRemoteSnowlumaQrLogin(
                 if (active && generation === epoch.current) {
                     setRefreshing(false);
                     setRequesting(false);
-                    if (!terminal && isPageVisible())
-                        timer = setTimeout(() => void request(false), 1000);
+                    if (!terminal && isPageVisible()) {
+                        // QQ 换码尚未完成时退避，避免反复点击；有效二维码只做状态查询。
+                        const delay = refreshExpired
+                            ? Math.min(1000 * 2 ** expiredRefreshAttempts, 30000)
+                            : 1000;
+                        timer = setTimeout(() => void request(refreshExpired), delay);
+                    }
                 }
             }
         };
         requestRef.current = request;
         queueMicrotask(() => {
             if (active && generation === epoch.current)
-                void request(initialRefresh && !session.current.initialized);
+                void request(
+                    (initialRefresh || session.current.forceRefresh) &&
+                        !session.current.initialized,
+                );
         });
         return () => {
             active = false;
@@ -233,9 +270,19 @@ export function useRemoteSnowlumaQrLogin(
                 }
             });
         };
-    }, [api, botId, open, initialRefresh, visible]);
+    }, [api, botId, open, initialRefresh, visible, attempt]);
 
     const refresh = useCallback(() => requestRef.current?.(true), []);
+    const canRetry =
+        open &&
+        visible &&
+        (snapshot?.state === 'unavailable' || snapshot?.state === 'cancelled') &&
+        snapshot.observer_removed &&
+        !session.current.scanned &&
+        !session.current.loginDetected;
+    const retry = useCallback(() => {
+        if (canRetry && !requesting) setAttempt((value) => value + 1);
+    }, [canRetry, requesting]);
     return {
         snapshot: open && visible ? snapshot : null,
         error: open ? error : null,
@@ -243,5 +290,7 @@ export function useRemoteSnowlumaQrLogin(
         requesting,
         paused: open && !visible,
         refresh,
+        canRetry,
+        retry,
     };
 }

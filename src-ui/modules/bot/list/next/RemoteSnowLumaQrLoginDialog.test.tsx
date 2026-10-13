@@ -1,9 +1,27 @@
 ﻿// @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RemoteSnowLumaQrLoginDialog } from './RemoteSnowLumaQrLoginDialog';
 import type { RemoteQrLoginApi } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
 import type { SnowLumaQrLoginSnapshot } from '../../../../core/ipc/generated/domain/SnowLumaQrLoginSnapshot';
+
+const imageMocks = vi.hoisted(() => ({ decode: vi.fn(), render: vi.fn() }));
+vi.mock('./loginQrImage', () => ({ resolveLoginQrPayload: imageMocks.decode }));
+vi.mock('qrcode', () => ({ default: { toDataURL: imageMocks.render } }));
+vi.mock('../../../../hooks/theme/useThemeTokens', () => ({
+    useThemeTokens: () => ({ foreground: '#1a120d', background: '#ffffff' }),
+}));
+
+const decodedUrl = 'https://ssl.ptlogin2.qq.com/qrlogin?synthetic=1';
+const regeneratedImage = 'data:image/png;base64,cmVnZW5lcmF0ZWQ=';
+beforeEach(() => {
+    imageMocks.decode.mockReset();
+    imageMocks.render.mockReset();
+    imageMocks.decode.mockImplementation(async (value: string) =>
+        value.startsWith('data:image/') ? decodedUrl : value,
+    );
+    imageMocks.render.mockResolvedValue(regeneratedImage);
+});
 
 const material: SnowLumaQrLoginSnapshot = {
     v: 1,
@@ -16,8 +34,179 @@ const material: SnowLumaQrLoginSnapshot = {
 };
 
 describe('SL QR dialog status', () => {
+    it('decodes a captured QR and renders its original content as a new code', async () => {
+        const capturedImage = 'data:image/png;base64,YQ==';
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({ ...material, qrcode_payload: capturedImage })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={vi.fn()}
+                api={api}
+            />,
+        );
+        await waitFor(() =>
+            expect(screen.getByRole('img').getAttribute('src')).toBe(regeneratedImage),
+        );
+        expect(imageMocks.decode).toHaveBeenCalledWith(capturedImage, expect.any(AbortSignal));
+        expect(imageMocks.render).toHaveBeenCalledWith(
+            decodedUrl,
+            expect.objectContaining({
+                width: 280,
+                margin: 4,
+                errorCorrectionLevel: 'M',
+            }),
+        );
+        expect(screen.getByRole('img').getAttribute('src')).not.toBe(capturedImage);
+        unmount();
+    });
+
+    it('keeps refresh available when a screenshot cannot be decoded', async () => {
+        imageMocks.decode.mockRejectedValue(new Error('decode failed'));
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({
+                ...material,
+                qrcode_payload: 'data:image/png;base64,YQ==',
+            })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={vi.fn()}
+                api={api}
+            />,
+        );
+        await waitFor(() =>
+            expect(screen.getByRole('status').textContent).toContain('二维码无法显示'),
+        );
+        expect(screen.queryByRole('img')).toBeNull();
+        expect(imageMocks.render).not.toHaveBeenCalled();
+        expect(
+            (screen.getByRole('button', { name: '刷新二维码' }) as HTMLButtonElement).disabled,
+        ).toBe(false);
+        unmount();
+    });
+
+    it('cancels decoding on close and does not render a late login code', async () => {
+        let resolve!: (value: string) => void;
+        imageMocks.decode.mockImplementation(
+            () =>
+                new Promise<string>((done) => {
+                    resolve = done;
+                }),
+        );
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi.fn(async () => ({
+                ...material,
+                qrcode_payload: 'data:image/png;base64,YQ==',
+            })),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { rerender, unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={vi.fn()}
+                api={api}
+            />,
+        );
+        await waitFor(() => expect(imageMocks.decode).toHaveBeenCalledOnce());
+        const signal = imageMocks.decode.mock.calls[0][1] as AbortSignal;
+        rerender(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open={false}
+                isOnline={false}
+                onOpenChange={vi.fn()}
+                api={api}
+            />,
+        );
+        await act(async () => resolve(decodedUrl));
+        expect(signal.aborted).toBe(true);
+        expect(imageMocks.render).not.toHaveBeenCalled();
+        expect(screen.queryByRole('img')).toBeNull();
+        unmount();
+    });
+
+    it('does not replace a refreshed code with a late decode of the previous screenshot', async () => {
+        let finishOld!: (value: string) => void;
+        imageMocks.decode.mockImplementationOnce(
+            () =>
+                new Promise<string>((resolve) => {
+                    finishOld = resolve;
+                }),
+        );
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce({
+                    ...material,
+                    qrcode_payload: 'data:image/png;base64,YQ==',
+                })
+                .mockResolvedValue({ ...material, qrcode_payload: 'data:image/png;base64,Yg==' }),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={vi.fn()}
+                api={api}
+            />,
+        );
+        await waitFor(() => expect(imageMocks.decode).toHaveBeenCalledOnce());
+        fireEvent.click(screen.getByRole('button', { name: '刷新二维码' }));
+        await waitFor(() =>
+            expect(screen.getByRole('img').getAttribute('src')).toBe(regeneratedImage),
+        );
+        await act(async () => finishOld('expired-login-content'));
+        expect(imageMocks.render).toHaveBeenCalledOnce();
+        expect(imageMocks.render).toHaveBeenCalledWith(decodedUrl, expect.any(Object));
+        unmount();
+    });
+
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it('offers in-place retry after a completed capture failure', async () => {
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockResolvedValueOnce({
+                    ...material,
+                    state: 'unavailable',
+                    qrcode_payload: null,
+                    observer_removed: true,
+                })
+                .mockResolvedValue({ ...material, observer_removed: true }),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const onOpenChange = vi.fn();
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={onOpenChange}
+                onOpenVnc={vi.fn()}
+                api={api}
+            />,
+        );
+        fireEvent.click(await screen.findByRole('button', { name: '重新获取' }));
+        await waitFor(() => expect(api.qrLoginSnapshot).toHaveBeenLastCalledWith('123456', true));
+        expect(onOpenChange).not.toHaveBeenCalled();
+        expect(api.closeQrLogin).not.toHaveBeenCalled();
+        unmount();
     });
 
     it.each([
@@ -168,7 +357,7 @@ describe('SL QR dialog status', () => {
             />,
         );
         await waitFor(() =>
-            expect(screen.getByRole('status').textContent).toBe('二维码已失效，请刷新'),
+            expect(screen.getByRole('status').textContent).toBe('二维码已失效，正在自动刷新'),
         );
         expect(screen.queryByRole('img', { name: 'QQ 登录二维码' })).toBeNull();
         expect(

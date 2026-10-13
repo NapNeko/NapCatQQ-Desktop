@@ -16,6 +16,13 @@ import {
     type RemoteQrLoginApi,
 } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
 import type { SnowLumaQrLoginState } from '../../../../core/ipc/generated/domain/SnowLumaQrLoginState';
+import { useThemeTokens } from '../../../../hooks/theme/useThemeTokens';
+import { resolveLoginQrPayload } from './loginQrImage';
+
+const QR_COLORS = {
+    foreground: { name: '--qr-foreground', fallback: '#1a120d' },
+    background: { name: '--qr-background', fallback: '#ffffff' },
+} as const;
 
 const LABELS: Record<SnowLumaQrLoginState, string> = {
     disabled: '简化扫码已关闭',
@@ -23,7 +30,7 @@ const LABELS: Record<SnowLumaQrLoginState, string> = {
     starting: '正在等待 QQ 登录窗口',
     waiting_for_qr: '请用手机 QQ 扫码',
     scanned: '已扫码，请在手机上确认',
-    expired: '二维码已失效，请刷新',
+    expired: '二维码已失效，正在自动刷新',
     logged_in: '登录成功，二维码已移除',
     login_detected: '正在确认 SL 登录状态',
     cancelled: '扫码已结束',
@@ -33,23 +40,30 @@ const LABELS: Record<SnowLumaQrLoginState, string> = {
 
 function LoginQrImage({ payload, onError }: { payload: string; onError: () => void }) {
     const [src, setSrc] = useState<string | null>(null);
+    const { foreground, background } = useThemeTokens(QR_COLORS);
     useEffect(() => {
         let active = true;
+        const controller = new AbortController();
         setSrc(null);
-        if (payload.startsWith('data:image/png;base64,')) setSrc(payload);
-        else {
-            void QRCode.toDataURL(payload, { width: 280, margin: 4, errorCorrectionLevel: 'M' })
-                .then((image) => {
-                    if (active) setSrc(image);
-                })
-                .catch(() => {
-                    if (active) onError();
+        void resolveLoginQrPayload(payload, controller.signal)
+            .then(async (content) => {
+                if (!active) return;
+                const image = await QRCode.toDataURL(content, {
+                    width: 280,
+                    margin: 4,
+                    errorCorrectionLevel: 'M',
+                    color: { dark: foreground, light: background },
                 });
-        }
+                if (active) setSrc(image);
+            })
+            .catch(() => {
+                if (active) onError();
+            });
         return () => {
             active = false;
+            controller.abort();
         };
-    }, [onError, payload]);
+    }, [background, foreground, onError, payload]);
     return src ? (
         <img src={src} alt="QQ 登录二维码" width={280} height={280} onError={onError} />
     ) : null;
@@ -76,18 +90,14 @@ export function RemoteSnowLumaQrLoginDialog({
 }: Props) {
     const [imageUnavailable, setImageUnavailable] = useState(false);
     const imageError = useCallback(() => setImageUnavailable(true), []);
-    const { snapshot, error, refreshing, requesting, paused, refresh } = useRemoteSnowlumaQrLogin(
-        botId,
-        open && !isOnline,
-        api,
-        initialRefresh,
-    );
+    const { snapshot, error, refreshing, requesting, paused, refresh, canRetry, retry } =
+        useRemoteSnowlumaQrLogin(botId, open && !isOnline, api, initialRefresh);
     useEffect(() => {
         if (open && isOnline) onOpenChange(false);
     }, [isOnline, open, onOpenChange]);
     useEffect(() => setImageUnavailable(false), [snapshot?.qrcode_payload]);
     const state = snapshot?.state;
-    const canRefresh = !paused && (state === 'waiting_for_qr' || state === 'expired');
+    const canRefresh = !paused && (canRetry || state === 'waiting_for_qr' || state === 'expired');
     const completed = isOnline || state === 'logged_in';
     const fallbackOnly =
         Boolean(error) ||
@@ -134,7 +144,7 @@ export function RemoteSnowLumaQrLoginDialog({
                         !refreshing &&
                         state === 'waiting_for_qr' &&
                         snapshot?.qrcode_payload && (
-                            <div className="overflow-hidden rounded-md bg-white">
+                            <div className="overflow-hidden rounded-md bg-[var(--qr-background)]">
                                 <LoginQrImage
                                     key={snapshot.qrcode_payload}
                                     payload={snapshot.qrcode_payload}
@@ -160,7 +170,7 @@ export function RemoteSnowLumaQrLoginDialog({
                             打开 QQ 界面
                         </Button>
                     ) : null}
-                    {completed || fallbackOnly ? (
+                    {completed || (fallbackOnly && !canRetry) ? (
                         <Button
                             variant={completed ? 'primary' : 'secondary'}
                             size="md"
@@ -180,10 +190,10 @@ export function RemoteSnowLumaQrLoginDialog({
                             size="md"
                             className="ml-auto min-w-28"
                             disabled={!canRefresh || refreshing || requesting}
-                            onClick={() => void refresh()}
+                            onClick={() => (canRetry ? retry() : void refresh())}
                         >
                             <RefreshCw size={16} aria-hidden />
-                            {refreshing ? '正在刷新' : '刷新二维码'}
+                            {refreshing ? '正在刷新' : canRetry ? '重新获取' : '刷新二维码'}
                         </Button>
                     )}
                 </DialogFooter>
