@@ -782,7 +782,7 @@ mod tests {
                 && !cmd.elevated
                 && cmd.args.first().map(String::as_str) != Some("version")
             {
-                return Ok(output(1, "", "permission denied"));
+                return Ok(output(1, "", "permission denied connecting to /var/run/docker.sock"));
             }
             match cmd.args.first().map(String::as_str) {
                 Some("version") => Ok(output(0, "27.3.1\n", "")),
@@ -1094,7 +1094,7 @@ mod tests {
         assert!(
             docker_args
                 .iter()
-                .any(|a| a == &["ps", "-a", "--format", "{{json .}}"])
+                .any(|a| a == &["ps", "-a", "--no-trunc", "--format", "{{json .}}"])
         );
     }
 
@@ -1148,7 +1148,7 @@ mod tests {
         assert!(
             docker_args
                 .iter()
-                .any(|a| a == &["ps", "-a", "--format", "{{json .}}"]),
+                .any(|a| a == &["ps", "-a", "--no-trunc", "--format", "{{json .}}"]),
             "observe 应至少一次 docker ps: {docker_args:?}"
         );
     }
@@ -1167,9 +1167,9 @@ mod tests {
             .unwrap();
 
         let docker = host.docker_commands();
-        // elevated_docker 场景:probe 先 sudo info 成功,不会 fallback 到 non-elevated info
+        // 普通用户的 socket 权限失败后才提权。
         assert!(
-            !docker
+            docker
                 .iter()
                 .any(|c| c.args.first().map(String::as_str) == Some("info") && !c.elevated)
         );
@@ -1198,7 +1198,7 @@ mod tests {
         assert!(
             docker
                 .iter()
-                .any(|c| c.args == ["stop", "ncbot-10001"] && c.elevated)
+                .any(|c| c.args == ["stop", "--", "ncbot-10001"] && c.elevated)
         );
     }
 

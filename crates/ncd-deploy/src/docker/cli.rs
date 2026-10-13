@@ -13,9 +13,14 @@ use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerS
 use ncd_host::{Host, HostCommand, HostError, HostPath, StreamSource};
 use tracing::{info, warn};
 
+#[path = "management.rs"]
+mod management;
+
 /// DockerCli 操作错误
 #[derive(Debug, thiserror::Error)]
 pub enum DockerCliError {
+    #[error("invalid docker argument: {0}")]
+    InvalidArgument(String),
     /// host 层调用失败(SSH 中断 / 进程起不来)
     #[error("host error: {0}")]
     Host(#[from] HostError),
@@ -120,7 +125,7 @@ impl<'h> DockerCli<'h> {
     /// docker 但当前会话没 socket 权限(没重登 / 没进 docker 组)"的远端会 permission
     /// denied 而不会自动 sudo,部署 / compose down 仍用 ensure_ready(额外要 compose)
     pub async fn ensure_daemon_ready(&self) -> Result<DockerStatus, DockerCliError> {
-        let status = self.probe().await;
+        let status = self.probe_checked().await?;
         if status.daemon_running {
             Ok(status)
         } else {
@@ -135,13 +140,12 @@ impl<'h> DockerCli<'h> {
         let cmd = HostCommand::new("docker")
             .arg("version")
             .arg("--format")
-            .arg("{{.Client.Version}}");
+            .arg("{{.Client.Version}}")
+            .timeout(std::time::Duration::from_secs(15));
         if let Ok(out) = self.host.run_to_string(cmd).await {
-            if out.success() {
-                let v = out.stdout.trim();
-                if !v.is_empty() {
-                    return Some(v.to_string());
-                }
+            let v = out.stdout.trim();
+            if !v.is_empty() {
+                return Some(v.to_string());
             }
         }
 
@@ -157,7 +161,8 @@ impl<'h> DockerCli<'h> {
             .arg("version")
             .arg("--format")
             .arg("{{.Client.Version}}")
-            .elevated();
+            .elevated()
+            .timeout(std::time::Duration::from_secs(15));
         let out = self.host.run_to_string(cmd_sudo).await.ok()?;
         if !out.success() {
             return None;
@@ -170,48 +175,18 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// 探 daemon 是否在跑,顺带定夺后续是否需要提权:先 sudo docker info(刚装完
-    /// docker 组未刷新的情况),过了置 elevated=true;不过再裸 docker info,过了
-    /// 说明用户已在 docker 组且会话已刷新,置 elevated=false;两者都不过才是 daemon 真没起
+    /// 优先当前用户的 context，避免 sudo 切到另一个 daemon（例如 rootless Docker）。
     async fn probe_daemon_with_elevation(&self) -> bool {
-        use std::sync::atomic::Ordering;
-
-        // Windows 没有 sudo/组权限这套,直接裸探一次即可,避免多余的 elevated 命令
-        if self.host.os() == ncd_host::Os::Windows {
-            return self.docker_info_once(false).await;
-        }
-
-        // 优先尝试 sudo(针对刚安装完的情况:用户已加入 docker 组,
-        // 但当前 SSH 会话的组信息未刷新,需要重登才生效)
-        if self.docker_info_once(true).await {
-            self.elevated.store(true, Ordering::Relaxed);
-            return true;
-        }
-
-        // fallback 到无 sudo(用户已在 docker 组且会话已刷新)
-        if self.docker_info_once(false).await {
-            self.elevated.store(false, Ordering::Relaxed);
-            return true;
-        }
-
-        false
-    }
-
-    /// 跑一次 docker info --format '{{.ServerVersion}}',elevated 决定要不要 sudo
-    async fn docker_info_once(&self, elevated: bool) -> bool {
-        let mut cmd = HostCommand::new("docker")
-            .arg("info")
-            .arg("--format")
-            .arg("{{.ServerVersion}}");
-        if elevated {
-            cmd = cmd.elevated();
-        }
-        matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
+        self.management_probe_daemon().await.is_ok()
     }
 
     /// docker compose version,compose v2 插件存在时退出码 0,按 elevated 标志跑
     async fn docker_compose_ok(&self) -> bool {
-        let cmd = self.docker_cmd().arg("compose").arg("version");
+        let cmd = self
+            .docker_cmd()
+            .arg("compose")
+            .arg("version")
+            .timeout(std::time::Duration::from_secs(15));
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
     }
 }
@@ -223,8 +198,10 @@ impl<'h> DockerCli<'h> {
             .docker_cmd()
             .arg("ps")
             .arg("-a")
+            .arg("--no-trunc")
             .arg("--format")
-            .arg("{{json .}}");
+            .arg("{{json .}}")
+            .timeout(std::time::Duration::from_secs(30));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -241,8 +218,10 @@ impl<'h> DockerCli<'h> {
         let cmd = self
             .docker_cmd()
             .arg("images")
+            .arg("--no-trunc")
             .arg("--format")
-            .arg("{{json .}}");
+            .arg("{{json .}}")
+            .timeout(std::time::Duration::from_secs(30));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -256,11 +235,15 @@ impl<'h> DockerCli<'h> {
 
     /// 删除本地镜像,image_ref 可为 repo:tag 或 id;force 时加 -f
     pub async fn remove_image(&self, image_ref: &str, force: bool) -> Result<(), DockerCliError> {
+        Self::validate_reference(image_ref)?;
         let mut cmd = self.docker_cmd().arg("rmi");
         if force {
             cmd = cmd.arg("-f");
         }
-        let cmd = cmd.arg(image_ref);
+        let cmd = cmd
+            .arg("--")
+            .arg(image_ref)
+            .timeout(std::time::Duration::from_secs(60));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -274,7 +257,18 @@ impl<'h> DockerCli<'h> {
 
     /// 对单个容器执行 start / stop / restart,命令名固定,容器名走 arg 转义
     pub async fn lifecycle(&self, action: &str, container: &str) -> Result<(), DockerCliError> {
-        let cmd = self.docker_cmd().arg(action).arg(container);
+        Self::validate_reference(container)?;
+        if !matches!(action, "start" | "stop" | "restart" | "pause" | "unpause") {
+            return Err(DockerCliError::InvalidArgument(
+                "unsupported container action".into(),
+            ));
+        }
+        let cmd = self
+            .docker_cmd()
+            .arg(action)
+            .arg("--")
+            .arg(container)
+            .timeout(std::time::Duration::from_secs(60));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -302,12 +296,15 @@ impl<'h> DockerCli<'h> {
 
     /// 取容器最近 tail 行日志,stdout + stderr 合并返回(docker logs 两路都吐)
     pub async fn logs(&self, container: &str, tail: u32) -> Result<String, DockerCliError> {
+        Self::validate_reference(container)?;
         let cmd = self
             .docker_cmd()
             .arg("logs")
             .arg("--tail")
-            .arg(tail.to_string())
-            .arg(container);
+            .arg(tail.clamp(1, 2000).to_string())
+            .arg("--")
+            .arg(container)
+            .timeout(std::time::Duration::from_secs(30));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
