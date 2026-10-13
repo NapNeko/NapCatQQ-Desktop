@@ -185,6 +185,7 @@ export function NotificationsTab({ draft, patchDraft, settingsDirty = false }: P
                   ? [draft.onebotTargetId]
                   : [];
         setOneBotEditorDraft({
+            onebotRelogin: structuredClone(draft.onebotRelogin),
             onebotMessengerBotIds: messengerIds,
             onebotTargetType: draft.onebotTargetType === 'group' ? 'group' : 'private',
             onebotTargetIds: targetIds,
@@ -201,11 +202,19 @@ export function NotificationsTab({ draft, patchDraft, settingsDirty = false }: P
 
     const saveOneBotEditor = () => {
         if (!oneBotEditorDraft) return;
+        if (
+            oneBotEditorDraft.onebotRelogin.enabled &&
+            oneBotEditorDraft.onebotRelogin.administratorIds.length === 0
+        ) {
+            pushErrorBar({ title: '无法保存', content: '请填写接收二维码的管理员 QQ 号' });
+            return;
+        }
         const messengerIds = oneBotEditorDraft.onebotMessengerBotIds
             .map((id) => id.trim())
             .filter(Boolean);
         const targetIds = oneBotEditorDraft.onebotTargetIds.filter((id) => id > 0);
         patchDraft({
+            onebotRelogin: structuredClone(oneBotEditorDraft.onebotRelogin),
             onebotMessengerBotIds: messengerIds,
             onebotMessengerBotId: messengerIds[0] ?? '',
             onebotTargetType: oneBotEditorDraft.onebotTargetType,
@@ -292,6 +301,7 @@ export function NotificationsTab({ draft, patchDraft, settingsDirty = false }: P
         emailEncryption: draft.emailEncryption || 'SSL',
     };
     const oneBotDraft = oneBotEditorDraft ?? {
+        onebotRelogin: structuredClone(draft.onebotRelogin),
         onebotMessengerBotIds:
             draft.onebotMessengerBotIds.length > 0
                 ? draft.onebotMessengerBotIds

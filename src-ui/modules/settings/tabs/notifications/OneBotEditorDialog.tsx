@@ -11,6 +11,8 @@ import {
     DialogHeader,
     DialogTitle,
     Select,
+    Switch,
+    NumberField,
 } from '../../../../shared/ui';
 import type { SettingsDraft } from '../../settings-draft';
 import { OneBotMessageEditor } from './OneBotMessageEditor';
@@ -24,13 +26,19 @@ const ONEBOT_TARGET_ITEMS = [
 
 export type OneBotEditorDraft = Pick<
     SettingsDraft,
-    'onebotMessengerBotIds' | 'onebotTargetType' | 'onebotTargetIds' | 'onebotMessageTemplate'
+    | 'onebotMessengerBotIds'
+    | 'onebotTargetType'
+    | 'onebotTargetIds'
+    | 'onebotMessageTemplate'
+    | 'onebotRelogin'
 >;
 
 export function oneBotIsReady(oneBot: OneBotEditorDraft): boolean {
     return (
         oneBot.onebotMessengerBotIds.some((id) => id.trim()) &&
-        oneBot.onebotTargetIds.some((id) => id > 0)
+        (oneBot.onebotTargetIds.some((id) => id > 0) ||
+            (oneBot.onebotRelogin.enabled &&
+                oneBot.onebotRelogin.administratorIds.some((id) => id > 0)))
     );
 }
 
@@ -38,7 +46,10 @@ export function oneBotSummary(oneBot: OneBotEditorDraft): string {
     const messengers = oneBot.onebotMessengerBotIds.filter((id) => id.trim());
     const targets = oneBot.onebotTargetIds.filter((id) => id > 0);
     if (messengers.length === 0) return '尚未选择发送方 Bot';
-    if (targets.length === 0) return '待填写接收目标';
+    if (targets.length === 0)
+        return oneBot.onebotRelogin.enabled && oneBot.onebotRelogin.administratorIds.length > 0
+            ? `${messengers.length} 个互助 Bot · 重登二维码私发管理员`
+            : '待填写接收目标';
     const messengerLabel =
         messengers.length === 1 ? messengers[0] : `${messengers[0]} 等 ${messengers.length} 个`;
     const targetLabel =
@@ -90,11 +101,12 @@ export function OneBotEditorDialog({
                                 onDraftChange({ onebotMessengerBotIds })
                             }
                             onEnsureHttp={onEnsureHttp}
+                            reloginMode={draft.onebotRelogin.enabled}
                         />
                     </div>
 
                     {/* 右：接收目标（上）+ 消息内容（下） */}
-                    <div className="flex min-h-0 min-w-0 flex-col gap-3 lg:h-full lg:overflow-hidden">
+                    <div className="flex min-h-0 min-w-0 flex-col gap-3 lg:h-full lg:overflow-y-auto">
                         <section className="shrink-0 space-y-2.5 rounded-sm border border-border-subtle bg-field p-3">
                             <div className="flex items-center justify-between gap-2">
                                 <p className="text-[13px] font-medium text-text">接收目标</p>
@@ -129,7 +141,64 @@ export function OneBotEditorDialog({
                             </div>
                         </section>
 
-                        <div className="flex min-h-[16rem] min-w-0 flex-1 flex-col lg:min-h-0">
+                        <section className="shrink-0 space-y-2.5 rounded-sm border border-border-subtle bg-field p-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[13px] font-medium text-text">
+                                    远端掉线后发送重登二维码
+                                </span>
+                                <Switch
+                                    checked={draft.onebotRelogin.enabled}
+                                    onCheckedChange={(enabled) =>
+                                        onDraftChange({
+                                            onebotRelogin: { ...draft.onebotRelogin, enabled },
+                                        })
+                                    }
+                                />
+                            </div>
+                            {draft.onebotRelogin.enabled && (
+                                <>
+                                    <p className="text-xs text-text-secondary">
+                                        由同机 ncd-watch 值守，需升级并同步。互助 Bot 需启用通用正向
+                                        WebSocket。二维码仅私发管理员，过期后回复「刷新二维码」。监控范围沿用各
+                                        Bot 的掉线通知开关。
+                                    </p>
+                                    <TargetIdChipsInput
+                                        values={draft.onebotRelogin.administratorIds}
+                                        placeholder="管理员 QQ 号，逗号添加多个"
+                                        onChange={(administratorIds) =>
+                                            onDraftChange({
+                                                onebotRelogin: {
+                                                    ...draft.onebotRelogin,
+                                                    administratorIds,
+                                                },
+                                            })
+                                        }
+                                    />
+                                    <div className="flex items-center justify-between text-[13px]">
+                                        <span>持续掉线后通知（秒）</span>
+                                        <NumberField
+                                            value={draft.onebotRelogin.offlineGraceSeconds}
+                                            min={15}
+                                            max={600}
+                                            className="w-24"
+                                            onValueChange={(value) =>
+                                                onDraftChange({
+                                                    onebotRelogin: {
+                                                        ...draft.onebotRelogin,
+                                                        offlineGraceSeconds: Math.max(
+                                                            15,
+                                                            Math.min(600, Math.round(value || 60)),
+                                                        ),
+                                                    },
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </section>
+
+                        <div className="flex min-h-[16rem] min-w-0 flex-1 flex-col">
                             <OneBotMessageEditor
                                 value={draft.onebotMessageTemplate}
                                 onChange={(onebotMessageTemplate) =>

@@ -10,6 +10,40 @@ beforeEach(() => {
 });
 
 describe('restoring persisted appearance', () => {
+    it('keeps relogin opt-in for old settings and preserves its administrator scope on save', async () => {
+        const { settingsService } = await import('./settings.service');
+        native.invoke.mockResolvedValue({
+            settings: {
+                poller: {
+                    botLoginCheckInterval: 5000,
+                    botOfflineWebHookNotice: false,
+                    botOfflineEmailNotice: false,
+                },
+                mcp: { enabled: false, port: 0, allowDangerous: false },
+                uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
+            },
+            githubPat: '',
+        });
+        const settings = await settingsService.get();
+        expect(settings.onebotRelogin).toEqual({
+            enabled: false,
+            administratorIds: [],
+            botIds: [],
+            offlineGraceSeconds: 60,
+            refreshCooldownSeconds: 30,
+        });
+        settings.onebotRelogin = {
+            ...settings.onebotRelogin,
+            enabled: true,
+            administratorIds: [12345],
+            botIds: ['99'],
+        };
+        await settingsService.set(settings);
+        const saved = native.invoke.mock.calls.find(([name]) => name === 'set_app_settings');
+        expect(saved?.[1]).toMatchObject({
+            dto: { settings: { onebotOfflineNotice: { relogin: settings.onebotRelogin } } },
+        });
+    });
     it('restores explicit default appearance over old local preferences after import', async () => {
         const { settingsService } = await import('./settings.service');
         const { hydrateAppUiPreferencesFromDisk } =

@@ -1,6 +1,7 @@
 // 浏览器 dev 模式下的后端设置 mock。
 
 import type { BackendSettings } from '../../services/settings.service';
+import { defaultReloginSettings } from '../../domain/settings/relogin';
 import {
     DEFAULT_ONEBOT_MESSAGE,
     DEFAULT_WEBHOOK_BODY,
@@ -47,6 +48,7 @@ export const mockBackendSettings: BackendSettings = {
     emailSmtpPort: 465,
     emailEncryption: 'SSL',
     onebotNoticeEnabled: false,
+    onebotRelogin: defaultReloginSettings(),
     onebotMessengerBotId: '',
     onebotMessengerBotIds: [],
     onebotTargetType: 'private',

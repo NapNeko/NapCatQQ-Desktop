@@ -36,6 +36,7 @@ export function OneBotMessengerPicker({
     enablingId,
     onChange,
     onEnsureHttp,
+    reloginMode = false,
 }: {
     selected: string[];
     candidates: OneBotCandidate[];
@@ -43,6 +44,7 @@ export function OneBotMessengerPicker({
     enablingId: string | null;
     onChange: (next: string[]) => void;
     onEnsureHttp: (botId: string) => void;
+    reloginMode?: boolean;
 }) {
     const [query, setQuery] = useState('');
     const selectedSet = new Set(selected);
@@ -134,6 +136,13 @@ export function OneBotMessengerPicker({
     const statusBadge = (candidate: OneBotCandidate) => {
         const enabling = enablingId === candidate.bot_id;
         const isRemote = candidate.scope === 'remote';
+        if (reloginMode && isRemote) {
+            return (
+                <Badge tone={candidate.has_relogin_ws ? 'success' : 'warning'} appearance="soft">
+                    {candidate.has_relogin_ws ? 'WS 已配置' : '需通用 WS'}
+                </Badge>
+            );
+        }
         if (candidate.eligible) {
             return (
                 <Badge tone="success" appearance="soft">
@@ -351,6 +360,11 @@ export function OneBotMessengerPicker({
                                                                 {candidate.has_local_http
                                                                     ? ` · :${candidate.http_port || '?'}`
                                                                     : ' · 缺 HTTP'}
+                                                                {reloginMode &&
+                                                                    candidate.scope === 'remote' &&
+                                                                    (candidate.has_relogin_ws
+                                                                        ? ' · WS 已配置'
+                                                                        : ' · 缺通用 WS')}
                                                             </p>
                                                         </div>
                                                     </button>

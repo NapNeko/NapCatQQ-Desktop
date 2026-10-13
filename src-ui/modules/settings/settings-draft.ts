@@ -105,6 +105,7 @@ export function draftFromBackendAndPrefs(
         onebotTargetId: backend.onebotTargetId,
         onebotTargetIds: [...backend.onebotTargetIds],
         onebotMessageTemplate: backend.onebotMessageTemplate,
+        onebotRelogin: structuredClone(backend.onebotRelogin),
         notifyOnRecovered: backend.notifyOnRecovered,
         offlineDebounceSeconds: backend.offlineDebounceSeconds,
         offlineDeliveryHistoryLimit: backend.offlineDeliveryHistoryLimit,
@@ -190,6 +191,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         onebotTargetId: draft.onebotTargetId,
         onebotTargetIds: [...draft.onebotTargetIds],
         onebotMessageTemplate: draft.onebotMessageTemplate,
+        onebotRelogin: structuredClone(draft.onebotRelogin),
         notifyOnRecovered: draft.notifyOnRecovered,
         offlineDebounceSeconds: draft.offlineDebounceSeconds,
         offlineDeliveryHistoryLimit: draft.offlineDeliveryHistoryLimit,
@@ -258,6 +260,7 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         draft.onebotTargetId !== baseline.onebotTargetId ||
         draft.onebotTargetIds.join(',') !== baseline.onebotTargetIds.join(',') ||
         draft.onebotMessageTemplate !== baseline.onebotMessageTemplate ||
+        JSON.stringify(draft.onebotRelogin) !== JSON.stringify(baseline.onebotRelogin) ||
         draft.notifyOnRecovered !== baseline.notifyOnRecovered ||
         draft.offlineDebounceSeconds !== baseline.offlineDebounceSeconds ||
         draft.offlineDeliveryHistoryLimit !== baseline.offlineDeliveryHistoryLimit ||

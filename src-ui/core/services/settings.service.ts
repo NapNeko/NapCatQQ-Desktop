@@ -29,6 +29,8 @@ import type { SnowLumaLinuxPackage } from '../ipc/types';
 import type { AppUiPreferences } from '../ipc/generated/domain/AppUiPreferences';
 import type { McpServerSettings } from '../ipc/generated/domain/McpServerSettings';
 import type { OfflineDeliveryRecord } from '../ipc/generated/domain/OfflineDeliveryRecord';
+import type { ReloginSettings } from '../ipc/generated/domain/ReloginSettings';
+import { defaultReloginSettings } from '../domain/settings/relogin';
 import type { EnsureOneBotMessengerHttpResult } from '../ipc/generated/domain/EnsureOneBotMessengerHttpResult';
 import type { OneBotMessengerCandidate } from '../ipc/generated/domain/OneBotMessengerCandidate';
 import { mockBackendSettings } from '../ipc/mock/settings.mock';
@@ -103,6 +105,7 @@ export interface BackendSettings {
     /** 多个私聊/群目标, 全部投递 */
     onebotTargetIds: number[];
     onebotMessageTemplate: string;
+    onebotRelogin: ReloginSettings;
     /** 上线恢复通知(默认关) */
     notifyOnRecovered: boolean;
     /** offline 边沿防抖秒数;0=关 */
@@ -232,6 +235,7 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
         emailSmtpPort: Number(dto.settings.Email?.EmailStmpPort ?? 465),
         emailEncryption: dto.settings.Email?.EmailEncryption ?? 'SSL',
         onebotNoticeEnabled: dto.settings.onebotOfflineNotice?.onebotNoticeEnabled ?? false,
+        onebotRelogin: dto.settings.onebotOfflineNotice?.relogin ?? defaultReloginSettings(),
         ...normalizeOneBotIdsFromDto(dto.settings.onebotOfflineNotice),
         onebotTargetType: dto.settings.onebotOfflineNotice?.onebotTargetType ?? 'private',
         onebotMessageTemplate:
@@ -317,6 +321,7 @@ type AppSettingsDtoInvoke = {
             onebotTargetId: number;
             onebotTargetIds: number[];
             onebotMessageTemplate: string;
+            relogin: ReloginSettings;
         };
         snowlumaNodePath: string | null;
         snowlumaPackage: SnowLumaLinuxPackage | null;
@@ -418,6 +423,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
                 ...normalizeOneBotIdsForInvoke(s),
                 onebotTargetType: s.onebotTargetType || 'private',
                 onebotMessageTemplate: s.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
+                relogin: s.onebotRelogin,
             },
             snowlumaNodePath: s.snowlumaNodePath || null,
             snowlumaPackage: s.snowlumaPackage || null,
@@ -576,6 +582,7 @@ export const settingsService = {
                     backend_type: 'napcat',
                     has_local_http: true,
                     http_port: 3010,
+                    has_relogin_ws: true,
                     eligible: true,
                     can_enable_http: false,
                     scope: 'local',
@@ -589,6 +596,7 @@ export const settingsService = {
                     backend_type: 'snowluma',
                     has_local_http: false,
                     http_port: 0,
+                    has_relogin_ws: false,
                     eligible: false,
                     can_enable_http: true,
                     scope: 'local',
@@ -602,6 +610,7 @@ export const settingsService = {
                     backend_type: 'napcat',
                     has_local_http: true,
                     http_port: 3001,
+                    has_relogin_ws: true,
                     eligible: false,
                     can_enable_http: false,
                     scope: 'remote',
@@ -615,6 +624,7 @@ export const settingsService = {
                     backend_type: 'napcat',
                     has_local_http: false,
                     http_port: 0,
+                    has_relogin_ws: false,
                     eligible: false,
                     can_enable_http: true,
                     scope: 'remote',
@@ -639,6 +649,7 @@ export const settingsService = {
                     backend_type: 'napcat',
                     has_local_http: true,
                     http_port: 3011,
+                    has_relogin_ws: true,
                     eligible: true,
                     can_enable_http: false,
                     scope: 'local',
