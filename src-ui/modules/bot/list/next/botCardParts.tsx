@@ -1,6 +1,6 @@
 // BotCard 子件：头像 / 信息 chip / 底栏工具钮 / 配置摘要 helpers
 
-import { forwardRef, useEffect, useRef, useState, type ComponentType } from 'react';
+import { forwardRef, useEffect, useRef, type ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../../shared/ui';
 import { ActionMotionIcon, MotionIcon, type MotionIconPreset } from '../../../../shared/ui/motion';
@@ -9,71 +9,7 @@ import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig'
 import { describeAutoRestartSchedule } from '../../../../core/domain/bot/auto-restart';
 import { cn } from '../../../../shared/utils/cn';
 
-export function BotAvatar({
-    qqid,
-    displayName,
-    flavorTone,
-}: {
-    qqid: string;
-    displayName: string;
-    flavorTone: 'brand' | 'info';
-}) {
-    const [failed, setFailed] = useState(false);
-    const numericQQ = /^\d+$/.test(qqid) ? qqid : null;
-    const showImg = numericQQ && !failed;
-    const initials = (displayName.trim().charAt(0) || '?').toUpperCase();
-    const palette = pickAvatarPalette(qqid);
-
-    return (
-        <div className="relative h-11 w-11 shrink-0">
-            <div
-                className={cn(
-                    'h-full w-full overflow-hidden rounded-md ring-1 ring-border-subtle',
-                    'bg-gradient-to-br',
-                    palette,
-                )}
-            >
-                {showImg && (
-                    <img
-                        src={`https://q.qlogo.cn/headimg_dl?dst_uin=${numericQQ}&spec=640`}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        referrerPolicy="no-referrer"
-                        draggable={false}
-                        onError={() => setFailed(true)}
-                    />
-                )}
-                {!showImg && (
-                    <div className="flex h-full w-full items-center justify-center font-display text-base font-semibold text-white/95">
-                        {initials}
-                    </div>
-                )}
-            </div>
-            <span
-                aria-hidden
-                className={cn(
-                    'absolute -bottom-0.5 -right-0.5 inline-block h-2.5 w-2.5 rounded-full ring-2 ring-elevated',
-                    flavorTone === 'info' ? 'bg-info' : 'bg-brand',
-                )}
-            />
-        </div>
-    );
-}
-
-const PALETTES = [
-    'from-pink-300 to-rose-400',
-    'from-amber-300 to-orange-400',
-    'from-emerald-300 to-teal-400',
-    'from-sky-300 to-indigo-400',
-    'from-violet-300 to-fuchsia-400',
-    'from-rose-300 to-red-400',
-] as const;
-
-function pickAvatarPalette(seed: string): string {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-    return PALETTES[Math.abs(h) % PALETTES.length] ?? PALETTES[0];
-}
+export { BotAvatar } from '../../BotAvatar';
 
 export function ToolbarMotionIcon({
     icon,
