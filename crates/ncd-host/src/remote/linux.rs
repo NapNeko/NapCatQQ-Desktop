@@ -525,6 +525,9 @@ impl Host for RemoteLinuxHost {
                 }
             };
 
+            // Channel 独立持有连接；等命令输出时占锁会让扫码被后台探测排队至超时。
+            drop(guard);
+
             if let Err(e) = channel.exec(true, line.as_bytes()).await {
                 self_for_invalidate.invalidate_connection().await;
                 return Err(HostError::remote_disconnected(format!("exec: {e}")));
@@ -583,6 +586,7 @@ impl Host for RemoteLinuxHost {
                 return Err(HostError::remote_disconnected(format!("open channel: {e}")));
             }
         };
+        drop(session_guard);
         if let Err(e) = channel.exec(true, line.as_bytes()).await {
             self.invalidate_connection().await;
             return Err(HostError::remote_disconnected(format!("exec: {e}")));

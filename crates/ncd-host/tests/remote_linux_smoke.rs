@@ -84,6 +84,33 @@ async fn smoke_run_to_string_echo() {
 
 #[tokio::test]
 #[ignore = "requires NCD_TEST_SSH_*"]
+async fn smoke_short_command_does_not_wait_for_long_command_output() {
+    let host = make_host().await;
+    let started = std::time::Instant::now();
+    let slow = async {
+        let output = host.run_to_string(HostCommand::new("sleep").arg("6")).await;
+        (output, started.elapsed())
+    };
+    let fast = async {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let output = host
+            .run_to_string(
+                HostCommand::new("echo")
+                    .arg("independent-channel")
+                    .timeout(Duration::from_secs(12)),
+            )
+            .await;
+        (output, started.elapsed())
+    };
+    let ((slow, slow_elapsed), (fast, elapsed)) = tokio::join!(slow, fast);
+    eprintln!("concurrent SSH commands completed: short={elapsed:?}, long={slow_elapsed:?}");
+    assert!(slow.unwrap().success());
+    assert_eq!(fast.unwrap().stdout.trim(), "independent-channel");
+    assert!(elapsed < slow_elapsed, "short command queued: {elapsed:?}");
+}
+
+#[tokio::test]
+#[ignore = "requires NCD_TEST_SSH_*"]
 async fn smoke_identity_methods() {
     let host = make_host().await;
     use ncd_host::host::{Locality, Os};
