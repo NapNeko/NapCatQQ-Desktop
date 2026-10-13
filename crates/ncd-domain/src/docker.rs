@@ -9,6 +9,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+mod management;
+pub use management::*;
+
 /// 目标主机上 Docker 的探测结果
 ///
 /// installed=false 时其余字段无意义(version 为空, 两个 bool 为 false),
@@ -450,6 +453,8 @@ pub enum ContainerAction {
     Start,
     Stop,
     Restart,
+    Pause,
+    Unpause,
     Remove,
 }
 
@@ -459,6 +464,8 @@ impl ContainerAction {
             Self::Start => "start",
             Self::Stop => "stop",
             Self::Restart => "restart",
+            Self::Pause => "pause",
+            Self::Unpause => "unpause",
             Self::Remove => "remove",
         }
     }

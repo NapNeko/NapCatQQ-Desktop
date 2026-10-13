@@ -3,4 +3,4 @@
 /**
  * 容器生命周期操作
  */
-export type ContainerAction = "start" | "stop" | "restart" | "remove";
+export type ContainerAction = "start" | "stop" | "restart" | "pause" | "unpause" | "remove";
