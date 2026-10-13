@@ -70,6 +70,46 @@ pub async fn is_stack_ready(
     Ok(out.success())
 }
 
+pub(crate) fn qq_main_running_script(qq_bin: &str) -> String {
+    let qq_bin = shell_single_quote(qq_bin);
+    format!(
+        r#"QQ_BIN={qq_bin}
+qq_bin=$(readlink -f "$QQ_BIN") || exit 2
+[ -n "$qq_bin" ] || exit 2
+for proc in /proc/[0-9]*; do
+  exe=$(readlink -f "$proc/exe" 2>/dev/null || true)
+  [ "$exe" = "$qq_bin" ] || continue
+  cmd=$(tr '\0' ' ' < "$proc/cmdline" 2>/dev/null || true)
+  case "$cmd" in ''|*"--type="*) continue ;; esac
+  echo running
+  exit 0
+done
+echo stopped
+"#
+    )
+}
+
+pub(crate) async fn remote_qq_main_running(
+    host: &dyn Host,
+    qq_bin: &str,
+) -> Result<bool, BotBackendError> {
+    let out = host
+        .run_to_string(
+            HostCommand::new("sh")
+                .arg("-c")
+                .arg(qq_main_running_script(qq_bin)),
+        )
+        .await
+        .map_err(|err| BotBackendError::Io(err.to_string()))?;
+    match (out.success(), out.stdout.trim()) {
+        (true, "running") => Ok(true),
+        (true, "stopped") => Ok(false),
+        _ => Err(BotBackendError::Io(
+            "无法确认远端 QQ 主进程是否已退出".into(),
+        )),
+    }
+}
+
 pub fn parse_webui_port_from_runtime_json(bytes: &[u8]) -> Option<u16> {
     let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     let n = v.get("webuiPort")?;

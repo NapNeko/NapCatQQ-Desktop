@@ -75,6 +75,8 @@ pub(crate) struct PreparedLogin {
 #[derive(Deserialize)]
 struct WireReply {
     session_id: String,
+    #[serde(default)]
+    diagnostic: Option<String>,
     #[serde(flatten)]
     snapshot: SnowLumaQrLoginSnapshot,
 }
@@ -185,6 +187,9 @@ async fn prepare_with_cancel(
 }
 
 impl LoginSession {
+    pub fn needs_renewal(&self) -> bool {
+        self.cancel.is_cancelled()
+    }
     pub fn pid(&self) -> u32 {
         self.qq_pid
     }
@@ -439,6 +444,14 @@ impl LoginSession {
             return Err(io_error());
         }
         let mut snapshot = wire.snapshot;
+        if let Some(reason) = wire.diagnostic.filter(|reason| {
+            reason.len() <= 64
+                && reason
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        }) {
+            tracing::debug!(pid = self.qq_pid, %reason, "扫码窗口采集暂未完成");
+        }
         // AT-SPI 主界面只阻止继续取图，账号及成功状态由 SL owner 判断。
         if snapshot.state == SnowLumaQrLoginState::LoggedIn {
             snapshot.state = SnowLumaQrLoginState::LoginDetected;
@@ -479,7 +492,7 @@ impl LoginSession {
         if !matches!(action, "snapshot" | "refresh" | "close") {
             return Err(io_error());
         }
-        if action == "close" {
+        if action == "close" || cancel.is_cancelled() {
             self.cancel.cancel();
             let mut result = SnowLumaQrLoginSnapshot::unavailable("扫码已关闭");
             result.state = SnowLumaQrLoginState::Cancelled;
@@ -487,6 +500,15 @@ impl LoginSession {
             return Ok(result);
         }
         let binding = self.binding.as_ref().ok_or_else(io_error)?;
+        let helper_path = HostPath::from_posix(format!("{}/atspi-login.py", self.directory));
+        if !host.exists(&helper_path).await.map_err(|_| io_error())? {
+            let mut restored = self.clone();
+            restored.cancel = cancel.clone();
+            restored.deploy(host).await?;
+            if restored.inspect(host, self.qq_pid).await? != *binding {
+                return Err(io_error());
+            }
+        }
         let input=serde_json::to_vec(&serde_json::json!({"v":1,"session_id":self.session_id,"action":action,"binding":binding,"scanned":scanned})).map_err(|_|io_error())?;
         match host
             .run_to_string(self.command().stdin(input).cancel_token(cancel))
@@ -495,8 +517,23 @@ impl LoginSession {
             Ok(out) if out.success() && out.stdout.len() <= 192 * 1024 => {
                 self.decode(out.stdout.as_bytes())
             }
-            Ok(_) => {
-                let mut result = SnowLumaQrLoginSnapshot::unavailable("扫码控件不可用，请使用 VNC");
+            Ok(out) => {
+                let reason = if out.stderr.contains("X Error") {
+                    "XWindowChanged"
+                } else if out.exit_code == Some(124) {
+                    "HelperDeadline"
+                } else {
+                    "HelperExited"
+                };
+                tracing::warn!(pid = self.qq_pid, exit_code = ?out.exit_code, reason,
+                    "扫码辅助进程未返回有效截图");
+                let mut result = SnowLumaQrLoginSnapshot::unavailable("扫码获取暂时失败，正在重试");
+                result.state = if out.exit_code.is_some() {
+                    SnowLumaQrLoginState::Starting
+                } else {
+                    result.observer_removed = false;
+                    SnowLumaQrLoginState::CleanupFailed
+                };
                 result.qq_pid = Some(self.qq_pid);
                 Ok(result)
             }
@@ -558,6 +595,7 @@ mod tests {
         birth: &'static str,
         bind_error: Option<&'static str>,
         cancel_on_bind: Option<CancellationToken>,
+        capture_exit: Option<i32>,
     }
     impl BindingHost {
         fn new() -> Self {
@@ -567,6 +605,7 @@ mod tests {
                 birth: "881923",
                 bind_error: None,
                 cancel_on_bind: None,
+                capture_exit: None,
             }
         }
     }
@@ -661,6 +700,12 @@ mod tests {
                         .to_string(),
                     ),
                 }
+            } else if let Some(code) = self.capture_exit {
+                let request: serde_json::Value =
+                    serde_json::from_slice(command.stdin.as_ref().unwrap()).unwrap();
+                (code, serde_json::json!({"session_id":request["session_id"],"v":1,
+                    "state":"waiting_for_qr","qq_pid":19,"qrcode_payload":"data:image/png;base64,YQ==",
+                    "uin":null,"observer_removed":true,"message":null}).to_string())
             } else {
                 panic!("recovery must not sample or invoke QQ controls")
             };
@@ -693,6 +738,46 @@ mod tests {
             binding: None,
             cancel: CancellationToken::new(),
         }
+    }
+
+    fn bound_session() -> LoginSession {
+        let mut value = session();
+        value.binding = Some(ProcessBinding {
+            pid: 19,
+            start_time: "881923".into(),
+            exe: "/opt/QQ/qq".into(),
+            uid: 1000,
+            display: ":0".into(),
+            bus: "unix:path=/run/user/1000/bus".into(),
+            xauthority: None,
+            runtime_dir: None,
+        });
+        value
+    }
+
+    #[tokio::test]
+    async fn missing_helper_is_restored_for_the_same_process_before_capture() {
+        let mut host = BindingHost::new();
+        host.capture_exit = Some(0);
+        let session = bound_session();
+        let result = session.request(&host, "snapshot").await.unwrap();
+        assert_eq!(result.state, SnowLumaQrLoginState::WaitingForQr);
+        assert!(
+            host.files
+                .lock()
+                .unwrap()
+                .contains_key("/tmp/private/atspi-login.py")
+        );
+    }
+
+    #[tokio::test]
+    async fn completed_helper_crash_is_retryable_without_stale_payload() {
+        let mut host = BindingHost::new();
+        host.capture_exit = Some(1);
+        let result = bound_session().request(&host, "snapshot").await.unwrap();
+        assert_eq!(result.state, SnowLumaQrLoginState::Starting);
+        assert!(result.observer_removed);
+        assert!(result.qrcode_payload.is_none());
     }
     #[test]
     fn reply_must_match_session_and_pid() {

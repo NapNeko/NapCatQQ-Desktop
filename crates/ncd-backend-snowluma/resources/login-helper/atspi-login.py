@@ -159,12 +159,41 @@ def next_login_control(nodes, performed):
     return None
 
 
+class QrDialogObscured(RuntimeError):
+    pass
+
+
+def notice_close_control(nodes):
+    dialogs = [node['obj'] for node in nodes if node['role'] == 'dialog']
+    if len(dialogs) != 1:
+        raise QrDialogObscured()
+    contents = [node for node in nodes if node.get('dialog') == dialogs[0]]
+    if not any(node['name'] == '下线通知' and node['role'] == 'static' for node in contents):
+        raise QrDialogObscured()
+    buttons = [node['obj'] for node in contents if node['name'] == '关闭' and node['role'] == 'push button']
+    if len(buttons) != 1:
+        raise QrDialogObscured()
+    return buttons[0]
+
+
 def reach_qr_page(make_tree, check, refresh):
     current, performed = make_tree(), set()
     try:
         while True:
             state = classify(current.nodes, current.main_interface)
-            if state in {'login_detected', 'scanned'} or (state == 'expired' and not refresh):
+            if state in {'login_detected', 'scanned'}:
+                return current
+            if any(node['role'] == 'dialog' for node in current.nodes):
+                if 'dismiss_notice' in performed:
+                    raise QrDialogObscured()
+                current.dismiss_notice(check)
+                performed.add('dismiss_notice')
+                for _ in range(10):
+                    current.close(); check(); time.sleep(0.1); current = make_tree()
+                    if not any(node['role'] == 'dialog' for node in current.nodes):
+                        break
+                continue
+            if state == 'expired' and not refresh:
                 return current
             if qr_page(current.nodes):
                 refresh_control = next((name for name in ('刷新二维码', '刷新')
@@ -254,6 +283,7 @@ class Libraries:
         self.image = signature(xl, 'XGetImage', P, [P, W, I, I, U, U, W, I])
         self.pixel = signature(xl, 'XGetPixel', W, [P, I, I])
         self.destroy = signature(xl, 'XDestroyImage', I, [P])
+        self.set_error_handler = signature(xl, 'XSetErrorHandler', P, [P])
 
     def text(self, pointer):
         if not pointer:
@@ -321,13 +351,15 @@ class Tree:
                 if lib.pid(app, None) != pid:
                     continue
                 lib.clear(app)
-                pending, count, main = [(app, 0)], 0, set()
+                pending, count, main = [(app, 0, None)], 0, set()
                 while pending and count < 240:
                     check()
-                    obj, depth = pending.pop(0)
+                    obj, depth, dialog = pending.pop(0)
                     count += 1
                     name, role = lib.text(lib.name(obj, None)), lib.text(lib.role(obj, None))
                     visible = lib.visible(obj)
+                    if visible and role == 'dialog':
+                        dialog = obj
                     if visible and role == 'toggle button':
                         if name == '联系人': main.add('contacts')
                         if name.startswith('消息'): main.add('messages')
@@ -337,15 +369,17 @@ class Tree:
                             return
                     relevant = (name in ALLOWED_BUTTONS | {'手机QQ扫码登录', '二维码', '已扫码', '已扫描', '扫码成功', '扫描成功'}
                                 or ('二维码' in name and ('过期' in name or '失效' in name))
-                                or ('手机' in name and '确认' in name))
+                                or ('手机' in name and '确认' in name)
+                                or role == 'dialog' or (dialog and name in {'下线通知', '关闭'}))
                     if relevant and visible:
-                        self.nodes.append({'obj': obj, 'name': name, 'role': role, 'box': lib.bounds(obj)})
+                        self.nodes.append({'obj': obj, 'name': name, 'role': role,
+                                           'box': lib.bounds(obj), 'dialog': dialog})
                     if depth < 24:
                         for child_index in range(min(max(lib.count(obj, None), 0), 64)):
                             child = lib.child(obj, child_index, None)
                             if child:
                                 self.refs.append(child)
-                                pending.append((child, depth + 1))
+                                pending.append((child, depth + 1, dialog))
                 return
         except BaseException:
             self.close()
@@ -354,6 +388,24 @@ class Tree:
     def close(self):
         for ptr in reversed(self.refs): self.lib.unref(ptr)
         self.refs.clear()
+
+    def dismiss_notice(self, check):
+        # 只关闭本进程“下线通知”内部的按钮，绝不点击窗口关闭或协议确认。
+        target = notice_close_control(self.nodes)
+        check()
+        if self.lib.pid(target, None) != self.pid or not self.lib.actionable(target):
+            raise QrDialogObscured()
+        action = self.lib.action(target)
+        if not action:
+            raise QrDialogObscured()
+        try:
+            names = [self.lib.text(self.lib.action_name(action, index, None))
+                     for index in range(min(max(self.lib.action_count(action, None), 0), 8))]
+            check()
+            if not self.lib.do(action, default_action_index(names), None):
+                raise QrDialogObscured()
+        finally:
+            self.lib.unref(action)
 
     def invoke(self, name, check):
         if name not in ALLOWED_BUTTONS or self.main_interface:
@@ -407,12 +459,17 @@ class OwnedDisplay:
         self.handle = lib.open(binding['display'].encode())
         if not self.handle:
             raise RuntimeError('DisplayUnavailable')
+        # Xlib 默认遇到 BadWindow/BadMatch 会退出进程，Python try/except 接不住。
+        # 窗口枚举和截图之间允许窗口销毁，由各查询的失败返回值触发重新获取。
+        self.error_handler = C.CFUNCTYPE(I, P, P)(lambda *_: 0)
+        self.previous_handler = lib.set_error_handler(C.cast(self.error_handler, P))
         self.root = lib.root(self.handle)
         self.pid_atom = lib.atom(self.handle, b'_NET_WM_PID', 1)
 
     def close(self):
         if self.handle: self.lib.close(self.handle)
         self.handle = None
+        self.lib.set_error_handler(self.previous_handler)
 
     def children(self, window):
         root, parent, pointer, count = W(), W(), P(), U()
@@ -550,11 +607,13 @@ def request_snapshot(request):
             except ValueError:
                 previous = 0
             now = time.monotonic()
-            if 0 <= now - previous < 30:
+            if 0 <= now - previous < 2:
                 current['action'] = 'snapshot'
-            else:
+            result = snapshot_locked(current)
+            if current['action'] == 'refresh' and result[0] == 'waiting_for_qr' and result[1]:
                 os.ftruncate(lock, 0)
                 os.pwrite(lock, str(now).encode('ascii'), 0)
+            return result
         return snapshot_locked(current)
 
 
@@ -576,7 +635,6 @@ def snapshot_locked(request):
             last_identity_check[0] = time.monotonic()
     check()
     if request['action'] == 'close': return 'cancelled', None
-    if request.get('scanned'): return 'scanned', None
     verify_session_bus(binding)
     os.environ['DISPLAY'], os.environ['DBUS_SESSION_BUS_ADDRESS'] = binding['display'], binding['bus']
     for key, value in [('XAUTHORITY', binding.get('xauthority')), ('XDG_RUNTIME_DIR', binding.get('runtime_dir'))]:
@@ -590,9 +648,13 @@ def snapshot_locked(request):
         initialized = True; lib.timeouts(300, 500)
         def tree():
             check(); return Tree(lib, binding['pid'], check)
-        current = reach_qr_page(tree, check, request['action'] == 'refresh')
+        current = (tree() if request.get('scanned') else
+                   reach_qr_page(tree, check, request['action'] == 'refresh'))
         try:
             state = classify(current.nodes, current.main_interface)
+            if request.get('scanned'):
+                # 等手机确认时只读状态；明确过期才能解除扫码锁，不导航或采集新码。
+                return (state if state in {'expired', 'login_detected'} else 'scanned'), None
             if state in {'login_detected', 'scanned'}: return state, None
             state = classify(current.nodes, current.main_interface)
             if state != 'waiting_for_qr': return state, None
@@ -604,6 +666,8 @@ def snapshot_locked(request):
             if not 0.08 <= ratio <= 0.7: return 'waiting_for_qr', None
             after = tree()
             try:
+                if any(node['role'] == 'dialog' for node in after.nodes):
+                    raise QrDialogObscured()
                 state = classify(after.nodes, after.main_interface)
                 if state != 'waiting_for_qr': return state, None
                 boxes = [node['box'] for node in after.nodes if node['name'] == '二维码' and node['role'] == 'image']
@@ -615,6 +679,43 @@ def snapshot_locked(request):
     finally:
         if display: display.close()
         if initialized: lib.exit()
+
+
+TRANSIENT_ERRORS = {
+    'AtspiUnavailable', 'ActionMissing', 'ActionNotUnique', 'ControlNotActionable',
+    'DefaultActionUnavailable', 'ActionRejected', 'FrameUnavailable', 'InvalidQrBounds',
+    'WindowBudgetExceeded', 'OwnedWindowNotUnique', 'WindowParentUnavailable',
+    'WindowStackUnavailable', 'QrWindowObscured',
+}
+
+
+def capture_reply(request):
+    message, diagnostic = None, None
+    try:
+        state, payload = request_snapshot(request)
+    except InterruptedError:
+        state, payload = 'cancelled', None
+    except DesktopSessionUnavailable:
+        state, payload = 'unavailable', None
+        message = 'QQ 桌面会话已失效，请重新启动此 Bot'
+    except QrDialogObscured:
+        state, payload = 'unavailable', None
+        message = 'QQ 弹窗遮挡了二维码，请打开 QQ 界面处理后重试'
+    except (TimeoutError, BlockingIOError):
+        state, payload = 'starting', None
+        diagnostic = 'RequestTimeoutOrBusy'
+        message = '扫码窗口暂未响应，正在重试'
+    except (RuntimeError, ValueError, OSError, KeyError) as error:
+        diagnostic = str(error) if str(error) in TRANSIENT_ERRORS else type(error).__name__
+        state = 'starting' if str(error) in TRANSIENT_ERRORS else 'unavailable'
+        payload = None
+        message = ('二维码被其他窗口遮挡，请在 QQ 界面将登录窗口移到前面'
+                   if str(error) == 'QrWindowObscured' else
+                   '正在重新获取扫码窗口' if state == 'starting' else
+                   '扫码控件或窗口不可用，请重试或打开 QQ 界面')
+    return {'session_id': request['session_id'], 'v': 1, 'state': state,
+            'qq_pid': request['binding']['pid'], 'qrcode_payload': payload,
+            'uin': None, 'observer_removed': True, 'message': message, 'diagnostic': diagnostic}
 
 
 def main():
@@ -630,22 +731,7 @@ def main():
     if len(raw) > 8192: raise ValueError('RequestBudgetExceeded')
     request = json.loads(raw)
     validate_request(request)
-    message = None
-    try:
-        state, payload = request_snapshot(request)
-    except InterruptedError:
-        state, payload = 'cancelled', None
-    except DesktopSessionUnavailable:
-        state, payload = 'unavailable', None
-        message = 'QQ 桌面会话已失效，请重新启动此 Bot'
-    except TimeoutError:
-        state, payload = 'waiting_for_qr', None
-    except (RuntimeError, ValueError, OSError, KeyError):
-        state, payload = 'unavailable', None
-    print(json.dumps({'session_id': request['session_id'], 'v': 1, 'state': state,
-                      'qq_pid': request['binding']['pid'], 'qrcode_payload': payload,
-                      'uin': None, 'observer_removed': True,
-                      'message': message or ('扫码控件或窗口不可用，请打开 QQ 界面' if state == 'unavailable' else None)}, ensure_ascii=False))
+    print(json.dumps(capture_reply(request), ensure_ascii=False))
 
 
 if __name__ == '__main__':

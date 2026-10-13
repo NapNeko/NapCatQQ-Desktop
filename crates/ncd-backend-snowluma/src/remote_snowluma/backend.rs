@@ -17,7 +17,7 @@ use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
     TailOpts,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -31,6 +31,9 @@ struct QrActivity {
     terminal: Mutex<Option<SnowLumaQrLoginSnapshot>>,
     cleanup_failed: AtomicBool,
     refresh_pending: AtomicBool,
+    capture_failures: AtomicU32,
+    recovery_started: AtomicBool,
+    close_revision: AtomicU32,
 }
 
 #[derive(Clone, PartialEq)]
@@ -58,6 +61,19 @@ fn closed_snapshot(
 }
 
 impl QrActivity {
+    async fn can_renew(&self) -> bool {
+        (self.cancel.is_cancelled() || self.opened_at.elapsed() >= Duration::from_secs(600))
+            && !self.cleanup_failed.load(Ordering::SeqCst)
+            && !self.scanned.load(Ordering::SeqCst)
+            && !self.login_detected.load(Ordering::SeqCst)
+            && self
+                .terminal
+                .lock()
+                .await
+                .as_ref()
+                .is_none_or(can_retry_qr_snapshot)
+    }
+
     fn new() -> Self {
         Self {
             cancel: CancellationToken::new(),
@@ -68,8 +84,40 @@ impl QrActivity {
             terminal: Mutex::new(None),
             cleanup_failed: AtomicBool::new(false),
             refresh_pending: AtomicBool::new(false),
+            capture_failures: AtomicU32::new(0),
+            recovery_started: AtomicBool::new(false),
+            close_revision: AtomicU32::new(0),
         }
     }
+
+    fn capture_result(&self, mut snapshot: SnowLumaQrLoginSnapshot) -> SnowLumaQrLoginSnapshot {
+        if snapshot.state == SnowLumaQrLoginState::Expired {
+            self.scanned.store(false, Ordering::SeqCst);
+        } else if self.scanned.load(Ordering::SeqCst)
+            && !snapshot.state.is_terminal()
+            && snapshot.state != SnowLumaQrLoginState::LoginDetected
+        {
+            snapshot.state = SnowLumaQrLoginState::Scanned;
+            snapshot.qrcode_payload = None;
+        }
+        if snapshot.state == SnowLumaQrLoginState::Starting {
+            if self.capture_failures.fetch_add(1, Ordering::SeqCst) >= 3 {
+                snapshot.state = SnowLumaQrLoginState::Unavailable;
+                snapshot.message = Some("暂时无法获取二维码，请重试或打开 QQ 界面".into());
+            }
+        } else {
+            self.capture_failures.store(0, Ordering::SeqCst);
+        }
+        snapshot
+    }
+}
+
+fn can_retry_qr_snapshot(snapshot: &SnowLumaQrLoginSnapshot) -> bool {
+    snapshot.observer_removed
+        && matches!(
+            snapshot.state,
+            SnowLumaQrLoginState::Cancelled | SnowLumaQrLoginState::Unavailable
+        )
 }
 
 use super::layout::SnowLumaRemotePaths;
@@ -85,6 +133,9 @@ use super::config::{render_native_snowluma_config_on_host, resolve_start_mode};
 use super::daemon::RemoteSnowLumaDaemon;
 use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
 use super::inject::{inject_via_tunnel, remote_qq_running_pid_with_hint};
+
+#[path = "qr_relogin.rs"]
+mod qr_relogin;
 
 /// 远端 SL 指标探针：上传资产并返回应 export 进共享 node 的 env
 #[async_trait]
@@ -185,24 +236,14 @@ impl RemoteSnowLumaBackend {
             result.state = SnowLumaQrLoginState::Disabled;
             return result;
         }
-        let Some(tracked) = self.login_pids.lock().await.get(bot_id).cloned() else {
+        let Some(mut tracked) = self.login_pids.lock().await.get(bot_id).cloned() else {
             return SnowLumaQrLoginSnapshot::unavailable(
                 "尚未确认此 Bot 的 QQ 进程，请打开 QQ 界面",
             );
         };
-        let pid = tracked.pid;
         if self.start_modes.lock().await.get(bot_id) != Some(&SnowLumaStartMode::ColdStart) {
             return SnowLumaQrLoginSnapshot::unavailable("热启动请使用 QQ 界面继续登录");
         }
-        let blank = |state| SnowLumaQrLoginSnapshot {
-            v: 1,
-            state,
-            qq_pid: Some(pid),
-            qrcode_payload: None,
-            uin: None,
-            observer_removed: true,
-            message: None,
-        };
         let host = self.daemon.current_host().await;
         let mut activity = self
             .qr_activity
@@ -212,6 +253,7 @@ impl RemoteSnowLumaBackend {
             .or_insert_with(|| Arc::new(QrActivity::new()))
             .clone();
         let serial_activity = Arc::clone(&activity);
+        let request_close_revision = activity.close_revision.load(Ordering::SeqCst);
         let _serial_operation = serial_activity.operation.lock().await;
         if self
             .qr_activity
@@ -224,21 +266,76 @@ impl RemoteSnowLumaBackend {
             result.state = SnowLumaQrLoginState::Starting;
             return result;
         }
-        if refresh
-            && activity.cancel.is_cancelled()
-            && !activity.cleanup_failed.load(Ordering::SeqCst)
-            && activity
-                .terminal
+        let cancelled = |pid| {
+            let mut snapshot = SnowLumaQrLoginSnapshot::unavailable("扫码已关闭");
+            snapshot.state = SnowLumaQrLoginState::Cancelled;
+            snapshot.qq_pid = Some(pid);
+            snapshot
+        };
+        if serial_activity.close_revision.load(Ordering::SeqCst) != request_close_revision {
+            return cancelled(tracked.pid);
+        }
+        let mut relogin_bound = false;
+        if refresh || activity.refresh_pending.load(Ordering::SeqCst) {
+            let prepared = self
+                .prepare_qr_relogin(bot_id, &tracked, &activity, request_close_revision)
+                .await;
+            if serial_activity.close_revision.load(Ordering::SeqCst) != request_close_revision {
+                if let Ok(qr_relogin::QrReloginPreparation::Bound(_, renewed)) = &prepared {
+                    renewed.cancel.cancel();
+                }
+                return cancelled(tracked.pid);
+            }
+            match prepared {
+                Ok(qr_relogin::QrReloginPreparation::Bound(current, renewed)) => {
+                    tracked = current;
+                    activity = renewed;
+                    relogin_bound = true;
+                }
+                Ok(qr_relogin::QrReloginPreparation::Unchanged) => {}
+                Ok(qr_relogin::QrReloginPreparation::Waiting) => {
+                    activity.refresh_pending.store(true, Ordering::SeqCst);
+                    let mut snapshot = SnowLumaQrLoginSnapshot::unavailable("正在恢复 QQ 扫码通道");
+                    snapshot.state = SnowLumaQrLoginState::Starting;
+                    return snapshot;
+                }
+                Err(error) => {
+                    tracing::warn!(bot_id = %bot_id, %error, "QQ 扫码重登通道恢复失败");
+                    return SnowLumaQrLoginSnapshot::unavailable(
+                        "扫码通道恢复失败，请重新获取或打开 QQ 界面",
+                    );
+                }
+            }
+        }
+        let pid = tracked.pid;
+        let blank = |state| SnowLumaQrLoginSnapshot {
+            v: 1,
+            state,
+            qq_pid: Some(pid),
+            qrcode_payload: None,
+            uin: None,
+            observer_removed: true,
+            message: None,
+        };
+        if self.login_pids.lock().await.get(bot_id) != Some(&tracked)
+            || self
+                .qr_activity
                 .lock()
                 .await
-                .as_ref()
-                .is_some_and(|snapshot| snapshot.state == SnowLumaQrLoginState::Cancelled)
+                .get(bot_id)
+                .is_none_or(|current| !Arc::ptr_eq(current, &activity))
         {
+            return blank(SnowLumaQrLoginState::Starting);
+        }
+        if refresh && activity.can_renew().await {
             let mut activities = self.qr_activity.lock().await;
             if activities
                 .get(bot_id)
                 .is_none_or(|current| !Arc::ptr_eq(current, &serial_activity))
             {
+                return blank(SnowLumaQrLoginState::Cancelled);
+            }
+            if serial_activity.close_revision.load(Ordering::SeqCst) != request_close_revision {
                 return blank(SnowLumaQrLoginState::Cancelled);
             }
             activity = Arc::new(QrActivity::new());
@@ -304,9 +401,7 @@ impl RemoteSnowLumaBackend {
         if activity.login_detected.load(Ordering::SeqCst) {
             return blank(SnowLumaQrLoginState::LoginDetected);
         }
-        if activity.scanned.load(Ordering::SeqCst) {
-            return blank(SnowLumaQrLoginState::Scanned);
-        }
+        let scanned = activity.scanned.load(Ordering::SeqCst);
         let mut session = self
             .login_sessions
             .lock()
@@ -316,7 +411,8 @@ impl RemoteSnowLumaBackend {
             .filter(|session| {
                 session.pid() == pid && session.start_time() == Some(tracked.start_time.as_str())
             });
-        let needs_binding = session.is_none() || !Arc::ptr_eq(&activity, &serial_activity);
+        let needs_binding = session.as_ref().is_none_or(LoginSession::needs_renewal)
+            || (!relogin_bound && !Arc::ptr_eq(&activity, &serial_activity));
         if needs_binding {
             // Only the user's open/refresh request may create a channel for an already running QQ.
             if !activity.refresh_pending.load(Ordering::SeqCst) {
@@ -386,13 +482,13 @@ impl RemoteSnowLumaBackend {
         let mut snapshot = match session
             .request_with_cancel(
                 host.as_ref(),
-                if activity.refresh_pending.swap(false, Ordering::SeqCst) {
+                if activity.refresh_pending.swap(false, Ordering::SeqCst) && !scanned {
                     "refresh"
                 } else {
                     "snapshot"
                 },
                 activity.cancel.clone(),
-                false,
+                scanned,
             )
             .await
         {
@@ -401,6 +497,7 @@ impl RemoteSnowLumaBackend {
                 return SnowLumaQrLoginSnapshot::unavailable("扫码通道不可用，请打开 QQ 界面");
             }
         };
+        snapshot = activity.capture_result(snapshot);
         activity
             .cleanup_failed
             .store(!snapshot.observer_removed, Ordering::SeqCst);
@@ -505,8 +602,18 @@ impl RemoteSnowLumaBackend {
             .entry(bot_id.clone())
             .or_insert_with(|| Arc::new(QrActivity::new()))
             .clone();
+        activity.close_revision.fetch_add(1, Ordering::SeqCst);
         activity.cancel.cancel();
         let _operation = activity.operation.lock().await;
+        if self
+            .qr_activity
+            .lock()
+            .await
+            .get(bot_id)
+            .is_none_or(|current| !Arc::ptr_eq(current, &activity))
+        {
+            return Ok(());
+        }
         let session = self.login_sessions.lock().await.get(bot_id).cloned();
         if let Some(session) = session {
             let host = self.daemon.current_host().await;
@@ -603,7 +710,7 @@ impl RemoteSnowLumaBackend {
         &self.daemon.layout().qq_bin
     }
 
-    /// 冷启动后再开桌面 / 导入：记下 QQ pid；WebUI 注入失败不阻断运行态。
+    /// 接管存活 QQ；WebUI 失败返回调用方，QQ 运行态由 reconcile 单独保留。
     pub async fn attach_reconciled_running(
         &self,
         bot_id: BotId,
@@ -656,7 +763,9 @@ impl RemoteSnowLumaBackend {
                 %err,
                 "reconcile: SnowLuma 隧道未建立，跳过 WebUI 注入"
             );
-            return Ok(());
+            self.event_bus
+                .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+            return Err(err);
         }
         let Some(endpoints) = self.daemon.tunnel_endpoints().await else {
             tracing::info!(
@@ -664,7 +773,9 @@ impl RemoteSnowLumaBackend {
                 bot_id = %bot_id,
                 "reconcile: 无 WebUI 隧道（node 未在或端口未解析），仅同步运行态"
             );
-            return Ok(());
+            self.event_bus
+                .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+            return Err(BotBackendError::Io("SnowLuma WebUI 隧道尚未建立".into()));
         };
         let http = match inject_via_tunnel(&endpoints, pid).await {
             Ok(c) => c,
@@ -676,7 +787,9 @@ impl RemoteSnowLumaBackend {
                     %err,
                     "reconcile: WebUI 注入失败（密码未知或端口刚换），Bot 仍标为运行中"
                 );
-                return Ok(());
+                self.event_bus
+                    .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+                return Err(err);
             }
         };
         self.event_bus
@@ -1040,9 +1153,90 @@ impl BotBackend for RemoteSnowLumaBackend {
 #[path = "backend_tests.rs"]
 mod tests;
 
+#[cfg(all(test, windows))]
+#[path = "qr_relogin_tests.rs"]
+mod qr_relogin_tests;
+
 #[cfg(test)]
 mod qr_close_tests {
     use super::*;
+
+    #[test]
+    fn confirmation_remains_latched_until_explicit_expiry() {
+        let activity = QrActivity::new();
+        activity.scanned.store(true, Ordering::SeqCst);
+        let mut snapshot = SnowLumaQrLoginSnapshot::unavailable("test");
+        snapshot.state = SnowLumaQrLoginState::WaitingForQr;
+        snapshot.qrcode_payload = Some("stale".into());
+        let waiting = activity.capture_result(snapshot.clone());
+        assert_eq!(waiting.state, SnowLumaQrLoginState::Scanned);
+        assert!(waiting.qrcode_payload.is_none());
+        snapshot.state = SnowLumaQrLoginState::Expired;
+        assert_eq!(
+            activity.capture_result(snapshot).state,
+            SnowLumaQrLoginState::Expired
+        );
+        assert!(!activity.scanned.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn refresh_renews_an_expired_lease_before_its_first_cancelled_reply() {
+        let mut activity = QrActivity::new();
+        assert!(!activity.can_renew().await);
+        activity.opened_at = Instant::now() - Duration::from_secs(601);
+        assert!(activity.can_renew().await);
+        activity.scanned.store(true, Ordering::SeqCst);
+        assert!(!activity.can_renew().await);
+        activity.scanned.store(false, Ordering::SeqCst);
+        activity.login_detected.store(true, Ordering::SeqCst);
+        assert!(!activity.can_renew().await);
+        activity.login_detected.store(false, Ordering::SeqCst);
+        activity.cleanup_failed.store(true, Ordering::SeqCst);
+        assert!(!activity.can_renew().await);
+    }
+
+    #[test]
+    fn transient_capture_failure_retries_then_stops_and_success_resets_budget() {
+        let activity = QrActivity::new();
+        let mut pending = SnowLumaQrLoginSnapshot::unavailable("retry");
+        pending.state = SnowLumaQrLoginState::Starting;
+        for _ in 0..3 {
+            assert_eq!(
+                activity.capture_result(pending.clone()).state,
+                SnowLumaQrLoginState::Starting
+            );
+        }
+        assert_eq!(
+            activity.capture_result(pending.clone()).state,
+            SnowLumaQrLoginState::Unavailable
+        );
+        let mut ready = pending.clone();
+        ready.state = SnowLumaQrLoginState::WaitingForQr;
+        activity.capture_result(ready);
+        assert_eq!(
+            activity.capture_result(pending).state,
+            SnowLumaQrLoginState::Starting
+        );
+    }
+
+    #[test]
+    fn explicit_retry_requires_completed_observer_and_never_reopens_confirmation() {
+        let mut snapshot = SnowLumaQrLoginSnapshot::unavailable("retry");
+        assert!(can_retry_qr_snapshot(&snapshot));
+        snapshot.observer_removed = false;
+        assert!(!can_retry_qr_snapshot(&snapshot));
+        snapshot.observer_removed = true;
+        for state in [
+            SnowLumaQrLoginState::Scanned,
+            SnowLumaQrLoginState::LoginDetected,
+            SnowLumaQrLoginState::LoggedIn,
+            SnowLumaQrLoginState::AccountMismatch,
+            SnowLumaQrLoginState::CleanupFailed,
+        ] {
+            snapshot.state = state;
+            assert!(!can_retry_qr_snapshot(&snapshot));
+        }
+    }
 
     #[test]
     fn closing_does_not_reopen_verified_login_or_wrong_account() {

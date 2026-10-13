@@ -662,6 +662,28 @@ async fn tick_once_locks_uin_and_emits_logged_in() {
 }
 
 #[tokio::test]
+async fn wrong_account_in_owned_process_never_marks_target_online() {
+    let (client, behavior) = MockClient::new();
+    {
+        let mut b = behavior.lock().await;
+        b.processes_responses
+            .push_back(Ok(vec![proc(12346, "999999", HookProcessStatus::Online)]));
+        b.qq_responses.push_back(Ok(vec![instance("999999")]));
+    }
+    let probe = Arc::new(MockProcessTreeProbe::with_set([12346u32]));
+    let (deps, _) = build_test_deps_with_expected(client, probe, Some("100200".into()));
+    let mut state = PollerState::new(12346);
+    tick_once(&BotId::new("100200"), &deps, &mut state).await;
+    assert_eq!(state.uin, None);
+    assert_eq!(state.last_state, Some(SnowLumaLoginState::WaitingForQrScan));
+    assert!(!process_matches_locked(
+        &proc(12346, "999999", HookProcessStatus::Online),
+        "100200",
+        Some(12346)
+    ));
+}
+
+#[tokio::test]
 async fn tick_once_locks_expected_uin_when_webui_pid_differs_from_launch_pid() {
     let (client, behavior) = MockClient::new();
     {

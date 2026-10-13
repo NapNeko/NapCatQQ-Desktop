@@ -304,9 +304,32 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         let candidates = candidates.as_ref().expect("candidates collected");
         let matched: Vec<&HookProcessInfo> = processes
             .iter()
-            .filter(|process| candidates.contains(&process.pid))
+            .filter(|process| {
+                candidates.contains(&process.pid)
+                    && (!is_real_uin(&process.uin)
+                        || uin_matches_expected(&process.uin, deps.expected_uin.as_deref()))
+            })
             .collect();
-        if let Some(new_state) = synthesize_state(&matched, false) {
+        // 候选进程登录了别的账号时不能把 Online 借给当前 Bot。
+        let new_state = synthesize_state(&matched, false)
+            .map(|value| {
+                if value == SnowLumaLoginState::LoggedIn {
+                    SnowLumaLoginState::Starting
+                } else {
+                    value
+                }
+            })
+            .or_else(|| {
+                processes
+                    .iter()
+                    .any(|process| {
+                        candidates.contains(&process.pid)
+                            && is_real_uin(&process.uin)
+                            && !uin_matches_expected(&process.uin, deps.expected_uin.as_deref())
+                    })
+                    .then_some(SnowLumaLoginState::WaitingForQrScan)
+            });
+        if let Some(new_state) = new_state {
             publish_login_state_if_needed(bot_id, deps, state, new_state);
         }
         return;
@@ -461,7 +484,7 @@ fn process_matches_locked(
     locked_uin: &str,
     locked_pid: Option<u32>,
 ) -> bool {
-    process.uin == locked_uin || locked_pid == Some(process.pid)
+    process.uin == locked_uin || (!is_real_uin(&process.uin) && locked_pid == Some(process.pid))
 }
 
 fn find_pid_for_uin(processes: &[HookProcessInfo], uin: &str) -> Option<u32> {

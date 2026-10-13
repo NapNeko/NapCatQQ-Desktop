@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use ncd_domain::BotId;
 use ncd_domain::domain_event::DomainEvent;
-use ncd_host::Host;
+use ncd_host::{Host, HostCommand};
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::BotBackendError;
 use tokio::sync::Mutex;
@@ -16,10 +16,11 @@ use super::orchestrator::{
     daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
 };
 use super::probe::{
-    resolve_remote_novnc_port, resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_port,
-    resolve_remote_webui_secret_near_snowluma_dir, wait_remote_webui_ready,
+    remote_qq_main_running, resolve_remote_novnc_port, resolve_remote_vnc_secret_from_x11vnc,
+    resolve_remote_webui_port, resolve_remote_webui_secret_near_snowluma_dir,
+    wait_remote_webui_ready,
 };
-use super::stack::restart_node_with_env;
+use super::stack::{recover_node_for_reconcile, restart_node_with_env};
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
 
@@ -382,8 +383,22 @@ impl RemoteSnowLumaDaemon {
         drop(guard);
 
         if stop_daemon {
-            self.tunnels.release(&self.server_id).await;
             let host = self.current_host().await;
+            // 冷启动接管尚未完成时，本地租约数不包含所有远端 QQ。
+            match remote_qq_main_running(host.as_ref(), &self.layout.qq_bin).await {
+                Ok(false) => {}
+                Ok(true) => {
+                    tracing::info!(server_id = %self.server_id,
+                        "远端仍有 QQ 主进程，保留共享 SnowLuma daemon");
+                    return;
+                }
+                Err(err) => {
+                    tracing::warn!(server_id = %self.server_id, %err,
+                        "无法确认远端 QQ 已全部退出，保留共享 SnowLuma daemon");
+                    return;
+                }
+            }
+            self.tunnels.release(&self.server_id).await;
             let _ = daemon_stop(host.as_ref(), &self.layout.paths).await;
             *self.tunnel_eps.lock().await = None;
             *self.tunnel_remote_ports.lock().await = None;
@@ -401,6 +416,46 @@ impl RemoteSnowLumaDaemon {
         self.tunnel_eps.lock().await.clone()
     }
 
+    /// 显式打开 QQ 界面时补齐缺失的 VNC 服务，保留正在运行的 X server / QQ。
+    pub async fn ensure_novnc_ready(
+        &self,
+    ) -> Result<RemoteSnowLumaTunnelEndpoints, BotBackendError> {
+        let _stack_guard = self.stack_bootstrap.lock().await;
+        let host = self.current_host().await;
+        let paths = &self.layout.paths;
+        let command = HostCommand::new("python3")
+            .arg("-c")
+            .arg(include_str!("../../resources/novnc-recovery.py"))
+            .arg(&paths.workspace_dir)
+            .arg(&paths.runtime_dir)
+            .arg(&paths.log_dir)
+            .arg(&paths.vnc_secret)
+            .arg(&self.layout.qq_bin)
+            .timeout(Duration::from_secs(15));
+        let output = host
+            .run_to_string(command)
+            .await
+            .map_err(|error| BotBackendError::Io(error.to_string()))?;
+        if !output.success() {
+            return Err(BotBackendError::Io(format!(
+                "恢复 QQ 界面失败：{}",
+                output.stderr.trim()
+            )));
+        }
+        #[derive(serde::Deserialize)]
+        struct Ready {
+            port: std::num::NonZeroU16,
+        }
+        let ready: Ready = serde_json::from_str(output.stdout.trim())
+            .map_err(|_| BotBackendError::Io("远端 noVNC 检查未返回有效端口".into()))?;
+        let webui_port = resolve_remote_webui_port(host.as_ref(), paths).await?;
+        self.open_tunnels_with_novnc_port(webui_port, None, Some(ready.port.get()))
+            .await?;
+        self.tunnel_endpoints()
+            .await
+            .ok_or_else(|| BotBackendError::Io("noVNC 隧道未就绪".into()))
+    }
+
     /// 桌面退出:只拆掉本机 SSH 隧道,不 stop 远端 daemon / QQ
     pub async fn detach_local_sessions(&self) {
         let _stack_guard = self.stack_bootstrap.lock().await;
@@ -410,8 +465,7 @@ impl RemoteSnowLumaDaemon {
         *self.tunnel_remote_ports.lock().await = None;
     }
 
-    /// 导入/冷启动 reconcile：只接管已在跑的 node，不新拉图形栈、不写死 WebUI 端口。
-    /// node 不在则跳过隧道（QQ 进程仍可由调用方标成运行中）。
+    /// 接管存活 QQ；缺失时只恢复 node，保留 QQ 使用中的图形会话和配置。
     pub async fn ensure_running_for_reconcile(&self) -> Result<(), BotBackendError> {
         self.ensure_running_for_reconcile_lease(None).await
     }
@@ -428,35 +482,55 @@ impl RemoteSnowLumaDaemon {
         bot_id: Option<&BotId>,
     ) -> Result<(), BotBackendError> {
         let _stack_guard = self.stack_bootstrap.lock().await;
+        // WebUI 接管失败也不代表 QQ 已退出，仍须占用共享 daemon。
+        if bot_id.is_some() {
+            let mut leases = self.leases.lock().await;
+            leases.acquire(bot_id);
+        }
+        let result = self.attach_reconciled_daemon(bot_id.is_some()).await;
+        let rc = {
+            let mut leases = self.leases.lock().await;
+            if result.is_ok() && bot_id.is_none() && leases.count() == 0 {
+                leases.acquire(None);
+            }
+            leases.count()
+        };
+        // WebUI 失败不能发 Crashed：runtime 会据此把仍存活的 QQ 一并标成崩溃。
+        if result.is_ok() {
+            self.event_bus
+                .publish(DomainEvent::snowluma_daemon_state_changed(
+                    DaemonState::Ready,
+                    rc,
+                    None,
+                    Some(self.server_id.clone()),
+                ));
+        }
+        result
+    }
+
+    async fn attach_reconciled_daemon(
+        &self,
+        recover_missing_node: bool,
+    ) -> Result<(), BotBackendError> {
         let host = self.current_host().await;
-        if !remote_daemon_already_ready(host.as_ref(), &self.layout.paths).await? {
+        let webui_port = if !remote_daemon_already_ready(host.as_ref(), &self.layout.paths).await? {
+            if !recover_missing_node {
+                return Err(BotBackendError::Io("远端 SnowLuma node 未运行".into()));
+            }
             tracing::info!(
                 target: "ncd_runtime::remote_snowluma",
                 server_id = %self.server_id,
-                "reconcile: 远端未发现已运行的 SnowLuma node，跳过 WebUI 隧道"
+                "reconcile: QQ 仍在运行，恢复缺失的 SnowLuma node"
             );
-            return Ok(());
-        }
-
-        let webui_port = resolve_remote_webui_port(host.as_ref(), &self.layout.paths).await?;
+            let env = self.metrics_node_env.lock().await.clone();
+            recover_node_for_reconcile(host.as_ref(), &self.layout, env.as_ref()).await?
+        } else {
+            resolve_remote_webui_port(host.as_ref(), &self.layout.paths).await?
+        };
         let _ = write_status_daemon_json(host.as_ref(), &self.layout.paths, true, true, webui_port)
             .await;
         self.open_tunnels(webui_port, None).await?;
 
-        let mut guard = self.leases.lock().await;
-        if bot_id.is_some() || guard.count() == 0 {
-            guard.acquire(bot_id);
-        }
-        let rc = guard.count();
-        drop(guard);
-
-        self.event_bus
-            .publish(DomainEvent::snowluma_daemon_state_changed(
-                DaemonState::Ready,
-                rc,
-                None,
-                Some(self.server_id.clone()),
-            ));
         Ok(())
     }
 
@@ -464,6 +538,16 @@ impl RemoteSnowLumaDaemon {
         &self,
         webui_port: u16,
         webui_password: Option<&str>,
+    ) -> Result<(), BotBackendError> {
+        self.open_tunnels_with_novnc_port(webui_port, webui_password, None)
+            .await
+    }
+
+    async fn open_tunnels_with_novnc_port(
+        &self,
+        webui_port: u16,
+        webui_password: Option<&str>,
+        novnc_port: Option<u16>,
     ) -> Result<(), BotBackendError> {
         let host = self.current_host().await;
         let webui_plain = match webui_password.map(str::trim).filter(|s| !s.is_empty()) {
@@ -520,7 +604,10 @@ impl RemoteSnowLumaDaemon {
         }
 
         // noVNC 口动态探测：外来图形栈的 websockify 常不在默认 6081
-        let novnc_port = resolve_remote_novnc_port(host.as_ref()).await;
+        let novnc_port = match novnc_port {
+            Some(port) => port,
+            None => resolve_remote_novnc_port(host.as_ref()).await,
+        };
 
         let previous_ports = *self.tunnel_remote_ports.lock().await;
         let previous_eps = self.tunnel_eps.lock().await.clone();
@@ -561,6 +648,10 @@ impl RemoteSnowLumaDaemon {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "daemon_recovery_tests.rs"]
+mod recovery_tests;
 
 #[cfg(test)]
 mod tests {

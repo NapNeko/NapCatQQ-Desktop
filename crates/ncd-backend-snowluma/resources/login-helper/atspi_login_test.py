@@ -11,27 +11,104 @@ spec.loader.exec_module(helper)
 
 
 class ContractTests(unittest.TestCase):
+    def test_window_change_is_retryable_and_never_returns_stale_material(self):
+        for error in [RuntimeError('OwnedWindowNotUnique'), RuntimeError('FrameUnavailable'),
+                      TimeoutError(), BlockingIOError()]:
+            with mock.patch.object(helper, 'request_snapshot', side_effect=error):
+                result = helper.capture_reply(self.request())
+                self.assertEqual(result['state'], 'starting')
+                self.assertIsNone(result['qrcode_payload'])
+                self.assertTrue(result['observer_removed'])
+
+    def test_unknown_dialog_requires_user_action_and_binding_failure_is_not_hidden(self):
+        for error in [helper.QrDialogObscured(), ValueError('BindingChanged')]:
+            with mock.patch.object(helper, 'request_snapshot', side_effect=error):
+                result = helper.capture_reply(self.request())
+                self.assertEqual(result['state'], 'unavailable')
+                self.assertIsNone(result['qrcode_payload'])
+
+    def test_x11_error_handler_is_restored_when_capture_closes(self):
+        lib = mock.Mock()
+        lib.open.return_value = 1
+        lib.set_error_handler.return_value = None
+        display = helper.OwnedDisplay(lib, {'pid': 19, 'display': ':0'})
+        self.assertEqual(display.error_handler(None, None), 0)
+        display.close()
+        lib.close.assert_called_once_with(1)
+        lib.set_error_handler.assert_called_with(None)
+
     def test_shared_refresh_cooldown_reads_current_code_without_clicking(self):
         request = self.request(); request['action'] = 'refresh'
         with mock.patch.object(helper, 'verify_binding'), mock.patch.object(helper, 'process_lease', return_value=nullcontext(7)), \
-             mock.patch.object(helper.os, 'pread', return_value=b'95', create=True), \
+             mock.patch.object(helper.os, 'pread', return_value=b'99', create=True), \
              mock.patch.object(helper.time, 'monotonic', return_value=100), \
              mock.patch.object(helper, 'snapshot_locked', return_value=('waiting_for_qr', None)) as capture:
             helper.request_snapshot(request)
             self.assertEqual(capture.call_args[0][0]['action'], 'snapshot')
 
-    def test_refresh_after_cooldown_updates_lease_before_capture(self):
+    def test_refresh_after_two_seconds_records_successful_capture(self):
         request = self.request(); request['action'] = 'refresh'
         with mock.patch.object(helper, 'verify_binding'), mock.patch.object(helper, 'process_lease', return_value=nullcontext(7)), \
-             mock.patch.object(helper.os, 'pread', return_value=b'50', create=True), \
+             mock.patch.object(helper.os, 'pread', return_value=b'95', create=True), \
              mock.patch.object(helper.os, 'ftruncate') as truncate, \
              mock.patch.object(helper.os, 'pwrite', create=True) as write, \
              mock.patch.object(helper.time, 'monotonic', return_value=100), \
-             mock.patch.object(helper, 'snapshot_locked', return_value=('scanned', None)) as capture:
-            self.assertEqual(helper.request_snapshot(request), ('scanned', None))
+             mock.patch.object(helper, 'snapshot_locked', return_value=('waiting_for_qr', 'image')) as capture:
+            self.assertEqual(helper.request_snapshot(request), ('waiting_for_qr', 'image'))
             truncate.assert_called_once_with(7, 0)
             write.assert_called_once_with(7, b'100', 0)
             self.assertEqual(capture.call_args[0][0]['action'], 'refresh')
+
+    def test_failed_refresh_does_not_consume_cooldown(self):
+        request = self.request(); request['action'] = 'refresh'
+        with mock.patch.object(helper, 'verify_binding'), mock.patch.object(helper, 'process_lease', return_value=nullcontext(7)), \
+             mock.patch.object(helper.os, 'pread', return_value=b'', create=True), \
+             mock.patch.object(helper.os, 'pwrite', create=True) as write, \
+             mock.patch.object(helper, 'snapshot_locked', return_value=('expired', None)):
+            self.assertEqual(helper.request_snapshot(request), ('expired', None))
+            write.assert_not_called()
+
+    def notice_nodes(self):
+        return [
+            {'obj': 1, 'role': 'dialog', 'name': '', 'dialog': 1},
+            {'obj': 2, 'role': 'static', 'name': '下线通知', 'dialog': 1},
+            {'obj': 3, 'role': 'push button', 'name': '关闭', 'dialog': 1},
+            {'obj': 4, 'role': 'push button', 'name': '关闭', 'dialog': None},
+        ]
+
+    def test_notice_close_is_scoped_to_dialog_not_window(self):
+        self.assertEqual(helper.notice_close_control(self.notice_nodes()), 3)
+
+    def test_unknown_or_ambiguous_modal_cannot_be_dismissed(self):
+        nodes = self.notice_nodes()
+        nodes[1]['name'] = '服务协议'
+        with self.assertRaises(helper.QrDialogObscured): helper.notice_close_control(nodes)
+        nodes = self.notice_nodes() + [{'obj': 5, 'role': 'dialog', 'name': '', 'dialog': 5}]
+        with self.assertRaises(helper.QrDialogObscured): helper.notice_close_control(nodes)
+
+    def test_notice_is_closed_before_underlying_qr_refresh(self):
+        calls = []
+        qr = [{'name': '扫码登录', 'role': 'static'}, {'name': '二维码', 'role': 'image'},
+              {'name': '刷新', 'role': 'push button'}]
+        class Page:
+            main_interface = False
+            def __init__(self, nodes): self.nodes = nodes
+            def dismiss_notice(self, check): calls.append('dismiss')
+            def invoke(self, name, check): calls.append(name)
+            def close(self): pass
+        pages = [Page(self.notice_nodes() + qr), Page(qr), Page(qr)]
+        with mock.patch.object(helper.time, 'sleep'):
+            helper.reach_qr_page(lambda: pages.pop(0), lambda: None, True)
+        self.assertEqual(calls, ['dismiss', '刷新'])
+
+    def test_persistent_notice_never_returns_obscured_qr(self):
+        class Page:
+            main_interface = False
+            nodes = self.notice_nodes()
+            def dismiss_notice(self, check): pass
+            def close(self): pass
+        with mock.patch.object(helper.time, 'sleep'), self.assertRaises(helper.QrDialogObscured):
+            helper.reach_qr_page(Page, lambda: None, False)
 
     def test_busy_process_never_enters_capture(self):
         with mock.patch.object(helper, 'verify_binding'), \
@@ -62,6 +139,30 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(helper.classify([qr], True), 'login_detected')
         self.assertEqual(helper.classify([qr, {'name': '请在手机上确认登录'}], False), 'scanned')
         self.assertEqual(helper.classify([qr, {'name': '当前二维码已过期'}], False), 'expired')
+
+    def test_phone_confirmation_checks_expiry_without_navigation_or_capture(self):
+        request = self.request()
+        request.update(scanned=True, action='refresh')
+        request['binding'].update(display=':0', bus='unix:path=/tmp/test')
+        for names, main, expected in [
+            (['请在手机上确认登录'], False, 'scanned'),
+            (['二维码'], False, 'scanned'),
+            (['二维码已过期'], False, 'expired'),
+            ([], True, 'login_detected'),
+        ]:
+            lib = mock.Mock(); lib.init.return_value = 0
+            tree = mock.Mock(nodes=[{'name': name} for name in names], main_interface=main)
+            with mock.patch.dict(helper.os.environ), \
+                    mock.patch.object(helper, 'verify_binding'), \
+                    mock.patch.object(helper, 'verify_session_bus'), \
+                    mock.patch.object(helper, 'Libraries', return_value=lib), \
+                    mock.patch.object(helper, 'Tree', return_value=tree), \
+                    mock.patch.object(helper, 'reach_qr_page') as navigate, \
+                    mock.patch.object(helper, 'OwnedDisplay') as capture:
+                self.assertEqual(helper.snapshot_locked(request), (expected, None))
+                navigate.assert_not_called()
+                capture.assert_not_called()
+                tree.close.assert_called_once()
 
     def test_window_occlusion_uses_intersection_not_title(self):
         self.assertTrue(helper.overlaps([100, 100, 200, 200], [299, 299, 30, 30]))

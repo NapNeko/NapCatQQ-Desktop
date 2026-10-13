@@ -352,6 +352,17 @@ pub async fn start_node(
     start_node_with_env(host, layout, None).await
 }
 
+pub(crate) async fn recover_node_for_reconcile(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    metrics_env: Option<&BTreeMap<String, String>>,
+) -> Result<u16, BotBackendError> {
+    // QQ 仍依赖原来的 X server；完整启栈会覆盖 PID 文件并干扰现有会话。
+    ensure_dirs(host, &layout.paths).await?;
+    start_node_with_env(host, layout, metrics_env).await?;
+    wait_remote_webui_ready(host, &layout.paths, Duration::from_secs(20)).await
+}
+
 /// 启动远端 SL node；`metrics_env` 会 export 进 nohup 子 shell（NCD_METRICS_* / NODE_OPTIONS）。
 pub async fn start_node_with_env(
     host: &dyn Host,
