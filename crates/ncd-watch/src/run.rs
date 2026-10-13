@@ -68,6 +68,10 @@ pub async fn run_once(
         Vec::new();
 
     for bot in notify.enabled_bots() {
+        // 重登引擎对这些账号持有唯一投递权，包括备用渠道。
+        if crate::relogin_config::owns(notify, &bot.bot_id) {
+            continue;
+        }
         let mut result = prober.probe_bot(bot);
         out.probed += 1;
 
@@ -245,6 +249,7 @@ pub async fn run_loop(
     prober: Arc<dyn Prober>,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
+    let relogin_task = tokio::spawn(crate::relogin::run(paths.clone(), shutdown.clone()));
     let mut edges = EdgeTracker::load(
         &paths.edge_state,
         WatchConfig::load_or_default(&paths.watch_json)
@@ -307,4 +312,6 @@ pub async fn run_loop(
             }
         }
     }
+    relogin_task.abort();
+    let _ = relogin_task.await;
 }

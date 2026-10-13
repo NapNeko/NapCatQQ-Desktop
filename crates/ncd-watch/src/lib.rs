@@ -8,6 +8,9 @@
 
 pub mod config;
 pub mod metrics;
+#[cfg(feature = "daemon")]
+pub mod relogin;
+pub mod relogin_config;
 
 #[cfg(feature = "daemon")]
 pub mod edge;

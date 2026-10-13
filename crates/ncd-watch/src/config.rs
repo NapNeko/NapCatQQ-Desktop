@@ -248,6 +248,8 @@ pub struct WatchOneBotMessenger {
 #[serde(rename_all = "camelCase")]
 pub struct WatchOneBotSettings {
     #[serde(default)]
+    pub relogin: crate::relogin_config::WatchReloginConfig,
+    #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub messengers: Vec<WatchOneBotMessenger>,
@@ -271,6 +273,7 @@ fn default_onebot_message_template() -> String {
 impl Default for WatchOneBotSettings {
     fn default() -> Self {
         Self {
+            relogin: Default::default(),
             enabled: false,
             messengers: Vec::new(),
             target_type: default_onebot_target_type(),
@@ -341,8 +344,25 @@ impl NotifyConfig {
         if !path.is_file() {
             return Ok(Self::default());
         }
-        let text = std::fs::read_to_string(path).map_err(|e| format!("read notify.json: {e}"))?;
-        serde_json::from_str(&text).map_err(|e| format!("parse notify.json: {e}"))
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        std::fs::File::open(path)
+            .map_err(|_| "无法读取 notify.json")?
+            .take(2 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "无法读取 notify.json")?;
+        if bytes.len() > 2 * 1024 * 1024 {
+            return Err("notify.json 过大".into());
+        }
+        let config: Self = serde_json::from_slice(&bytes).map_err(|_| "notify.json 格式无效")?;
+        if config.protocol != WATCH_PROTOCOL_V1
+            || config.bots.len() > 256
+            || config.onebot.relogin.event_endpoints.len() > 64
+            || config.onebot.relogin.login_targets.len() > 256
+        {
+            return Err("notify.json 版本或数量超限".into());
+        }
+        Ok(config)
     }
 
     pub fn enabled_bots(&self) -> impl Iterator<Item = &NotifyBotTarget> {

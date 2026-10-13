@@ -2,7 +2,7 @@
 
 ncd-watch 是装在远端 Linux 主机上的小程序。桌面端关掉、断网或者 SSH 断开以后，由它接着盯这台主机上的 Bot，掉线时照你在桌面端设置里配好的方式发通知：Webhook、邮件，或者用同机另一个 Bot 发 QQ 消息。
 
-- 桌面端在线时，默认只由桌面端发通知，ncd-watch 不会重复发。
+- 普通通知默认在桌面端退出后由 watch 接管；启用重登二维码的账号始终由 watch 值守。
 - ncd-watch 不监听任何端口，只往外发请求，不需要在防火墙上开入站端口。
 - 在桌面端「组件」页选中远端主机，就能安装、更新、卸载 ncd-watch。
 
@@ -18,6 +18,9 @@ ncd-watch 是装在远端 Linux 主机上的小程序。桌面端关掉、断网
 | `~/ncd-watch/config/metrics.json` | 桌面端退出后接着采实例 CPU / 内存，由桌面端写 |
 | `~/ncd-watch/state/desktop_present` | 桌面端在线心跳 |
 | `~/ncd-watch/state/edge_state.json` | 每个 Bot 上一次的状态，用来判断“刚掉线” |
+| `~/ncd-watch/state/relogin.json` | 重登事件、指令去重和投递记录，不含二维码 |
+| `~/ncd-watch/state/relogin-status.json` | 最近加载配置与已连接的互助 Bot |
+| `~/ncd-watch/state/intents/` | Desktop 同步的人工启停意图 |
 
 换目录可以给程序传 `--root <目录>`，或者设环境变量 `NCD_WATCH_ROOT`。
 
@@ -126,6 +129,41 @@ sudo loginctl enable-linger "$USER"
 
 ## 怎么判断掉线
 
+### 重登二维码（同机互助）
+
+在「设置 → 通知 → OneBot」选择同一远端主机上的互助 Bot，打开「远端掉线后发送重登二维码」，填写管理员 QQ 号。各 Bot 的掉线通知开关决定监控范围。互助 Bot 必须有通用正向 WebSocket：原生部署监听本机地址，Docker 在容器内监听 `0.0.0.0` 并发布该端口。只配 HTTP 或仅事件/API 的 WebSocket 不足以完成收发闭环。
+
+升级远端 ncd-watch 后同步通知配置。旧二进制会明确拒绝启用此能力。配置刚写入但 watch 尚未确认加载时，稍后重新同步；CLI 可查看当前状态：
+
+```bash
+~/ncd-watch/bin/ncd-watch capabilities
+~/ncd-watch/bin/ncd-watch relogin-status
+```
+
+此模式不依赖 Desktop、聊天窗口或调试台常驻，也不受 `notifyWhileDesktopPresent` 控制。目前覆盖远端同机互助；本机 Desktop 自动取码和跨服务器代发尚未接入。
+
+- 账号曾在线且持续掉线默认 60 秒后，由另一个在线 Bot 私发一次通知与可用的二维码。群目标只收到文字提示，二维码只发给管理员。
+- 二维码过期不追加通知。取码失败时先发一次文字，等待管理员请求。无人参与的恢复默认不提示；可沿用恢复通知开关。主动刷新过的管理员会收到一次恢复确认，需连续在线 2 分钟。
+- 普通私聊接收目标不会自动获得二维码权限；管理员必须单独配置。没有在线互助方时尝试已配置的邮件和 Webhook，已恢复的旧事件不补发。
+- 手动停止、首次等待登录以及无法确认账号状态都不自动发送重登码。超时投递按结果未知保存，避免立即换 Bot 重复通知。
+- 进程或容器确认停止时仍发送文字告警；WebUI 鉴权失败、探测权限不足保留为未知，不据此判断需要扫码。
+
+| 管理员消息 | 行为 |
+| :--- | :--- |
+| 回复重登通知「刷新二维码」 | 读取或刷新该事件的二维码 |
+| 私聊「刷新二维码」 | 当前会话只有一个待处理账号时可用 |
+| `/ncd 刷新 QQ号或唯一名称` | 获取指定账号的当前二维码，默认冷却 30 秒 |
+| `/ncd 状态` | 查看未结束的掉线事件 |
+| `/ncd 忽略 QQ号或唯一名称` | 停止本次事件的主动通知 |
+
+群指令必须来自管理员、位于已配置群内并 @ 当前互助 Bot；回复仍走私聊，不将二维码回退到群里。管理员应能正常私聊该 Bot。
+
+SL 取码依赖 QQ 的图形会话和扫码辅助；原生 Linux / Docker 共用进程锁与刷新冷却，已扫码时不会刷新。NC 通过 WebUI 读取二维码；有明确扫码阶段的版本才主动调用刷新接口，老版本保守地返回当前码。QQ 页面、辅助或会话不可用时需要打开 QQ / VNC 处理，刷新指令不会由 watch 主动重启进程。
+
+账本损坏或写入失败会暂停重登投递；修复文件权限/磁盘问题后重启 watch。不要为排障直接删除账本，清空投递记录可能导致重复通知。`once` 只运行普通边沿探测，不执行二维码或管理员指令服务。
+
+### 普通通知
+
 每一轮对每个 Bot 分两层看：
 
 1. 进程在不在。Docker 部署跑 `docker inspect -f {{.State.Running}} <容器名>`，直接运行跑 `pgrep -f -- <processMatch>`。
@@ -162,6 +200,6 @@ RUST_LOG=debug ~/ncd-watch/bin/ncd-watch once
 
 4. 防火墙。ncd-watch 访问的是本机回环地址 `127.0.0.1`，ufw、firewalld 默认不拦回环。上一步的 `curl` 能连上，就可以排除防火墙。云服务器的安全组只管外部流量，和这里无关。ncd-watch 需要能访问外网的只有 Webhook 地址和 SMTP 服务器。
 
-5. 桌面端其实在线。桌面端开着、连着这台主机时，ncd-watch 不发通知，由桌面端发。`once` 输出里 `desktop_present_skip=true` 就是这种情况。想两边都发，把 `watch.json` 的 `notifyWhileDesktopPresent` 改成 `true`。
+5. 桌面端其实在线。普通模式下，Desktop 在线时由桌面端发通知，`once` 会输出 `desktop_present_skip=true`。重登二维码模式始终由 watch 值守，应查看 `relogin-status` 和服务日志。
 
 6. ncd-watch 没在跑。`systemctl --user status ncd-watch` 看状态，断开 SSH 以后就停了的话见上文 `enable-linger`。

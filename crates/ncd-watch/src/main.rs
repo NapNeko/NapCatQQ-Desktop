@@ -28,6 +28,10 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// 打印编译进当前二进制的能力清单。
+    Capabilities,
+    /// 查看重登值守状态，不包含二维码或凭据。
+    ReloginStatus,
     /// 常驻探活(默认子命令语义)
     Run,
     /// 只跑一轮探活并打印结果(不发 Webhook 除非有边沿且 Desktop 离线)
@@ -52,6 +56,26 @@ async fn main() {
     };
 
     match cli.cmd {
+        Commands::Capabilities => println!(
+            "{}",
+            serde_json::json!({"v":1,"features":[ncd_watch::relogin_config::RELOGIN_CAPABILITY]})
+        ),
+        Commands::ReloginStatus => {
+            let path = paths.state_dir.join("relogin-status.json");
+            let status = std::fs::read(path)
+                .ok()
+                .filter(|bytes| bytes.len() <= 16384)
+                .and_then(|bytes| {
+                    serde_json::from_slice::<ncd_watch::relogin_config::WatchReloginStatus>(&bytes)
+                        .ok()
+                });
+            if let Some(status) = status {
+                println!("{}", serde_json::to_string(&status).unwrap_or_default());
+            } else {
+                eprintln!("relogin status unavailable");
+                std::process::exit(1);
+            }
+        }
         Commands::PrintDefaults => {
             println!("root={}", paths.root.display());
             println!("watch.json={}", paths.watch_json.display());

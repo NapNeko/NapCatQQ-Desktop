@@ -10,11 +10,17 @@ description = "Remote host-side process/container watcher and offline webhook (D
 [features]
 default = ["daemon"]
 daemon = [
+    "dep:ncd-relogin",
+    "dep:ncd-onebot",
+    "dep:async-trait",
+    "dep:uuid",
+    "dep:base64",
+    "dep:qrcode",
+    "dep:image",
     "dep:reqwest",
     "dep:clap",
     "dep:tracing",
     "dep:tracing-subscriber",
-    "dep:sha2",
     "dep:hex",
     "dep:lettre",
     "tokio/rt-multi-thread",
@@ -38,6 +44,13 @@ path = "src/lib.rs"
 
 [dependencies]
 ncd-domain = { path = "../ncd-domain" }
+ncd-relogin = { path = "../ncd-relogin", optional = true }
+ncd-onebot = { path = "../ncd-onebot", optional = true }
+async-trait = { version = "0.1", optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
+base64 = { version = "0.22", optional = true }
+qrcode = { version = "0.14", default-features = false, features = ["image"], optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -48,7 +61,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 clap = { version = "4", features = ["derive", "env"], optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
-sha2 = { version = "0.10", optional = true }
+sha2 = "0.10"
 hex = { version = "0.4", optional = true }
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "hostname", "rustls-tls"], optional = true }
 

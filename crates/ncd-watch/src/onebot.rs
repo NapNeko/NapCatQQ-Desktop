@@ -215,6 +215,7 @@ mod tests {
 
     fn settings(messengers: Vec<WatchOneBotMessenger>) -> WatchOneBotSettings {
         WatchOneBotSettings {
+            relogin: Default::default(),
             enabled: true,
             messengers,
             target_type: "private".into(),
