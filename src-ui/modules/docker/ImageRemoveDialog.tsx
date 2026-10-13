@@ -1,7 +1,7 @@
 // 删除镜像确认对话框：强制删除选项不塞进卡片 footer，避免网格单卡被撑高。
 // 关闭时先播退场动画，onExited 后再 onDismiss，避免镜像名先消失导致布局跳动。
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -33,6 +33,7 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
     const [open, setOpen] = useState(false);
     const [shownImage, setShownImage] = useState<ImageInfo | null>(null);
     const [force, setForce] = useState(false);
+    const submitting = useRef(false);
 
     useEffect(() => {
         if (image) {
@@ -44,7 +45,7 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
     const displayRef = shownImage ? imageDisplayRef(shownImage) : '';
 
     const requestClose = () => {
-        if (isRemoving) return;
+        if (isRemoving || submitting.current) return;
         setOpen(false);
     };
 
@@ -55,7 +56,8 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
     };
 
     const handleConfirm = async () => {
-        if (!shownImage) return;
+        if (!shownImage || isRemoving || submitting.current) return;
+        submitting.current = true;
         try {
             await onConfirm({
                 imageRef: imageRemoveRef(shownImage),
@@ -64,6 +66,8 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
             setOpen(false);
         } catch {
             /* 失败保持打开；InfoBar 由 useDocker 处理 */
+        } finally {
+            submitting.current = false;
         }
     };
 

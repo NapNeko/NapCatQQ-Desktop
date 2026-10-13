@@ -2,6 +2,7 @@
 
 import type {
     ContainerInfo,
+    ContainerAction,
     ContainerState,
     DockerFlavor,
     DockerStatus,
@@ -49,6 +50,13 @@ export function dockerStatusSummary(status: DockerStatus): {
     return { ready: true, label: `Docker ${status.version} 就绪` };
 }
 
+export function dockerManagementSummary(status: DockerStatus): { ready: boolean; label: string } {
+    if (status.installed && status.daemonRunning && !status.composeAvailable) {
+        return { ready: true, label: `Docker ${status.version} 可管理 · 缺少 compose 插件` };
+    }
+    return dockerStatusSummary(status);
+}
+
 /// 判断一个容器名是不是本工程部署的 NapCat / SnowLuma(用于在容器列表里
 /// 标记"这是我们部署的")。简单按镜像名前缀判断。
 export function isManagedImage(image: string): boolean {
@@ -78,11 +86,28 @@ export function isDanglingImage(image: ImageInfo): boolean {
 
 /// 传给 `docker rmi` 的引用(优先 repo:tag,否则 id)。
 export function imageRemoveRef(image: ImageInfo): string {
+    if (!image.tag.trim() || image.tag === '<none>') return image.id;
     const ref = imageDisplayRef(image);
     if (ref === image.id) {
         return image.id;
     }
     return ref;
+}
+
+export function containerActions(state: ContainerState): ContainerAction[] {
+    switch (state) {
+        case 'running':
+            return ['stop', 'restart', 'pause'];
+        case 'paused':
+            return ['unpause'];
+        case 'created':
+        case 'exited':
+            return ['start'];
+        case 'restarting':
+            return ['stop'];
+        default:
+            return [];
+    }
 }
 
 /// 删除镜像失败时是否属于「仍有容器引用，需 -f」类错误。

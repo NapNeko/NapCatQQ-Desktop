@@ -22,7 +22,8 @@ interface DockerToolbarProps {
     summary: { ready: boolean; label: string } | null;
     isProbing: boolean;
     resourceCount: number | null;
-    resourceLabel: '容器' | '镜像';
+    resourceLabel: '容器' | '镜像' | '网络' | '数据卷';
+    showSetupHint: boolean;
 }
 
 export const DockerToolbar: React.FC<DockerToolbarProps> = ({
@@ -33,6 +34,7 @@ export const DockerToolbar: React.FC<DockerToolbarProps> = ({
     isProbing,
     resourceCount,
     resourceLabel,
+    showSetupHint,
 }) => {
     const items = servers.map((s) => ({
         value: `remote:${s.id}`,
@@ -51,7 +53,7 @@ export const DockerToolbar: React.FC<DockerToolbarProps> = ({
                     </span>
                 )}
             </div>
-            {!ready && !isProbing && (
+            {showSetupHint && !ready && !isProbing && (
                 <p className="text-xs text-text-tertiary">
                     去组件页的「Docker 部署」区安装 / 启动 Docker。
                 </p>

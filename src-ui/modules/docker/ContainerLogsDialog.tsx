@@ -1,76 +1,97 @@
-// 容器日志对话框：打开时拉一次最近 400 行，可手动刷新。
-// fetchLogs 是 useDocker 暴露的命令式方法（不走 react-query 缓存，按需取）。
-
-import React, { useCallback, useEffect, useState } from 'react';
+// 日志查询绑定容器 ID，切换行数或主机后旧请求不能覆盖新结果。
+import { useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    Button,
+    Checkbox,
+    Select,
+} from '../../shared/ui';
 import { ActionMotionIcon, refreshMotion } from '../../shared/ui/motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, Button } from '../../shared/ui';
-import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+import { useDockerLogs } from '../../hooks/docker/useDockerContainer';
+import { errorText } from '../../core/domain/errors';
 
-interface ContainerLogsDialogProps {
-    name: string;
-    fetchLogs: (name: string, tail?: number) => Promise<string>;
-    onClose: () => void;
-}
-
-export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
+export function ContainerLogsDialog({
+    hostId,
+    id,
     name,
-    fetchLogs,
     onClose,
-}) => {
-    const [logs, setLogs] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const text = await fetchLogs(name, 400);
-            setLogs(text || '（暂无日志）');
-        } catch (e) {
-            const raw = e instanceof Error ? e.message : String(e);
-            setError(raw);
-            pushErrorBar({ title: '取容器日志失败', raw });
-        } finally {
-            setLoading(false);
-        }
-    }, [fetchLogs, name]);
-
-    useEffect(() => {
-        load();
-    }, [load]);
-
+}: {
+    hostId: string;
+    id: string;
+    name: string;
+    onClose: () => void;
+}) {
+    const [tail, setTail] = useState('400');
+    const [autoRefresh, setAutoRefresh] = useState(false);
+    const [search, setSearch] = useState('');
+    const logs = useDockerLogs(hostId, id, Number(tail), autoRefresh);
+    const text = useMemo(
+        () =>
+            (logs.data ?? '')
+                .split('\n')
+                .filter((line) => line.toLowerCase().includes(search.toLowerCase()))
+                .join('\n'),
+        [logs.data, search],
+    );
     return (
-        <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <Dialog open onOpenChange={(open) => !open && onClose()}>
             <DialogContent size="xl">
                 <DialogHeader>
-                    <div className="flex items-center justify-between pr-6">
-                        <DialogTitle>{name} · 容器运行日志</DialogTitle>
-                        <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
-                            <ActionMotionIcon
-                                icon={RefreshCw}
-                                size={13}
-                                motion={refreshMotion(loading)}
-                            />
-                            刷新
-                        </Button>
-                    </div>
+                    <DialogTitle>{name} · 容器运行日志</DialogTitle>
                 </DialogHeader>
-
-                {error ? (
-                    <p className="text-sm text-text-secondary">取日志失败，详情见日志</p>
-                ) : loading && !logs ? (
-                    <div className="flex items-center gap-2 py-10 text-text-tertiary">
-                        <ActionMotionIcon icon={RefreshCw} size={16} motion="spin" />
-                        <span className="text-sm">加载中…</span>
-                    </div>
-                ) : (
-                    <pre className="max-h-[60vh] overflow-auto rounded-md bg-canvas/70 p-3 font-mono text-2xs leading-relaxed text-text-secondary">
-                        {logs}
-                    </pre>
+                <div className="flex flex-wrap items-center gap-3">
+                    <Select
+                        label="最近行数"
+                        id="docker-log-tail"
+                        value={tail}
+                        onValueChange={setTail}
+                        items={['100', '400', '1000', '2000'].map((value) => ({
+                            value,
+                            label: `${value} 行`,
+                        }))}
+                    />
+                    <input
+                        aria-label="过滤日志"
+                        placeholder="过滤日志"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        className="min-w-0 flex-1 rounded-sm border border-border-subtle bg-field px-3 py-2 text-sm text-text"
+                    />
+                    <Checkbox
+                        id="docker-log-auto"
+                        label="自动刷新"
+                        checked={autoRefresh}
+                        onCheckedChange={setAutoRefresh}
+                    />
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={logs.isFetching}
+                        onClick={() => void logs.refetch()}
+                    >
+                        <ActionMotionIcon
+                            icon={RefreshCw}
+                            size={13}
+                            motion={refreshMotion(logs.isFetching)}
+                        />
+                        刷新
+                    </Button>
+                </div>
+                {logs.isError && (
+                    <p role="alert" className="break-all text-sm text-danger">
+                        {errorText(logs.error)}
+                    </p>
                 )}
+                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-canvas/70 p-3 font-mono text-xs leading-relaxed text-text-secondary">
+                    {logs.isLoading
+                        ? '加载中…'
+                        : text || (search ? '没有匹配的日志' : '（暂无日志）')}
+                </pre>
             </DialogContent>
         </Dialog>
     );
-};
+}

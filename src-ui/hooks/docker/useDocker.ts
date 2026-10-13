@@ -1,175 +1,223 @@
-// Docker 管理面 React 适配层。
-//
-// 接口速查（写 UI 时照着接）：
-//   入参：hostId（"local" 或 "remote:<serverId>"）
-//   返回：
-//     status            DockerStatus | undefined   当前主机的 docker 探测结果
-//     isProbing         boolean                    probe 是否进行中
-//     containers        ContainerInfo[]            容器列表（含已停止）
-//     images            ImageInfo[]                本地镜像列表
-//     isLoadingList     boolean
-//     isLoadingImages   boolean
-//     refetch()                                    手动刷新 probe + 列表
-//     install()         → Promise<string>          帮装 docker，返回结果文案
-//     isInstalling      boolean
-//     deploy(spec)      → Promise<DeployedContainer>一键部署 NapCat/SnowLuma
-//     isDeploying       boolean
-//     containerAction({name, action})              start/stop/restart/remove
-//     removeImage({imageRef, force?})              删除本地镜像
-//     isActing          boolean
-//     isRemovingImage   boolean
-//     composeDown({name, removeVolumes})           停并清理一个部署
-//     isComposingDown   boolean
-//     fetchLogs(name, tail?) → Promise<string>     取容器日志（命令式调用）
-
+// Docker 查询和操作绑定发起时的主机，切换主机后仍只刷新原主机。
 import { useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { dockerService } from '../../core/services/docker.service';
 import { dockerActionStore } from './dockerActionStore';
 import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
-import { SEE_LOGS_HINT } from '../../core/domain/ui/errorBarCopy';
 import { imageRemoveFailureHint } from '../../core/domain/docker/status';
-import type { ContainerAction, ContainerInfo, DockerStatus, ImageInfo } from '../../core/ipc/types';
+import type { ContainerAction, DockerResourceKind } from '../../core/ipc/types';
 
-/// 容器操作动词。InfoBar 标题用，比裸 action 字面量友好。
+export type DockerTab = 'containers' | 'images' | 'networks' | 'volumes';
+export type ContainerActionRequest = {
+    name: string;
+    displayName?: string;
+    action: ContainerAction;
+    force?: boolean;
+};
+export type ResourceRemoveRequest = { kind: DockerResourceKind; id: string; name: string };
+
 const ACTION_VERB: Record<ContainerAction, string> = {
     start: '启动',
     stop: '停止',
     restart: '重启',
+    pause: '暂停',
+    unpause: '恢复',
     remove: '删除',
 };
 
-export function useDocker(hostId: string, activeTab: 'containers' | 'images' = 'containers') {
-    const queryClient = useQueryClient();
-
+export function useDocker(
+    hostId: string,
+    activeTab: DockerTab = 'containers',
+    autoRefresh = false,
+) {
+    const client = useQueryClient();
+    const mutationKey = ['docker', hostId];
+    const isBusy = useIsMutating({ mutationKey }) > 0;
+    const enabled = hostId.length > 0;
+    const interval = autoRefresh && !isBusy ? 15000 : false;
     const statusQuery = useQuery({
         queryKey: ['docker', 'status', hostId],
         queryFn: () => dockerService.probe(hostId),
+        enabled,
+        retry: false,
+        refetchInterval: interval,
     });
-
+    const ready = enabled && !statusQuery.isError && (statusQuery.data?.daemonRunning ?? false);
+    const options = { retry: false, refetchInterval: interval } as const;
     const containersQuery = useQuery({
+        ...options,
         queryKey: ['docker', 'containers', hostId],
         queryFn: () => dockerService.listContainers(hostId),
-        // daemon 没起时列容器会失败，禁用查询避免反复报错。
-        enabled: (statusQuery.data?.daemonRunning ?? false) && activeTab === 'containers',
+        enabled: ready && activeTab === 'containers',
     });
-
     const imagesQuery = useQuery({
+        ...options,
         queryKey: ['docker', 'images', hostId],
         queryFn: () => dockerService.listImages(hostId),
-        enabled: (statusQuery.data?.daemonRunning ?? false) && activeTab === 'images',
+        enabled: ready && activeTab === 'images',
     });
+    const networksQuery = useQuery({
+        ...options,
+        queryKey: ['docker', 'networks', hostId],
+        queryFn: () => dockerService.listNetworks(hostId),
+        enabled: ready && activeTab === 'networks',
+    });
+    const volumesQuery = useQuery({
+        ...options,
+        queryKey: ['docker', 'volumes', hostId],
+        queryFn: () => dockerService.listVolumes(hostId),
+        enabled: ready && activeTab === 'volumes',
+    });
+    const activeQuery = {
+        containers: containersQuery,
+        images: imagesQuery,
+        networks: networksQuery,
+        volumes: volumesQuery,
+    }[activeTab];
 
-    const invalidate = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ['docker', 'status', hostId] });
-        queryClient.invalidateQueries({ queryKey: ['docker', 'containers', hostId] });
-        queryClient.invalidateQueries({ queryKey: ['docker', 'images', hostId] });
-    }, [queryClient, hostId]);
+    const invalidateHost = useCallback(
+        (target: string) =>
+            client.invalidateQueries({
+                predicate: (query) =>
+                    query.queryKey[0] === 'docker' && query.queryKey[2] === target,
+            }),
+        [client],
+    );
+    const success = (target: string, title: string, name: string) => {
+        pushInfoBar({
+            key: `docker:${target}:${name}`,
+            tone: 'success',
+            title,
+            content: name,
+            autoDismissMs: 4000,
+        });
+    };
+    const failed = (target: string, title: string, name: string, err: unknown, hint?: string) => {
+        pushErrorBar({
+            key: `docker:${target}:${name}`,
+            title,
+            raw: `${name}：${errorText(err)}`,
+            content: hint || undefined,
+        });
+    };
 
     const installMutation = useMutation({
-        mutationFn: async () => {
+        mutationKey,
+        retry: false,
+        mutationFn: async (target: string) => {
             const taskId = crypto.randomUUID();
-            dockerInstallProgressStore.started(taskId, hostId);
-            dockerActionStore.markInstalling(hostId, taskId);
-            return dockerService.install(hostId, taskId);
+            dockerInstallProgressStore.started(taskId, target);
+            dockerActionStore.markInstalling(target, taskId);
+            return dockerService.install(target, taskId);
         },
-        onSuccess: invalidate,
-        onSettled: () => dockerActionStore.clearInstalling(hostId),
+        onSuccess: (_result, target) => invalidateHost(target),
+        onSettled: (_result, _error, target) => dockerActionStore.clearInstalling(target),
     });
-
     const actionMutation = useMutation({
-        mutationFn: (args: { name: string; action: ContainerAction }) =>
-            dockerService.containerAction(hostId, args.name, args.action),
-        onSuccess: (_void, { name, action }) => {
-            invalidate();
-            const verb = ACTION_VERB[action];
-            pushInfoBar({
-                key: `container-action:${hostId}:${name}`,
-                tone: 'success',
-                title: `容器已${verb}`,
-                content: name,
-                autoDismissMs: 4000,
-            });
-        },
-        onError: (err: unknown, { name, action }) => {
-            pushErrorBar({
-                key: `container-action:${hostId}:${name}`,
-                title: `容器${ACTION_VERB[action]}失败`,
-                raw: `${name}：${errorText(err)}`,
-            });
-        },
+        mutationKey,
+        retry: false,
+        mutationFn: (args: ContainerActionRequest & { hostId: string }) =>
+            dockerService.containerAction(args.hostId, args.name, args.action, args.force),
+        onSuccess: (_result, args) =>
+            success(
+                args.hostId,
+                `容器已${ACTION_VERB[args.action]}`,
+                args.displayName ?? args.name,
+            ),
+        onError: (err, args) =>
+            failed(
+                args.hostId,
+                `容器${ACTION_VERB[args.action]}失败`,
+                args.displayName ?? args.name,
+                err,
+            ),
+        // 超时不代表远端没执行，失败后也回读状态，绝不自动重试写操作。
+        onSettled: (_result, _error, args) => invalidateHost(args.hostId),
     });
-
-    const removeImageMutation = useMutation({
-        mutationFn: (args: { imageRef: string; force?: boolean }) =>
-            dockerService.removeImage(hostId, args.imageRef, args.force),
-        onSuccess: (_void, { imageRef }) => {
-            invalidate();
-            pushInfoBar({
-                key: `image-remove:${hostId}:${imageRef}`,
-                tone: 'success',
-                title: '镜像已删除',
-                content: imageRef,
-                autoDismissMs: 4000,
-            });
-        },
-        onError: (err: unknown, { imageRef }) => {
-            const raw = errorText(err);
-            const hint = imageRemoveFailureHint(raw);
-            pushErrorBar({
-                key: `image-remove:${hostId}:${imageRef}`,
-                title: '删除镜像失败',
-                raw: `${imageRef}：${raw}`,
-                content: hint ? `${hint} ${SEE_LOGS_HINT}` : undefined,
-            });
-        },
+    const imageMutation = useMutation({
+        mutationKey,
+        retry: false,
+        mutationFn: (args: { hostId: string; imageRef: string; force?: boolean }) =>
+            dockerService.removeImage(args.hostId, args.imageRef, args.force),
+        onSuccess: (_result, args) => success(args.hostId, '镜像已删除', args.imageRef),
+        onError: (err, args) =>
+            failed(
+                args.hostId,
+                '删除镜像失败',
+                args.imageRef,
+                err,
+                imageRemoveFailureHint(errorText(err)),
+            ),
+        onSettled: (_result, _error, args) => invalidateHost(args.hostId),
     });
-
-    const composeDownMutation = useMutation({
-        mutationFn: (args: { name: string; removeVolumes: boolean }) =>
-            dockerService.composeDown(hostId, args.name, args.removeVolumes),
-        onSuccess: invalidate,
+    const resourceMutation = useMutation({
+        mutationKey,
+        retry: false,
+        mutationFn: (args: ResourceRemoveRequest & { hostId: string }) =>
+            dockerService.removeResource(args.hostId, args.kind, args.id),
+        onSuccess: (_result, args) =>
+            success(
+                args.hostId,
+                args.kind === 'network' ? '网络已删除' : '数据卷已删除',
+                args.name,
+            ),
+        onError: (err, args) => failed(args.hostId, '删除资源失败', args.name, err),
+        onSettled: (_result, _error, args) => invalidateHost(args.hostId),
     });
-
+    const composeMutation = useMutation({
+        mutationKey,
+        retry: false,
+        mutationFn: (args: { hostId: string; name: string; removeVolumes: boolean }) =>
+            dockerService.composeDown(args.hostId, args.name, args.removeVolumes),
+        onError: (err, args) => failed(args.hostId, '停止部署失败', args.name, err),
+        onSettled: (_result, _error, args) => invalidateHost(args.hostId),
+    });
     const fetchLogs = useCallback(
-        (name: string, tail = 400): Promise<string> => dockerService.logs(hostId, name, tail),
+        (name: string, tail = 400) => dockerService.logs(hostId, name, tail),
         [hostId],
     );
 
     return {
-        status: statusQuery.data as DockerStatus | undefined,
-        isProbing: statusQuery.isLoading,
-
-        containers: (containersQuery.data ?? []) as ContainerInfo[],
+        status: statusQuery.data,
+        statusError: statusQuery.error,
+        ready,
+        isProbing: statusQuery.isFetching,
+        isRefreshing: statusQuery.isFetching || activeQuery.isFetching,
+        listError: activeQuery.error,
+        isLoading: activeQuery.isLoading,
+        containers: containersQuery.data ?? [],
         isLoadingList: containersQuery.isLoading,
-
-        images: (imagesQuery.data ?? []) as ImageInfo[],
+        images: imagesQuery.data ?? [],
         isLoadingImages: imagesQuery.isLoading,
-
+        networks: networksQuery.data ?? [],
+        volumes: volumesQuery.data ?? [],
         refetch: () => {
-            invalidate();
+            void invalidateHost(hostId);
         },
-
-        install: installMutation.mutateAsync,
+        install: () => installMutation.mutateAsync(hostId),
         isInstalling: installMutation.isPending,
-
-        containerAction: actionMutation.mutate,
-        isActing: actionMutation.isPending,
-
-        removeImage: removeImageMutation.mutate,
-        removeImageAsync: removeImageMutation.mutateAsync,
-        isRemovingImage: removeImageMutation.isPending,
-        removingImageRef: removeImageMutation.isPending
-            ? (removeImageMutation.variables?.imageRef ?? null)
-            : null,
-
-        composeDown: composeDownMutation.mutate,
-        isComposingDown: composeDownMutation.isPending,
-
+        containerAction: (args: ContainerActionRequest) =>
+            actionMutation.mutate({ ...args, hostId }),
+        containerActionAsync: (args: ContainerActionRequest) =>
+            actionMutation.mutateAsync({ ...args, hostId }),
+        isActing: isBusy,
+        removeImage: (args: { imageRef: string; force?: boolean }) =>
+            imageMutation.mutate({ ...args, hostId }),
+        removeImageAsync: (args: { imageRef: string; force?: boolean }) =>
+            imageMutation.mutateAsync({ ...args, hostId }),
+        isRemovingImage: imageMutation.isPending,
+        removingImageRef:
+            imageMutation.isPending && imageMutation.variables?.hostId === hostId
+                ? imageMutation.variables.imageRef
+                : null,
+        removeResourceAsync: (args: ResourceRemoveRequest) =>
+            resourceMutation.mutateAsync({ ...args, hostId }),
+        composeDown: (args: { name: string; removeVolumes: boolean }) =>
+            composeMutation.mutate({ ...args, hostId }),
+        isComposingDown: composeMutation.isPending,
         fetchLogs,
     };
 }

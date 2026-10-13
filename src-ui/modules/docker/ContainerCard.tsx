@@ -2,11 +2,16 @@
 // 视觉对齐 ComponentManageCard / ServerCard：surface 壳 + 底栏（状态 + 操作）。
 
 import React from 'react';
-import { Box, Play, Square, RotateCw, Trash2, ScrollText } from 'lucide-react';
+import { Box, Play, Square, RotateCw, Trash2, ScrollText, Pause, Info } from 'lucide-react';
 import { ActionMotionIcon, RESOURCE_MOTION } from '../../shared/ui/motion';
 import { Badge, Button } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
-import { containerStateBadge, isManagedImage, compactPorts } from '../../core/domain/docker/status';
+import {
+    containerStateBadge,
+    isManagedImage,
+    compactPorts,
+    containerActions,
+} from '../../core/domain/docker/status';
 import type { ContainerAction, ContainerInfo } from '../../core/ipc/types';
 
 interface ContainerCardProps {
@@ -14,6 +19,7 @@ interface ContainerCardProps {
     isActing: boolean;
     onAction: (action: ContainerAction) => void;
     onViewLogs: () => void;
+    onDetails: () => void;
 }
 
 export const ContainerCard: React.FC<ContainerCardProps> = ({
@@ -21,6 +27,7 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
     isActing,
     onAction,
     onViewLogs,
+    onDetails,
 }) => {
     const badge = containerStateBadge(container.state);
     const running = container.state === 'running';
@@ -51,7 +58,7 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                             </h3>
                             {managed ? (
                                 <Badge tone="brand" appearance="soft" className="shrink-0">
-                                    托管
+                                    协议镜像
                                 </Badge>
                             ) : null}
                         </div>
@@ -105,30 +112,41 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                     {badge.label}
                 </Badge>
                 <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
-                    {running ? (
+                    {containerActions(container.state).map((action) => (
                         <Button
+                            key={action}
                             size="sm"
                             variant="secondary"
-                            onClick={() => onAction('stop')}
+                            onClick={() => onAction(action)}
                             disabled={isActing}
                         >
-                            <ActionMotionIcon icon={Square} size={13} />
-                            停止
+                            <ActionMotionIcon
+                                icon={
+                                    action === 'stop'
+                                        ? Square
+                                        : action === 'restart'
+                                          ? RotateCw
+                                          : action === 'pause'
+                                            ? Pause
+                                            : Play
+                                }
+                                size={13}
+                            />
+                            {
+                                {
+                                    start: '启动',
+                                    stop: '停止',
+                                    restart: '重启',
+                                    pause: '暂停',
+                                    unpause: '恢复',
+                                    remove: '删除',
+                                }[action]
+                            }
                         </Button>
-                    ) : (
-                        <Button size="sm" onClick={() => onAction('start')} disabled={isActing}>
-                            <ActionMotionIcon icon={Play} size={13} />
-                            启动
-                        </Button>
-                    )}
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onAction('restart')}
-                        disabled={isActing}
-                    >
-                        <ActionMotionIcon icon={RotateCw} size={13} />
-                        重启
+                    ))}
+                    <Button size="sm" variant="ghost" onClick={onDetails}>
+                        <Info size={13} />
+                        详情
                     </Button>
                     <Button
                         size="sm"

@@ -10,16 +10,24 @@ import type {
     DockerFlavor,
     DockerInstallReport,
     DockerStatus,
+    DockerContainerDetails,
+    DockerContainerStats,
+    DockerNetworkInfo,
+    DockerVolumeInfo,
+    DockerResourceKind,
     ImageInfo,
 } from '../ipc/types';
 import {
     mockDockerStatus,
-    mockContainers,
     mockDeployed,
-    mockImages,
     mockProgressSequence,
     withMockDelay,
 } from '../ipc/mock/docker.mock';
+import {
+    mockDockerHost,
+    mockContainerDetails,
+    mockContainerAction,
+} from '../ipc/mock/docker-management.mock';
 
 /// 安装 docker 的可选入参。sudoPassword 是用户在弹框输入的 sudo 密码,
 /// rememberSudo 是用户勾的"记住密码"。两者都不传时后端自动从 keyring 找缓存密码。
@@ -57,12 +65,12 @@ export const dockerService = {
 
     listContainers: async (hostId: string): Promise<ContainerInfo[]> => {
         if (isTauri) return invoke<ContainerInfo[]>('docker_list_containers', { hostId });
-        return withMockDelay(mockContainers, 200);
+        return withMockDelay([...mockDockerHost(hostId).containers], 200);
     },
 
     listImages: async (hostId: string): Promise<ImageInfo[]> => {
         if (isTauri) return invoke<ImageInfo[]>('docker_list_images', { hostId });
-        return withMockDelay(mockImages, 200);
+        return withMockDelay([...mockDockerHost(hostId).images], 200);
     },
 
     removeImage: async (hostId: string, imageRef: string, force?: boolean): Promise<void> => {
@@ -72,6 +80,10 @@ export const dockerService = {
                 imageRef,
                 force: force ?? null,
             });
+        const host = mockDockerHost(hostId);
+        host.images = host.images.filter(
+            (i) => `${i.repository}:${i.tag}` !== imageRef && i.id !== imageRef,
+        );
         return withMockDelay(undefined, 150);
     },
 
@@ -79,8 +91,49 @@ export const dockerService = {
         hostId: string,
         name: string,
         action: ContainerAction,
+        force = false,
     ): Promise<void> => {
-        if (isTauri) return invoke<void>('docker_container_action', { hostId, name, action });
+        if (isTauri)
+            return invoke<void>('docker_container_action', { hostId, name, action, force });
+        mockContainerAction(hostId, name, action, force);
+        return withMockDelay(undefined, 150);
+    },
+
+    containerDetails: async (hostId: string, id: string): Promise<DockerContainerDetails> => {
+        if (isTauri) return invoke('docker_container_details', { hostId, id });
+        return withMockDelay(mockContainerDetails(hostId, id), 150);
+    },
+
+    containerStats: async (hostId: string, id: string): Promise<DockerContainerStats> => {
+        if (isTauri) return invoke('docker_container_stats', { hostId, id });
+        return withMockDelay(
+            {
+                cpuPercent: '1.24%',
+                memoryUsage: '128MiB / 2GiB',
+                memoryPercent: '6.25%',
+                networkIo: '12MB / 4MB',
+                blockIo: '28MB / 2MB',
+                pids: '18',
+            },
+            150,
+        );
+    },
+
+    listNetworks: async (hostId: string): Promise<DockerNetworkInfo[]> => {
+        if (isTauri) return invoke('docker_list_networks', { hostId });
+        return withMockDelay([...mockDockerHost(hostId).networks], 150);
+    },
+
+    listVolumes: async (hostId: string): Promise<DockerVolumeInfo[]> => {
+        if (isTauri) return invoke('docker_list_volumes', { hostId });
+        return withMockDelay([...mockDockerHost(hostId).volumes], 150);
+    },
+
+    removeResource: async (hostId: string, kind: DockerResourceKind, id: string): Promise<void> => {
+        if (isTauri) return invoke('docker_remove_resource', { hostId, kind, id });
+        const host = mockDockerHost(hostId);
+        if (kind === 'network') host.networks = host.networks.filter((n) => n.id !== id);
+        else host.volumes = host.volumes.filter((v) => v.name !== id);
         return withMockDelay(undefined, 150);
     },
 

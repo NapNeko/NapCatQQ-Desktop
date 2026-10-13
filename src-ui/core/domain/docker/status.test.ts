@@ -4,7 +4,9 @@ import {
     compactPorts,
     containerMatchesFlavor,
     containerStateBadge,
+    containerActions,
     dockerStatusSummary,
+    dockerManagementSummary,
     imageDisplayRef,
     imageRemoveConflictNeedsForce,
     imageRemoveFailureHint,
@@ -75,6 +77,7 @@ describe('dockerStatusSummary', () => {
         const s = dockerStatusSummary(status({ composeAvailable: false }));
         expect(s.ready).toBe(false);
         expect(s.label).toContain('compose');
+        expect(dockerManagementSummary(status({ composeAvailable: false })).ready).toBe(true);
     });
 
     it('全就绪时 ready=true', () => {
@@ -111,6 +114,7 @@ describe('imageDisplayRef / isDanglingImage / imageRemoveRef', () => {
     it('repo 有、tag 是 <none> 时只显示 repo', () => {
         const i = image({ tag: '<none>' });
         expect(imageDisplayRef(i)).toBe('mlikiowa/napcat-docker');
+        expect(imageRemoveRef(i)).toBe(i.id);
         expect(isDanglingImage(i)).toBe(false);
     });
 
@@ -122,6 +126,17 @@ describe('imageDisplayRef / isDanglingImage / imageRemoveRef', () => {
         const empty = image({ repository: '  ', tag: '' });
         expect(isDanglingImage(empty)).toBe(true);
         expect(imageDisplayRef(empty)).toBe('a1b2c3d4e5f6');
+    });
+});
+
+describe('containerActions', () => {
+    it('暂停容器只能恢复，过渡状态不给启动或重启', () => {
+        expect(containerActions('paused')).toEqual(['unpause']);
+        expect(containerActions('restarting')).toEqual(['stop']);
+        expect(containerActions('other')).toEqual([]);
+        expect(containerActions('running')).toEqual(['stop', 'restart', 'pause']);
+        expect(containerActions('exited')).toEqual(['start']);
+        expect(containerActions('created')).toEqual(['start']);
     });
 });
 
