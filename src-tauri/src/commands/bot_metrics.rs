@@ -12,7 +12,8 @@ use ncd_domain::{BotId, BotRuntimeMetrics, MetricsHistoryPoint, ProbeHealth};
 use ncd_host::{HostCommand, HostPath};
 use ncd_runtime::metrics::{
     BotRuntimeMetricsPrefs, history_path_for_bot, load_history, now_ms, parse_probe_stats_json,
-    remote_metrics_history_posix, remote_metrics_host_stats_posix, remote_metrics_stats_posix,
+    remote_metrics_history_posix, remote_metrics_host_stats_posix, remote_metrics_read_failure,
+    remote_metrics_stats_posix,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -232,16 +233,12 @@ async fn remote_probe_error_hint(
             let text = String::from_utf8_lossy(&bytes);
             let brief = text.lines().next().unwrap_or("").trim();
             if brief.is_empty() {
-                format!(
-                    "远端无 net-stats（{stats_posix}）：{read_err}。请重启该 Bot（注入会把 env 写进 loadNapCat.js）"
-                )
+                format!("远端尚无指标快照（{stats_posix}）：{read_err}。启用指标后需重启此 Bot")
             } else {
                 format!("远端探针写失败（{stats_posix}.err）：{brief}")
             }
         }
-        Err(_) => format!(
-            "远端无 net-stats（{stats_posix}）：{read_err}。请重启该 Bot（注入会把 env 写进 loadNapCat.js）"
-        ),
+        Err(_) => format!("远端尚无指标快照（{stats_posix}）：{read_err}。启用指标后需重启此 Bot"),
     }
 }
 
@@ -284,11 +281,11 @@ async fn fetch_one_metrics(
             let m = match host.read_file(&remote_path).await {
                 Ok(bytes) => metrics_from_bytes(bot_id, &bytes, stale_ms, clock_ms),
                 Err(err) => {
-                    let hint = remote_probe_error_hint(host.as_ref(), &remote_posix, &err).await;
-                    let mut m = BotRuntimeMetrics::unavailable(bot_id);
-                    m.probe = ProbeHealth::NotInjected;
-                    m.probe_error = Some(hint);
-                    m.collected_at_ms = clock_ms;
+                    let mut m = remote_metrics_read_failure(bot_id, &err, clock_ms);
+                    if m.probe == ProbeHealth::NotInjected {
+                        m.probe_error =
+                            Some(remote_probe_error_hint(host.as_ref(), &remote_posix, &err).await);
+                    }
                     m
                 }
             };

@@ -417,64 +417,25 @@ pub async fn release_snowluma_agreement_session(
         .map_err(|e| e.to_string())
 }
 
-/// 打开 SnowLuma Docker noVNC 扫码页(对齐 legacy build_snowluma_novnc_url)
+/// 准备远端 QQ 界面并返回 noVNC 地址。
 #[tauri::command]
 pub async fn open_snowluma_novnc(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::BotId;
-    use ncd_domain::{DeploymentType, RuntimeTarget};
-
-    let bid = BotId::new(bot_id);
-    let cfg = state
+    let (port, password) = state
         .bot_manager
-        .get_bot_config(&bid)
+        .prepare_snowluma_novnc(&ncd_domain::BotId::new(bot_id))
         .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Bot 配置不存在".to_string())?;
-
-    if cfg.bot.backend_type != ncd_domain::BackendType::SnowLuma {
-        return Err("当前 Bot 不是 SnowLuma".into());
-    }
-
-    if cfg.bot.deployment_type == DeploymentType::Docker {
-        let ep = state
-            .bot_manager
-            .snowluma_docker_endpoints(&bid)
-            .await
-            .ok_or_else(|| "noVNC 隧道未就绪，请确认 Bot 已启动".to_string())?;
-
-        let pwd_enc = urlencoding::encode(&ep.vnc_password);
-        let query = format!(
-            "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
-        );
-
-        return Ok(SnowLumaWebuiEndpoint {
-            url: format!("http://127.0.0.1:{}/vnc.html?{query}", ep.novnc_local_port),
-            password: ep.vnc_password,
-        });
-    }
-
-    if cfg.bot.deployment_type == DeploymentType::Native {
-        if let RuntimeTarget::Server(server_id) = &cfg.bot.runtime_target {
-            let ep = state
-                .bot_manager
-                .snowluma_native_endpoints_for_server(server_id)
-                .await
-                .ok_or_else(|| "远端 Native noVNC 隧道未就绪".to_string())?;
-            let pwd_enc = urlencoding::encode(&ep.vnc_password);
-            let query = format!(
-                "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
-            );
-            return Ok(SnowLumaWebuiEndpoint {
-                url: format!("http://127.0.0.1:{}/vnc.html?{query}", ep.novnc_local_port),
-                password: ep.vnc_password,
-            });
-        }
-    }
-
-    Err("仅远端 SnowLuma（Docker 或 Native）支持 noVNC 扫码".to_string())
+        .map_err(|error| error.to_string())?;
+    let pwd_enc = urlencoding::encode(&password);
+    let query = format!(
+        "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
+    );
+    Ok(SnowLumaWebuiEndpoint {
+        url: format!("http://127.0.0.1:{port}/vnc.html?{query}"),
+        password,
+    })
 }
 
 // =============================================================================
