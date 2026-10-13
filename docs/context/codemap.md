@@ -291,6 +291,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 桌面日志 | `desktop_log.rs`, `desktop_log_format.rs`, `commands/desktop_log.rs` |
 | 通知 / Toast | `desktop_notify.rs`, `windows_toast.rs` |
 | 离线多渠道 | `crates/ncd-runtime/src/notify/` + 设计归档 `docs/dev/archive/ncd-watch/offline-onebot-notice.md` |
+| OneBot 重登互助 | `ncd-relogin` 事件/指令/投递账本；`ncd-watch/src/relogin/` 常驻探测/收发/取码；`runtime/watch/sync.rs` 配置与能力确认；SL 复用 `resources/login-helper/atspi-login.py` |
 | 远端脱管后监控（设计） | 设计归档 `docs/dev/archive/ncd-watch/`；活 plan `.claude/plan/ncd-watch.md`；crate `crates/ncd-watch` |
 | 单实例 | `single_instance.rs` |
 | hooks | `src-ui/hooks/desktop/` |
