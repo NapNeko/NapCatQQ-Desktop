@@ -137,6 +137,11 @@ fn serve_request(
     stopped: &AtomicBool,
     transfer: &dyn Fn(&Request) -> Transfer,
 ) {
+    // Winsock accept inherits the nonblocking listener mode; a full send buffer
+    // would make write_all return WouldBlock and truncate the HTTP response.
+    stream
+        .set_nonblocking(false)
+        .expect("set fixture connection blocking");
     let _ = stream.set_nodelay(true);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
@@ -265,6 +270,53 @@ impl RecordingSink {
 
 fn payload(bytes: usize) -> Arc<Vec<u8>> {
     Arc::new((0..bytes).map(|offset| (offset % 251) as u8).collect())
+}
+
+#[test]
+fn fixture_handles_nonblocking_connections_with_delayed_headers_and_backpressure() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    // Reproduce Winsock inheritance on every platform, before any request bytes.
+    stream.set_nonblocking(true).unwrap();
+    let body = payload(4 * 1024 * 1024);
+    let response_body = body.clone();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let task = thread::spawn(move || {
+        serve_request(
+            stream,
+            &response_body,
+            &Mutex::new(Vec::new()),
+            &AtomicBool::new(false),
+            &|_| Transfer::default(),
+        );
+        done_tx.send(()).unwrap();
+    });
+
+    assert!(
+        matches!(
+            done_rx.recv_timeout(Duration::from_millis(50)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ),
+        "an accepted connection must wait for request headers"
+    );
+    client
+        .write_all(b"GET /asset HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .unwrap();
+    // Leave the response unread long enough for the socket send buffer to fill.
+    thread::sleep(Duration::from_millis(50));
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    task.join().unwrap();
+    let body_start = response
+        .windows(4)
+        .position(|bytes| bytes == b"\r\n\r\n")
+        .expect("response should contain complete headers")
+        + 4;
+    assert_eq!(&response[body_start..], body.as_slice());
 }
 
 fn race_config() -> MirrorRaceConfig {
