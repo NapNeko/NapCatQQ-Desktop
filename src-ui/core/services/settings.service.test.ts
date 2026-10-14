@@ -9,6 +9,72 @@ beforeEach(() => {
     native.invoke.mockReset();
 });
 
+function legacySettingsDto() {
+    return {
+        settings: {
+            poller: {
+                botLoginCheckInterval: 5000,
+                botOfflineWebHookNotice: false,
+                botOfflineEmailNotice: false,
+            },
+            mcp: { enabled: false, port: 0, allowDangerous: false },
+            uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
+        },
+        githubPat: '',
+    };
+}
+
+describe('GitHub API configuration', () => {
+    it('keeps the proxy as the default when older settings have no API mode', async () => {
+        const { settingsService } = await import('./settings.service');
+        native.invoke.mockResolvedValue(legacySettingsDto());
+
+        expect((await settingsService.get()).githubApiMode).toBe('proxy');
+    });
+
+    it('saves and restores direct mode with a trimmed PAT outside app settings', async () => {
+        const { settingsService } = await import('./settings.service');
+        native.invoke.mockResolvedValue(legacySettingsDto());
+        const settings = await settingsService.get();
+        settings.githubApiMode = 'direct';
+        settings.githubPat = '  github_pat_test  ';
+
+        await settingsService.set(settings);
+
+        const saved = native.invoke.mock.calls.find(([name]) => name === 'set_app_settings');
+        expect(saved?.[1]).toMatchObject({
+            dto: { settings: { githubApiMode: 'direct' }, githubPat: 'github_pat_test' },
+        });
+        expect(saved?.[1].dto.settings).not.toHaveProperty('githubPat');
+        native.invoke.mockResolvedValue(saved?.[1].dto);
+        expect(await settingsService.get()).toMatchObject({
+            githubApiMode: 'direct',
+            githubPat: 'github_pat_test',
+        });
+    });
+
+    it('persists switching back to proxy without discarding the stored PAT', async () => {
+        const { settingsService } = await import('./settings.service');
+        const dto = legacySettingsDto();
+        native.invoke.mockResolvedValue({
+            ...dto,
+            settings: { ...dto.settings, githubApiMode: 'direct' },
+            githubPat: 'github_pat_test',
+        });
+        const settings = await settingsService.get();
+        settings.githubApiMode = 'proxy';
+
+        await settingsService.set(settings);
+
+        expect(native.invoke).toHaveBeenCalledWith('set_app_settings', {
+            dto: expect.objectContaining({
+                settings: expect.objectContaining({ githubApiMode: 'proxy' }),
+                githubPat: 'github_pat_test',
+            }),
+        });
+    });
+});
+
 describe('restoring persisted appearance', () => {
     it('keeps relogin opt-in for old settings and preserves its administrator scope on save', async () => {
         const { settingsService } = await import('./settings.service');

@@ -21,6 +21,7 @@ export const mockBackendSettings: BackendSettings = {
     botRuntimeMetricsIntervalMs: 3000,
     botRuntimeMetricsRetentionDays: 7,
     taskQueueCleanup: { ...DEFAULT_TASK_QUEUE_CLEANUP },
+    githubApiMode: 'proxy',
     githubPat: '',
     closeAction: 'close',
     afterCloseUiBehavior: 'delayed_lightweight',

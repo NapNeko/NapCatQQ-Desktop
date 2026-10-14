@@ -72,6 +72,7 @@ export function draftFromBackendAndPrefs(
         botRuntimeMetricsEnabled: backend.botRuntimeMetricsEnabled,
         botRuntimeMetricsIntervalMs: backend.botRuntimeMetricsIntervalMs,
         botRuntimeMetricsRetentionDays: backend.botRuntimeMetricsRetentionDays,
+        githubApiMode: backend.githubApiMode,
         githubPat: backend.githubPat,
         closeAction: backend.closeAction,
         afterCloseUiBehavior: backend.afterCloseUiBehavior,
@@ -146,6 +147,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
             taskQueueCleanupEnabled: draft.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: draft.taskQueueCleanupLingerMs,
         },
+        githubApiMode: draft.githubApiMode,
         githubPat: draft.githubPat,
         closeAction: draft.closeAction,
         afterCloseUiBehavior: draft.afterCloseUiBehavior,
@@ -211,6 +213,7 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         draft.botRuntimeMetricsEnabled !== baseline.botRuntimeMetricsEnabled ||
         draft.botRuntimeMetricsIntervalMs !== baseline.botRuntimeMetricsIntervalMs ||
         draft.botRuntimeMetricsRetentionDays !== baseline.botRuntimeMetricsRetentionDays ||
+        draft.githubApiMode !== baseline.githubApiMode ||
         draft.githubPat !== baseline.githubPat ||
         draft.closeAction !== baseline.closeAction ||
         draft.afterCloseUiBehavior !== baseline.afterCloseUiBehavior ||

@@ -63,7 +63,7 @@ pub mod system_resource {
 
 pub use app_config::{
     AfterCloseUiBehavior, AppSettings, AppSettingsDto, CloseAction, DesktopNotifySettings,
-    FeatureToggles, SnowLumaAppConfig, SystemResourceSnapshot, UiModeOnStartup,
+    FeatureToggles, GithubApiMode, SnowLumaAppConfig, SystemResourceSnapshot, UiModeOnStartup,
     WebUiPollerSettings, clamp_lightweight_delay_secs, default_login_interval,
     default_perf_monitor_interval, default_snowluma_port,
 };

@@ -30,6 +30,7 @@ import type { AppUiPreferences } from '../ipc/generated/domain/AppUiPreferences'
 import type { McpServerSettings } from '../ipc/generated/domain/McpServerSettings';
 import type { OfflineDeliveryRecord } from '../ipc/generated/domain/OfflineDeliveryRecord';
 import type { ReloginSettings } from '../ipc/generated/domain/ReloginSettings';
+import type { GithubApiMode } from '../ipc/generated/domain/GithubApiMode';
 import { defaultReloginSettings } from '../domain/settings/relogin';
 import type { EnsureOneBotMessengerHttpResult } from '../ipc/generated/domain/EnsureOneBotMessengerHttpResult';
 import type { OneBotMessengerCandidate } from '../ipc/generated/domain/OneBotMessengerCandidate';
@@ -61,6 +62,7 @@ export interface BackendSettings {
     botRuntimeMetricsIntervalMs: number;
     botRuntimeMetricsRetentionDays: number;
     taskQueueCleanup: TaskQueueCleanupPrefs;
+    githubApiMode: GithubApiMode;
     githubPat: string;
     closeAction: CloseAction;
     afterCloseUiBehavior: AfterCloseUiBehavior;
@@ -205,6 +207,7 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
             taskQueueCleanupEnabled: dto.settings.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: dto.settings.taskQueueCleanupLingerMs,
         }),
+        githubApiMode: dto.settings.githubApiMode ?? 'proxy',
         githubPat: dto.githubPat ?? '',
         closeAction,
         afterCloseUiBehavior: normalizeAfterClose(dto.settings.afterCloseUiBehavior),
@@ -276,6 +279,7 @@ type AppSettingsDtoInvoke = {
         botRuntimeMetricsRetentionDays: number;
         taskQueueCleanupEnabled: boolean;
         taskQueueCleanupLingerMs: number;
+        githubApiMode: GithubApiMode;
         closeAction: string;
         afterCloseUiBehavior: string;
         enterLightweightDelaySecs: number;
@@ -381,6 +385,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             ),
             taskQueueCleanupEnabled: tq.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: tq.taskQueueCleanupLingerMs,
+            githubApiMode: s.githubApiMode,
             closeAction: s.closeAction === 'tray' ? 'tray' : 'close',
             afterCloseUiBehavior: s.afterCloseUiBehavior,
             enterLightweightDelaySecs: s.enterLightweightDelaySecs,

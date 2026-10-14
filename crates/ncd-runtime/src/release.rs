@@ -2,6 +2,7 @@
 //!
 //! 缓存策略:
 //! - 缓存文件:<data_root>/cache/release-snapshot.json
+//! - 缓存记录 API 请求模式和失效代号;设置更新后不复用旧请求写回的快照
 //! - TTL:1 小时;快照内 fetched_at + 3600 还在 future 就直接返回缓存
 //! - 拉取失败:返回上次缓存(带老 fetched_at);都没有就返回 Default
 //! - 永远不向 caller 抛错(fetch_release_snapshot 返回 ReleaseSnapshot,
@@ -11,24 +12,27 @@
 //! 比对本地版本和远端版本派生)
 //!
 //! 拉取源(迁移自 legacy Python versioning/service.py):
-//! 1. 优先走自建 HMAC 签名中转代理(国内可达,自带 PAT 限速保护);
+//! 1. 默认优先走自建 HMAC 签名中转代理(国内可达,自带 PAT 限速保护);
 //!    中转返回 403 时读响应头 X-Server-Time 校正本地时钟,重试一次
 //! 2. 中转失败 / 未配置 → fallback 直连 GitHub 官方 API(可带用户 PAT)
-//! 3. 任何 IO / 网络错误一律降级到 None 字段或老缓存,不向 caller 抛错
+//! 3. 设置选择直连时只请求 GitHub 官方 API,成功或失败都不请求中转
+//! 4. 任何 IO / 网络错误一律降级到 None 字段或老缓存,不向 caller 抛错
 
 use std::path::Path;
 use std::time::Duration;
 
+use ncd_domain::GithubApiMode;
 use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
 use ncd_network::{
     NetworkError, ReleaseAlias, RetryPolicy, is_proxy_configured, proxy_release_url, proxy_signer,
     retry_with_backoff, shared_client,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 const CACHE_TTL_SECS: u64 = 3600;
 const CACHE_FILE_NAME: &str = "release-snapshot.json";
+const CACHE_GENERATION_FILE_NAME: &str = "release-snapshot-generation";
 const CACHE_DIR_NAME: &str = "cache";
 /// 单次 HTTP 请求超时中转代理国内通常 <2s,GitHub 直连兜底需要更宽裕的余量
 /// (DNS + TLS + 收完整 JSON)legacy Python 各调用点为 5/10/15/20s,取中位偏上
@@ -45,9 +49,10 @@ const DESKTOP_RELEASES_LIST_URL: &str =
 
 /// 拉取一次远端 releases 快照
 ///
-/// token:可选 GitHub PAT非 None 时给直连 GitHub 的 fallback 请求加
+/// 路由由 app-settings.json 的 github_api_mode 决定:默认中转优先,
+/// Direct 只走 GitHub 官方 API。token:可选 GitHub PAT,非空时给直连请求加
 /// Authorization: Bearer <token>,把匿名速率限制(60 次/小时/IP)提升到
-/// 认证额度(5000 次/小时)token 不参与缓存 key——缓存只按 TTL,认证与否
+/// 认证额度(5000 次/小时)token 不参与缓存 key——缓存按请求模式和 TTL,认证与否
 /// 拿到的 release 数据一致中转代理请求不带 PAT(中转用自己的 HMAC 签名)
 ///
 /// force:true 时跳过磁盘 TTL 缓存,强制走中转/GitHub(用户点「刷新」用);
@@ -55,7 +60,7 @@ const DESKTOP_RELEASES_LIST_URL: &str =
 ///
 /// 流程:
 /// 1. force=false 时读缓存;未过 TTL 直接返回;
-/// 2. 并发拉仓库 latest(每个先中转后 fallback GitHub);
+/// 2. 按设置并发拉仓库 latest(中转优先或只直连 GitHub);
 /// 3. 写缓存(失败仅 warn,不阻断返回);
 /// 4. 返回新快照
 ///
@@ -65,8 +70,14 @@ pub async fn fetch_release_snapshot(
     token: Option<&str>,
     force: bool,
 ) -> ReleaseSnapshot {
+    let github_api_mode = crate::desktop::load_app_settings(data_root).github_api_mode;
+    // 请求启动时捕获代号:设置保存会更新 marker,旧请求晚写也无法重新填充有效缓存。
+    let cache_generation = read_cache_generation(data_root);
     if !force {
-        if let Some(cached) = read_cache(data_root) {
+        let cached = cache_generation.as_ref().ok().and_then(|generation| {
+            read_cache_for_mode_and_generation(data_root, github_api_mode, generation.as_deref())
+        });
+        if let Some(cached) = cached {
             if !is_stale(&cached) {
                 tracing::debug!(
                     target: "ncd_runtime::release",
@@ -86,17 +97,19 @@ pub async fn fetch_release_snapshot(
         );
     }
 
+    let token = token.map(str::trim).filter(|t| !t.is_empty());
     let client = shared_client();
-    // ProxySigner 单例:offset 持久化到 data_root/config(与 LocalConfigStore 一致)
-    let config_dir = data_root.join("config");
-    // 触发单例初始化(首次拿取时从磁盘加载 offset)即使中转未配置也初始化,
-    // 保持与 Python ProxySigner.instance() 一致的「always init + 日志诊断」语义
-    let _ = proxy_signer(Some(config_dir));
+    if github_api_mode == GithubApiMode::Proxy {
+        // ProxySigner 单例:offset 持久化到 data_root/config(与 LocalConfigStore 一致)
+        // 直连模式不初始化中转签名器,也不读写中转校时文件。
+        let _ = proxy_signer(Some(data_root.join("config")));
+    }
 
     let proxy_configured = is_proxy_configured();
-    let has_token = token.map(|t| !t.trim().is_empty()).unwrap_or(false);
+    let has_token = token.is_some();
     info!(
         target: "ncd_runtime::release",
+        ?github_api_mode,
         proxy_configured,
         has_github_pat = has_token,
         "开始拉取远端版本快照（proxy_configured={proxy_configured}, pat={has_token}）"
@@ -107,12 +120,14 @@ pub async fn fetch_release_snapshot(
             client,
             ReleaseAlias::Napcat,
             GithubSource::Latest(NAPCAT_RELEASES_URL),
+            github_api_mode,
             token,
         ),
         fetch_one(
             client,
             ReleaseAlias::Snowluma,
             GithubSource::Latest(SNOWLUMA_RELEASES_URL),
+            github_api_mode,
             token,
         ),
         fetch_one(
@@ -122,6 +137,7 @@ pub async fn fetch_release_snapshot(
                 list_url: DESKTOP_RELEASES_LIST_URL,
                 kind: TagFilterKind::Desktop,
             },
+            github_api_mode,
             token,
         ),
         fetch_one(
@@ -131,6 +147,7 @@ pub async fn fetch_release_snapshot(
                 list_url: DESKTOP_RELEASES_LIST_URL,
                 kind: TagFilterKind::NcdWatch,
             },
+            github_api_mode,
             token,
         ),
         fetch_qq_linux_latest(),
@@ -150,10 +167,11 @@ pub async fn fetch_release_snapshot(
     .map(|(_, name)| name)
     .collect();
     if !failed.is_empty() {
-        let via_proxy = is_proxy_configured();
+        let via_proxy = github_api_mode == GithubApiMode::Proxy && proxy_configured;
         warn!(
             target: "ncd_runtime::release",
             repos = %failed.join(", "),
+            ?github_api_mode,
             via_proxy,
             "GitHub 版本检查失败（将使用缓存或留空）；可检查网络、设置 HTTPS_PROXY 环境变量或配置 GitHub PAT"
         );
@@ -171,8 +189,20 @@ pub async fn fetch_release_snapshot(
         fetched_at: Some(current_unix_ts()),
     };
 
-    if let Err(err) = write_cache(data_root, &snapshot) {
-        warn!(?err, "release snapshot cache write failed");
+    match cache_generation {
+        Ok(generation) => {
+            if let Err(err) =
+                write_cache(data_root, &snapshot, github_api_mode, generation.as_deref())
+            {
+                warn!(?err, "release snapshot cache write failed");
+            }
+        }
+        Err(err) => {
+            warn!(
+                ?err,
+                "release cache generation read failed; skipping cache write"
+            );
+        }
     }
     snapshot
 }
@@ -225,10 +255,10 @@ struct GhAssetDto {
 
 /// GitHub 直连源:latest 单条,或 list 后按 tag 前缀挑
 #[derive(Clone, Copy, Debug)]
-enum GithubSource {
-    Latest(&'static str),
+enum GithubSource<'a> {
+    Latest(&'a str),
     ListFiltered {
-        list_url: &'static str,
+        list_url: &'a str,
         kind: TagFilterKind,
     },
 }
@@ -348,23 +378,41 @@ async fn fetch_qq_windows_latest() -> Option<ReleaseInfo> {
 async fn fetch_one(
     client: &reqwest::Client,
     alias: ReleaseAlias,
-    source: GithubSource,
+    source: GithubSource<'_>,
+    mode: GithubApiMode,
     token: Option<&str>,
+) -> Option<ReleaseInfo> {
+    let proxy_url = if mode == GithubApiMode::Proxy {
+        proxy_release_url(alias)
+    } else {
+        None
+    };
+    fetch_one_with_proxy_url(client, alias, source, mode, token, proxy_url.as_deref()).await
+}
+
+/// URL 在调用处解析,使路由和认证行为可以用本地 HTTP 服务验证。
+async fn fetch_one_with_proxy_url(
+    client: &reqwest::Client,
+    alias: ReleaseAlias,
+    source: GithubSource<'_>,
+    mode: GithubApiMode,
+    token: Option<&str>,
+    proxy_url: Option<&str>,
 ) -> Option<ReleaseInfo> {
     let tag_filter = match source {
         GithubSource::Latest(_) => None,
         GithubSource::ListFiltered { kind, .. } => Some(kind),
     };
-    // 1. 中转代理优先(已配置时)
-    if is_proxy_configured() {
-        if let Some(proxy_url) = proxy_release_url(alias) {
+    // 1. 中转模式优先请求中转;直连模式完全跳过此分支。
+    if mode == GithubApiMode::Proxy {
+        if let Some(proxy_url) = proxy_url {
             info!(
                 target: "ncd_runtime::release",
                 alias = alias.as_str(),
                 proxy_url = %proxy_url,
                 "尝试中转代理拉取"
             );
-            match try_proxy(client, &proxy_url, alias).await {
+            match try_proxy(client, proxy_url, alias).await {
                 ProxyOutcome::Ok(info) => {
                     if let Some(kind) = tag_filter {
                         if !kind.matches(&info.tag) {
@@ -402,16 +450,22 @@ async fn fetch_one(
                     );
                 }
             }
+        } else {
+            tracing::debug!(
+                target: "ncd_runtime::release",
+                alias = alias.as_str(),
+                "中转代理未配置，直接走 GitHub 直连"
+            );
         }
     } else {
         tracing::debug!(
             target: "ncd_runtime::release",
             alias = alias.as_str(),
-            "中转代理未配置，直接走 GitHub 直连"
+            "已选择 GitHub 直连，跳过中转代理"
         );
     }
 
-    // 2. GitHub 直连 fallback
+    // 2. GitHub 直连(直连模式的唯一来源,或中转模式的 fallback)
     let github_label = match source {
         GithubSource::Latest(url) => url,
         GithubSource::ListFiltered { list_url, .. } => list_url,
@@ -567,11 +621,14 @@ async fn proxy_fetch_attempt(
 /// GitHub 官方 API 直连(可带 PAT)带有限重试(瞬时网络错误)
 async fn try_github(
     client: &reqwest::Client,
-    source: GithubSource,
+    source: GithubSource<'_>,
     token: Option<&str>,
 ) -> Result<ReleaseInfo, NetworkError> {
     let policy = RetryPolicy::default();
-    let token_owned = token.map(|s| s.to_string());
+    let token_owned = token
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_owned);
     retry_with_backoff(&policy, || {
         let token = token_owned.as_deref();
         async move { github_fetch_attempt(client, source, token).await }
@@ -581,7 +638,7 @@ async fn try_github(
 
 async fn github_fetch_attempt(
     client: &reqwest::Client,
-    source: GithubSource,
+    source: GithubSource<'_>,
     token: Option<&str>,
 ) -> Result<ReleaseInfo, NetworkError> {
     let url = match source {
@@ -798,10 +855,79 @@ fn cache_path(data_root: &Path) -> std::path::PathBuf {
     data_root.join(CACHE_DIR_NAME).join(CACHE_FILE_NAME)
 }
 
+/// 缓存记录请求模式和失效代号,不持有 PAT 或其散列。
+/// 旧缓存没有来源/代号字段,仅在默认中转模式且没有失效 marker 时有效。
+/// 设置更新前已发出的请求可能晚于缓存清理完成;代号防止复用这类旧结果。
+#[derive(Serialize, Deserialize)]
+struct CachedReleaseSnapshot {
+    #[serde(flatten)]
+    snapshot: ReleaseSnapshot,
+    #[serde(default)]
+    github_api_mode: GithubApiMode,
+    #[serde(default)]
+    cache_generation: Option<String>,
+}
+
+fn cache_generation_path(data_root: &Path) -> std::path::PathBuf {
+    data_root
+        .join(CACHE_DIR_NAME)
+        .join(CACHE_GENERATION_FILE_NAME)
+}
+
+fn read_cache_generation(data_root: &Path) -> std::io::Result<Option<String>> {
+    match std::fs::read_to_string(cache_generation_path(data_root)) {
+        Ok(content) => {
+            let generation = content.trim();
+            uuid::Uuid::parse_str(generation)
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+            Ok(Some(generation.to_owned()))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 fn read_cache(data_root: &Path) -> Option<ReleaseSnapshot> {
+    let mode = crate::desktop::load_app_settings(data_root).github_api_mode;
+    read_cache_for_mode(data_root, mode)
+}
+
+fn read_cache_for_mode(data_root: &Path, mode: GithubApiMode) -> Option<ReleaseSnapshot> {
+    let generation = read_cache_generation(data_root).ok()?;
+    read_cache_for_mode_and_generation(data_root, mode, generation.as_deref())
+}
+
+fn read_cache_for_mode_and_generation(
+    data_root: &Path,
+    mode: GithubApiMode,
+    generation: Option<&str>,
+) -> Option<ReleaseSnapshot> {
     let path = cache_path(data_root);
     let content = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&content).ok()
+    let cached: CachedReleaseSnapshot = serde_json::from_str(&content).ok()?;
+    (cached.github_api_mode == mode && cached.cache_generation.as_deref() == generation)
+        .then_some(cached.snapshot)
+}
+
+/// API 模式或 PAT 改变后清理旧快照,下一次版本查询重新请求。
+/// 先原子更新失效代号,即使快照删除失败,旧请求和旧缓存也不会被后续读取接受。
+pub fn invalidate_release_cache(data_root: &Path) -> std::io::Result<()> {
+    let dir = data_root.join(CACHE_DIR_NAME);
+    std::fs::create_dir_all(&dir)?;
+    let generation = uuid::Uuid::new_v4().to_string();
+    let marker = cache_generation_path(data_root);
+    let temporary = dir.join(format!("{CACHE_GENERATION_FILE_NAME}.{generation}.tmp"));
+    let updated =
+        std::fs::write(&temporary, &generation).and_then(|()| std::fs::rename(&temporary, &marker));
+    if let Err(err) = updated {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(err);
+    }
+    match std::fs::remove_file(cache_path(data_root)) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 /// 仅读磁盘缓存的快照,不发起网络请求
@@ -816,11 +942,21 @@ pub fn read_cached_release_snapshot(data_root: &Path) -> Option<ReleaseSnapshot>
     read_cache(data_root)
 }
 
-fn write_cache(data_root: &Path, snap: &ReleaseSnapshot) -> std::io::Result<()> {
+fn write_cache(
+    data_root: &Path,
+    snap: &ReleaseSnapshot,
+    mode: GithubApiMode,
+    generation: Option<&str>,
+) -> std::io::Result<()> {
     let dir = data_root.join(CACHE_DIR_NAME);
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(CACHE_FILE_NAME);
-    let content = serde_json::to_string_pretty(snap)
+    let cached = CachedReleaseSnapshot {
+        snapshot: snap.clone(),
+        github_api_mode: mode,
+        cache_generation: generation.map(str::to_owned),
+    };
+    let content = serde_json::to_string_pretty(&cached)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(path, content)
 }
@@ -830,6 +966,8 @@ mod tests {
     use super::*;
     use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
     use tempfile::tempdir;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn fresh_snapshot() -> ReleaseSnapshot {
         ReleaseSnapshot {
@@ -851,6 +989,240 @@ mod tests {
             qq_windows_latest: None,
             fetched_at: Some(current_unix_ts()),
         }
+    }
+
+    fn mock_client() -> reqwest::Client {
+        reqwest::Client::builder().no_proxy().build().unwrap()
+    }
+
+    async fn mock_release(server: &MockServer, release_path: &str, tag: &str) {
+        Mock::given(method("GET"))
+            .and(path(release_path))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "tag_name": tag,
+                "published_at": "2026-10-14T00:00:00Z",
+                "assets": []
+            })))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn direct_mode_skips_proxy_and_trims_pat() {
+        let github = MockServer::start().await;
+        let proxy = MockServer::start().await;
+        mock_release(&github, "/latest", "v4.18.1").await;
+        mock_release(&proxy, "/v1/release/napcat", "v0.0.1").await;
+        let github_url = format!("{}/latest", github.uri());
+        let proxy_url = format!("{}/v1/release/napcat", proxy.uri());
+
+        let release = fetch_one_with_proxy_url(
+            &mock_client(),
+            ReleaseAlias::Napcat,
+            GithubSource::Latest(&github_url),
+            GithubApiMode::Direct,
+            Some(" \tgithub-test-pat\n "),
+            Some(&proxy_url),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(release.version, "4.18.1");
+        assert!(proxy.received_requests().await.unwrap().is_empty());
+        let requests = github.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].headers["authorization"],
+            "Bearer github-test-pat"
+        );
+        assert!(!requests[0].headers.contains_key("x-signature"));
+    }
+
+    #[tokio::test]
+    async fn direct_mode_failure_does_not_fall_back_to_proxy() {
+        let github = MockServer::start().await;
+        let proxy = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&github)
+            .await;
+        mock_release(&proxy, "/v1/release/napcat", "v4.18.1").await;
+        let github_url = format!("{}/latest", github.uri());
+        let proxy_url = format!("{}/v1/release/napcat", proxy.uri());
+
+        let release = fetch_one_with_proxy_url(
+            &mock_client(),
+            ReleaseAlias::Napcat,
+            GithubSource::Latest(&github_url),
+            GithubApiMode::Direct,
+            Some("invalid-pat"),
+            Some(&proxy_url),
+        )
+        .await;
+
+        assert!(release.is_none());
+        assert_eq!(github.received_requests().await.unwrap().len(), 1);
+        assert!(proxy.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn direct_mode_blank_or_missing_pat_sends_no_authorization() {
+        let github = MockServer::start().await;
+        mock_release(&github, "/latest", "v4.18.1").await;
+        let github_url = format!("{}/latest", github.uri());
+        let client = mock_client();
+
+        for token in [None, Some(""), Some(" \t\n ")] {
+            assert!(
+                fetch_one_with_proxy_url(
+                    &client,
+                    ReleaseAlias::Napcat,
+                    GithubSource::Latest(&github_url),
+                    GithubApiMode::Direct,
+                    token,
+                    None,
+                )
+                .await
+                .is_some()
+            );
+        }
+
+        let requests = github.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(
+            requests
+                .iter()
+                .all(|request| !request.headers.contains_key("authorization"))
+        );
+    }
+
+    #[tokio::test]
+    async fn default_mode_uses_proxy_without_sending_pat() {
+        let github = MockServer::start().await;
+        let proxy = MockServer::start().await;
+        mock_release(&github, "/latest", "v0.0.1").await;
+        mock_release(&proxy, "/v1/release/napcat", "v4.18.1").await;
+        let github_url = format!("{}/latest", github.uri());
+        let proxy_url = format!("{}/v1/release/napcat", proxy.uri());
+
+        let release = fetch_one_with_proxy_url(
+            &mock_client(),
+            ReleaseAlias::Napcat,
+            GithubSource::Latest(&github_url),
+            GithubApiMode::default(),
+            Some("github-test-pat"),
+            Some(&proxy_url),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(release.version, "4.18.1");
+        assert!(github.received_requests().await.unwrap().is_empty());
+        let requests = proxy.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(!requests[0].headers.contains_key("authorization"));
+        assert!(requests[0].headers.contains_key("x-signature"));
+    }
+
+    #[tokio::test]
+    async fn proxy_failure_falls_back_to_github_with_trimmed_pat() {
+        let github = MockServer::start().await;
+        let proxy = MockServer::start().await;
+        mock_release(&github, "/latest", "v4.18.1").await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&proxy)
+            .await;
+        let github_url = format!("{}/latest", github.uri());
+        let proxy_url = format!("{}/v1/release/napcat", proxy.uri());
+
+        let release = fetch_one_with_proxy_url(
+            &mock_client(),
+            ReleaseAlias::Napcat,
+            GithubSource::Latest(&github_url),
+            GithubApiMode::Proxy,
+            Some("  github-test-pat  "),
+            Some(&proxy_url),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(release.version, "4.18.1");
+        let proxy_requests = proxy.received_requests().await.unwrap();
+        assert_eq!(proxy_requests.len(), 1);
+        assert!(!proxy_requests[0].headers.contains_key("authorization"));
+        let github_requests = github.received_requests().await.unwrap();
+        assert_eq!(github_requests.len(), 1);
+        assert_eq!(
+            github_requests[0].headers["authorization"],
+            "Bearer github-test-pat"
+        );
+    }
+
+    #[tokio::test]
+    async fn proxy_mode_without_configured_proxy_uses_github() {
+        let github = MockServer::start().await;
+        mock_release(&github, "/latest", "v4.18.1").await;
+        let github_url = format!("{}/latest", github.uri());
+
+        let release = fetch_one_with_proxy_url(
+            &mock_client(),
+            ReleaseAlias::Napcat,
+            GithubSource::Latest(&github_url),
+            GithubApiMode::Proxy,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(release.version, "4.18.1");
+        let requests = github.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(!requests[0].headers.contains_key("authorization"));
+    }
+
+    #[tokio::test]
+    async fn direct_mode_preserves_desktop_and_watch_list_filtering() {
+        let github = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/releases"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                { "tag_name": "watch-v0.2.0" },
+                { "tag_name": "v2.0.0" },
+                { "tag_name": "watch-v0.2.4" },
+                { "tag_name": "v3.0.0", "draft": true }
+            ])))
+            .mount(&github)
+            .await;
+        let github_url = format!("{}/releases", github.uri());
+        let client = mock_client();
+
+        for (alias, kind, expected_tag) in [
+            (ReleaseAlias::Ncd, TagFilterKind::Desktop, "v2.0.0"),
+            (
+                ReleaseAlias::NcdWatch,
+                TagFilterKind::NcdWatch,
+                "watch-v0.2.4",
+            ),
+        ] {
+            let release = fetch_one_with_proxy_url(
+                &client,
+                alias,
+                GithubSource::ListFiltered {
+                    list_url: &github_url,
+                    kind,
+                },
+                GithubApiMode::Direct,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(release.tag, expected_tag);
+        }
+        assert_eq!(github.received_requests().await.unwrap().len(), 2);
     }
 
     /// fetched_at 为 None(从未拉过)必须视为 stale:保证首次启动一定走真
@@ -889,10 +1261,224 @@ mod tests {
         let temp = tempdir().unwrap();
         let snap = fresh_snapshot();
 
-        write_cache(temp.path(), &snap).expect("write_cache ok");
+        write_cache(temp.path(), &snap, GithubApiMode::Proxy, None).expect("write_cache ok");
         let loaded = read_cache(temp.path()).expect("read_cache returns snapshot");
 
         assert_eq!(loaded, snap);
+    }
+
+    #[test]
+    fn invalidating_cache_removes_snapshot_and_accepts_missing_file() {
+        let temp = tempdir().unwrap();
+        invalidate_release_cache(temp.path()).unwrap();
+        let generation = read_cache_generation(temp.path()).unwrap();
+        write_cache(
+            temp.path(),
+            &fresh_snapshot(),
+            GithubApiMode::Proxy,
+            generation.as_deref(),
+        )
+        .unwrap();
+        assert!(cache_path(temp.path()).exists());
+
+        invalidate_release_cache(temp.path()).unwrap();
+
+        assert!(!cache_path(temp.path()).exists());
+        assert!(read_cache(temp.path()).is_none());
+        invalidate_release_cache(temp.path()).unwrap();
+    }
+
+    #[test]
+    fn pat_only_invalidation_rejects_late_same_mode_cache_write() {
+        let temp = tempdir().unwrap();
+        let snapshot = fresh_snapshot();
+        // 首次请求没有 marker;更新 PAT 后模式仍是 Proxy,旧请求才返回。
+        let previous_generation = read_cache_generation(temp.path()).unwrap();
+        invalidate_release_cache(temp.path()).unwrap();
+        let generation = read_cache_generation(temp.path()).unwrap();
+        assert_ne!(previous_generation, generation);
+        write_cache(
+            temp.path(),
+            &snapshot,
+            GithubApiMode::Proxy,
+            previous_generation.as_deref(),
+        )
+        .unwrap();
+        assert!(read_cached_release_snapshot(temp.path()).is_none());
+
+        write_cache(
+            temp.path(),
+            &snapshot,
+            GithubApiMode::Proxy,
+            generation.as_deref(),
+        )
+        .unwrap();
+        assert_eq!(
+            read_cached_release_snapshot(temp.path()),
+            Some(snapshot.clone())
+        );
+
+        // 已有 marker 时再次更新 PAT,也必须拒绝前一代请求的晚写。
+        invalidate_release_cache(temp.path()).unwrap();
+        let next_generation = read_cache_generation(temp.path()).unwrap();
+        assert_ne!(generation, next_generation);
+        write_cache(
+            temp.path(),
+            &snapshot,
+            GithubApiMode::Proxy,
+            generation.as_deref(),
+        )
+        .unwrap();
+        assert!(read_cached_release_snapshot(temp.path()).is_none());
+
+        write_cache(
+            temp.path(),
+            &snapshot,
+            GithubApiMode::Proxy,
+            next_generation.as_deref(),
+        )
+        .unwrap();
+        assert_eq!(read_cached_release_snapshot(temp.path()), Some(snapshot));
+    }
+
+    #[test]
+    fn invalidation_updates_generation_even_when_snapshot_delete_fails() {
+        let temp = tempdir().unwrap();
+        std::fs::create_dir_all(cache_path(temp.path())).unwrap();
+        assert!(read_cache_generation(temp.path()).unwrap().is_none());
+
+        assert!(invalidate_release_cache(temp.path()).is_err());
+
+        assert!(read_cache_generation(temp.path()).unwrap().is_some());
+    }
+
+    #[test]
+    fn invalidation_reports_generation_write_failure_and_rejects_bad_marker() {
+        let temp = tempdir().unwrap();
+        write_cache(temp.path(), &fresh_snapshot(), GithubApiMode::Proxy, None).unwrap();
+        // marker 被目录占用,原子替换必须失败并上报;不可读 marker 不能视为缺失。
+        std::fs::create_dir_all(cache_generation_path(temp.path())).unwrap();
+
+        assert!(invalidate_release_cache(temp.path()).is_err());
+
+        assert!(cache_path(temp.path()).exists());
+        assert!(read_cache_generation(temp.path()).is_err());
+        assert!(read_cached_release_snapshot(temp.path()).is_none());
+
+        std::fs::remove_dir(cache_generation_path(temp.path())).unwrap();
+        std::fs::write(cache_generation_path(temp.path()), "invalid-generation").unwrap();
+        assert!(read_cache_generation(temp.path()).is_err());
+        assert!(read_cached_release_snapshot(temp.path()).is_none());
+    }
+
+    #[test]
+    fn cache_rejects_snapshot_from_previous_api_mode() {
+        let temp = tempdir().unwrap();
+        let snapshot = fresh_snapshot();
+        write_cache(temp.path(), &snapshot, GithubApiMode::Proxy, None).unwrap();
+        assert_eq!(
+            read_cache_for_mode(temp.path(), GithubApiMode::Proxy),
+            Some(snapshot.clone())
+        );
+        assert!(read_cache_for_mode(temp.path(), GithubApiMode::Direct).is_none());
+
+        write_cache(temp.path(), &snapshot, GithubApiMode::Direct, None).unwrap();
+        assert_eq!(
+            read_cache_for_mode(temp.path(), GithubApiMode::Direct),
+            Some(snapshot)
+        );
+        assert!(read_cache_for_mode(temp.path(), GithubApiMode::Proxy).is_none());
+    }
+
+    #[test]
+    fn legacy_cache_is_only_accepted_in_default_proxy_mode() {
+        let temp = tempdir().unwrap();
+        let snapshot = fresh_snapshot();
+        std::fs::create_dir_all(temp.path().join(CACHE_DIR_NAME)).unwrap();
+        std::fs::write(
+            cache_path(temp.path()),
+            serde_json::to_string(&snapshot).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            read_cache_for_mode(temp.path(), GithubApiMode::Proxy),
+            Some(snapshot)
+        );
+        assert!(read_cache_for_mode(temp.path(), GithubApiMode::Direct).is_none());
+
+        invalidate_release_cache(temp.path()).unwrap();
+        std::fs::write(
+            cache_path(temp.path()),
+            serde_json::to_string(&fresh_snapshot()).unwrap(),
+        )
+        .unwrap();
+        assert!(read_cache_for_mode(temp.path(), GithubApiMode::Proxy).is_none());
+    }
+
+    #[tokio::test]
+    async fn matching_generation_cache_keeps_ttl_short_circuit() {
+        let temp = tempdir().unwrap();
+        let snapshot = fresh_snapshot();
+        // 无 marker 的旧默认路径保持 TTL 缓存行为。
+        write_cache(temp.path(), &snapshot, GithubApiMode::Proxy, None).unwrap();
+        assert_eq!(
+            fetch_release_snapshot(temp.path(), None, false).await,
+            snapshot
+        );
+
+        // 失效后新一代缓存同样能在 TTL 内短路,不重复发起远端请求。
+        invalidate_release_cache(temp.path()).unwrap();
+        let generation = read_cache_generation(temp.path()).unwrap();
+        write_cache(
+            temp.path(),
+            &snapshot,
+            GithubApiMode::Proxy,
+            generation.as_deref(),
+        )
+        .unwrap();
+        assert_eq!(
+            fetch_release_snapshot(temp.path(), None, false).await,
+            snapshot
+        );
+    }
+
+    #[test]
+    fn cached_snapshot_reader_respects_saved_direct_mode_after_late_proxy_write() {
+        let temp = tempdir().unwrap();
+        let config_dir = temp.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let settings = ncd_domain::AppSettings {
+            github_api_mode: GithubApiMode::Direct,
+            ..Default::default()
+        };
+        std::fs::write(
+            config_dir.join(ncd_config::APP_SETTINGS_FILE),
+            serde_json::to_string(&settings).unwrap(),
+        )
+        .unwrap();
+        // 模拟切换模式并清理缓存后,旧中转请求才返回并重新写盘。
+        let previous_generation = read_cache_generation(temp.path()).unwrap();
+        invalidate_release_cache(temp.path()).unwrap();
+        write_cache(
+            temp.path(),
+            &fresh_snapshot(),
+            GithubApiMode::Proxy,
+            previous_generation.as_deref(),
+        )
+        .unwrap();
+
+        assert!(read_cached_release_snapshot(temp.path()).is_none());
+
+        let generation = read_cache_generation(temp.path()).unwrap();
+        write_cache(
+            temp.path(),
+            &fresh_snapshot(),
+            GithubApiMode::Direct,
+            generation.as_deref(),
+        )
+        .unwrap();
+        assert!(read_cached_release_snapshot(temp.path()).is_some());
     }
 
     #[test]
@@ -900,7 +1486,7 @@ mod tests {
         let temp = tempdir().unwrap();
         // cache dir 不存在;write_cache 应该自己 mkdir -p
         let snap = ReleaseSnapshot::default();
-        write_cache(temp.path(), &snap).expect("write_cache ok");
+        write_cache(temp.path(), &snap, GithubApiMode::Proxy, None).expect("write_cache ok");
         assert!(cache_path(temp.path()).exists());
     }
 
@@ -911,7 +1497,7 @@ mod tests {
         let temp = tempdir().unwrap();
         let mut snap = fresh_snapshot();
         snap.fetched_at = Some(current_unix_ts().saturating_sub(CACHE_TTL_SECS + 100));
-        write_cache(temp.path(), &snap).unwrap();
+        write_cache(temp.path(), &snap, GithubApiMode::Proxy, None).unwrap();
 
         let loaded = read_cache(temp.path()).unwrap();
         assert!(is_stale(&loaded));
@@ -1090,7 +1676,7 @@ mod tests {
         // 标记为「刚拉过」的假数据,非 force 应直接返回
         snap.fetched_at = Some(current_unix_ts());
         snap.napcat_latest.as_mut().unwrap().version = "cached-only".into();
-        write_cache(temp.path(), &snap).unwrap();
+        write_cache(temp.path(), &snap, GithubApiMode::Proxy, None).unwrap();
 
         let cached = fetch_release_snapshot(temp.path(), None, false).await;
         assert_eq!(

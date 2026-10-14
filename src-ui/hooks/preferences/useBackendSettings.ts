@@ -36,8 +36,17 @@ export function useBackendSettings(cb: Callbacks = {}) {
             await applyClientPrefsFromDraft(draft);
             return savedBackend;
         },
-        onSuccess: (savedBackend) => {
+        onSuccess: async (savedBackend) => {
+            const previous = queryClient.getQueryData<typeof savedBackend>(backendSettingsKey);
             queryClient.setQueryData(backendSettingsKey, savedBackend);
+            if (
+                previous?.githubApiMode !== savedBackend.githubApiMode ||
+                previous?.githubPat.trim() !== savedBackend.githubPat.trim()
+            ) {
+                // 首次查询尚无数据时，invalidateQueries 不会替换正在执行的旧请求。
+                await queryClient.cancelQueries({ queryKey: ['releaseSnapshot'] });
+                void queryClient.invalidateQueries({ queryKey: ['releaseSnapshot'] });
+            }
             void reloadBotRuntimeMetricsCatalogSettings();
             pushInfoBar({
                 key: 'app-settings-save',
