@@ -113,12 +113,12 @@ impl MaiBotComponent {
         let mirrors = build_mirror_urls(&url, None);
         ctx.info(format!("下载 {repo} {tag}，候选镜像 {} 个", mirrors.len()))
             .await;
-        let local_tmp = std::env::temp_dir().join(format!(
+        let local_tmp = ctx.download_path(format!(
             "ncd-maibot-{slot}-{}-{}.{}",
             std::process::id(),
             unix_ms(),
             ext.as_str()
-        ));
+        ))?;
         let downloaded = DownloadHelper::new()?
             .download_with_mirrors_no_chunk(&mirrors, &local_tmp, None, ctx, step)
             .await;

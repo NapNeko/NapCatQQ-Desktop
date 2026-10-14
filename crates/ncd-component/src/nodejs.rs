@@ -369,12 +369,12 @@ impl Component for NodeJsComponent {
         } else {
             "tar.xz"
         };
-        let local_tmp = std::env::temp_dir().join(format!(
+        let local_tmp = ctx.download_path(format!(
             "ncd-nodejs-{}-{}.{}",
             self.version,
             std::process::id(),
             archive_ext
-        ));
+        ))?;
 
         let helper = DownloadHelper::new()?;
         let mirrors = ncd_network::build_mirror_urls(&url, None);

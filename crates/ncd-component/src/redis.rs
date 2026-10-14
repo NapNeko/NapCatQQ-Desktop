@@ -207,7 +207,7 @@ impl RedisComponent {
         asset: &str,
         step: u32,
     ) -> Result<std::path::PathBuf, ActionError> {
-        let local_tmp = std::env::temp_dir().join(format!("ncd-{}-{asset}", std::process::id()));
+        let local_tmp = ctx.download_path(format!("ncd-{}-{asset}", std::process::id()))?;
         let helper = DownloadHelper::new()?;
         let mirrors = if url.starts_with("https://github.com/") {
             ncd_network::build_mirror_urls(url, None)

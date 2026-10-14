@@ -862,6 +862,8 @@ pub fn run() {
             commands::list_remote_files,
             commands::open_data_dir,
             commands::data_root_migrate::preview_migrate_data_root,
+            commands::cache_cleanup::scan_download_cache,
+            commands::cache_cleanup::clean_download_cache,
             commands::data_root_migrate::start_migrate_data_root,
             commands::data_root_migrate::cancel_migrate_data_root,
             commands::data_root_migrate::delete_retired_data_root,

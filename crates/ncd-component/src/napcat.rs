@@ -472,11 +472,11 @@ impl NapCatComponent {
             message: "download NapCat.Shell.zip".into(),
         })
         .await;
-        let local_tmp = std::env::temp_dir().join(format!(
+        let local_tmp = ctx.download_path(format!(
             "ncd-napcat-{}-{}.zip",
             std::process::id(),
             chrono_ms()
-        ));
+        ))?;
         let helper = DownloadHelper::new()?;
         let mirrors = build_mirror_urls(&self.download_url, None);
         ctx.info(format!(
@@ -742,11 +742,11 @@ impl NapCatComponent {
             message: "download NapCat.Shell.zip".into(),
         })
         .await;
-        let local_tmp = std::env::temp_dir().join(format!(
+        let local_tmp = ctx.download_path(format!(
             "ncd-napcat-win-{}-{}.zip",
             std::process::id(),
             chrono_ms()
-        ));
+        ))?;
         let helper = DownloadHelper::new()?;
         let mirrors = build_mirror_urls(&self.download_url, None);
         ctx.info(format!(

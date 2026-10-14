@@ -102,8 +102,7 @@ impl KoishiComponent {
             mirrors.len()
         ))
         .await;
-        let base =
-            std::env::temp_dir().join(format!("ncd-koishi-{}-{}", std::process::id(), unix_ms()));
+        let base = ctx.download_path(format!("ncd-koishi-{}-{}", std::process::id(), unix_ms()))?;
         let zip_local = base.with_extension("zip");
         let downloaded = DownloadHelper::new()?
             .download_with_mirrors_no_chunk(&mirrors, &zip_local, None, ctx, step)

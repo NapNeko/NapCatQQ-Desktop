@@ -72,6 +72,7 @@ pub fn build_component_for_host(
     ctx: &BuildComponentCtx<'_>,
 ) -> Result<Arc<dyn Component>, String> {
     let data_root_host = data_root_to_host_path(ctx.data_root, ctx.host.os());
+    let data_paths = crate::DataPaths::new(ctx.data_root);
     let layout = ctx.layout;
     let remote_home = ctx.remote_home;
     let snapshot = ctx.snapshot;
@@ -186,9 +187,12 @@ pub fn build_component_for_host(
         ComponentId::Qq => {
             if ctx.host.os() == Os::Windows {
                 // 侧装根 components/QQ(启动链路 resolve_qq_install_path 同源);
-                // 安装包缓存 runtime/cache/qq,失败保留可复用
+                // 安装包缓存独立于已安装组件，失败保留可复用
                 let qq_root = data_root_host.join("components").join(MANAGED_QQ_DIR_NAME);
-                let cache = data_root_host.join("runtime").join("cache").join("qq");
+                let cache = data_root_to_host_path(
+                    &data_paths.installer_cache_dir().join("qq"),
+                    ctx.host.os(),
+                );
                 Arc::new(QQComponent::default_v3_2_25(qq_root).with_tmp_dir(cache))
             } else {
                 Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
@@ -204,8 +208,12 @@ pub fn build_component_for_host(
             );
             if ctx.host.os() == Os::Windows {
                 let install_dir = data_root_host.join("components").join("NodeJs");
-                let mut comp =
-                    NodeJsComponent::new("22.13.0", install_dir).with_version_reqs(accept);
+                let mut comp = NodeJsComponent::new("22.13.0", install_dir)
+                    .with_version_reqs(accept)
+                    .with_tmp_dir(data_root_to_host_path(
+                        &data_paths.download_cache_dir().join("staging"),
+                        ctx.host.os(),
+                    ));
                 if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
                     comp = comp.with_extra_detect_bin(bin);
                 }
@@ -228,10 +236,10 @@ pub fn build_component_for_host(
         ComponentId::VcRedist => {
             // 安装包缓存目录:稳定文件名 VC_redist.x64.exe(SHA256 匹配才复用),
             // 失败保留可复用;只在 Windows 本机生效,组件自身 check_target 拦截
-            let cache = data_root_host
-                .join("runtime")
-                .join("cache")
-                .join("vcredist");
+            let cache = data_root_to_host_path(
+                &data_paths.installer_cache_dir().join("vcredist"),
+                ctx.host.os(),
+            );
             Arc::new(VcRedistComponent::new(cache))
         }
         ComponentId::NcdWatch => {
@@ -283,7 +291,14 @@ pub fn build_component_for_host(
                 let home = require_remote_home(remote_home)?;
                 UvComponent::default_remote_install_dir(home)
             };
-            Arc::new(UvComponent::new(UV_DEFAULT_VERSION, install_dir))
+            let mut component = UvComponent::new(UV_DEFAULT_VERSION, install_dir);
+            if ctx.host.os() == Os::Windows {
+                component = component.with_tmp_dir(data_root_to_host_path(
+                    &data_paths.download_cache_dir().join("staging"),
+                    ctx.host.os(),
+                ));
+            }
+            Arc::new(component)
         }
         // Linux 上 git 是系统包，组件目录只是占位
         ComponentId::Git => Arc::new(GitComponent::new(

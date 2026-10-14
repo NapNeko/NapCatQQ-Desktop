@@ -271,7 +271,7 @@ pub async fn ensure_python(
         .ok_or_else(|| python_install_failed(request, "uv 没给出可下载的解释器"))?;
     let (tag, file) = python_build_rel(&url)
         .ok_or_else(|| python_install_failed(request, &format!("认不出下载地址 {url}")))?;
-    let local_tmp = std::env::temp_dir().join(format!("ncd-python-{}-{file}", std::process::id()));
+    let local_tmp = ctx.download_path(format!("ncd-python-{}-{file}", std::process::id()))?;
     let downloaded = DownloadHelper::new()?
         .download_with_mirrors_no_chunk(&python_download_mirrors(&url), &local_tmp, None, ctx, step)
         .await;

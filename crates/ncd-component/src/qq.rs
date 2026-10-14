@@ -27,7 +27,7 @@
 //!
 //! Windows 安装流程(侧装,不跑安装器、不写注册表、不要 UAC):
 //! 1. pcConfig.json 取 Windows.ntDownloadX64Url;gtimg/QQNTV2 裸链先 UrlSign
-//! 2. 下载到 data_root/runtime/cache/qq/QQNT-{version}.exe,已存在则复用
+//! 2. 下载到 data_root/cache/installers/qq/QQNT-{version}.exe,已存在则复用
 //! 3. 安装包是 PE,payload 是内嵌的 7z(LZMA+BCJ2)。7zr 直接 x 只会命中前面
 //!    一个 28KB 的许可协议小包,所以先 `l -t#` 列出内嵌档案,取最大的 N.7z
 //!    `e -t#` 抠出来再 `x`;payload 里 Files/ 就是完整 QQNT 树
@@ -774,7 +774,7 @@ impl QQComponent {
             ))
             .await;
 
-            let local_tmp = std::env::temp_dir().join(format!(
+            let local_tmp = ctx.download_path(format!(
                 "ncd-qq-{}-{}.{}",
                 release.version.replace(['/', '\\', ' '], "_"),
                 std::process::id(),
@@ -782,7 +782,7 @@ impl QQComponent {
                     PackageFormat::Deb => "deb",
                     PackageFormat::Rpm => "rpm",
                 }
-            ));
+            ))?;
 
             let helper = DownloadHelper::new()?;
             helper

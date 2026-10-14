@@ -13,6 +13,7 @@ pub mod bot_actor;
 pub mod bot_config;
 pub mod bot_runtime_metrics;
 pub mod bot_status;
+pub mod cache_cleanup;
 pub mod chat_archive;
 pub mod chat_desktop;
 pub mod chat_group_files;

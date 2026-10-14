@@ -1,5 +1,7 @@
 //! 数据根:布局收敛(layout v1)与整树换根迁移。
 
+pub mod cache;
+mod cache_fs;
 pub mod consolidate;
 pub mod relocate;
 

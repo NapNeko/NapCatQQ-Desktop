@@ -2,6 +2,7 @@ pub mod app_framework;
 pub mod app_settings;
 pub mod bot;
 pub mod bot_metrics;
+pub mod cache_cleanup;
 pub mod chat;
 pub mod chat_clipboard;
 pub mod chat_screenshot;

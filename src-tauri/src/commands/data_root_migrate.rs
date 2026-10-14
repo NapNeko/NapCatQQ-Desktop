@@ -106,6 +106,7 @@ pub async fn start_migrate_data_root(
     state: State<'_, AppState>,
     target_root: String,
 ) -> Result<DataRootMigrateResult, String> {
+    let _cache_lease = state.components.download_cache().maintenance()?;
     let _guard = state.migrate_gate.acquire().await;
     state.migrate_gate.ensure_idle()?;
 

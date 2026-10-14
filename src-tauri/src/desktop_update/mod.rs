@@ -345,7 +345,7 @@ impl GithubMsiUpdateProvider {
     }
 
     fn staging_dir(&self) -> PathBuf {
-        self.data_root.join("runtime").join("tmp")
+        ncd_runtime::DataPaths::new(&self.data_root).update_cache_dir()
     }
 
     fn staged_msi_path(&self) -> PathBuf {

@@ -103,6 +103,9 @@ pub async fn install_desktop_update(
         ));
     }
 
+    // 覆盖下载、校验、启动 MSI 直到退出，不能只保护网络传输阶段。
+    let _cache_lease = state.components.download_cache().lease().await?;
+
     let task_id = task_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());

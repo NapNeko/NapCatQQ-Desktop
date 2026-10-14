@@ -5,6 +5,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useConfigTransfer } from '../../../hooks/preferences/useConfigTransfer';
 import { ConfigImportDialog } from '../ConfigImportDialog';
 import { DataRootMigrateDialog } from '../DataRootMigrateDialog';
+import { CacheCleanupDialog } from '../CacheCleanupDialog';
 import { Button, TextField } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import type { SettingsDraft } from '../settings-draft';
@@ -21,6 +22,7 @@ interface Props {
 export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDraft }: Props) {
     const [revealPat, setRevealPat] = useState(false);
     const [migrateOpen, setMigrateOpen] = useState(false);
+    const [cleanupOpen, setCleanupOpen] = useState(false);
     const {
         exportConfig,
         openImportWizard,
@@ -54,7 +56,6 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDra
                             {dataRoot}
                         </span>
                     }
-                    isLast
                 >
                     <div className="flex shrink-0 items-center gap-1.5">
                         <Button
@@ -74,6 +75,15 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDra
                             迁移
                         </Button>
                     </div>
+                </FieldRow>
+                <FieldRow
+                    label="下载缓存"
+                    description="查看并清理安装包、旧更新包和下载暂存文件。"
+                    isLast
+                >
+                    <Button variant="secondary" size="sm" onClick={() => setCleanupOpen(true)}>
+                        扫描与清理
+                    </Button>
                 </FieldRow>
             </SettingsSection>
 
@@ -150,6 +160,7 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDra
                 onOpenChange={setMigrateOpen}
                 currentDataRoot={dataRoot}
             />
+            <CacheCleanupDialog open={cleanupOpen} onOpenChange={setCleanupOpen} />
 
             <SettingsSection title="GitHub" description="可选；填写后组件页检查更新走认证额度">
                 {!draft ? (

@@ -29,6 +29,7 @@ pub struct ActionCtx {
     pub(crate) cancel: CancellationToken,
     /// 日志回调(可选,默认走 tracing)
     pub(crate) logger: Option<LoggerFn>,
+    download_dir: Option<std::path::PathBuf>,
 }
 
 impl ActionCtx {
@@ -44,6 +45,7 @@ impl ActionCtx {
             progress: tx,
             cancel: CancellationToken::new(),
             logger: None,
+            download_dir: None,
         };
         (ctx, rx)
     }
@@ -54,6 +56,7 @@ impl ActionCtx {
             progress: self.progress.clone(),
             cancel: self.cancel.child_token(),
             logger: self.logger.clone(),
+            download_dir: self.download_dir.clone(),
         }
     }
 
@@ -69,6 +72,29 @@ impl ActionCtx {
 
     pub fn cancel_token(&self) -> CancellationToken {
         self.cancel.clone()
+    }
+
+    /// 编排层注入自有暂存目录；独立组件测试仍可使用系统临时目录。
+    pub fn with_download_dir(mut self, directory: std::path::PathBuf) -> Self {
+        self.download_dir = Some(directory);
+        self
+    }
+
+    pub fn download_path(
+        &self,
+        name: impl AsRef<std::path::Path>,
+    ) -> Result<std::path::PathBuf, crate::error::ActionError> {
+        let name = name.as_ref();
+        let mut components = name.components();
+        if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+            || components.next().is_some()
+        {
+            return Err(crate::error::ActionError::other("下载文件名不能包含目录"));
+        }
+        let directory = self.download_dir.clone().unwrap_or_else(std::env::temp_dir);
+        std::fs::create_dir_all(&directory)
+            .map_err(|e| crate::error::ActionError::other(format!("创建下载暂存目录失败：{e}")))?;
+        Ok(directory.join(name))
     }
 
     /// 上报进度,channel 满时异步等待,保证 UI 不丢消息
@@ -111,6 +137,23 @@ impl ActionCtx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_directory_is_inherited_and_rejects_paths_outside_it() {
+        let temporary = tempfile::tempdir().unwrap();
+        let directory = temporary.path().join("downloads");
+        let (ctx, _rx) = ActionCtx::new();
+        let child = ctx.with_download_dir(directory.clone()).child();
+        assert_eq!(
+            child.download_path("archive.zip").unwrap(),
+            directory.join("archive.zip")
+        );
+        assert!(directory.is_dir());
+        for name in ["", "../outside.zip", "folder/archive.zip"] {
+            assert!(child.download_path(name).is_err());
+        }
+        assert!(child.download_path(temporary.path()).is_err());
+    }
 
     #[tokio::test]
     async fn emit_pushes_event_to_receiver() {

@@ -112,6 +112,18 @@ impl DataPaths {
         self.root.join("cache")
     }
 
+    pub fn download_cache_dir(&self) -> PathBuf {
+        self.cache_dir().join("downloads")
+    }
+
+    pub fn installer_cache_dir(&self) -> PathBuf {
+        self.cache_dir().join("installers")
+    }
+
+    pub fn update_cache_dir(&self) -> PathBuf {
+        self.cache_dir().join("updates")
+    }
+
     pub fn tmp_dir(&self) -> PathBuf {
         self.root.join("tmp")
     }

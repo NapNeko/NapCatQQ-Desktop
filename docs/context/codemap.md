@@ -91,6 +91,7 @@ flowchart TB
 | 数据根解析 | `src-tauri/src/bootstrap.rs`（`resolve_data_root`：`NCD_DATA_ROOT` → **HKCU** DataRoot → **HKLM** DataRoot → ProgramData 默认） |
 | 产品路径注册表 | `src-tauri/src/product_registry.rs`（HKLM 机器默认 + **HKCU 用户迁移指针** `write_user_data_root`）+ `src-tauri/wix/v2-orphan-cleanup.wxs`（HKLM DataRoot 机器默认；WiX3 无 NeverOverwrite）+ `src-tauri/wix/main.wxs`（HKCU `Software\NapCatQQ Desktop`；模板须 `Software\\{{product_name}}`）+ `legacy_install_cleanup.rs` |
 | 数据根整树迁移 | `crates/ncd-runtime/src/data/relocate.rs` + `ncd-domain` `data_root_migrate.rs` + `src-tauri/src/commands/data_root_migrate.rs` + UI `DataRootMigrateDialog` / `DataTab`；活 plan `.claude/plan/data-root-relocate.md` |
+| 下载缓存清理 | `ncd-runtime/src/data/{cache,cache_fs}.rs` + `ncd-domain/src/cache_cleanup.rs` + `commands/cache_cleanup.rs` + UI `CacheCleanupDialog` / `useCacheCleanup`；`ComponentExecutor` 持有共享服务，安装/更新持读租约至整个任务结束，清理/迁移持独占租约；Windows 以 `tmp/.ncd-download-cache.lock` 的共享模式保护同数据目录的其他实例；新缓存通过 `DataPaths` 落 `cache/{installers,updates,downloads}`，历史路径按白名单扫描 |
 | 启动快照 | `src-tauri/src/bootstrap.rs` + `ncd-domain` `bootstrap.rs` |
 | App 组装 / AppState | `src-tauri/src/lib.rs` |
 | 运行时句柄 | `src-tauri/src/runtime.rs` |

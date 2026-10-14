@@ -224,11 +224,11 @@ impl NcdWatchComponent {
 
         // 正式路径:Desktop 本机下载 release → SFTP 上传(与 NC/SL 一致)。
         // 不用远端 wget/curl 直下 GitHub:远端常无外网/无代理。
-        let local_tmp = std::env::temp_dir().join(format!(
+        let local_tmp = ctx.download_path(format!(
             "ncd-watch-{}-{}",
             std::process::id(),
             self.version_label.replace(['/', '\\', ' '], "_")
-        ));
+        ))?;
         if local_tmp.exists() {
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }

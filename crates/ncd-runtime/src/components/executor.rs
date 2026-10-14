@@ -173,6 +173,7 @@ pub struct ComponentExecutor {
     server_manager: Arc<ServerManager>,
     event_bus: BroadcastEventBus,
     active_tasks: ActiveTasks,
+    download_cache: crate::data::cache::DownloadCacheService,
     /// 动作完成后清掉该主机的库存副本(安装可能改变布局)
     inventory: Arc<RemoteInventoryService>,
     app_settings: Arc<RwLock<AppSettings>>,
@@ -200,6 +201,7 @@ impl ComponentExecutor {
             server_manager,
             event_bus,
             active_tasks: ActiveTasks::default(),
+            download_cache: crate::data::cache::DownloadCacheService::new(&data_root),
             app_settings,
             data_root,
             local_snowluma_version,
@@ -229,6 +231,10 @@ impl ComponentExecutor {
 
     pub fn active_tasks(&self) -> &ActiveTasks {
         &self.active_tasks
+    }
+
+    pub fn download_cache(&self) -> &crate::data::cache::DownloadCacheService {
+        &self.download_cache
     }
 
     /// 组件任务排进的那条队列;要盯自己提交的任务、或往同一条队列里排任务的用这个
@@ -695,6 +701,7 @@ impl ComponentExecutor {
             inventory: Arc::clone(&self.inventory),
             event_bus: self.event_bus.clone(),
             active_tasks: self.active_tasks.clone(),
+            download_cache: self.download_cache.clone(),
             app_settings: Arc::clone(&self.app_settings),
             data_root: self.data_root.clone(),
             server_manager: Arc::clone(&self.server_manager),
@@ -734,6 +741,7 @@ struct ComponentTaskRunner {
     inventory: Arc<RemoteInventoryService>,
     event_bus: BroadcastEventBus,
     active_tasks: ActiveTasks,
+    download_cache: crate::data::cache::DownloadCacheService,
     app_settings: Arc<RwLock<AppSettings>>,
     data_root: PathBuf,
     server_manager: Arc<ServerManager>,
@@ -741,7 +749,17 @@ struct ComponentTaskRunner {
 
 impl ComponentTaskRunner {
     async fn run(mut self, task_ctx: DeploymentTaskContext) -> DeploymentTaskRunResult {
-        let (mut ctx, mut rx) = ActionCtx::new();
+        let task_cancel = task_ctx.cancel_token();
+        let _cache_lease = tokio::select! {
+            lease = self.download_cache.lease() => match lease {
+                Ok(lease) => lease,
+                Err(error) => return DeploymentTaskRunResult::failed(error),
+            },
+            () = task_cancel.cancelled() => return DeploymentTaskRunResult::failed("任务已取消"),
+        };
+        let (ctx, mut rx) = ActionCtx::new();
+        let mut ctx =
+            ctx.with_download_dir(crate::DataPaths::new(&self.data_root).download_cache_dir());
         let cancel_token = ctx.cancel_token();
         let task_id = task_ctx.task_id().to_string();
         // 从哪条路返回都会摘掉,取消命令不会拿到已结束任务的令牌

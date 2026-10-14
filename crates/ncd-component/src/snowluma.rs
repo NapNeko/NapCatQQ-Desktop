@@ -473,14 +473,14 @@ impl SnowLumaComponent {
         if !have_archive {
             // 走镜像 fallback:本机下载 → 上传
             let helper = DownloadHelper::new()?;
-            let local_tmp = std::env::temp_dir().join(format!(
+            let local_tmp = ctx.download_path(format!(
                 "ncd-snowluma-{}-{}.tar.gz",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_millis())
                     .unwrap_or(0)
-            ));
+            ))?;
 
             let mirrors = self.mirror_urls();
             ctx.info(format!(
@@ -702,14 +702,14 @@ impl SnowLumaComponent {
         .await;
 
         let helper = DownloadHelper::new()?;
-        let local_tmp = std::env::temp_dir().join(format!(
+        let local_tmp = ctx.download_path(format!(
             "ncd-snowluma-win-{}-{}.zip",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis())
                 .unwrap_or(0)
-        ));
+        ))?;
 
         let mirrors = self.mirror_urls();
         ctx.info(format!(

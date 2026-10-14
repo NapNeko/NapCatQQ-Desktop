@@ -53,7 +53,7 @@ const SUPPORTED: &[(Os, Locality)] = &[(Os::Windows, Locality::Local)];
 /// VC++ 运行库 component；只认 Windows 本机
 #[derive(Debug, Clone)]
 pub struct VcRedistComponent {
-    /// 安装包缓存目录（工厂注入 data_root 派生的 runtime/cache/vcredist）
+    /// 安装包缓存目录（工厂注入 data_root 派生的 cache/installers/vcredist）
     pub cache_dir: HostPath,
 }
 

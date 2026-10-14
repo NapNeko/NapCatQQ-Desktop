@@ -281,7 +281,7 @@ impl Component for UvComponent {
             "tar.gz"
         };
         let file_name = format!("ncd-uv-{}-{}.{ext}", self.version, std::process::id());
-        let local_tmp = std::env::temp_dir().join(&file_name);
+        let local_tmp = ctx.download_path(&file_name)?;
         let helper = DownloadHelper::new()?;
         let mirrors = ncd_network::build_mirror_urls(&url, None);
         helper
