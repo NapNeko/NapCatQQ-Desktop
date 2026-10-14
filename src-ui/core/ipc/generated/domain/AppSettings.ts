@@ -3,6 +3,7 @@ import type { AfterCloseUiBehavior } from "./AfterCloseUiBehavior";
 import type { AppUiPreferences } from "./AppUiPreferences";
 import type { CloseAction } from "./CloseAction";
 import type { FeatureToggles } from "./FeatureToggles";
+import type { GithubApiMode } from "./GithubApiMode";
 import type { McpServerSettings } from "./McpServerSettings";
 import type { OfflineEmailSettings } from "./OfflineEmailSettings";
 import type { OfflineOneBotSettings } from "./OfflineOneBotSettings";
@@ -19,6 +20,10 @@ export type AppSettings = {
  * WebUI 登录轮询设置
  */
 poller: WebUiPollerSettings, 
+/**
+ * GitHub API 请求方式；PAT 单独存储在 SecretStore。
+ */
+githubApiMode: GithubApiMode, 
 /**
  * 主页性能监控开关
  */

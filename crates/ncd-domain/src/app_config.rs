@@ -16,6 +16,16 @@ use crate::offline_alert::{
     OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookSettings,
 };
 
+/// GitHub 版本 API 的请求方式；默认保持中转优先，直连只访问 GitHub 官方 API。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum GithubApiMode {
+    #[default]
+    Proxy,
+    Direct,
+}
+
 string_enum! {
     /// 主窗口关闭按钮行为
     ///
@@ -366,6 +376,9 @@ pub struct AppSettings {
     /// WebUI 登录轮询设置
     #[serde(default)]
     pub poller: WebUiPollerSettings,
+    /// GitHub API 请求方式；PAT 单独存储在 SecretStore。
+    #[serde(rename = "githubApiMode", default)]
+    pub github_api_mode: GithubApiMode,
     /// 主页性能监控开关
     #[serde(rename = "performanceMonitorEnabled", default = "default_true")]
     pub performance_monitor_enabled: bool,
@@ -500,6 +513,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             poller: WebUiPollerSettings::default(),
+            github_api_mode: GithubApiMode::default(),
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
             bot_runtime_metrics_enabled: false,
@@ -827,6 +841,7 @@ mod tests {
     fn app_settings_empty_object_falls_back_to_defaults() {
         let parsed: AppSettings = serde_json::from_str("{}").expect("空对象应能反序列化为默认值");
         assert_eq!(parsed, AppSettings::default());
+        assert_eq!(parsed.github_api_mode, GithubApiMode::Proxy);
         assert!(parsed.performance_monitor_enabled);
         assert_eq!(parsed.performance_monitor_interval_ms, 1200);
         assert_eq!(
@@ -848,9 +863,12 @@ mod tests {
             },
             performance_monitor_enabled: false,
             performance_monitor_interval_ms: 3000,
+            github_api_mode: GithubApiMode::Direct,
             ..AppSettings::default()
         };
         let json = serde_json::to_string(&cfg).expect("serialize 不应失败");
+        assert!(json.contains(r#""githubApiMode":"direct""#));
+        assert!(!json.contains("githubPat"));
         let back: AppSettings = serde_json::from_str(&json).expect("反序列化失败");
         assert_eq!(back, cfg);
     }

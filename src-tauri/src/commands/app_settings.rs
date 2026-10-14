@@ -55,33 +55,63 @@ pub async fn set_app_settings(
 
     let mut settings = dto.settings;
     settings.normalize();
-    // 包类型由组件安装 / 卸载流程维护，设置页的旧草稿不能覆盖当前安装状态
-    let (settings, ()) = ncd_runtime::desktop::update_app_settings(
-        &state.data_root,
-        &state.app_settings,
-        move |current| {
-            let package = current.snowluma_package;
-            *current = settings;
-            current.snowluma_package = package;
-        },
-    )
-    .await?;
-
-    // 开机自启:JSON 为权威源,落盘成功后再收敛 HKCU Run(用户级,无需 UAC)。
-    // 若此处失败,启动时 reconcile_launch_on_startup 会再按 JSON 对齐。
-    crate::autostart::apply_launch_on_startup(settings.launch_on_startup)
-        .map_err(|e| format!("同步开机自启失败: {e}"))?;
-
-    // PAT:非空写 keyring,空串清除删除失败(本就没有)忽略
-    let secrets = secret_store(&state);
     let pat = dto.github_pat.trim();
+    let secrets = secret_store(&state);
+    let previous_pat = secrets
+        .get(GITHUB_PAT_SECRET_KEY)
+        .map_err(|e| format!("读取 GitHub PAT 失败: {e}"))?;
+    let pat_changed = previous_pat
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        != (!pat.is_empty()).then_some(pat);
+
+    // 先保存凭据，避免 PAT 写入失败后仍将请求方式切换为直连。
     if pat.is_empty() {
-        let _ = secrets.delete(GITHUB_PAT_SECRET_KEY);
+        match secrets.delete(GITHUB_PAT_SECRET_KEY) {
+            Ok(()) => {}
+            Err(ncd_domain::errors::SecretError::NotFound) if previous_pat.is_none() => {}
+            Err(err) => return Err(format!("清除 GitHub PAT 失败: {err}")),
+        }
+        // SecretStore 可能同时使用系统密钥库与加密回退存储，确认两处均已清除。
+        if secret_store(&state)
+            .get(GITHUB_PAT_SECRET_KEY)
+            .map_err(|e| format!("确认 GitHub PAT 清除结果失败: {e}"))?
+            .is_some()
+        {
+            return Err("清除 GitHub PAT 失败，凭据仍存在".to_string());
+        }
     } else {
         secrets
             .put(GITHUB_PAT_SECRET_KEY, pat)
             .map_err(|e| format!("保存 GitHub PAT 失败: {e}"))?;
     }
+
+    // 包类型由组件安装 / 卸载流程维护，设置页的旧草稿不能覆盖当前安装状态
+    let (settings, github_mode_changed) = ncd_runtime::desktop::update_app_settings(
+        &state.data_root,
+        &state.app_settings,
+        move |current| {
+            let package = current.snowluma_package;
+            let github_mode_changed = current.github_api_mode != settings.github_api_mode;
+            *current = settings;
+            current.snowluma_package = package;
+            github_mode_changed
+        },
+    )
+    .await?;
+
+    if github_mode_changed || pat_changed {
+        if let Err(err) = ncd_runtime::release::invalidate_release_cache(&state.data_root) {
+            // 配置已经落盘，缓存清理失败不应阻断其他设置的热更新。
+            tracing::warn!(error = %err, "GitHub 配置已保存，清除版本缓存失败");
+        }
+    }
+
+    // 开机自启:JSON 为权威源,落盘成功后再收敛 HKCU Run(用户级,无需 UAC)。
+    // 若此处失败,启动时 reconcile_launch_on_startup 会再按 JSON 对齐。
+    crate::autostart::apply_launch_on_startup(settings.launch_on_startup)
+        .map_err(|e| format!("同步开机自启失败: {e}"))?;
 
     // 热更新内存中的轮询设置,运行中的 Poller 下次 tick 生效
     state
