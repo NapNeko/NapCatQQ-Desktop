@@ -45,7 +45,7 @@ chrono = "0.4"
 keyring = "2"
 aes-gcm = "0.10"
 hex = "0.4"
-netstat2 = "0.9"
+netstat2 = "0.11.2"
 
 [target.'cfg(windows)'.dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }

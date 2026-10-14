@@ -129,6 +129,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 };
                 target.webui_secret = password.clone();
                 if docker {
+                    if let Some(endpoint) = self.snowluma_docker_endpoints(&bot).await {
+                        target.webui_port = endpoint.webui_host_port;
+                    }
                     target.container_name = Some(ncd_deploy::bot_docker_container_name(
                         BackendType::SnowLuma,
                         config.bot.qq_id,
@@ -145,6 +148,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         targets.push(target);
                         continue;
                     };
+                    target.pid_file = Some(daemon.paths().pid_bot_path(bot.as_str()));
                     let Some(resolver) = &self.host_resolver else {
                         targets.push(target);
                         continue;
@@ -164,7 +168,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         continue;
                     };
                     target.webui_port = port;
-                    target.pid_file = Some(daemon.paths().pid_bot_path(bot.as_str()));
                 }
             }
             targets.push(target);

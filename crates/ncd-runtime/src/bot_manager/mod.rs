@@ -44,6 +44,7 @@ mod debug_port;
 mod helpers;
 mod host_recovery;
 mod listeners;
+mod metrics;
 mod novnc;
 mod qr_login;
 mod refresh;
@@ -276,7 +277,31 @@ impl<S: ConfigStore + 'static> BotManager<crate::LocalBotConfigRepo<S>, S> {
         bots: Option<Vec<BotConfig>>,
         write: impl std::future::Future<Output = Result<T, String>>,
     ) -> Result<T, String> {
-        self.repo.replace_with(bots, write).await
+        let previous = if bots.is_some() {
+            self.repo.list().await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let result = self.repo.replace_with(bots, write).await?;
+        if !previous.is_empty() {
+            let manager = self.clone();
+            tokio::spawn(async move {
+                let Ok(current) = manager.repo.list().await else {
+                    return;
+                };
+                for config in previous {
+                    if !current.iter().any(|next| {
+                        next.bot.qq_id == config.bot.qq_id
+                            && next.bot.backend_type == config.bot.backend_type
+                            && next.bot.deployment_type == config.bot.deployment_type
+                            && next.bot.runtime_target == config.bot.runtime_target
+                    }) {
+                        manager.remove_snowluma_metrics_registration(&config).await;
+                    }
+                }
+            });
+        }
+        Ok(result)
     }
 }
 
@@ -401,7 +426,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 启动前按 AppSettings 注入指标探针（本机）；失败只记日志，不阻断启动
     async fn apply_runtime_metrics_inject(&self, bot_id: &BotId, config: &BotConfig) {
-        use crate::metrics::{apply_metrics_to_environment, prepare_inject};
+        use crate::metrics::prepare_inject;
         use ncd_domain::bot_config::BackendType;
 
         // 仅本机启动注入；远端 NC 由 RemoteNativeLaunchTranslator + RuntimeRemoteMetricsInjector 处理
@@ -414,6 +439,23 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         };
         let prefs = Self::load_metrics_prefs(&data_root);
 
+        if config.bot.backend_type == BackendType::SnowLuma {
+            if let Some(daemon) = &self.snowluma_daemon {
+                match crate::metrics::prepare_snowluma_inject(
+                    &data_root,
+                    bot_id.as_str(),
+                    config,
+                    &prefs,
+                ) {
+                    Ok(env) => daemon.set_metrics_child_env(Some(env)),
+                    Err(err) => {
+                        warn!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, %err, "shared SL metrics inject failed")
+                    }
+                }
+            }
+            return;
+        }
+
         let plan = match prepare_inject(&data_root, bot_id.as_str(), config, &prefs) {
             Ok(p) => p,
             Err(err) => {
@@ -423,87 +465,59 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     %err,
                     "metrics inject prepare failed"
                 );
-                // 失败时清掉上次残留的 NODE_OPTIONS/--require，避免带着坏路径再 spawn
-                if config.bot.backend_type == BackendType::SnowLuma {
-                    if let Some(daemon) = &self.snowluma_daemon {
-                        daemon.set_metrics_child_env(None);
-                    }
-                }
                 return;
             }
         };
 
-        match config.bot.backend_type {
-            BackendType::SnowLuma => {
-                if let Some(daemon) = &self.snowluma_daemon {
-                    if let Some(plan) = plan.as_ref() {
-                        // SL 无 loadNapCat 入口：NCD_* + NODE_OPTIONS=--require 一并交给子进程
-                        let mut env = std::collections::BTreeMap::new();
-                        apply_metrics_to_environment(&mut env, plan);
-                        crate::metrics::merge_node_options_require(&mut env, &plan.probe_script);
-                        // 探针路径同样用正斜杠，避免其它消费方踩 Windows 转义坑
-                        env.insert(
-                            "NCD_METRICS_PROBE_PATH".into(),
-                            plan.probe_script.to_string_lossy().replace('\\', "/"),
-                        );
-                        daemon.set_metrics_child_env(Some(env));
+        {
+            // 改写 loadNapCat.js：process.env(NCD_*) + require 探针。
+            // env 必须写进脚本：WinBoot 注入的 QQ 不一定继承 BotRuntimeConfig.environment。
+            // 调用方须在 build_plan 之后执行，否则 plan 会写回无探针基线。
+            use crate::metrics::{apply_metrics_to_environment, build_napcat_load_script_with_env};
+            let napcat_dir = data_root.join("components").join("NapCatQQ");
+            let load_path = napcat_dir.join("loadNapCat.js");
+            let napcat_mjs = napcat_dir.join("napcat.mjs");
+            if napcat_mjs.is_file() {
+                let uri = {
+                    let normalized = napcat_mjs.to_string_lossy().replace('\\', "/");
+                    if normalized.contains(":/") {
+                        format!("file:///{normalized}")
                     } else {
-                        daemon.set_metrics_child_env(None);
+                        format!("file://{normalized}")
                     }
-                }
-            }
-            BackendType::NapCat => {
-                // 改写 loadNapCat.js：process.env(NCD_*) + require 探针。
-                // env 必须写进脚本：WinBoot 注入的 QQ 不一定继承 BotRuntimeConfig.environment。
-                // 调用方须在 build_plan 之后执行，否则 plan 会写回无探针基线。
-                use crate::metrics::{
-                    apply_metrics_to_environment, build_napcat_load_script_with_env,
                 };
-                let napcat_dir = data_root.join("components").join("NapCatQQ");
-                let load_path = napcat_dir.join("loadNapCat.js");
-                let napcat_mjs = napcat_dir.join("napcat.mjs");
-                if napcat_mjs.is_file() {
-                    let uri = {
-                        let normalized = napcat_mjs.to_string_lossy().replace('\\', "/");
-                        if normalized.contains(":/") {
-                            format!("file:///{normalized}")
-                        } else {
-                            format!("file://{normalized}")
-                        }
-                    };
-                    let metrics_env = plan.as_ref().map(|p| {
-                        let mut env = std::collections::BTreeMap::new();
-                        apply_metrics_to_environment(&mut env, p);
-                        env
-                    });
-                    let script = build_napcat_load_script_with_env(
-                        &uri,
-                        plan.as_ref().map(|p| p.probe_script.as_path()),
-                        metrics_env.as_ref(),
-                    );
-                    if let Err(err) = std::fs::write(&load_path, script) {
-                        warn!(
-                            target: "ncd_runtime::bot_manager",
-                            bot_id = %bot_id,
-                            %err,
-                            "rewrite loadNapCat.js for metrics failed"
-                        );
-                    } else if plan.is_some() {
-                        info!(
-                            target: "ncd_runtime::bot_manager",
-                            bot_id = %bot_id,
-                            path = %load_path.display(),
-                            "metrics: rewrote loadNapCat.js with env + probe require"
-                        );
-                    }
-                } else {
+                let metrics_env = plan.as_ref().map(|p| {
+                    let mut env = std::collections::BTreeMap::new();
+                    apply_metrics_to_environment(&mut env, p);
+                    env
+                });
+                let script = build_napcat_load_script_with_env(
+                    &uri,
+                    plan.as_ref().map(|p| p.probe_script.as_path()),
+                    metrics_env.as_ref(),
+                );
+                if let Err(err) = std::fs::write(&load_path, script) {
                     warn!(
                         target: "ncd_runtime::bot_manager",
                         bot_id = %bot_id,
-                        path = %napcat_mjs.display(),
-                        "metrics: napcat.mjs missing, skip loadNapCat rewrite"
+                        %err,
+                        "rewrite loadNapCat.js for metrics failed"
+                    );
+                } else if plan.is_some() {
+                    info!(
+                        target: "ncd_runtime::bot_manager",
+                        bot_id = %bot_id,
+                        path = %load_path.display(),
+                        "metrics: rewrote loadNapCat.js with env + probe require"
                     );
                 }
+            } else {
+                warn!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    path = %napcat_mjs.display(),
+                    "metrics: napcat.mjs missing, skip loadNapCat rewrite"
+                );
             }
         }
     }
@@ -519,6 +533,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         use ncd_domain::kinds::RuntimeTarget;
 
         if !matches!(config.bot.runtime_target, RuntimeTarget::Local) {
+            return;
+        }
+        // 共享 SL node 由 daemon 吃主机级注册表；QQ 子进程不吃单账号探针环境。
+        if config.bot.backend_type == ncd_domain::BackendType::SnowLuma {
             return;
         }
         let Some(data_root) = self.store.config_dir().parent().map(|p| p.to_path_buf()) else {
@@ -538,6 +556,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 远端：把最新 nodes.json 写到 ncd-watch metrics 目录（需 host 已连接）
     async fn refresh_remote_metrics_nodes_map(&self, bot_id: &BotId, config: &BotConfig) {
         use ncd_host::HostPath;
+
+        if config.bot.backend_type == BackendType::SnowLuma
+            && config.bot.deployment_type == ncd_domain::DeploymentType::Native
+        {
+            self.refresh_snowluma_metrics_registration(config).await;
+            return;
+        }
 
         let Some(server_id) = config.bot.runtime_target.server_id() else {
             return;
@@ -638,15 +663,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             router = router
                 .with_snowluma_data_root(crate::DataPaths::new(data_root).snowluma_data_dir());
             let prefs = Self::load_metrics_prefs(data_root);
+            // SL 即使统计关闭也预加载共享探针，后续设置通过注册表热更新。
+            router = router.with_remote_metrics_injector(Arc::new(
+                crate::metrics::RuntimeRemoteMetricsInjector::new(data_root.to_path_buf()),
+            ));
             if prefs.enabled {
-                router = router
-                    .with_remote_metrics_injector(Arc::new(
-                        crate::metrics::RuntimeRemoteMetricsInjector::new(
-                            data_root.to_path_buf(),
-                            prefs.clone(),
-                        ),
-                    ))
-                    .with_docker_metrics(data_root.to_path_buf(), prefs);
+                router = router.with_docker_metrics(data_root.to_path_buf(), prefs);
             }
         }
         router
@@ -1003,6 +1025,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.dispose_poller(bot_id).await;
             self.remote_runtime_sessions().shutdown_bot(bot_id).await;
             self.publish_state_change(&stopped, "stop_completed");
+            self.refresh_snowluma_metrics_registration(&cfg).await;
             if stopped.state == BotActorState::Starting {
                 let config = self.get_required_bot_config(bot_id).await?;
                 return self
@@ -1021,6 +1044,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.dispose_poller(bot_id).await;
                 self.remote_runtime_sessions().shutdown_bot(bot_id).await;
                 self.publish_state_change(&stopped, "stop_completed");
+                self.refresh_snowluma_metrics_registration(&cfg).await;
                 if stopped.state == BotActorState::Starting {
                     let config = self.get_required_bot_config(bot_id).await?;
                     return self
@@ -1302,6 +1326,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         // 1. 先持久化 bot.json(source of truth)
         self.repo.upsert(config.clone()).await?;
+        if let Some(previous) = &previous_config {
+            if previous.bot.runtime_target != config.bot.runtime_target
+                || previous.bot.backend_type != config.bot.backend_type
+                || previous.bot.deployment_type != config.bot.deployment_type
+            {
+                self.remove_snowluma_metrics_registration(previous).await;
+            }
+        }
+        self.refresh_snowluma_metrics_registration(&config).await;
 
         // 2. 渲染派生配置文件(走 render_backend_config:读 existing + merge unknown + apply overrides)
         self.render_backend_config(&bot_id, &config, overrides)
@@ -2392,6 +2425,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         self.repo.delete(qq_id).await?;
+        if let Some(config) = &previous_config {
+            self.remove_snowluma_metrics_registration(config).await;
+        }
 
         let mut txn = JsonTransaction::new();
         for path in output_paths_for_backend(BackendType::NapCat, self.store.config_dir(), bot_id)

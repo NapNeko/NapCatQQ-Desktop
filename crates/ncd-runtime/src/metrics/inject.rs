@@ -30,13 +30,13 @@ pub fn ensure_probe_script(data_root: &Path) -> Result<PathBuf, String> {
         fs::create_dir_all(parent).map_err(|e| format!("mkdir metrics: {e}"))?;
     }
     // 始终覆盖为当前 Desktop 版本探针，避免旧脚本残留
-    fs::write(&path, EMBEDDED_PROBE_CJS).map_err(|e| format!("write probe script: {e}"))?;
+    super::shared::write_local_atomic(&path, EMBEDDED_PROBE_CJS.as_bytes())?;
     Ok(path)
 }
 
 pub fn build_node_map(config: &BotConfig) -> Vec<MetricsNodeMapEntry> {
     let mut out = Vec::new();
-    for s in &config.connect.http_servers {
+    for s in config.connect.http_servers.iter().filter(|s| s.base.enable) {
         out.push(MetricsNodeMapEntry {
             name: s.base.name.clone(),
             kind: NetworkNodeKind::HttpServer,
@@ -44,7 +44,12 @@ pub fn build_node_map(config: &BotConfig) -> Vec<MetricsNodeMapEntry> {
             target_url: None,
         });
     }
-    for s in &config.connect.http_sse_servers {
+    for s in config
+        .connect
+        .http_sse_servers
+        .iter()
+        .filter(|s| s.base.enable)
+    {
         out.push(MetricsNodeMapEntry {
             name: s.base.name.clone(),
             kind: NetworkNodeKind::HttpSse,
@@ -52,7 +57,7 @@ pub fn build_node_map(config: &BotConfig) -> Vec<MetricsNodeMapEntry> {
             target_url: None,
         });
     }
-    for s in &config.connect.http_clients {
+    for s in config.connect.http_clients.iter().filter(|s| s.base.enable) {
         out.push(MetricsNodeMapEntry {
             name: s.base.name.clone(),
             kind: NetworkNodeKind::HttpClient,
@@ -60,7 +65,12 @@ pub fn build_node_map(config: &BotConfig) -> Vec<MetricsNodeMapEntry> {
             target_url: Some(s.url.clone()),
         });
     }
-    for s in &config.connect.websocket_servers {
+    for s in config
+        .connect
+        .websocket_servers
+        .iter()
+        .filter(|s| s.base.enable)
+    {
         out.push(MetricsNodeMapEntry {
             name: s.base.name.clone(),
             kind: NetworkNodeKind::WsServer,
@@ -68,7 +78,12 @@ pub fn build_node_map(config: &BotConfig) -> Vec<MetricsNodeMapEntry> {
             target_url: None,
         });
     }
-    for s in &config.connect.websocket_clients {
+    for s in config
+        .connect
+        .websocket_clients
+        .iter()
+        .filter(|s| s.base.enable)
+    {
         out.push(MetricsNodeMapEntry {
             name: s.base.name.clone(),
             kind: NetworkNodeKind::WsClient,
@@ -90,7 +105,7 @@ pub fn write_nodes_map(
     let nodes_path = nodes_map_path_for_bot(data_root, bot_id);
     let nodes = build_node_map(config);
     let json = serde_json::to_string(&nodes).map_err(|e| e.to_string())?;
-    fs::write(&nodes_path, json).map_err(|e| format!("write nodes map: {e}"))?;
+    super::shared::write_local_atomic(&nodes_path, json.as_bytes())?;
     Ok(nodes_path)
 }
 
@@ -265,6 +280,19 @@ mod tests {
         assert_eq!(m.len(), 1);
         assert_eq!(m[0].name, "http-1");
         assert_eq!(m[0].listen_port, Some(3000));
+    }
+
+    #[test]
+    fn disabled_network_node_does_not_claim_a_shared_port() {
+        let mut config = sample_config();
+        let mut disabled = config.connect.http_servers[0].clone();
+        disabled.base.name = "disabled-on-same-port".into();
+        disabled.base.enable = false;
+        config.connect.http_servers.push(disabled);
+        let map = build_node_map(&config);
+        assert_eq!(map.len(), 1);
+        assert_eq!(map[0].name, "http-1");
+        assert_eq!(map[0].listen_port, Some(3000));
     }
 
     #[test]

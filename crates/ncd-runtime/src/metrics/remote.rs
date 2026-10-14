@@ -59,12 +59,10 @@ impl RemoteMetricsPaths {
 
     /// 远端 SL 共享 node：NCD_* + NODE_OPTIONS=--require（与本机 daemon 子进程一致）
     pub fn env_map_for_snowluma(&self) -> BTreeMap<String, String> {
-        use super::inject::merge_node_options_require;
-        let mut env = BTreeMap::new();
-        apply_metrics_to_environment(&mut env, &self.to_inject_plan());
-        env.insert("NCD_METRICS_PROBE_PATH".into(), self.probe_script.clone());
-        merge_node_options_require(&mut env, std::path::Path::new(&self.probe_script));
-        env
+        super::snowluma_metrics_env(
+            std::path::Path::new(&self.probe_script),
+            std::path::Path::new(&super::remote_snowluma_registry_posix(&self.home)),
+        )
     }
 }
 
@@ -99,10 +97,6 @@ pub async fn ensure_remote_metrics_assets(
     prefs: &BotRuntimeMetricsPrefs,
     local_data_root: &std::path::Path,
 ) -> Result<RemoteMetricsPaths, String> {
-    if !prefs.enabled {
-        return Err("metrics disabled".into());
-    }
-
     let metrics_root = format!("{}/ncd-watch/metrics", home.trim_end_matches('/'));
     let bot_dir = format!("{metrics_root}/{bot_id}");
     host.create_dir_all(&HostPath::from_posix(&bot_dir))
@@ -114,16 +108,14 @@ pub async fn ensure_remote_metrics_assets(
         ensure_probe_script(local_data_root).map_err(|e| format!("local probe: {e}"))?;
     let remote_probe = format!("{metrics_root}/{REMOTE_PROBE_NAME}");
     let remote_probe_path = HostPath::from_posix(&remote_probe);
-    host.upload(&local_probe, &remote_probe_path)
-        .await
-        .map_err(|e| format!("upload probe: {e}"))?;
+    let body = std::fs::read(&local_probe).map_err(|e| format!("read probe: {e}"))?;
+    super::shared::write_remote_atomic(host, &remote_probe_path, &body).await?;
 
     let nodes_path = remote_metrics_nodes_posix(home, bot_id);
     let nodes = build_node_map(config);
     let nodes_json = serde_json::to_vec(&nodes).map_err(|e| e.to_string())?;
-    host.write_file(&HostPath::from_posix(&nodes_path), &nodes_json)
-        .await
-        .map_err(|e| format!("write remote nodes: {e}"))?;
+    super::shared::write_remote_atomic(host, &HostPath::from_posix(&nodes_path), &nodes_json)
+        .await?;
 
     let stats_out = remote_metrics_stats_posix(home, bot_id);
 
@@ -171,22 +163,18 @@ pub fn merge_metrics_env(env: &mut BTreeMap<String, String>, paths: &RemoteMetri
 /// 供 RemoteNativeLaunchTranslator 调用的注入器（实现放在 ncd-runtime，避免 backend 依赖 metrics 细节）
 pub struct RuntimeRemoteMetricsInjector {
     local_data_root: std::path::PathBuf,
-    prefs: BotRuntimeMetricsPrefs,
 }
 
 impl RuntimeRemoteMetricsInjector {
-    pub fn new(
-        local_data_root: impl Into<std::path::PathBuf>,
-        prefs: BotRuntimeMetricsPrefs,
-    ) -> Self {
+    pub fn new(local_data_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             local_data_root: local_data_root.into(),
-            prefs,
         }
     }
 
-    pub fn prefs(&self) -> &BotRuntimeMetricsPrefs {
-        &self.prefs
+    pub fn prefs(&self) -> BotRuntimeMetricsPrefs {
+        // Backend 按 server 缓存；不能把创建时的开关/间隔也永久缓存。
+        BotRuntimeMetricsPrefs::from_data_root(&self.local_data_root)
     }
 }
 
@@ -202,7 +190,8 @@ impl ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector
         config: &BotConfig,
         install_base: &HostPath,
     ) -> Option<BTreeMap<String, String>> {
-        if !self.prefs.enabled {
+        let prefs = self.prefs();
+        if !prefs.enabled {
             return None;
         }
         let paths = match ensure_remote_metrics_assets(
@@ -210,7 +199,7 @@ impl ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector
             home,
             bot_id,
             config,
-            &self.prefs,
+            &prefs,
             &self.local_data_root,
         )
         .await
@@ -296,15 +285,13 @@ impl ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector
         bot_id: &str,
         config: &BotConfig,
     ) -> Option<BTreeMap<String, String>> {
-        if !self.prefs.enabled {
-            return None;
-        }
+        let prefs = self.prefs();
         let paths = match ensure_remote_metrics_assets(
             host,
             home,
             bot_id,
             config,
-            &self.prefs,
+            &prefs,
             &self.local_data_root,
         )
         .await
@@ -320,6 +307,12 @@ impl ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector
                 return None;
             }
         };
+        if let Err(err) =
+            super::write_remote_snowluma_registration(host, home, bot_id, config, &prefs).await
+        {
+            tracing::warn!(target: "ncd_runtime::metrics", bot_id, %err, "remote SL metrics registration failed");
+            return None;
+        }
         let env = paths.env_map_for_snowluma();
         tracing::info!(
             target: "ncd_runtime::metrics",
@@ -329,5 +322,54 @@ impl ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector
             "remote SL metrics: probe assets ready (NODE_OPTIONS + NCD_* for shared node)"
         );
         Some(env)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ncd_traits::ConfigStore;
+
+    #[test]
+    fn cached_remote_injector_reads_latest_metrics_prefs() {
+        let root = tempfile::tempdir().unwrap();
+        let injector = RuntimeRemoteMetricsInjector::new(root.path());
+        assert!(!injector.prefs().enabled);
+        let store = crate::LocalConfigStore::new(root.path());
+        let mut settings = ncd_domain::AppSettings::default();
+        settings.bot_runtime_metrics_enabled = true;
+        settings.bot_runtime_metrics_interval_ms = 30_000;
+        let path = store.config_dir().join(ncd_config::APP_SETTINGS_FILE);
+        store
+            .write_json_atomic(&path, &serde_json::to_value(&settings).unwrap())
+            .unwrap();
+        assert!(injector.prefs().enabled);
+        assert_eq!(injector.prefs().interval_ms, 30_000);
+        settings.bot_runtime_metrics_enabled = false;
+        settings.bot_runtime_metrics_interval_ms = 1000;
+        store
+            .write_json_atomic(&path, &serde_json::to_value(&settings).unwrap())
+            .unwrap();
+        assert!(!injector.prefs().enabled);
+        assert_eq!(injector.prefs().interval_ms, 1000);
+    }
+
+    #[test]
+    fn remote_snowluma_env_is_shared_while_outputs_are_per_bot() {
+        let paths = |id: &str| RemoteMetricsPaths {
+            home: "/home/test".into(),
+            probe_script: "/home/test/ncd-watch/metrics/ncd-ob11-stats.cjs".into(),
+            stats_out: remote_metrics_stats_posix("/home/test", id),
+            nodes_path: remote_metrics_nodes_posix("/home/test", id),
+            interval_ms: if id == "10001" { 1000 } else { 30_000 },
+        };
+        assert_eq!(
+            paths("10001").env_map_for_snowluma(),
+            paths("10002").env_map_for_snowluma()
+        );
+        let napcat = paths("10001").env_map();
+        assert!(napcat.contains_key("NCD_METRICS_OUT"));
+        assert!(!napcat.contains_key("NCD_METRICS_REGISTRY_DIR"));
+        assert!(!napcat.contains_key("NODE_OPTIONS"));
     }
 }

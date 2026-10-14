@@ -172,10 +172,10 @@ pub struct NotifyBotTarget {
     /// Native: 进程名子串匹配(如 QQ / napcat);空则仅 pid_file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub process_match: Option<String>,
-    /// NapCat WebUI 在远端本机的端口(Docker 为 host 映射口;Native 为实际监听口)
+    /// WebUI 在远端本机的端口(Docker 为 host 映射口;Native 为实际监听口)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webui_port: Option<u16>,
-    /// NapCat WebUI token(换 Bearer);仅写 0600 的 notify.json
+    /// NapCat token / SnowLuma WebUI 密码;仅写 0600 的 notify.json
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webui_token: Option<String>,
     /// 是否监控该 bot
@@ -233,6 +233,9 @@ pub struct WatchOneBotMessenger {
     /// 由 watch 按 container_name + container_port 现查
     #[serde(default)]
     pub base_url: String,
+    /// HTTP 服务路径前缀;独立保存,避免 Docker 现查端口时丢失。旧配置缺省沿用 base_url。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
     #[serde(default)]
     pub access_token: String,
     /// Docker 部署的 messenger:容器名与 OneBot HTTP 在容器内的端口。
@@ -241,6 +244,18 @@ pub struct WatchOneBotMessenger {
     pub container_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub container_port: Option<u16>,
+}
+
+/// 与调试台一致:缺省为 `/`,没写前导 `/` 的补上。
+pub fn normalize_onebot_path(path: &str) -> String {
+    let path = path.trim();
+    if path.is_empty() {
+        "/".to_owned()
+    } else if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("/{path}")
+    }
 }
 
 /// notify.json 内 OneBot 子集(仅同机 messenger;跨机不写)

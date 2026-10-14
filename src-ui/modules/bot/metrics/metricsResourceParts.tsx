@@ -79,10 +79,12 @@ export function SystemResourceCard({
     metrics,
     rss,
     isRemote,
+    sharedProcess = false,
 }: {
     metrics: BotRuntimeMetrics | null;
     rss: number | null;
     isRemote: boolean;
+    sharedProcess?: boolean;
 }) {
     const heap = metrics?.memory?.heap_used_bytes;
     const hostUsed = metrics?.memory?.host_used_bytes;
@@ -110,9 +112,15 @@ export function SystemResourceCard({
             <div className="flex h-full min-h-0 flex-col gap-2">
                 <ResourceMeter
                     icon={MemoryStick}
-                    label="进程 RSS"
+                    label={sharedProcess ? 'SnowLuma 共享服务 RSS' : '进程 RSS'}
                     value={formatBytes(rss)}
-                    detail={heap != null ? `堆 ${formatBytes(Number(heap))}` : undefined}
+                    detail={
+                        sharedProcess
+                            ? '同机账号共用此内存，不能按 Bot 累加'
+                            : heap != null
+                              ? `堆 ${formatBytes(Number(heap))}`
+                              : undefined
+                    }
                     ratio={rssRatioOfHostTotal(metrics)}
                 />
                 <ResourceMeter

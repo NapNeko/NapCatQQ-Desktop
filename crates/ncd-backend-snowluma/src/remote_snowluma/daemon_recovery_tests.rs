@@ -165,6 +165,44 @@ fn daemon(host: Arc<RecoveryHost>, bus: Arc<BroadcastEventBus>) -> RemoteSnowLum
 }
 
 #[tokio::test]
+async fn shared_metrics_update_preserves_running_node_and_is_used_for_recovery() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    let env = BTreeMap::from([
+        ("NCD_METRICS_ENABLED".into(), "1".into()),
+        (
+            "NCD_METRICS_REGISTRY_DIR".into(),
+            "/root/ncd-watch/metrics/snowluma-shared".into(),
+        ),
+        (
+            "NODE_OPTIONS".into(),
+            "--require /root/ncd-watch/metrics/ncd-ob11-stats.cjs".into(),
+        ),
+    ]);
+    daemon
+        .apply_metrics_node_env(Some(env.clone()))
+        .await
+        .unwrap();
+    assert_eq!(host.starts.load(Ordering::SeqCst), 0);
+    assert!(host.node_running.load(Ordering::SeqCst));
+    assert_eq!(*daemon.metrics_node_env.lock().await, Some(env));
+    host.node_running.store(false, Ordering::SeqCst);
+    daemon
+        .ensure_running_for_reconcile_bot(&BotId::new("10001"))
+        .await
+        .unwrap();
+    assert_eq!(host.starts.load(Ordering::SeqCst), 1);
+    let commands = host.commands.lock().unwrap();
+    let startup = commands
+        .iter()
+        .find(|cmd| cmd.contains("node_pid=$!"))
+        .unwrap();
+    assert!(startup.contains("NCD_METRICS_REGISTRY_DIR"));
+    assert!(startup.contains("snowluma-shared"));
+    assert!(!commands.iter().any(|cmd| cmd.contains("kill \"$pid\"")));
+}
+
+#[tokio::test]
 async fn novnc_recovery_uses_verified_custom_port_without_starting_node_or_acquiring_bot_lease() {
     let host = Arc::new(RecoveryHost::new(true, "running", false));
     let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));

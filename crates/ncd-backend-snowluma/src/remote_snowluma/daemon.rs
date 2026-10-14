@@ -167,25 +167,13 @@ impl RemoteSnowLumaDaemon {
         );
     }
 
-    /// 应用 metrics env 到共享 node：与当前已应用 env 不同则重启 node 并等 WebUI。
-    /// 重启后必须按新端口重开隧道，否则 inject 会打到已死的旧口。
+    /// 记住共享 node 下次启动的探针环境；已有 node 只靠注册表热更新。
+    /// 旧 node 尚未预加载时也不主动重启，以免中断其它账号的通信。
     pub async fn apply_metrics_node_env(
         &self,
         env: Option<BTreeMap<String, String>>,
     ) -> Result<(), BotBackendError> {
         let _stack_guard = self.stack_bootstrap.lock().await;
-        {
-            let guard = self.metrics_node_env.lock().await;
-            if *guard == env {
-                return Ok(());
-            }
-        }
-        let host = self.current_host().await;
-        let layout = &self.layout;
-        restart_node_with_env(host.as_ref(), layout, env.as_ref()).await?;
-        let webui_port =
-            wait_remote_webui_ready(host.as_ref(), &layout.paths, Duration::from_secs(60)).await?;
-        self.open_tunnels(webui_port, None).await?;
         *self.metrics_node_env.lock().await = env;
         Ok(())
     }
@@ -297,11 +285,11 @@ impl RemoteSnowLumaDaemon {
                     Some(self.server_id.clone()),
                 ));
         } else if *self.metrics_node_env.lock().await != metrics_env {
-            // 指标输出路径按 Bot 不同；为它重启会断掉其他 QQ 的共享 SL 通道。
+            // 新环境按主机固定；旧 node 未预加载时留到完整服务下次启动。
             tracing::info!(
                 target: "ncd_backend_snowluma::remote",
                 server_id = %self.server_id,
-                "复用共享 SnowLuma node，保留现有指标环境，新环境在共享 node 重载时应用"
+                "复用共享 SnowLuma node；账号注册热更新，探针环境在共享 node 下次启动时应用"
             );
         }
         let known_port = if !stack_up {
@@ -345,7 +333,7 @@ impl RemoteSnowLumaDaemon {
             });
         self.open_tunnels(webui_port, tunnel_password.as_deref())
             .await?;
-        if !stack_up || restart_node {
+        if metrics_env.is_some() || !stack_up || restart_node {
             *self.metrics_node_env.lock().await = metrics_env;
         }
 

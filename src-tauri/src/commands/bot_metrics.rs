@@ -226,19 +226,25 @@ async fn remote_probe_error_hint(
     host: &dyn ncd_host::Host,
     stats_posix: &str,
     read_err: &impl std::fmt::Display,
+    shared_snowluma: bool,
 ) -> String {
+    let inject_hint = if shared_snowluma {
+        "升级前已运行的 SnowLuma 需在同机所有账号停止后重新启动共享服务；后续指标设置自动生效"
+    } else {
+        "启用指标后需重启此 Bot"
+    };
     let err_path = HostPath::from_posix(format!("{stats_posix}.err"));
     match host.read_file(&err_path).await {
         Ok(bytes) => {
             let text = String::from_utf8_lossy(&bytes);
             let brief = text.lines().next().unwrap_or("").trim();
             if brief.is_empty() {
-                format!("远端尚无指标快照（{stats_posix}）：{read_err}。启用指标后需重启此 Bot")
+                format!("远端尚无指标快照（{stats_posix}）：{read_err}。{inject_hint}")
             } else {
                 format!("远端探针写失败（{stats_posix}.err）：{brief}")
             }
         }
-        Err(_) => format!("远端尚无指标快照（{stats_posix}）：{read_err}。启用指标后需重启此 Bot"),
+        Err(_) => format!("远端尚无指标快照（{stats_posix}）：{read_err}。{inject_hint}"),
     }
 }
 
@@ -283,8 +289,18 @@ async fn fetch_one_metrics(
                 Err(err) => {
                     let mut m = remote_metrics_read_failure(bot_id, &err, clock_ms);
                     if m.probe == ProbeHealth::NotInjected {
-                        m.probe_error =
-                            Some(remote_probe_error_hint(host.as_ref(), &remote_posix, &err).await);
+                        let shared_snowluma = config.bot.backend_type
+                            == ncd_domain::BackendType::SnowLuma
+                            && config.bot.deployment_type == ncd_domain::DeploymentType::Native;
+                        m.probe_error = Some(
+                            remote_probe_error_hint(
+                                host.as_ref(),
+                                &remote_posix,
+                                &err,
+                                shared_snowluma,
+                            )
+                            .await,
+                        );
                     }
                     m
                 }

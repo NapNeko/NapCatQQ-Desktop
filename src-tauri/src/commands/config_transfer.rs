@@ -619,8 +619,15 @@ pub async fn import_config(
         .app_manager
         .framework_configs_restored(&framework_restore.restored_ids);
 
-    let chat_enabled = state.app_settings.read().await.features.chat;
-    crate::chat_window::apply_chat_feature(&app, chat_enabled).await?;
+    let settings = state.app_settings.read().await.clone();
+    let mut prefs = ncd_runtime::metrics::BotRuntimeMetricsPrefs::from_app(&settings);
+    prefs.normalize();
+    *state.metrics_collector.prefs().write().await = prefs;
+    let bot_manager = state.bot_manager.clone();
+    tauri::async_runtime::spawn(async move {
+        bot_manager.refresh_snowluma_metrics_registry().await;
+    });
+    crate::chat_window::apply_chat_feature(&app, settings.features.chat).await?;
 
     if let Err(error) = app.emit("config-imported", &files) {
         tracing::warn!(%error, "failed to notify windows after configuration import");

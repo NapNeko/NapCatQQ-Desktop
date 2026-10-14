@@ -35,6 +35,8 @@ use ncd_domain::ids::BotId;
 #[derive(Debug, Clone)]
 pub struct SnowLumaDockerEndpoints {
     pub webui_local_port: u16,
+    /// 远端主机上的实际映射口,供 ncd-watch 直接探活。
+    pub webui_host_port: u16,
     pub novnc_local_port: u16,
     /// noVNC / VNC(compose VNC_PASSWD)
     pub vnc_password: String,
@@ -433,6 +435,7 @@ impl DockerBotSessionRegistry {
                     (Ok(w), Ok(n)) => {
                         snowluma_eps = Some(SnowLumaDockerEndpoints {
                             webui_local_port: w.local_port(),
+                            webui_host_port: remote_webui,
                             novnc_local_port: n.local_port(),
                             vnc_password: vnc.clone(),
                             webui_password: webui,

@@ -103,8 +103,8 @@ sudo loginctl enable-linger "$USER"
 | `containerName` | Docker 容器名。NapCat 是 `ncbot-<QQ号>`，SnowLuma 是 `slbot-<QQ号>`，缺省时也按这个规则推 |
 | `processMatch` | 直接运行时用 `pgrep -f` 找 QQ 进程的匹配串，形如 `no-sandbox -q <QQ号>$` |
 | `pidFile` | 可选，按 pid 文件判断进程在不在 |
-| `webuiPort` | NapCat WebUI 在这台主机上的端口，ncd-watch 从 `127.0.0.1` 访问它来判断 QQ 账号是否在线。Docker 部署取容器实际的端口映射 |
-| `webuiToken` | NapCat WebUI token |
+| `webuiPort` | WebUI 在这台主机上的端口，ncd-watch 从 `127.0.0.1` 访问它来判断 QQ 账号是否在线。Docker 部署取容器实际的端口映射 |
+| `webuiToken` | NapCat WebUI token 或 SnowLuma WebUI 密码，仅保存在权限为 `600` 的配置文件中 |
 | `enabled` | 是否盯这个 Bot |
 
 `webhooks` 里每一项（注意这里的字段是下划线写法）：
@@ -167,7 +167,7 @@ SL 取码依赖 QQ 的图形会话和扫码辅助；原生 Linux / Docker 共用
 每一轮对每个 Bot 分两层看：
 
 1. 进程在不在。Docker 部署跑 `docker inspect -f {{.State.Running}} <容器名>`，直接运行跑 `pgrep -f -- <processMatch>`。
-2. QQ 账号是不是登录着。只对 NapCat 且 `webuiPort`、`webuiToken` 都有的 Bot 做：用 token 登录 `http://127.0.0.1:<webuiPort>` 的 WebUI，查登录状态。
+2. QQ 账号是不是登录着。有 `webuiPort`、`webuiToken` 的 Bot 会登录本机 WebUI 查询账号状态。NapCat 查询登录接口；SnowLuma 查询进程列表，并通过账号号、PID 和进程启动代次确认归属。SnowLuma 未登录时账号号为 `0`，只有确认属于目标 Bot 的进程才会判为掉线。
 
 能查账号的 Bot 以账号为准：从“已登录”变成“未登录”才算掉线，进程在不代表账号在线。查不了账号的 Bot 才退回按进程判断。
 

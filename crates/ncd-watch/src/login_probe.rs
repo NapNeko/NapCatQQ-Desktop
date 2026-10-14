@@ -1,4 +1,4 @@
-//! NapCat WebUI 账号在线探活(远端本机 127.0.0.1)
+//! NapCat / SnowLuma WebUI 账号在线探活(远端本机 127.0.0.1)
 //!
 //! 对齐 Desktop login_poller / online_from_login_status:
 //! - auth → CheckLoginStatus(isLogin/isOffline) → GetQQLoginInfo(online)
@@ -32,6 +32,8 @@ const REJECT_BACKOFF: Duration = Duration::from_secs(65);
 #[derive(Debug, Default)]
 pub struct WebUiLoginCache {
     entries: HashMap<String, CacheEntry>,
+    snowluma: Option<crate::relogin::webui::WebUi>,
+    sl_processes: HashMap<String, crate::relogin::webui::SlProcessBinding>,
 }
 
 #[derive(Debug)]
@@ -127,13 +129,17 @@ fn is_unauthorized_message(message: &str) -> bool {
     m.eq_ignore_ascii_case("Unauthorized") || m.eq_ignore_ascii_case("Server token not initialized")
 }
 
-/// 对单个 bot 查账号在线态;无 port/token 或非 napcat 返回 Unknown
+/// 对单个 bot 查账号在线态;无 port/凭据或不支持的 backend 返回 Unknown
 pub async fn probe_login_status(
     bot: &NotifyBotTarget,
     cache: &mut WebUiLoginCache,
 ) -> (LoginStatus, String) {
-    if !bot.backend.eq_ignore_ascii_case("napcat") {
-        return (LoginStatus::Unknown, "login probe: non-napcat".into());
+    if !bot.backend.eq_ignore_ascii_case("napcat") && !bot.backend.eq_ignore_ascii_case("snowluma")
+    {
+        return (
+            LoginStatus::Unknown,
+            "login probe: unsupported backend".into(),
+        );
     }
     let Some(port) = bot.webui_port.filter(|p| *p > 0) else {
         return (LoginStatus::Unknown, "login probe: no webui_port".into());
@@ -142,6 +148,9 @@ pub async fn probe_login_status(
     let Some(token) = token else {
         return (LoginStatus::Unknown, "login probe: no webui_token".into());
     };
+    if bot.backend.eq_ignore_ascii_case("snowluma") {
+        return probe_snowluma_login(bot, port, token, cache).await;
+    }
 
     let hash = login_hash(token);
     let entry = cache.entry(&bot.bot_id, port, hash.clone());
@@ -207,13 +216,73 @@ pub async fn probe_login_status(
 
 /// 是否具备 WebUI 登录探活条件(有则掉线主信号走账号态,不用进程冒充在线)
 pub fn has_webui_probe(bot: &NotifyBotTarget) -> bool {
-    bot.backend.eq_ignore_ascii_case("napcat")
+    (bot.backend.eq_ignore_ascii_case("napcat") || bot.backend.eq_ignore_ascii_case("snowluma"))
         && bot.webui_port.filter(|p| *p > 0).is_some()
         && bot
             .webui_token
             .as_ref()
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false)
+}
+
+async fn probe_snowluma_login(
+    bot: &NotifyBotTarget,
+    port: u16,
+    password: &str,
+    cache: &mut WebUiLoginCache,
+) -> (LoginStatus, String) {
+    use crate::relogin::webui::{WebUi, account_state, process_for_account};
+    if cache.snowluma.is_none() {
+        match WebUi::new() {
+            Ok(client) => cache.snowluma = Some(client),
+            Err(error) => return (LoginStatus::Unknown, error),
+        }
+    }
+    let Some(client) = cache.snowluma.as_mut() else {
+        return (
+            LoginStatus::Unknown,
+            "SnowLuma WebUI client unavailable".into(),
+        );
+    };
+    let data = match client
+        .request(&bot.bot_id, port, password, true, "/api/processes")
+        .await
+    {
+        Ok(data) => data,
+        Err(error) => return (LoginStatus::Unknown, format!("webui:{port} {error}")),
+    };
+    let processes = match serde_json::from_value(data) {
+        Ok(processes) => processes,
+        Err(_) => {
+            return (
+                LoginStatus::Unknown,
+                format!("webui:{port} invalid process list"),
+            );
+        }
+    };
+    let container = bot.is_docker().then(|| bot.resolved_container_name());
+    let binding = process_for_account(
+        processes,
+        &bot.bot_id,
+        bot.pid_file.as_deref(),
+        container.as_deref(),
+        None,
+        cache.sl_processes.get(&bot.bot_id),
+    )
+    .await;
+    let Some(binding) = binding else {
+        return (
+            LoginStatus::Unknown,
+            format!("webui:{port} account process unconfirmed"),
+        );
+    };
+    let state = match account_state(&binding.process, &bot.bot_id) {
+        ncd_relogin::AccountState::Online => LoginStatus::LoggedIn,
+        ncd_relogin::AccountState::Offline => LoginStatus::LoggedOut,
+        _ => LoginStatus::Unknown,
+    };
+    cache.sl_processes.insert(bot.bot_id.clone(), binding);
+    (state, format!("webui:{port} SnowLuma login={state:?}"))
 }
 
 /// 单个状态接口的结果:Ok(data) / Err(说明, 是否鉴权失效)
@@ -418,12 +487,12 @@ mod tests {
     }
 
     #[test]
-    fn non_napcat_unknown() {
+    fn unsupported_backend_unknown() {
         let bot = NotifyBotTarget {
             bot_id: "1".into(),
             qq_id: 1,
             bot_name: String::new(),
-            backend: "snowluma".into(),
+            backend: "unsupported".into(),
             deployment: "native".into(),
             container_name: None,
             pid_file: None,
@@ -443,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn has_webui_probe_requires_napcat_port_token() {
+    fn has_webui_probe_requires_supported_backend_port_and_secret() {
         let mut bot = NotifyBotTarget {
             bot_id: "1".into(),
             qq_id: 1,
@@ -459,8 +528,97 @@ mod tests {
             webui_port_guessed: false,
         };
         assert!(has_webui_probe(&bot));
+        bot.backend = "snowluma".into();
+        assert!(has_webui_probe(&bot));
+        bot.backend = "unsupported".into();
+        assert!(!has_webui_probe(&bot));
+        bot.backend = "napcat".into();
         bot.webui_token = Some("  ".into());
         assert!(!has_webui_probe(&bot));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn snowluma_probe_detects_logout_and_never_borrows_another_bot() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"token":"session"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let online = Arc::new(AtomicBool::new(true));
+        let state = online.clone();
+        let pid = std::process::id();
+        Mock::given(method("GET"))
+            .and(path("/api/processes"))
+            .respond_with(move |_: &wiremock::Request| {
+                let online = state.load(Ordering::SeqCst);
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"list":[
+                    {"pid":pid,"path":"/qq","uin":if online {"10001"} else {"0"},
+                     "status":if online {"online"} else {"available"},"loggedIn":online,"connected":online},
+                    {"pid":pid + 1,"path":"/qq","uin":"0","status":"available","loggedIn":false}
+                ]}))
+            })
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let pid_file = dir.path().join("qq.pid");
+        std::fs::write(&pid_file, pid.to_string()).unwrap();
+        let mut bot = napcat_bot(server.address().port(), "secret");
+        bot.bot_id = "10001".into();
+        bot.qq_id = 10001;
+        bot.backend = "snowluma".into();
+        bot.deployment = "native".into();
+        bot.pid_file = Some(pid_file.to_string_lossy().into_owned());
+        let mut cache = WebUiLoginCache::new();
+        assert_eq!(
+            probe_login_status(&bot, &mut cache).await.0,
+            LoginStatus::LoggedIn
+        );
+        let mut other = bot.clone();
+        other.bot_id = "20002".into();
+        other.qq_id = 20002;
+        assert_eq!(
+            probe_login_status(&other, &mut cache).await.0,
+            LoginStatus::Unknown
+        );
+        online.store(false, Ordering::SeqCst);
+        assert_eq!(
+            probe_login_status(&bot, &mut cache).await.0,
+            LoginStatus::LoggedOut
+        );
+        assert_eq!(
+            probe_login_status(&other, &mut cache).await.0,
+            LoginStatus::Unknown
+        );
+    }
+
+    #[tokio::test]
+    async fn snowluma_auth_failure_remains_unknown_and_is_shared_across_bots() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let mut cache = WebUiLoginCache::new();
+        for id in ["10001", "20002"] {
+            let mut bot = napcat_bot(server.address().port(), "secret");
+            bot.backend = "snowluma".into();
+            bot.bot_id = id.into();
+            assert_eq!(
+                probe_login_status(&bot, &mut cache).await.0,
+                LoginStatus::Unknown
+            );
+        }
     }
 
     async fn mount_login(server: &MockServer, body: serde_json::Value) {

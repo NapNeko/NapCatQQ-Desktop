@@ -5,9 +5,11 @@
 //   NCD_METRICS_OUT=<abs path>
 //   NCD_METRICS_INTERVAL_MS=3000
 //   NCD_METRICS_NODES_JSON=<json array> OR NCD_METRICS_NODES_PATH=<file>
+// Shared SnowLuma daemon: NCD_METRICS_REGISTRY_DIR=<directory>, containing
+// { botId, accountId, nodesPath, statsOut, enabled, intervalMs } descriptors.
 //
-// 只挂 node 核心模块（net / http / https）：NapCat 把 `ws` 打进 bundle、SnowLuma 自带
-// `@snowluma/websocket`，任何针对 ws 包的 hook 都拿不到正反向连接。核心模块是两边共同
+// 只挂 node 核心模块（net / http / https / diagnostics_channel）。NapCat 把 `ws` 打进
+// bundle，SnowLuma 自带 `@snowluma/websocket`，针对 ws 包的 hook 拿不到正反向连接。核心模块是两边共同
 // 的最底层出口，且不随上游版本漂移。
 //
 // 归属：服务端节点按 socket.localPort 对 listenPort；客户端节点按 remote host:port 对
@@ -22,6 +24,7 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const net = require('net');
+const diagnostics = require('diagnostics_channel');
 
 if (process.env.NCD_METRICS_ENABLED !== '1') {
     module.exports = { disabled: true };
@@ -29,15 +32,16 @@ if (process.env.NCD_METRICS_ENABLED !== '1') {
 }
 
 const outPath = process.env.NCD_METRICS_OUT;
-if (!outPath) {
+const registryDir = process.env.NCD_METRICS_REGISTRY_DIR;
+if (!outPath && !registryDir) {
     module.exports = { disabled: true, reason: 'missing NCD_METRICS_OUT' };
     return;
 }
 
-const intervalMs = Math.max(
-    1000,
-    Math.min(30000, parseInt(process.env.NCD_METRICS_INTERVAL_MS || '3000', 10) || 3000),
-);
+function clampInterval(value) {
+    return Math.max(1000, Math.min(30000, parseInt(value || '3000', 10) || 3000));
+}
+const intervalMs = clampInterval(process.env.NCD_METRICS_INTERVAL_MS);
 
 /** 单帧超过这个大小只记条数不看正文，避免为统计缓冲大图片 */
 const MAX_SCAN_PAYLOAD = 64 * 1024;
@@ -45,24 +49,20 @@ const MAX_SCAN_PAYLOAD = 64 * 1024;
 const MAX_FRAME_BUFFER = 512 * 1024;
 const WS_OPCODES = new Set([0x0, 0x1, 0x2, 0x8, 0x9, 0xa]);
 
-/** @type {{ name: string, kind: string, listenPort?: number, targetUrl?: string }[]} */
-let nodeMap = [];
-/** 上次成功加载 nodes 文件的 mtime，用于热更新（NC/SL 连接配置可热改） */
-let nodesMapMtimeMs = 0;
-/** listenPort -> node */
+const contexts = new Map();
+/** listenPort -> candidate nodes; shared ports must never pick the first Bot */
 let portIndex = new Map();
-/** 客户端节点解析结果：{ node, host, port, path } */
 let targetIndex = [];
 
 /** @type {Map<string, any>} */
 const counters = new Map();
 
-function ensureNode(name, kind) {
-    let c = counters.get(name);
+function ensureNode(node) {
+    let c = counters.get(node.key);
     if (!c) {
         c = {
-            name,
-            kind: kind || 'unknown',
+            name: node.name,
+            kind: node.kind || 'unknown',
             eventsOut: 0,
             actionsIn: 0,
             bytesOut: 0,
@@ -70,9 +70,9 @@ function ensureNode(name, kind) {
             errors: 0,
             lastActivityAtMs: 0,
         };
-        counters.set(name, c);
-    } else if (kind && c.kind === 'unknown') {
-        c.kind = kind;
+        counters.set(node.key, c);
+    } else if (node.kind && c.kind === 'unknown') {
+        c.kind = node.kind;
     }
     return c;
 }
@@ -101,81 +101,140 @@ function parseTarget(url) {
     }
 }
 
-function applyNodeMap(next) {
+function applyNodeMap(context, next) {
     if (!Array.isArray(next)) return;
-    nodeMap = next;
+    context.nodes = [];
+    for (const n of next) {
+        if (!n || !n.name) continue;
+        const node = { ...n, name: String(n.name), kind: n.kind || 'unknown', botId: context.botId,
+            accountId: context.accountId, key: context.botId ? `${context.botId}\0${n.name}` : String(n.name) };
+        context.nodes.push(node);
+        ensureNode(node);
+    }
+    context.keys = new Set(context.nodes.map((node) => node.key));
+}
+
+function rebuildIndexes() {
     const ports = new Map();
     const targets = [];
-    for (const n of nodeMap) {
-        if (!n || !n.name) continue;
-        const kind = n.kind || 'unknown';
-        ensureNode(String(n.name), kind);
-        const listenPort = Number(n.listenPort || n.listen_port || 0);
-        if (listenPort > 0) ports.set(listenPort, { name: String(n.name), kind });
-        const targetUrl = n.targetUrl || n.target_url;
-        if (targetUrl) {
-            const t = parseTarget(targetUrl);
-            if (t) targets.push({ name: String(n.name), kind, ...t });
+    for (const context of contexts.values()) {
+        for (const node of context.nodes) {
+            const listenPort = Number(node.listenPort || node.listen_port || 0);
+            if (listenPort > 0) {
+                if (!ports.has(listenPort)) ports.set(listenPort, []);
+                ports.get(listenPort).push(node);
+            }
+            const targetUrl = node.targetUrl || node.target_url;
+            if (targetUrl) {
+                const t = parseTarget(targetUrl);
+                if (t) targets.push({ node, ...t });
+            }
         }
     }
     portIndex = ports;
     targetIndex = targets;
 }
 
-function loadNodeMapFromEnv(force) {
-    try {
-        if (process.env.NCD_METRICS_NODES_JSON) {
-            if (force || nodeMap.length === 0) {
-                applyNodeMap(JSON.parse(process.env.NCD_METRICS_NODES_JSON));
-            }
-            return;
+function refreshRegistry() {
+    if (!registryDir) {
+        let context = contexts.get('');
+        if (!context) {
+            context = { botId: '', accountId: '', statsOut: outPath, enabled: true, intervalMs, nodes: [], keys: new Set() };
+            contexts.set('', context);
         }
-        const p = process.env.NCD_METRICS_NODES_PATH;
-        if (!p) return;
-        let st;
         try {
-            st = fs.statSync(p);
-        } catch (_) {
-            return;
+            if (process.env.NCD_METRICS_NODES_JSON) {
+                if (!context.loaded) applyNodeMap(context, JSON.parse(process.env.NCD_METRICS_NODES_JSON));
+                context.loaded = true;
+            } else if (process.env.NCD_METRICS_NODES_PATH) {
+                applyNodeMap(context, JSON.parse(fs.readFileSync(process.env.NCD_METRICS_NODES_PATH, 'utf8')));
+            }
+        } catch (_) { /* Keep the last complete map during an atomic update. */ }
+    } else {
+        let files;
+        try { files = fs.readdirSync(registryDir).filter((file) => file.endsWith('.json')); }
+        catch (_) { return; }
+        const seen = new Set();
+        for (const file of files) {
+            try {
+                const descriptor = JSON.parse(fs.readFileSync(path.join(registryDir, file), 'utf8'));
+                if (!descriptor.botId || !descriptor.statsOut || !descriptor.nodesPath) continue;
+                const botId = String(descriptor.botId);
+                seen.add(botId);
+                let context = contexts.get(botId);
+                if (!context) {
+                    context = { botId, nodes: [], keys: new Set() };
+                    contexts.set(botId, context);
+                }
+                context.accountId = String(descriptor.accountId || botId);
+                context.descriptorFile = file;
+                context.statsOut = descriptor.statsOut;
+                if (descriptor.enabled === true && !context.enabled) context.lastWrite = 0;
+                context.enabled = descriptor.enabled === true;
+                context.intervalMs = clampInterval(descriptor.intervalMs);
+                try { applyNodeMap(context, JSON.parse(fs.readFileSync(descriptor.nodesPath, 'utf8'))); }
+                catch (_) { /* Do not replace a valid map with a partial write. */ }
+            } catch (_) {
+                // A malformed descriptor must not redirect traffic to another Bot.
+                const previous = [...contexts.values()].find((context) => context.descriptorFile === file);
+                if (previous) seen.add(previous.botId);
+            }
         }
-        const mtime = st.mtimeMs || 0;
-        if (!force && mtime && mtime === nodesMapMtimeMs) return;
-        applyNodeMap(JSON.parse(fs.readFileSync(p, 'utf8')));
-        nodesMapMtimeMs = mtime;
-    } catch (_) {
-        /* 保持上一份 map */
+        for (const botId of contexts.keys()) if (!seen.has(botId)) contexts.delete(botId);
     }
+    rebuildIndexes();
 }
 
-loadNodeMapFromEnv(true);
+refreshRegistry();
 
 function matchByPort(port) {
-    if (!port) return null;
-    return portIndex.get(Number(port)) || null;
+    return portIndex.get(Number(port)) || [];
 }
 
 function matchByHostPort(host, port, hintPath) {
-    if (!port) return null;
+    if (!port) return [];
     const h = normalizeHost(host);
     const p = Number(port);
-    let loose = null;
+    const matches = [];
+    let longest = -1;
+    const requestPath = hintPath && String(hintPath).split(/[?#]/, 1)[0];
     for (const t of targetIndex) {
         if (t.port !== p) continue;
         if (t.host !== h) continue;
-        if (hintPath && t.path && t.path !== '/' && String(hintPath).startsWith(t.path)) return t;
-        if (!loose) loose = t;
+        if (requestPath) {
+            const targetPath = t.path === '/' ? '/' : t.path.replace(/\/$/, '');
+            if (targetPath !== '/' && requestPath !== targetPath && !requestPath.startsWith(`${targetPath}/`)) continue;
+            if (targetPath.length < longest) continue;
+            if (targetPath.length > longest) { matches.length = 0; longest = targetPath.length; }
+        }
+        matches.push(t.node);
     }
-    return loose;
+    return matches;
 }
 
-function matchByUrl(url) {
-    const t = parseTarget(url);
-    if (!t) return null;
-    return matchByHostPort(t.host, t.port, t.path);
+function activeNode(node) {
+    if (!node) return false;
+    const context = contexts.get(node.botId);
+    return !!(context && context.enabled && context.keys.has(node.key));
+}
+
+function payloadAccountId(payload) {
+    const match = payload && payload.subarray(0, MAX_SCAN_PAYLOAD).toString('utf8')
+        .match(/"self_id"\s*:\s*(?:"(\d+)"|(\d+))(?=\s*[,}])/);
+    return match && (match[1] || match[2]);
+}
+
+function selectNode(candidates, payload, accountHint) {
+    let matches = candidates;
+    const identity = payloadAccountId(payload) || accountHint;
+    if (identity) matches = matches.filter((node) => !node.accountId || node.accountId === String(identity));
+    const unique = new Map(matches.map((node) => [node.key, node]));
+    const node = unique.size === 1 ? unique.values().next().value : null;
+    return activeNode(node) ? node : null;
 }
 
 function touch(node) {
-    const c = ensureNode(node.name, node.kind);
+    const c = ensureNode(node);
     c.lastActivityAtMs = Date.now();
     return c;
 }
@@ -203,7 +262,7 @@ function classifyPayload(buf) {
  * 正文可读时以正文为准，这样 action 回执不会被算成事件；压缩帧/二进制帧退回方向判定。
  */
 function countMessage(node, dir, payload) {
-    if (!node) return;
+    if (!activeNode(node)) return;
     const cls = classifyPayload(payload);
     const c = touch(node);
     if (dir === 'out') {
@@ -214,8 +273,8 @@ function countMessage(node, dir, payload) {
 }
 
 function countError(node) {
-    if (!node) return;
-    const c = ensureNode(node.name, node.kind);
+    if (!activeNode(node)) return;
+    const c = ensureNode(node);
     c.errors += 1;
 }
 
@@ -336,7 +395,16 @@ function sampleBytes(entry) {
     const dIn = read - entry.lastRead;
     const dOut = written - entry.lastWritten;
     if (dIn <= 0 && dOut <= 0) return;
-    const c = ensureNode(entry.node.name, entry.node.kind);
+    entry.lastRead = read;
+    entry.lastWritten = written;
+    if (!activeNode(entry.node)) {
+        if (entry.pending) {
+            entry.pendingIn += Math.max(0, dIn);
+            entry.pendingOut += Math.max(0, dOut);
+        }
+        return;
+    }
+    const c = ensureNode(entry.node);
     if (dIn > 0) {
         c.bytesIn += dIn;
         entry.lastRead = read;
@@ -362,8 +430,51 @@ function sampleAllSockets() {
 function enterWsMode(entry) {
     if (entry.mode === 'ws') return;
     entry.mode = 'ws';
-    entry.scanIn = createFrameScanner((payload) => countMessage(entry.node, 'in', payload));
-    entry.scanOut = createFrameScanner((payload) => countMessage(entry.node, 'out', payload));
+    const onMessage = (dir, payload) => {
+        const identity = payloadAccountId(payload);
+        if (identity) entry.accountHint = identity;
+        const node = selectNode(entry.candidates, payload, entry.accountHint);
+        if (node) bindNode(entry, node);
+        else if (identity) { bindNode(entry, null); entry.pending = false; }
+        countMessage(entry.node, dir, payload);
+    };
+    entry.scanIn = createFrameScanner((payload) => onMessage('in', payload));
+    entry.scanOut = createFrameScanner((payload) => onMessage('out', payload));
+}
+
+function bindNode(entry, node) {
+    if (entry.node && node && entry.node.key === node.key) { entry.node = node; return; }
+    sampleBytes(entry);
+    entry.node = activeNode(node) ? node : null;
+    if (entry.node && entry.pending) {
+        const counter = touch(entry.node);
+        counter.bytesIn += entry.pendingIn;
+        counter.bytesOut += entry.pendingOut;
+        counter.eventsOut += entry.pendingEvents || 0;
+        entry.pendingEvents = 0;
+    }
+    entry.pendingIn = 0;
+    entry.pendingOut = 0;
+}
+
+function beginRequest(entry, candidates, accountHint, requestPath, preservePending = false) {
+    sampleBytes(entry);
+    entry.candidates = candidates;
+    entry.accountHint = accountHint;
+    if (requestPath !== undefined) entry.requestPath = requestPath;
+    if (!preservePending) {
+        entry.pendingIn = 0;
+        entry.pendingOut = 0;
+    }
+    entry.pending = candidates.some(activeNode);
+    entry.node = null;
+    // HTTP reports can come from an unconfigured/disabled account at the same
+    // destination. Keep their headers pending until the body identifies the Bot.
+    const deferAccountIdentity = registryDir && !accountHint && entry.address;
+    if (!deferAccountIdentity) bindNode(entry, selectNode(candidates, null, accountHint));
+    entry.httpEventTail = null;
+    entry.identityBuffer = null;
+    entry.pendingEvents = 0;
 }
 
 /** 握手响应里出现 101 就把整条连接切成 WS 模式（两个方向共用一个状态） */
@@ -379,12 +490,30 @@ function detectUpgrade(entry, text) {
 const EVENT_MARKER = Buffer.from('"post_type"');
 
 /** Buffer.indexOf 是原生查找，比 toString 后再扫便宜，也不怕正文超出截断窗口 */
-function countEventMarkers(node, buf) {
-    let idx = buf.indexOf(EVENT_MARKER);
-    while (idx !== -1) {
-        touch(node).eventsOut += 1;
-        idx = buf.indexOf(EVENT_MARKER, idx + EVENT_MARKER.length);
+function countEventMarkers(entry, buf) {
+    const data = entry.httpEventTail ? Buffer.concat([entry.httpEventTail, buf]) : buf;
+    const identity = (entry.identityBuffer ? Buffer.concat([entry.identityBuffer, buf]) : data).subarray(0, MAX_SCAN_PAYLOAD);
+    const accountId = payloadAccountId(identity);
+    if (accountId) entry.accountHint = accountId;
+    const waitForAccount = registryDir && entry.address && !entry.accountHint
+        && entry.candidates.some((node) => node.kind === 'httpClient');
+    const node = waitForAccount ? null : selectNode(entry.candidates, identity, entry.accountHint);
+    if (node) bindNode(entry, node);
+    else if (accountId) {
+        bindNode(entry, null);
+        entry.pending = false;
+        entry.pendingEvents = 0;
     }
+    if (!entry.node && entry.pending) entry.identityBuffer = Buffer.from(identity);
+    else entry.identityBuffer = null;
+    let idx = data.indexOf(EVENT_MARKER);
+    while (idx !== -1) {
+        if (activeNode(entry.node)) touch(entry.node).eventsOut += 1;
+        else if (entry.pending) entry.pendingEvents += 1;
+        idx = data.indexOf(EVENT_MARKER, idx + EVENT_MARKER.length);
+    }
+    // A split marker must count once when completed in the next write.
+    entry.httpEventTail = Buffer.from(data.subarray(Math.max(0, data.length - EVENT_MARKER.length + 1)));
 }
 
 function observeOutbound(entry, chunk, encoding) {
@@ -395,6 +524,21 @@ function observeOutbound(entry, chunk, encoding) {
     if (!buf || !buf.length) return;
 
     if (entry.mode === 'http') {
+        if (entry.address && (/^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) /.test(buf.subarray(0, 16).toString('latin1')) || entry.requestHead)) {
+            entry.requestHead = entry.requestHead ? Buffer.concat([entry.requestHead, buf]) : buf;
+            const end = entry.requestHead.indexOf('\r\n\r\n');
+            if (end < 0) {
+                if (entry.requestHead.length > MAX_SCAN_PAYLOAD) entry.requestHead = null;
+                return;
+            }
+            const head = entry.requestHead.subarray(0, end).toString('latin1');
+            const requestPath = (head.match(/^\S+\s+(\S+)/) || [])[1];
+            const accountHint = (head.match(/\r\nx-self-id:\s*(\d+)/i) || [])[1];
+            if (!entry.viaHttpHook && !entry.viaUndiciHook) {
+                beginRequest(entry, matchByHostPort(entry.address.host, entry.address.port, requestPath), accountHint, requestPath, !entry.node);
+            }
+            entry.requestHead = null;
+        }
         const consumed = detectUpgrade(entry, buf.subarray(0, Math.min(buf.length, 2048)).toString('latin1'));
         if (consumed >= 0) {
             if (consumed < buf.length) entry.scanOut(buf.subarray(consumed));
@@ -402,8 +546,8 @@ function observeOutbound(entry, chunk, encoding) {
         }
         // SSE 没有帧头可数；SnowLuma 的 HTTP 上报走全局 fetch(undici)，不经 http.request
         // 钩子。两者都只能在字节流上扫事件标记。
-        if (entry.node.kind === 'httpSse' || (entry.node.kind === 'httpClient' && !entry.viaHttpHook)) {
-            countEventMarkers(entry.node, buf);
+        if (entry.candidates.some((node) => node.kind === 'httpSse' || (node.kind === 'httpClient' && !entry.viaHttpHook))) {
+            countEventMarkers(entry, buf);
         }
         return;
     }
@@ -414,8 +558,16 @@ function observeInbound(entry, chunk) {
     if (!chunk || !chunk.length) return;
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     if (entry.mode === 'http') {
+        // http.request owns its parser and exposes the upgrade head separately.
+        if (entry.viaHttpHook) return;
         const consumed = detectUpgrade(entry, buf.subarray(0, Math.min(buf.length, 2048)).toString('latin1'));
         if (consumed >= 0 && consumed < buf.length) entry.scanIn(buf.subarray(consumed));
+        return;
+    }
+    if (entry.replayedHeadBytes) {
+        const skipped = Math.min(entry.replayedHeadBytes, buf.length);
+        entry.replayedHeadBytes -= skipped;
+        if (skipped < buf.length && entry.scanIn) entry.scanIn(buf.subarray(skipped));
         return;
     }
     if (entry.scanIn) entry.scanIn(buf);
@@ -427,8 +579,13 @@ function observeInbound(entry, chunk) {
  * 不逐 socket 包 write —— http 客户端 upgrade 后会把 socket.write 换回原生实现，
  * 挂在实例上的包装会被直接冲掉。
  */
-function instrumentSocket(socket, node) {
-    if (!socket || !node || socket[INSTRUMENTED]) return;
+function instrumentSocket(socket, candidates, address) {
+    if (!socket || (!candidates.length && !registryDir)) return null;
+    const existing = entryBySocket.get(socket);
+    if (existing) {
+        if (address) existing.address = address;
+        return existing;
+    }
     try {
         Object.defineProperty(socket, INSTRUMENTED, { value: true, enumerable: false });
     } catch (_) {
@@ -437,7 +594,12 @@ function instrumentSocket(socket, node) {
 
     const entry = {
         socket,
-        node,
+        node: address ? null : selectNode(candidates),
+        candidates,
+        address,
+        pending: candidates.some(activeNode),
+        pendingIn: 0,
+        pendingOut: 0,
         mode: 'http',
         scanIn: null,
         scanOut: null,
@@ -451,7 +613,7 @@ function instrumentSocket(socket, node) {
     socket.emit = function (event, arg) {
         try {
             if (event === 'data') observeInbound(entry, arg);
-            else if (event === 'error') countError(node);
+            else if (event === 'error') countError(entry.node);
             else if (event === 'close') {
                 sampleBytes(entry);
                 liveSockets.delete(entry);
@@ -461,6 +623,17 @@ function instrumentSocket(socket, node) {
         }
         return origEmit.apply(this, arguments);
     };
+    // WS consumers often unshift the upgrade head back into the readable stream.
+    // Those bytes were already scanned in req.upgrade; observe the replay without
+    // consuming it or changing the socket's flowing state.
+    const origUnshift = socket.unshift;
+    socket.unshift = function (chunk) {
+        if (entry.upgradeHead && Buffer.isBuffer(chunk) && chunk.equals(entry.upgradeHead)) {
+            entry.replayedHeadBytes = (entry.replayedHeadBytes || 0) + chunk.length;
+        }
+        return origUnshift.apply(this, arguments);
+    };
+    return entry;
 }
 
 // 出站统一挂在 stream 内部写口：cork/uncork 批量、writev、以及 upgrade 后被换掉的
@@ -507,17 +680,23 @@ function attachServer(server) {
     const secure = typeof server.setSecureContext === 'function';
     server.on(secure ? 'secureConnection' : 'connection', (socket) => {
         try {
-            const node = matchByPort(socket && socket.localPort);
-            if (node) instrumentSocket(socket, node);
+            instrumentSocket(socket, matchByPort(socket && socket.localPort));
         } catch (_) { }
     });
 
     server.on('request', (req) => {
         try {
-            const node = matchByPort(req.socket && req.socket.localPort);
+            const candidates = matchByPort(req.socket && req.socket.localPort);
+            const node = selectNode(candidates, null, req.headers['x-self-id']);
             if (!node) return;
             if (node.kind === 'httpSse' && req.method === 'GET') return; // GET 是订阅流，不是 action
             touch(node).actionsIn += 1;
+        } catch (_) { }
+    });
+    server.prependListener('upgrade', (req, socket) => {
+        try {
+            const entry = instrumentSocket(socket, matchByPort(socket.localPort));
+            if (entry) beginRequest(entry, matchByPort(socket.localPort), req.headers['x-self-id']);
         } catch (_) { }
     });
 }
@@ -555,8 +734,7 @@ try {
         try {
             const target = connectTarget(arguments);
             if (target) {
-                const node = matchByHostPort(target.host, target.port);
-                if (node) instrumentSocket(this, node);
+                instrumentSocket(this, matchByHostPort(target.host, target.port), target);
             }
         } catch (_) { }
         return origConnect.apply(this, arguments);
@@ -583,8 +761,11 @@ function wrapHttpModule(mod, isHttps) {
                 const p = opts.path || '/';
                 urlHint = `${proto}//${host}:${port}${p}`;
             }
-            const node = matchByUrl(urlHint);
-            if (!node) return req;
+            const target = parseTarget(urlHint);
+            const candidates = target ? matchByHostPort(target.host, target.port, req.path) : [];
+            if (!candidates.length && !registryDir) return req;
+            let node = selectNode(candidates, null, req.getHeader('x-self-id'));
+            let requestEntry = null;
 
             // 包 emit 而不是 on：node 客户端拿 req.listenerCount('upgrade') 决定要不要
             // 销毁一个意料之外的 101 连接，凭空加监听者会把该销毁的 socket 留下来。
@@ -592,21 +773,34 @@ function wrapHttpModule(mod, isHttps) {
             req.emit = function (event, a, b, c) {
                 try {
                     if (event === 'socket') {
-                        instrumentSocket(a, node);
+                        const entry = instrumentSocket(a, candidates, target);
                         // 这条连接的事件由下面的 req.end 判定，socket 层别再扫一遍
-                        const entry = entryBySocket.get(a);
-                        if (entry) entry.viaHttpHook = true;
+                        if (entry) {
+                            requestEntry = entry;
+                            beginRequest(entry, candidates, req.getHeader('x-self-id'), req.path);
+                            if (node) bindNode(entry, node);
+                            entry.viaHttpHook = true;
+                            entry.viaUndiciHook = false;
+                        }
                     } else if (event === 'upgrade') {
                         // 客户端的 101 也走 C++ parser，socket 不发 'data'，只有这里拿得到切换时机
-                        instrumentSocket(b, node);
-                        const entry = entryBySocket.get(b);
+                        const entry = instrumentSocket(b, candidates, target);
                         if (entry) {
                             enterWsMode(entry);
-                            if (c && c.length) entry.scanIn(c);
+                            if (c && c.length) {
+                                entry.scanIn(c);
+                                entry.upgradeHead = c;
+                            }
                         }
                     }
                 } catch (_) { }
-                return origReqEmit.apply(this, arguments);
+                try { return origReqEmit.apply(this, arguments); }
+                finally {
+                    if (event === 'upgrade') {
+                        const entry = entryBySocket.get(b);
+                        if (entry) entry.upgradeHead = null;
+                    }
+                }
             };
 
             const chunks = [];
@@ -629,7 +823,12 @@ function wrapHttpModule(mod, isHttps) {
                 try {
                     push(chunk, enc);
                     // 空体请求（握手 / 探活）不是事件上报
-                    if (chunks.length) countMessage(node, 'out', Buffer.concat(chunks));
+                    if (chunks.length) {
+                        const body = Buffer.concat(chunks);
+                        node = selectNode(candidates, body, req.getHeader('x-self-id'));
+                        if (requestEntry) bindNode(requestEntry, node);
+                        countMessage(node, 'out', body);
+                    }
                 } catch (_) { }
                 return origEnd.apply(this, arguments);
             };
@@ -650,6 +849,25 @@ try {
     wrapHttpModule(https, true);
 } catch (_) { }
 
+// Node fetch uses undici instead of http.request. Its core diagnostic channel
+// supplies the request path before headers are written, including reused sockets.
+try {
+    diagnostics.channel('undici:client:sendHeaders').subscribe(({ request, socket }) => {
+        try {
+            const target = parseTarget(request.origin);
+            if (!target) return;
+            const candidates = matchByHostPort(target.host, target.port, request.path);
+            let entry = entryBySocket.get(socket);
+            if (!entry) entry = instrumentSocket(socket, candidates, target);
+            if (entry) {
+                beginRequest(entry, candidates, undefined, request.path);
+                entry.viaHttpHook = false;
+                entry.viaUndiciHook = true;
+            }
+        } catch (_) { }
+    });
+} catch (_) { }
+
 // --- 快照 -------------------------------------------------------------------
 
 function memorySnapshot() {
@@ -664,13 +882,11 @@ function memorySnapshot() {
     }
 }
 
-function writeSnapshot() {
+function writeContext(context) {
     try {
-        // 连接配置热更新：Desktop 改 nodes.json 后无需重启 Bot
-        loadNodeMapFromEnv(false);
-        sampleAllSockets();
         const nodes = [];
-        for (const c of counters.values()) {
+        for (const node of context.nodes) {
+            const c = ensureNode(node);
             nodes.push({
                 name: c.name,
                 kind: c.kind,
@@ -687,22 +903,23 @@ function writeSnapshot() {
             memory: memorySnapshot(),
             nodes,
         };
-        const dir = path.dirname(outPath);
+        const output = context.statsOut;
+        const dir = path.dirname(output);
         fs.mkdirSync(dir, { recursive: true });
-        const tmp = outPath + '.tmp';
+        const tmp = output + '.tmp';
         fs.writeFileSync(tmp, JSON.stringify(payload));
-        fs.renameSync(tmp, outPath);
+        fs.renameSync(tmp, output);
         // 成功后清掉上次写失败痕迹
         try {
-            fs.unlinkSync(outPath + '.err');
+            fs.unlinkSync(output + '.err');
         } catch (_) { }
     } catch (err) {
         // 静默吞掉会导致 UI 永远「未注入」；落盘 .err 便于 SSH 排查
         try {
-            const dir = path.dirname(outPath);
+            const dir = path.dirname(context.statsOut);
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(
-                outPath + '.err',
+                context.statsOut + '.err',
                 String((err && err.stack) || err || 'writeSnapshot failed'),
                 'utf8',
             );
@@ -710,8 +927,35 @@ function writeSnapshot() {
     }
 }
 
+function writeSnapshot(force = true) {
+    // Charge traffic collected before a configuration change to the old owner.
+    sampleAllSockets();
+    refreshRegistry();
+    for (const entry of liveSockets) {
+        entry.candidates = entry.address
+            ? matchByHostPort(entry.address.host, entry.address.port, entry.requestPath)
+            : matchByPort(entry.socket.localPort);
+        const canWaitForIdentity = entry.candidates.some(activeNode)
+            && (!entry.accountHint || !!selectNode(entry.candidates, null, entry.accountHint));
+        const ownerRemoved = entry.node && (!activeNode(entry.node)
+            || !entry.candidates.some((node) => node.key === entry.node.key));
+        if (ownerRemoved || !canWaitForIdentity) {
+            entry.node = null;
+            entry.pendingIn = 0;
+            entry.pendingOut = 0;
+        }
+        entry.pending = canWaitForIdentity;
+    }
+    const now = Date.now();
+    for (const context of contexts.values()) {
+        if (!context.enabled || (!force && context.lastWrite && now - context.lastWrite < context.intervalMs)) continue;
+        writeContext(context);
+        context.lastWrite = now;
+    }
+}
+
 writeSnapshot();
-const timer = setInterval(writeSnapshot, intervalMs);
+const timer = setInterval(() => writeSnapshot(false), registryDir ? 1000 : intervalMs);
 if (timer.unref) timer.unref();
 
 module.exports = {

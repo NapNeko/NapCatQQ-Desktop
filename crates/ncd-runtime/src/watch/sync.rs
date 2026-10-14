@@ -1,6 +1,6 @@
 //! 为远端 server 组装 ncd-watch 的 notify.json,并经 Host 写入
 //!
-//! 对齐 Desktop 离线通知子集: Webhook + Email + 同机 OneBot + NC 登录探活凭据。
+//! 对齐 Desktop 离线通知子集: Webhook + Email + 同机 OneBot + 登录探活凭据。
 
 use ncd_deploy::{DockerDeployment, bot_docker_container_name};
 use ncd_domain::bot_config::{BackendType, BotConfig, DeploymentType};
@@ -13,12 +13,12 @@ use ncd_domain::{
 use ncd_host::{Host, HostPath};
 use ncd_watch::config::{
     DesktopPresentFile, NotifyBotTarget, NotifyConfig, WATCH_PROTOCOL_V1, WatchOneBotMessenger,
-    WatchOneBotSettings, WatchPaths,
+    WatchOneBotSettings, WatchPaths, normalize_onebot_path,
 };
 
 pub use ncd_watch::config::NotifyConfig as WatchNotifyConfig;
 
-/// 组装 notify 时可选的 per-bot WebUI 凭据(仅 NapCat)与 OneBot
+/// 组装 notify 时可选的 per-bot WebUI 凭据与 OneBot
 #[derive(Debug, Clone, Default)]
 pub struct WatchNotifyExtras {
     /// bot_id(qq 字符串) -> (port, token)
@@ -98,6 +98,7 @@ pub fn watch_onebot_messenger_from_bot(config: &BotConfig) -> Option<WatchOneBot
             Some(WatchOneBotMessenger {
                 bot_id,
                 base_url: format!("http://127.0.0.1:{}", server.port),
+                path: normalize_onebot_path(&server.path),
                 access_token: server.base.token.clone(),
                 container_name: None,
                 container_port: None,
@@ -115,6 +116,7 @@ pub fn watch_onebot_messenger_from_bot(config: &BotConfig) -> Option<WatchOneBot
                 base_url: host_port
                     .map(|p| format!("http://127.0.0.1:{p}"))
                     .unwrap_or_default(),
+                path: normalize_onebot_path(&server.path),
                 access_token: server.base.token.clone(),
                 container_name: Some(spec.container_name.clone()),
                 container_port: Some(server.port),
@@ -193,7 +195,7 @@ pub fn watch_event_endpoint(
     Some(ncd_watch::relogin_config::WatchEventEndpoint {
         bot_id: config.bot.qq_id.to_string(),
         port: server.port,
-        path: server.path.clone(),
+        path: normalize_onebot_path(&server.path),
         token: server.base.token.clone(),
         container_name: docker
             .then(|| bot_docker_container_name(config.bot.backend_type, config.bot.qq_id)),
@@ -239,7 +241,7 @@ pub fn bot_to_notify_target_with_webui(
 
     // webui 为 (0, token) 表示 token 已知、容器实际映射的口还没拿到(会话隧道没开起来)
     let (webui_port, webui_token, webui_port_guessed) = match (config.bot.backend_type, webui) {
-        (BackendType::NapCat, Some((port, token))) if port > 0 && !token.trim().is_empty() => {
+        (_, Some((port, token))) if port > 0 && !token.trim().is_empty() => {
             (Some(port), Some(token), false)
         }
         (BackendType::NapCat, webui)
@@ -264,6 +266,31 @@ pub fn bot_to_notify_target_with_webui(
         webui_token,
         enabled: config.advanced.offline_notice,
         webui_port_guessed,
+    }
+}
+
+/// 普通探活和重登共用远端主机端点;关闭重登仍需 SL daemon 凭据及 per-bot PID 绑定。
+pub fn apply_watch_login_targets(
+    notify: &mut NotifyConfig,
+    targets: &[ncd_watch::relogin_config::WatchLoginTarget],
+) {
+    for bot in &mut notify.bots {
+        if !bot.backend.eq_ignore_ascii_case("snowluma") {
+            continue;
+        }
+        let Some(target) = targets.iter().find(|target| target.bot_id == bot.bot_id) else {
+            continue;
+        };
+        if target.webui_port > 0 {
+            bot.webui_port = Some(target.webui_port);
+            bot.webui_port_guessed = false;
+        }
+        if !target.webui_secret.trim().is_empty() {
+            bot.webui_token = Some(target.webui_secret.clone());
+        }
+        if !bot.is_docker() {
+            bot.pid_file.clone_from(&target.pid_file);
+        }
     }
 }
 
@@ -353,6 +380,14 @@ pub fn merge_notify_preserve_webui(new: &mut NotifyConfig, prev: &NotifyConfig) 
         }
     }
     for bot in &mut new.bots {
+        let Some(old) = prev.bots.iter().find(|b| {
+            b.bot_id == bot.bot_id && b.backend == bot.backend && b.deployment == bot.deployment
+        }) else {
+            continue;
+        };
+        if bot.backend.eq_ignore_ascii_case("snowluma") && bot.pid_file.is_none() {
+            bot.pid_file.clone_from(&old.pid_file);
+        }
         let has_port = !bot.webui_port_guessed && bot.webui_port.filter(|p| *p > 0).is_some();
         let has_token = bot
             .webui_token
@@ -362,9 +397,6 @@ pub fn merge_notify_preserve_webui(new: &mut NotifyConfig, prev: &NotifyConfig) 
         if has_port && has_token {
             continue;
         }
-        let Some(old) = prev.bots.iter().find(|b| b.bot_id == bot.bot_id) else {
-            continue;
-        };
         if !has_port {
             if let Some(p) = old.webui_port.filter(|p| *p > 0) {
                 bot.webui_port = Some(p);
@@ -754,6 +786,85 @@ mod tests {
     }
 
     #[test]
+    fn snowluma_notify_credentials_and_pid_bindings_do_not_require_relogin() {
+        use ncd_watch::relogin_config::WatchLoginTarget;
+        let mut a = sample_remote("s1", 11);
+        a.bot.backend_type = BackendType::SnowLuma;
+        a.bot.deployment_type = DeploymentType::Native;
+        let mut b = a.clone();
+        b.bot.qq_id = 22;
+        let mut notify = build_notify_config("s1", &[a, b], &OfflineWebhookSettings::default());
+        apply_watch_login_targets(
+            &mut notify,
+            &[11, 22].map(|qq| WatchLoginTarget {
+                bot_id: qq.to_string(),
+                webui_port: 5099,
+                webui_secret: "daemon-password".into(),
+                pid_file: Some(format!("/home/sl/run/{qq}.pid")),
+                ..Default::default()
+            }),
+        );
+        assert!(!notify.onebot.relogin.settings.enabled);
+        assert!(notify.onebot.relogin.login_targets.is_empty());
+        for bot in &notify.bots {
+            assert_eq!(bot.webui_port, Some(5099));
+            assert_eq!(bot.webui_token.as_deref(), Some("daemon-password"));
+            assert_eq!(
+                bot.pid_file.as_deref(),
+                Some(format!("/home/sl/run/{}.pid", bot.bot_id).as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn snowluma_docker_notify_uses_host_mapping_and_preserves_credentials_in_restart_gap() {
+        use ncd_watch::relogin_config::WatchLoginTarget;
+        let mut cfg = sample_remote("s1", 11);
+        cfg.bot.backend_type = BackendType::SnowLuma;
+        let mut old = build_notify_config("s1", &[cfg.clone()], &OfflineWebhookSettings::default());
+        apply_watch_login_targets(
+            &mut old,
+            &[WatchLoginTarget {
+                bot_id: "11".into(),
+                webui_port: 15555,
+                webui_secret: "password".into(),
+                container_name: Some("slbot-11".into()),
+                container_webui_port: Some(5099),
+                ..Default::default()
+            }],
+        );
+        let mut next = build_notify_config("s1", &[cfg], &OfflineWebhookSettings::default());
+        merge_notify_preserve_webui(&mut next, &old);
+        assert_eq!(next.bots[0].webui_port, Some(15555));
+        assert_eq!(next.bots[0].webui_token.as_deref(), Some("password"));
+        assert!(next.bots[0].pid_file.is_none());
+        next.bots[0].backend = "napcat".into();
+        next.bots[0].webui_port = None;
+        next.bots[0].webui_token = None;
+        merge_notify_preserve_webui(&mut next, &old);
+        assert!(next.bots[0].webui_port.is_none());
+        assert!(next.bots[0].webui_token.is_none());
+    }
+
+    #[test]
+    fn snowluma_native_restart_gap_preserves_pid_binding() {
+        let mut cfg = sample_remote("s1", 11);
+        cfg.bot.backend_type = BackendType::SnowLuma;
+        cfg.bot.deployment_type = DeploymentType::Native;
+        let mut old = build_notify_config("s1", &[cfg.clone()], &OfflineWebhookSettings::default());
+        old.bots[0].webui_port = Some(5099);
+        old.bots[0].webui_token = Some("password".into());
+        old.bots[0].pid_file = Some("/home/sl/run/11.pid".into());
+        let mut next = build_notify_config("s1", &[cfg], &OfflineWebhookSettings::default());
+        merge_notify_preserve_webui(&mut next, &old);
+        assert_eq!(
+            next.bots[0].pid_file.as_deref(),
+            Some("/home/sl/run/11.pid")
+        );
+        assert_eq!(next.bots[0].webui_token.as_deref(), Some("password"));
+    }
+
+    #[test]
     fn build_notify_includes_webhook_channels() {
         let bots = vec![sample_remote("s1", 9)];
         let mut wh = OfflineWebhookSettings::default();
@@ -1000,6 +1111,46 @@ mod tests {
     }
 
     #[test]
+    fn messenger_projection_keeps_http_prefix_for_native_and_docker_resolution() {
+        let mut cfg = with_http(sample_remote("s1", 10002), 3010);
+        cfg.connect.http_servers[0].path = " botB/ ".into();
+        let docker = watch_onebot_messenger_from_bot(&cfg).unwrap();
+        assert!(docker.base_url.is_empty());
+        assert_eq!(docker.path, "/botB/");
+        assert_eq!(docker.container_port, Some(3010));
+        cfg.bot.deployment_type = DeploymentType::Native;
+        let native = watch_onebot_messenger_from_bot(&cfg).unwrap();
+        assert_eq!(native.base_url, "http://127.0.0.1:3010");
+        assert_eq!(native.path, "/botB/");
+    }
+
+    #[test]
+    fn event_endpoint_normalizes_default_and_missing_leading_slash() {
+        let mut cfg = sample_remote("s1", 10002);
+        cfg.connect
+            .websocket_servers
+            .push(ncd_domain::WebsocketServerConfig {
+                base: NetworkBaseFields {
+                    enable: true,
+                    name: "watch".into(),
+                    message_post_format: MessagePostFormat::Array,
+                    token: String::new(),
+                    debug: false,
+                },
+                host: "0.0.0.0".into(),
+                port: 3001,
+                report_self_message: false,
+                enable_force_push_event: false,
+                heart_interval: 30000,
+                path: String::new(),
+                role: ncd_domain::WsRole::Universal,
+            });
+        assert_eq!(watch_event_endpoint(&cfg).unwrap().path, "/");
+        cfg.connect.websocket_servers[0].path = " botB ".into();
+        assert_eq!(watch_event_endpoint(&cfg).unwrap().path, "/botB");
+    }
+
+    #[test]
     fn docker_messenger_prefers_published_server() {
         let cfg = with_http(with_http(sample_remote("s1", 1277629216), 3010), 3001);
         let m = watch_onebot_messenger_from_bot(&cfg).unwrap();
@@ -1035,5 +1186,6 @@ mod tests {
         let old: WatchOneBotMessenger =
             serde_json::from_str(r#"{"botId":"1","baseUrl":"http://127.0.0.1:1"}"#).unwrap();
         assert_eq!(old.container_port, None);
+        assert_eq!(old.path, "");
     }
 }

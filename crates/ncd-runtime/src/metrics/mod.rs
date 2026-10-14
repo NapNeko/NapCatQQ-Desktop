@@ -7,6 +7,7 @@ mod paths;
 mod probe_parse;
 mod remote;
 mod remote_read;
+mod shared;
 
 pub use remote_read::remote_metrics_read_failure;
 
@@ -20,12 +21,16 @@ pub use inject::{
 };
 pub use paths::{
     history_path_for_bot, metrics_bot_dir, metrics_root, nodes_map_path_for_bot, probe_script_path,
-    stats_path_for_bot,
+    snowluma_registration_path, snowluma_registry_dir, stats_path_for_bot,
 };
 pub use probe_parse::load_probe_stats_file;
 pub use remote::{
     RemoteMetricsPaths, RuntimeRemoteMetricsInjector, ensure_remote_metrics_assets,
     merge_metrics_env, probe_remote_home, rewrite_remote_napcat_load_script,
+};
+pub use shared::{
+    SnowLumaMetricsRegistration, prepare_snowluma_inject, remote_snowluma_registry_posix,
+    snowluma_metrics_env, write_local_snowluma_registration, write_remote_snowluma_registration,
 };
 
 /// 远端 ncd-watch 侧 metrics 路径（与 watch/sync::build_watch_metrics_config 一致）

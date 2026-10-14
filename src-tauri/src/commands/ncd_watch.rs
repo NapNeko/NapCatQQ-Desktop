@@ -2,8 +2,9 @@
 
 use ncd_domain::ids::BotId;
 use ncd_runtime::ncd_watch_sync::{
-    WatchNotifyConfig, WatchNotifyExtras, build_notify_config_with_extras, clear_desktop_present,
-    write_desktop_present, write_notify_json_merged,
+    WatchNotifyConfig, WatchNotifyExtras, apply_watch_login_targets,
+    build_notify_config_with_extras, clear_desktop_present, write_desktop_present,
+    write_notify_json_merged,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -43,9 +44,10 @@ async fn build_notify_for_server(
     );
     let mut notify =
         build_notify_config_with_extras(server_id, bots, &settings.offline_webhook, &extras);
+    let login_targets = state.bot_manager.watch_login_targets(server_id, bots).await;
+    apply_watch_login_targets(&mut notify, &login_targets);
     if notify.onebot.relogin.settings.enabled {
-        notify.onebot.relogin.login_targets =
-            state.bot_manager.watch_login_targets(server_id, bots).await;
+        notify.onebot.relogin.login_targets = login_targets;
     }
     notify
 }
@@ -296,7 +298,11 @@ async fn push_metrics_json_for_server(
         settings.bot_runtime_metrics_retention_days,
         &remote_bots,
     );
-    write_metrics_json(host, home, &metrics).await
+    write_metrics_json(host, home, &metrics).await?;
+    state
+        .bot_manager
+        .refresh_snowluma_metrics_for_server(server_id, host, home, bots)
+        .await
 }
 
 /// 对所有已连接远端 server 刷 present + 有远端 bot 时同步 notify
