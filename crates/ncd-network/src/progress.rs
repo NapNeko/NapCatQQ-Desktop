@@ -13,7 +13,7 @@ pub enum DownloadStage {
     Racing,
     /// 单镜像稳定下载中(或切片下载中的某一片)
     Streaming,
-    /// 当前镜像 stall(idle timeout),切到下一个
+    /// 当前源持续低速、断流或校验失败，切到下一个
     SwitchingMirror,
     /// 续传:已有 .part 文件,从断点继续
     Resuming,

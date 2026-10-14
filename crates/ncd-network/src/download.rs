@@ -1,8 +1,8 @@
-//! 单 URL 下载:HTTP Range 续传 + chunk-level idle timeout + 进度节流
+//! 单 URL 下载:HTTP Range 续传 + idle / 持续低速检测 + 进度节流
 //!
 //! 与 race / chunked 解耦,只做"给定 URL,把字节灌到 .part,写完 rename 到 dest"
-//! idle timeout 超时报 IdleTimeout,caller(race)据此切镜像;dest 已有 .part 时
-//! 取其大小作 Range offset;200 表示不支持续传则 truncate 重下,206 直接 append
+//! idle / 低速超时由 caller(race)处理换源;dest 已有 .part 时取其大小作
+//! Range offset;200 表示不支持续传则重下,206 验证起点后 append
 
 use std::path::Path;
 use std::sync::Arc;
@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use futures_util::StreamExt;
+use reqwest::Client;
 use reqwest::header;
-use reqwest::{Client, Response};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -24,7 +24,7 @@ use crate::range::{
     PartFile, parse_content_length_from_range, parse_content_range_bounds, range_header_value,
     supports_resume,
 };
-use crate::speed::SpeedSampler;
+use crate::speed::{LowSpeedConfig, LowSpeedMonitor, SpeedSampler};
 
 pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(20);
 pub const PROGRESS_THROTTLE_INTERVAL: Duration = Duration::from_millis(250);
@@ -35,6 +35,7 @@ pub struct DownloadConfig {
     pub idle_timeout: Duration,
     pub stage: DownloadStage,
     pub mirror_url: Option<String>,
+    pub low_speed: Option<LowSpeedConfig>,
 }
 
 impl Default for DownloadConfig {
@@ -43,6 +44,7 @@ impl Default for DownloadConfig {
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
             stage: DownloadStage::Streaming,
             mirror_url: None,
+            low_speed: None,
         }
     }
 }
@@ -82,18 +84,35 @@ pub async fn download_with_client(
         "download start"
     );
 
-    let mut req = client.get(url);
+    let mut req = client.get(url).header(header::ACCEPT_ENCODING, "identity");
     if resume_offset > 0 {
         req = req.header(header::RANGE, range_header_value(resume_offset));
     }
 
-    let resp = req.send().await?;
+    let resp = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(NetworkError::Cancelled),
+        result = timeout(cfg.idle_timeout, req.send()) => match result {
+            Ok(result) => result?,
+            Err(_) => return Err(NetworkError::IdleTimeout(cfg.idle_timeout)),
+        },
+    };
     let status = resp.status();
     if !status.is_success() {
         return Err(NetworkError::Status(status.as_u16()));
     }
 
     let used_resume = supports_resume(status);
+    if used_resume {
+        match parse_content_range_bounds(&resp) {
+            Some((start, _)) if start == resume_offset => {}
+            _ => {
+                return Err(NetworkError::Http(
+                    "invalid Content-Range for resume offset".into(),
+                ));
+            }
+        }
+    }
     if resume_offset > 0 && !used_resume {
         part.truncate().await?;
     }
@@ -110,6 +129,14 @@ pub async fn download_with_client(
 
     let mut last_progress_at = Instant::now();
     let mut last_progress_bytes = downloaded;
+    let mut low_speed = cfg
+        .low_speed
+        .clone()
+        .map(|cfg| LowSpeedMonitor::new(cfg, Instant::now(), downloaded));
+    let mut ticker = tokio::time::interval(Duration::from_millis(500));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    ticker.tick().await;
+    let mut last_byte_at = tokio::time::Instant::now();
 
     push_update(
         &sink,
@@ -127,14 +154,34 @@ pub async fn download_with_client(
         let next = tokio::select! {
             biased;
             _ = cancel.cancelled() => {
+                let _ = part.flush().await;
                 return Err(NetworkError::Cancelled);
             }
-            r = timeout(cfg.idle_timeout, stream.next()) => r,
+            r = tokio::time::timeout_at(last_byte_at + cfg.idle_timeout, stream.next()) => r,
+            _ = ticker.tick() => {
+                let now = Instant::now();
+                sampler.record(now, downloaded);
+                if let Some(speed_bps) = low_speed.as_mut().and_then(|m| m.check(now, downloaded, total)) {
+                    part.flush().await?;
+                    return Err(NetworkError::SlowDownload {
+                        speed_bps,
+                        min_bps: cfg.low_speed.as_ref().map_or(0, |c| c.min_bps),
+                    });
+                }
+                push_update(&sink, cfg.stage, downloaded, total, sampler.current_bps(),
+                    cfg.mirror_url.as_deref(), "streaming".into()).await;
+                last_progress_at = now;
+                last_progress_bytes = downloaded;
+                continue;
+            }
         };
 
         let chunk_opt = match next {
             Ok(opt) => opt,
-            Err(_) => return Err(NetworkError::IdleTimeout(cfg.idle_timeout)),
+            Err(_) => {
+                part.flush().await?;
+                return Err(NetworkError::IdleTimeout(cfg.idle_timeout));
+            }
         };
 
         let chunk = match chunk_opt {
@@ -145,6 +192,13 @@ pub async fn download_with_client(
 
         if chunk.is_empty() {
             continue;
+        }
+        last_byte_at = tokio::time::Instant::now();
+
+        if total.is_some_and(|t| downloaded.saturating_add(chunk.len() as u64) > t) {
+            return Err(NetworkError::Http(
+                "response exceeds declared file size".into(),
+            ));
         }
 
         part.append(&chunk).await?;
@@ -172,17 +226,6 @@ pub async fn download_with_client(
     }
 
     part.flush().await?;
-    push_update(
-        &sink,
-        cfg.stage,
-        downloaded,
-        total,
-        sampler.current_bps(),
-        cfg.mirror_url.as_deref(),
-        "done".to_string(),
-    )
-    .await;
-
     // 流自然结束 ≠ 下完服务端 / 中间代理可能在没发完 Content-Length 字节
     // 的情况下 EOF(连接被掐断,反代上游超时,CDN 缓存只缓了一部分)
     // 不校验就 finalize,会留下残缺的 .part 改名成 dest,下游 zip / tar
@@ -191,7 +234,7 @@ pub async fn download_with_client(
     // 不一致,续传 offset 是危险操作,所以 race 切 mirror 时也会主动
     // truncate)
     if let Some(t) = total {
-        if downloaded < t {
+        if downloaded != t {
             // .part 仍保留在磁盘上以便观察/调试;finalize() 没被调用,
             // 不会污染 dest
             return Err(NetworkError::Truncated {
@@ -202,6 +245,16 @@ pub async fn download_with_client(
     }
 
     part.finalize(dest).await?;
+    push_update(
+        &sink,
+        cfg.stage,
+        downloaded,
+        total,
+        sampler.current_bps(),
+        cfg.mirror_url.as_deref(),
+        "done".into(),
+    )
+    .await;
     Ok(downloaded)
 }
 
@@ -258,7 +311,9 @@ impl AggregatedProgress {
     }
 
     pub async fn snapshot(&self) -> (u64, Option<u64>, Option<u64>) {
-        let g = self.inner.lock().await;
+        let mut g = self.inner.lock().await;
+        let downloaded = g.downloaded;
+        g.sampler.record(Instant::now(), downloaded);
         (g.downloaded, g.total, g.sampler.current_bps())
     }
 }
@@ -291,11 +346,18 @@ pub(crate) async fn download_byte_range(
     }
 
     let header_val = format!("bytes={}-{}", range.0, range.1);
-    let resp = client
+    let request = client
         .get(url)
         .header(header::RANGE, header_val)
-        .send()
-        .await?;
+        .header(header::ACCEPT_ENCODING, "identity");
+    let resp = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(NetworkError::Cancelled),
+        result = timeout(idle_timeout, request.send()) => match result {
+            Ok(result) => result?,
+            Err(_) => return Err(NetworkError::IdleTimeout(idle_timeout)),
+        },
+    };
     let status = resp.status();
     if !supports_resume(status) {
         return Err(NetworkError::Status(status.as_u16()));
@@ -354,6 +416,11 @@ pub(crate) async fn download_byte_range(
             continue;
         }
 
+        if downloaded.saturating_add(chunk.len() as u64) > expected {
+            return Err(NetworkError::Http(
+                "range response exceeds requested size".into(),
+            ));
+        }
         file.write_all(&chunk).await?;
         downloaded += chunk.len() as u64;
 
@@ -371,40 +438,4 @@ pub(crate) async fn download_byte_range(
     }
 
     Ok(downloaded)
-}
-
-/// 探测远端文件大小 + 是否支持 Range,用 GET + Range: bytes=0-0(HEAD 在
-/// GitHub releases / objects 上有镜像不支持). 返回 (total_bytes, accept_ranges)
-pub(crate) async fn probe_size_and_range(
-    client: &Client,
-    url: &str,
-    cancel: &CancellationToken,
-    idle_timeout: Duration,
-) -> Result<(Option<u64>, bool), NetworkError> {
-    let resp_fut = client.get(url).header(header::RANGE, "bytes=0-0").send();
-    let resp: Response = tokio::select! {
-        biased;
-        _ = cancel.cancelled() => return Err(NetworkError::Cancelled),
-        r = timeout(idle_timeout, resp_fut) => match r {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => return Err(NetworkError::from(e)),
-            Err(_) => return Err(NetworkError::IdleTimeout(idle_timeout)),
-        }
-    };
-
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(NetworkError::Status(status.as_u16()));
-    }
-
-    let accept_ranges = supports_resume(status);
-    let total = if accept_ranges {
-        parse_content_length_from_range(&resp, 0)
-    } else {
-        resp.content_length()
-    };
-
-    // 立即丢弃 stream,释放连接
-    drop(resp);
-    Ok((total, accept_ranges))
 }

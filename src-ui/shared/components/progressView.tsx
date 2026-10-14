@@ -103,25 +103,32 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
               : null;
 
     return (
-        <div
-            className={cn(
-                'mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]',
-                className,
-            )}
-        >
-            <StageIcon stage={progress.downloadStage} />
-            <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
-            {bytesText && (
-                <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">
-                    {bytesText}
+        <div className={cn('mt-1 min-w-0 max-w-full text-[11.5px]', className)}>
+            <div className="flex min-w-0 items-center gap-2">
+                <StageIcon stage={progress.downloadStage} />
+                <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
+                {bytesText && (
+                    <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">
+                        {bytesText}
+                    </span>
+                )}
+                {trailingMetric && (
+                    <span className="shrink-0 font-mono tabular-nums text-brand">
+                        {trailingMetric}
+                    </span>
+                )}
+                <span className="ml-auto shrink-0 font-mono tabular-nums text-text-secondary">
+                    {indeterminate ? '—' : `${progress.percent}%`}
                 </span>
+            </div>
+            {progress.message.trim() && (
+                <div
+                    className="mt-0.5 truncate text-[11px] text-text-tertiary"
+                    title={progress.message}
+                >
+                    {progress.message}
+                </div>
             )}
-            {trailingMetric && (
-                <span className="shrink-0 font-mono tabular-nums text-brand">{trailingMetric}</span>
-            )}
-            <span className="ml-auto shrink-0 font-mono tabular-nums text-text-secondary">
-                {indeterminate ? '—' : `${progress.percent}%`}
-            </span>
         </div>
     );
 };
