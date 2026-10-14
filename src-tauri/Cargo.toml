@@ -37,7 +37,7 @@ chrono = "0.4"
 base64 = "0.22"
 urlencoding = "2"
 url = "2"
-netstat2 = "0.9"
+netstat2 = "0.11.2"
 async-trait = "0.1"
 semver = { version = "1", features = ["serde"] }
 sha2 = "0.10"

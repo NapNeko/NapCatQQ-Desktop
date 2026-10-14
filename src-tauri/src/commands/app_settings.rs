@@ -107,6 +107,10 @@ pub async fn set_app_settings(
         prefs.normalize();
         *state.metrics_collector.prefs().write().await = prefs;
     }
+    let bot_manager = state.bot_manager.clone();
+    tauri::async_runtime::spawn(async move {
+        bot_manager.refresh_snowluma_metrics_registry().await;
+    });
 
     // 调试台功能开关与 MCP 服务随设置保存热生效（关掉即停接收器和在途调用）
     crate::chat_window::apply_chat_feature(&app, settings.features.chat).await?;

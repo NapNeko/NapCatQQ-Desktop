@@ -9,7 +9,7 @@ use std::process::Stdio;
 use ncd_domain::docker::{DOCKER_INSPECT_PORTS_FORMAT, parse_published_host_port};
 use ncd_domain::{OfflineAlert, render_template};
 
-use crate::config::{WatchOneBotMessenger, WatchOneBotSettings};
+use crate::config::{WatchOneBotMessenger, WatchOneBotSettings, normalize_onebot_path};
 
 const TIMEOUT_SECS: u64 = 10;
 
@@ -68,6 +68,19 @@ pub fn candidate_messengers<'a>(
 
 /// 这个 messenger 这次该连的 OneBot HTTP 根地址;两条路都没有就返回 None
 pub fn resolve_base_url(m: &WatchOneBotMessenger, resolver: &dyn PortResolver) -> Option<String> {
+    let base_url = m.base_url.trim();
+    // 旧配置可能直接在 base_url 中保存前缀;现查 Docker 端口也要保留它。
+    let path = if m.path.trim().is_empty() {
+        reqwest::Url::parse(base_url)
+            .ok()
+            .map(|url| url.path().to_owned())
+            .unwrap_or_else(|| "/".into())
+    } else {
+        normalize_onebot_path(&m.path)
+    };
+    if path.contains(['?', '#']) {
+        return None;
+    }
     let container = m
         .container_name
         .as_deref()
@@ -76,11 +89,23 @@ pub fn resolve_base_url(m: &WatchOneBotMessenger, resolver: &dyn PortResolver) -
     let port = m.container_port.filter(|p| *p > 0);
     if let (Some(container), Some(port)) = (container, port) {
         if let Some(host_port) = resolver.published_port(container, port) {
-            return Some(format!("http://127.0.0.1:{host_port}"));
+            return Some(format!(
+                "http://127.0.0.1:{host_port}{}",
+                path.trim_end_matches('/')
+            ));
         }
     }
-    let url = m.base_url.trim();
-    (!url.is_empty()).then(|| url.to_string())
+    if base_url.is_empty() {
+        return None;
+    }
+    if m.path.trim().is_empty() {
+        return Some(base_url.to_owned());
+    }
+    let mut url = reqwest::Url::parse(base_url).ok()?;
+    url.set_path(&path);
+    url.set_query(None);
+    url.set_fragment(None);
+    Some(url.to_string().trim_end_matches('/').to_owned())
 }
 
 pub async fn send_watch_onebot(
@@ -97,6 +122,66 @@ pub async fn send_watch_onebot(
         &DockerPortResolver,
     )
     .await
+}
+
+/// 旧 notify.json 未带 WebUI 凭据时,通过 OneBot 确认账号身份与登录态。
+pub async fn messenger_is_online(messenger: &WatchOneBotMessenger) -> bool {
+    messenger_is_online_with(messenger, &DockerPortResolver).await
+}
+
+async fn messenger_is_online_with(
+    messenger: &WatchOneBotMessenger,
+    resolver: &dyn PortResolver,
+) -> bool {
+    let Ok(expected_qq) = messenger.bot_id.trim().parse::<u64>() else {
+        return false;
+    };
+    if expected_qq == 0 {
+        return false;
+    }
+    let Some(base_url) = resolve_base_url(messenger, resolver) else {
+        return false;
+    };
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
+        .build()
+    else {
+        return false;
+    };
+    for action in ["get_login_info", "get_status"] {
+        let url = format!("{}/{action}", base_url.trim_end_matches('/'));
+        let mut request = client.post(url).json(&serde_json::json!({}));
+        if !messenger.access_token.is_empty() {
+            request = request.bearer_auth(&messenger.access_token);
+        }
+        let Ok(response) = request.send().await else {
+            return false;
+        };
+        if !response.status().is_success() {
+            return false;
+        }
+        let Ok(reply) = read_onebot_response(response).await else {
+            return false;
+        };
+        if action == "get_login_info" {
+            let qq = reply.data.get("user_id").and_then(|value| {
+                value
+                    .as_u64()
+                    .or_else(|| value.as_str().and_then(|value| value.trim().parse().ok()))
+            });
+            if qq != Some(expected_qq) {
+                return false;
+            }
+        } else if reply
+            .data
+            .get("online")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        {
+            return false;
+        }
+    }
+    true
 }
 
 pub async fn send_watch_onebot_with(
@@ -181,7 +266,10 @@ async fn send_with_messenger(
             );
         }
         match req.send().await {
-            Ok(resp) if resp.status().is_success() => ok_count += 1,
+            Ok(resp) if resp.status().is_success() => match validate_onebot_response(resp).await {
+                Ok(()) => ok_count += 1,
+                Err(err) => failures.push(format!("{target_id}: {err}")),
+            },
             Ok(resp) => failures.push(format!("{target_id}: HTTP {}", resp.status().as_u16())),
             Err(err) => failures.push(format!("{target_id}: {err}")),
         }
@@ -199,11 +287,37 @@ async fn send_with_messenger(
     )))
 }
 
+async fn validate_onebot_response(response: reqwest::Response) -> Result<(), String> {
+    read_onebot_response(response).await.map(|_| ())
+}
+
+async fn read_onebot_response(
+    response: reqwest::Response,
+) -> Result<ncd_onebot::client::Ob11Reply, String> {
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|_| "OneBot 回包不是有效 JSON".to_owned())?;
+    let reply = ncd_onebot::client::envelope::parse_ob11_reply(&body);
+    if reply.retcode == 0 && (reply.status.is_empty() || reply.status.eq_ignore_ascii_case("ok")) {
+        return Ok(reply);
+    }
+    let detail = if reply.message.is_empty() {
+        reply.wording
+    } else {
+        reply.message
+    };
+    Err(format!(
+        "OneBot status={}, retcode={}: {detail}",
+        reply.status, reply.retcode
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ncd_domain::{BotId, OfflineAlertKind, OfflineAlertSource};
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct FakeResolver(Option<u16>);
@@ -228,6 +342,7 @@ mod tests {
         WatchOneBotMessenger {
             bot_id: id.into(),
             base_url: url.into(),
+            path: String::new(),
             access_token: String::new(),
             container_name: None,
             container_port: None,
@@ -300,12 +415,136 @@ mod tests {
         );
     }
 
+    #[test]
+    fn resolve_keeps_http_prefix_with_actual_docker_port_and_fallback() {
+        let mut dm = docker_m("10002", "http://127.0.0.1:3216", 3000);
+        dm.path = " botB/ ".into();
+        assert_eq!(
+            resolve_base_url(&dm, &FakeResolver(Some(3999))).as_deref(),
+            Some("http://127.0.0.1:3999/botB")
+        );
+        assert_eq!(
+            resolve_base_url(&dm, &FakeResolver(None)).as_deref(),
+            Some("http://127.0.0.1:3216/botB")
+        );
+        // 手工旧配置把前缀保存在 baseUrl,缺 path 字段仍可迁移端口。
+        let legacy = docker_m("10002", "http://127.0.0.1:3216/botB", 3000);
+        assert_eq!(
+            resolve_base_url(&legacy, &FakeResolver(Some(3999))).as_deref(),
+            Some("http://127.0.0.1:3999/botB")
+        );
+        assert_eq!(
+            resolve_base_url(&legacy, &FakeResolver(None)).as_deref(),
+            Some("http://127.0.0.1:3216/botB")
+        );
+    }
+
+    #[tokio::test]
+    async fn http_200_business_failures_try_next_messenger() {
+        for response in [
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "failed", "retcode": 1404, "wording": "账号不在线",
+            })),
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "failed", "retcode": 0,
+            })),
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "ok", "retcode": 1404,
+            })),
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({})),
+            ResponseTemplate::new(200).set_body_string("not JSON"),
+        ] {
+            let first = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/send_private_msg"))
+                .respond_with(response)
+                .expect(1)
+                .mount(&first)
+                .await;
+            let second = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/send_private_msg"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "status": "ok", "retcode": 0,
+                })))
+                .expect(1)
+                .mount(&second)
+                .await;
+            let s = settings(vec![m("10002", &first.uri()), m("10003", &second.uri())]);
+            send_watch_onebot_with(&s, "10001", None, &alert(), &FakeResolver(None))
+                .await
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn docker_mapping_sends_to_http_prefix_with_token() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/botB/send_group_msg"))
+            .and(header("Authorization", "Bearer secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "OK", "retcode": "0", "data": {"message_id": 123},
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let mut messenger = docker_m("10002", "http://127.0.0.1:1", 3000);
+        messenger.path = "botB".into();
+        messenger.access_token = "secret".into();
+        let mut s = settings(vec![messenger]);
+        s.target_type = "group".into();
+        let host_port = reqwest::Url::parse(&server.uri()).unwrap().port().unwrap();
+        send_watch_onebot_with(&s, "10001", None, &alert(), &FakeResolver(Some(host_port)))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn messenger_probe_requires_matching_account_and_online_status() {
+        for (user_id, status, retcode, online, expected) in [
+            ("10002", "ok", 0, true, true),
+            ("10003", "ok", 0, true, false),
+            ("0", "ok", 0, true, false),
+            ("10002", "failed", 1404, true, false),
+            ("10002", "ok", 0, false, false),
+        ] {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/botB/get_login_info"))
+                .and(header("Authorization", "Bearer secret"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "status": "ok", "retcode": 0, "data": {"user_id": user_id},
+                })))
+                .mount(&server)
+                .await;
+            Mock::given(method("POST"))
+                .and(path("/botB/get_status"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "status": status, "retcode": retcode, "data": {"online": online},
+                })))
+                .mount(&server)
+                .await;
+            let mut messenger = docker_m("10002", "http://127.0.0.1:1", 3000);
+            messenger.path = "botB".into();
+            messenger.access_token = "secret".into();
+            let port = reqwest::Url::parse(&server.uri()).unwrap().port().unwrap();
+            assert_eq!(
+                messenger_is_online_with(&messenger, &FakeResolver(Some(port))).await,
+                expected,
+                "user_id={user_id}, status={status}, retcode={retcode}, online={online}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn falls_back_to_next_messenger_when_first_fails() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/send_private_msg"))
-            .respond_with(ResponseTemplate::new(200))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "ok", "retcode": 0,
+            })))
             .expect(1)
             .mount(&server)
             .await;
@@ -345,16 +584,22 @@ mod tests {
             .respond_with(|req: &wiremock::Request| {
                 let body: serde_json::Value = serde_json::from_slice(&req.body).unwrap();
                 if body["user_id"] == 1 {
-                    ResponseTemplate::new(200)
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "status": "ok", "retcode": 0,
+                    }))
                 } else {
-                    ResponseTemplate::new(500)
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "status": "failed", "retcode": 1404, "wording": "账号不在线",
+                    }))
                 }
             })
             .mount(&first)
             .await;
         let second = MockServer::start().await;
         Mock::given(method("POST"))
-            .respond_with(ResponseTemplate::new(200))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "ok", "retcode": 0,
+            })))
             .expect(0)
             .mount(&second)
             .await;

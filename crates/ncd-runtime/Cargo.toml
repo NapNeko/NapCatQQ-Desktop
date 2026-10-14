@@ -67,7 +67,7 @@ croner = "4"
 sysinfo = "0.31"
 scrypt = "0.11"
 base64 = "0.22"
-netstat2 = "0.9"
+netstat2 = "0.11.2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 lettre = { version = "0.11", default-features = false, features = [
     "smtp-transport",

@@ -2,7 +2,7 @@
 mod capture;
 #[cfg(test)]
 mod tests;
-mod webui;
+pub(crate) mod webui;
 
 use crate::config::{NotifyConfig, WatchPaths};
 use crate::relogin_config::{WatchEventEndpoint, WatchLoginTarget};
@@ -25,7 +25,7 @@ pub struct WatchPort {
     config: NotifyConfig,
     webui: Mutex<webui::WebUi>,
     connections: HashMap<String, WsClient>,
-    processes: Mutex<HashMap<String, webui::Process>>,
+    processes: Mutex<HashMap<String, webui::SlProcessBinding>>,
 }
 
 impl WatchPort {
@@ -61,37 +61,18 @@ impl WatchPort {
         let target = self.target(bot)?;
         let data = self.read(bot, "/api/processes").await.ok()?;
         let processes: webui::Processes = serde_json::from_value(data).ok()?;
-        let pid = if let Some(file) = &target.pid_file {
-            let bytes = capture::read_limited(file, 32).await.ok()?;
-            std::str::from_utf8(&bytes).ok()?.trim().parse::<u32>().ok()
-        } else if let Some(container) = &target.container_name {
-            capture::docker_anchor_pid(container)
-                .await
-                .or(self.processes.lock().await.get(bot).map(|p| p.pid))
-                .or(target.expected_pid)
-        } else {
-            self.processes
-                .lock()
-                .await
-                .get(bot)
-                .map(|p| p.pid)
-                .or(target.expected_pid)
-        };
-        let by_account: Vec<_> = processes.list.iter().filter(|p| p.uin == bot).collect();
-        let process = if by_account.len() == 1 {
-            by_account[0].clone()
-        } else if by_account.is_empty() {
-            processes.list.into_iter().find(|p| Some(p.pid) == pid)?
-        } else {
-            return None;
-        };
-        if process.pid == 0 || (!process.uin.is_empty() && process.uin != bot) {
-            return None;
-        }
-        self.processes
-            .lock()
-            .await
-            .insert(bot.to_owned(), process.clone());
+        let previous = self.processes.lock().await.get(bot).cloned();
+        let binding = webui::process_for_account(
+            processes,
+            bot,
+            target.pid_file.as_deref(),
+            target.container_name.as_deref(),
+            target.expected_pid,
+            previous.as_ref(),
+        )
+        .await?;
+        let process = binding.process.clone();
+        self.processes.lock().await.insert(bot.to_owned(), binding);
         Some(process)
     }
 }
@@ -605,10 +586,11 @@ pub async fn run(paths: WatchPaths, mut shutdown: tokio::sync::watch::Receiver<b
             let Some(local_port) = local_port.filter(|p| *p > 0) else {
                 continue;
             };
-            if !endpoint.path.starts_with('/') || endpoint.path.contains(['?', '#']) {
+            if endpoint.path.contains(['?', '#']) {
                 continue;
             }
-            let url = format!("ws://127.0.0.1:{local_port}{}", endpoint.path);
+            let path = crate::config::normalize_onebot_path(&endpoint.path);
+            let url = format!("ws://127.0.0.1:{local_port}{path}");
             let (tx, rx) = mpsc::channel(128);
             match tokio::time::timeout(
                 Duration::from_secs(5),

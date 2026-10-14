@@ -8,10 +8,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[derive(Debug)]
 pub struct WebUi {
     http: reqwest::Client,
     sessions: HashMap<String, Session>,
 }
+#[derive(Debug)]
 struct Session {
     token: Option<String>,
     at: Instant,
@@ -166,7 +168,7 @@ pub async fn read_json(response: reqwest::Response) -> Result<Value, String> {
 pub struct Processes {
     pub list: Vec<Process>,
 }
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Process {
     pub pid: u32,
     pub path: String,
@@ -178,9 +180,123 @@ pub struct Process {
     pub connected: Option<bool>,
 }
 
+#[derive(Clone, Debug)]
+pub struct SlProcessBinding {
+    pub process: Process,
+    pub generation: String,
+}
+
+fn unbound_uin(uin: &str) -> bool {
+    matches!(uin, "" | "0")
+}
+
+fn select_process(processes: Processes, bot: &str, pid: Option<u32>) -> Option<Process> {
+    let mut by_account = processes.list.iter().filter(|p| p.uin == bot);
+    if let Some(process) = by_account.next() {
+        return (process.pid > 0 && by_account.next().is_none()).then(|| process.clone());
+    }
+    let mut by_pid = processes
+        .list
+        .into_iter()
+        .filter(|p| p.pid > 0 && Some(p.pid) == pid);
+    let process = by_pid.next()?;
+    (unbound_uin(&process.uin) && by_pid.next().is_none()).then_some(process)
+}
+
+/// 未登录的 uin="0" 只借用已验证且代次相同的 PID，或核实进程参数中的账号。
+/// 同一 daemon 的其他未登录进程、真实其他账号与 PID 复用都保持未知。
+pub async fn process_for_account(
+    processes: Processes,
+    bot: &str,
+    pid_file: Option<&str>,
+    container: Option<&str>,
+    expected_pid: Option<u32>,
+    previous: Option<&SlProcessBinding>,
+) -> Option<SlProcessBinding> {
+    let pid = if let Some(file) = pid_file {
+        let bytes = super::capture::read_limited(file, 32).await.ok()?;
+        Some(
+            std::str::from_utf8(&bytes)
+                .ok()?
+                .trim()
+                .parse::<u32>()
+                .ok()?,
+        )
+    } else if let Some(container) = container {
+        super::capture::docker_anchor_pid(container)
+            .await
+            .or(previous.map(|b| b.process.pid))
+            .or(expected_pid)
+    } else {
+        previous.map(|b| b.process.pid).or(expected_pid)
+    };
+    let process = select_process(processes, bot, pid)?;
+    let generation = super::capture::generation(container, process.pid).await?;
+    if unbound_uin(&process.uin)
+        && !previous.is_some_and(|b| b.process.pid == process.pid && b.generation == generation)
+    {
+        let path = format!("/proc/{}/cmdline", process.pid);
+        let bytes = if let Some(container) = container {
+            let mut command = tokio::process::Command::new("docker");
+            command.args(["exec", container, "cat", &path]);
+            super::capture::run(command, &[], 64 * 1024).await.ok()?
+        } else {
+            super::capture::read_limited(&path, 64 * 1024).await.ok()?
+        };
+        if !cmdline_matches_account(&bytes, bot)
+            || super::capture::generation(container, process.pid)
+                .await
+                .as_ref()
+                != Some(&generation)
+        {
+            return None;
+        }
+    }
+    Some(SlProcessBinding {
+        process,
+        generation,
+    })
+}
+
+fn cmdline_matches_account(bytes: &[u8], bot: &str) -> bool {
+    if bytes.last() != Some(&0) {
+        return false;
+    }
+    let Ok(command) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let mut args = command.trim_end_matches('\0').split('\0');
+    if args.next().is_none_or(str::is_empty) {
+        return false;
+    }
+    let mut matched = false;
+    while let Some(arg) = args.next() {
+        if arg == "--type" || arg.starts_with("--type=") {
+            return false;
+        }
+        let account = if matches!(arg, "-q" | "--qq" | "--qq-id") {
+            let Some(account) = args.next() else {
+                return false;
+            };
+            Some(account)
+        } else {
+            arg.strip_prefix("-q")
+                .or_else(|| arg.strip_prefix("--qq="))
+                .or_else(|| arg.strip_prefix("--qq-id="))
+        };
+        if let Some(account) = account {
+            if account != bot {
+                return false;
+            }
+            matched = true;
+        }
+    }
+    matched
+}
+
 pub fn account_state(process: &Process, expected: &str) -> ncd_relogin::AccountState {
     use ncd_relogin::AccountState::*;
-    if !process.uin.is_empty() && process.uin != expected {
+    if !unbound_uin(&process.uin) && process.uin != expected {
         return Unknown;
     }
     match process.logged_in {
@@ -194,5 +310,65 @@ pub fn account_state(process: &Process, expected: &str) -> ncd_relogin::AccountS
         }
         _ if process.status == "disconnected" => Offline,
         _ => Unknown,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sl_unbound_process_selection_requires_unique_pid() {
+        let list = |items| serde_json::from_value(json!({"list":items})).unwrap();
+        let process = |pid, uin| json!({"pid":pid,"path":"/qq","uin":uin,"status":"available"});
+        assert!(
+            select_process(list(vec![process(1, "0"), process(2, "0")]), "10001", None).is_none()
+        );
+        assert_eq!(
+            select_process(
+                list(vec![process(1, "0"), process(2, "0")]),
+                "10001",
+                Some(2)
+            )
+            .unwrap()
+            .pid,
+            2
+        );
+        assert!(
+            select_process(
+                list(vec![process(1, "0"), process(1, "0")]),
+                "10001",
+                Some(1)
+            )
+            .is_none()
+        );
+        assert!(select_process(list(vec![process(1, "20002")]), "10001", Some(1)).is_none());
+        assert!(
+            select_process(
+                list(vec![process(1, "10001"), process(2, "10001")]),
+                "10001",
+                Some(1)
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn sl_process_account_arguments_reject_helpers_and_other_accounts() {
+        for command in [
+            b"/opt/QQ/qq\0--no-sandbox\0-q\010001\0".as_slice(),
+            b"/opt/QQ/qq\0--qq=10001\0".as_slice(),
+        ] {
+            assert!(cmdline_matches_account(command, "10001"));
+        }
+        for command in [
+            b"/opt/QQ/qq\0-q\020002\0".as_slice(),
+            b"/opt/QQ/qq\0-q\010001\0--qq=20002\0".as_slice(),
+            b"/opt/QQ/qq\0-q\010001\0--type=renderer\0".as_slice(),
+            b"/opt/QQ/qq\0-q\0".as_slice(),
+            b"/opt/QQ/qq\0".as_slice(),
+        ] {
+            assert!(!cmdline_matches_account(command, "10001"));
+        }
     }
 }

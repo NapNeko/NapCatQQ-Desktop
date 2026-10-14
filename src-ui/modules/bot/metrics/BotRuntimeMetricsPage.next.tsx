@@ -52,6 +52,7 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
     const displayName =
         config?.bot.name && config.bot.name.trim().length > 0 ? config.bot.name.trim() : botId;
     const flavor = config?.bot.backend_type ?? null;
+    const sharedSnowLuma = flavor === 'snowluma' && config?.bot.deploymentType === 'native';
     const isRemote =
         config?.bot.runtime_target != null && !isRuntimeTargetLocal(config.bot.runtime_target);
 
@@ -91,7 +92,7 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
 
     const statusBanner = !enabled ? (
         <div className="rounded-sm bg-inset/50 px-3 py-2 text-2xs leading-relaxed text-text-secondary ring-1 ring-border-subtle">
-            实例指标未启用。请到「设置 · 监控」打开并保存，然后重启该 Bot。
+            实例指标未启用。请到「设置 · 监控」打开并保存。
         </div>
     ) : showInjectHint ? (
         <div
@@ -120,9 +121,11 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
                             ? isRemote
                                 ? '检查远端连接、ncd-watch 同步与探针注入。'
                                 : '可尝试重启实例；持续失败请查 Desktop 日志。'
-                            : isRemote
-                              ? '开启指标并同步 ncd-watch 后，在该机重启 Bot。'
-                              : '设置 · 监控启用并保存后，重启该实例。'}
+                            : sharedSnowLuma
+                              ? '先开启并保存指标。升级前已运行的 SnowLuma 需在同机所有账号停止后重新启动；后续设置自动生效。'
+                              : isRemote
+                                ? '开启指标并同步 ncd-watch 后，在该机重启 Bot。'
+                                : '设置 · 监控启用并保存后，重启该实例。'}
                     </p>
                 </div>
             </div>
@@ -246,7 +249,7 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
                                 <div className="@container min-h-0 flex-1">
                                     <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-2">
                                         <KpiTile
-                                            label="内存 RSS"
+                                            label={sharedSnowLuma ? '共享服务 RSS' : '内存 RSS'}
                                             value={formatBytes(rss)}
                                             hint={
                                                 heap != null
@@ -282,7 +285,12 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
                             </div>
                         </Panel>
 
-                        <SystemResourceCard metrics={metrics} rss={rss} isRemote={isRemote} />
+                        <SystemResourceCard
+                            metrics={metrics}
+                            rss={rss}
+                            isRemote={isRemote}
+                            sharedProcess={sharedSnowLuma}
+                        />
                     </div>
 
                     <Panel

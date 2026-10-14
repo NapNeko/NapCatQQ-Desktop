@@ -84,6 +84,136 @@ fn wrong_account_and_loading_are_unknown_not_offline() {
         ),
         AccountState::Offline
     );
+    assert_eq!(
+        webui::account_state(
+            &process(
+                json!({"pid":1,"path":"/qq","uin":"0","status":"available","loggedIn":false,"connected":false})
+            ),
+            "1"
+        ),
+        AccountState::Offline
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sl_logout_keeps_exact_process_binding_across_zero_uin() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/login"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token":"test"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let online = Arc::new(AtomicBool::new(true));
+    let state = online.clone();
+    let pid = std::process::id();
+    Mock::given(method("GET"))
+        .and(path("/api/processes"))
+        .respond_with(move |_: &wiremock::Request| {
+            let logged_in = state.load(Ordering::SeqCst);
+            ResponseTemplate::new(200).set_body_json(json!({"list":[
+                {"pid":pid,"path":"/qq","uin":if logged_in {"10001"} else {"0"},
+                 "status":if logged_in {"online"} else {"available"},"loggedIn":logged_in,"connected":logged_in},
+                {"pid":pid + 1,"path":"/qq","uin":"0","status":"available","loggedIn":false}
+            ]}))
+        })
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = WatchPaths::from_root(dir.path());
+    let pid_file = dir.path().join("qq.pid");
+    std::fs::write(&pid_file, pid.to_string()).unwrap();
+    let mut config = NotifyConfig::example();
+    config.bots[0].backend = "snowluma".into();
+    config.bots[0].deployment = "native".into();
+    config.bots[0].process_match = None;
+    config.onebot.relogin.login_targets = vec![WatchLoginTarget {
+        bot_id: "10001".into(),
+        webui_port: server.address().port(),
+        webui_secret: "secret".into(),
+        pid_file: Some(pid_file.to_string_lossy().into_owned()),
+        ..Default::default()
+    }];
+    let port = WatchPort {
+        config_path: paths.notify_json,
+        config,
+        webui: Mutex::new(webui::WebUi::new().unwrap()),
+        connections: HashMap::new(),
+        processes: Mutex::new(HashMap::new()),
+    };
+    assert_eq!(
+        port.observe("10001").await.unwrap().state,
+        AccountState::Online
+    );
+    online.store(false, Ordering::SeqCst);
+    assert_eq!(
+        port.observe("10001").await.unwrap().state,
+        AccountState::Offline
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sl_unbound_pid_reuse_and_other_accounts_stay_unknown() {
+    let pid = std::process::id();
+    let generation = capture::generation(None, pid).await.unwrap();
+    let bound: webui::Process = serde_json::from_value(json!({
+        "pid":pid,"path":"/qq","uin":"10001","status":"online","loggedIn":true
+    }))
+    .unwrap();
+    let previous = webui::SlProcessBinding {
+        process: bound,
+        generation,
+    };
+    let processes = |uin| {
+        serde_json::from_value(json!({"list":[{
+            "pid":pid,"path":"/qq","uin":uin,"status":"available","loggedIn":false
+        }]}))
+        .unwrap()
+    };
+    assert!(
+        webui::process_for_account(
+            processes("0"),
+            "10001",
+            None,
+            None,
+            Some(pid),
+            Some(&previous)
+        )
+        .await
+        .is_some()
+    );
+    assert!(
+        webui::process_for_account(
+            processes("20002"),
+            "10001",
+            None,
+            None,
+            Some(pid),
+            Some(&previous)
+        )
+        .await
+        .is_none()
+    );
+    assert!(
+        webui::process_for_account(processes("0"), "10001", None, None, Some(pid), None)
+            .await
+            .is_none()
+    );
+    let stale = webui::SlProcessBinding {
+        generation: "old-process".into(),
+        ..previous
+    };
+    assert!(
+        webui::process_for_account(processes("0"), "10001", None, None, Some(pid), Some(&stale))
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]

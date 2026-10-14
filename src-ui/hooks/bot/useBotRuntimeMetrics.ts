@@ -1,7 +1,8 @@
 // Bot 实例运行时指标：订阅共享 catalog（list 批量）+ 单 bot 视图。
 // 页面不可见时 catalog 自动降频；对话框可额外 live 刷新单 bot。
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { botService } from '../../core/services/bot.service';
 import type { BotRuntimeMetrics } from '../../core/ipc/generated/domain/BotRuntimeMetrics';
 import {
@@ -39,77 +40,36 @@ export function useBotRuntimeMetrics(
     );
 
     const fromCatalog = botId ? (catalog.byId[botId] ?? null) : null;
-    const [detailOverride, setDetailOverride] = useState<BotRuntimeMetrics | null>(null);
-    const [gapFill, setGapFill] = useState<BotRuntimeMetrics | null>(null);
-    /** 仅「还没有任何 metrics」时的首拉；静默轮询不碰它 */
-    const [initialLoading, setInitialLoading] = useState(false);
-
-    // catalog 未含该 bot 时补一次单拉（新启 bot 两轮 list 之间 / 浏览器 mock）
-    useEffect(() => {
-        if (!catalog.enabled || !botId || fromCatalog || liveDetail) {
-            if (fromCatalog) setGapFill(null);
-            return;
-        }
-        if (catalog.fetching || catalog.lastFetchAt === 0) return;
-        let cancelled = false;
-        void botService
-            .getRuntimeMetrics(botId)
-            .then((m) => {
-                if (!cancelled) setGapFill(m);
-            })
-            .catch(() => {
-                if (!cancelled) setGapFill(null);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [catalog.enabled, catalog.fetching, catalog.lastFetchAt, botId, fromCatalog, liveDetail]);
-
-    useEffect(() => {
-        if (!liveDetail || !catalog.enabled || !botId) {
-            setDetailOverride(null);
-            setInitialLoading(false);
-            return;
-        }
-        let cancelled = false;
-        let hasSnapshot = false;
-        const tick = async () => {
-            // 首屏才亮 loading；后续 interval 静默更新，不驱动按钮转圈
-            if (!hasSnapshot) setInitialLoading(true);
-            try {
-                const m = await botService.getRuntimeMetrics(botId);
-                if (!cancelled) {
-                    setDetailOverride(m);
-                    hasSnapshot = true;
-                }
-            } catch {
-                if (!cancelled) setDetailOverride(null);
-            } finally {
-                if (!cancelled) setInitialLoading(false);
-            }
-        };
-        void tick();
-        const t = window.setInterval(() => void tick(), Math.max(1000, catalog.intervalMs || 3000));
-        return () => {
-            cancelled = true;
-            window.clearInterval(t);
-        };
-    }, [liveDetail, catalog.enabled, catalog.intervalMs, botId]);
-
-    const metrics = useMemo(() => {
-        if (liveDetail && detailOverride) return detailOverride;
-        return fromCatalog ?? gapFill;
-    }, [liveDetail, detailOverride, fromCatalog, gapFill]);
-
+    const detail = useQuery({
+        queryKey: ['botRuntimeMetrics', botId, catalog.enabled],
+        queryFn: async ({ signal }) => {
+            const metrics = await botService.getRuntimeMetrics(botId);
+            // IPC 不能撤回；切走 Bot 后忽略迟到结果，重新打开时从当前状态采集。
+            signal.throwIfAborted();
+            return metrics;
+        },
+        enabled:
+            catalog.enabled &&
+            !!botId &&
+            (liveDetail || (!fromCatalog && !catalog.fetching && catalog.lastFetchAt > 0)),
+        refetchInterval: liveDetail ? Math.max(1000, catalog.intervalMs || 3000) : false,
+        retry: false,
+        staleTime: 0,
+        gcTime: 0,
+    });
+    const fromDetail = detail.data?.bot_id === botId ? detail.data : null;
+    // list 与单拉可独立完成，后到的旧采样不能盖住已经显示的新采样。
+    const metrics = !catalog.enabled
+        ? null
+        : fromCatalog && (!fromDetail || fromCatalog.collected_at_ms > fromDetail.collected_at_ms)
+          ? fromCatalog
+          : (fromDetail ?? fromCatalog);
+    const { refetch } = detail;
     const refresh = useCallback(async () => {
-        if (!liveDetail || !botId) return;
-        try {
-            const m = await botService.getRuntimeMetrics(botId);
-            setDetailOverride(m);
-        } catch {
-            setDetailOverride(null);
-        }
-    }, [liveDetail, botId]);
+        if (!liveDetail || !catalog.enabled || !botId) return;
+        // 与轮询共用在途请求；IPC 没有取消能力，不能取消后又发出第二份。
+        await refetch({ cancelRefetch: false });
+    }, [liveDetail, catalog.enabled, botId, refetch]);
 
     return {
         enabled: catalog.enabled,
@@ -117,7 +77,7 @@ export function useBotRuntimeMetrics(
         retentionDays: catalog.retentionDays,
         metrics,
         // 有数据后 catalog.fetching 也不再算 loading，避免 list 轮询抽按钮
-        loading: metrics == null && (initialLoading || catalog.fetching),
+        loading: catalog.enabled && metrics == null && (detail.isFetching || catalog.fetching),
         refresh,
     };
 }

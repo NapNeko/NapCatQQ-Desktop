@@ -57,6 +57,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     ) =>
                 {
                     self.snowluma_ui.clear_bot(&snapshot.bot_id).await;
+                    // 异常退出、启动/停止失败也让该账号退出共享流量映射。
+                    // 文件与 SSH 更新在后台，事件环继续处理其它 Bot。
+                    let manager = Arc::clone(&self);
+                    let bot = snapshot.bot_id.clone();
+                    tokio::spawn(async move {
+                        if let Ok(config) = manager.get_required_bot_config(&bot).await {
+                            manager.refresh_snowluma_metrics_registration(&config).await;
+                        }
+                    });
                 }
                 _ => {}
             }

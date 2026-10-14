@@ -756,6 +756,21 @@ impl RemoteSnowLumaBackend {
             .await
             .insert(bot_id.clone(), resolve_start_mode(config));
 
+        // Desktop 重开后重新注册已存活账号，恢复缺失 node 时仍预加载共享探针。
+        if let Some(injector) = &self.metrics_injector {
+            if let Some(env) = injector
+                .prepare(
+                    host.as_ref(),
+                    self.daemon.remote_home(),
+                    bot_id.as_str(),
+                    config,
+                )
+                .await
+            {
+                self.daemon.apply_metrics_node_env(Some(env)).await?;
+            }
+        }
+
         if let Err(err) = self.daemon.ensure_running_for_reconcile_bot(&bot_id).await {
             tracing::warn!(
                 target: "ncd_runtime::remote_snowluma",
