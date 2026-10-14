@@ -49,7 +49,14 @@ impl DownloadHelper {
             return Err(ActionError::Cancelled);
         }
 
-        emit_step(ctx, step, 0, format!("download {url}"), None).await;
+        emit_step(
+            ctx,
+            step,
+            0,
+            format!("准备下载 · {}", source_label(url, url)),
+            None,
+        )
+        .await;
 
         let sink: Arc<dyn DownloadProgressSink> =
             Arc::new(CtxSink::new(ctx.clone(), step, url.to_string()));
@@ -73,7 +80,7 @@ impl DownloadHelper {
             ctx,
             step,
             100,
-            format!("downloaded {}", file_size_label(dest_path).await),
+            format!("下载完成 {}", file_size_label(dest_path).await),
             None,
         )
         .await;
@@ -110,7 +117,7 @@ impl DownloadHelper {
             ctx,
             step,
             0,
-            format!("download {} (race {} mirrors)", &mirrors[0], mirrors.len()),
+            format!("准备下载，正在比较 {} 个下载源", mirrors.len()),
             None,
         )
         .await;
@@ -139,7 +146,7 @@ impl DownloadHelper {
             ctx,
             step,
             100,
-            format!("downloaded {}", file_size_label(dest_path).await),
+            format!("下载完成 {}", file_size_label(dest_path).await),
             None,
         )
         .await;
@@ -171,7 +178,7 @@ impl DownloadHelper {
             ctx,
             step,
             0,
-            format!("download {} (race {} mirrors)", &mirrors[0], mirrors.len()),
+            format!("准备下载，正在比较 {} 个下载源", mirrors.len()),
             None,
         )
         .await;
@@ -195,7 +202,7 @@ impl DownloadHelper {
             ctx,
             step,
             100,
-            format!("downloaded {}", file_size_label(dest_path).await),
+            format!("下载完成 {}", file_size_label(dest_path).await),
             None,
         )
         .await;
@@ -297,6 +304,21 @@ fn fmt_bps(bps: u64) -> String {
     }
 }
 
+/// 只展示主机，避免进度消息暴露签名参数、认证信息或很长的资产路径。
+fn source_label(url: &str, primary_url: &str) -> String {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return "下载源".into();
+    };
+    let Some(host) = parsed.host_str() else {
+        return "下载源".into();
+    };
+    let is_mirror = url != primary_url
+        || parsed.path().starts_with("/https://")
+        || parsed.path().starts_with("/http://")
+        || (host == "registry.npmmirror.com" && parsed.path().starts_with("/-/binary/node/"));
+    format!("{} {host}", if is_mirror { "镜像" } else { "直连" })
+}
+
 /// 把 ncd_network::ProgressUpdate 翻成 ActionCtx::emit
 struct CtxSink {
     ctx: ActionCtx,
@@ -322,11 +344,29 @@ impl DownloadProgressSink for CtxSink {
             _ => 0,
         };
 
+        let readable_message = update
+            .message
+            .chars()
+            .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+            .then(|| update.message.trim());
         let stage_label = match update.stage {
-            DownloadStage::Racing => "race",
-            DownloadStage::Streaming => "download",
-            DownloadStage::SwitchingMirror => "switch mirror",
-            DownloadStage::Resuming => "resume",
+            DownloadStage::Racing => readable_message.unwrap_or("正在测速选择下载源"),
+            DownloadStage::Streaming => readable_message.unwrap_or("下载中"),
+            DownloadStage::SwitchingMirror => {
+                let reason = update.message.to_ascii_lowercase();
+                if let Some(message) = readable_message {
+                    message
+                } else if reason.contains("slow")
+                    || reason.contains("low-speed")
+                    || reason.contains("低速")
+                    || reason.contains("偏低")
+                {
+                    "下载速度持续偏低，正在切换镜像"
+                } else {
+                    "正在切换下载源"
+                }
+            }
+            DownloadStage::Resuming => "断点续传中",
         };
         let stage_id = match update.stage {
             DownloadStage::Racing => "racing",
@@ -336,32 +376,27 @@ impl DownloadProgressSink for CtxSink {
         };
 
         let mirror = update.mirror_url.as_deref().unwrap_or(&self.primary_url);
-        let mut message = match (update.total, update.speed_bps) {
+        let metrics = match (update.total, update.speed_bps) {
             (Some(t), Some(bps)) => format!(
-                "{stage_label} {} / {} - {}",
+                "{} / {} · {}",
                 fmt_bytes(update.downloaded),
                 fmt_bytes(t),
                 fmt_bps(bps)
             ),
-            (Some(t), None) => format!(
-                "{stage_label} {} / {}",
-                fmt_bytes(update.downloaded),
-                fmt_bytes(t)
-            ),
-            (None, Some(bps)) => format!(
-                "{stage_label} {} - {}",
-                fmt_bytes(update.downloaded),
-                fmt_bps(bps)
-            ),
-            (None, None) => format!("{stage_label} {}", fmt_bytes(update.downloaded)),
+            (Some(t), None) => format!("{} / {}", fmt_bytes(update.downloaded), fmt_bytes(t)),
+            (None, Some(bps)) => format!("{} · {}", fmt_bytes(update.downloaded), fmt_bps(bps)),
+            (None, None) => fmt_bytes(update.downloaded),
         };
-        if matches!(
-            update.stage,
-            DownloadStage::Racing | DownloadStage::SwitchingMirror
-        ) {
-            message.push_str(" @ ");
-            message.push_str(mirror);
-        }
+        let message = if update.stage == DownloadStage::Racing {
+            stage_label.to_string()
+        } else {
+            let source = source_label(mirror, &self.primary_url);
+            if update.stage == DownloadStage::SwitchingMirror {
+                format!("{source} · {stage_label}")
+            } else {
+                format!("{source} · {stage_label} · {metrics}")
+            }
+        };
 
         self.ctx
             .emit(ProgressKind::StepProgress {
@@ -384,6 +419,70 @@ mod tests {
     use tempfile::tempdir;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn progress_exposes_selected_source_without_url_secrets() {
+        let (ctx, mut rx) = ActionCtx::new();
+        let primary = "https://github.com/foo/bar/releases/download/v1/archive.zip";
+        let sink = CtxSink::new(ctx, 1, primary.into());
+        sink.tick(ProgressUpdate {
+            stage: DownloadStage::Streaming,
+            downloaded: 1024,
+            total: Some(4096),
+            speed_bps: Some(2048),
+            mirror_url: Some(
+                "https://user:secret@gh-proxy.com/https://github.com/archive.zip?token=secret"
+                    .into(),
+            ),
+            message: "streaming".into(),
+        })
+        .await;
+
+        let event = rx.recv().await.unwrap();
+        let ProgressKind::StepProgress {
+            message,
+            downloaded_bytes,
+            speed_bps,
+            ..
+        } = event.kind
+        else {
+            panic!("expected download progress");
+        };
+        assert!(message.starts_with("镜像 gh-proxy.com · 下载中"));
+        assert!(!message.contains("secret"));
+        assert!(!message.contains("archive.zip"));
+        assert_eq!(downloaded_bytes, Some(1024));
+        assert_eq!(speed_bps, Some(2048));
+        assert_eq!(source_label(primary, primary), "直连 github.com");
+    }
+
+    #[tokio::test]
+    async fn low_speed_switch_reason_reaches_progress_message() {
+        let (ctx, mut rx) = ActionCtx::new();
+        let sink = CtxSink::new(ctx, 1, "https://github.com/archive.zip".into());
+        sink.tick(ProgressUpdate {
+            stage: DownloadStage::SwitchingMirror,
+            downloaded: 0,
+            total: None,
+            speed_bps: None,
+            mirror_url: Some("https://gh-proxy.com/https://github.com/archive.zip".into()),
+            message: "持续低速（80.0 KB/s），自动更换下载源".into(),
+        })
+        .await;
+
+        let event = rx.recv().await.unwrap();
+        let ProgressKind::StepProgress {
+            message,
+            download_stage,
+            ..
+        } = event.kind
+        else {
+            panic!("expected download progress");
+        };
+        assert!(message.contains("持续低速（80.0 KB/s），自动更换下载源"));
+        assert!(message.contains("镜像 gh-proxy.com"));
+        assert_eq!(download_stage.as_deref(), Some("switching_mirror"));
+    }
 
     #[tokio::test]
     async fn download_writes_file_and_returns_ok() {

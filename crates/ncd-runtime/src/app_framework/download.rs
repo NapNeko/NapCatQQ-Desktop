@@ -1,8 +1,12 @@
 //! 本机走 ncd-network；远端走 Host::download_url。不给 ncd-host 加 HTTP 依赖。
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use ncd_host::{Host, HostPath, Locality};
-use ncd_network::shared_client;
+use ncd_network::{ChunkedConfig, NoopProgressSink, build_mirror_urls, download_smart};
 use ncd_traits::AppFrameworkError;
+use tokio_util::sync::CancellationToken;
 
 pub async fn download_url_to_host(
     host: &dyn Host,
@@ -16,24 +20,21 @@ pub async fn download_url_to_host(
     }
     match host.locality() {
         Locality::Local => {
-            let resp = shared_client()
-                .get(url)
-                .send()
-                .await
-                .map_err(|e| AppFrameworkError::Integration(format!("下载失败: {e}")))?;
-            if !resp.status().is_success() {
-                return Err(AppFrameworkError::Integration(format!(
-                    "下载失败: HTTP {}",
-                    resp.status()
-                )));
-            }
-            let bytes = resp
-                .bytes()
-                .await
-                .map_err(|e| AppFrameworkError::Integration(format!("读取下载内容失败: {e}")))?;
-            host.write_file(dest, &bytes)
-                .await
-                .map_err(|e| AppFrameworkError::Host(e.to_string()))
+            let mirrors = build_mirror_urls(url, None);
+            let local_dest = PathBuf::from(dest.render_for(host.os()));
+            download_smart(
+                &mirrors,
+                &local_dest,
+                Arc::new(NoopProgressSink),
+                CancellationToken::new(),
+                ChunkedConfig::default(),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| match e {
+                ncd_network::NetworkError::Io(e) => AppFrameworkError::Host(e.to_string()),
+                other => AppFrameworkError::Integration(format!("下载失败: {other}")),
+            })
         }
         Locality::Remote => host
             .download_url(url, dest)

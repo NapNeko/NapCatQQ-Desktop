@@ -35,6 +35,7 @@ pub fn is_retryable(err: &NetworkError) -> bool {
         NetworkError::Status(code) => matches!(*code, 429 | 502 | 503 | 504),
         NetworkError::IdleTimeout(_) => true,
         NetworkError::Cancelled
+        | NetworkError::SlowDownload { .. }
         | NetworkError::ChecksumMismatch { .. }
         | NetworkError::InvalidArgument(_)
         | NetworkError::AllMirrorsFailed(_)

@@ -2,8 +2,8 @@
 //!
 //! 集中三件事:
 //! 1. 全工程共享 reqwest::Client(连接池 + TLS 会话复用)
-//! 2. 大文件下载流水线:单镜像续传 + idle timeout → mirror race(Top-2 阶梯
-//!    加码 + first-chunk 判赢)→ 切片并行(≥16MB 文件切 4 片并行下载)
+//! 2. 下载流水线:限量吞吐量测速选源 → 单流下载 / ≥16MB 切片并行，
+//!    持续低速或断流自动换源，所有候选都慢时保留可用源完成下载
 //! 3. 进度上报:通过 progress::DownloadProgressSink trait 把字节,瞬时速度,
 //!    阶段信息透出给调用层,避免与 ncd-component 形成强耦合
 //!
@@ -36,4 +36,4 @@ pub use progress::{DownloadProgressSink, DownloadStage, NoopProgressSink, Progre
 pub use proxy::{ProxySigner, ReleaseAlias, is_proxy_configured, proxy_release_url, proxy_signer};
 pub use race::{MirrorRaceConfig, download_with_mirror_race};
 pub use retry::{RetryPolicy, is_retryable, retry_with_backoff};
-pub use speed::SpeedSampler;
+pub use speed::{LowSpeedConfig, SpeedSampler};

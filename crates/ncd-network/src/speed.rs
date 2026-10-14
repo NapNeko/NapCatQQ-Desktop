@@ -38,12 +38,12 @@ impl SpeedSampler {
     /// 记录一个样本,downloaded 是从下载开始累计的字节数(单调递增)
     pub fn record(&mut self, now: Instant, downloaded: u64) {
         self.samples.push_back((now, downloaded));
-        // 丢弃落出窗口的老样本,但至少保留 1 个供 current_bps 比较
-        while self.samples.len() > 1 {
-            let Some(&(oldest, _)) = self.samples.front() else {
+        // 保留窗口边界前的一个样本；长时间无字节后也能估出实际低速。
+        while self.samples.len() > 2 {
+            let Some(&(next, _)) = self.samples.get(1) else {
                 break;
             };
-            if now.saturating_duration_since(oldest) <= self.window {
+            if now.saturating_duration_since(next) <= self.window {
                 break;
             }
             self.samples.pop_front();
@@ -79,5 +79,109 @@ impl SpeedSampler {
 impl Default for SpeedSampler {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 持续低速检测；只在还有其它候选源时启用，单源下载默认不设速度下限。
+#[derive(Debug, Clone)]
+pub struct LowSpeedConfig {
+    pub min_bps: u64,
+    /// 连接建立后的预热时间，避免把 TLS / CDN 启动算成低速。
+    pub grace_period: Duration,
+    /// 必须观察完整窗口，短暂抖动不会触发换源。
+    pub window: Duration,
+}
+
+impl Default for LowSpeedConfig {
+    fn default() -> Self {
+        Self {
+            min_bps: 128 * 1024,
+            grace_period: Duration::from_secs(4),
+            window: Duration::from_secs(6),
+        }
+    }
+}
+
+pub(crate) struct LowSpeedMonitor {
+    cfg: LowSpeedConfig,
+    started: Instant,
+    samples: VecDeque<(Instant, u64)>,
+}
+
+impl LowSpeedMonitor {
+    pub(crate) fn new(cfg: LowSpeedConfig, now: Instant, _downloaded: u64) -> Self {
+        Self {
+            cfg,
+            started: now,
+            samples: VecDeque::new(),
+        }
+    }
+
+    pub(crate) fn check(
+        &mut self,
+        now: Instant,
+        downloaded: u64,
+        total: Option<u64>,
+    ) -> Option<u64> {
+        if self.cfg.min_bps == 0
+            || self.cfg.window.is_zero()
+            || now.saturating_duration_since(self.started) < self.cfg.grace_period
+        {
+            return None;
+        }
+        self.samples.push_back((now, downloaded));
+        while self.samples.len() > 2 {
+            let (time, _) = self.samples[1];
+            if now.saturating_duration_since(time) < self.cfg.window {
+                break;
+            }
+            self.samples.pop_front();
+        }
+        let &(start, bytes) = self.samples.front()?;
+        let elapsed = now.saturating_duration_since(start);
+        if elapsed < self.cfg.window {
+            return None;
+        }
+        let bps = (downloaded.saturating_sub(bytes) as f64 / elapsed.as_secs_f64()) as u64;
+        // 按实测速度估计剩余时间；不能让固定的小文件阈值豁免滴流下载。
+        let nearly_done = total.is_some_and(|total| {
+            total.saturating_sub(downloaded) <= (bps as f64 * self.cfg.window.as_secs_f64()) as u64
+        });
+        (bps < self.cfg.min_bps && !nearly_done).then_some(bps)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sparse_samples_include_wait_time() {
+        let start = Instant::now();
+        let mut sampler = SpeedSampler::new();
+        sampler.record(start, 0);
+        sampler.record(start + Duration::from_secs(10), 1000);
+        assert_eq!(sampler.current_bps(), Some(100));
+    }
+
+    #[test]
+    fn low_speed_requires_warmup_and_full_window() {
+        let start = Instant::now();
+        let cfg = LowSpeedConfig::default();
+        let mut monitor = LowSpeedMonitor::new(cfg, start, 0);
+        for seconds in 0..10 {
+            assert_eq!(
+                monitor.check(start + Duration::from_secs(seconds), seconds * 1024, None),
+                None
+            );
+        }
+        assert_eq!(
+            monitor.check(start + Duration::from_secs(10), 10 * 1024, None),
+            Some(1024)
+        );
+        assert_eq!(
+            monitor.check(start + Duration::from_secs(11), 11 * 1024, Some(12 * 1024)),
+            None
+        );
     }
 }

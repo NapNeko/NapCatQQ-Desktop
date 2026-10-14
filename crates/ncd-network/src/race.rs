@@ -1,20 +1,15 @@
-//! Mirror Race:多镜像并发探测,谁先吐第一字节用谁
-//!
-//! Top-2 阶梯加码:启动前 2 个 probe(不写盘),每 stagger 加 1 个 racer. 第一个
-//! 收到 chunk 的为 winner,cancel 其他;winner 走 download_with_resume 正式下载,
-//! 中途 idle timeout/硬错切下个 mirror 从 .part 续传,全挂返 AllMirrorsFailed
-//!
-//! 不复用 probe stream:winner 重新发 GET,代价是每 mirror 多收几十 KB,但避免
-//! 多 racer 抢写同一 .part 的并发问题
+//! 有界吞吐量测速选源；正式下载低速或断流后按测速排名换源。
+//! 每个候选最多采样 probe_bytes，慢流最多观察 probe_duration；首字节只
+//! 标志连接可用，不决定胜者。跨源重新下载，避免不同缓存的字节拼接。
 
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use tokio::sync::mpsc;
+use reqwest::header;
 use tokio::task::JoinSet;
-use tokio::time::timeout;
+use tokio::time::{Instant, timeout_at};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
@@ -22,51 +17,47 @@ use crate::client::shared_client;
 use crate::download::{DEFAULT_IDLE_TIMEOUT, DownloadConfig, download_with_resume};
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
-use crate::range::part_path;
+use crate::range::{parse_content_length_from_range, parse_content_range_bounds, part_path};
+use crate::speed::LowSpeedConfig;
 use crate::verify::verify_sha256_if_needed;
 
 #[derive(Debug, Clone)]
 pub struct MirrorRaceConfig {
-    /// 初始并发探测的镜像数,默认 2
+    /// 初始并发探测数；其余候选按 stagger 加入。
     pub initial_parallel: usize,
-    /// 阶梯加码间隔:每 stagger 加 1 个 racer,默认 3s
     pub stagger: Duration,
-    /// 单 mirror 等首字节最长时间,默认 30s
+    /// 单源从建立连接到完成采样的总时间上限。
     pub probe_first_chunk_timeout: Duration,
-    /// 正式下载阶段每 chunk 的 idle timeout,默认 20s
+    pub probe_duration: Duration,
+    pub probe_bytes: u64,
     pub idle_timeout: Duration,
-    /// 期望 SHA256(64-hex 小写);Some 时每个 mirror 下完后立即校验,
-    /// mismatch 视为该镜像投毒(返完整长度的垃圾字节,所有字节级防御失效),
-    /// truncate .part 切下一家;None 时跳过校验
+    pub low_speed: Option<LowSpeedConfig>,
     pub expected_sha256: Option<String>,
 }
 
 impl Default for MirrorRaceConfig {
     fn default() -> Self {
         Self {
-            initial_parallel: 2,
-            stagger: Duration::from_secs(3),
-            probe_first_chunk_timeout: Duration::from_secs(30),
+            initial_parallel: 3,
+            stagger: Duration::from_millis(350),
+            probe_first_chunk_timeout: Duration::from_secs(8),
+            probe_duration: Duration::from_secs(2),
+            probe_bytes: 512 * 1024,
             idle_timeout: DEFAULT_IDLE_TIMEOUT,
+            low_speed: Some(LowSpeedConfig::default()),
             expected_sha256: None,
         }
     }
 }
 
-#[derive(Debug)]
-enum RacerOutcome {
-    FirstChunk {
-        idx: usize,
-        url: String,
-    },
-    Failed {
-        idx: usize,
-        url: String,
-        err: String,
-    },
+#[derive(Debug, Clone)]
+pub(crate) struct MirrorProbe {
+    pub idx: usize,
+    pub total: Option<u64>,
+    pub supports_ranges: bool,
+    pub speed_bps: u64,
 }
 
-/// Mirror race 主入口,mirrors 顺序即偏好顺序,前 initial_parallel 个先并发,之后按 stagger 依次加入
 pub async fn download_with_mirror_race(
     mirrors: &[String],
     dest: &Path,
@@ -74,274 +65,351 @@ pub async fn download_with_mirror_race(
     cancel: CancellationToken,
     cfg: MirrorRaceConfig,
 ) -> Result<u64, NetworkError> {
-    if mirrors.is_empty() {
-        return Err(NetworkError::InvalidArgument("mirrors is empty".into()));
-    }
-    if cfg.initial_parallel == 0 {
-        return Err(NetworkError::InvalidArgument(
-            "initial_parallel must be >= 1".into(),
-        ));
-    }
-
-    let winner_idx = match run_race(mirrors, &sink, &cancel, &cfg).await? {
-        Some(idx) => idx,
-        None => {
-            return Err(NetworkError::AllMirrorsFailed(
-                "no mirror produced first chunk".into(),
-            ));
-        }
-    };
-
-    let mut tried: Vec<usize> = vec![winner_idx];
-    #[allow(unused_assignments)]
-    let mut last_err: Option<NetworkError> = None;
-
-    let primary = &mirrors[winner_idx];
-    push_stage(&sink, DownloadStage::Streaming, primary, "winner").await;
-
-    let dl_cfg = DownloadConfig {
-        idle_timeout: cfg.idle_timeout,
-        stage: DownloadStage::Streaming,
-        mirror_url: Some(primary.clone()),
-    };
-    match download_with_resume(primary, dest, sink.clone(), cancel.clone(), dl_cfg).await {
-        Ok(_) => match verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await {
-            Ok(n) => return Ok(n),
-            Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
-            Err(e) => {
-                // 完整长度的垃圾字节是国内代理常见 case:长度对,Content-Range 对,
-                // 流不截断,但 body 是另一份缓存对象这里把它当作"该镜像投毒",
-                // 删掉 .part + dest 切下家
-                warn!(
-                    target: "ncd_network::race",
-                    url = %primary, err = %e,
-                    "primary mirror passed transport checks but failed sha256, treating as poisoned cache"
-                );
-                let _ = tokio::fs::remove_file(dest).await;
-                let _ = tokio::fs::remove_file(&part_path(dest)).await;
-                last_err = Some(e);
-            }
-        },
-        Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
-        Err(e) => {
-            warn!(target: "ncd_network::race", url = %primary, err = %e, "primary mirror failed");
-            last_err = Some(e);
-        }
-    }
-
-    for (idx, url) in mirrors.iter().enumerate() {
-        if tried.contains(&idx) {
-            continue;
-        }
-        tried.push(idx);
-        // 切 mirror 时丢掉 .part:不同 mirror(尤其是国内代理)缓存的 release
-        // 资产可能与上游不严格一致(缓存截断 / 旧版本 / 反代解压),跨 mirror
-        // 续传 offset 会在 .part 里拼出错位字节,下游 zip 解压报 "Could not
-        // find EOCD"宁可全文件重下,也不能拼错
-        let _ = tokio::fs::remove_file(&part_path(dest)).await;
-        push_stage(&sink, DownloadStage::SwitchingMirror, url, "switch").await;
-        let dl_cfg = DownloadConfig {
-            idle_timeout: cfg.idle_timeout,
-            stage: DownloadStage::Streaming,
-            mirror_url: Some(url.clone()),
-        };
-        match download_with_resume(url, dest, sink.clone(), cancel.clone(), dl_cfg).await {
-            Ok(_) => match verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await {
-                Ok(n) => return Ok(n),
-                Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
-                Err(e) => {
-                    warn!(
-                        target: "ncd_network::race",
-                        url = %url, err = %e,
-                        "fallback mirror passed transport checks but failed sha256"
-                    );
-                    let _ = tokio::fs::remove_file(dest).await;
-                    let _ = tokio::fs::remove_file(&part_path(dest)).await;
-                    last_err = Some(e);
-                }
-            },
-            Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
-            Err(e) => {
-                warn!(target: "ncd_network::race", url = %url, err = %e, "fallback mirror failed");
-                last_err = Some(e);
-            }
-        }
-    }
-
-    Err(NetworkError::AllMirrorsFailed(
-        last_err
-            .map(|e| e.to_string())
-            .unwrap_or_else(|| "no further mirrors".into()),
-    ))
+    let ranked = select_mirrors(mirrors, &sink, &cancel, &cfg).await?;
+    download_ranked_mirrors(mirrors, ranked, dest, sink, cancel, cfg).await
 }
 
-async fn run_race(
+/// 大小文件共享同一测速结果；不支持 Range 的最快源仍可用单流下载。
+pub(crate) async fn select_mirrors(
     mirrors: &[String],
     sink: &Arc<dyn DownloadProgressSink>,
     cancel: &CancellationToken,
     cfg: &MirrorRaceConfig,
-) -> Result<Option<usize>, NetworkError> {
-    let race_cancel = cancel.child_token();
-    // capacity 留余量:每个 mirror 最多发 1 条 outcome
-    let (tx, mut rx) = mpsc::channel::<RacerOutcome>(mirrors.len().max(1) + 4);
-    let mut tasks: JoinSet<()> = JoinSet::new();
-    let mut next_idx: usize = 0;
-
-    let initial = cfg.initial_parallel.min(mirrors.len());
-    for _ in 0..initial {
-        if next_idx >= mirrors.len() {
-            break;
-        }
-        spawn_racer(
-            &mut tasks,
-            next_idx,
-            mirrors[next_idx].clone(),
-            race_cancel.child_token(),
-            tx.clone(),
-            cfg.probe_first_chunk_timeout,
-        );
-        next_idx += 1;
+) -> Result<Vec<MirrorProbe>, NetworkError> {
+    if mirrors.is_empty()
+        || cfg.initial_parallel == 0
+        || cfg.stagger.is_zero()
+        || cfg.probe_duration.is_zero()
+        || cfg.probe_bytes == 0
+        || cfg.probe_first_chunk_timeout.is_zero()
+        || cfg.idle_timeout.is_zero()
+        || cfg
+            .low_speed
+            .as_ref()
+            .is_some_and(|c| c.min_bps == 0 || c.window.is_zero())
+    {
+        return Err(NetworkError::InvalidArgument(
+            "invalid mirror race configuration".into(),
+        ));
     }
-
+    if cancel.is_cancelled() {
+        return Err(NetworkError::Cancelled);
+    }
     push_stage(
         sink,
         DownloadStage::Racing,
         &mirrors[0],
-        &format!("probing {initial} mirrors"),
+        "正在比较下载源速度",
     )
     .await;
 
-    let mut active = initial;
+    let mut tasks = JoinSet::new();
+    let mut next_idx = 0;
+    let mut completed = vec![false; mirrors.len()];
+    let mut ranked = Vec::new();
+    let mut errors = Vec::new();
+    for _ in 0..cfg.initial_parallel.min(mirrors.len()) {
+        spawn_probe(&mut tasks, next_idx, mirrors[next_idx].clone(), cfg.clone());
+        next_idx += 1;
+    }
     let mut stagger = tokio::time::interval(cfg.stagger);
     stagger.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     stagger.tick().await;
-
-    let winner = loop {
-        if active == 0 && next_idx >= mirrors.len() {
-            break None;
+    // 给其它候选一个完整采样窗口，避免最快首字节抢走胜者位置。
+    let mut decision_deadline: Option<Instant> = None;
+    loop {
+        if tasks.is_empty() && next_idx == mirrors.len() {
+            break;
         }
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => {
-                race_cancel.cancel();
-                drop(tx);
-                while tasks.join_next().await.is_some() {}
-                return Err(NetworkError::Cancelled);
-            }
-            Some(outcome) = rx.recv() => {
-                active = active.saturating_sub(1);
-                match outcome {
-                    RacerOutcome::FirstChunk { idx, url } => {
-                        debug!(target: "ncd_network::race", url=%url, "race winner");
-                        break Some(idx);
-                    }
-                    RacerOutcome::Failed { idx, url, err } => {
-                        debug!(target: "ncd_network::race", url=%url, idx, err, "racer failed");
-                        if next_idx < mirrors.len() {
-                            spawn_racer(
-                                &mut tasks,
-                                next_idx,
-                                mirrors[next_idx].clone(),
-                                race_cancel.child_token(),
-                                tx.clone(),
-                                cfg.probe_first_chunk_timeout,
-                            );
-                            next_idx += 1;
-                            active += 1;
+            _ = cancel.cancelled() => return Err(NetworkError::Cancelled),
+            joined = tasks.join_next(), if !tasks.is_empty() => {
+                match joined {
+                    Some(Ok((idx, Ok(probe)))) => {
+                        completed[idx] = true;
+                        debug!(target: "ncd_network::race", url=%mirrors[idx], speed_bps=probe.speed_bps, "throughput sample complete");
+                        ranked.push(probe);
+                        if decision_deadline.is_none() {
+                            decision_deadline = Some(Instant::now() + cfg.probe_duration);
                         }
-                    }
+                    },
+                    Some(Ok((idx, Err(err)))) => {
+                        completed[idx] = true;
+                        errors.push(format!("{}: {err}", mirrors[idx]));
+                    },
+                    Some(Err(err)) => errors.push(format!("probe task: {err}")),
+                    None => {},
                 }
-            }
-            _ = stagger.tick() => {
+                // 空出来的探测连接立即让给后续候选，不必等待下一次 stagger。
                 if next_idx < mirrors.len() {
-                    spawn_racer(
-                        &mut tasks,
-                        next_idx,
-                        mirrors[next_idx].clone(),
-                        race_cancel.child_token(),
-                        tx.clone(),
-                        cfg.probe_first_chunk_timeout,
-                    );
+                    spawn_probe(&mut tasks, next_idx, mirrors[next_idx].clone(), cfg.clone());
                     next_idx += 1;
-                    active += 1;
                 }
-            }
+            },
+            _ = stagger.tick(), if next_idx < mirrors.len() => {
+                spawn_probe(&mut tasks, next_idx, mirrors[next_idx].clone(), cfg.clone());
+                next_idx += 1;
+            },
+            _ = async {
+                match decision_deadline {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => std::future::pending::<()>().await,
+                }
+            } => break,
         }
-    };
-
-    race_cancel.cancel();
-    drop(tx);
+    }
+    tasks.abort_all();
     while tasks.join_next().await.is_some() {}
-    Ok(winner)
+    if ranked.is_empty() {
+        return Err(NetworkError::AllMirrorsFailed(errors.join("; ")));
+    }
+    ranked.sort_by(|a, b| b.speed_bps.cmp(&a.speed_bps).then(a.idx.cmp(&b.idx)));
+    // 有界测速结束时仍在连接的源留作备选，已经失败的源不重复等待。
+    for (idx, done) in completed.into_iter().enumerate() {
+        if !done {
+            ranked.push(MirrorProbe {
+                idx,
+                total: None,
+                supports_ranges: false,
+                speed_bps: 0,
+            });
+        }
+    }
+    Ok(ranked)
 }
 
-fn spawn_racer(
-    tasks: &mut JoinSet<()>,
+fn spawn_probe(
+    tasks: &mut JoinSet<(usize, Result<MirrorProbe, NetworkError>)>,
     idx: usize,
     url: String,
-    cancel: CancellationToken,
-    tx: mpsc::Sender<RacerOutcome>,
-    first_chunk_timeout: Duration,
+    cfg: MirrorRaceConfig,
 ) {
-    tasks.spawn(async move {
-        let outcome = probe_first_chunk(&url, &cancel, first_chunk_timeout).await;
-        let msg = match outcome {
-            Ok(()) => RacerOutcome::FirstChunk {
-                idx,
-                url: url.clone(),
-            },
-            Err(e) => RacerOutcome::Failed {
-                idx,
-                url: url.clone(),
-                err: e.to_string(),
-            },
-        };
-        let _ = tx.send(msg).await;
-    });
+    tasks.spawn(async move { (idx, probe_throughput(idx, &url, &cfg).await) });
 }
 
-/// 单 racer:发 GET,等第一个 chunk 到达就成功返回
-///
-/// 不写盘,不消费后续字节:拿到首字节立刻 drop stream 释放连接
-async fn probe_first_chunk(
+async fn probe_throughput(
+    idx: usize,
     url: &str,
-    cancel: &CancellationToken,
-    first_chunk_timeout: Duration,
-) -> Result<(), NetworkError> {
-    let client = shared_client();
-    let req = client.get(url);
-    let resp_fut = req.send();
-
-    let resp = tokio::select! {
-        biased;
-        _ = cancel.cancelled() => return Err(NetworkError::Cancelled),
-        r = timeout(first_chunk_timeout, resp_fut) => {
-            match r {
-                Ok(Ok(r)) => r,
-                Ok(Err(e)) => return Err(NetworkError::from(e)),
-                Err(_) => return Err(NetworkError::IdleTimeout(first_chunk_timeout)),
-            }
-        }
-    };
-
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(NetworkError::Status(status.as_u16()));
+    cfg: &MirrorRaceConfig,
+) -> Result<MirrorProbe, NetworkError> {
+    let started = Instant::now();
+    let deadline = started + cfg.probe_first_chunk_timeout;
+    let request = shared_client()
+        .get(url)
+        .header(header::RANGE, format!("bytes=0-{}", cfg.probe_bytes - 1))
+        .header(header::ACCEPT_ENCODING, "identity");
+    let mut resp = timeout_at(deadline, request.send())
+        .await
+        .map_err(|_| NetworkError::IdleTimeout(cfg.probe_first_chunk_timeout))??;
+    // 一些下载端点拒绝 Range，却允许普通 GET；仍按相同字节/时间预算采样。
+    if matches!(resp.status().as_u16(), 400 | 405 | 416 | 501) {
+        drop(resp);
+        resp = timeout_at(
+            deadline,
+            shared_client()
+                .get(url)
+                .header(header::ACCEPT_ENCODING, "identity")
+                .send(),
+        )
+        .await
+        .map_err(|_| NetworkError::IdleTimeout(cfg.probe_first_chunk_timeout))??;
     }
-
-    let mut stream = resp.bytes_stream();
-    tokio::select! {
-        biased;
-        _ = cancel.cancelled() => Err(NetworkError::Cancelled),
-        r = timeout(first_chunk_timeout, stream.next()) => {
-            match r {
-                Ok(Some(Ok(chunk))) if !chunk.is_empty() => Ok(()),
-                Ok(Some(Ok(_))) => Err(NetworkError::Http("empty first chunk".into())),
-                Ok(Some(Err(e))) => Err(NetworkError::from(e)),
-                Ok(None) => Err(NetworkError::Http("stream ended before first chunk".into())),
-                Err(_) => Err(NetworkError::IdleTimeout(first_chunk_timeout)),
+    if !resp.status().is_success() {
+        return Err(NetworkError::Status(resp.status().as_u16()));
+    }
+    let supports_ranges = resp.status() == reqwest::StatusCode::PARTIAL_CONTENT;
+    if supports_ranges {
+        match parse_content_range_bounds(&resp) {
+            Some((0, end)) if end < cfg.probe_bytes => {}
+            _ => {
+                return Err(NetworkError::Http(
+                    "invalid Content-Range on throughput probe".into(),
+                ));
             }
         }
+    }
+    let total = if supports_ranges {
+        parse_content_length_from_range(&resp, 0)
+    } else {
+        resp.content_length()
+    };
+    if total == Some(0) {
+        return Ok(MirrorProbe {
+            idx,
+            total,
+            supports_ranges: false,
+            speed_bps: 0,
+        });
+    }
+    let mut stream = resp.bytes_stream();
+    let mut received = 0u64;
+    let mut sample_deadline = deadline;
+    loop {
+        match timeout_at(sample_deadline, stream.next()).await {
+            Ok(Some(Ok(chunk))) if !chunk.is_empty() => {
+                if received == 0 {
+                    sample_deadline = deadline.min(Instant::now() + cfg.probe_duration);
+                }
+                received += (chunk.len() as u64).min(cfg.probe_bytes - received);
+                if received >= cfg.probe_bytes {
+                    break;
+                }
+            }
+            Ok(Some(Ok(_))) => {}
+            Ok(Some(Err(err))) => return Err(err.into()),
+            Ok(None) => break,
+            Err(_) if received > 0 => break,
+            Err(_) => return Err(NetworkError::IdleTimeout(cfg.probe_first_chunk_timeout)),
+        }
+    }
+    if received == 0 {
+        return Err(NetworkError::Http("empty download source".into()));
+    }
+    let seconds = started.elapsed().as_secs_f64().max(0.001);
+    Ok(MirrorProbe {
+        idx,
+        total,
+        supports_ranges,
+        speed_bps: (received as f64 / seconds) as u64,
+    })
+}
+
+pub(crate) async fn download_ranked_mirrors(
+    mirrors: &[String],
+    ranked: Vec<MirrorProbe>,
+    dest: &Path,
+    sink: Arc<dyn DownloadProgressSink>,
+    cancel: CancellationToken,
+    cfg: MirrorRaceConfig,
+) -> Result<u64, NetworkError> {
+    download_ranked_mirrors_with_fallback(mirrors, ranked, dest, sink, cancel, cfg, None).await
+}
+
+/// 分片的低速主源也可作为最后的单流兜底，正式失败的备用源不能使它丢失。
+pub(crate) async fn download_ranked_mirrors_with_fallback(
+    mirrors: &[String],
+    ranked: Vec<MirrorProbe>,
+    dest: &Path,
+    sink: Arc<dyn DownloadProgressSink>,
+    cancel: CancellationToken,
+    cfg: MirrorRaceConfig,
+    slow_fallback: Option<MirrorProbe>,
+) -> Result<u64, NetworkError> {
+    let allow_switch = ranked.len() > 1 || slow_fallback.is_some();
+    let mut attempts: Vec<(MirrorProbe, bool)> =
+        ranked.into_iter().map(|p| (p, allow_switch)).collect();
+    let mut slowest_fallback = slow_fallback;
+    let mut retried_slow = false;
+    let mut next = 0;
+    let mut last_err = None;
+    loop {
+        if cancel.is_cancelled() {
+            return Err(NetworkError::Cancelled);
+        }
+        if next >= attempts.len() {
+            if !retried_slow {
+                if let Some(probe) = slowest_fallback.take() {
+                    attempts.push((probe, false));
+                    retried_slow = true;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let (probe, detect_low_speed) = &attempts[next];
+        let url = &mirrors[probe.idx];
+        // 智能选源每次胜者都可能变化，旧 .part 没有来源凭据，不能盲目续接。
+        // 明确单 URL 的续传仍由 download_with_resume 保留。
+        remove_if_exists(&part_path(dest)).await?;
+        let message = if retried_slow {
+            "候选源均较慢，继续使用可用源完成下载".to_string()
+        } else if let Some(NetworkError::SlowDownload { speed_bps, .. }) = &last_err {
+            format!(
+                "持续低速（{:.1} KB/s），自动更换下载源",
+                *speed_bps as f64 / 1024.0
+            )
+        } else if let Some(error) = &last_err {
+            let reason = match error {
+                NetworkError::Status(code) => format!("HTTP {code}"),
+                NetworkError::IdleTimeout(_) => "等待下载数据超时".into(),
+                NetworkError::ChecksumMismatch { .. } => "文件校验失败".into(),
+                NetworkError::Truncated { .. } => "下载内容不完整".into(),
+                _ => "连接异常".into(),
+            };
+            format!("下载源不可用，自动更换：{reason}")
+        } else {
+            format!(
+                "已选择下载源，测速 {:.1} KB/s",
+                probe.speed_bps as f64 / 1024.0
+            )
+        };
+        push_stage(
+            &sink,
+            if next == 0 {
+                DownloadStage::Streaming
+            } else {
+                DownloadStage::SwitchingMirror
+            },
+            url,
+            &message,
+        )
+        .await;
+        let dl_cfg = DownloadConfig {
+            idle_timeout: cfg.idle_timeout,
+            stage: DownloadStage::Streaming,
+            mirror_url: Some(url.clone()),
+            low_speed: if *detect_low_speed {
+                cfg.low_speed.clone()
+            } else {
+                None
+            },
+        };
+        let result = match download_with_resume(url, dest, sink.clone(), cancel.clone(), dl_cfg)
+            .await
+        {
+            Ok(_) => {
+                let result = verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await;
+                if result.is_err() {
+                    remove_if_exists(dest).await?;
+                }
+                result
+            }
+            Err(err) => Err(err),
+        };
+        match result {
+            Ok(n) => {
+                return if cancel.is_cancelled() {
+                    Err(NetworkError::Cancelled)
+                } else {
+                    Ok(n)
+                };
+            }
+            Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
+            Err(err @ (NetworkError::Io(_) | NetworkError::InvalidArgument(_))) => return Err(err),
+            Err(err) => {
+                if matches!(err, NetworkError::SlowDownload { .. }) && slowest_fallback.is_none() {
+                    slowest_fallback = Some(probe.clone());
+                }
+                warn!(target: "ncd_network::race", url=%url, err=%err, "download source failed; trying ranked fallback");
+                last_err = Some(err);
+            }
+        }
+        next += 1;
+    }
+    Err(NetworkError::AllMirrorsFailed(last_err.map_or_else(
+        || "no usable download source".into(),
+        |e| e.to_string(),
+    )))
+}
+
+async fn remove_if_exists(path: &Path) -> Result<(), NetworkError> {
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
     }
 }
 

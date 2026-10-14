@@ -19,6 +19,10 @@ pub enum NetworkError {
     #[error("idle timeout: no bytes for {0:?}")]
     IdleTimeout(std::time::Duration),
 
+    /// 有字节到达但完整观察窗口内持续低速，调用方应重新选源。
+    #[error("slow download: {speed_bps} B/s below {min_bps} B/s")]
+    SlowDownload { speed_bps: u64, min_bps: u64 },
+
     /// 本地 IO 失败(写入 .part 文件 / mkdir 等)
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),

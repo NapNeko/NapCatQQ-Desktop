@@ -16,8 +16,8 @@ use ncd_domain::SchemaVersion;
 use ncd_domain::release_snapshot::ReleaseInfo;
 use ncd_domain::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_network::{
-    DownloadConfig, DownloadProgressSink, DownloadStage, NoopProgressSink, ProgressUpdate,
-    download_with_resume,
+    ChunkedConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig, NoopProgressSink,
+    ProgressUpdate, build_mirror_urls, download_smart,
 };
 use ncd_runtime::release::fetch_release_snapshot;
 use ncd_runtime::{BroadcastEventBus, DomainEvent, EventBus};
@@ -263,28 +263,55 @@ impl DownloadProgressSink for DesktopUpdateProgressSink {
             DownloadStage::SwitchingMirror => "switching_mirror",
             DownloadStage::Resuming => "resuming",
         };
-        let message = if update.message.trim().is_empty() {
-            match (update.total, update.speed_bps) {
-                (Some(t), Some(bps)) => format!(
-                    "下载 {} / {} · {}/s",
-                    fmt_bytes(update.downloaded),
-                    fmt_bytes(t),
-                    fmt_bytes(bps)
-                ),
-                (Some(t), None) => {
-                    format!("下载 {} / {}", fmt_bytes(update.downloaded), fmt_bytes(t))
+        let readable_message = update
+            .message
+            .chars()
+            .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+            .then(|| update.message.trim());
+        let stage_label = match update.stage {
+            DownloadStage::Racing => readable_message.unwrap_or("正在比较下载源速度"),
+            DownloadStage::SwitchingMirror => {
+                // 技术错误可能带有完整请求 URL，进度中只保留中文原因。
+                if update.message.starts_with("下载源不可用，自动更换：") {
+                    "下载源不可用，自动更换"
+                } else {
+                    readable_message.unwrap_or("正在切换下载源")
                 }
-                (None, Some(bps)) => {
-                    format!(
-                        "下载 {} · {}/s",
-                        fmt_bytes(update.downloaded),
-                        fmt_bytes(bps)
-                    )
-                }
-                (None, None) => format!("下载 {}", fmt_bytes(update.downloaded)),
             }
-        } else {
-            update.message
+            DownloadStage::Resuming => "断点续传中",
+            DownloadStage::Streaming => match update.message.trim() {
+                "start" => "开始下载",
+                "resume" => "断点续传中",
+                "done" | "chunked: done" => "下载完成",
+                message if message.starts_with("chunked") => "并行下载中",
+                _ => readable_message.unwrap_or("下载中"),
+            },
+        };
+        let source = update
+            .mirror_url
+            .as_deref()
+            .and_then(|url| url::Url::parse(url).ok())
+            .and_then(|url| url.host_str().map(|host| format!("下载源 {host}")))
+            .unwrap_or_else(|| "下载源".into());
+        let metrics = match (update.total, update.speed_bps) {
+            (Some(t), Some(bps)) => format!(
+                "{} / {} · {}/s",
+                fmt_bytes(update.downloaded),
+                fmt_bytes(t),
+                fmt_bytes(bps)
+            ),
+            (Some(t), None) => {
+                format!("{} / {}", fmt_bytes(update.downloaded), fmt_bytes(t))
+            }
+            (None, Some(bps)) => {
+                format!("{} · {}/s", fmt_bytes(update.downloaded), fmt_bytes(bps))
+            }
+            (None, None) => fmt_bytes(update.downloaded),
+        };
+        let message = match update.stage {
+            DownloadStage::Racing => stage_label.to_string(),
+            DownloadStage::SwitchingMirror => format!("{source} · {stage_label}"),
+            _ => format!("{source} · {stage_label} · {metrics}"),
         };
 
         self.publish(ProgressKind::StepProgress {
@@ -459,22 +486,23 @@ async fn download_and_install_windows(
         .progress
         .clone()
         .unwrap_or_else(|| Arc::new(NoopProgressSink));
-    let cfg = DownloadConfig {
-        mirror_url: Some(update.download_url.clone()),
+    let expected = update.content_sha256.trim();
+    let expected_sha256 = (!expected.is_empty()).then(|| expected.to_string());
+    let cfg = ChunkedConfig {
+        expected_sha256: expected_sha256.clone(),
+        race_cfg: MirrorRaceConfig {
+            expected_sha256,
+            ..Default::default()
+        },
         ..Default::default()
     };
-    download_with_resume(
-        &update.download_url,
-        &dest,
-        sink,
-        provider.cancel.clone(),
-        cfg,
-    )
-    .await
-    .map_err(|e| match e {
-        ncd_network::NetworkError::Cancelled => UpdateError::Cancelled,
-        other => UpdateError::install_failed(format!("download msi: {other}")),
-    })?;
+    let mirrors = build_mirror_urls(&update.download_url, None);
+    download_smart(&mirrors, &dest, sink, provider.cancel.clone(), cfg)
+        .await
+        .map_err(|e| match e {
+            ncd_network::NetworkError::Cancelled => UpdateError::Cancelled,
+            other => UpdateError::install_failed(format!("download msi: {other}")),
+        })?;
 
     if provider.cancel.is_cancelled() {
         return Err(UpdateError::Cancelled);
@@ -491,7 +519,6 @@ async fn download_and_install_windows(
         )));
     }
 
-    let expected = update.content_sha256.trim();
     GithubMsiUpdateProvider::verify_sha256_if_needed(
         &dest,
         if expected.is_empty() {
@@ -831,6 +858,108 @@ fn is_running_as_admin() -> bool {
 mod tests {
     use super::*;
     use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo};
+
+    #[tokio::test]
+    async fn download_progress_translates_stages_and_hides_url_secrets() {
+        let bus = BroadcastEventBus::default();
+        let mut subscription = bus.subscribe(ncd_runtime::EventFilter::all());
+        let sink = DesktopUpdateProgressSink::new(bus, "update-task", 2);
+        for (internal, translated) in [
+            ("start", "开始下载"),
+            ("resume", "断点续传中"),
+            ("streaming", "下载中"),
+            ("chunked: 4 parts, total 4096 bytes", "并行下载中"),
+            ("chunked", "并行下载中"),
+            ("done", "下载完成"),
+            ("chunked: done", "下载完成"),
+        ] {
+            sink.tick(ProgressUpdate {
+                stage: DownloadStage::Streaming,
+                downloaded: 1024,
+                total: Some(4096),
+                speed_bps: Some(2048),
+                mirror_url: Some(
+                    "https://user:secret@gh-proxy.com/https://github.com/archive.msi?token=secret"
+                        .into(),
+                ),
+                message: internal.into(),
+            })
+            .await;
+            let DomainEvent::ComponentActionProgress { task_id, event } =
+                subscription.next().await.unwrap()
+            else {
+                panic!("expected component progress event");
+            };
+            let ProgressKind::StepProgress {
+                step,
+                percent,
+                message,
+                speed_bps,
+                downloaded_bytes,
+                total_bytes,
+                download_stage,
+                ..
+            } = event.kind
+            else {
+                panic!("expected download progress");
+            };
+            assert_eq!(task_id, "update-task");
+            assert_eq!(step, 2);
+            assert_eq!(percent, 25);
+            assert!(message.starts_with(&format!("下载源 gh-proxy.com · {translated}")));
+            assert!(message.contains("1.0 KB / 4.0 KB · 2.0 KB/s"));
+            assert!(!message.contains("secret"));
+            assert!(!message.contains("archive.msi"));
+            assert!(!message.contains("user"));
+            assert_eq!(speed_bps, Some(2048));
+            assert_eq!(downloaded_bytes, Some(1024));
+            assert_eq!(total_bytes, Some(4096));
+            assert_eq!(download_stage.as_deref(), Some("streaming"));
+        }
+    }
+
+    #[tokio::test]
+    async fn download_progress_preserves_chinese_switch_reason_without_request_url() {
+        let bus = BroadcastEventBus::default();
+        let mut subscription = bus.subscribe(ncd_runtime::EventFilter::all());
+        let sink = DesktopUpdateProgressSink::new(bus, "update-task", 2);
+        for (stage, reason, expected) in [
+            (
+                DownloadStage::Racing,
+                "正在比较下载源速度",
+                "正在比较下载源速度",
+            ),
+            (
+                DownloadStage::SwitchingMirror,
+                "持续低速（80.0 KB/s），自动更换下载源",
+                "下载源 gh-proxy.com · 持续低速（80.0 KB/s），自动更换下载源",
+            ),
+            (
+                DownloadStage::SwitchingMirror,
+                "下载源不可用，自动更换：http error: https://user:secret@host/archive.msi?token=secret",
+                "下载源 gh-proxy.com · 下载源不可用，自动更换",
+            ),
+        ] {
+            sink.tick(ProgressUpdate {
+                stage,
+                downloaded: 0,
+                total: None,
+                speed_bps: None,
+                mirror_url: Some("https://gh-proxy.com/https://github.com/archive.msi".into()),
+                message: reason.into(),
+            })
+            .await;
+            let DomainEvent::ComponentActionProgress { event, .. } =
+                subscription.next().await.unwrap()
+            else {
+                panic!("expected component progress event");
+            };
+            let ProgressKind::StepProgress { message, .. } = event.kind else {
+                panic!("expected download progress");
+            };
+            assert_eq!(message, expected);
+        }
+    }
 
     fn sample_info(version: &str, assets: Vec<(&str, &str)>) -> ReleaseInfo {
         ReleaseInfo {
