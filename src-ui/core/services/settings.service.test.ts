@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultAppUiPreferencesFromPrefs } from '../domain/settings/ui-preferences-bridge';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
+import { defaultNetworkSettings } from '../domain/settings/network';
 
 const native = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('../ipc/transport', () => ({ isTauri: true, invoke: native.invoke }));
@@ -72,6 +73,54 @@ describe('GitHub API configuration', () => {
                 githubPat: 'github_pat_test',
             }),
         });
+    });
+});
+
+describe('network configuration persistence', () => {
+    it('supplies network defaults for settings saved before network configuration existed', async () => {
+        const { settingsService } = await import('./settings.service');
+        native.invoke.mockResolvedValue(legacySettingsDto());
+        expect(await settingsService.get()).toMatchObject({
+            network: defaultNetworkSettings(),
+            proxyPassword: '',
+        });
+    });
+
+    it('round trips proxy credentials separately from serializable app settings', async () => {
+        const { settingsService } = await import('./settings.service');
+        native.invoke.mockResolvedValue(legacySettingsDto());
+        const settings = await settingsService.get();
+        settings.network = {
+            ...settings.network,
+            proxyMode: 'manual',
+            proxyUrl: 'socks5h://localhost:1080',
+            proxyUsername: 'user',
+            githubDownloadMode: 'mirror',
+            nodeDownloadMode: 'direct',
+        };
+        settings.proxyPassword = ' secret with spaces ';
+        await settingsService.set(settings);
+        const saved = native.invoke.mock.calls.find(([name]) => name === 'set_app_settings')?.[1]
+            .dto;
+        expect(saved.settings.network).toEqual(settings.network);
+        expect(saved.settings.network).not.toHaveProperty('proxyPassword');
+        expect(saved.settings).not.toHaveProperty('proxyPassword');
+        expect(saved.proxyPassword).toBe(' secret with spaces ');
+        native.invoke.mockResolvedValue(saved);
+        expect(await settingsService.get()).toMatchObject({
+            network: settings.network,
+            proxyPassword: settings.proxyPassword,
+        });
+    });
+
+    it('blocks invalid network settings before IPC save', async () => {
+        const { settingsService } = await import('./settings.service');
+        native.invoke.mockResolvedValue(legacySettingsDto());
+        const settings = await settingsService.get();
+        settings.network.proxyMode = 'manual';
+        settings.network.proxyUrl = 'http://user:secret@proxy.example.com';
+        await expect(settingsService.set(settings)).rejects.toThrow('地址中不能包含用户名或密码');
+        expect(native.invoke.mock.calls.some(([name]) => name === 'set_app_settings')).toBe(false);
     });
 });
 

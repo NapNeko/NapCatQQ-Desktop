@@ -32,6 +32,11 @@ import type { OfflineDeliveryRecord } from '../ipc/generated/domain/OfflineDeliv
 import type { ReloginSettings } from '../ipc/generated/domain/ReloginSettings';
 import type { GithubApiMode } from '../ipc/generated/domain/GithubApiMode';
 import { defaultReloginSettings } from '../domain/settings/relogin';
+import {
+    defaultNetworkSettings,
+    validateNetworkSettings,
+    type NetworkSettings,
+} from '../domain/settings/network';
 import type { EnsureOneBotMessengerHttpResult } from '../ipc/generated/domain/EnsureOneBotMessengerHttpResult';
 import type { OneBotMessengerCandidate } from '../ipc/generated/domain/OneBotMessengerCandidate';
 import { mockBackendSettings } from '../ipc/mock/settings.mock';
@@ -64,6 +69,9 @@ export interface BackendSettings {
     taskQueueCleanup: TaskQueueCleanupPrefs;
     githubApiMode: GithubApiMode;
     githubPat: string;
+    network: NetworkSettings;
+    proxyPassword: string;
+    networkError?: string;
     closeAction: CloseAction;
     afterCloseUiBehavior: AfterCloseUiBehavior;
     enterLightweightDelaySecs: number;
@@ -209,6 +217,9 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
         }),
         githubApiMode: dto.settings.githubApiMode ?? 'proxy',
         githubPat: dto.githubPat ?? '',
+        network: { ...defaultNetworkSettings(), ...dto.settings.network },
+        proxyPassword: dto.proxyPassword ?? '',
+        networkError: dto.networkError ?? undefined,
         closeAction,
         afterCloseUiBehavior: normalizeAfterClose(dto.settings.afterCloseUiBehavior),
         enterLightweightDelaySecs: Number(dto.settings.enterLightweightDelaySecs ?? 300),
@@ -280,6 +291,7 @@ type AppSettingsDtoInvoke = {
         taskQueueCleanupEnabled: boolean;
         taskQueueCleanupLingerMs: number;
         githubApiMode: GithubApiMode;
+        network: NetworkSettings;
         closeAction: string;
         afterCloseUiBehavior: string;
         enterLightweightDelaySecs: number;
@@ -331,6 +343,7 @@ type AppSettingsDtoInvoke = {
         snowlumaPackage: SnowLumaLinuxPackage | null;
     };
     githubPat: string;
+    proxyPassword: string;
 };
 
 function uiPreferencesForInvoke(ui: AppUiPreferences): AppUiPreferences {
@@ -386,6 +399,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             taskQueueCleanupEnabled: tq.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: tq.taskQueueCleanupLingerMs,
             githubApiMode: s.githubApiMode,
+            network: { ...s.network },
             closeAction: s.closeAction === 'tray' ? 'tray' : 'close',
             afterCloseUiBehavior: s.afterCloseUiBehavior,
             enterLightweightDelaySecs: s.enterLightweightDelaySecs,
@@ -434,6 +448,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             snowlumaPackage: s.snowlumaPackage || null,
         },
         githubPat: s.githubPat.trim(),
+        proxyPassword: s.proxyPassword,
     };
 }
 
@@ -521,6 +536,7 @@ export const settingsService = {
         }
         return {
             ...mockBackendSettings,
+            network: { ...mockBackendSettings.network },
             webHookChannels: mockBackendSettings.webHookChannels.map((c) => ({
                 ...c,
             })),
@@ -528,12 +544,17 @@ export const settingsService = {
     },
 
     set: async (settings: BackendSettings): Promise<void> => {
+        const validationError = Object.values(
+            validateNetworkSettings(settings.network, settings.proxyPassword),
+        )[0];
+        if (validationError) throw new Error(validationError);
         if (isTauri) {
             await invoke<void>('set_app_settings', { dto: toDtoInvoke(settings) });
             return;
         }
         Object.assign(mockBackendSettings, {
             ...settings,
+            network: { ...settings.network },
             webHookChannels: settings.webHookChannels.map((c) => ({ ...c })),
         });
     },

@@ -2,6 +2,7 @@
 
 import type { BackendSettings } from '../../services/settings.service';
 import { defaultReloginSettings } from '../../domain/settings/relogin';
+import { defaultNetworkSettings } from '../../domain/settings/network';
 import {
     DEFAULT_ONEBOT_MESSAGE,
     DEFAULT_WEBHOOK_BODY,
@@ -23,6 +24,8 @@ export const mockBackendSettings: BackendSettings = {
     taskQueueCleanup: { ...DEFAULT_TASK_QUEUE_CLEANUP },
     githubApiMode: 'proxy',
     githubPat: '',
+    network: defaultNetworkSettings(),
+    proxyPassword: '',
     closeAction: 'close',
     afterCloseUiBehavior: 'delayed_lightweight',
     enterLightweightDelaySecs: 300,

@@ -7,6 +7,7 @@ import { clampPerformanceMonitorIntervalMs } from '../../core/domain/performance
 import { clientPrefsFromBackend, type BackendSettings } from '../../core/services/settings.service';
 import { webhookChannelsEqual } from '../../core/domain/settings/offline-notify-defaults';
 import { featuresEqual } from '../../core/domain/settings/features';
+import { networkSettingsEqual } from '../../core/domain/settings/network';
 import {
     appPreferencesToAppUiPreferences,
     infoBarDismissPrefsFromDraftFields,
@@ -74,6 +75,9 @@ export function draftFromBackendAndPrefs(
         botRuntimeMetricsRetentionDays: backend.botRuntimeMetricsRetentionDays,
         githubApiMode: backend.githubApiMode,
         githubPat: backend.githubPat,
+        network: { ...backend.network },
+        proxyPassword: backend.proxyPassword,
+        networkError: backend.networkError,
         closeAction: backend.closeAction,
         afterCloseUiBehavior: backend.afterCloseUiBehavior,
         enterLightweightDelaySecs: backend.enterLightweightDelaySecs,
@@ -149,6 +153,8 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         },
         githubApiMode: draft.githubApiMode,
         githubPat: draft.githubPat,
+        network: { ...draft.network },
+        proxyPassword: draft.proxyPassword,
         closeAction: draft.closeAction,
         afterCloseUiBehavior: draft.afterCloseUiBehavior,
         enterLightweightDelaySecs: draft.enterLightweightDelaySecs,
@@ -215,6 +221,8 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         draft.botRuntimeMetricsRetentionDays !== baseline.botRuntimeMetricsRetentionDays ||
         draft.githubApiMode !== baseline.githubApiMode ||
         draft.githubPat !== baseline.githubPat ||
+        !networkSettingsEqual(draft.network, baseline.network) ||
+        draft.proxyPassword !== baseline.proxyPassword ||
         draft.closeAction !== baseline.closeAction ||
         draft.afterCloseUiBehavior !== baseline.afterCloseUiBehavior ||
         draft.enterLightweightDelaySecs !== baseline.enterLightweightDelaySecs ||

@@ -13,6 +13,7 @@ import {
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import { reloadBotRuntimeMetricsCatalogSettings } from '../bot/botRuntimeMetricsCatalog';
+import { networkSettingsEqual } from '../../core/domain/settings/network';
 
 const backendSettingsKey = ['appSettings'] as const;
 
@@ -41,7 +42,10 @@ export function useBackendSettings(cb: Callbacks = {}) {
             queryClient.setQueryData(backendSettingsKey, savedBackend);
             if (
                 previous?.githubApiMode !== savedBackend.githubApiMode ||
-                previous?.githubPat.trim() !== savedBackend.githubPat.trim()
+                previous?.githubPat.trim() !== savedBackend.githubPat.trim() ||
+                previous?.proxyPassword !== savedBackend.proxyPassword ||
+                !previous ||
+                !networkSettingsEqual(previous.network, savedBackend.network)
             ) {
                 // 首次查询尚无数据时，invalidateQueries 不会替换正在执行的旧请求。
                 await queryClient.cancelQueries({ queryKey: ['releaseSnapshot'] });

@@ -1,26 +1,20 @@
-// 数据 Tab：数据根目录、整树迁移、配置导入导出、GitHub API 与 Token。
+// 数据 Tab：数据根目录、整树迁移、配置导入导出。
 
 import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
 import { useConfigTransfer } from '../../../hooks/preferences/useConfigTransfer';
 import { ConfigImportDialog } from '../ConfigImportDialog';
 import { DataRootMigrateDialog } from '../DataRootMigrateDialog';
 import { CacheCleanupDialog } from '../CacheCleanupDialog';
-import { Button, Select, TextField } from '../../../shared/ui';
-import { ActionMotionIcon } from '../../../shared/ui/motion';
-import type { SettingsDraft } from '../settings-draft';
+import { Button } from '../../../shared/ui';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
 
 interface Props {
     dataRoot: string;
     onOpenDataDir: () => Promise<string>;
     isOpeningDir: boolean;
-    draft: SettingsDraft | null;
-    patchDraft: (patch: Partial<SettingsDraft>) => void;
 }
 
-export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDraft }: Props) {
-    const [revealPat, setRevealPat] = useState(false);
+export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir }: Props) {
     const [migrateOpen, setMigrateOpen] = useState(false);
     const [cleanupOpen, setCleanupOpen] = useState(false);
     const {
@@ -161,61 +155,6 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir, draft, patchDra
                 currentDataRoot={dataRoot}
             />
             <CacheCleanupDialog open={cleanupOpen} onOpenChange={setCleanupOpen} />
-
-            <SettingsSection title="GitHub" description="配置检查更新时的 GitHub API 访问方式。">
-                {!draft ? (
-                    <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
-                ) : (
-                    <>
-                        <FieldRow
-                            label="API 访问方式"
-                            description={
-                                draft.githubApiMode === 'direct'
-                                    ? '直接访问 api.github.com，使用自己的 Token，不经过默认中转。'
-                                    : '优先使用默认中转；中转不可用时尝试直连 GitHub。'
-                            }
-                        >
-                            <Select<SettingsDraft['githubApiMode']>
-                                className="w-72"
-                                value={draft.githubApiMode}
-                                onValueChange={(v) => patchDraft({ githubApiMode: v })}
-                                items={[
-                                    { value: 'proxy', label: '默认中转（推荐）' },
-                                    { value: 'direct', label: '直连 GitHub' },
-                                ]}
-                            />
-                        </FieldRow>
-                        <FieldRow
-                            label="Personal Access Token（可选）"
-                            description="直连 GitHub 时使用，也用于中转失败后的直连请求；仅发送给 GitHub。公开仓库无需额外权限。保存至系统密钥库或本机加密存储；留空使用匿名额度。"
-                            isLast
-                        >
-                            <div className="flex items-center gap-1.5">
-                                <TextField
-                                    className="w-72"
-                                    type={revealPat ? 'text' : 'password'}
-                                    placeholder="ghp_... / github_pat_..."
-                                    autoComplete="off"
-                                    value={draft.githubPat}
-                                    onValueChange={(v) => patchDraft({ githubPat: v })}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setRevealPat((r) => !r)}
-                                    className="flex h-8 w-8 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text"
-                                    aria-label={revealPat ? '隐藏 token' : '显示 token'}
-                                >
-                                    {revealPat ? (
-                                        <ActionMotionIcon icon={EyeOff} size={15} />
-                                    ) : (
-                                        <ActionMotionIcon icon={Eye} size={15} />
-                                    )}
-                                </button>
-                            </div>
-                        </FieldRow>
-                    </>
-                )}
-            </SettingsSection>
         </SettingsTabSections>
     );
 }

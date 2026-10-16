@@ -15,6 +15,8 @@ import { RuntimeTab } from './tabs/RuntimeTab';
 import { MonitoringTab } from './tabs/MonitoringTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
 import { DataTab } from './tabs/DataTab';
+import { NetworkTab } from './tabs/NetworkTab';
+import { validateNetworkSettings } from '../../core/domain/settings/network';
 import { useDesktopLogViewer } from '../../hooks/diagnostics/useDesktopLogViewer';
 import { DesktopLogTab } from './tabs/DesktopLogTab';
 import { DesktopLogToolbar } from './tabs/DesktopLogToolbar';
@@ -51,12 +53,15 @@ export function SettingsPageNext() {
     }, [settings]);
 
     const dirty = draft !== null && settings !== null && isSettingsDirty(draft, settings);
+    const networkInvalid =
+        draft !== null &&
+        Object.keys(validateNetworkSettings(draft.network, draft.proxyPassword)).length > 0;
 
     const patchDraft = (patch: Partial<SettingsDraft>) =>
         setDraft((cur) => (cur ? { ...cur, ...patch } : cur));
 
     const handleSave = () => {
-        if (draft) save(draft);
+        if (draft && !networkInvalid) save(draft);
     };
 
     const handleCancel = () => {
@@ -81,12 +86,13 @@ export function SettingsPageNext() {
                     }
                 >
                     <div className="flex min-w-0 items-center gap-2">
-                        <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0">
+                        <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0 [&_[role=tab]]:shrink-0 [&_[role=tab]]:whitespace-nowrap">
                             <TabsTrigger value="appearance">外观</TabsTrigger>
                             <TabsTrigger value="features">功能</TabsTrigger>
                             <TabsTrigger value="window">窗口</TabsTrigger>
                             {terminalEnabled && <TabsTrigger value="terminal">终端</TabsTrigger>}
                             <TabsTrigger value="runtime">运行</TabsTrigger>
+                            <TabsTrigger value="network">网络</TabsTrigger>
                             <TabsTrigger value="monitoring">监控</TabsTrigger>
                             <TabsTrigger value="notifications">通知</TabsTrigger>
                             <TabsTrigger value="log">日志</TabsTrigger>
@@ -97,6 +103,7 @@ export function SettingsPageNext() {
                             <SaveActions
                                 dirty={dirty}
                                 saving={isSaving}
+                                invalid={networkInvalid}
                                 onSave={handleSave}
                                 onCancel={handleCancel}
                             />
@@ -140,6 +147,10 @@ export function SettingsPageNext() {
                         <RuntimeTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
+                    <TabsContent value="network" className="pb-10 pt-7 focus-visible:outline-none">
+                        <NetworkTab draft={draft} patchDraft={patchDraft} saving={isSaving} />
+                    </TabsContent>
+
                     <TabsContent
                         value="monitoring"
                         className="pb-10 pt-7 focus-visible:outline-none"
@@ -178,8 +189,6 @@ export function SettingsPageNext() {
                             dataRoot={bootstrap?.data_root ?? '—'}
                             onOpenDataDir={openDataDir}
                             isOpeningDir={isOpeningDir}
-                            draft={draft}
-                            patchDraft={patchDraft}
                         />
                     </TabsContent>
 
@@ -195,11 +204,12 @@ export function SettingsPageNext() {
 interface SaveActionsProps {
     dirty: boolean;
     saving: boolean;
+    invalid: boolean;
     onSave: () => void;
     onCancel: () => void;
 }
 
-function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
+function SaveActions({ dirty, saving, invalid, onSave, onCancel }: SaveActionsProps) {
     return (
         <div className="ml-auto flex shrink-0 items-center gap-3 pr-1">
             <span className="hidden text-xs sm:inline-flex sm:items-center sm:gap-1.5">
@@ -233,7 +243,13 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
                 <Button variant="ghost" size="sm" onClick={onCancel} disabled={!dirty || saving}>
                     撤销
                 </Button>
-                <Button variant="primary" size="sm" onClick={onSave} disabled={!dirty || saving}>
+                <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={onSave}
+                    disabled={!dirty || saving || invalid}
+                    title={invalid ? '请修正网络页中的设置' : undefined}
+                >
                     {saving ? (
                         <>
                             <Spinner size="xs" />
