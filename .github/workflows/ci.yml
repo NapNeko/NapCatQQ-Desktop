@@ -85,6 +85,7 @@ jobs:
               - 'clippy.toml'
               - 'rust-toolchain.toml'
               - 'scripts/ci-rust-cache*'
+              - 'scripts/test-windows-agent*'
               - '.github/workflows/ci.yml'
             rust_shell:
               - 'crates/**'
@@ -235,6 +236,14 @@ jobs:
           cargo test -p ncd-runtime --test bot_manager -- --quiet
           cargo test -p ncd-deploy --lib docker::compose::tests -- --quiet
           cargo test -p ncd-backend-napcat --lib napcat::login_poller -- --quiet
+
+      - name: Windows Agent tests under a standard account
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          github.event.inputs.suite == 'full' ||
+          github.event.inputs.suite == 'rust'
+        shell: pwsh
+        run: ./scripts/test-windows-agent.ps1
 
       - name: Workspace tests
         if: >-

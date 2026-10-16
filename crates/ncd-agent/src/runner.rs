@@ -20,11 +20,6 @@ use windows_sys::Win32::{
     System::{JobObjects::*, Threading::*},
 };
 
-#[cfg(test)]
-mod test_desktop;
-#[cfg(test)]
-mod test_process;
-
 pub fn run(root: PathBuf, instance: String, generation: String) -> Result<(), String> {
     let directory = store::instance_dir(&root, &instance);
     let _runner_lease = FileLock::acquire(&directory.join("runner.lock"))?;
@@ -502,30 +497,23 @@ Start-Sleep -Seconds 45
 
     #[test]
     fn real_hidden_process_job_closure_and_generation_stop_are_isolated() {
-        if std::env::var_os(test_process::OWNER_SID).is_none() {
-            if native::elevated().unwrap() {
-                let root = tempfile::tempdir().unwrap();
-                let entry = fixture(root.path());
-                assert!(matches!(
-                    spawn(&entry, &root.path().join("elevated.log")),
-                    Err(error) if error == "refusing to run workload with an elevated user token"
-                ));
-            }
-            test_process::run_limited(
-                "runner::tests::real_hidden_process_job_closure_and_generation_stop_are_isolated",
-            )
-            .unwrap();
+        let elevated = native::elevated().unwrap();
+        if let Ok(owner) = std::env::var("NCD_AGENT_TEST_OWNER_SID") {
+            assert_eq!(native::own_sid().unwrap(), owner);
+            assert!(
+                !elevated,
+                "the CI owner fixture must use a standard account"
+            );
+        }
+        if elevated {
+            let root = tempfile::tempdir().unwrap();
+            let entry = fixture(root.path());
+            assert!(matches!(
+                spawn(&entry, &root.path().join("elevated.log")),
+                Err(error) if error == "refusing to run workload with an elevated user token"
+            ));
             return;
         }
-        assert_eq!(
-            native::own_sid().unwrap(),
-            std::env::var(test_process::OWNER_SID).unwrap(),
-            "the isolated subprocess must retain the calling user's SID"
-        );
-        assert!(
-            !native::elevated().unwrap(),
-            "the owner-identity smoke subprocess must not be elevated"
-        );
         let root = tempfile::tempdir().unwrap();
         let entry = fixture(root.path());
 
