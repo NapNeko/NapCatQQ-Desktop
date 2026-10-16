@@ -99,8 +99,6 @@ export function mockRemoteRuntimeStatus(
                     started_at: Math.floor((Date.now() - 3600000) / 1000),
                     memory_rss_bytes: 145000000,
                     server_total_memory_bytes: 8589934592,
-                    backend_kind: 'remote_ssh',
-                    runtime_target: 'remote_ssh',
                     extra: {
                         active_connections: 12,
                         webui_enabled: true,

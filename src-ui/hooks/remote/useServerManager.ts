@@ -9,6 +9,7 @@ import { errorText } from '../../core/domain/errors';
 import { SEE_LOGS_HINT } from '../../core/domain/ui/errorBarCopy';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ProbeReport } from '../../core/ipc/generated/domain/ProbeReport';
+import { WINDOWS_REMOTE_INFO_KEY } from './useWindowsRemoteInfo';
 
 /// 档案显示名：优先 name，回退 host，最后裸 id。InfoBar 标题里用，让用户一眼
 /// 认出是哪台机器，而不是看裸 UUID。
@@ -98,6 +99,21 @@ export function useServerManager() {
         // 探测报告 success=false 不是 IPC 失败（命令本身成功返回了报告），所以
         // 走 onSuccess 分流：报告 success 才绿条，否则红条带后端给的 error 原因。
         onSuccess: (report, args) => {
+            if (report.success) {
+                const server = serversQuery.data?.find((item) => item.id === args.id);
+                if (server)
+                    queryClient.setQueryData(
+                        [
+                            WINDOWS_REMOTE_INFO_KEY,
+                            server.id,
+                            server.host,
+                            server.port,
+                            server.username,
+                            server.platform ?? 'auto',
+                        ],
+                        report.windowsInfo ?? null,
+                    );
+            }
             queryClient.invalidateQueries({ queryKey: ['servers'] });
             // 恢复链路增强：除了 invalidate，显式 refetchQueries 强制立即拉新数据。
             // 解决“在远程页测试连接成功后，Bot 列表徽标和配置页门禁不自动更新”的问题。

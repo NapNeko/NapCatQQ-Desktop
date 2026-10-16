@@ -39,6 +39,7 @@ import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfil
 import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
 import { inventorySummary } from '../../core/domain/remote-host/inventory-labels';
 import { serverLifecycleBadge } from './serverCardPresentation';
+import { WindowsRemoteStatus } from './WindowsRemoteDialog';
 
 export { serverCardGridClass } from './serverCardGrid';
 
@@ -206,6 +207,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                     >
                                         {sshEndpoint}
                                     </p>
+                                    <WindowsRemoteStatus server={server} />
                                     {healthLine && (
                                         <p
                                             className={cn(

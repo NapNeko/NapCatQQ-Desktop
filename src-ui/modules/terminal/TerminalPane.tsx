@@ -301,7 +301,9 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                     />
                 )}
             </div>
-            {info.features.stats && <TerminalStatsBar sessionId={sessionId} visible={visible} />}
+            {info.features.stats && (
+                <TerminalStatsBar sessionId={sessionId} visible={visible} hostOs={info.host_os} />
+            )}
         </div>
     );
 }

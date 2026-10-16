@@ -26,6 +26,7 @@ import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ComponentActionProgress } from '../../hooks/components/useComponentAction';
+import { useLocalQqSource } from '../../hooks/components/useLocalQqSource';
 import { compareSemver, type ReleaseInfoView } from '../../core/domain/release/normalize';
 import {
     ProgressLine,
@@ -39,7 +40,7 @@ import {
     isExternalNodeSource,
     uninstallEntryAction,
 } from './componentStatusPresentation';
-import type { StepKind, UninstallSupport } from '../../core/ipc/types';
+import type { StepKind } from '../../core/ipc/types';
 
 export type RowAction =
     | { kind: 'install' }
@@ -82,6 +83,7 @@ interface Props {
 
 export const MachineComponentRowView: React.FC<Props> = ({
     row,
+    hostId,
     latestRemoteVersion,
     latestRelease = null,
     activeProgress,
@@ -94,6 +96,10 @@ export const MachineComponentRowView: React.FC<Props> = ({
 }) => {
     const { info, status } = row;
     const openExternal = useOpenExternal();
+    const isLocalQq = info.id === 'qq' && hostId === 'local';
+    const qqSource = useLocalQqSource(isLocalQq);
+    const usesSystemQq = isLocalQq && qqSource === 'system' && status.state === 'installed';
+    const managedActionsAllowed = !isLocalQq || qqSource === 'managed';
 
     const isCancelable =
         activeProgress != null &&
@@ -124,6 +130,31 @@ export const MachineComponentRowView: React.FC<Props> = ({
         activeProgress.progress.status !== 'cancelled';
 
     const canShowNotes = !!latestRelease && !!onShowReleaseNotes;
+    const lifecycleDisabled = disabled || inFlight || !!lifecycleBlockedReason;
+    const uninstallAction =
+        !inFlight && managedActionsAllowed
+            ? uninstallEntryAction(info.uninstall, status)
+            : 'none';
+
+    const componentActions = usesSystemQq ? (
+        <Button
+            size="sm"
+            variant="primary"
+            disabled={disabled || inFlight}
+            title="单独安装一份 QQ，Bot 下次启动时优先使用；不改动系统 QQ"
+            onClick={() => handle({ kind: 'install_independent' })}
+        >
+            转为 NCD 管理
+        </Button>
+    ) : status.state !== 'installed' || managedActionsAllowed ? (
+        <ActionButtons
+            status={status}
+            latestRemoteVersion={latestRemoteVersion}
+            disabled={disabled || inFlight}
+            lifecycleBlockedReason={lifecycleBlockedReason}
+            onAction={handle}
+        />
+    ) : null;
 
     const footer = isCancelable ? (
         <Button
@@ -137,44 +168,61 @@ export const MachineComponentRowView: React.FC<Props> = ({
     ) : (
         <>
             {trailingActions}
-            <ActionButtons
-                status={status}
-                uninstall={info.uninstall}
-                latestRemoteVersion={latestRemoteVersion}
-                disabled={disabled}
-                lifecycleBlockedReason={lifecycleBlockedReason}
-                onAction={handle}
-            />
+            {componentActions}
         </>
     );
 
-    const titleAside =
-        canShowNotes || info.repo_url ? (
-            <div className="flex items-center gap-0.5">
-                {canShowNotes && (
-                    <button
-                        type="button"
-                        onClick={onShowReleaseNotes}
-                        title="查看发版日志"
-                        aria-label="查看发版日志"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text"
-                    >
-                        <ScrollText size={13} strokeWidth={2} aria-hidden />
-                    </button>
-                )}
-                {info.repo_url && (
-                    <button
-                        type="button"
-                        onClick={() => openExternal(info.repo_url!)}
-                        title="打开项目仓库"
-                        aria-label="打开项目仓库"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-brand"
-                    >
-                        <ExternalLink size={13} strokeWidth={2} aria-hidden />
-                    </button>
-                )}
-            </div>
-        ) : undefined;
+    const hasTitleActions = canShowNotes || !!info.repo_url || uninstallAction !== 'none';
+    const titleAside = hasTitleActions ? (
+        <div className="flex items-center gap-0.5">
+            {canShowNotes && (
+                <button
+                    type="button"
+                    onClick={onShowReleaseNotes}
+                    title="查看发版日志"
+                    aria-label="查看发版日志"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text"
+                >
+                    <ScrollText size={13} strokeWidth={2} aria-hidden />
+                </button>
+            )}
+            {info.repo_url && (
+                <button
+                    type="button"
+                    onClick={() => openExternal(info.repo_url!)}
+                    title="打开项目仓库"
+                    aria-label="打开项目仓库"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-brand"
+                >
+                    <ExternalLink size={13} strokeWidth={2} aria-hidden />
+                </button>
+            )}
+            {uninstallAction === 'task' && (
+                <button
+                    type="button"
+                    disabled={lifecycleDisabled}
+                    title={lifecycleBlockedReason ?? '卸载组件'}
+                    aria-label="卸载组件"
+                    onClick={() => handle({ kind: 'uninstall' })}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger disabled:pointer-events-none disabled:opacity-40"
+                >
+                    <Trash2 size={13} strokeWidth={2} aria-hidden />
+                </button>
+            )}
+            {uninstallAction === 'system' && (
+                // 系统页与 Bot 运行状态无关,不吃 lifecycleDisabled
+                <button
+                    type="button"
+                    title="打开系统应用管理页进行卸载"
+                    aria-label="在系统中卸载"
+                    onClick={() => openSystemUninstallOrReport()}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger"
+                >
+                    <Trash2 size={13} strokeWidth={2} aria-hidden />
+                </button>
+            )}
+        </div>
+    ) : undefined;
 
     const iconNode =
         componentLogoIcon(info.id) ??
@@ -184,11 +232,23 @@ export const MachineComponentRowView: React.FC<Props> = ({
 
     const updatable =
         status.state === 'installed' &&
+        managedActionsAllowed &&
         !!latestRemoteVersion &&
         !isExternalNodeSource(status.detected.source) &&
         compareSemver(status.detected.version, latestRemoteVersion) > 0;
 
-    const uninstallAction = uninstallEntryAction(info.uninstall, status);
+    const statusBadge = hostComponentStatusBadge(status, {
+        hasUpdate: managedActionsAllowed && hasUpdate(status, latestRemoteVersion),
+        inFlight,
+    });
+    if (status.state === 'installed' && !inFlight && isLocalQq) {
+        if (qqSource === 'system') {
+            statusBadge.label = '系统 QQ';
+            statusBadge.tone = 'neutral';
+        } else if (qqSource === 'managed') {
+            statusBadge.label = 'NCD 管理';
+        }
+    }
 
     const handleCopyVersion = async (v: string, label: string) => {
         try {
@@ -210,18 +270,21 @@ export const MachineComponentRowView: React.FC<Props> = ({
                 <div className="h-full min-w-0">
                     <ComponentManageCard
                         accent={inFlight ? 'brand' : 'none'}
-                        statusBadge={hostComponentStatusBadge(status, {
-                            hasUpdate: hasUpdate(status, latestRemoteVersion),
-                            inFlight,
-                        })}
+                        statusBadge={statusBadge}
                         title={info.display_name}
                         icon={iconNode}
                         titleAside={titleAside}
-                        description={info.description || undefined}
+                        description={
+                            usesSystemQq
+                                ? '单独安装一份 QQ，供 Bot 下次启动时使用'
+                                : info.description || undefined
+                        }
                         meta={
                             <StatusMeta
                                 status={status}
-                                latestRemoteVersion={latestRemoteVersion}
+                                latestRemoteVersion={
+                                    managedActionsAllowed ? latestRemoteVersion : null
+                                }
                                 activeProgress={activeProgress}
                             />
                         }
@@ -248,6 +311,17 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     >
                         <X size={13} className="text-danger" />
                         <span>取消当前任务</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && usesSystemQq && (
+                    <ContextMenuItem
+                        tone="brand"
+                        disabled={disabled}
+                        onClick={() => handle({ kind: 'install_independent' })}
+                    >
+                        <Download size={13} className="text-brand" />
+                        <span>转为 NCD 管理</span>
                     </ContextMenuItem>
                 )}
 
@@ -443,59 +517,29 @@ const StatusMeta: React.FC<{
 
 const ActionButtons: React.FC<{
     status: MachineComponentRow['status'];
-    uninstall: UninstallSupport;
     latestRemoteVersion: string | null;
     disabled?: boolean;
     lifecycleBlockedReason?: string | null;
     onAction: (a: RowAction) => void;
-}> = ({ status, uninstall, latestRemoteVersion, disabled, lifecycleBlockedReason, onAction }) => {
+}> = ({ status, latestRemoteVersion, disabled, lifecycleBlockedReason, onAction }) => {
     const lifecycleDisabled = disabled || !!lifecycleBlockedReason;
-    const uninstallAction = uninstallEntryAction(uninstall, status);
     switch (status.state) {
         case 'installed': {
             const updatable =
                 !!latestRemoteVersion &&
                 !isExternalNodeSource(status.detected.source) &&
                 compareSemver(status.detected.version, latestRemoteVersion) > 0;
+            if (!updatable) return null;
             return (
-                <>
-                    {updatable && (
-                        <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={lifecycleDisabled}
-                            title={lifecycleBlockedReason ?? undefined}
-                            onClick={() => onAction({ kind: 'update' })}
-                        >
-                            更新
-                        </Button>
-                    )}
-                    {uninstallAction === 'task' && (
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-text-tertiary hover:bg-danger-soft hover:text-danger"
-                            disabled={lifecycleDisabled}
-                            title={lifecycleBlockedReason ?? '卸载组件'}
-                            aria-label="卸载组件"
-                            onClick={() => onAction({ kind: 'uninstall' })}
-                        >
-                            <Trash2 size={13} strokeWidth={2} />
-                        </Button>
-                    )}
-                    {uninstallAction === 'system' && (
-                        // 系统页与 Bot 运行状态无关,不吃 lifecycleDisabled
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-xs text-text-tertiary hover:text-text"
-                            title="打开系统应用管理页进行卸载"
-                            onClick={() => openSystemUninstallOrReport()}
-                        >
-                            系统卸载
-                        </Button>
-                    )}
-                </>
+                <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={lifecycleDisabled}
+                    title={lifecycleBlockedReason ?? undefined}
+                    onClick={() => onAction({ kind: 'update' })}
+                >
+                    更新
+                </Button>
             );
         }
         case 'not_installed':

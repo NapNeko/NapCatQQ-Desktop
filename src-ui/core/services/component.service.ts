@@ -65,7 +65,7 @@ export const componentService = {
                 snowlumaLinuxPackage: snowlumaLinuxPackage ?? null,
             });
         }
-        return withMockDelay(mockRunAction(componentId, hostId, kind), 50);
+        return withMockDelay(mockRunAction(componentId, hostId, kind, taskId), 50);
     },
 
     cancelComponentAction: async (taskId: string): Promise<void> => {

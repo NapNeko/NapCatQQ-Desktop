@@ -373,28 +373,12 @@ export type { DeploymentTaskResource } from './generated/domain/DeploymentTaskRe
 export type { DeploymentTaskSnapshot } from './generated/domain/DeploymentTaskSnapshot';
 export type { DeploymentTaskList } from './generated/domain/DeploymentTaskList';
 
-import type { BotActorState } from './generated/BotActorState';
-import type { BotActorSnapshot } from './generated/BotActorSnapshot';
-import type { ProgressEvent } from './generated/domain/ProgressEvent';
-import type { DeploymentTaskSnapshot } from './generated/domain/DeploymentTaskSnapshot';
-import type { AppInstance } from './generated/domain/AppInstance';
-
 export type BotFlavor = 'napcat' | 'snowluma';
 
 export type BackendKind = 'local' | 'remote_ssh';
 
-export interface BotStatus {
-    bot_id: string;
-    state: BotActorState;
-    pid?: number | null;
-    started_at?: number | null;
-    memory_rss_bytes?: number | null;
-    server_total_memory_bytes?: number | null;
-    extra?: Record<string, any>;
-    flavor?: BotFlavor; // client-side decorator if needed, or in extra
-    backend_kind?: BackendKind; // local or remote_ssh
-    runtime_target?: string;
-}
+export type { BotStatus } from './generated/domain/BotStatus';
+import type { BotStatus } from './generated/domain/BotStatus';
 
 export interface ConnectRemoteHostRequest {
     remote_id: string;
@@ -440,7 +424,6 @@ export interface BatchResultResponse {
 
 export type NapCatLoginInvalidationReason = 'kicked' | 'logged_out';
 export type { NapCatWebuiAuthIssue } from './generated/NapCatWebuiAuthIssue';
-import type { NapCatWebuiAuthIssue } from './generated/NapCatWebuiAuthIssue';
 
 // SnowLuma 后端类型—— re-export ts-rs 生成产物
 export type { DaemonState } from './generated/DaemonState';
@@ -451,174 +434,7 @@ export type { HookProcessInfo } from './generated/HookProcessInfo';
 export type { OneBotInstanceInfo } from './generated/OneBotInstanceInfo';
 export type { SnowLumaAppConfig } from './generated/domain/SnowLumaAppConfig';
 
-import type { DaemonState } from './generated/DaemonState';
-import type { SnowLumaLoginState } from './generated/SnowLumaLoginState';
-
-// 按 kind 区分的判别联合(payload body)。统一通过下方 DomainEvent 带上 v envelope。
-type DomainEventBody =
-    | {
-          kind: 'bot_state_changed';
-          snapshot: BotActorSnapshot;
-          reason?: string | null;
-      }
-    | {
-          kind: 'bot_status_changed';
-          status: BotStatus;
-          source?: string | null;
-      }
-    | {
-          kind: 'bot_log_appended';
-          bot_id: string;
-          line: string;
-          channel?: string | null;
-      }
-    | {
-          kind: 'bot_error';
-          bot_id: string;
-          message: string;
-          hint?: string | null;
-      }
-    | {
-          kind: 'task_progress';
-          task_id: string;
-          progress: number;
-          message: string;
-      }
-    | {
-          kind: 'napcat_webui_available';
-          bot_id: string;
-          port: number;
-          token: string;
-      }
-    | {
-          kind: 'bot_process_exited';
-          bot_id: string;
-          exit_code?: number | null;
-          reason?: string | null;
-      }
-    | {
-          kind: 'napcat_login_qrcode';
-          bot_id: string;
-          qrcode_url: string;
-      }
-    | {
-          kind: 'napcat_login_qrcode_removed';
-          bot_id: string;
-      }
-    | {
-          kind: 'napcat_login_online';
-          bot_id: string;
-          online: boolean;
-      }
-    | {
-          kind: 'napcat_login_probe_unavailable';
-          bot_id: string;
-      }
-    | {
-          kind: 'napcat_login_invalidated';
-          bot_id: string;
-          reason: NapCatLoginInvalidationReason;
-      }
-    | {
-          kind: 'napcat_webui_auth_changed';
-          bot_id: string;
-          issue: NapCatWebuiAuthIssue | null;
-      }
-    | {
-          kind: 'snowluma_daemon_state_changed';
-          state: DaemonState;
-          ref_count: number;
-          reason?: string | null;
-          /** `local` = 本机 daemon；远端为 SSH server_id */
-          server_id?: string | null;
-      }
-    | {
-          kind: 'snowluma_bot_injected';
-          bot_id: string;
-          qq_pid: number;
-      }
-    | {
-          kind: 'snowluma_uin_detected';
-          bot_id: string;
-          uin: string;
-      }
-    | {
-          kind: 'snowluma_login_state_changed';
-          bot_id: string;
-          state: SnowLumaLoginState;
-      }
-    | {
-          kind: 'snowluma_login_probe_unavailable';
-          bot_id: string;
-      }
-    | {
-          kind: 'snowluma_pid_set_changed';
-          bot_id: string;
-          pids: number[];
-      }
-    | {
-          kind: 'snowluma_daemon_log';
-          line: string;
-      }
-    | {
-          kind: 'snowluma_docker_endpoints_ready';
-          bot_id: string;
-      }
-    | {
-          kind: 'component_action_progress';
-          task_id: string;
-          event: ProgressEvent;
-      }
-    | {
-          kind: 'docker_deploy_progress';
-          task_id: string;
-          event: ProgressEvent;
-      }
-    | {
-          kind: 'docker_install_progress';
-          task_id: string;
-          event: ProgressEvent;
-      }
-    | {
-          kind: 'deployment_task_changed';
-          task: DeploymentTaskSnapshot;
-      }
-    | {
-          kind: 'deployment_task_removed';
-          task_id: string;
-      }
-    | {
-          kind: 'desktop_log_appended';
-          line: string;
-      }
-    // 远端主机传输层连接健康事件（不绑 bot，绑 server_id）
-    | {
-          kind: 'host_connection_lost';
-          server_id: string;
-          reason?: string | null;
-          consecutive_failures: number;
-      }
-    | {
-          kind: 'host_connection_recovered';
-          server_id: string;
-          latency_ms: number;
-      }
-    // 应用端实例（Karin 等）快照变化 / 进程日志；不进协议 Bot 事件
-    | {
-          kind: 'app_instance_changed';
-          instance: AppInstance;
-          reason?: string | null;
-      }
-    | {
-          kind: 'app_instance_log_appended';
-          instance_id: string;
-          line: string;
-      }
-    // 实例另起一轮输出（启动 / 麦麦运行卡重启），先于新一轮的第一行到
-    | {
-          kind: 'app_instance_log_reset';
-          instance_id: string;
-      };
+type DomainEventBody = import('./generated/domain/DomainEvent').DomainEvent;
 
 // 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope,后端改了形状前端能按版本分辨。
 // 形如 { v: 1, kind: 'bot_log_appended', ... }。v 暂为可选,兼容历史 payload 与

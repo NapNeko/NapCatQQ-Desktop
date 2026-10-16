@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import type { DomainEvent } from '../../core/ipc/types';
 import { RUNTIME_READINESS_QUERY_KEY } from '../components/useRuntimeReadiness';
+import { WINDOWS_REMOTE_INFO_KEY } from './useWindowsRemoteInfo';
 
 /**
  * 常驻监听远端主机连接健康事件。
@@ -46,6 +47,7 @@ export function useHostConnectionEvents(): void {
 
                 // 1. 让服务器列表（含 state / health）立即刷新
                 queryClient.invalidateQueries({ queryKey: ['servers'] });
+                queryClient.invalidateQueries({ queryKey: [WINDOWS_REMOTE_INFO_KEY, serverId] });
 
                 // 2. 让该主机的组件探测缓存失效（精确到 hostId 前缀匹配）。
                 //    react-query v5 的 invalidate 支持 predicate，这里用部分 key 匹配：

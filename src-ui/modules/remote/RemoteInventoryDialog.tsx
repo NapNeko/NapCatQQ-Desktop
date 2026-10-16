@@ -41,6 +41,8 @@ export const RemoteInventoryDialog: React.FC<RemoteInventoryDialogProps> = ({
     onSaveOverrides,
 }) => {
     const inv: RemoteInventory | null | undefined = server?.inventory;
+    const windows =
+        server?.platform === 'windows' || /^(?:[a-z]:[\\/]|\\\\)/i.test(inv?.home ?? '');
     const [qqInstallBase, setQqInstallBase] = useState('');
     const [napcatRoot, setNapcatRoot] = useState('');
     const [snowlumaDir, setSnowlumaDir] = useState('');
@@ -68,10 +70,12 @@ export const RemoteInventoryDialog: React.FC<RemoteInventoryDialogProps> = ({
             ncdWatchRoot: ncdWatchRoot.trim() || null,
         };
         const invalid = Object.values(overrides).find(
-            (v) => typeof v === 'string' && v.includes(' '),
+            (v) => typeof v === 'string' && (/[\r\n\0]/.test(v) || (!windows && v.includes(' '))),
         );
         if (invalid) {
-            setOverrideError('路径不能包含空格');
+            setOverrideError(
+                windows ? '路径不能包含换行或空字符' : '路径不能包含空格、换行或空字符',
+            );
             return;
         }
         setOverrideError(null);
@@ -101,8 +105,7 @@ export const RemoteInventoryDialog: React.FC<RemoteInventoryDialogProps> = ({
                         </h3>
                         {!inv || inv.items.length === 0 ? (
                             <p className="text-sm text-text-secondary">
-                                未发现安装，组件安装将落到桌面默认路径（$HOME/Napcat、
-                                $HOME/snowluma-remote）。
+                                未发现安装，可到组件页安装。
                             </p>
                         ) : (
                             <ul className="flex flex-col gap-1.5">
@@ -154,31 +157,31 @@ export const RemoteInventoryDialog: React.FC<RemoteInventoryDialogProps> = ({
                         </p>
                         <TextField
                             label="QQ 安装根"
-                            placeholder="$HOME/Napcat 或 /"
+                            placeholder={windows ? 'D:\\QQ' : '$HOME/Napcat 或 /'}
                             value={qqInstallBase}
                             onValueChange={setQqInstallBase}
                         />
                         <TextField
                             label="NapCat 目录"
-                            placeholder="…/app_launcher/napcat"
+                            placeholder={windows ? 'D:\\NapCat' : '…/app_launcher/napcat'}
                             value={napcatRoot}
                             onValueChange={setNapcatRoot}
                         />
                         <TextField
                             label="SnowLuma 目录"
-                            placeholder="…/workspace/snowluma"
+                            placeholder={windows ? 'D:\\SnowLuma' : '…/workspace/snowluma'}
                             value={snowlumaDir}
                             onValueChange={setSnowlumaDir}
                         />
                         <TextField
                             label="node 可执行文件"
-                            placeholder="…/node/bin/node"
+                            placeholder={windows ? 'D:\\NodeJs\\node.exe' : '…/node/bin/node'}
                             value={nodeBin}
                             onValueChange={setNodeBin}
                         />
                         <TextField
                             label="ncd-watch 根目录"
-                            placeholder="$HOME/ncd-watch"
+                            placeholder={windows ? 'D:\\ncd-watch' : '$HOME/ncd-watch'}
                             value={ncdWatchRoot}
                             onValueChange={setNcdWatchRoot}
                         />

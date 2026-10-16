@@ -26,7 +26,15 @@ function Meter({ value }: { value: number }) {
     );
 }
 
-export function TerminalStatsBar({ sessionId, visible }: { sessionId: string; visible: boolean }) {
+export function TerminalStatsBar({
+    sessionId,
+    visible,
+    hostOs,
+}: {
+    sessionId: string;
+    visible: boolean;
+    hostOs: string;
+}) {
     const { stats, stale } = useTerminalStats(sessionId, visible);
     if (!stats) {
         return (
@@ -50,9 +58,9 @@ export function TerminalStatsBar({ sessionId, visible }: { sessionId: string; vi
         stats.swap_total
             ? `交换 ${formatBytes(stats.swap_used)} / ${formatBytes(stats.swap_total)}`
             : null,
-        `根分区 ${diskText}`,
+        `${hostOs === 'windows' ? '系统盘' : '根分区'} ${diskText}`,
         `网速 ↓ ${formatRate(stats.net_rx_per_sec)} ↑ ${formatRate(stats.net_tx_per_sec)}`,
-        `负载（1 / 5 / 15 分钟）${load}`,
+        hostOs === 'linux' ? `负载（1 / 5 / 15 分钟）${load}` : null,
         `已开机 ${uptime}`,
     ]
         .filter(Boolean)
@@ -86,10 +94,12 @@ export function TerminalStatsBar({ sessionId, visible }: { sessionId: string; vi
                     <ArrowUp size={12} className="ml-1 text-text-tertiary" />
                     {formatRate(stats.net_tx_per_sec)}
                 </span>
-                <span className="hidden items-center gap-1 @min-[44rem]:flex">
-                    <Activity size={12} className="text-text-tertiary" />
-                    {load}
-                </span>
+                {hostOs === 'linux' && (
+                    <span className="hidden items-center gap-1 @min-[44rem]:flex">
+                        <Activity size={12} className="text-text-tertiary" />
+                        {load}
+                    </span>
+                )}
                 <span className="hidden items-center gap-1 @min-[50rem]:flex">
                     <Timer size={12} className="text-text-tertiary" />
                     {uptime}

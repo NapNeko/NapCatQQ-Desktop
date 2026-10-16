@@ -10,6 +10,7 @@
 // 由 rememberCredential 字段控制；连接测试由用户在卡片上点"测试连接"完成。
 
 import React, { useEffect, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -20,6 +21,8 @@ import {
     DialogClose,
     Button,
 } from '../../shared/ui';
+import { ActionMotionIcon } from '../../shared/ui/motion';
+import { cn } from '../../shared/utils/cn';
 import { useLocalSshKeys } from '../../hooks/remote/useLocalSsh';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { AuthMethod } from '../../core/ipc/generated/domain/AuthMethod';
@@ -45,7 +48,8 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
     const [name, setName] = useState('');
     const [host, setHost] = useState('');
     const [port, setPort] = useState(22);
-    const [username, setUsername] = useState('root');
+    const [username, setUsername] = useState('');
+    const [platform, setPlatform] = useState('auto');
     const [password, setPassword] = useState('');
     const [authMethod, setAuthMethod] = useState<AuthMethod>('password');
     const [keyPath, setKeyPath] = useState('');
@@ -57,6 +61,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
     const hostId = `${formId}-host`;
     const portId = `${formId}-port`;
     const usernameId = `${formId}-username`;
+    const platformId = `${formId}-platform`;
     const authMethodId = `${formId}-auth-method`;
     const passwordId = `${formId}-password`;
     const autoKeyId = `${formId}-auto-key`;
@@ -73,6 +78,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
             setHost(initialProfile.host);
             setPort(initialProfile.port);
             setUsername(initialProfile.username);
+            setPlatform(initialProfile.platform ?? 'auto');
             setAuthMethod(initialProfile.authMethod);
             setKeyPath(initialProfile.privateKeyPath ?? '');
             setRemember(initialProfile.rememberCredential);
@@ -80,7 +86,8 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
             setName('');
             setHost('');
             setPort(22);
-            setUsername('root');
+            setUsername('');
+            setPlatform('auto');
             setAuthMethod('password');
             setKeyPath('');
             setRemember(true);
@@ -107,6 +114,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
             host: host.trim(),
             port,
             username: username.trim(),
+            platform: platform === 'auto' ? null : platform,
             authMethod,
             privateKeyPath: authMethod === 'key' ? keyPath.trim() || null : null,
             rememberCredential: remember,
@@ -157,6 +165,19 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         />
                     </Field>
 
+                    <Field id={platformId} label="目标系统">
+                        <select
+                            id={platformId}
+                            className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none focus:ring-1 focus:ring-brand"
+                            value={platform}
+                            onChange={(event) => setPlatform(event.target.value)}
+                        >
+                            <option value="auto">自动识别</option>
+                            <option value="windows">Windows</option>
+                            <option value="linux">Linux</option>
+                        </select>
+                    </Field>
+
                     <div className="grid grid-cols-[80px_1fr] gap-2">
                         <Field id={portId} label="端口">
                             <TextInput
@@ -169,7 +190,11 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         <Field id={usernameId} label="用户名" required>
                             <TextInput
                                 id={usernameId}
-                                placeholder="ubuntu / root"
+                                placeholder={
+                                    platform === 'windows'
+                                        ? '本地账户或 域\\用户名'
+                                        : 'SSH 登录账户'
+                                }
                                 value={username}
                                 onChange={setUsername}
                             />
@@ -366,18 +391,41 @@ const TextInput: React.FC<TextInputProps> = ({
     type = 'text',
     autoFocus,
     ariaDescribedBy,
-}) => (
-    <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        aria-describedby={ariaDescribedBy}
-        className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
-    />
-);
+}) => {
+    const isPassword = type === 'password';
+    const [reveal, setReveal] = useState(false);
+    return (
+        <div className="relative w-full min-w-0">
+            <input
+                id={id}
+                type={isPassword ? (reveal ? 'text' : 'password') : type}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                autoFocus={autoFocus}
+                aria-describedby={ariaDescribedBy}
+                className={cn(
+                    'h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand',
+                    isPassword && 'pr-8',
+                )}
+            />
+            {isPassword && (
+                <button
+                    type="button"
+                    onClick={() => setReveal((r) => !r)}
+                    className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
+                    aria-label={reveal ? '隐藏密码' : '显示密码'}
+                >
+                    {reveal ? (
+                        <ActionMotionIcon icon={EyeOff} size={14} />
+                    ) : (
+                        <ActionMotionIcon icon={Eye} size={14} />
+                    )}
+                </button>
+            )}
+        </div>
+    );
+};
 
 /// 取路径最后一段（兼容 / 和 \）。
 function fileName(path: string): string {

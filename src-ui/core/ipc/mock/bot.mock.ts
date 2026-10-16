@@ -14,8 +14,6 @@ export const mockBots: BotStatus[] = [
         started_at: Math.floor((Date.now() - 7200000) / 1000),
         memory_rss_bytes: 124518400,
         server_total_memory_bytes: 17179869184,
-        backend_kind: 'local',
-        runtime_target: 'local',
         extra: {
             ws_port: 3001,
             http_port: 3002,
@@ -25,12 +23,7 @@ export const mockBots: BotStatus[] = [
     {
         bot_id: '10002',
         state: 'stopped',
-        pid: null,
-        started_at: null,
-        memory_rss_bytes: null,
         server_total_memory_bytes: 17179869184,
-        backend_kind: 'local',
-        runtime_target: 'local',
         extra: {},
     },
 ];

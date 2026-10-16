@@ -10,6 +10,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     nodejs: 'Node.js',
     novnc: 'noVNC',
     ncd_watch: 'NCD Watch',
+    windows_agent: 'Windows 远程代理',
     desktop_self: 'Desktop',
     karin: 'Karin',
     uv: 'uv',

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
-import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
+import { Button, SecretField, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
 import {
     Dialog,
     DialogContent,
@@ -38,14 +38,16 @@ import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPromp
 import { CopyCodeBlock } from '../../shared/ui/CopyCodeBlock';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 
-function hostKeyVerifyCommand(prompt: HostKeyPrompt): string {
+function hostKeyVerifyCommand(prompt: HostKeyPrompt, windows = false): string {
     const kind = prompt.keyKind.toLowerCase();
     const file = kind.includes('ed25519')
         ? '/etc/ssh/ssh_host_ed25519_key.pub'
         : kind.includes('rsa')
           ? '/etc/ssh/ssh_host_rsa_key.pub'
           : '/etc/ssh/ssh_host_ecdsa_key.pub';
-    return `ssh-keygen -lf ${file}`;
+    return windows
+        ? `ssh-keygen.exe -lf "$env:ProgramData\\ssh\\${file.split('/').pop()}"`
+        : `ssh-keygen -lf ${file}`;
 }
 
 export const RemoteHostPanelNext: React.FC = () => {
@@ -451,9 +453,6 @@ function KeyAuthPasswordDialog({
         if (target) setPassword('');
     }, [target]);
 
-    const passwordId = React.useId();
-    const passwordDescId = `${passwordId}-desc`;
-
     if (!target) return null;
 
     return (
@@ -473,27 +472,14 @@ function KeyAuthPasswordDialog({
                     }}
                     className="flex flex-col gap-3"
                 >
-                    <div className="flex flex-col gap-1.5">
-                        <label
-                            htmlFor={passwordId}
-                            className="text-xs font-medium text-text-secondary"
-                        >
-                            当前 SSH 密码
-                        </label>
-                        <input
-                            id={passwordId}
-                            type="password"
-                            autoFocus
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="SSH 密码"
-                            aria-describedby={passwordDescId}
-                            className="h-9 w-full rounded-sm bg-inset px-3 text-sm text-text outline-none transition-colors placeholder:text-text-tertiary focus:ring-1 focus:ring-brand"
-                        />
-                        <p id={passwordDescId} className="text-2xs leading-snug text-text-tertiary">
-                            仅用于本次写入远端 authorized_keys，不会在此处修改档案密码。
-                        </p>
-                    </div>
+                    <SecretField
+                        label="当前 SSH 密码"
+                        autoFocus
+                        value={password}
+                        onValueChange={setPassword}
+                        placeholder="SSH 密码"
+                        hint="仅用于本次写入远端 authorized_keys，不会在此处修改档案密码。"
+                    />
                     <DialogFooter>
                         <Button size="sm" variant="ghost" type="button" onClick={onClose}>
                             取消
@@ -554,7 +540,10 @@ function HostKeyConfirmDialog({
                     <p className="text-2xs text-text-tertiary">
                         在服务器上执行下方命令，将输出中的 SHA256 与上方指纹比对一致后再信任。
                     </p>
+                    <span className="text-2xs text-text-tertiary">Linux</span>
                     <CopyCodeBlock command={hostKeyVerifyCommand(prompt)} />
+                    <span className="text-2xs text-text-tertiary">Windows PowerShell</span>
+                    <CopyCodeBlock command={hostKeyVerifyCommand(prompt, true)} />
                     <p className="flex items-start gap-1.5 text-2xs leading-snug text-text-tertiary">
                         <ShieldAlert size={13} className="mt-px shrink-0 text-warning" />
                         <span>信任后写入 known_hosts；若日后指纹变更会阻断并提示疑似中间人。</span>

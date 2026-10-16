@@ -188,6 +188,8 @@ interface InstalledEntry {
     source: string;
 }
 
+const systemQq: InstalledEntry = { version: '9.9.36-53644', source: 'system' };
+
 const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>> = {
     napcat: {
         local: { version: '4.18.1', source: 'napcat.mjs' },
@@ -200,7 +202,7 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:dev': null,
     },
     qq: {
-        local: null,
+        local: systemQq,
         'remote:production': { version: '3.2.25-45758', source: 'qq --version' },
         'remote:dev': null,
     },
@@ -224,6 +226,7 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:production': null,
         'remote:dev': null,
     },
+    windows_agent: {},
     desktop_self: {
         local: { version: '0.1.0-alpha.1', source: 'package.json' },
         'remote:production': null,
@@ -359,10 +362,11 @@ export function mockRuntimeReadiness(root: ComponentId, hostId: string): Runtime
     };
 }
 
-// 预览按「只有系统 QQ」回答，好让启动前的提醒在浏览器里也能走一遍。
-// 真机上这个值来自组件目录，不受这里影响
+// 预览初始只有系统 QQ，侧装完成后与组件探测一起切换来源。
 export function mockLocalQqSource(): LocalQqSource {
-    return 'system';
+    const installed = installedMatrix.qq.local;
+    if (!installed) return 'missing';
+    return installed.source === 'system' ? 'system' : 'managed';
 }
 
 // ─── 假装跑 action：吐进度事件 ─────────────────────────────────────────
@@ -373,9 +377,14 @@ export function mockLocalQqSource(): LocalQqSource {
 const activeMockTasks = new Map<string, ReturnType<typeof setInterval>>();
 let taskCounter = 0;
 
-export function mockRunAction(componentId: ComponentId, hostId: string, kind: StepKind): string {
+export function mockRunAction(
+    componentId: ComponentId,
+    hostId: string,
+    kind: StepKind,
+    requestedTaskId?: string,
+): string {
     taskCounter += 1;
-    const taskId = `mock-task-${Date.now()}-${taskCounter}`;
+    const taskId = requestedTaskId ?? `mock-task-${Date.now()}-${taskCounter}`;
     const startedAt = Date.now();
 
     const emit = (kindEvt: ProgressEvent) => {
@@ -431,10 +440,9 @@ export function mockRunAction(componentId: ComponentId, hostId: string, kind: St
                 step: 1,
                 ok: true,
             });
-            emit({ v: 1, timestamp_ms: now(), kind: 'finished', ok: true });
-
-            // 完成后更新 installedMatrix（让下次 detect 拿到新状态）
+            // 终态事件会立即触发重新探测，先提交结果再通知订阅者。
             applyMockOutcome(componentId, hostId, kind);
+            emit({ v: 1, timestamp_ms: now(), kind: 'finished', ok: true });
             return;
         }
         const stage = progress === 0 ? 'racing' : 'streaming';
@@ -497,12 +505,13 @@ function applyMockOutcome(componentId: ComponentId, hostId: string, kind: StepKi
     const matrix = installedMatrix[componentId];
     if (!matrix) return;
     if (kind === 'uninstall') {
-        matrix[hostId] = null;
+        matrix[hostId] = componentId === 'qq' && hostId === 'local' ? systemQq : null;
         return;
     }
     if (kind === 'ensure_installed' || kind === 'force_install' || kind === 'update') {
         matrix[hostId] = {
-            version: kind === 'update' ? '4.20.0' : '4.18.1',
+            version:
+                componentId === 'qq' ? '9.9.36-53644' : kind === 'update' ? '4.20.0' : '4.18.1',
             source: 'mock',
         };
     }

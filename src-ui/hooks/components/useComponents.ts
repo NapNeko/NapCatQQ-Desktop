@@ -37,6 +37,7 @@ import type { Os, ComponentInfo, ComponentDetectResult } from '../../core/ipc/ty
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 import { RUNTIME_READINESS_QUERY_KEY } from './useRuntimeReadiness';
+import { LOCAL_QQ_SOURCE_QUERY_KEY } from './useLocalQqSource';
 
 type DetectQuery = UseQueryResult<ComponentDetectResult, Error>;
 
@@ -233,6 +234,7 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
             void queryClient.invalidateQueries({ queryKey: ['docker'] });
             void queryClient.invalidateQueries({ queryKey: ['docker', 'containers'] });
             void queryClient.invalidateQueries({ queryKey: [RUNTIME_READINESS_QUERY_KEY] });
+            void queryClient.invalidateQueries({ queryKey: LOCAL_QQ_SOURCE_QUERY_KEY });
             void catalogQuery.refetch();
             for (const q of detectQueries) void q.refetch();
         },

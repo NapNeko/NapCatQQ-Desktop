@@ -353,6 +353,7 @@ function toProfile(host: DiscoveredSshHost): ServerProfile {
         host: host.host,
         port: host.port,
         username: host.username,
+        platform: null,
         authMethod: host.authMethod,
         privateKeyPath: host.identityFile ?? null,
         rememberCredential: true,

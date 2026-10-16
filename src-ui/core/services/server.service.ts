@@ -7,6 +7,7 @@ import type { ServerProfile } from '../ipc/generated/domain/ServerProfile';
 import type { ProbeReport } from '../ipc/generated/domain/ProbeReport';
 import type { DiscoveredSshHost } from '../ipc/generated/domain/DiscoveredSshHost';
 import type { RemoteInventory } from '../ipc/generated/domain/RemoteInventory';
+import type { RemoteWindowsInfo } from '../ipc/generated/domain/RemoteWindowsInfo';
 
 export const serverService = {
     list: async (): Promise<ServerProfile[]> => {
@@ -38,6 +39,7 @@ export const serverService = {
             });
         return {
             success: false,
+            windowsInfo: null,
             osInfo: null,
             error: 'not in Tauri',
             latencyMs: BigInt(0),
@@ -75,5 +77,11 @@ export const serverService = {
     refreshInventory: async (serverId: string): Promise<RemoteInventory> => {
         if (isTauri) return invoke<RemoteInventory>('refresh_remote_inventory', { serverId });
         throw new Error('not in Tauri');
+    },
+
+    windowsInfo: async (serverId: string): Promise<RemoteWindowsInfo | null> => {
+        if (isTauri)
+            return invoke<RemoteWindowsInfo | null>('get_remote_windows_info', { serverId });
+        return null;
     },
 };

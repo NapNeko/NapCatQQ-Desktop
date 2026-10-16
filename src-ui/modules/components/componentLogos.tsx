@@ -32,6 +32,7 @@ const COMPONENT_LOGOS: Readonly<Partial<Record<ComponentId, string>>> = {
     vcredist: vcredistLogo,
     desktop_self: desktopLogo,
     ncd_watch: desktopLogo,
+    windows_agent: desktopLogo,
     uv: uvLogo,
     git: gitLogo,
     redis: redisLogo,
