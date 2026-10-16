@@ -21,6 +21,8 @@ use windows_sys::Win32::{
 };
 
 #[cfg(test)]
+mod test_desktop;
+#[cfg(test)]
 mod test_process;
 
 pub fn run(root: PathBuf, instance: String, generation: String) -> Result<(), String> {

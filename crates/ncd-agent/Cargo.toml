@@ -39,5 +39,8 @@ windows-sys = { version = "0.61", features = [
 [dev-dependencies]
 tempfile = "3"
 
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_StationsAndDesktops", "Win32_Graphics_Gdi"] }
+
 [lints]
 workspace = true
