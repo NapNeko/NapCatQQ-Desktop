@@ -10,7 +10,7 @@
 //   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
 //   motionLevel     elegant / standard / rich。决定动画风格强度
 //   motionSpeed     0.5 ~ 1.5（内部值）。0.5 = 体感 1× 基准，越大越快
-//   radiusStyle     square / standard / round。全局圆角风格（统一系数缩放）
+//   radiusStyle     square / standard / round。全局圆角风格
 //   sidebarStyle    classic 贴边可折叠 / floating 悬浮卡片（AppNext 壳消费）
 
 import {

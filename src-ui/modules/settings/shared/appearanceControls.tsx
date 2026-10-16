@@ -2,20 +2,11 @@
 
 import type { ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
-import {
-    Sparkles,
-    Wand2,
-    Feather,
-    Square,
-    Circle,
-    RectangleHorizontal,
-    PanelLeftDashed,
-    RectangleVertical,
-} from 'lucide-react';
+import { Sparkles, Wand2, Feather, PanelLeftDashed, RectangleVertical } from 'lucide-react';
 import { SegmentMotionIcon } from '../../../shared/ui/motion';
 import type { MotionLevel } from '../../../core/design/motion';
 import type { RadiusStyle } from '../../../core/design/radius';
-import { RADIUS_LABELS } from '../../../core/design/radius';
+import { RADIUS_LABELS, RADIUS_PRESETS } from '../../../core/design/radius';
 import type { SidebarStyle } from '../../../core/domain/settings/preferencesStore';
 import {
     MOTION_SPEED_DEFAULT,
@@ -126,10 +117,6 @@ export function MotionSpeedSlider({
     );
 }
 
-/// 圆角风格三选段。三档语义见 core/design/radius.ts:
-///   方正 square  — 0.5× 克制直角
-///   标准 standard — 1.0× 默认平衡
-///   圆润 round   — 1.5× 饱满圆角
 export function RadiusStyleSegment({
     value,
     onChange,
@@ -140,11 +127,10 @@ export function RadiusStyleSegment({
     const items: ReadonlyArray<{
         value: RadiusStyle;
         label: string;
-        icon: ComponentType<LucideProps>;
     }> = [
-        { value: 'square', label: RADIUS_LABELS.square, icon: Square },
-        { value: 'standard', label: RADIUS_LABELS.standard, icon: RectangleHorizontal },
-        { value: 'round', label: RADIUS_LABELS.round, icon: Circle },
+        { value: 'square', label: RADIUS_LABELS.square },
+        { value: 'standard', label: RADIUS_LABELS.standard },
+        { value: 'round', label: RADIUS_LABELS.round },
     ];
     return (
         <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
@@ -154,6 +140,7 @@ export function RadiusStyleSegment({
                     <button
                         key={it.value}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() => onChange(it.value)}
                         className={
                             'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-all ' +
@@ -162,10 +149,10 @@ export function RadiusStyleSegment({
                                 : 'border border-transparent text-text-tertiary hover:text-text')
                         }
                     >
-                        <SegmentMotionIcon
-                            icon={it.icon}
-                            selected={selected}
-                            segmentKey={`radius-${it.value}`}
+                        <span
+                            aria-hidden="true"
+                            className="h-3.5 w-3.5 shrink-0 border-[1.5px] border-current"
+                            style={{ borderRadius: RADIUS_PRESETS[it.value].sm }}
                         />
                         <span>{it.label}</span>
                     </button>

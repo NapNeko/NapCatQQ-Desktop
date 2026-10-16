@@ -131,13 +131,13 @@
     --accent-tint: var(--accent-50);
 
     /* semantic: 圆角 */
-    --radius-xs: 4px;
-    --radius-sm: 8px;
-    --radius-md: 12px;
+    --radius-xs: 2px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
     /* 默认卡片 */
-    --radius-lg: 20px;
+    --radius-lg: 10px;
     /* hero / hello 卡 */
-    --radius-xl: 28px;
+    --radius-xl: 14px;
     --radius-pill: 9999px;
 
     /* semantic: 滚动条（全局 index.css；各主题块覆写 thumb 三档） */
