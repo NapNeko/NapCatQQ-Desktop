@@ -295,13 +295,6 @@ pub fn hide_window(window: &WebviewWindow) -> Result<(), String> {
 pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(focused) => {
-            if *focused
-                && window.is_visible().unwrap_or(false)
-                && !window.is_minimized().unwrap_or(false)
-                && defer_native_restore(window)
-            {
-                return;
-            }
             if let Some(event) = policy::native_focus_event(
                 *focused,
                 window.is_visible().unwrap_or(false),
@@ -315,8 +308,14 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
             if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
                 if window.is_minimized().unwrap_or(false) {
                     notify(&webview, Event::Hide);
-                } else if window.is_visible().unwrap_or(false) {
-                    defer_native_restore(window);
+                } else if window.is_visible().unwrap_or(false)
+                    && window
+                        .app_handle()
+                        .try_state::<WebviewScheduler>()
+                        .is_some_and(|scheduler| scheduler.needs_native_restore(window.label()))
+                {
+                    // 系统已经恢复了原生窗口，只唤醒网页；再次 hide/show 会让任务栏恢复闪跳。
+                    notify(&webview, Event::Show);
                 }
             }
         }
@@ -327,36 +326,6 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         }
         _ => {}
     }
-}
-
-fn defer_native_restore(window: &tauri::Window) -> bool {
-    let Some(scheduler) = window.app_handle().try_state::<WebviewScheduler>() else {
-        return false;
-    };
-    if !scheduler.needs_native_restore(window.label()) {
-        return false;
-    }
-    let Some(webview) = window.app_handle().get_webview_window(window.label()) else {
-        return false;
-    };
-    let focused = window.is_focused().unwrap_or(false);
-    // 任务栏恢复先露出原生窗口，先收起表面，等 controller 确认后再放出。
-    if let Err(error) = window.hide() {
-        tracing::warn!(target: "ncd_tauri::webview_scheduler", label = window.label(), %error, "延迟原生窗口恢复失败");
-        return false;
-    }
-    // 在原生事件中确定代次，排队期间的隐藏/销毁可使这次恢复失效。
-    let Some((revision, actions)) = scheduler.step(window.label(), Event::Show) else {
-        return false;
-    };
-    tauri::async_runtime::spawn(async move {
-        if let Err(error) = finish_show(&webview, revision, actions).await {
-            tracing::warn!(target: "ncd_tauri::webview_scheduler", label = webview.label(), %error, "恢复 WebView 可见性失败");
-        } else if focused {
-            let _ = webview.set_focus();
-        }
-    });
-    true
 }
 
 fn notify(window: &WebviewWindow, event: Event) {
@@ -557,7 +526,7 @@ mod tests {
     }
 
     #[test]
-    fn os_restore_stays_gated_after_focus_until_visibility_is_confirmed() {
+    fn native_restore_keeps_retrying_until_webview_visibility_is_confirmed() {
         let scheduler = WebviewScheduler::default();
         assert!(!scheduler.needs_native_restore("main"));
         let (hidden, _) = scheduler.step("main", Event::Hide).unwrap();
