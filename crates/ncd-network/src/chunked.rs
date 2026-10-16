@@ -15,7 +15,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use crate::client::shared_client;
+use crate::client::{network_snapshot, shared_client, with_network_snapshot, with_snapshot};
 use crate::download::{AggregatedProgress, DEFAULT_IDLE_TIMEOUT, download_byte_range};
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
@@ -65,6 +65,16 @@ impl Default for ChunkedConfig {
 
 /// 智能下载入口:所有文件先比较镜像吞吐量,只有最快源适合时才切片。
 pub async fn download_smart(
+    mirrors: &[String],
+    dest: &Path,
+    sink: Arc<dyn DownloadProgressSink>,
+    cancel: CancellationToken,
+    cfg: ChunkedConfig,
+) -> Result<u64, NetworkError> {
+    with_network_snapshot(download_smart_inner(mirrors, dest, sink, cancel, cfg)).await
+}
+
+async fn download_smart_inner(
     mirrors: &[String],
     dest: &Path,
     sink: Arc<dyn DownloadProgressSink>,
@@ -204,7 +214,8 @@ async fn download_chunked_inner(
         let range = *range;
         let mirror = primary_mirror.to_string();
 
-        tasks.spawn(async move {
+        let snapshot = network_snapshot();
+        tasks.spawn(with_snapshot(snapshot, async move {
             let res = download_chunk_with_retry(
                 idx,
                 &mirror,
@@ -216,7 +227,7 @@ async fn download_chunked_inner(
             )
             .await;
             (idx, res)
-        });
+        }));
     }
 
     let mut sampler = SpeedSampler::new();
@@ -400,7 +411,7 @@ async fn download_chunk_with_retry(
             biased;
             _ = cancel.cancelled() => Err(NetworkError::Cancelled),
             result = download_byte_range(
-                client,
+                &client,
                 mirror,
                 dest_chunk,
                 range,

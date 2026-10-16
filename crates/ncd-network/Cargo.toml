@@ -9,7 +9,9 @@ build = "build.rs"
 path = "src/lib.rs"
 
 [dependencies]
+ncd-domain = { path = "../ncd-domain" }
 async-trait = "0.1"
+base64 = "0.22"
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "fs", "io-util", "sync", "time"] }
@@ -17,10 +19,14 @@ tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
 bytes = "1"
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "gzip"] }
+reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "gzip", "socks", "system-proxy"] }
+hyper-util = { version = "0.1", features = ["client-proxy", "client-proxy-system"] }
 sha2 = "0.10"
 hex = "0.4"
 hmac = "0.12"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }

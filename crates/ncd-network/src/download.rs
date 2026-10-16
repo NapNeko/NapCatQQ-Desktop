@@ -59,7 +59,7 @@ pub async fn download_with_resume(
     cfg: DownloadConfig,
 ) -> Result<u64, NetworkError> {
     let client = shared_client();
-    download_with_client(client, url, dest, sink, cancel, cfg).await
+    download_with_client(&client, url, dest, sink, cancel, cfg).await
 }
 
 pub async fn download_with_client(

@@ -4,7 +4,11 @@
 //! 是 reverse-proxy 模式(完整原始 URL 加在前缀后面,如 https://gh-proxy.com/https://github.com/...)
 //! 仅为已知公共主机展开，不把认证、签名链接或其它下载源转发给第三方。
 
+use ncd_domain::{DownloadMirror, DownloadSourceMode, NetworkSettings, ProxyMode};
 use reqwest::Url;
+
+use crate::client::network_snapshot;
+use crate::settings::validate_mirror_url;
 
 /// 内置候选镜像前缀(不含末尾 /)，空串表示直连，实际选择由吞吐量测速决定。
 pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
@@ -24,6 +28,94 @@ const NODE_BINARY_MIRROR: &str = "https://registry.npmmirror.com/-/binary/node";
 /// 默认按主机选择 GitHub / Node 镜像；显式 prefixes 仍按反代前缀拼接，
 /// 非法前缀被跳过。未知主机、认证或签名 URL 只返回直连地址。
 pub fn build_mirror_urls(original: &str, prefixes: Option<&[&str]>) -> Vec<String> {
+    match prefixes {
+        Some(prefixes) => build_mirror_candidates(original, Some(prefixes)),
+        None => mirror_urls_for_settings(original, &network_snapshot().settings),
+    }
+}
+
+pub fn mirror_urls_for_settings(original: &str, settings: &NetworkSettings) -> Vec<String> {
+    let direct = || vec![original.to_string()];
+    let Some(source) = public_source(original) else {
+        return direct();
+    };
+    let (mode, mirror) = match &source {
+        PublicSource::Github => (
+            settings.github_download_mode,
+            settings.github_mirror.as_str(),
+        ),
+        PublicSource::Node(_) => (settings.node_download_mode, settings.node_mirror.as_str()),
+    };
+    match mode {
+        DownloadSourceMode::Direct => direct(),
+        DownloadSourceMode::Auto if settings.proxy_mode == ProxyMode::Manual => direct(),
+        DownloadSourceMode::Auto => build_mirror_candidates(original, None),
+        DownloadSourceMode::Mirror => match source {
+            PublicSource::Github => build_mirror_candidates(original, Some(&[mirror])),
+            PublicSource::Node(path) => match validate_mirror_url(mirror) {
+                Ok(prefix) => vec![format!("{}/{path}", prefix.as_str().trim_end_matches('/'))],
+                Err(_) => direct(),
+            },
+        },
+    }
+}
+
+pub fn download_mirror_catalog() -> Vec<DownloadMirror> {
+    let mut catalog: Vec<DownloadMirror> = DEFAULT_MIRROR_PREFIXES
+        .iter()
+        .filter(|prefix| !prefix.is_empty())
+        .filter_map(|prefix| {
+            let url = Url::parse(prefix).ok()?;
+            let host = url.host_str()?.to_string();
+            Some(DownloadMirror {
+                id: host.clone(),
+                label: host,
+                url: (*prefix).to_string(),
+                kind: "github".into(),
+            })
+        })
+        .collect();
+    catalog.push(DownloadMirror {
+        id: "npmmirror-node".into(),
+        label: "npmmirror".into(),
+        url: NODE_BINARY_MIRROR.into(),
+        kind: "node".into(),
+    });
+    catalog
+}
+
+enum PublicSource {
+    Github,
+    Node(String),
+}
+
+fn public_source(original: &str) -> Option<PublicSource> {
+    let url = Url::parse(original).ok()?;
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.port().is_some()
+    {
+        return None;
+    }
+    match url.host_str()? {
+        "github.com"
+        | "raw.githubusercontent.com"
+        | "objects.githubusercontent.com"
+        | "release-assets.githubusercontent.com"
+        | "codeload.github.com" => Some(PublicSource::Github),
+        "nodejs.org" => url
+            .path()
+            .strip_prefix("/dist/")
+            .filter(|path| !path.is_empty())
+            .map(|path| PublicSource::Node(path.to_string())),
+        _ => None,
+    }
+}
+
+fn build_mirror_candidates(original: &str, prefixes: Option<&[&str]>) -> Vec<String> {
     let Ok(url) = Url::parse(original) else {
         return vec![original.to_string()];
     };
@@ -175,5 +267,74 @@ mod tests {
             build_mirror_urls(original, Some(&["not a URL"])),
             vec![original]
         );
+    }
+
+    #[test]
+    fn selected_mirror_is_the_only_candidate_for_its_source() {
+        let settings = NetworkSettings {
+            github_download_mode: DownloadSourceMode::Mirror,
+            github_mirror: "https://mirror.example/prefix/".into(),
+            node_download_mode: DownloadSourceMode::Mirror,
+            node_mirror: "https://node.example/dist/".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            mirror_urls_for_settings("https://github.com/foo/bar/archive/v1.zip", &settings),
+            ["https://mirror.example/prefix/https://github.com/foo/bar/archive/v1.zip"]
+        );
+        assert_eq!(
+            mirror_urls_for_settings("https://nodejs.org/dist/v22.1.0/node.zip", &settings),
+            ["https://node.example/dist/v22.1.0/node.zip"]
+        );
+    }
+
+    #[test]
+    fn manual_proxy_automatic_routes_use_original_without_overriding_explicit_mirror() {
+        let mut settings = NetworkSettings {
+            proxy_mode: ProxyMode::Manual,
+            ..Default::default()
+        };
+        for original in [
+            "https://github.com/foo/bar/archive.zip",
+            "https://nodejs.org/dist/index.json",
+        ] {
+            assert_eq!(mirror_urls_for_settings(original, &settings), [original]);
+        }
+        settings.github_download_mode = DownloadSourceMode::Mirror;
+        assert_eq!(
+            mirror_urls_for_settings("https://github.com/foo/archive.zip", &settings),
+            ["https://gh-proxy.com/https://github.com/foo/archive.zip"]
+        );
+    }
+
+    #[test]
+    fn fixed_mirrors_cannot_receive_private_or_signed_links() {
+        let settings = NetworkSettings {
+            github_download_mode: DownloadSourceMode::Mirror,
+            node_download_mode: DownloadSourceMode::Mirror,
+            ..Default::default()
+        };
+        for original in [
+            "https://github.com/a.zip?token=secret",
+            "https://user:secret@github.com/a.zip",
+            "https://objects.githubusercontent.com/a?signature=secret",
+            "https://github.com.evil.test/a.zip",
+            "https://nodejs.org/dist/a.zip?signature=secret",
+            "https://private.test/archive.zip",
+        ] {
+            assert_eq!(mirror_urls_for_settings(original, &settings), [original]);
+        }
+    }
+
+    #[test]
+    fn catalog_has_valid_unique_entries_and_covers_default_mirrors() {
+        let catalog = download_mirror_catalog();
+        assert_eq!(catalog.len(), DEFAULT_MIRROR_PREFIXES.len());
+        let mut ids = std::collections::HashSet::new();
+        for entry in catalog {
+            assert!(ids.insert(entry.id));
+            assert!(matches!(entry.kind.as_str(), "github" | "node"));
+            assert!(validate_mirror_url(&entry.url).is_ok());
+        }
     }
 }

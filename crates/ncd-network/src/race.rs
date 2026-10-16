@@ -13,7 +13,7 @@ use tokio::time::{Instant, timeout_at};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use crate::client::shared_client;
+use crate::client::{network_snapshot, shared_client, with_network_snapshot, with_snapshot};
 use crate::download::{DEFAULT_IDLE_TIMEOUT, DownloadConfig, download_with_resume};
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
@@ -65,8 +65,11 @@ pub async fn download_with_mirror_race(
     cancel: CancellationToken,
     cfg: MirrorRaceConfig,
 ) -> Result<u64, NetworkError> {
-    let ranked = select_mirrors(mirrors, &sink, &cancel, &cfg).await?;
-    download_ranked_mirrors(mirrors, ranked, dest, sink, cancel, cfg).await
+    with_network_snapshot(async {
+        let ranked = select_mirrors(mirrors, &sink, &cancel, &cfg).await?;
+        download_ranked_mirrors(mirrors, ranked, dest, sink, cancel, cfg).await
+    })
+    .await
 }
 
 /// 大小文件共享同一测速结果；不支持 Range 的最快源仍可用单流下载。
@@ -185,7 +188,10 @@ fn spawn_probe(
     url: String,
     cfg: MirrorRaceConfig,
 ) {
-    tasks.spawn(async move { (idx, probe_throughput(idx, &url, &cfg).await) });
+    let snapshot = network_snapshot();
+    tasks.spawn(with_snapshot(snapshot, async move {
+        (idx, probe_throughput(idx, &url, &cfg).await)
+    }));
 }
 
 async fn probe_throughput(
