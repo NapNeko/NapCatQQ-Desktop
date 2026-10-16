@@ -9,11 +9,12 @@ import {
     DialogHeader,
     DialogTitle,
     NumberField,
+    SecretField,
     Select,
     TextField,
 } from '../../../../shared/ui';
 import type { SettingsDraft } from '../../settings-draft';
-import { DialogField, SecretField } from './dialog-shared';
+import { DialogField } from './dialog-shared';
 
 const ENCRYPTION_ITEMS = [
     { value: 'SSL', label: 'SSL' },

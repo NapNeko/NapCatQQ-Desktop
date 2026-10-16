@@ -19,13 +19,14 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
+    SecretField,
     Select,
     Switch,
     TextField,
 } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import { WebhookMessageBuilder } from '../WebhookMessageBuilder';
-import { DialogField, SecretField } from './dialog-shared';
+import { DialogField } from './dialog-shared';
 
 const METHOD_ITEMS = [
     { value: 'POST', label: 'POST' },

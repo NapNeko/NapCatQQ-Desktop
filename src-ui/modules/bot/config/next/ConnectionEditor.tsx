@@ -3,7 +3,15 @@
 // 全局 InfoBar 只作 fallback（用户切走时还能看到）。
 
 import { useEffect, useState } from 'react';
-import { Button, TextField, NumberField, Switch, Select, Checkbox } from '../../../../shared/ui';
+import {
+    Button,
+    TextField,
+    SecretField,
+    NumberField,
+    Switch,
+    Select,
+    Checkbox,
+} from '../../../../shared/ui';
 import {
     type ConnectionKind,
     type ConnectionConfig,
@@ -120,12 +128,13 @@ export function ConnectionEditor({
             />
 
             {/* token + debug 放尾部，频次低 */}
-            <TextField
+            <SecretField
                 label="鉴权 Token"
                 value={data.token}
                 onValueChange={(v) => patch('token', v)}
                 placeholder="留空则不需鉴权"
                 hint="外部应用请求时携带在 Authorization Header / URL Query"
+                className="font-mono"
             />
             <Checkbox
                 label="开启调试输出"

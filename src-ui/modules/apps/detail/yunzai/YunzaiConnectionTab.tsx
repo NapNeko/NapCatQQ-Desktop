@@ -1,7 +1,7 @@
 // 云崽「连接」：server.yaml（监听口 / 鉴权）和 redis.yaml。协议 Bot 反向 WS 连 /OneBotv11，
 // 对接对话框会把口和 token 两边一起写好；这里改了端口或 token，已对接的会跟着重新对接。
 
-import { FormSection, NumberField, TextField } from '../../../../shared/ui';
+import { FormSection, NumberField, SecretField, TextField } from '../../../../shared/ui';
 import { CopyCodeBlock } from '../../../../shared/ui/CopyCodeBlock';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import type {
@@ -69,7 +69,7 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
                         disabled={disabled}
                         onValueChange={(v) => setServer({ port: v ?? server.port })}
                     />
-                    <TextField
+                    <SecretField
                         label="token"
                         hint="留空不鉴权；对接时会自动生成"
                         value={server.access_token}
@@ -127,9 +127,8 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
                         disabled={disabled}
                         onValueChange={(v) => setRedis({ db: v ?? 0 })}
                     />
-                    <TextField
+                    <SecretField
                         label="密码"
-                        type="password"
                         value={redis.password}
                         disabled={disabled}
                         onValueChange={(password) => setRedis({ password })}

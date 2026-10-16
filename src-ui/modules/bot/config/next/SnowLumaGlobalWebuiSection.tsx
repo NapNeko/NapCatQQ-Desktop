@@ -1,6 +1,6 @@
 // SnowLuma 全局 WebUI：与 Bot 字段一并由配置页保存。
 
-import { NumberField, TextField, FormSection } from '../../../../shared/ui';
+import { NumberField, SecretField, FormSection } from '../../../../shared/ui';
 import type { SnowLumaAppConfig } from '../../../../core/ipc/generated/domain/SnowLumaAppConfig';
 
 export interface SnowLumaGlobalWebuiSectionProps {
@@ -46,7 +46,7 @@ export function SnowLumaGlobalWebuiSection({
                     max={65535}
                     hint="被占用时改用附近端口，需重启守护进程"
                 />
-                <TextField
+                <SecretField
                     label="WebUI 登录密码（可选覆盖）"
                     value={value.snowlumaWebuiPasswordOverride}
                     onValueChange={(v) => onChange({ ...value, snowlumaWebuiPasswordOverride: v })}

@@ -9,12 +9,15 @@ import {
     useId,
     useImperativeHandle,
     useRef,
+    useState,
     type InputHTMLAttributes,
     type ReactNode,
 } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
+import { ActionMotionIcon } from './motion';
 
 const inputVariants = cva(
     [
@@ -50,8 +53,13 @@ export interface TextFieldProps
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
-    ({ label, hint, error, required, onValueChange, className, id, ...rest }, ref) => {
+    ({ label, hint, error, required, onValueChange, className, id, type, ...rest }, ref) => {
         const invalid = !!error;
+        const isPassword = type === 'password';
+        const [reveal, setReveal] = useState(false);
+        const resolvedType = isPassword ? (reveal ? 'text' : 'password') : type;
+        const ariaName =
+            rest['aria-label'] || (typeof label === 'string' && label ? label : '密钥');
         // useId fallback:调用方没给 id/name 时也保证 label↔input↔描述能关联,
         // 满足可访问名称要求(屏幕阅读器、自动化测试都依赖这层关联)。
         const generatedId = useId();
@@ -82,17 +90,35 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
                         {required && <span className="ml-0.5 text-danger">*</span>}
                     </label>
                 )}
-                <input
-                    ref={inputRef}
-                    id={fieldId}
-                    aria-invalid={invalid || undefined}
-                    aria-describedby={describedById}
-                    className={inputVariants({ invalid })}
-                    onChange={(e) => {
-                        onValueChange?.(e.target.value);
-                    }}
-                    {...rest}
-                />
+                <div className="relative w-full min-w-0">
+                    <input
+                        ref={inputRef}
+                        id={fieldId}
+                        type={resolvedType}
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={describedById}
+                        className={cn(inputVariants({ invalid }), isPassword && 'pr-9')}
+                        onChange={(e) => {
+                            onValueChange?.(e.target.value);
+                        }}
+                        {...rest}
+                    />
+                    {isPassword && (
+                        <button
+                            type="button"
+                            disabled={rest.disabled}
+                            onClick={() => setReveal((r) => !r)}
+                            className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-40"
+                            aria-label={`${reveal ? '隐藏' : '显示'}${ariaName}`}
+                        >
+                            {reveal ? (
+                                <ActionMotionIcon icon={EyeOff} size={15} />
+                            ) : (
+                                <ActionMotionIcon icon={Eye} size={15} />
+                            )}
+                        </button>
+                    )}
+                </div>
                 {(hint || error) && (
                     <p
                         id={describedById}

@@ -1,7 +1,7 @@
 // Karin 单条连接的 Dialog 表单，交互对齐 Bot ConnectionEditor：草稿编辑，确定后写回配置。
 
 import { useEffect, useState } from 'react';
-import { Button, NumberField, Switch, TextField } from '../../../../shared/ui';
+import { Button, NumberField, SecretField, Switch, TextField } from '../../../../shared/ui';
 import { FieldLabel, LinkDependentBadge, PortSyncBadge } from '../FieldHints';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import type {
@@ -182,7 +182,7 @@ function DraftFields({
                             setData({ ...data, env: { ...data.env, http_host } })
                         }
                     />
-                    <TextField
+                    <SecretField
                         label="HTTP 秘钥"
                         value={data.env.http_auth_key}
                         className="font-mono sm:col-span-2"
@@ -195,7 +195,7 @@ function DraftFields({
         case 'reverseWs':
             return (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <TextField
+                    <SecretField
                         label={
                             <FieldLabel text="鉴权秘钥">
                                 <LinkDependentBadge linked={linked} />
@@ -234,7 +234,7 @@ function DraftFields({
                         placeholder="ws://127.0.0.1:3001"
                         onValueChange={(url) => setData({ ...data, row: { ...data.row, url } })}
                     />
-                    <TextField
+                    <SecretField
                         label="Token"
                         value={data.row.token}
                         className="font-mono sm:col-span-2"
@@ -262,13 +262,13 @@ function DraftFields({
                             setData({ ...data, row: { ...data.row, self_id } })
                         }
                     />
-                    <TextField
+                    <SecretField
                         label="Token"
                         value={data.row.token}
                         className="font-mono"
                         onValueChange={(token) => setData({ ...data, row: { ...data.row, token } })}
                     />
-                    <TextField
+                    <SecretField
                         label="api_token"
                         value={data.row.api_token}
                         className="font-mono"
@@ -276,7 +276,7 @@ function DraftFields({
                             setData({ ...data, row: { ...data.row, api_token } })
                         }
                     />
-                    <TextField
+                    <SecretField
                         label="post_token"
                         value={data.row.post_token}
                         className="font-mono"
@@ -289,7 +289,7 @@ function DraftFields({
         case 'console':
             return (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <TextField
+                    <SecretField
                         label="Token"
                         value={data.console.token}
                         className="font-mono"

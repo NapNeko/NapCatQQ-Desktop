@@ -2,6 +2,7 @@ import {
     FormSection,
     KeyValueListEditor,
     NumberField,
+    SecretField,
     Select,
     Switch,
     TextField,
@@ -62,7 +63,7 @@ export const NoneBot2ConnectionsTab: React.FC<NoneBot2TabProps> = ({
                         hint={linked ? '改端口或 token 会重写对接' : undefined}
                         onValueChange={(v) => set({ port: v ?? env.port })}
                     />
-                    <TextField
+                    <SecretField
                         label="ONEBOT_ACCESS_TOKEN"
                         value={env.onebot_access_token}
                         disabled={disabled}

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { FormSection, NumberField, Switch, TextField } from '../../../../shared/ui';
+import { FormSection, NumberField, SecretField, Switch, TextField } from '../../../../shared/ui';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import { Pill } from './parts';
 import type { AstrBotInstanceConfig, AstrBotOneBotRow } from '../../../../core/ipc/types';
@@ -64,7 +64,7 @@ export const AstrBotConnectionsTab: React.FC<AstrBotConnectionsTabProps> = ({
                         hint={linked ? '已对接，改口会一并重写协议端的连接地址' : undefined}
                         onValueChange={(v) => set({ ws_reverse_port: v ?? row.ws_reverse_port })}
                     />
-                    <TextField
+                    <SecretField
                         label="连接密钥"
                         value={row.ws_reverse_token}
                         disabled={disabled}
