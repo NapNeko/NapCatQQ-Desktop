@@ -28,6 +28,14 @@ const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 impl RemoteLinuxHost {
     pub(super) async fn open_pty_channel(&self, req: PtyRequest) -> Result<PtySession, HostError> {
         let line = remote_pty_command_line(&req);
+        self.open_raw_pty(req, line).await
+    }
+
+    pub(crate) async fn open_raw_pty(
+        &self,
+        req: PtyRequest,
+        line: Option<String>,
+    ) -> Result<PtySession, HostError> {
         let channel = {
             let guard = self.handle.lock().await;
             let Some(session) = guard.as_ref() else {

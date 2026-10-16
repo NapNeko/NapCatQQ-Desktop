@@ -1,6 +1,6 @@
 //! ncd-host:NapCatQQ-Desktop 的"主机"抽象层
 //!
-//! Host trait 把"一台机器"(本地 Windows / 远端 Linux / 远端 Windows stub /
+//! Host trait 把"一台机器"(本地 Windows / 远端 Linux / 远端 Windows /
 //! 未来的 macOS / Docker / Agent)抽成统一接口,所有"装组件 / 跑命令 / 传文件 /
 //! 开隧道 / 提权"操作都通过它完成
 //!
@@ -17,7 +17,7 @@
 //! - HostError 错误体系
 //! - LocalWindowsHost 实装(local::windows,#[cfg(windows)])
 //! - RemoteLinuxHost 实装(基于 russh / russh-sftp)
-//! - RemoteWindowsHost 接口预留 stub,所有方法返回 HostError::Unsupported
+//! - RemoteWindowsHost 实装(Windows OpenSSH / PowerShell / Agent)
 //!
 //! 跨平台约束:
 //! - 所有路径用 [HostPath] 表达,内部统一 POSIX 风格,落地时由各 Host 实装做转换

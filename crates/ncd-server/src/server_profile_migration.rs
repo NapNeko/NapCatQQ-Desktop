@@ -72,6 +72,7 @@ pub fn migrate_legacy_single_server_app_config(
         webui_url: None,
         path_overrides: None,
         inventory: None,
+        platform: None,
     };
 
     let payload = serde_json::to_value(vec![profile.clone()])
@@ -164,6 +165,7 @@ fn migrate_v1_profile_entry(value: Value) -> Option<ServerProfile> {
         webui_url: None,
         path_overrides: None,
         inventory: None,
+        platform: None,
     })
 }
 

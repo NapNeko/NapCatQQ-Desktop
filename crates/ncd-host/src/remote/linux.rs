@@ -58,6 +58,7 @@ struct ClientCallback {
     port: u16,
     host_key_error: Arc<Mutex<Option<HostError>>>,
     remote_forwards: RemoteForwardTable,
+    verified_host_key: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 #[async_trait]
@@ -68,7 +69,7 @@ impl Handler for ClientCallback {
         &mut self,
         server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        match &self.policy {
+        let accepted = match &self.policy {
             HostKeyPolicy::Insecure => Ok(true),
             HostKeyPolicy::Strict { known_hosts_path }
             | HostKeyPolicy::AcceptOnFirstUse { known_hosts_path } => {
@@ -101,7 +102,17 @@ impl Handler for ClientCallback {
                     }
                 }
             }
+        };
+        if matches!(accepted, Ok(true)) && !matches!(self.policy, HostKeyPolicy::Insecure) {
+            if let Ok(mut key) = self.verified_host_key.lock() {
+                *key = Some(format!(
+                    "{} {}",
+                    server_public_key.name(),
+                    server_public_key.public_key_base64()
+                ));
+            }
         }
+        accepted
     }
 
     async fn server_channel_open_forwarded_tcpip(
@@ -195,6 +206,7 @@ pub struct RemoteLinuxHost {
     remote_forwards: RemoteForwardTable,
     /// `which` 找到过的命令路径。跟着这个连接对象活：换了服务器档案会重建连接，自然作废
     which_found: std::sync::Mutex<HashMap<String, String>>,
+    verified_host_key: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl RemoteLinuxHost {
@@ -205,12 +217,14 @@ impl RemoteLinuxHost {
     ) -> Result<Self, HostError> {
         let host_key_error = Arc::new(Mutex::new(None));
         let remote_forwards = Arc::new(Mutex::new(HashMap::new()));
+        let verified_host_key = Arc::new(std::sync::Mutex::new(None));
         let cb = ClientCallback {
             policy: config.host_key_policy.clone(),
             host: config.host.clone(),
             port: config.port,
             host_key_error: Arc::clone(&host_key_error),
             remote_forwards: Arc::clone(&remote_forwards),
+            verified_host_key: Arc::clone(&verified_host_key),
         };
         // 长任务(apt 等锁,流式安装)需要更长的会话空闲上限;仅靠 keepalive 时
         // 默认 inactivity=2×keepalive 在部分 sshd/中间设备上仍可能被掐断
@@ -247,35 +261,43 @@ impl RemoteLinuxHost {
         };
 
         // 认证
-        match &config.credentials {
-            SshCredentials::Password { username, password } => {
-                let ok = handle
-                    .authenticate_password(username, password)
-                    .await
-                    .map_err(|e| HostError::RemoteConnection {
-                        reason: format!("password auth: {e}"),
-                    })?;
-                if !ok {
-                    return Err(HostError::RemoteConnection {
-                        reason: "password rejected".into(),
-                    });
+        let authentication = async {
+            match &config.credentials {
+                SshCredentials::Password { username, password } => {
+                    let ok = handle
+                        .authenticate_password(username, password)
+                        .await
+                        .map_err(|e| HostError::RemoteConnection {
+                            reason: format!("password auth: {e}"),
+                        })?;
+                    if !ok {
+                        return Err(HostError::RemoteConnection {
+                            reason: "password rejected".into(),
+                        });
+                    }
                 }
-            }
-            SshCredentials::Key { username, key } => {
-                let key_pair = load_key(key).await?;
-                let ok = handle
-                    .authenticate_publickey(username, Arc::new(key_pair))
-                    .await
-                    .map_err(|e| HostError::RemoteConnection {
-                        reason: format!("publickey auth: {e}"),
-                    })?;
-                if !ok {
-                    return Err(HostError::RemoteConnection {
-                        reason: "publickey rejected".into(),
-                    });
+                SshCredentials::Key { username, key } => {
+                    let key_pair = load_key(key).await?;
+                    let ok = handle
+                        .authenticate_publickey(username, Arc::new(key_pair))
+                        .await
+                        .map_err(|e| HostError::RemoteConnection {
+                            reason: format!("publickey auth: {e}"),
+                        })?;
+                    if !ok {
+                        return Err(HostError::RemoteConnection {
+                            reason: "publickey rejected".into(),
+                        });
+                    }
                 }
-            }
-        }
+            };
+            Ok::<(), HostError>(())
+        };
+        tokio::time::timeout(config.connect_timeout, authentication)
+            .await
+            .map_err(|_| HostError::Timeout {
+                operation: "ssh_authentication",
+            })??;
 
         let id_str = id.into();
         info!(
@@ -295,6 +317,7 @@ impl RemoteLinuxHost {
             config,
             remote_forwards,
             which_found: std::sync::Mutex::new(HashMap::new()),
+            verified_host_key,
         })
     }
 
@@ -304,7 +327,9 @@ impl RemoteLinuxHost {
     }
 
     /// 取复用的 SFTP 会话;首次访问或缓存被清空时新建一条
-    async fn sftp_session(&self) -> Result<Arc<russh_sftp::client::SftpSession>, HostError> {
+    pub(super) async fn sftp_session(
+        &self,
+    ) -> Result<Arc<russh_sftp::client::SftpSession>, HostError> {
         {
             let guard = self.sftp.lock().await;
             if let Some(session) = guard.as_ref() {
@@ -339,6 +364,75 @@ impl RemoteLinuxHost {
     /// 主机 id 引用
     pub fn server_id(&self) -> &str {
         &self.id
+    }
+
+    /// 只打开 SSH exec 通道；命令语法由目标平台的 Host 决定。
+    pub(super) async fn open_raw_channel(
+        &self,
+        line: &str,
+        stdin: Option<&[u8]>,
+    ) -> Result<Channel<Msg>, HostError> {
+        let guard = self.handle.lock().await;
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| HostError::remote_disconnected("ssh session poisoned"))?;
+        let result = session.channel_open_session().await;
+        drop(guard);
+        let mut channel = match result {
+            Ok(channel) => channel,
+            Err(error) => {
+                self.invalidate_connection().await;
+                return Err(HostError::remote_disconnected(format!(
+                    "open channel: {error}"
+                )));
+            }
+        };
+        channel
+            .exec(true, line.as_bytes())
+            .await
+            .map_err(|error| HostError::remote_disconnected(format!("exec: {error}")))?;
+        loop {
+            match channel.wait().await {
+                Some(ChannelMsg::Success) => break,
+                Some(ChannelMsg::Failure | ChannelMsg::Close) | None => {
+                    return Err(HostError::remote_disconnected("SSH exec was rejected"));
+                }
+                Some(ChannelMsg::Data { .. } | ChannelMsg::ExtendedData { .. }) => {
+                    return Err(HostError::remote_disconnected(
+                        "SSH exec output preceded acceptance",
+                    ));
+                }
+                _ => {}
+            }
+        }
+        if let Some(input) = stdin {
+            channel
+                .data(input)
+                .await
+                .map_err(|error| HostError::remote_disconnected(format!("stdin: {error}")))?;
+            channel
+                .eof()
+                .await
+                .map_err(|error| HostError::remote_disconnected(format!("stdin EOF: {error}")))?;
+        }
+        Ok(channel)
+    }
+
+    pub(super) async fn spawn_raw(
+        &self,
+        line: &str,
+        cmd: &HostCommand,
+    ) -> Result<Box<dyn HostProcess>, HostError> {
+        let channel = self.open_raw_channel(line, cmd.stdin.as_deref()).await?;
+        Ok(Box::new(RemoteHostProcess {
+            channel: Some(channel),
+            id: ProcessId {
+                native: 0,
+                origin: self.id.clone(),
+            },
+            timeout: cmd.timeout,
+            wait_policy: cmd.wait_policy,
+        }))
     }
 
     /// 确保解压工具(unzip / tar)在远端可用,缺了就用包管理器装一次
@@ -461,6 +555,32 @@ impl Host for RemoteLinuxHost {
 
     fn shell(&self) -> &dyn HostShell {
         &self.shell
+    }
+
+    fn trusted_ssh_host_key(&self) -> Option<String> {
+        self.verified_host_key
+            .lock()
+            .ok()
+            .and_then(|key| key.clone())
+    }
+
+    async fn install_authorized_key(&self, line: &str, marker: &str) -> Result<(), HostError> {
+        let command = super::authorized_keys::linux_key_command(Some(line), marker)?;
+        let output = self.run_to_string(command).await?;
+        super::authorized_keys::check_output(output, "install_authorized_key")
+    }
+
+    async fn remove_authorized_key(&self, marker: &str) -> Result<(), HostError> {
+        let command = super::authorized_keys::linux_key_command(None, marker)?;
+        let output = self.run_to_string(command).await?;
+        super::authorized_keys::check_output(output, "remove_authorized_key")
+    }
+
+    async fn secure_private_key(&self, path: &HostPath) -> Result<(), HostError> {
+        let output = self
+            .run_to_string(HostCommand::new("chmod").arg("600").arg(path.as_posix()))
+            .await?;
+        super::authorized_keys::check_output(output, "secure_private_key")
     }
 
     // 只记找到的：没装的命令用户随时可能去装上，记住「没有」反而会一直报缺。
@@ -1137,9 +1257,9 @@ impl Host for RemoteLinuxHost {
 /// 远端 exec 强杀:SSH SIGKILL + 限时 close。
 /// 只 close 时,部分 OpenSSH/docker pull 场景 channel.close 会一直等进程结束,
 /// 任务队列「强制停止」就会表现为点了没反应。
-async fn force_kill_remote_channel(channel: &russh::Channel<russh::client::Msg>) {
+pub(super) async fn force_kill_remote_channel(channel: &russh::Channel<russh::client::Msg>) {
     // 强制停止路径直接 KILL;信号失败也继续 close
-    let _ = channel.signal(Sig::KILL).await;
+    let _ = tokio::time::timeout(Duration::from_secs(2), channel.signal(Sig::KILL)).await;
     let close = channel.close();
     match tokio::time::timeout(Duration::from_secs(2), close).await {
         Ok(Ok(())) => {}
@@ -1233,7 +1353,7 @@ async fn open_sftp(
         .map_err(|e| HostError::remote_disconnected(format!("sftp session: {e}")))
 }
 
-fn sftp_err_to_host(
+pub(super) fn sftp_err_to_host(
     path: &str,
     op: &'static str,
     e: russh_sftp::client::error::Error,
@@ -1262,7 +1382,7 @@ fn sftp_err_to_host(
 
 // 收集 channel 输出(用于 run_to_string)
 
-async fn collect_channel_output(
+pub(super) async fn collect_channel_output(
     channel: &mut russh::Channel<russh::client::Msg>,
 ) -> Result<CommandOutput, HostError> {
     let mut stdout = Vec::new();

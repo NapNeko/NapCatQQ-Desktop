@@ -21,7 +21,7 @@ use tracing::{debug, info, warn};
 use ts_rs::TS;
 
 use ncd_host::remote::{
-    ConnectionConfig, HostKeyCheck, HostKeyPolicy, KnownHostsStore, RemoteLinuxHost, SshCredentials,
+    ConnectionConfig, HostKeyCheck, HostKeyPolicy, KnownHostsStore, SshCredentials,
 };
 use ncd_host::{Host, HostError};
 
@@ -73,6 +73,20 @@ pub struct ServerProfile {
     /// 最近一次安装库存探测快照
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inventory: Option<RemoteInventory>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+}
+
+impl ServerProfile {
+    pub fn same_inventory_target(&self, other: &Self) -> bool {
+        self.host == other.host
+            && self.port == other.port
+            && self.username == other.username
+            && self.auth_method == other.auth_method
+            && self.private_key_path == other.private_key_path
+            && self.platform == other.platform
+            && self.path_overrides == other.path_overrides
+    }
 }
 
 /// 认证方式
@@ -130,6 +144,8 @@ pub struct ConnectionHealth {
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ProbeReport {
     pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub windows_info: Option<ncd_domain::windows_remote::RemoteWindowsInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os_info: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -520,6 +536,7 @@ impl ServerManager {
         mut profile: ServerProfile,
         password: Option<String>,
     ) -> Result<ServerProfile, String> {
+        validate_platform(profile.platform.as_deref())?;
         if profile.id.is_empty() {
             profile.id = short_uuid();
         }
@@ -547,20 +564,26 @@ impl ServerManager {
 
     pub async fn update_server(
         &self,
-        profile: ServerProfile,
+        mut profile: ServerProfile,
         password: Option<String>,
     ) -> Result<ServerProfile, String> {
+        validate_platform(profile.platform.as_deref())?;
         let mut all = self.repo.load().await;
         let pos = all
             .iter()
             .position(|p| p.id == profile.id)
             .ok_or_else(|| format!("server not found: {}", profile.id))?;
+        if !all[pos].same_inventory_target(&profile) {
+            profile.inventory = None;
+        }
 
         let changed_slot = if let Some(pw) = &password {
             if profile.remember_credential {
                 self.sync.credentials().set_password(&profile.id, pw)?;
                 // 关键修复:同时更新 sudo 槽,确保提权操作可用
-                let _ = self.sync.credentials().set_sudo_password(&profile.id, pw);
+                if profile.platform.as_deref() != Some("windows") {
+                    let _ = self.sync.credentials().set_sudo_password(&profile.id, pw);
+                }
                 Some(PasswordSlot::Ssh)
             } else {
                 let _ = self.sync.credentials().delete_password(&profile.id);
@@ -619,6 +642,23 @@ impl ServerManager {
         Ok(all[pos].clone())
     }
 
+    pub async fn set_inventory_for_profile(
+        &self,
+        profile: &ServerProfile,
+        inventory: RemoteInventory,
+    ) -> Result<(), String> {
+        let mut all = self.repo.load().await;
+        let current = all
+            .iter_mut()
+            .find(|p| p.id == profile.id)
+            .ok_or_else(|| format!("server not found: {}", profile.id))?;
+        if !current.same_inventory_target(profile) {
+            return Err("探测期间主机连接或安装路径已更改，请重新探测".into());
+        }
+        current.inventory = Some(inventory);
+        self.repo.save(&all).await
+    }
+
     /// 密码登录 → 自动配置免密
     ///
     /// 流程:用密码连一次远端 → 本地生成 ed25519 密钥对 → 把公钥追加进远端
@@ -646,7 +686,7 @@ impl ServerManager {
             credentials,
             self.host_key_policy(),
         );
-        let host = RemoteLinuxHost::connect(&profile.id, config)
+        let host = ncd_host::remote::connect_remote_host_with_platform(&profile.id, config, profile.platform.as_deref())
             .await
             .map_err(|e| match &e {
                 HostError::HostKeyUnknown { .. } => {
@@ -675,13 +715,16 @@ impl ServerManager {
             IFS= read -r pub_key\n\
             grep -qxF -- \"$pub_key\" \"$HOME/.ssh/authorized_keys\" || \
             printf '%s\\n' \"$pub_key\" >> \"$HOME/.ssh/authorized_keys\"\n";
+        let key_command = if host.os() == ncd_host::Os::Windows {
+            windows_key_auth_command(pub_line)
+        } else {
+            ncd_host::HostCommand::new("sh")
+                .arg("-c")
+                .arg(script)
+                .stdin(format!("{pub_line}\n").into_bytes())
+        };
         let out = host
-            .run_to_string(
-                ncd_host::HostCommand::new("sh")
-                    .arg("-c")
-                    .arg(script)
-                    .stdin(format!("{pub_line}\n").into_bytes()),
-            )
+            .run_to_string(key_command)
             .await
             .map_err(|e| format!("写入远端 authorized_keys 失败: {e}"))?;
         if !out.success() {
@@ -696,11 +739,36 @@ impl ServerManager {
         tokio::fs::create_dir_all(&self.key_dir)
             .await
             .map_err(|e| format!("创建密钥目录失败: {e}"))?;
-        let key_path = self.key_dir.join(&profile.id);
+        let key_path = self
+            .key_dir
+            .join(format!("server-{}-ed25519", short_uuid()));
+        let empty = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&key_path)
+            .await
+            .map_err(|e| format!("写入私钥失败: {e}"))?;
+        drop(empty);
+        // 先收紧空文件，再写入秘密，避免继承的 ProgramData ACL 暂时暴露私钥。
+        set_key_file_permissions(&key_path).await?;
         tokio::fs::write(&key_path, pair.private_openssh.as_bytes())
             .await
             .map_err(|e| format!("写入私钥失败: {e}"))?;
-        set_key_file_permissions(&key_path).await;
+
+        // 真正以新私钥认证后才切档案，不能把自定义 sshd 配置下的写入成功当成可登录。
+        let verify_config = ConnectionConfig::new(
+            &profile.host,
+            profile.port,
+            SshCredentials::key_file(&profile.username, &key_path, None),
+            self.host_key_policy(),
+        );
+        let verified_host = ncd_host::remote::connect_remote_host_with_platform(
+            &profile.id,
+            verify_config,
+            profile.platform.as_deref(),
+        )
+        .await
+        .map_err(|error| format!("公钥已写入，但私钥登录验证失败，档案仍保留密码认证: {error}"))?;
 
         // 5. 档案切到 Key 认证;SSH 登录不再需要密码,清掉 ssh 凭据避免残留
         //    但把这个登录密码挪存到 sudo 槽:绝大多数云主机 sudo 密码就是登录密码,
@@ -712,7 +780,9 @@ impl ServerManager {
         updated.private_key_path = Some(key_path_str);
 
         // 关键改进:使用 sync 层的迁移方法(显式语义)
-        self.sync.migrate_ssh_to_sudo(&profile.id)?;
+        if host.os() == ncd_host::Os::Linux {
+            self.sync.migrate_ssh_to_sudo(&profile.id)?;
+        }
         let _ = self.sync.credentials().delete_password(&profile.id);
 
         let mut persisted = self.repo.load().await;
@@ -721,13 +791,16 @@ impl ServerManager {
             self.repo.save(&persisted).await?;
         }
 
-        // 6. 缓存这次连接(密码通道已建立,可直接复用),状态置已连接
-        //    顺手把这次的登录密码注入 host 当提权密码——刚挪存到 sudo 槽的就是它,
-        //    省得密钥登录后第一次 elevated 操作还得回 keyring 取
-        let host: Arc<dyn Host> = Arc::new(host);
-        host.set_elevation_password(Some(password.to_string()))
-            .await;
-        self.hosts.write().await.insert(profile.id.clone(), host);
+        // 复用已验证的新密钥连接，Linux 仍保留提权凭据。
+        if host.os() == ncd_host::Os::Linux {
+            verified_host
+                .set_elevation_password(Some(password.to_string()))
+                .await;
+        }
+        self.hosts
+            .write()
+            .await
+            .insert(profile.id.clone(), verified_host);
         self.update_state(id, ServerState::Connected).await;
 
         Ok(updated)
@@ -799,11 +872,13 @@ impl ServerManager {
         )
         .with_keepalive(Some(std::time::Duration::from_secs(15)));
 
-        let host = RemoteLinuxHost::connect(&profile.id, config)
-            .await
-            .map_err(|e| format!("隔离连接建立失败: {e}"))?;
-
-        let host: Arc<dyn Host> = Arc::new(host);
+        let host = ncd_host::remote::connect_remote_host_with_platform(
+            &profile.id,
+            config,
+            profile.platform.as_deref(),
+        )
+        .await
+        .map_err(|e| format!("隔离连接建立失败: {e}"))?;
 
         // 关键改进:立即同步最新密码(解决缓存过期问题)
         self.sync.sync_elevation_to_host(id, host.as_ref()).await;
@@ -891,7 +966,11 @@ impl ServerManager {
         // 同时约束握手和认证，断网时不能让认证无限占住该主机的连接锁。
         let connected = tokio::time::timeout(
             connect_timeout,
-            RemoteLinuxHost::connect(&profile.id, config),
+            ncd_host::remote::connect_remote_host_with_platform(
+                &profile.id,
+                config,
+                profile.platform.as_deref(),
+            ),
         )
         .await
         .unwrap_or(Err(HostError::Timeout {
@@ -932,6 +1011,7 @@ impl ServerManager {
                 }
                 return Ok(ProbeReport {
                     success: false,
+                    windows_info: None,
                     os_info: None,
                     error: Some(error),
                     latency_ms,
@@ -942,32 +1022,45 @@ impl ServerManager {
         };
 
         // 拿 OS 信息
-        let os_info = match host
-            .run_to_string(
-                ncd_host::HostCommand::new("uname")
-                    .arg("-a")
-                    .timeout(std::time::Duration::from_secs(3)),
+        let windows_info = if host.os() == ncd_host::Os::Windows {
+            Some(
+                host.remote_windows_info()
+                    .await
+                    .map_err(|error| error.to_string())?,
             )
-            .await
-        {
-            Ok(out) if out.success() => Some(out.stdout.trim().to_string()),
-            _ => None,
+        } else {
+            None
+        };
+        let os_info = if let Some(info) = &windows_info {
+            Some(format!("{} ({})", info.os_version, info.architecture))
+        } else {
+            match host
+                .run_to_string(
+                    ncd_host::HostCommand::new("uname")
+                        .arg("-a")
+                        .timeout(std::time::Duration::from_secs(3)),
+                )
+                .await
+            {
+                Ok(out) if out.success() => Some(out.stdout.trim().to_string()),
+                _ => None,
+            }
         };
 
         let latency_ms = start.elapsed().as_millis() as u64;
 
         // 缓存连接,并把 keyring 里的提权密码注入这条 host:之后任何 elevated 操作
         // (装 unzip,写 /opt/QQ,apt 装包,装 docker)都自动用上,不必每条命令各传
-        let host: Arc<dyn Host> = Arc::new(host);
-
         // 关键改进:自动同步 ssh 密码到 sudo 槽(setup_key_auth 之前的平滑迁移)
-        if let Err(e) = self.sync.migrate_ssh_to_sudo(id) {
-            tracing::warn!(
-                target: "ncd_runtime::server_manager",
-                server_id = %id,
-                err = %e,
-                "SSH 密码迁移到 sudo 槽失败，后续提权操作可能需要重新输入密码"
-            );
+        if host.os() == ncd_host::Os::Linux {
+            if let Err(e) = self.sync.migrate_ssh_to_sudo(id) {
+                tracing::warn!(
+                    target: "ncd_runtime::server_manager",
+                    server_id = %id,
+                    err = %e,
+                    "SSH 密码迁移到 sudo 槽失败，后续提权操作可能需要重新输入密码"
+                );
+            }
         }
 
         self.inject_elevation_password(id, host.as_ref()).await;
@@ -996,6 +1089,7 @@ impl ServerManager {
 
         Ok(ProbeReport {
             success: true,
+            windows_info,
             os_info,
             error: None,
             latency_ms,
@@ -1487,22 +1581,71 @@ impl ServerManager {
     }
 }
 
-/// 给落盘的私钥文件设权限Unix 设 600(仅属主可读写,否则 ssh 会拒用);
-/// Windows 上文件权限模型不同,依赖 NTFS ACL 继承用户目录权限,这里 no-op
-async fn set_key_file_permissions(path: &Path) {
+fn windows_key_auth_command(public_line: &str) -> ncd_host::HostCommand {
+    let script = r#"$ErrorActionPreference='Stop';$key=[Console]::In.ReadLine();if(!$key -or $key -notmatch '^ssh-ed25519 [A-Za-z0-9+/=]+(?: .*)?$'){throw 'Invalid public key'};$id=[Security.Principal.WindowsIdentity]::GetCurrent();$principal=New-Object Security.Principal.WindowsPrincipal($id);$admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);if($admin){$path=[IO.Path]::Combine([Environment]::GetFolderPath('CommonApplicationData'),'ssh','administrators_authorized_keys')}else{$path=[IO.Path]::Combine([Environment]::GetFolderPath('UserProfile'),'.ssh','authorized_keys')};[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path));$lines=@();if([IO.File]::Exists($path)){$lines=@([IO.File]::ReadAllLines($path))};if($lines -notcontains $key){$lines+=,$key;[IO.File]::WriteAllLines($path,$lines,(New-Object Text.UTF8Encoding($false)))};$acl=New-Object Security.AccessControl.FileSecurity;$acl.SetAccessRuleProtection($true,$false);$system=New-Object Security.Principal.SecurityIdentifier('S-1-5-18');$admins=New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544');foreach($sid in @($system,$admins)){$rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow');$acl.AddAccessRule($rule)};if(!$admin){$rule=New-Object Security.AccessControl.FileSystemAccessRule($id.User,'FullControl','Allow');$acl.AddAccessRule($rule);$acl.SetOwner($id.User)}else{$acl.SetOwner($admins)};[IO.File]::SetAccessControl($path,$acl)"#;
+    use base64::Engine;
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    ncd_host::HostCommand::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-EncodedCommand",
+            &encoded,
+        ])
+        .stdin(format!("{public_line}\n").into_bytes())
+}
+
+fn validate_platform(platform: Option<&str>) -> Result<(), String> {
+    if matches!(platform, None | Some("auto" | "windows" | "linux")) {
+        Ok(())
+    } else {
+        Err("远端平台必须为auto/windows/linux".into())
+    }
+}
+
+/// 私钥只允许当前控制端用户和系统读取，不继承 ProgramData 的普通用户权限。
+async fn set_key_file_permissions(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         if let Ok(meta) = tokio::fs::metadata(path).await {
             let mut perms = meta.permissions();
             perms.set_mode(0o600);
-            let _ = tokio::fs::set_permissions(path, perms).await;
+            tokio::fs::set_permissions(path, perms)
+                .await
+                .map_err(|error| format!("设置私钥权限失败: {error}"))?;
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = path;
+        use base64::Engine;
+        let literal = format!("'{}'", path.to_string_lossy().replace('\'', "''"));
+        let script = format!(
+            "$ErrorActionPreference='Stop';$path={literal};$id=[Security.Principal.WindowsIdentity]::GetCurrent();$acl=New-Object Security.AccessControl.FileSecurity;$acl.SetAccessRuleProtection($true,$false);$acl.SetOwner($id.User);$system=New-Object Security.Principal.SecurityIdentifier('S-1-5-18');foreach($sid in @($id.User,$system)){{$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow')))}};[IO.File]::SetAccessControl($path,$acl)"
+        );
+        let bytes: Vec<_> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let mut command = tokio::process::Command::new("powershell.exe");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-EncodedCommand",
+            &base64::engine::general_purpose::STANDARD.encode(bytes),
+        ]);
+        ncd_host::hide_console_window(&mut command);
+        let output = command
+            .output()
+            .await
+            .map_err(|error| format!("设置私钥ACL失败: {error}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "设置私钥ACL失败: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
     }
+    Ok(())
 }
 
 fn short_uuid() -> String {
@@ -1599,6 +1742,36 @@ fn auto_connect_retry_delay(err: &HostError, failures: u32) -> std::time::Durati
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn platform_selection_rejects_unknown_targets() {
+        assert!(validate_platform(None).is_ok());
+        assert!(validate_platform(Some("windows")).is_ok());
+        assert!(validate_platform(Some("wsl")).is_err());
+    }
+
+    #[test]
+    fn windows_key_setup_uses_target_sid_and_never_posix_permissions() {
+        use base64::Engine;
+        let command = windows_key_auth_command("ssh-ed25519 AAAA ncd");
+        let encoded = command.args.last().unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap();
+        let units: Vec<_> = bytes
+            .chunks_exact(2)
+            .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+            .collect();
+        let script = String::from_utf16(&units).unwrap();
+        assert!(script.contains("administrators_authorized_keys"));
+        assert!(script.contains("S-1-5-32-544"));
+        assert!(script.contains("SetAccessRuleProtection($true,$false)"));
+        assert!(!script.contains("chmod"));
+        assert_eq!(
+            command.stdin.as_deref(),
+            Some(b"ssh-ed25519 AAAA ncd\n".as_slice())
+        );
+    }
 
     #[tokio::test(start_paused = true)]
     async fn health_probe_waits_between_ticks_even_when_settings_change() {
@@ -1697,6 +1870,7 @@ mod tests {
             webui_url: None,
             path_overrides: None,
             inventory: None,
+            platform: None,
         }
     }
 
@@ -1907,6 +2081,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connection_or_path_change_discards_inventory_from_the_old_target() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        for (index, field) in ["host", "username", "paths"].into_iter().enumerate() {
+            let mut original = make_profile(&format!("s{index}"), "Target");
+            original.inventory = Some(RemoteInventory::empty("/old/user", "2026-10-16T00:00:00Z"));
+            mgr.add_server(original.clone(), None).await.unwrap();
+            let mut changed = original.clone();
+            match field {
+                "host" => changed.host = "192.0.2.99".into(),
+                "username" => changed.username = "another-user".into(),
+                _ => {
+                    changed.path_overrides = Some(RemotePathOverrides {
+                        napcat_root: Some("/new/napcat".into()),
+                        ..Default::default()
+                    })
+                }
+            }
+            assert!(
+                mgr.update_server(changed, None)
+                    .await
+                    .unwrap()
+                    .inventory
+                    .is_none()
+            );
+            assert!(
+                mgr.set_inventory_for_profile(
+                    &original,
+                    RemoteInventory::empty("/old/user", "2026-10-16T00:00:00Z")
+                )
+                .await
+                .is_err()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn changing_only_the_display_name_preserves_inventory() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        let mut profile = make_profile("s1", "Old");
+        profile.inventory = Some(RemoteInventory::empty("/same/user", "2026-10-16T00:00:00Z"));
+        mgr.add_server(profile.clone(), None).await.unwrap();
+        profile.name = "New".into();
+        assert!(
+            mgr.update_server(profile, None)
+                .await
+                .unwrap()
+                .inventory
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
     async fn delete_server_removes_and_cleans_credential() {
         let root = tempdir().unwrap();
         let (mgr, creds) = make_mgr(root.path());
@@ -1980,6 +2208,7 @@ mod tests {
     fn probe_report_serialization() {
         let report = ProbeReport {
             success: true,
+            windows_info: None,
             os_info: Some("Linux 6.1".into()),
             error: None,
             latency_ms: 42,

@@ -582,6 +582,7 @@ mod tests {
             webui_url: None,
             path_overrides: None,
             inventory: None,
+            platform: None,
         }
     }
 

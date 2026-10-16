@@ -6,7 +6,7 @@
 //! 实装矩阵:
 //! - LocalWindowsHost:本地 Windows 实装(基于 std::fs + tokio::process)
 //! - RemoteLinuxHost:远端 Linux 实装(基于 russh + russh-sftp)
-//! - RemoteWindowsHost:接口 stub,所有方法返回 HostError::Unsupported
+//! - RemoteWindowsHost:Windows OpenSSH + PowerShell + Agent
 //! - 未来 LocalLinuxHost / LocalMacOsHost / DockerHost / AgentHost
 
 use async_trait::async_trait;
@@ -112,6 +112,60 @@ pub trait Host: Send + Sync {
     /// 拿到 shell 抽象(用于命令拼接 / SSH 远端)
     fn shell(&self) -> &dyn HostShell;
 
+    /// 目标机的用户目录；不能从控制端环境变量推导。
+    fn target_home(&self) -> Option<HostPath> {
+        None
+    }
+
+    /// 目标机上由 Desktop 管理的根目录。
+    fn target_managed_root(&self) -> Option<HostPath> {
+        None
+    }
+
+    /// 本次严格校验过的 SSH 主机公钥（算法 + base64），不包含主机地址。
+    fn trusted_ssh_host_key(&self) -> Option<String> {
+        None
+    }
+
+    async fn install_authorized_key(
+        &self,
+        _public_key_line: &str,
+        _marker: &str,
+    ) -> Result<(), HostError> {
+        Err(HostError::Unsupported {
+            operation: "install_authorized_key",
+        })
+    }
+
+    async fn remove_authorized_key(&self, _marker: &str) -> Result<(), HostError> {
+        Err(HostError::Unsupported {
+            operation: "remove_authorized_key",
+        })
+    }
+
+    async fn secure_private_key(&self, _path: &HostPath) -> Result<(), HostError> {
+        Err(HostError::Unsupported {
+            operation: "secure_private_key",
+        })
+    }
+
+    async fn remote_windows_info(
+        &self,
+    ) -> Result<ncd_domain::windows_remote::RemoteWindowsInfo, HostError> {
+        Err(HostError::Unsupported {
+            operation: "remote_windows_info",
+        })
+    }
+
+    async fn windows_agent_request(
+        &self,
+        _request: ncd_domain::windows_remote::WindowsAgentRequest,
+    ) -> Result<ncd_domain::windows_remote::WindowsAgentResponse, HostError> {
+        Err(HostError::Unsupported {
+            operation: "windows_agent_request",
+        })
+    }
+
     // ===== 文件操作 =====
 
     /// 读文件全部内容到内存
@@ -160,7 +214,7 @@ pub trait Host: Send + Sync {
     ///
     /// - 本地主机:委托到本地文件系统下载
     /// - 远程 Linux:优先使用 wget/curl 直接下载
-    /// - 远程 Windows Stub:返回 Unsupported
+    /// - 远程 Windows:目标机 PowerShell 下载
     ///
     /// 默认实现返回 Unsupported,让调用方 fallback 到"本地下载→upload"
     async fn download_url(&self, _url: &str, _dest: &HostPath) -> Result<(), HostError> {

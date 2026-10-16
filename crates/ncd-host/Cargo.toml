@@ -18,6 +18,7 @@ tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 tracing = "0.1"
 ts-rs = { version = "12", features = ["serde-compat"] }
 bytes = "1"
+base64 = "0.22"
 
 # 归档解压(M3.2)
 zip = { version = "2", default-features = false, features = ["deflate"] }
