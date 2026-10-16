@@ -21,6 +21,7 @@ members = [
     "crates/ncd-onebot",
     "crates/ncd-relogin",
     "crates/ncd-mcp",
+    "crates/ncd-agent",
 ]
 resolver = "3"
 

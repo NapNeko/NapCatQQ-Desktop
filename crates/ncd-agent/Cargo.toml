@@ -1,0 +1,43 @@
+[package]
+name = "ncd-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Windows remote supervisor and authenticated SSH stdio bridge"
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-host = { path = "../ncd-host" }
+ncd-watch = { path = "../ncd-watch" }
+ncd-relogin = { path = "../ncd-relogin" }
+ncd-traits = { path = "../ncd-traits" }
+ncd-deploy = { path = "../ncd-deploy" }
+async-trait = "0.1"
+url = "2"
+ncd-backend-snowluma = { path = "../ncd-backend-snowluma" }
+ncd-backend-napcat = { path = "../ncd-backend-napcat" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util", "fs"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+tracing = "0.1"
+croner = "4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation", "Win32_Security", "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_Pipes",
+  "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_Services",
+  "Win32_System_RemoteDesktop", "Win32_System_Environment", "Win32_System_Diagnostics_Debug",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
