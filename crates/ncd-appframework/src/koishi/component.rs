@@ -29,6 +29,7 @@ use crate::node_tooling::{NodeToolchain, write_node_marker};
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -69,9 +70,10 @@ impl KoishiComponent {
     }
 
     async fn pick_asset(&self, host: &dyn Host, ctx: &ActionCtx) -> BoilerplateAsset {
-        let arch = match host.locality() {
-            Locality::Remote => probe_remote_arch(host).await.unwrap_or(host.arch()),
-            Locality::Local => host.arch(),
+        let arch = if host.os() == Os::Linux && host.locality() == Locality::Remote {
+            probe_remote_arch(host).await.unwrap_or(host.arch())
+        } else {
+            host.arch()
         };
         let slug = platform_slug(host.os(), arch);
         match fetch_latest_asset(slug).await {
@@ -112,9 +114,9 @@ impl KoishiComponent {
             return Err(e);
         }
 
-        let (local, ext, kind) = match host.locality() {
-            Locality::Local => (zip_local.clone(), "zip", ArchiveKind::Zip),
-            Locality::Remote => {
+        let (local, ext, kind) = match (host.os(), host.locality()) {
+            (Os::Windows, _) | (_, Locality::Local) => (zip_local.clone(), "zip", ArchiveKind::Zip),
+            (_, Locality::Remote) => {
                 ctx.info("远端改用 tar.gz 传（很多机器没装 unzip）").await;
                 let tgz = base.with_extension("tar.gz");
                 let (src, dst) = (zip_local.clone(), tgz.clone());
@@ -219,6 +221,15 @@ impl KoishiComponent {
         )
         .timeout(YARN_TIMEOUT)
         .cancel_token(ctx.cancel_token());
+        let prefix: Vec<String> = tc
+            .node_dir()
+            .map(|d| d.render_for(host.os()))
+            .into_iter()
+            .collect();
+        let cmd = cmd.env(
+            "PATH",
+            crate::node_tooling::target_path_env(host, &prefix).await?,
+        );
         let log_ctx = ctx.clone();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let drain = tokio::spawn(async move {
@@ -366,7 +377,15 @@ impl KoishiComponent {
     ) -> Result<HostCommand, ActionError> {
         let tc = resolve_node(host, &self.install_dir, self.node_bin.as_ref()).await?;
         let yarn = resolve_yarn_rel(host, &self.install_dir).await?;
-        Ok(self.launch_with(&tc, &yarn, host.os(), host.locality(), args))
+        let prefix: Vec<String> = tc
+            .node_dir()
+            .map(|d| d.render_for(host.os()))
+            .into_iter()
+            .collect();
+        let path = crate::node_tooling::target_path_env(host, &prefix).await?;
+        Ok(self
+            .launch_with(&tc, &yarn, host.os(), host.locality(), args)
+            .env("PATH", path))
     }
 
     fn launch_with(
@@ -435,10 +454,14 @@ impl Component for KoishiComponent {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![Requirement::component_version(
-            ComponentId::NodeJs,
-            KOISHI_NODE_VERSION_RANGE,
-        )]
+        crate::remote_windows_requirements(
+            vec![Requirement::component_version(
+                ComponentId::NodeJs,
+                KOISHI_NODE_VERSION_RANGE,
+            )],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {

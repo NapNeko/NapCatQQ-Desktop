@@ -29,6 +29,7 @@ use crate::node_tooling::{
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -141,7 +142,12 @@ impl KarinComponent {
     ) -> Result<HostCommand, ActionError> {
         let preferred = self.preferred_nodes(host).await;
         let tc = resolve_node_toolchain(host, &preferred).await?;
-        Ok(self.launch_with(host, &tc, args))
+        let path = crate::node_tooling::target_path_env(
+            host,
+            &path_prefix(&tc, &self.install_dir, host.os()),
+        )
+        .await?;
+        Ok(self.launch_with(host, &tc, args).env("PATH", path))
     }
 
     fn launch_with(&self, host: &dyn Host, tc: &NodeToolchain, args: &LaunchArgs) -> HostCommand {
@@ -191,6 +197,18 @@ impl KarinComponent {
             message: name.to_string(),
         })
         .await;
+        let cmd = if host.os() == Os::Windows && host.locality() == Locality::Remote {
+            let preferred = self.preferred_nodes(host).await;
+            let tc = resolve_node_toolchain(host, &preferred).await?;
+            let path = crate::node_tooling::target_path_env(
+                host,
+                &path_prefix(&tc, &self.install_dir, host.os()),
+            )
+            .await?;
+            cmd.env("PATH", path)
+        } else {
+            cmd
+        };
         let cmd = cmd
             .timeout(LONG_STEP_TIMEOUT)
             .cancel_token(ctx.cancel_token())
@@ -459,10 +477,14 @@ impl Component for KarinComponent {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![Requirement::component_version(
-            ComponentId::NodeJs,
-            KARIN_NODE_VERSION_RANGE,
-        )]
+        crate::remote_windows_requirements(
+            vec![Requirement::component_version(
+                ComponentId::NodeJs,
+                KARIN_NODE_VERSION_RANGE,
+            )],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
@@ -577,8 +599,7 @@ mod tests {
                 .contains(&(Os::Windows, Locality::Local))
         );
         assert!(
-            !comp
-                .supported_targets()
+            comp.supported_targets()
                 .contains(&(Os::Windows, Locality::Remote))
         );
     }

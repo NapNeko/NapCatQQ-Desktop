@@ -261,6 +261,17 @@ impl KoishiAdapter {
             .map_err(|e| AppFrameworkError::Runtime(e.to_string()))?;
         let cmd = yarn::yarn_command(&tc, &dir, &yarn_rel, host.os(), host.locality(), None, args)
             .timeout(std::time::Duration::from_secs(20 * 60));
+        let prefix: Vec<String> = tc
+            .node_dir()
+            .map(|d| d.render_for(host.os()))
+            .into_iter()
+            .collect();
+        let cmd = cmd.env(
+            "PATH",
+            crate::node_tooling::target_path_env(host, &prefix)
+                .await
+                .map_err(|e| AppFrameworkError::Runtime(e.to_string()))?,
+        );
         let sink = log.cloned();
         let out = host
             .run_streaming(

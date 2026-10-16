@@ -22,9 +22,7 @@ use super::git::{GIT_LONG_TIMEOUT, GitTool, clone_candidates, last_line};
 use super::manifest::{YUNZAI_BUILTIN_PLUGIN_DIRS, YUNZAI_JS_PLUGIN_DIR, YUNZAI_PLUGINS_DIR};
 use crate::adapter::PluginLogSink;
 use crate::karin::plugin::{KarinPluginAppFile, KarinPluginAuthor, KarinPluginRepo};
-use crate::node_tooling::{
-    local_path_env, path_prefix, pnpm_command, read_node_marker, resolve_node_toolchain,
-};
+use crate::node_tooling::{path_prefix, pnpm_command, read_node_marker, resolve_node_toolchain};
 use crate::store::{
     AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
     percent_decode_lossy,
@@ -665,13 +663,9 @@ async fn pnpm_install_if_needed(
     if let Some(d) = &git.dir {
         prefix.push(d.render_for(host.os()));
     }
-    let path_env = match host.locality() {
-        ncd_host::Locality::Local => local_path_env(&prefix, host.os()),
-        ncd_host::Locality::Remote => {
-            prefix.extend(["/usr/local/bin", "/usr/bin", "/bin"].map(String::from));
-            prefix.join(":")
-        }
-    };
+    let path_env = crate::node_tooling::target_path_env(host, &prefix)
+        .await
+        .map_err(|e| AppFrameworkError::Runtime(e.to_string()))?;
     emit(log, "pnpm install（装插件依赖）");
     let cmd = pnpm_command(&tc, &root, host.os(), &["install", "--no-frozen-lockfile"])
         .env("CI", "true")

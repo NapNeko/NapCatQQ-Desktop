@@ -15,6 +15,20 @@ pub fn local_port_free(port: u16) -> bool {
 /// 远端 Linux 上正在监听的 TCP 口，不依赖 ss / netstat 装没装。
 /// 命令跑不通或什么也没读到给 None：那是不知道，不是没人占，兜底由调用方定
 pub async fn remote_listening_ports(host: &dyn Host) -> Option<Vec<u16>> {
+    if host.os() == ncd_host::Os::Windows {
+        let out = host.run_to_string(HostCommand::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", "[Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | ForEach-Object { $_.Port }"]).timeout(Duration::from_secs(15))).await.ok()?;
+        if !out.success() {
+            return None;
+        }
+        let mut ports: Vec<u16> = out
+            .stdout
+            .lines()
+            .filter_map(|line| line.trim().parse().ok())
+            .collect();
+        ports.sort_unstable();
+        ports.dedup();
+        return Some(ports);
+    }
     let cmd = HostCommand::new("sh")
         .arg("-c")
         .arg("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null")

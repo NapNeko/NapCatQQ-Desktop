@@ -23,6 +23,7 @@ use crate::uv_tooling::{read_uv_marker, resolve_uv, venv_python, venv_script, wr
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -424,10 +425,14 @@ impl Component for AstrBotComponent {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![Requirement::component_version(
-            ComponentId::Uv,
-            ASTRBOT_UV_VERSION_RANGE,
-        )]
+        crate::remote_windows_requirements(
+            vec![Requirement::component_version(
+                ComponentId::Uv,
+                ASTRBOT_UV_VERSION_RANGE,
+            )],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {

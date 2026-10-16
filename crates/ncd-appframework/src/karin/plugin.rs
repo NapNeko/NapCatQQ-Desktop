@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use ncd_domain::{AppConfigDocument, AppConfigFormat, AppInstance};
-use ncd_host::{Host, HostCommand, HostError, HostPath, Locality};
+use ncd_host::{Host, HostCommand, HostError, HostPath};
 use ncd_traits::AppFrameworkError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -15,9 +15,7 @@ pub use crate::adapter::PluginLogSink;
 pub const KARIN_PLUGINS_LIST_URL: &str = "https://registry.npmjs.com/@karinjs/plugins-list/latest";
 
 use super::config::{KARIN_CONFIG_DIR, KarinInstanceConfig, KarinScopeRule};
-use crate::node_tooling::{
-    local_path_env, path_prefix, pnpm_command, read_node_marker, resolve_node_toolchain,
-};
+use crate::node_tooling::{path_prefix, pnpm_command, read_node_marker, resolve_node_toolchain};
 
 const PLUGIN_CMD_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const APP_PLUGIN_DIR: &str = "plugins/karin-plugin-example";
@@ -893,10 +891,13 @@ async fn run_pnpm(
         .timeout(PLUGIN_CMD_TIMEOUT)
         .env("CI", "true")
         .env("npm_config_update_notifier", "false");
-    if host.locality() == Locality::Local {
-        let prefix = path_prefix(&tc, instance_root, host.os());
-        cmd = cmd.env("PATH", local_path_env(&prefix, host.os()));
-    }
+    let prefix = path_prefix(&tc, instance_root, host.os());
+    cmd = cmd.env(
+        "PATH",
+        crate::node_tooling::target_path_env(host, &prefix)
+            .await
+            .map_err(|e| AppFrameworkError::Runtime(e.to_string()))?,
+    );
     run_host_cmd(
         host,
         cmd,

@@ -37,6 +37,7 @@ use crate::yaml_patch;
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -193,7 +194,12 @@ impl YunzaiComponent {
         let preferred = self.preferred_nodes(host).await;
         let tc = resolve_node_toolchain(host, &preferred).await?;
         let git = GitTool::resolve(host, self.git_bin.as_ref()).await.ok();
-        Ok(self.launch_with(host, &tc, git.as_ref(), args))
+        let path =
+            crate::node_tooling::target_path_env(host, &self.path_entries(host, &tc, git.as_ref()))
+                .await?;
+        Ok(self
+            .launch_with(host, &tc, git.as_ref(), args)
+            .env("PATH", path))
     }
 
     /// 进程和它自己调的 pnpm / git 用的 PATH：私有 pnpm、node、托管 git 在前
@@ -276,6 +282,18 @@ impl YunzaiComponent {
         name: &str,
         cmd: HostCommand,
     ) -> Result<(), ActionError> {
+        let cmd = if host.os() == Os::Windows && host.locality() == Locality::Remote {
+            let tc = resolve_node_toolchain(host, &self.preferred_nodes(host).await).await?;
+            let git = GitTool::resolve(host, self.git_bin.as_ref()).await.ok();
+            let path = crate::node_tooling::target_path_env(
+                host,
+                &self.path_entries(host, &tc, git.as_ref()),
+            )
+            .await?;
+            cmd.env("PATH", path)
+        } else {
+            cmd
+        };
         let cmd = cmd
             .timeout(LONG_STEP_TIMEOUT)
             .cancel_token(ctx.cancel_token())
@@ -427,21 +445,11 @@ impl YunzaiComponent {
             &args.iter().map(String::as_str).collect::<Vec<_>>(),
         )
         .env("PUPPETEER_SKIP_DOWNLOAD", "true")
-        .env("PATH", self.tool_path(host, tc, git));
+        .env(
+            "PATH",
+            crate::node_tooling::target_path_env(host, &self.path_entries(host, tc, git)).await?,
+        );
         self.run_step(host, ctx, step, "安装依赖", cmd).await
-    }
-
-    /// 装依赖时的 PATH：有的包 postinstall 要调 git / node
-    fn tool_path(&self, host: &dyn Host, tc: &NodeToolchain, git: Option<&GitTool>) -> String {
-        let prefix = self.path_entries(host, tc, git);
-        match host.locality() {
-            Locality::Local => local_path_env(&prefix, host.os()),
-            Locality::Remote => {
-                let mut parts = prefix;
-                parts.extend(["/usr/local/bin", "/usr/bin", "/bin"].map(String::from));
-                parts.join(":")
-            }
-        }
     }
 
     /// 单独下 puppeteer 要的 Chrome；失败不挡安装（shotium 渲染器不要浏览器，静态模板照样出图）
@@ -766,11 +774,15 @@ impl Component for YunzaiComponent {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![
-            Requirement::component_version(ComponentId::NodeJs, YUNZAI_NODE_VERSION_RANGE),
-            Requirement::component(ComponentId::Git),
-            Requirement::component(ComponentId::Redis),
-        ]
+        crate::remote_windows_requirements(
+            vec![
+                Requirement::component_version(ComponentId::NodeJs, YUNZAI_NODE_VERSION_RANGE),
+                Requirement::component(ComponentId::Git),
+                Requirement::component(ComponentId::Redis),
+            ],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
@@ -892,8 +904,7 @@ mod tests {
         );
         assert_eq!(comp.id(), ComponentId::Yunzai);
         assert!(
-            !comp
-                .supported_targets()
+            comp.supported_targets()
                 .contains(&(Os::Windows, Locality::Remote))
         );
     }

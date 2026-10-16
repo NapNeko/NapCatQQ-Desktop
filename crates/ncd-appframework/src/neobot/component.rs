@@ -37,6 +37,7 @@ use crate::uv_tooling::{
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -600,10 +601,14 @@ impl Component for NeoBotComponent {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![Requirement::component_version(
-            ComponentId::Uv,
-            NEOBOT_UV_VERSION_RANGE,
-        )]
+        crate::remote_windows_requirements(
+            vec![Requirement::component_version(
+                ComponentId::Uv,
+                NEOBOT_UV_VERSION_RANGE,
+            )],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
@@ -708,10 +713,9 @@ mod tests {
                 .contains(&(Os::Windows, Locality::Local))
         );
         assert!(
-            !comp
-                .supported_targets()
+            comp.supported_targets()
                 .contains(&(Os::Windows, Locality::Remote)),
-            "Windows 远端没有实现"
+            "Windows 远端由代理监督运行"
         );
     }
 

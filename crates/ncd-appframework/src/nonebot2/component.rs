@@ -42,6 +42,7 @@ fn looks_like_ncd_dynamic_bot_py(text: &str) -> bool {
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -503,10 +504,14 @@ impl Component for NoneBot2Component {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![Requirement::component_version(
-            ComponentId::Uv,
-            NONEBOT2_UV_VERSION_RANGE,
-        )]
+        crate::remote_windows_requirements(
+            vec![Requirement::component_version(
+                ComponentId::Uv,
+                NONEBOT2_UV_VERSION_RANGE,
+            )],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
@@ -610,8 +615,7 @@ mod tests {
                 .contains(&(Os::Windows, Locality::Local))
         );
         assert!(
-            !comp
-                .supported_targets()
+            comp.supported_targets()
                 .contains(&(Os::Windows, Locality::Remote))
         );
     }

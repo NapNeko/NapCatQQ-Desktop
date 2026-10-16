@@ -147,6 +147,20 @@ impl YunzaiAdapter {
     }
 
     async fn remote_exit(host: &dyn Host, port: u16, headers: &[(String, String)]) -> bool {
+        if host.os() == ncd_host::Os::Windows {
+            let mut header_entries = String::new();
+            for (key, value) in headers {
+                header_entries.push_str(&format!(
+                    "'{}'='{}';",
+                    key.replace('\'', "''"),
+                    value.replace('\'', "''")
+                ));
+            }
+            let script = format!(
+                "$h=@{{{header_entries}}};try {{ Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:{port}/exit' -Headers $h -TimeoutSec 3 | Out-Null; 'sent' }} catch {{ if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) {{ 'denied' }} elseif ($_.Exception.Status -eq [Net.WebExceptionStatus]::ConnectFailure) {{ 'failed' }} else {{ 'sent' }} }}"
+            );
+            return matches!(host.run_to_string(HostCommand::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command"]).arg(script).timeout(Duration::from_secs(10))).await, Ok(out) if out.success() && out.stdout.trim() == "sent");
+        }
         let header_args: String = headers
             .iter()
             .map(|(k, v)| format!(" -H {}", shell_single_quote(&format!("{k}: {v}"))))

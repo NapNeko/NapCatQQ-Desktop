@@ -197,6 +197,33 @@ pub fn local_path_env(prefix: &[String], os: Os) -> String {
     all.join(sep)
 }
 
+pub async fn target_path_env(host: &dyn Host, prefix: &[String]) -> Result<String, ActionError> {
+    if host.locality() == ncd_host::Locality::Local {
+        return Ok(local_path_env(prefix, host.os()));
+    }
+    if host.os() != Os::Windows {
+        let mut parts = prefix.to_vec();
+        parts.extend(["/usr/local/bin", "/usr/bin", "/bin"].map(String::from));
+        return Ok(parts.join(":"));
+    }
+    let out = host
+        .run_to_string(HostCommand::new("powershell.exe").args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Environment]::GetEnvironmentVariable('Path','Process')",
+        ]))
+        .await?;
+    if !out.success() {
+        return Err(ActionError::other("无法读取目标 Windows PATH"));
+    }
+    let mut parts = prefix.to_vec();
+    if !out.stdout.trim().is_empty() {
+        parts.push(out.stdout.trim().to_string());
+    }
+    Ok(parts.join(";"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

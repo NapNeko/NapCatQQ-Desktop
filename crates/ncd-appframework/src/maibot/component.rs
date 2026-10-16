@@ -39,6 +39,7 @@ use crate::uv_tooling::{
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -105,9 +106,9 @@ impl MaiBotComponent {
         tag: &str,
         slot: &str,
     ) -> Result<StagedSource, ActionError> {
-        let (ext, kind) = match host.locality() {
-            Locality::Local => (ArchiveExt::Zip, ArchiveKind::Zip),
-            Locality::Remote => (ArchiveExt::TarGz, ArchiveKind::TarGz),
+        let (ext, kind) = match (host.os(), host.locality()) {
+            (Os::Windows, _) | (_, Locality::Local) => (ArchiveExt::Zip, ArchiveKind::Zip),
+            (_, Locality::Remote) => (ArchiveExt::TarGz, ArchiveKind::TarGz),
         };
         let url = archive_url(repo, tag, ext);
         let mirrors = build_mirror_urls(&url, None);
@@ -568,7 +569,15 @@ impl MaiBotComponent {
             .into_iter()
             .find_map(|p| p.parent())
             .filter(|d| !d.as_posix().is_empty() && d.as_posix() != ".");
-        Ok(self.launch_with(host.os(), host.locality(), args, uv_dir.as_ref()))
+        let prefix: Vec<String> = uv_dir
+            .as_ref()
+            .map(|d| d.render_for(host.os()))
+            .into_iter()
+            .collect();
+        let path = crate::node_tooling::target_path_env(host, &prefix).await?;
+        Ok(self
+            .launch_with(host.os(), host.locality(), args, uv_dir.as_ref())
+            .env("PATH", path))
     }
 
     fn launch_with(
@@ -682,10 +691,14 @@ impl Component for MaiBotComponent {
     }
 
     fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
-        vec![Requirement::component_version(
-            ComponentId::Uv,
-            MAIBOT_UV_VERSION_RANGE,
-        )]
+        crate::remote_windows_requirements(
+            vec![Requirement::component_version(
+                ComponentId::Uv,
+                MAIBOT_UV_VERSION_RANGE,
+            )],
+            _os,
+            _locality,
+        )
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {

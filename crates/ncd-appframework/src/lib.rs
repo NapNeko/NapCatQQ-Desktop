@@ -19,6 +19,19 @@ pub mod koishi;
 pub mod maibot;
 pub mod neobot;
 pub mod node_tooling;
+
+pub(crate) fn remote_windows_requirements(
+    mut requirements: Vec<ncd_component::Requirement>,
+    os: ncd_host::Os,
+    locality: ncd_host::Locality,
+) -> Vec<ncd_component::Requirement> {
+    if os == ncd_host::Os::Windows && locality == ncd_host::Locality::Remote {
+        requirements.push(ncd_component::Requirement::component(
+            ncd_component::ComponentId::WindowsAgent,
+        ));
+    }
+    requirements
+}
 pub mod nonebot2;
 pub mod ports;
 pub mod registry;

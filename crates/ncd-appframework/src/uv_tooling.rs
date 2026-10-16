@@ -163,6 +163,9 @@ pub fn parse_linux_libc(getconf: &str, ldd: &str) -> LinuxLibc {
 }
 
 pub async fn probe_linux_libc(host: &dyn Host) -> LinuxLibc {
+    if host.os() != Os::Linux {
+        return LinuxLibc::Unknown;
+    }
     let cmd = HostCommand::new("sh")
         .arg("-c")
         .arg("getconf GNU_LIBC_VERSION 2>/dev/null; echo '--ncd--'; ldd --version 2>&1 | head -n 1")
@@ -179,6 +182,24 @@ pub async fn probe_linux_libc(host: &dyn Host) -> LinuxLibc {
 
 /// 目标目录所在分区剩多少（KB）。目录还没建就往上找第一个已存在的
 pub async fn probe_free_kb(host: &dyn Host, dir: &HostPath) -> Option<u64> {
+    if host.os() == Os::Windows {
+        let path = dir.render_for(Os::Windows).replace('\'', "''");
+        let script = format!(
+            "$p=[IO.Path]::GetPathRoot('{path}'); [UInt64]([Math]::Floor(([IO.DriveInfo]::new($p)).AvailableFreeSpace/1024))"
+        );
+        let out = host
+            .run_to_string(
+                HostCommand::new("powershell.exe")
+                    .args(["-NoProfile", "-NonInteractive", "-Command"])
+                    .arg(script),
+            )
+            .await
+            .ok()?;
+        return out
+            .success()
+            .then(|| out.stdout.trim().parse().ok())
+            .flatten();
+    }
     let script = format!(
         "d={}; while [ ! -d \"$d\" ] && [ \"$d\" != / ]; do d=$(dirname \"$d\"); done; df -Pk \"$d\" | tail -n 1",
         shell_single_quote(dir.as_posix())
@@ -283,13 +304,18 @@ pub async fn ensure_python(
     let uploaded = host.upload(&local_tmp, &dest).await;
     let _ = tokio::fs::remove_file(&local_tmp).await;
     uploaded?;
+    let mut mirror =
+        reqwest::Url::parse("file:///").map_err(|e| ActionError::other(e.to_string()))?;
+    let mirror_path = if host.os() == Os::Windows {
+        scratch.render_for(Os::Windows).replace('\\', "/")
+    } else {
+        scratch.as_posix().to_string()
+    };
+    mirror.set_path(&mirror_path);
     let installed = host
         .run_to_string(
             uv_cmd(&["python", "install", request])
-                .env(
-                    "UV_PYTHON_INSTALL_MIRROR",
-                    format!("file://{}", scratch.as_posix()),
-                )
+                .env("UV_PYTHON_INSTALL_MIRROR", mirror.as_str())
                 .timeout(PYTHON_DIRECT_TIMEOUT),
         )
         .await;
