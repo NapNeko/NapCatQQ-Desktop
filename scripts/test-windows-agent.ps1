@@ -30,6 +30,7 @@ $password = "Ncd!$([Guid]::NewGuid().ToString('N'))Aa1"
 Write-Output "::add-mask::$password"
 $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 $account = $null
+$batchLogonGranted = $false
 $taskRegistered = $false
 $sandboxCreated = $false
 $fixtureStarted = Get-Date
@@ -107,6 +108,9 @@ try {
     $account = New-LocalUser -Name $username -Password $securePassword -AccountNeverExpires -PasswordNeverExpires
     $users = Get-LocalGroup -SID 'S-1-5-32-545'
     Add-LocalGroupMember -Group $users -Member $account
+    Add-Type -Path (Join-Path $PSScriptRoot 'test-windows-agent-account.cs')
+    [NcdCiAccountRights]::SetBatchLogon($account.SID, $true)
+    $batchLogonGranted = $true
     New-Item -ItemType Directory -Path $sandbox | Out-Null
     $sandboxCreated = $true
     $acl = Get-Acl -LiteralPath $sandbox
@@ -137,7 +141,13 @@ try {
         Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
     }
-    if ($account) { Remove-LocalUser -SID $account.SID }
+    if ($account) {
+        try {
+            if ($batchLogonGranted) { [NcdCiAccountRights]::SetBatchLogon($account.SID, $false) }
+        } finally {
+            Remove-LocalUser -SID $account.SID
+        }
+    }
     $securePassword.Dispose()
     if ($sandboxCreated -and (Test-Path -LiteralPath $sandbox)) {
         $resolved = [IO.Path]::GetFullPath($sandbox)
