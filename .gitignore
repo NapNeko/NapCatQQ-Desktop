@@ -37,6 +37,7 @@ legacy-python/
 target/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/resources/remote-agent/*.exe
 **/*.rs.bk
 *.rlib
 # build.rs 生成的编译期常量（模板 proxy_constants.template.rs 入库）

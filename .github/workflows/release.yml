@@ -123,7 +123,10 @@ jobs:
 
       - name: Export ts-rs bindings
         shell: pwsh
-        run: cargo test --workspace --lib export_bindings_ -- --quiet
+        run: |
+          pnpm run build:remote-agent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --workspace --lib export_bindings_ -- --quiet
 
       - name: Assert generated IPC types committed
         shell: pwsh

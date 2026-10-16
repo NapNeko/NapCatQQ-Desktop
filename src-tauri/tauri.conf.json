@@ -4,8 +4,8 @@
   "version": "3.4.5",
   "identifier": "com.napcatqq.desktop",
   "build": {
-    "beforeDevCommand": "pnpm run dev",
-    "beforeBuildCommand": "pnpm run build",
+    "beforeDevCommand": "pnpm run build:remote-agent && pnpm run dev",
+    "beforeBuildCommand": "pnpm run build:remote-agent --release && pnpm run build",
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420"
   },

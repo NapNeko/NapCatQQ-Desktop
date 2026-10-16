@@ -95,6 +95,7 @@ jobs:
               - 'clippy.toml'
               - 'rust-toolchain.toml'
               - 'scripts/ci-rust-cache*'
+              - 'scripts/build-remote-agent.mjs'
               - '.github/workflows/ci.yml'
             frontend:
               - 'src-ui/**'
@@ -302,7 +303,11 @@ jobs:
       - name: Restore Cargo input timestamps
         run: node scripts/ci-rust-cache.mjs restore
 
-      - name: Shell tests (ncd-tauri)
+      - name: Build bundled Windows agent
+        # Tauri validates packaged resources even for shell unit tests.
+        run: node scripts/build-remote-agent.mjs
+
+      - name: Run shell tests (ncd-tauri)
         run: cargo test -p ncd-tauri
 
       - name: Assert shell IPC types committed
