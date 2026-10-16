@@ -94,10 +94,10 @@ impl NcdWatchComponent {
             display_name: "NCD Watch".to_string(),
             description: "本控制台关闭后仍可告警".to_string(),
             repo_url: Some(format!("https://github.com/{RELEASE_REPO}")),
-            supported_targets: vec![crate::types::SupportedTarget::new(
-                Os::Linux,
-                Locality::Remote,
-            )],
+            supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Remote),
+            ],
             // 与 Desktop 同属产品侧配套：远端脱管后的告警进程，不是 QQ/Node 一类框架运行时依赖
             category: crate::types::ComponentCategory::SelfApp,
             uninstall: crate::types::UninstallSupport::Supported,
@@ -523,6 +523,9 @@ pub fn normalize_detected_version(raw: &str) -> String {
 /// 远端 uname -m → Arch。
 /// Host::arch() 对远端写死 X86_64,装 musl 二进制必须以 uname 为准。
 pub async fn probe_remote_arch(host: &dyn Host) -> Result<Arch, ActionError> {
+    if host.os() == Os::Windows {
+        return Ok(host.arch());
+    }
     let out = host
         .run_to_string(HostCommand::new("uname").arg("-m"))
         .await

@@ -48,7 +48,10 @@ const EXIT_SUCCESS_REBOOT_REQUIRED: i32 = 3010;
 /// UAC 提权失败时给前端的固定文案（安装包已保留，重试不重新下载）
 const VCREDIST_ELEVATION_REQUIRED_MSG: &str = "VC++ 运行库安装需要管理员权限。UAC 提权未成功。请退出后右键本程序，选择「以管理员身份运行」，再点一次安装（安装包已保留，不会重新下载）。";
 
-const SUPPORTED: &[(Os, Locality)] = &[(Os::Windows, Locality::Local)];
+const SUPPORTED: &[(Os, Locality)] = &[
+    (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
+];
 
 /// VC++ 运行库 component；只认 Windows 本机
 #[derive(Debug, Clone)]
@@ -71,10 +74,10 @@ impl VcRedistComponent {
             repo_url: Some(
                 "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist".to_string(),
             ),
-            supported_targets: vec![crate::types::SupportedTarget::new(
-                Os::Windows,
-                Locality::Local,
-            )],
+            supported_targets: SUPPORTED
+                .iter()
+                .map(|(os, locality)| crate::types::SupportedTarget::new(*os, *locality))
+                .collect(),
             category: crate::types::ComponentCategory::RuntimeDep,
             // 系统运行库注册在 Windows「已安装的应用」里,卸载走 OS 流程
             uninstall: crate::types::UninstallSupport::SystemManaged,
@@ -93,14 +96,14 @@ impl Component for VcRedistComponent {
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
-        let Some(stdout) = query_registry_value(host, "Installed").await else {
+        let Some(stdout) = query_registry_value(host, "Installed").await? else {
             // 键不存在（未装）时 reg.exe 退出码非 0；reg 起不来同样按未装，
             // 与 QQ 注册表探测同口径
             return Ok(None);
         };
         match parse_reg_installed(&stdout) {
             Some(true) => {
-                let version = match query_registry_value(host, "Version").await {
+                let version = match query_registry_value(host, "Version").await? {
                     Some(out) => parse_reg_version(&out).unwrap_or_else(|| "unknown".to_string()),
                     None => "unknown".to_string(),
                 };
@@ -123,7 +126,11 @@ impl Component for VcRedistComponent {
             message: "download VC_redist.x64.exe".into(),
         })
         .await;
-        let local_exe = installer_local_path(&self.cache_dir);
+        let local_exe = if host.locality() == Locality::Remote {
+            ctx.download_path(INSTALLER_FILE_NAME)?
+        } else {
+            installer_local_path(&self.cache_dir)
+        };
         if let Some(parent) = local_exe.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
                 ActionError::other(format!("创建 VC++ 运行库安装包缓存目录失败: {e}"))
@@ -156,7 +163,15 @@ impl Component for VcRedistComponent {
             message: format!("run VC_redist.x64.exe /quiet /norestart (v{VCREDIST_VERSION})"),
         })
         .await;
-        let installer = local_exe.to_string_lossy().to_string();
+        let target_installer = if host.locality() == Locality::Remote {
+            host.create_dir_all(&self.cache_dir).await?;
+            let target = self.cache_dir.join(INSTALLER_FILE_NAME);
+            host.upload(&local_exe, &target).await?;
+            target
+        } else {
+            HostPath::from_windows(local_exe.to_string_lossy().as_ref())
+        };
+        let installer = target_installer.render_for(Os::Windows);
         ctx.info(format!("运行 VC++ 运行库静默安装器: {installer}"))
             .await;
         let cmd = HostCommand::new(installer)
@@ -167,6 +182,9 @@ impl Component for VcRedistComponent {
         match host.run_to_string(cmd).await {
             Ok(out) if vcredist_exit_success(out.exit_code) => {
                 let _ = tokio::fs::remove_file(&local_exe).await;
+                if host.locality() == Locality::Remote {
+                    let _ = host.remove_file(&target_installer).await;
+                }
                 if out.exit_code == Some(EXIT_SUCCESS_REBOOT_REQUIRED) {
                     ctx.info("VC++ 运行库安装完成，需要重启系统后生效").await;
                 } else {
@@ -211,14 +229,17 @@ impl Component for VcRedistComponent {
 }
 
 /// 跑 `reg query <key> /v <value>`,成功(success)才带回 stdout,其余 None
-async fn query_registry_value(host: &dyn Host, value: &str) -> Option<String> {
+async fn query_registry_value(host: &dyn Host, value: &str) -> Result<Option<String>, ActionError> {
     let cmd = HostCommand::new("reg")
         .arg("query")
         .arg(VCREDIST_REGISTRY_KEY)
         .arg("/v")
         .arg(value);
-    let out = host.run_to_string(cmd).await.ok()?;
-    out.success().then_some(out.stdout)
+    match host.run_to_string(cmd).await {
+        Ok(out) => Ok(out.success().then_some(out.stdout)),
+        Err(error) if host.locality() == Locality::Remote => Err(error.into()),
+        Err(_) => Ok(None),
+    }
 }
 
 /// 解析 reg query /v <name> 的 stdout,取 `<name>    <ty>    <value>` 里的值
@@ -325,7 +346,7 @@ mod tests {
     #[test]
     fn info_matches_trait_supported_targets() {
         let info = VcRedistComponent::info();
-        assert_eq!(info.supported_targets.len(), 1);
+        assert_eq!(info.supported_targets.len(), 2);
         assert_eq!(info.supported_targets[0].os, Os::Windows);
         assert_eq!(info.supported_targets[0].locality, Locality::Local);
         assert_eq!(info.category, crate::types::ComponentCategory::RuntimeDep);

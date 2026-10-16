@@ -104,7 +104,7 @@ pub fn managed_qq_root(components_dir: &Path) -> PathBuf {
 pub fn managed_qq_current_dir(qq_root: &Path) -> Option<PathBuf> {
     let raw = std::fs::read_to_string(qq_root.join(MANAGED_CURRENT_FILE)).ok()?;
     let ver = raw.trim();
-    if ver.is_empty() {
+    if ver.is_empty() || sanitize_qq_version_for_filename(ver) != ver {
         return None;
     }
     let dir = qq_root
@@ -206,11 +206,101 @@ fn sanitize_qq_version_for_filename(version: &str) -> String {
             }
         })
         .collect();
-    if cleaned.chars().all(|c| c == '_') || cleaned.is_empty() {
+    if cleaned.chars().all(|c| c == '_') || cleaned.is_empty() || cleaned == "." || cleaned == ".."
+    {
         "unknown".to_string()
     } else {
         cleaned
     }
+}
+
+#[cfg(test)]
+#[path = "qq_windows_tests.rs"]
+mod windows_tests;
+
+#[path = "qq_windows_remote.rs"]
+mod windows_remote;
+
+async fn commit_managed_qq(
+    files: &Path,
+    qq_root: &Path,
+    version: &str,
+    ctx: &ActionCtx,
+) -> Result<(), ActionError> {
+    if sanitize_qq_version_for_filename(version) != version {
+        return Err(ActionError::install_step(
+            "qq_extract",
+            "QQ 版本号不能作为目录名",
+        ));
+    }
+    if ctx.is_cancelled() {
+        return Err(ActionError::Cancelled);
+    }
+    let versions_dir = qq_root.join(MANAGED_VERSIONS_DIR);
+    tokio::fs::create_dir_all(&versions_dir)
+        .await
+        .map_err(|e| ActionError::other(format!("创建 {} 失败: {e}", versions_dir.display())))?;
+    let next = qq_root.join("current.next");
+    // 先写完整指针，再替换 current.txt，失败时旧指针仍可供启动链路使用。
+    tokio::fs::write(&next, format!("{version}\n"))
+        .await
+        .map_err(|e| ActionError::other(format!("写 QQ 版本指针失败: {e}")))?;
+    if ctx.is_cancelled() {
+        let _ = tokio::fs::remove_file(&next).await;
+        return Err(ActionError::Cancelled);
+    }
+    let dest = versions_dir.join(version);
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    // 备份不放在解包暂存目录里，回滚失败时仍留下可恢复的旧副本。
+    let backup = versions_dir.join(format!(".previous-{}-{nonce}", std::process::id()));
+    let had_previous = dest.exists();
+    if had_previous {
+        if let Err(e) = tokio::fs::rename(&dest, &backup).await {
+            let _ = tokio::fs::remove_file(&next).await;
+            return Err(ActionError::other(format!(
+                "无法替换 {}: {e}，请先停掉使用它的 Bot",
+                dest.display()
+            )));
+        }
+    }
+    let mut placed = false;
+    let result = async {
+        tokio::fs::rename(files, &dest)
+            .await
+            .map_err(|e| ActionError::other(format!("放置 QQ 到 {} 失败: {e}", dest.display())))?;
+        placed = true;
+        tokio::fs::rename(&next, qq_root.join(MANAGED_CURRENT_FILE))
+            .await
+            .map_err(|e| ActionError::other(format!("切换 QQ 版本失败: {e}")))
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = tokio::fs::remove_file(&next).await;
+        if placed {
+            tokio::fs::rename(&dest, files).await.map_err(|e| {
+                ActionError::other(format!(
+                    "{error}; 撤回新副本失败: {e}; 旧副本保留于 {}",
+                    backup.display()
+                ))
+            })?;
+        }
+        if had_previous {
+            tokio::fs::rename(&backup, &dest).await.map_err(|e| {
+                ActionError::other(format!(
+                    "{error}; 恢复旧副本失败: {e}; 旧副本保留于 {}",
+                    backup.display()
+                ))
+            })?;
+        }
+        return Err(error);
+    }
+    if had_previous {
+        let _ = tokio::fs::remove_dir_all(&backup).await;
+    }
+    Ok(())
 }
 
 /// 缓存目录下的安装包路径(稳定文件名,跨进程/重启可复用)
@@ -551,6 +641,7 @@ impl QQComponent {
             repo_url: Some("https://im.qq.com/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Remote),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
             ],
@@ -567,10 +658,9 @@ impl Component for QQComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // Windows 本机 + Linux 本地 / 远端,Windows 远端由 backend 的 SSH 逻辑
-        // 处理,不走本 component
         &[
             (Os::Windows, Locality::Local),
+            (Os::Windows, Locality::Remote),
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
         ]
@@ -927,6 +1017,9 @@ impl QQComponent {
         &self,
         host: &dyn Host,
     ) -> Result<Option<DetectedVersion>, ActionError> {
+        if host.locality() == Locality::Remote {
+            return self.detect_remote_windows(host).await;
+        }
         if let Some(dir) = managed_qq_current_dir(&self.windows_qq_root()) {
             // QQ 目录树自带 versions/config.json,版本号在那里。这个 versions
             // 是 QQ 的布局,不是侧装外层那个 MANAGED_VERSIONS_DIR,别混用常量
@@ -1002,6 +1095,7 @@ impl QQComponent {
             .arg("Install");
         let out = match host.run_to_string(cmd).await {
             Ok(o) => o,
+            Err(error) if host.locality() == Locality::Remote => return Err(error.into()),
             // reg query 在键不存在时退出码非 0;run_to_string 不会因非 0 报
             // Err,但若 reg 自身起不来(PATH 缺失等)才会到这里,按未装处理
             Err(_) => return Ok(None),
@@ -1022,6 +1116,9 @@ impl QQComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
+        if host.locality() == Locality::Remote {
+            return self.install_remote_windows(host, ctx).await;
+        }
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
         ctx.info("准备获取 QQ Windows 安装器").await;
 
@@ -1224,28 +1321,14 @@ impl QQComponent {
                     format!("读 versions/config.json 失败: {e}"),
                 )
             })?;
-        let version = parse_json_string_field(&cfg, "curVersion")
-            .map(|v| sanitize_qq_version_for_filename(&v))
-            .ok_or_else(|| {
-                ActionError::install_step("qq_extract", "versions/config.json 缺 curVersion")
-            })?;
+        let version = parse_json_string_field(&cfg, "curVersion").ok_or_else(|| {
+            ActionError::install_step("qq_extract", "versions/config.json 缺 curVersion")
+        })?;
 
-        let versions_dir = qq_root.join(MANAGED_VERSIONS_DIR);
-        tokio::fs::create_dir_all(&versions_dir)
-            .await
-            .map_err(|e| {
-                ActionError::other(format!("创建 {} 失败: {e}", versions_dir.display()))
-            })?;
-        let dest = versions_dir.join(&version);
-        remove_managed_dir(&dest).await?;
-        tokio::fs::rename(&files, &dest)
-            .await
-            .map_err(|e| ActionError::other(format!("放置 QQ 到 {} 失败: {e}", dest.display())))?;
-        tokio::fs::write(qq_root.join(MANAGED_CURRENT_FILE), format!("{version}\n"))
-            .await
-            .map_err(|e| ActionError::other(format!("写 current.txt 失败: {e}")))?;
+        commit_managed_qq(&files, qq_root, &version, ctx).await?;
 
         // 旧版本尽量清掉;还开着的删不动就留着,下次再清
+        let versions_dir = qq_root.join(MANAGED_VERSIONS_DIR);
         if let Ok(mut rd) = tokio::fs::read_dir(&versions_dir).await {
             while let Ok(Some(entry)) = rd.next_entry().await {
                 if entry.file_name().to_string_lossy() != version {
@@ -1262,6 +1345,9 @@ impl QQComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
+        if host.locality() == Locality::Remote {
+            return self.uninstall_remote_windows(host, ctx).await;
+        }
         ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
         let qq_root = self.windows_qq_root();
         ctx.emit(ProgressKind::StepBegin {
@@ -1290,6 +1376,14 @@ impl QQComponent {
 
     /// Windows verify:侧装 current 有 QQ.exe,或回落的系统 QQ 注册表在;再看能否读出版本号
     async fn verify_windows(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
+        if host.locality() == Locality::Remote {
+            let detected = self.detect_remote_windows(host).await?;
+            return Ok(VerifyReport::ok().with_check(
+                "QQ Windows executable",
+                detected.is_some(),
+                detected.map(|v| v.source),
+            ));
+        }
         let mut report = match managed_qq_current_dir(&self.windows_qq_root()) {
             Some(dir) => VerifyReport::ok().with_check(
                 "managed QQ.exe present",

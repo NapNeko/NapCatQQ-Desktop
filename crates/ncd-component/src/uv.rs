@@ -64,6 +64,7 @@ const UV_DEFAULT_SHA256: &[(&str, &str)] = &[
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -244,6 +245,11 @@ impl Component for UvComponent {
 
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.check_target(host)?;
+        let remote_windows = host.os() == Os::Windows && host.locality() == Locality::Remote;
+        if remote_windows {
+            crate::windows_install::recover(host, &self.install_dir).await?;
+        }
+        let nonce = crate::windows_install::nonce();
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
         // 远端 Host::arch() 写死 x86_64，ARM 服务器上会传一个跑不起来的 uv 上去
@@ -280,7 +286,7 @@ impl Component for UvComponent {
         } else {
             "tar.gz"
         };
-        let file_name = format!("ncd-uv-{}-{}.{ext}", self.version, std::process::id());
+        let file_name = format!("ncd-uv-{}-{nonce}.{ext}", self.version);
         let local_tmp = ctx.download_path(&file_name)?;
         let helper = DownloadHelper::new()?;
         let mirrors = ncd_network::build_mirror_urls(&url, None);
@@ -307,9 +313,7 @@ impl Component for UvComponent {
             message: "解压".into(),
         })
         .await;
-        let stage_dir = self
-            .tmp_dir
-            .join(format!("ncd-uv-stage-{}", std::process::id()));
+        let stage_dir = self.tmp_dir.join(format!("ncd-uv-stage-{nonce}"));
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
         let kind = if host.os() == Os::Windows {
@@ -331,7 +335,7 @@ impl Component for UvComponent {
         // 目录顶掉能用的旧 uv，换过去那一下只差一次改名
         let new_dir = match self.install_dir.parent() {
             Some(parent) => parent.join(format!(
-                "{}.new",
+                "{}.new-{nonce}",
                 self.install_dir.file_name().unwrap_or("uv")
             )),
             None => self.install_dir.join(".new"),
@@ -362,8 +366,12 @@ impl Component for UvComponent {
                 ));
             }
         }
-        let _ = host.remove_dir_all(&self.install_dir).await;
-        host.rename(&new_dir, &self.install_dir).await?;
+        if remote_windows {
+            crate::windows_install::replace(host, &self.install_dir, &new_dir, &[]).await?;
+        } else {
+            let _ = host.remove_dir_all(&self.install_dir).await;
+            host.rename(&new_dir, &self.install_dir).await?;
+        }
         let _ = host.remove_dir_all(&stage_dir).await;
         let _ = host.remove_file(&remote_archive).await;
 

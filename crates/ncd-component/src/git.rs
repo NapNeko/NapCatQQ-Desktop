@@ -46,6 +46,7 @@ const MINGIT_DEFAULT_SHA256: &[(&str, &str)] = &[
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -157,7 +158,11 @@ impl GitComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
+        if host.locality() == Locality::Remote {
+            crate::windows_install::recover(host, &self.install_dir).await?;
+        }
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        let nonce = crate::windows_install::nonce();
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "下载 MinGit".into(),
@@ -192,14 +197,19 @@ impl GitComponent {
         })
         .await;
         // 解到隔壁的 .new，装齐了再换过去：解到一半失败不会剩半个目录顶掉能用的旧版
-        let new_dir = sibling_dir(&self.install_dir, "new");
+        let new_dir = sibling_dir(&self.install_dir, &format!("new-{nonce}"));
         let _ = host.remove_dir_all(&new_dir).await;
         host.create_dir_all(&new_dir).await?;
-        let archive = HostPath::from_windows(local_tmp.to_string_lossy().as_ref());
+        let archive = sibling_dir(&self.install_dir, &format!("download-{nonce}.zip"));
+        if let Some(parent) = archive.parent() {
+            host.create_dir_all(&parent).await?;
+        }
+        host.upload(&local_tmp, &archive).await?;
         let extracted = host
             .extract_archive(&archive, &new_dir, ArchiveKind::Zip)
             .await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
+        let _ = host.remove_file(&archive).await;
         extracted?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -208,8 +218,12 @@ impl GitComponent {
             message: format!("安装到 {}", self.install_dir.as_posix()),
         })
         .await;
-        let _ = host.remove_dir_all(&self.install_dir).await;
-        host.rename(&new_dir, &self.install_dir).await?;
+        if host.locality() == Locality::Remote {
+            crate::windows_install::replace(host, &self.install_dir, &new_dir, &[]).await?;
+        } else {
+            let _ = host.remove_dir_all(&self.install_dir).await;
+            host.rename(&new_dir, &self.install_dir).await?;
+        }
         let bin = self.install_dir.join("cmd").join("git.exe");
         if self
             .probe(host, bin.as_posix(), bin.as_posix())

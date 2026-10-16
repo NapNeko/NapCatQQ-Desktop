@@ -35,6 +35,9 @@ pub mod traits;
 pub mod types;
 pub mod uv;
 pub mod vcredist;
+pub mod windows_agent;
+mod windows_install;
+pub mod windows_watch;
 
 pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
@@ -76,3 +79,5 @@ pub use types::{
 };
 pub use uv::{UV_DEFAULT_VERSION, UvComponent};
 pub use vcredist::{VCREDIST_VERSION, VCREDIST_X64_SHA256, VCREDIST_X64_URL, VcRedistComponent};
+pub use windows_agent::{WindowsAgentComponent, discover_local_windows_agent_binary};
+pub use windows_watch::WindowsNcdWatchComponent;

@@ -54,6 +54,7 @@ const VALKEY_MIN_GLIBC: (u32, u32) = (2, 34);
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
+    (Os::Windows, Locality::Remote),
     (Os::Linux, Locality::Local),
     (Os::Linux, Locality::Remote),
 ];
@@ -225,7 +226,12 @@ impl RedisComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
+        if host.locality() == Locality::Remote {
+            crate::windows_install::recover(host, &self.install_dir).await?;
+        }
+        crate::windows_install::require_x64(host, "Redis")?;
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        let nonce = crate::windows_install::nonce();
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "下载 Redis".into(),
@@ -243,14 +249,19 @@ impl RedisComponent {
             message: "解压".into(),
         })
         .await;
-        let stage = sibling_dir(&self.install_dir, "stage");
+        let stage = sibling_dir(&self.install_dir, &format!("stage-{nonce}"));
         let _ = host.remove_dir_all(&stage).await;
         host.create_dir_all(&stage).await?;
-        let archive = HostPath::from_windows(local_tmp.to_string_lossy().as_ref());
+        let archive = sibling_dir(&self.install_dir, &format!("download-{nonce}.zip"));
+        if let Some(parent) = archive.parent() {
+            host.create_dir_all(&parent).await?;
+        }
+        host.upload(&local_tmp, &archive).await?;
         let extracted = host
             .extract_archive(&archive, &stage, ArchiveKind::Zip)
             .await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
+        let _ = host.remove_file(&archive).await;
         extracted?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -260,8 +271,12 @@ impl RedisComponent {
         })
         .await;
         let top = stage.join(asset.trim_end_matches(".zip"));
-        let _ = host.remove_dir_all(&self.install_dir).await;
-        host.rename(&top, &self.install_dir).await?;
+        if host.locality() == Locality::Remote {
+            crate::windows_install::replace(host, &self.install_dir, &top, &["data"]).await?;
+        } else {
+            let _ = host.remove_dir_all(&self.install_dir).await;
+            host.rename(&top, &self.install_dir).await?;
+        }
         let _ = host.remove_dir_all(&stage).await;
         self.verify_installed(host).await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;

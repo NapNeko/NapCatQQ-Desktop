@@ -191,6 +191,7 @@ impl NapCatComponent {
             repo_url: Some("https://github.com/NapNeko/NapCatQQ".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Remote),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
             ],
@@ -313,13 +314,17 @@ impl Component for NapCatComponent {
         // Windows remote 由 backend 自己的 SSH 注入逻辑处理,不走本 component
         &[
             (Os::Windows, Locality::Local),
+            (Os::Windows, Locality::Remote),
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
         ]
     }
 
-    fn requirements(&self, os: Os, _locality: Locality) -> Vec<Requirement> {
+    fn requirements(&self, os: Os, locality: Locality) -> Vec<Requirement> {
         let mut reqs = vec![Requirement::component(ComponentId::Qq)];
+        if os == Os::Windows && locality == Locality::Remote {
+            reqs.push(Requirement::component(ComponentId::WindowsAgent));
+        }
         if os == Os::Windows {
             // 官方注入器动态链接 MSVCP140 / VCRUNTIME140*,缺 VC++ 运行库时秒退。
             // 只在 Windows 声明:Linux 目标上 vcredist 组件本身是 Unsupported,
@@ -729,6 +734,9 @@ impl NapCatComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
+        if host.locality() == Locality::Remote {
+            return self.install_remote_windows(host, ctx).await;
+        }
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
         ctx.info(format!(
             "准备安装 Windows NapCat 到 {}",
@@ -818,6 +826,53 @@ impl NapCatComponent {
         ctx.info("Windows NapCat 安装完成，临时文件已清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
 
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
+    async fn install_remote_windows(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
+        crate::windows_install::require_x64(host, "NapCat")
+            .and_then(|_| self.check_target(host))?;
+        crate::windows_install::recover(host, &self.install_base_dir).await?;
+        let parent = self
+            .install_base_dir
+            .parent()
+            .ok_or_else(|| ActionError::other("NapCat 安装目录无父目录"))?;
+        let nonce = crate::windows_install::nonce();
+        let stage = parent.join(format!(".ncd-napcat-stage-{nonce}"));
+        let payload = stage.join("payload");
+        host.create_dir_all(&payload).await?;
+        let local = ctx.download_path(format!("ncd-napcat-{nonce}.zip"))?;
+        DownloadHelper::new()?
+            .download_with_mirrors(
+                &build_mirror_urls(&self.download_url, None),
+                &local,
+                self.expected_sha256.as_deref(),
+                ctx,
+                1,
+            )
+            .await?;
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+        let archive = stage.join("napcat.zip");
+        host.upload(&local, &archive).await?;
+        let _ = tokio::fs::remove_file(local).await;
+        host.extract_archive(&archive, &payload, ncd_host::ArchiveKind::Zip)
+            .await?;
+        if !host.exists(&payload.join("napcat.mjs")).await? {
+            return Err(ActionError::other("NapCat 发行包缺少 napcat.mjs"));
+        }
+        if ctx.is_cancelled() {
+            return Err(ActionError::Cancelled);
+        }
+        crate::windows_install::replace(host, &self.install_base_dir, &payload, &["config", "log"])
+            .await?;
+        let _ = host.remove_dir_all(&stage).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }

@@ -29,16 +29,7 @@ use crate::requirement::Requirement;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// 默认 GitHub 镜像 fallback 列表(对齐 legacy install_snowluma.sh.j2)
-pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
-    "", // 直连(空前缀)
-    "https://gh.ddlc.top/",
-    "https://gh-proxy.com/",
-    "https://ghfast.top/",
-    "https://cors.isteed.cc/",
-    "https://ghproxy.cc/",
-    "https://github.akams.cn/",
-];
+pub use ncd_network::DEFAULT_MIRROR_PREFIXES;
 
 /// SnowLuma 部署模式
 ///
@@ -62,7 +53,7 @@ pub struct SnowLumaComponent {
     /// GitHub release URL(直连形式),如
     /// https://github.com/SnowLuma/SnowLuma/releases/download/v1.14.13/SnowLuma-v1.14.13-linux-x64.tar.gz
     pub framework_url: String,
-    /// 镜像前缀列表(默认使用 [DEFAULT_MIRROR_PREFIXES])
+    /// 为空时使用 Desktop 的下载线路设置。
     pub mirror_prefixes: Vec<String>,
     /// 期望 SHA256(可选)
     pub expected_sha256: Option<String>,
@@ -95,10 +86,7 @@ impl SnowLumaComponent {
             workspace_dir,
             snowluma_dir,
             framework_url: framework_url.into(),
-            mirror_prefixes: DEFAULT_MIRROR_PREFIXES
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            mirror_prefixes: Vec::new(),
             expected_sha256: None,
             preloaded_tarball: None,
             mode: PlatformMode::Linux,
@@ -133,10 +121,7 @@ impl SnowLumaComponent {
             workspace_dir: install_dir.clone(),
             snowluma_dir: install_dir,
             framework_url: url,
-            mirror_prefixes: DEFAULT_MIRROR_PREFIXES
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            mirror_prefixes: Vec::new(),
             expected_sha256: None,
             preloaded_tarball: None,
             mode: PlatformMode::Windows,
@@ -207,19 +192,13 @@ impl SnowLumaComponent {
         self.snowluma_dir.join(".installed_tag")
     }
 
-    /// 拼接镜像 URL 列表(直连放第一位,失败按顺序 fallback)
     fn mirror_urls(&self) -> Vec<String> {
-        self.mirror_prefixes
-            .iter()
-            .map(|prefix| {
-                if prefix.is_empty() {
-                    self.framework_url.clone()
-                } else {
-                    let trimmed = prefix.trim_end_matches('/');
-                    format!("{trimmed}/{}", self.framework_url)
-                }
-            })
-            .collect()
+        if self.mirror_prefixes.is_empty() {
+            ncd_network::build_mirror_urls(&self.framework_url, None)
+        } else {
+            let prefixes: Vec<_> = self.mirror_prefixes.iter().map(String::as_str).collect();
+            ncd_network::build_mirror_urls(&self.framework_url, Some(&prefixes))
+        }
     }
 
     /// 组件元数据,给 list_components Tauri command 使用
@@ -231,6 +210,7 @@ impl SnowLumaComponent {
             repo_url: Some("https://github.com/SnowLuma/SnowLuma".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Remote),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
             ],
@@ -251,6 +231,7 @@ impl Component for SnowLumaComponent {
         // (legacy SnowLumaInstall),Windows 远端不支持(没有用例)
         &[
             (Os::Windows, Locality::Local),
+            (Os::Windows, Locality::Remote),
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
         ]
@@ -258,6 +239,9 @@ impl Component for SnowLumaComponent {
 
     fn requirements(&self, os: Os, locality: Locality) -> Vec<Requirement> {
         let mut reqs = Vec::new();
+        if os == Os::Windows && locality == Locality::Remote {
+            reqs.push(Requirement::component(ComponentId::WindowsAgent));
+        }
         // 完整包自带 node;只有 lite 才要外置 Node,版本按上游脚本
         if self.package == SnowLumaLinuxPackage::Lite {
             reqs.push(Requirement::component_version(
@@ -672,6 +656,11 @@ impl SnowLumaComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
+        let remote_windows = host.locality() == Locality::Remote;
+        crate::windows_install::require_x64(host, "SnowLuma")?;
+        if remote_windows {
+            crate::windows_install::recover(host, &self.snowluma_dir).await?;
+        }
         let tag = self.windows_tag.as_deref().ok_or_else(|| {
             ActionError::install_step(
                 "snowluma_windows_install",
@@ -686,10 +675,21 @@ impl SnowLumaComponent {
         ))
         .await;
 
-        host.create_dir_all(&self.snowluma_dir).await?;
-        let stage_dir = self
-            .snowluma_dir
-            .join(format!("_stage-{}", std::process::id()));
+        let stage_dir = if remote_windows {
+            let parent = self
+                .snowluma_dir
+                .parent()
+                .ok_or_else(|| ActionError::other("SnowLuma 安装目录无父目录"))?;
+            host.create_dir_all(&parent).await?;
+            parent.join(format!(
+                ".ncd-snowluma-stage-{}",
+                crate::windows_install::nonce()
+            ))
+        } else {
+            host.create_dir_all(&self.snowluma_dir).await?;
+            self.snowluma_dir
+                .join(format!("_stage-{}", std::process::id()))
+        };
         // 任何残留 stage 都先清掉
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
@@ -765,8 +765,28 @@ impl SnowLumaComponent {
             payload_root.as_posix()
         ))
         .await;
-        self.copy_extracted_into_install(host, &payload_root)
+        if remote_windows {
+            let required: &[&str] = if self.package == SnowLumaLinuxPackage::Full {
+                &["index.mjs", "node.exe", "package.json"]
+            } else {
+                &["index.mjs", "package.json"]
+            };
+            for name in required {
+                if !host.exists(&payload_root.join(name)).await? {
+                    return Err(ActionError::other(format!("SnowLuma 发行包缺少 {name}")));
+                }
+            }
+            crate::windows_install::replace(
+                host,
+                &self.snowluma_dir,
+                &payload_root,
+                &["config", "data"],
+            )
             .await?;
+        } else {
+            self.copy_extracted_into_install(host, &payload_root)
+                .await?;
+        }
         let _ = host.remove_dir_all(&stage_dir).await;
         ctx.info("SnowLuma 文件已复制，临时目录已清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
@@ -1126,8 +1146,8 @@ mod tests {
         // 7 = 1 直连 + 6 镜像(legacy install_snowluma.sh.j2 L325-L331)
         assert_eq!(DEFAULT_MIRROR_PREFIXES.len(), 7);
         assert_eq!(DEFAULT_MIRROR_PREFIXES[0], "");
-        assert!(DEFAULT_MIRROR_PREFIXES.contains(&"https://gh-proxy.com/"));
-        assert!(DEFAULT_MIRROR_PREFIXES.contains(&"https://github.akams.cn/"));
+        assert!(DEFAULT_MIRROR_PREFIXES.contains(&"https://gh-proxy.com"));
+        assert!(DEFAULT_MIRROR_PREFIXES.contains(&"https://github.akams.cn"));
     }
 
     #[test]

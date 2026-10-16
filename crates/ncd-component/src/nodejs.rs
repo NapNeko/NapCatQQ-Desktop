@@ -273,6 +273,7 @@ impl NodeJsComponent {
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Remote),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
                 crate::types::SupportedTarget::new(Os::MacOs, Locality::Local),
@@ -292,6 +293,7 @@ impl Component for NodeJsComponent {
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
         &[
             (Os::Windows, Locality::Local),
+            (Os::Windows, Locality::Remote),
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
             (Os::MacOs, Locality::Local),
@@ -354,6 +356,11 @@ impl Component for NodeJsComponent {
 
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.check_target(host)?;
+        let remote_windows = host.os() == Os::Windows && host.locality() == Locality::Remote;
+        if remote_windows {
+            crate::windows_install::recover(host, &self.install_dir).await?;
+        }
+        let install_nonce = crate::windows_install::nonce();
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
         // Step 1: 下载归档
@@ -370,9 +377,10 @@ impl Component for NodeJsComponent {
             "tar.xz"
         };
         let local_tmp = ctx.download_path(format!(
-            "ncd-nodejs-{}-{}.{}",
+            "ncd-nodejs-{}-{}-{}.{}",
             self.version,
             std::process::id(),
+            install_nonce,
             archive_ext
         ))?;
 
@@ -396,9 +404,10 @@ impl Component for NodeJsComponent {
         })
         .await;
         let remote_archive = self.tmp_dir.join(format!(
-            "ncd-nodejs-{}-{}.{}",
+            "ncd-nodejs-{}-{}-{}.{}",
             self.version,
             std::process::id(),
+            install_nonce,
             archive_ext
         ));
         host.create_dir_all(&self.tmp_dir).await?;
@@ -414,7 +423,7 @@ impl Component for NodeJsComponent {
         .await;
         let stage_dir = self
             .tmp_dir
-            .join(format!("ncd-nodejs-stage-{}", std::process::id()));
+            .join(format!("ncd-nodejs-stage-{install_nonce}"));
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
 
@@ -433,13 +442,23 @@ impl Component for NodeJsComponent {
             message: "install to target dir".into(),
         })
         .await;
-        let _ = host.remove_dir_all(&self.install_dir).await;
-        host.create_dir_all(&self.install_dir).await?;
         let root_subdir = stage_dir.join(self.extract_root_subdir(host));
-
-        if host.os() == Os::Windows {
+        if remote_windows {
+            let parent = self
+                .install_dir
+                .parent()
+                .ok_or_else(|| ActionError::other("Node 安装目录无父目录"))?;
+            let incoming = parent.join(format!(".ncd-node-new-{install_nonce}"));
+            host.create_dir_all(&incoming).await?;
+            copy_dir_all(host, &root_subdir, &incoming).await?;
+            crate::windows_install::replace(host, &self.install_dir, &incoming, &[]).await?;
+        } else if host.os() == Os::Windows {
+            let _ = host.remove_dir_all(&self.install_dir).await;
+            host.create_dir_all(&self.install_dir).await?;
             copy_dir_all(host, &root_subdir, &self.install_dir).await?;
         } else {
+            let _ = host.remove_dir_all(&self.install_dir).await;
+            host.create_dir_all(&self.install_dir).await?;
             let root = BashShell.escape(root_subdir.as_posix());
             let dest = BashShell.escape(self.install_dir.as_posix());
             let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
