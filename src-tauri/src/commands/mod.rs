@@ -20,6 +20,7 @@ pub mod host_resolve;
 pub mod koishi;
 pub mod mcp;
 pub mod ncd_watch;
+pub mod network;
 pub mod onebot_debug;
 pub mod release;
 pub mod servers;
@@ -69,6 +70,7 @@ pub async fn connect_remote_host(
         host: request.host.clone(),
         port: if request.port == 0 { 22 } else { request.port },
         username: request.username.clone(),
+        platform: None,
         auth_method: if request.password.is_some() {
             ncd_runtime::AuthMethod::Password
         } else {
@@ -433,6 +435,11 @@ mod tests {
             components,
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings),
+            network: Arc::new(
+                ncd_runtime::desktop::network::NetworkManager::blocked(&Default::default())
+                    .unwrap(),
+            ),
+            network_update_gate: tokio::sync::Mutex::new(()),
             offline_notifier: composite_offline,
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),

@@ -24,6 +24,8 @@ fn get_app_settings() -> AppSettingsDto {
     AppSettingsDto {
         settings: AppSettings::default(),
         github_pat: String::new(),
+        proxy_password: String::new(),
+        network_error: None,
     }
 }
 

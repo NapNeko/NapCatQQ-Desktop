@@ -3,8 +3,8 @@
 use ncd_domain::ids::BotId;
 use ncd_runtime::ncd_watch_sync::{
     WatchNotifyConfig, WatchNotifyExtras, apply_watch_login_targets,
-    build_notify_config_with_extras, clear_desktop_present, write_desktop_present,
-    write_notify_json_merged,
+    build_notify_config_with_extras, clear_desktop_present, target_watch_home,
+    write_desktop_present, write_notify_json_merged,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -66,6 +66,8 @@ pub async fn sync_ncd_watch_notify(
         .as_deref()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| "无法解析远端 $HOME，请先测试连接".to_string())?;
+    let watch_home = target_watch_home(host.as_ref(), home)?;
+    let home = watch_home.as_str();
 
     let bots = state
         .bot_manager
@@ -196,13 +198,32 @@ async fn push_notify_for_server(
         }
         return Err(());
     };
+    let Ok(watch_home) = target_watch_home(host.as_ref(), home) else {
+        return Err(());
+    };
+    let home = watch_home.as_str();
     // 心跳只写给装了 ncd-watch 的机：没人读的 present / notify / metrics 每轮要四五次 SFTP。
     // 一次 stat 换这几次写；装上以后下一轮心跳（45 秒内，present 90 秒才过期）就接上
     if matches!(mode, NotifyPushMode::Heartbeat) {
-        let root = selected.as_ref().and_then(|s| s.ncd_watch_root.as_deref());
-        let bin = ncd_component::ncd_watch_bin_path(home, root);
-        if !host.exists(&bin).await.unwrap_or(false) {
-            return Err(());
+        if host.os() == ncd_host::Os::Windows {
+            use ncd_domain::windows_remote::*;
+            let response = host
+                .windows_agent_request(WindowsAgentRequest {
+                    v: 1,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    action: WindowsAgentAction::Hello,
+                })
+                .await;
+            if !matches!(response, Ok(WindowsAgentResponse { result: WindowsAgentResult::Hello(ref status), .. }) if status.capabilities.iter().any(|feature| feature == "watch_v1"))
+            {
+                return Err(());
+            }
+        } else {
+            let root = selected.as_ref().and_then(|s| s.ncd_watch_root.as_deref());
+            let bin = ncd_component::ncd_watch_bin_path(home, root);
+            if !host.exists(&bin).await.unwrap_or(false) {
+                return Err(());
+            }
         }
     }
     if let Err(e) = write_desktop_present(host.as_ref(), home, Some(version)).await {
@@ -411,6 +432,10 @@ pub async fn clear_present_on_all_remote_servers(state: &AppState) {
         let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
             continue;
         };
+        let Ok(watch_home) = target_watch_home(host.as_ref(), home) else {
+            continue;
+        };
+        let home = watch_home.as_str();
         if let Err(e) = clear_desktop_present(host.as_ref(), home).await {
             tracing::debug!(server_id = %profile.id, %e, "clear desktop_present failed");
         } else {

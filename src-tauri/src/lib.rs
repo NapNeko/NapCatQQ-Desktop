@@ -72,6 +72,8 @@ pub struct AppState {
     pub(crate) components: Arc<ncd_runtime::ComponentExecutor>,
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
     pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
+    pub(crate) network: Arc<ncd_runtime::desktop::network::NetworkManager>,
+    pub(crate) network_update_gate: Mutex<()>,
     /// 离线告警 fan-out(桌面 Toast / Webhook / Email / OneBot)
     pub(crate) offline_notifier: Arc<ncd_runtime::CompositeOfflineNotifier>,
     pub(crate) lightweight_scheduler: Arc<lightweight_scheduler::LightweightScheduler>,
@@ -247,8 +249,27 @@ pub fn run() {
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
     );
-    let mut app_settings = ncd_runtime::desktop::load_app_settings(&data_root);
-    ncd_runtime::desktop::backfill_snowluma_package(&data_root, &mut app_settings);
+    let loaded_settings = ncd_runtime::desktop::load_app_settings_checked(&data_root);
+    let mut app_settings = loaded_settings.as_ref().cloned().unwrap_or_default();
+    if loaded_settings.is_ok() {
+        ncd_runtime::desktop::backfill_snowluma_package(&data_root, &mut app_settings);
+    }
+    let configured_network = loaded_settings
+        .and_then(|_| ncd_runtime::desktop::network::read_proxy_password(secrets.as_ref()))
+        .and_then(|password| {
+            ncd_runtime::desktop::network::NetworkManager::new(
+                &app_settings.network,
+                password.as_deref().unwrap_or_default(),
+            )
+        });
+    #[allow(clippy::expect_used)]
+    let network = Arc::new(configured_network.unwrap_or_else(|error| {
+        tracing::error!(%error, "网络设置无法应用，外网请求已停用，请在设置中修复");
+        ncd_runtime::desktop::network::NetworkManager::blocked(&app_settings.network)
+            .expect("构建停用网络客户端失败")
+    }));
+    #[allow(clippy::expect_used)]
+    ncd_network::client::install_network_provider(network.clone()).expect("网络服务重复初始化");
     // 以 app-settings 为准收敛 HKCU Run(开=刷新路径,关=删本产品值)
     autostart::reconcile_launch_on_startup(app_settings.launch_on_startup);
     let app_settings_shared = Arc::new(RwLock::new(app_settings.clone()));
@@ -493,6 +514,8 @@ pub fn run() {
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings_shared),
             offline_notifier: Arc::clone(&offline_notifier),
+            network,
+            network_update_gate: Mutex::new(()),
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(Mutex::new(None)),
             metrics_collector: metrics_collector.clone(),
@@ -875,6 +898,8 @@ pub fn run() {
             commands::release::get_release_snapshot,
             commands::app_settings::get_app_settings,
             commands::app_settings::set_app_settings,
+            commands::network::list_download_mirrors,
+            commands::network::test_network_settings,
             commands::desktop_consent::get_desktop_agreements,
             commands::desktop_consent::accept_desktop_agreements,
             commands::desktop_onboarding::get_desktop_onboarding,
@@ -1089,6 +1114,7 @@ pub fn run() {
             commands::servers::scan_local_ssh_keys,
             commands::servers::discover_local_ssh_hosts,
             commands::servers::refresh_remote_inventory,
+            commands::servers::get_remote_windows_info,
             commands::servers::fetch_imported_network,
             commands::docker::ops::docker_probe,
             commands::docker::install::docker_install,

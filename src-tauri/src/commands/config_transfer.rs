@@ -413,6 +413,8 @@ fn normalize_app_settings_import(value: serde_json::Value) -> Result<serde_json:
     let mut settings: ncd_domain::AppSettings = serde_json::from_value(value)
         .map_err(|e| format!("app-settings.json 不是合法应用设置,已中止导入: {e}"))?;
     settings.normalize();
+    ncd_network::client::validate_network_settings(&settings.network)
+        .map_err(|error| format!("网络设置无效，已中止导入: {error}"))?;
     serde_json::to_value(&settings).map_err(|e| format!("序列化 app-settings 失败: {e}"))
 }
 
@@ -527,6 +529,7 @@ pub async fn import_config(
     state.migrate_gate.ensure_idle()?;
     let _framework_guard = state.app_manager.framework_config_transfer_guard().await;
     let source = PathBuf::from(&source_path);
+    let _settings_guard = state.network_update_gate.lock().await;
     let (staging, _kind, _guard) = resolve_import_staging(&source)?;
 
     // Legacy password fields are normalized without importing credentials into this machine's keyring.
@@ -538,6 +541,21 @@ pub async fn import_config(
         frontend_preferences,
         framework_backups,
     } = prepare_import_transaction(&staging, &state.data_root, &secrets)?;
+
+    let imported_settings: Option<ncd_domain::AppSettings> =
+        imported_cache_payload(&txn, &state.data_root, "config/app-settings.json", None)?;
+    let prepared_network = if let Some(settings) = imported_settings.as_ref() {
+        let local_secrets = ncd_runtime::SecretStoreImpl::new(state.data_root.join("secrets"));
+        let password = ncd_runtime::desktop::network::read_proxy_password(&local_secrets)?;
+        let current = state.app_settings.read().await;
+        ensure_import_proxy_identity(&current.network, &settings.network, password.as_deref())?;
+        Some(ncd_runtime::desktop::network::NetworkManager::prepare(
+            &settings.network,
+            password.as_deref().unwrap_or_default(),
+        )?)
+    } else {
+        None
+    };
 
     let mut instances: Option<Vec<ncd_domain::AppInstance>> = imported_cache_payload(
         &txn,
@@ -619,6 +637,13 @@ pub async fn import_config(
         .app_manager
         .framework_configs_restored(&framework_restore.restored_ids);
 
+    if let Some(prepared) = prepared_network {
+        state.network.apply(prepared);
+        if let Err(error) = ncd_runtime::release::invalidate_release_cache(&state.data_root) {
+            tracing::warn!(%error, "导入后清除版本缓存失败");
+        }
+    }
+
     let settings = state.app_settings.read().await.clone();
     let mut prefs = ncd_runtime::metrics::BotRuntimeMetricsPrefs::from_app(&settings);
     prefs.normalize();
@@ -639,6 +664,21 @@ pub async fn import_config(
         frontend_preferences,
         framework_pending: Some(framework_restore.pending),
     })
+}
+
+fn ensure_import_proxy_identity(
+    current: &ncd_domain::NetworkSettings,
+    imported: &ncd_domain::NetworkSettings,
+    password: Option<&str>,
+) -> Result<(), String> {
+    let same_endpoint = url::Url::parse(current.proxy_url.trim()).ok()
+        == url::Url::parse(imported.proxy_url.trim()).ok();
+    if password.is_some_and(|password| !password.is_empty())
+        && (!same_endpoint || current.proxy_username.trim() != imported.proxy_username.trim())
+    {
+        return Err("导入的代理地址或用户名与本机不同，请先在网络设置中清除代理密码，再重新导入并配置新凭据".into());
+    }
+    Ok(())
 }
 
 fn normalize_imported_instance_states(
@@ -809,6 +849,59 @@ mod regression_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn importing_another_proxy_never_reuses_local_password() {
+        let current = ncd_domain::NetworkSettings {
+            proxy_url: "http://proxy-a.example:80".into(),
+            proxy_username: "alice".into(),
+            ..Default::default()
+        };
+        let mut imported = current.clone();
+        imported.proxy_url = "http://proxy-a.example/".into();
+        assert!(ensure_import_proxy_identity(&current, &imported, Some("password")).is_ok());
+        imported.proxy_url = "http://proxy-b.example/".into();
+        assert!(ensure_import_proxy_identity(&current, &imported, Some("password")).is_err());
+        assert!(ensure_import_proxy_identity(&current, &imported, None).is_ok());
+        imported = current.clone();
+        imported.proxy_username = "bob".into();
+        assert!(ensure_import_proxy_identity(&current, &imported, Some("password")).is_err());
+    }
+
+    #[test]
+    fn network_import_defaults_legacy_and_rejects_embedded_credentials() {
+        let legacy = normalize_app_settings_import(serde_json::json!({})).unwrap();
+        assert_eq!(legacy["network"]["proxyMode"], "system");
+        assert_eq!(legacy["network"]["githubDownloadMode"], "auto");
+        let invalid = serde_json::json!({
+            "network": {
+                "proxyMode": "manual",
+                "proxyUrl": "http://user:private-password@localhost:7890"
+            }
+        });
+        let error = normalize_app_settings_import(invalid).unwrap_err();
+        assert!(!error.contains("private-password"));
+        assert!(error.contains("网络设置无效"));
+    }
+
+    #[test]
+    fn network_import_keeps_selected_source_without_importing_proxy_password() {
+        let imported = normalize_app_settings_import(serde_json::json!({
+            "network": {
+                "proxyMode": "direct",
+                "githubDownloadMode": "mirror",
+                "githubMirror": "https://mirror.example"
+            },
+            "proxyPassword": "not-imported"
+        }))
+        .unwrap();
+        assert_eq!(imported["network"]["githubDownloadMode"], "mirror");
+        assert_eq!(
+            imported["network"]["githubMirror"],
+            "https://mirror.example"
+        );
+        assert!(imported.get("proxyPassword").is_none());
+    }
 
     fn force_fallback_secrets() -> (tempfile::TempDir, ncd_runtime::SecretStoreImpl) {
         let dir = tempfile::tempdir().unwrap();

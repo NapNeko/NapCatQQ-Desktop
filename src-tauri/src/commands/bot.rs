@@ -593,6 +593,11 @@ mod tests {
             components,
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings),
+            network: Arc::new(
+                ncd_runtime::desktop::network::NetworkManager::blocked(&Default::default())
+                    .unwrap(),
+            ),
+            network_update_gate: tokio::sync::Mutex::new(()),
             offline_notifier: composite_offline,
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),

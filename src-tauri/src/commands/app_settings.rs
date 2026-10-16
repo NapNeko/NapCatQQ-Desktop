@@ -6,14 +6,13 @@
 
 use ncd_domain::{AppSettingsDto, OfflineWebhookChannel};
 use ncd_runtime::SecretStoreImpl;
+use ncd_runtime::desktop::network::read_proxy_password;
+use ncd_runtime::desktop::network_settings::{GITHUB_PAT_SECRET_KEY, save_desktop_settings};
 use ncd_traits::SecretStore;
 use tauri::{AppHandle, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
-
-/// GitHub PAT 在 SecretStore 里的 key与 SSH 凭证的 ssh:{id} 命名风格一致
-const GITHUB_PAT_SECRET_KEY: &str = "app:github_pat";
 
 fn secret_store(state: &AppState) -> SecretStoreImpl {
     SecretStoreImpl::new(state.data_root.join("secrets"))
@@ -25,7 +24,12 @@ fn secret_store(state: &AppState) -> SecretStoreImpl {
 /// 不报错PAT 读 SecretStore,keyring 不可用 / 未设置时回落空串
 #[tauri::command]
 pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsDto, String> {
-    let settings = ncd_runtime::desktop::load_app_settings(&state.data_root);
+    let _settings_guard = state.network_update_gate.lock().await;
+    let (settings, mut network_error) =
+        match ncd_runtime::desktop::load_app_settings_checked(&state.data_root) {
+            Ok(settings) => (settings, None),
+            Err(error) => (ncd_domain::AppSettings::default(), Some(error)),
+        };
 
     let github_pat = secret_store(&state)
         .get(GITHUB_PAT_SECRET_KEY)
@@ -33,9 +37,25 @@ pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsD
         .flatten()
         .unwrap_or_default();
 
+    let proxy_password = match read_proxy_password(&secret_store(&state)) {
+        Ok(password) => password.unwrap_or_default(),
+        Err(error) => {
+            network_error = Some(error);
+            String::new()
+        }
+    };
+    if network_error.is_none() {
+        network_error = ncd_runtime::desktop::network::NetworkManager::prepare(
+            &settings.network,
+            &proxy_password,
+        )
+        .err();
+    }
     Ok(AppSettingsDto {
         settings,
         github_pat,
+        proxy_password,
+        network_error,
     })
 }
 
@@ -52,56 +72,11 @@ pub async fn set_app_settings(
     dto: AppSettingsDto,
 ) -> Result<(), String> {
     state.migrate_gate.ensure_idle()?;
+    let _settings_guard = state.network_update_gate.lock().await;
+    let (settings, network_changed) =
+        save_desktop_settings(&state.data_root, &state.app_settings, &state.network, dto).await?;
 
-    let mut settings = dto.settings;
-    settings.normalize();
-    let pat = dto.github_pat.trim();
-    let secrets = secret_store(&state);
-    let previous_pat = secrets
-        .get(GITHUB_PAT_SECRET_KEY)
-        .map_err(|e| format!("读取 GitHub PAT 失败: {e}"))?;
-    let pat_changed = previous_pat
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        != (!pat.is_empty()).then_some(pat);
-
-    // 先保存凭据，避免 PAT 写入失败后仍将请求方式切换为直连。
-    if pat.is_empty() {
-        match secrets.delete(GITHUB_PAT_SECRET_KEY) {
-            Ok(()) => {}
-            Err(ncd_domain::errors::SecretError::NotFound) if previous_pat.is_none() => {}
-            Err(err) => return Err(format!("清除 GitHub PAT 失败: {err}")),
-        }
-        // SecretStore 可能同时使用系统密钥库与加密回退存储，确认两处均已清除。
-        if secret_store(&state)
-            .get(GITHUB_PAT_SECRET_KEY)
-            .map_err(|e| format!("确认 GitHub PAT 清除结果失败: {e}"))?
-            .is_some()
-        {
-            return Err("清除 GitHub PAT 失败，凭据仍存在".to_string());
-        }
-    } else {
-        secrets
-            .put(GITHUB_PAT_SECRET_KEY, pat)
-            .map_err(|e| format!("保存 GitHub PAT 失败: {e}"))?;
-    }
-
-    // 包类型由组件安装 / 卸载流程维护，设置页的旧草稿不能覆盖当前安装状态
-    let (settings, github_mode_changed) = ncd_runtime::desktop::update_app_settings(
-        &state.data_root,
-        &state.app_settings,
-        move |current| {
-            let package = current.snowluma_package;
-            let github_mode_changed = current.github_api_mode != settings.github_api_mode;
-            *current = settings;
-            current.snowluma_package = package;
-            github_mode_changed
-        },
-    )
-    .await?;
-
-    if github_mode_changed || pat_changed {
+    if network_changed {
         if let Err(err) = ncd_runtime::release::invalidate_release_cache(&state.data_root) {
             // 配置已经落盘，缓存清理失败不应阻断其他设置的热更新。
             tracing::warn!(error = %err, "GitHub 配置已保存，清除版本缓存失败");

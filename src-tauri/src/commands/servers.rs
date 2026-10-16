@@ -17,6 +17,21 @@ pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerProfil
 }
 
 #[tauri::command]
+pub async fn get_remote_windows_info(
+    state: State<'_, AppState>,
+    server_id: String,
+) -> Result<Option<ncd_domain::windows_remote::RemoteWindowsInfo>, String> {
+    let host = state.server_manager.ensure_connected(&server_id).await?;
+    if host.os() != ncd_host::Os::Windows {
+        return Ok(None);
+    }
+    host.remote_windows_info()
+        .await
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn test_server_connection(
     state: State<'_, AppState>,
     id: String,

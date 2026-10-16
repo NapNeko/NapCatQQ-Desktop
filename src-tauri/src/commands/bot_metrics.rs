@@ -213,6 +213,10 @@ async fn resolve_remote_host_and_home(
         .await
         .map_err(|e| format!("远端连接失败：{e}"))?;
     let host_id = format!("remote:{server_id}");
+    if host.os() == ncd_host::Os::Windows {
+        let home = ncd_runtime::metrics::probe_remote_home(host.as_ref()).await?;
+        return Ok((host, home));
+    }
     let (probe, _) = cached_host_probe(&host_id, host.as_ref(), state).await;
     let home = probe
         .home
