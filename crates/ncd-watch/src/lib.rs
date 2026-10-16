@@ -21,6 +21,8 @@ pub mod login_probe;
 #[cfg(feature = "daemon")]
 pub mod onebot;
 #[cfg(feature = "daemon")]
+pub mod platform;
+#[cfg(feature = "daemon")]
 pub mod present;
 #[cfg(feature = "daemon")]
 pub mod probe;

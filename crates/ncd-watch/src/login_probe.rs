@@ -134,6 +134,20 @@ pub async fn probe_login_status(
     bot: &NotifyBotTarget,
     cache: &mut WebUiLoginCache,
 ) -> (LoginStatus, String) {
+    if !bot.is_docker() {
+        if let Some(adapter) = crate::platform::adapter() {
+            let state = adapter
+                .observe(bot)
+                .await
+                .map(|observation| observation.state);
+            let status = match state {
+                Some(ncd_relogin::AccountState::Online) => LoginStatus::LoggedIn,
+                Some(ncd_relogin::AccountState::Offline) => LoginStatus::LoggedOut,
+                _ => LoginStatus::Unknown,
+            };
+            return (status, "authenticated native supervisor".into());
+        }
+    }
     if !bot.backend.eq_ignore_ascii_case("napcat") && !bot.backend.eq_ignore_ascii_case("snowluma")
     {
         return (

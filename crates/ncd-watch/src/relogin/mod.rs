@@ -2,7 +2,7 @@
 mod capture;
 #[cfg(test)]
 mod tests;
-pub(crate) mod webui;
+pub mod webui;
 
 use crate::config::{NotifyConfig, WatchPaths};
 use crate::relogin_config::{WatchEventEndpoint, WatchLoginTarget};
@@ -44,6 +44,16 @@ impl WatchPort {
         }
     }
     async fn read(&self, bot: &str, path: &str) -> Result<Value, String> {
+        if self
+            .config
+            .bots
+            .iter()
+            .any(|target| target.bot_id == bot && !target.is_docker())
+        {
+            if let Some(adapter) = crate::platform::adapter() {
+                return adapter.read_webui(bot, path).await;
+            }
+        }
         let target = self.target(bot).ok_or("缺少 watch 登录配置")?;
         let port = self.port(target).await.ok_or("WebUI 端口不可用")?;
         let sl = self
@@ -114,6 +124,19 @@ impl ReloginPort for WatchPort {
                     }
                 }
                 None => return Some(result),
+            }
+        }
+        if !config.is_docker() {
+            if let Some(adapter) = crate::platform::adapter() {
+                let mut observation = adapter.observe(config).await?;
+                observation.reset_generation = result.reset_generation;
+                if !observation.reset_generation.is_empty() {
+                    observation.generation = format!(
+                        "{}:{}",
+                        observation.reset_generation, observation.generation
+                    );
+                }
+                return Some(observation);
             }
         }
         if capture::process_absent(config, self.target(bot)).await == Some(true) {
@@ -260,7 +283,15 @@ impl ReloginPort for WatchPort {
             .iter()
             .find(|b| b.bot_id == bot)
             .ok_or("账号不存在")?;
-        let snapshot = if config.backend == "snowluma" {
+        let snapshot = if config.backend == "snowluma"
+            && !config.is_docker()
+            && crate::platform::adapter().is_some()
+        {
+            crate::platform::adapter()
+                .ok_or("原生会话辅助不可用")?
+                .qr(bot, refresh)
+                .await?
+        } else if config.backend == "snowluma" {
             let process = self.sl_process(bot).await.ok_or("QQ 进程不可用")?;
             if webui::account_state(&process, bot) != AccountState::Offline {
                 return Err("登录状态已改变".into());
@@ -414,7 +445,11 @@ impl ReloginPort for WatchPort {
                     .await;
         }
     }
-    async fn close_qr(&self, _bot: &str) {}
+    async fn close_qr(&self, bot: &str) {
+        if let Some(adapter) = crate::platform::adapter() {
+            adapter.close_qr(bot).await;
+        }
+    }
 }
 
 fn successful(value: &Value) -> bool {

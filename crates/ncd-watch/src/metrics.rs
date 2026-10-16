@@ -287,6 +287,7 @@ fn write_host_stats(path: &Path, state: &mut MetricsRunState, now: u64) -> Resul
 }
 
 /// /proc/meminfo → (total, used) bytes；used ≈ total - MemAvailable
+#[cfg(not(windows))]
 fn read_meminfo_bytes() -> Option<(u64, u64)> {
     let text = fs::read_to_string("/proc/meminfo").ok()?;
     let mut total_kb = None;
@@ -329,6 +330,7 @@ fn sample_cpu_percent(state: &mut MetricsRunState) -> Option<f64> {
     pct
 }
 
+#[cfg(not(windows))]
 fn read_proc_stat_cpu() -> Option<(u64, u64)> {
     let text = fs::read_to_string("/proc/stat").ok()?;
     let line = text.lines().next()?;
@@ -347,12 +349,62 @@ fn read_proc_stat_cpu() -> Option<(u64, u64)> {
 }
 
 /// 根分区 used/total。优先 `df -B1`（字节）；部分 busybox 无 -B 时回退 `df -k`。
+#[cfg(not(windows))]
 fn read_root_disk_bytes() -> Option<(u64, u64)> {
     if let Some(v) = parse_df_output(&run_df(&["-B1", "/"])?, 1) {
         return Some(v);
     }
     // -k：1KiB 块，乘 1024 得字节
     parse_df_output(&run_df(&["-k", "/"])?, 1024)
+}
+
+#[cfg(windows)]
+#[expect(unsafe_code, reason = "Windows host metric queries")]
+fn read_meminfo_bytes() -> Option<(u64, u64)> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+    if unsafe { GlobalMemoryStatusEx(&mut status) } == 0 {
+        return None;
+    }
+    Some((
+        status.ullTotalPhys,
+        status.ullTotalPhys.saturating_sub(status.ullAvailPhys),
+    ))
+}
+
+#[cfg(windows)]
+#[expect(unsafe_code, reason = "Windows CPU time snapshot")]
+fn read_proc_stat_cpu() -> Option<(u64, u64)> {
+    use windows_sys::Win32::{Foundation::FILETIME, System::Threading::GetSystemTimes};
+    let (mut idle, mut kernel, mut user): (FILETIME, FILETIME, FILETIME) =
+        unsafe { std::mem::zeroed() };
+    if unsafe { GetSystemTimes(&mut idle, &mut kernel, &mut user) } == 0 {
+        return None;
+    }
+    let value =
+        |time: FILETIME| (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime);
+    Some((value(idle), value(kernel).saturating_add(value(user))))
+}
+
+#[cfg(windows)]
+#[expect(unsafe_code, reason = "Windows system disk space query")]
+fn read_root_disk_bytes() -> Option<(u64, u64)> {
+    let drive = format!("{}\\", std::env::var("SystemDrive").ok()?);
+    let path: Vec<u16> = drive.encode_utf16().chain(Some(0)).collect();
+    let (mut available, mut total, mut free) = (0, 0, 0);
+    if unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+            path.as_ptr(),
+            &mut available,
+            &mut total,
+            &mut free,
+        )
+    } == 0
+    {
+        return None;
+    }
+    Some((total, total.saturating_sub(free)))
 }
 
 fn run_df(args: &[&str]) -> Option<String> {

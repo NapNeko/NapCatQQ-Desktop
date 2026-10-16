@@ -56,28 +56,43 @@ impl Prober for HostProber {
         if bot.is_docker() {
             return probe_docker(bot);
         }
-        if let Some(pid_file) = bot
-            .pid_file
-            .as_ref()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
+        #[cfg(windows)]
         {
-            return probe_pid_file(bot, Path::new(pid_file));
+            if let Some(adapter) = crate::platform::adapter() {
+                return adapter.process(bot);
+            }
+            return process_only(
+                bot,
+                ProbeKind::Unconfigured,
+                ProbeStatus::Unknown,
+                "Windows native probe requires the authenticated Agent host".into(),
+            );
         }
-        if let Some(pat) = bot
-            .process_match
-            .as_ref()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
+        #[cfg(not(windows))]
         {
-            return probe_process_match(bot, pat);
-        }
-        ProbeResult {
-            bot_id: bot.bot_id.clone(),
-            kind: ProbeKind::Unconfigured,
-            status: ProbeStatus::Unknown,
-            login: LoginStatus::Unknown,
-            detail: "no pid_file / process_match / docker target".into(),
+            if let Some(pid_file) = bot
+                .pid_file
+                .as_ref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                return probe_pid_file(bot, Path::new(pid_file));
+            }
+            if let Some(pat) = bot
+                .process_match
+                .as_ref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                return probe_process_match(bot, pat);
+            }
+            ProbeResult {
+                bot_id: bot.bot_id.clone(),
+                kind: ProbeKind::Unconfigured,
+                status: ProbeStatus::Unknown,
+                login: LoginStatus::Unknown,
+                detail: "no pid_file / process_match / docker target".into(),
+            }
         }
     }
 }
