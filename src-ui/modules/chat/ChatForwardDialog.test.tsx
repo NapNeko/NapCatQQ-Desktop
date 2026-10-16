@@ -1,9 +1,10 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { emptyAccount, ingestMessage, type Contact } from '../../core/domain/chat/model';
 import { ChatForwardError } from '../../core/domain/chat/messageTransfer';
+import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { ChatForwardDialog } from './ChatForwardDialog';
 
 vi.mock('@tanstack/react-virtual', async (importOriginal) => ({
@@ -22,7 +23,13 @@ vi.mock('@tanstack/react-virtual', async (importOriginal) => ({
 
 const recipient: Contact = { key: 'private:2', type: 'private', id: '2', name: '小红' };
 
+afterEach(() => {
+    cleanup();
+    preferencesStore.reset();
+});
+
 function setup() {
+    preferencesStore.setMotionEnabled(false);
     const store = new ChatAccountStore(
         {
             bot_id: 'forward-dialog',
