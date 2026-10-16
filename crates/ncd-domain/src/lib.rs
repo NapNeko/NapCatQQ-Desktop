@@ -31,6 +31,7 @@ pub mod log_snapshot;
 pub mod mcp;
 pub mod migration;
 pub mod napcat_events;
+pub mod network_settings;
 pub mod node_environment;
 pub mod offline_alert;
 pub mod onebot_debug;
@@ -46,6 +47,8 @@ pub mod snowluma_login;
 pub mod snowluma_start_mode;
 pub mod snowluma_ui;
 pub mod terminal;
+pub mod windows_bot;
+pub mod windows_remote;
 
 // 向后兼容: 下游 crate 仍可 use ncd_domain::{models::*, report::*}
 pub use migration as models;
@@ -137,6 +140,9 @@ pub use migration::{
     MigrationStage, MigrationWarning,
 };
 pub use napcat_events::{NapCatLoginInvalidationReason, NapCatWebuiAuthIssue};
+pub use network_settings::{
+    DownloadMirror, DownloadSourceMode, NetworkProbeResult, NetworkSettings, ProxyMode,
+};
 pub use node_environment::{NodeEnvironmentCandidate, NodeProbeResult, NodeSourceKind};
 pub use offline_alert::{
     EnsureOneBotMessengerHttpResult, OfflineAlert, OfflineAlertKind, OfflineAlertSource,

@@ -5,6 +5,7 @@ import type { CloseAction } from "./CloseAction";
 import type { FeatureToggles } from "./FeatureToggles";
 import type { GithubApiMode } from "./GithubApiMode";
 import type { McpServerSettings } from "./McpServerSettings";
+import type { NetworkSettings } from "./NetworkSettings";
 import type { OfflineEmailSettings } from "./OfflineEmailSettings";
 import type { OfflineOneBotSettings } from "./OfflineOneBotSettings";
 import type { OfflineWebhookSettings } from "./OfflineWebhookSettings";
@@ -23,7 +24,7 @@ poller: WebUiPollerSettings,
 /**
  * GitHub API 请求方式；PAT 单独存储在 SecretStore。
  */
-githubApiMode: GithubApiMode, 
+githubApiMode: GithubApiMode, network: NetworkSettings, 
 /**
  * 主页性能监控开关
  */

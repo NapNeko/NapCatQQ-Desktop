@@ -53,6 +53,8 @@ pub enum ComponentId {
     DesktopSelf,
     #[serde(rename = "ncd_watch")]
     NcdWatch,
+    #[serde(rename = "windows_agent")]
+    WindowsAgent,
     #[serde(rename = "karin")]
     Karin,
     #[serde(rename = "uv")]
@@ -86,6 +88,7 @@ impl ComponentId {
             Self::VcRedist => "vcredist",
             Self::DesktopSelf => "desktop_self",
             Self::NcdWatch => "ncd_watch",
+            Self::WindowsAgent => "windows_agent",
             Self::Karin => "karin",
             Self::Uv => "uv",
             Self::NoneBot2 => "nonebot2",

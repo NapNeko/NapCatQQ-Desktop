@@ -61,4 +61,4 @@ pathOverrides?: RemotePathOverrides | null,
 /**
  * 最近一次安装库存探测快照
  */
-inventory?: RemoteInventory | null, };
+inventory?: RemoteInventory | null, platform?: string | null, };

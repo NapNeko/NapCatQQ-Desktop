@@ -153,6 +153,10 @@ pub trait BotBackend: Send + Sync {
         Ok(())
     }
 
+    async fn sync_bot_config(&self, _config: &BotConfig) -> Result<(), BotBackendError> {
+        Ok(())
+    }
+
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError>;
     async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError>;
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError>;

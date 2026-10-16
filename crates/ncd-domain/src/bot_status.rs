@@ -8,27 +8,35 @@ use serde_json::{Map, Value};
 use crate::bot_actor::BotActorState;
 use crate::ids::BotId;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ProcessHandle {
     pub bot_id: BotId,
     pub pid: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotStatus {
     pub bot_id: BotId,
     pub state: BotActorState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub transport_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub pid: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
     pub started_at: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
     pub memory_rss_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
     pub server_total_memory_bytes: Option<u64>,
     #[serde(default)]
+    #[ts(type = "Record<string, unknown>")]
     pub extra: Map<String, Value>,
 }
 

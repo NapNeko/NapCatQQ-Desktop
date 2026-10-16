@@ -77,8 +77,9 @@ pub enum DomainEventKind {
     AppInstanceLogReset,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum DomainEvent {
     BotStateChanged {
         snapshot: BotActorSnapshot,

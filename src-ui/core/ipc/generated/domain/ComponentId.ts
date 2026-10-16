@@ -27,4 +27,4 @@
  * 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
  * Qq 切成 qq 也算巧合,但 NapCat 不行,所以统一都用显式 rename
  */
-export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "vcredist" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "git" | "redis" | "yunzai" | "neobot";
+export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "vcredist" | "desktop_self" | "ncd_watch" | "windows_agent" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "git" | "redis" | "yunzai" | "neobot";

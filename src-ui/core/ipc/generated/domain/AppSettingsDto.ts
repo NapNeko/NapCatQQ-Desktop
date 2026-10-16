@@ -8,4 +8,8 @@ export type AppSettingsDto = { settings: AppSettings,
 /**
  * GitHub PAT,空串视为清除
  */
-githubPat: string, };
+githubPat: string, 
+/**
+ * 仅经 IPC 传递，持久化交给 SecretStore；空串视为清除。
+ */
+proxyPassword: string, networkError?: string, };

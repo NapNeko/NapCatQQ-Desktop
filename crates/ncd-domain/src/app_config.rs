@@ -12,6 +12,7 @@ use crate::snowluma_linux_package::SnowLumaLinuxPackage;
 use crate::app_framework::AppFrameworkId;
 use crate::macros::default_true;
 use crate::mcp::McpServerSettings;
+use crate::network_settings::NetworkSettings;
 use crate::offline_alert::{
     OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookSettings,
 };
@@ -379,6 +380,8 @@ pub struct AppSettings {
     /// GitHub API 请求方式；PAT 单独存储在 SecretStore。
     #[serde(rename = "githubApiMode", default)]
     pub github_api_mode: GithubApiMode,
+    #[serde(default)]
+    pub network: NetworkSettings,
     /// 主页性能监控开关
     #[serde(rename = "performanceMonitorEnabled", default = "default_true")]
     pub performance_monitor_enabled: bool,
@@ -514,6 +517,7 @@ impl Default for AppSettings {
         Self {
             poller: WebUiPollerSettings::default(),
             github_api_mode: GithubApiMode::default(),
+            network: NetworkSettings::default(),
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
             bot_runtime_metrics_enabled: false,
@@ -553,6 +557,7 @@ impl AppSettings {
         self.normalize_task_queue_cleanup();
         self.normalize_lightweight_prefs();
         self.normalize_remote_host_health_probe();
+        self.network.normalize();
         self.features.normalize();
         self.offline_webhook.normalize();
         self.offline_onebot.normalize();
@@ -639,13 +644,29 @@ impl AppSettings {
 }
 
 /// 设置页 IPC 边界 DTO
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppSettingsDto {
     pub settings: AppSettings,
     /// GitHub PAT,空串视为清除
     #[serde(rename = "githubPat", default)]
     pub github_pat: String,
+    /// 仅经 IPC 传递，持久化交给 SecretStore；空串视为清除。
+    #[serde(rename = "proxyPassword", default)]
+    pub proxy_password: String,
+    #[serde(
+        rename = "networkError",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub network_error: Option<String>,
+}
+
+impl std::fmt::Debug for AppSettingsDto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppSettingsDto").finish_non_exhaustive()
+    }
 }
 
 // SystemResourceSnapshot 原在 system_resource.rs, 合并到 app_config:
@@ -881,6 +902,39 @@ mod tests {
         assert_eq!(parsed.performance_monitor_interval_ms, 5000);
         assert!(parsed.performance_monitor_enabled);
         assert_eq!(parsed.poller, WebUiPollerSettings::default());
+    }
+
+    #[test]
+    fn legacy_settings_gain_default_network_without_exposing_passwords() {
+        let parsed: AppSettings = serde_json::from_str(r#"{"githubApiMode":"direct"}"#).unwrap();
+        assert_eq!(parsed.network, NetworkSettings::default());
+        let dto: AppSettingsDto = serde_json::from_str(
+            r#"{"settings":{"network":{"proxyMode":"direct"}},"githubPat":"pat-value","proxyPassword":"  proxy-secret  "}"#,
+        )
+        .unwrap();
+        assert_eq!(dto.proxy_password, "  proxy-secret  ");
+        let saved = serde_json::to_string(&dto.settings).unwrap();
+        assert!(!saved.contains("proxyPassword"));
+        assert!(!saved.contains("proxy-secret"));
+        assert!(!saved.contains("pat-value"));
+        let debug = format!("{dto:?}");
+        assert!(!debug.contains("proxy-secret"));
+        assert!(!debug.contains("pat-value"));
+        let round_trip: AppSettingsDto =
+            serde_json::from_str(&serde_json::to_string(&dto).unwrap()).unwrap();
+        assert_eq!(round_trip, dto);
+        let legacy_dto: AppSettingsDto =
+            serde_json::from_str(r#"{"settings":{},"githubPat":""}"#).unwrap();
+        assert!(legacy_dto.proxy_password.is_empty());
+        assert!(legacy_dto.network_error.is_none());
+    }
+
+    #[test]
+    fn app_settings_normalize_network_fields() {
+        let mut settings = AppSettings::default();
+        settings.network.proxy_url = " http://127.0.0.1:7890 ".into();
+        settings.normalize();
+        assert_eq!(settings.network.proxy_url, "http://127.0.0.1:7890");
     }
 
     #[test]

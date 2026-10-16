@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(transparent)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotId(String);
 
 impl BotId {
