@@ -11,6 +11,44 @@ pub(super) struct Desktop {
 }
 
 impl Desktop {
+    pub(super) fn verify_access(&self, token: HANDLE) -> Result<(), String> {
+        unsafe {
+            if ImpersonateLoggedOnUser(token) == 0 {
+                return Err(native::last_error());
+            }
+            struct Revert;
+            impl Drop for Revert {
+                fn drop(&mut self) {
+                    unsafe {
+                        RevertToSelf();
+                    }
+                }
+            }
+            let _revert = Revert;
+            let path = String::from_utf16_lossy(&self.path[..self.path.len() - 1]);
+            let (station, desktop) = path
+                .split_once('\\')
+                .ok_or("invalid isolated desktop path")?;
+            let station = OpenWindowStationW(native::wide(station).as_ptr(), 0, GENERIC_ALL);
+            if station.is_null() {
+                return Err(format!(
+                    "limited token cannot open its window station: {}",
+                    native::last_error()
+                ));
+            }
+            CloseWindowStation(station);
+            let desktop = OpenDesktopW(native::wide(desktop).as_ptr(), 0, 0, GENERIC_ALL);
+            if desktop.is_null() {
+                return Err(format!(
+                    "limited token cannot open its desktop: {}",
+                    native::last_error()
+                ));
+            }
+            CloseDesktop(desktop);
+            Ok(())
+        }
+    }
+
     pub(super) fn new(owner: &str) -> Result<Self, String> {
         let name = format!("NcdAgentTest-{}", uuid::Uuid::new_v4());
         let descriptor =

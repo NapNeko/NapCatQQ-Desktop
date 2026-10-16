@@ -66,22 +66,59 @@ pub(super) fn run_limited(test: &str) -> Result<(), String> {
         {
             return Err(native::last_error());
         }
-        for handle in [log.as_raw_handle(), input.as_raw_handle()] {
+        let handles = [log.as_raw_handle(), input.as_raw_handle()];
+        for handle in handles {
             if SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) == 0 {
                 return Err(native::last_error());
             }
         }
-        let mut startup: STARTUPINFOW = std::mem::zeroed();
-        startup.cb = std::mem::size_of_val(&startup) as u32;
-        startup.dwFlags = STARTF_USESTDHANDLES;
-        startup.hStdInput = input.as_raw_handle();
-        startup.hStdOutput = log.as_raw_handle();
-        startup.hStdError = log.as_raw_handle();
-        startup.lpDesktop = desktop
+        let mut attribute_bytes = 0;
+        InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut attribute_bytes);
+        if attribute_bytes == 0 {
+            return Err(native::last_error());
+        }
+        let mut storage = vec![0usize; attribute_bytes.div_ceil(std::mem::size_of::<usize>())];
+        let attributes = storage.as_mut_ptr().cast();
+        if InitializeProcThreadAttributeList(attributes, 1, 0, &mut attribute_bytes) == 0 {
+            return Err(native::last_error());
+        }
+        struct Attributes(LPPROC_THREAD_ATTRIBUTE_LIST);
+        impl Drop for Attributes {
+            fn drop(&mut self) {
+                unsafe { DeleteProcThreadAttributeList(self.0) }
+            }
+        }
+        let attributes = Attributes(attributes);
+        if UpdateProcThreadAttribute(
+            attributes.0,
+            0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+            handles.as_ptr().cast(),
+            std::mem::size_of_val(&handles),
+            null_mut(),
+            null(),
+        ) == 0
+        {
+            return Err(native::last_error());
+        }
+        let mut startup: STARTUPINFOEXW = std::mem::zeroed();
+        startup.StartupInfo.cb = std::mem::size_of_val(&startup) as u32;
+        startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        startup.StartupInfo.hStdInput = input.as_raw_handle();
+        startup.StartupInfo.hStdOutput = log.as_raw_handle();
+        startup.StartupInfo.hStdError = log.as_raw_handle();
+        startup.StartupInfo.lpDesktop = desktop
             .as_mut()
             .map_or(null_mut(), |desktop| desktop.path.as_mut_ptr());
+        startup.lpAttributeList = attributes.0;
+        if let (Some(desktop), Some(limited)) = (&desktop, &limited) {
+            desktop.verify_access(limited.0)?;
+        }
         let mut info: PROCESS_INFORMATION = std::mem::zeroed();
-        let flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT;
+        let flags = CREATE_SUSPENDED
+            | CREATE_NO_WINDOW
+            | CREATE_UNICODE_ENVIRONMENT
+            | EXTENDED_STARTUPINFO_PRESENT;
         let result = if let Some(limited) = &limited {
             CreateProcessAsUserW(
                 limited.0,
@@ -93,7 +130,7 @@ pub(super) fn run_limited(test: &str) -> Result<(), String> {
                 flags,
                 block.as_ptr().cast(),
                 null(),
-                &startup,
+                &startup.StartupInfo,
                 &mut info,
             )
         } else {
@@ -106,7 +143,7 @@ pub(super) fn run_limited(test: &str) -> Result<(), String> {
                 flags,
                 block.as_ptr().cast(),
                 null(),
-                &startup,
+                &startup.StartupInfo,
                 &mut info,
             )
         };
