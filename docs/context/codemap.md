@@ -44,9 +44,10 @@ flowchart TB
   DEP --> TR
   TR --> DOM[ncd-domain]
   HOST --> DOM
+  NET --> DOM
 ```
 
-图里只画主要的边：除 ncd-network / ncd-log / ncd-template 这几个无内部依赖的 crate，其余都直接依赖 ncd-domain；runtime 也直接用 host / component / deploy / network / log。两个 `ncd-backend-*` 互不依赖。
+图里只画主要的边：除 ncd-log / ncd-template 这几个无内部依赖的 crate，其余都直接依赖 ncd-domain；runtime 也直接用 host / component / deploy / network / log。两个 `ncd-backend-*` 互不依赖。
 
 ---
 
@@ -62,7 +63,8 @@ flowchart TB
 | `crates/ncd-backend-napcat/` | NapCat 本机+远端实现（WebUI/login poller/remote native） |
 | `crates/ncd-backend-snowluma/` | SnowLuma daemon/poller + remote stack/tunnel |
 | `crates/ncd-onebot/` | OneBot 11 调试台协议层：动作目录（NapCat / SnowLuma 两种文档统一模型 + 内置快照）、HTTP / WS / SSE 客户端、重连退避、事件环形缓冲；只依赖 ncd-domain，不认识 Bot 和 Tauri |
-| `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象；shell 引号 `shell_single_quote`、Linux 包管理器 `LinuxPackageManager`、远端读文件 `remote_file` 都在这层 |
+| `crates/ncd-host/` | 本机 Windows / 远端 Windows、Linux SSH 主机抽象；Windows PowerShell 字节流、SFTP、PTY、隧道和平台探测在 `remote/windows*`；Linux 包管理器 `LinuxPackageManager`、远端读文件 `remote_file` 都在这层 |
+| `crates/ncd-agent/` | Windows SCM 控制服务、认证 Named Pipe、独立 Job runner、所属用户会话 worker；`bot/` 托管 NC/SL，`watch.rs` 承载同一值守引擎。协议在 `ncd-domain/windows_remote.rs`、`windows_bot.rs`，Desktop 路由在 `ncd-runtime/launch/windows*`。用户入口见 [Windows 远程管理](../user/windows-remote.md) |
 | `crates/ncd-watch/` | 远端主机侧监控 bin：探活 + Webhook（Desktop 退出后） |
 | `crates/ncd-component/` | 组件：Node/uv/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf/NcdWatch；`ComponentId`（含按实例装的 Karin / NoneBot2 / AstrBot / MaiBot / Koishi）定义在 ncd-domain，这里转出 |
 | `crates/ncd-appframework/` | 应用端框架适配器：registry + `karin/`、`nonebot2/`、`astrbot/`、`maibot/`、`koishi/`（manifest / Component / Integration / 写配置备份还原），共用的挑口查口 `ports.rs` |
@@ -319,6 +321,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 网络 | `crates/ncd-network/src/**` |
+| 代理与下载线路设置 | `ncd-domain/network_settings.rs` → `ncd-runtime/desktop/{network,network_settings}.rs` → `commands/network.rs` / `app_settings.rs`；`NetworkManager` 持有客户端快照，保存与导入后热应用，密码走 SecretStore；`ncd-network/{client,settings,mirror}.rs` 处理代理、校验与线路，下载任务固定客户端；UI `settings/tabs/NetworkTab.tsx` + `hooks/settings/useNetworkSettings.ts`；用户说明 [network.md](../user/network.md) |
 | 日志 crate | `crates/ncd-log/src/**` |
 | 系统指标 command | `src-tauri/src/commands/system_metrics.rs` |
 | 服务 | `system-metrics.service.ts` |
