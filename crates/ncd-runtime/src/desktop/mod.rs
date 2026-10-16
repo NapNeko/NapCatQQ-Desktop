@@ -2,10 +2,16 @@
 
 pub mod crash_bundle;
 pub mod log;
+pub mod network;
+pub mod network_settings;
 pub mod settings;
 
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
+pub use network::{
+    NetworkManager, probe_network_settings, read_proxy_password, restore_proxy_password,
+    save_proxy_password,
+};
 pub use settings::{
-    backfill_snowluma_package, load_app_settings, read_app_settings_file,
-    replace_app_settings_with, update_app_settings,
+    backfill_snowluma_package, load_app_settings, load_app_settings_checked,
+    read_app_settings_file, replace_app_settings_with, update_app_settings,
 };

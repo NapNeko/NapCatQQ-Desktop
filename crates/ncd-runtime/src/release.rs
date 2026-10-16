@@ -117,21 +117,21 @@ pub async fn fetch_release_snapshot(
 
     let (napcat, snowluma, desktop, ncd_watch, qq_linux, qq_windows) = tokio::join!(
         fetch_one(
-            client,
+            &client,
             ReleaseAlias::Napcat,
             GithubSource::Latest(NAPCAT_RELEASES_URL),
             github_api_mode,
             token,
         ),
         fetch_one(
-            client,
+            &client,
             ReleaseAlias::Snowluma,
             GithubSource::Latest(SNOWLUMA_RELEASES_URL),
             github_api_mode,
             token,
         ),
         fetch_one(
-            client,
+            &client,
             ReleaseAlias::Ncd,
             GithubSource::ListFiltered {
                 list_url: DESKTOP_RELEASES_LIST_URL,
@@ -141,7 +141,7 @@ pub async fn fetch_release_snapshot(
             token,
         ),
         fetch_one(
-            client,
+            &client,
             ReleaseAlias::NcdWatch,
             GithubSource::ListFiltered {
                 list_url: DESKTOP_RELEASES_LIST_URL,
@@ -173,7 +173,7 @@ pub async fn fetch_release_snapshot(
             repos = %failed.join(", "),
             ?github_api_mode,
             via_proxy,
-            "GitHub 版本检查失败（将使用缓存或留空）；可检查网络、设置 HTTPS_PROXY 环境变量或配置 GitHub PAT"
+            "GitHub 版本检查失败（将使用缓存或留空）；请检查设置中的网络代理、API 线路和 GitHub PAT"
         );
     } else {
         info!(target: "ncd_runtime::release", "GitHub 版本快照已更新");

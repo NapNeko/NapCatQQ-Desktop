@@ -35,6 +35,21 @@ pub fn load_app_settings(data_root: &Path) -> AppSettings {
     read_app_settings_file(data_root).unwrap_or_default()
 }
 
+/// 网络初始化不能将损坏配置误当作首次启动，否则可能绕过原先的代理策略。
+pub fn load_app_settings_checked(data_root: &Path) -> Result<AppSettings, String> {
+    let store = LocalConfigStore::new(data_root);
+    let value = match store.read_json(&store.config_dir().join(APP_SETTINGS_FILE)) {
+        Ok(value) => value,
+        Err(ncd_domain::ConfigError::NotFound(_)) => return Ok(AppSettings::default()),
+        Err(ncd_domain::ConfigError::Json(_)) => {
+            return Err("app-settings.json 格式无效，请修复配置后重新保存设置".to_string());
+        }
+        Err(_) => return Err("无法读取 app-settings.json，请检查配置文件访问权限".to_string()),
+    };
+    serde_json::from_value(value)
+        .map_err(|_| "app-settings.json 含有无效设置，请修复配置后重新保存设置".to_string())
+}
+
 /// 整份替换 app-settings.json 的写法(配置导入)走这里:`write` 在写锁里跑，
 /// 写完把内存换成盘上的新值，中间插不进一次拿旧副本回写的 update_app_settings。
 /// 本机 SnowLuma 包类型记的是这台机器装了什么，保留内存那份并写回文件
@@ -98,6 +113,52 @@ mod tests {
             .read_json(&store.config_dir().join(APP_SETTINGS_FILE))
             .unwrap();
         serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn checked_settings_missing_file_uses_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        assert_eq!(
+            load_app_settings_checked(temp.path()).unwrap(),
+            AppSettings::default()
+        );
+    }
+
+    #[test]
+    fn checked_settings_preserve_valid_network_configuration() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut settings = AppSettings::default();
+        settings.network.proxy_mode = ncd_domain::ProxyMode::Direct;
+        settings.network.github_download_mode = ncd_domain::DownloadSourceMode::Mirror;
+        settings.network.github_mirror = "https://mirror.example".to_string();
+        write_app_settings_file(temp.path(), &settings).unwrap();
+        assert_eq!(load_app_settings_checked(temp.path()).unwrap(), settings);
+    }
+
+    #[test]
+    fn checked_settings_report_invalid_json_and_fields_without_input_values() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let path = store.config_dir().join(APP_SETTINGS_FILE);
+        std::fs::create_dir_all(store.config_dir()).unwrap();
+        for content in [
+            r#"{"network":{"proxyMode":"private-sensitive-value"}}"#,
+            r#"{"network":{"proxyUrl":"private-sensitive-value""#,
+        ] {
+            std::fs::write(&path, content).unwrap();
+            let error = load_app_settings_checked(temp.path()).unwrap_err();
+            assert!(!error.contains("private-sensitive-value"));
+            assert!(error.contains("app-settings.json"));
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), content);
+        }
+    }
+
+    #[test]
+    fn checked_settings_do_not_treat_unreadable_file_as_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        std::fs::create_dir_all(store.config_dir().join(APP_SETTINGS_FILE)).unwrap();
+        assert!(load_app_settings_checked(temp.path()).is_err());
     }
 
     #[tokio::test]
