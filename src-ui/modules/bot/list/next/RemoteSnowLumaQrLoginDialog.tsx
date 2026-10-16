@@ -2,15 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Check, Monitor, RefreshCw, X } from 'lucide-react';
-import {
-    Button,
-    Dialog,
-    DialogContent,
-    DialogTitle,
-    DialogDescription,
-    DialogHeader,
-    DialogFooter,
-} from '../../../../shared/ui';
+import { Button } from '../../../../shared/ui';
 import {
     useRemoteSnowlumaQrLogin,
     type RemoteQrLoginApi,
@@ -18,8 +10,16 @@ import {
 import type { SnowLumaQrLoginState } from '../../../../core/ipc/generated/domain/SnowLumaQrLoginState';
 import { useThemeTokens } from '../../../../hooks/theme/useThemeTokens';
 import { resolveLoginQrPayload } from './loginQrImage';
+import {
+    QrLoginDialogShell,
+    QrStagePlaceholder,
+    type QrPlaceholderVariant,
+    type QrStageTone,
+} from './QrLoginDialogShell';
 
-const QR_COLORS = {
+const QR_PIXEL_SIZE = 280;
+
+const QR_TOKEN_SPEC = {
     foreground: { name: '--qr-foreground', fallback: '#1a120d' },
     background: { name: '--qr-background', fallback: '#ffffff' },
 } as const;
@@ -40,7 +40,7 @@ const LABELS: Record<SnowLumaQrLoginState, string> = {
 
 function LoginQrImage({ payload, onError }: { payload: string; onError: () => void }) {
     const [src, setSrc] = useState<string | null>(null);
-    const { foreground, background } = useThemeTokens(QR_COLORS);
+    const { foreground, background } = useThemeTokens(QR_TOKEN_SPEC);
     useEffect(() => {
         let active = true;
         const controller = new AbortController();
@@ -49,7 +49,7 @@ function LoginQrImage({ payload, onError }: { payload: string; onError: () => vo
             .then(async (content) => {
                 if (!active) return;
                 const image = await QRCode.toDataURL(content, {
-                    width: 280,
+                    width: QR_PIXEL_SIZE,
                     margin: 4,
                     errorCorrectionLevel: 'M',
                     color: { dark: foreground, light: background },
@@ -65,8 +65,18 @@ function LoginQrImage({ payload, onError }: { payload: string; onError: () => vo
         };
     }, [background, foreground, onError, payload]);
     return src ? (
-        <img src={src} alt="QQ 登录二维码" width={280} height={280} onError={onError} />
-    ) : null;
+        <img
+            src={src}
+            alt="QQ 登录二维码"
+            width={QR_PIXEL_SIZE}
+            height={QR_PIXEL_SIZE}
+            className="h-[280px] w-[280px] select-none rounded-sm"
+            draggable={false}
+            onError={onError}
+        />
+    ) : (
+        <QrStagePlaceholder variant="loading" title="正在渲染二维码…" />
+    );
 }
 
 interface Props {
@@ -125,79 +135,143 @@ export function RemoteSnowLumaQrLoginDialog({
                     : state === 'waiting_for_qr' && !snapshot?.qrcode_payload
                       ? '正在等待 QQ 生成二维码'
                       : (snapshot?.message ?? (state ? LABELS[state] : '正在加载扫码状态'))));
+
+    const showQrImage =
+        open &&
+        !isOnline &&
+        !paused &&
+        !refreshing &&
+        !imageUnavailable &&
+        state === 'waiting_for_qr' &&
+        Boolean(snapshot?.qrcode_payload);
+
+    const statusTone: QrStageTone = completed
+        ? 'success'
+        : state === 'cleanup_failed' || state === 'account_mismatch' || Boolean(error)
+          ? 'danger'
+          : state === 'expired' || imageUnavailable || fallbackOnly
+            ? 'warning'
+            : showQrImage || state === 'scanned' || state === 'login_detected'
+              ? 'brand'
+              : 'neutral';
+
+    const placeholder: { variant: QrPlaceholderVariant; title: string; hint?: string } = (() => {
+        if (completed) {
+            return {
+                variant: 'success',
+                title: '登录成功',
+                hint: '二维码已安全移除，即将进入在线状态',
+            };
+        }
+        if (state === 'scanned') {
+            return {
+                variant: 'scanned',
+                title: '已扫码，请在手机上确认',
+                hint: '在手机 QQ 点击「允许登录」完成授权',
+            };
+        }
+        if (state === 'login_detected') {
+            return {
+                variant: 'loading',
+                title: '正在确认登录状态…',
+                hint: '手机已授权，正在等待 SnowLuma 会话就绪',
+            };
+        }
+        if (state === 'expired') {
+            return {
+                variant: 'expired',
+                title: '二维码已过期',
+                hint: '正在自动获取新二维码，也可点击下方立即刷新',
+            };
+        }
+        if (fallbackOnly || imageUnavailable) {
+            return {
+                variant: 'warning',
+                title: status,
+                hint: onOpenVnc
+                    ? '可点击左下角「打开 QQ 界面」继续完成登录'
+                    : '请尝试重新获取二维码或检查 QQ 运行状态',
+            };
+        }
+        return {
+            variant: 'loading',
+            title: status,
+            hint: '请稍候，正在准备 QQ 登录二维码',
+        };
+    })();
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm">
-                <DialogHeader>
-                    <DialogTitle>扫码登录 · {botId}</DialogTitle>
-                    <DialogDescription className="sr-only">
-                        使用手机 QQ 扫描二维码并确认登录。
-                    </DialogDescription>
-                </DialogHeader>
-                <div
-                    className="flex min-h-80 flex-col items-center justify-center gap-4 py-4"
-                    aria-busy={requesting}
-                >
-                    {open &&
-                        !isOnline &&
-                        !paused &&
-                        !refreshing &&
-                        state === 'waiting_for_qr' &&
-                        snapshot?.qrcode_payload && (
-                            <div className="overflow-hidden rounded-md bg-[var(--qr-background)]">
-                                <LoginQrImage
-                                    key={snapshot.qrcode_payload}
-                                    payload={snapshot.qrcode_payload}
-                                    onError={imageError}
-                                />
-                            </div>
-                        )}
-                    <p role="status" className="text-center text-sm text-text-secondary">
-                        {status}
-                    </p>
-                </div>
-                <DialogFooter className="mt-4 justify-between gap-3 border-t border-border-subtle pt-4">
+        <QrLoginDialogShell
+            open={open}
+            onOpenChange={onOpenChange}
+            botId={botId}
+            flavorLabel="SnowLuma"
+            hasQrCode={showQrImage}
+            ariaBusy={requesting}
+            viewport={
+                showQrImage && snapshot?.qrcode_payload ? (
+                    <LoginQrImage
+                        key={snapshot.qrcode_payload}
+                        payload={snapshot.qrcode_payload}
+                        onError={imageError}
+                    />
+                ) : (
+                    <QrStagePlaceholder
+                        variant={placeholder.variant}
+                        title={placeholder.title}
+                        hint={placeholder.hint}
+                    />
+                )
+            }
+            statusText={status}
+            statusTone={statusTone}
+            footer={
+                <>
                     {onOpenVnc && !completed ? (
                         <Button
                             variant={fallbackOnly ? 'primary' : 'ghost'}
-                            size="md"
+                            size="sm"
                             onClick={() => {
                                 onOpenChange(false);
                                 onOpenVnc();
                             }}
                         >
-                            <Monitor size={16} aria-hidden />
+                            <Monitor size={14} aria-hidden />
                             打开 QQ 界面
                         </Button>
                     ) : null}
                     {completed || (fallbackOnly && !canRetry) ? (
                         <Button
                             variant={completed ? 'primary' : 'secondary'}
-                            size="md"
-                            className="ml-auto min-w-28"
+                            size="sm"
+                            className="ml-auto min-w-24"
                             onClick={() => onOpenChange(false)}
                         >
                             {completed ? (
-                                <Check size={16} aria-hidden />
+                                <Check size={14} aria-hidden />
                             ) : (
-                                <X size={16} aria-hidden />
+                                <X size={14} aria-hidden />
                             )}
                             {completed ? '完成' : '关闭'}
                         </Button>
                     ) : (
                         <Button
                             variant={state === 'expired' ? 'primary' : 'secondary'}
-                            size="md"
-                            className="ml-auto min-w-28"
+                            size="sm"
+                            className="ml-auto min-w-24"
                             disabled={!canRefresh || refreshing || requesting}
                             onClick={() => (canRetry ? retry() : void refresh())}
                         >
-                            <RefreshCw size={16} aria-hidden />
+                            <RefreshCw
+                                size={14}
+                                className={refreshing ? 'animate-spin' : undefined}
+                                aria-hidden
+                            />
                             {refreshing ? '正在刷新' : canRetry ? '重新获取' : '刷新二维码'}
                         </Button>
                     )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                </>
+            }
+        />
     );
 }

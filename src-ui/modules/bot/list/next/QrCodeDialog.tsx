@@ -34,9 +34,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Dialog, DialogContent, DialogTitle } from '../../../../shared/ui';
 import { useThemeTokens } from '../../../../hooks/theme/useThemeTokens';
 import type { NapCatLoginInvalidationReason } from '../../../../core/ipc/types';
+import { QrLoginDialogShell, QrStagePlaceholder } from './QrLoginDialogShell';
+
+const QR_PIXEL_SIZE = 280;
+
+const QR_TOKEN_SPEC = {
+    foreground: { name: '--qr-foreground', fallback: '#1a120d' },
+    background: { name: '--qr-background', fallback: '#ffffff' },
+} as const;
 
 interface QrCodeDialogProps {
     open: boolean;
@@ -54,19 +61,6 @@ interface QrCodeDialogProps {
     /** 弹窗打开期间检测到账号被踢时触发。父组件应在此处关闭弹窗 + push InfoBar 引导用户重启。 */
     onKicked?: () => void;
 }
-
-const QR_PIXEL_SIZE = 280;
-
-const QR_TOKEN_SPEC = {
-    foreground: { name: '--qr-foreground', fallback: '#1a120d' },
-    background: { name: '--qr-background', fallback: '#ffffff' },
-} as const;
-
-// 码区里的等待 / 出错文字也用码的前景色：暗色主题下码区是浅底，默认的浅色次要字会看不见。
-const QR_FRAME_STYLE = {
-    background: 'var(--qr-background)',
-    color: 'var(--qr-foreground)',
-};
 
 function isInlineImageSrc(value: string): boolean {
     // 只接 data:image/...；普通 http(s) URL 是 NapCat 二维码的 payload 字符串，
@@ -88,26 +82,30 @@ export function QrCodeDialog({
     useLoginSuccessSignal(open, isOnline, onLoginSuccess);
     useKickedSignal(open, invalidationReason, onKicked);
 
+    const hasQrCode = Boolean(qrcodeUrl);
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm">
-                <DialogTitle>扫码登录 · {botId}</DialogTitle>
-
-                <div
-                    className={
-                        'mt-4 flex items-center justify-center rounded-md p-6 ring-1 ring-border-subtle transition-colors ' +
-                        (qrcodeUrl ? '' : 'bg-elevated text-text-tertiary')
-                    }
-                    style={qrcodeUrl ? QR_FRAME_STYLE : undefined}
-                >
-                    {qrcodeUrl ? <QrCanvas content={qrcodeUrl} /> : <QrPending />}
-                </div>
-
-                <div className="mt-3 flex items-center justify-center text-2xs text-text-tertiary tabular-nums">
-                    {qrcodeUrl ? <ElapsedHint seconds={elapsed} /> : null}
-                </div>
-            </DialogContent>
-        </Dialog>
+        <QrLoginDialogShell
+            open={open}
+            onOpenChange={onOpenChange}
+            botId={botId}
+            flavorLabel="NapCat"
+            hasQrCode={hasQrCode}
+            viewport={
+                qrcodeUrl ? (
+                    <QrCanvas content={qrcodeUrl} />
+                ) : (
+                    <QrStagePlaceholder
+                        variant="loading"
+                        title="等待二维码…"
+                        hint="正在等待 NapCat 返回登录二维码"
+                    />
+                )
+            }
+            statusText={qrcodeUrl ? '请用手机 QQ 扫码' : '正在等待二维码…'}
+            statusTone={qrcodeUrl ? 'brand' : 'neutral'}
+            statusAside={qrcodeUrl ? <ElapsedHint seconds={elapsed} /> : null}
+        />
     );
 }
 
