@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import net from 'node:net';
+import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -17,36 +18,9 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ncd-probe-'));
 const outPath = path.join(tmpDir, 'net-stats.json');
 const nodesPath = path.join(tmpDir, 'nodes.json');
 
-/** 端口要在探针加载前定好：nodes.json 只在 require 时读第一份 */
-async function freePort() {
-    return await new Promise((resolve, reject) => {
-        const srv = net.createServer();
-        srv.on('error', reject);
-        srv.listen(0, '127.0.0.1', () => {
-            const port = srv.address().port;
-            srv.close(() => resolve(port));
-        });
-    });
-}
-
-const ports = {
-    httpServer: await freePort(),
-    wsServer: await freePort(),
-    sseServer: await freePort(),
-    httpPeer: await freePort(),
-    wsPeer: await freePort(),
-};
-
-fs.writeFileSync(
-    nodesPath,
-    JSON.stringify([
-        { name: 'http-default', kind: 'httpServer', listenPort: ports.httpServer },
-        { name: 'ws-default', kind: 'wsServer', listenPort: ports.wsServer },
-        { name: 'sse-default', kind: 'httpSse', listenPort: ports.sseServer },
-        { name: 'http-post', kind: 'httpClient', targetUrl: `http://127.0.0.1:${ports.httpPeer}/` },
-        { name: 'ws-reverse', kind: 'wsClient', targetUrl: `ws://127.0.0.1:${ports.wsPeer}/onebot` },
-    ]),
-);
+// 由真实服务持有系统分配的端口，避免先释放空闲端口再绑定的竞态。
+const ports = {};
+fs.writeFileSync(nodesPath, '[]');
 
 process.env.NCD_METRICS_ENABLED = '1';
 process.env.NCD_METRICS_OUT = outPath;
@@ -81,6 +55,13 @@ function trackServer(server) {
     return server;
 }
 
+async function listen(server, name) {
+    const ready = once(server, 'listening');
+    server.listen(0, '127.0.0.1');
+    await ready;
+    ports[name] = server.address().port;
+}
+
 function nodeStats(name) {
     probe.writeSnapshot();
     const snap = JSON.parse(fs.readFileSync(outPath, 'utf8'));
@@ -100,21 +81,20 @@ async function waitFor(label, predicate, timeoutMs = 4000) {
 
 before(async () => {
     // 正向 HTTP（被计数节点）：收 action 回 response
-    trackServer(
-        http
-            .createServer((req, res) => {
-                const chunks = [];
-                req.on('data', (c) => chunks.push(c));
-                req.on('end', () => {
-                    res.setHeader('content-type', 'application/json');
-                    res.end(JSON.stringify({ status: 'ok', retcode: 0, data: null, echo: '1' }));
-                });
-            })
-            .listen(ports.httpServer, '127.0.0.1'),
+    await listen(
+        trackServer(http.createServer((req, res) => {
+            const chunks = [];
+            req.on('data', (c) => chunks.push(c));
+            req.on('end', () => {
+                res.setHeader('content-type', 'application/json');
+                res.end(JSON.stringify({ status: 'ok', retcode: 0, data: null, echo: '1' }));
+            });
+        })),
+        'httpServer',
     );
 
     // 正向 WS（被计数节点）：推事件 + 收 action
-    const wss = new WebSocketServer({ port: ports.wsServer, host: '127.0.0.1' });
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
     wss.on('connection', (socket) => {
         socket.on('message', (data) => {
             socket.send(JSON.stringify({ status: 'ok', retcode: 0, echo: JSON.parse(String(data)).echo }));
@@ -122,36 +102,45 @@ before(async () => {
         socket.send(EVENT);
     });
     closers.push({ close: () => new Promise((resolve) => wss.close(() => resolve())) });
+    await once(wss, 'listening');
+    ports.wsServer = wss.address().port;
 
     // SSE 服务（被计数节点）：GET 订阅后连发事件
-    trackServer(
-        http
-            .createServer((req, res) => {
-                res.writeHead(200, { 'content-type': 'text/event-stream' });
-                res.write(`data: ${EVENT}\n\n`);
-                res.write(`data: ${EVENT}\n\n`);
-            })
-            .listen(ports.sseServer, '127.0.0.1'),
+    await listen(
+        trackServer(http.createServer((req, res) => {
+            res.writeHead(200, { 'content-type': 'text/event-stream' });
+            res.write(`data: ${EVENT}\n\n`);
+            res.write(`data: ${EVENT}\n\n`);
+        })),
+        'sseServer',
     );
 
     // 对端 HTTP 上报服务（不在 node map 里，不该被计数）
-    trackServer(
-        http
-            .createServer((req, res) => {
-                req.resume();
-                req.on('end', () => res.end('{}'));
-            })
-            .listen(ports.httpPeer, '127.0.0.1'),
+    await listen(
+        trackServer(http.createServer((req, res) => {
+            req.resume();
+            req.on('end', () => res.end('{}'));
+        })),
+        'httpPeer',
     );
 
     // 对端反向 WS 服务（不在 node map 里）：收事件回 action
-    const peerWss = new WebSocketServer({ port: ports.wsPeer, host: '127.0.0.1' });
+    const peerWss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
     peerWss.on('connection', (socket) => {
         socket.on('message', () => socket.send(ACTION));
     });
     closers.push({ close: () => new Promise((resolve) => peerWss.close(() => resolve())) });
+    await once(peerWss, 'listening');
+    ports.wsPeer = peerWss.address().port;
 
-    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(nodesPath, JSON.stringify([
+        { name: 'http-default', kind: 'httpServer', listenPort: ports.httpServer },
+        { name: 'ws-default', kind: 'wsServer', listenPort: ports.wsServer },
+        { name: 'sse-default', kind: 'httpSse', listenPort: ports.sseServer },
+        { name: 'http-post', kind: 'httpClient', targetUrl: `http://127.0.0.1:${ports.httpPeer}/` },
+        { name: 'ws-reverse', kind: 'wsClient', targetUrl: `ws://127.0.0.1:${ports.wsPeer}/onebot` },
+    ]));
+    probe.writeSnapshot();
 });
 
 after(async () => {

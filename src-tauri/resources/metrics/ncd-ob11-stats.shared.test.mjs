@@ -35,33 +35,17 @@ after(async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-async function freePort() {
-    const server = net.createServer();
-    servers.add(server);
-    try {
-        await listen(server, 0);
-        const port = server.address().port;
-        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-        return port;
-    } finally {
-        servers.delete(server);
-    }
-}
-
 function listen(server, port) {
     return new Promise((resolve, reject) => {
         const onError = (error) => { server.off('listening', onListening); reject(error); };
-        const onListening = () => { server.off('error', onError); resolve(); };
+        const onListening = () => { server.off('error', onError); resolve(server.address().port); };
         server.once('error', onError);
         server.once('listening', onListening);
         server.listen(port, '127.0.0.1');
     });
 }
 
-const ports = Object.fromEntries(await Promise.all(
-    ['alphaHttp', 'betaHttp', 'alphaWs', 'betaWs', 'httpPeer', 'wsPeer', 'sharedWs', 'hotWs', 'addedHttp', 'sharedHttp', 'lateWs']
-        .map(async (name) => [name, await freePort()]),
-));
+const ports = {};
 
 function atomicJson(file, value) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -87,28 +71,36 @@ function saveDescriptor(entry) {
 
 const httpUrl = (suffix) => `http://127.0.0.1:${ports.httpPeer}${suffix}`;
 const wsUrl = (suffix) => `ws://127.0.0.1:${ports.wsPeer}${suffix}`;
-const sharedWsUrl = `ws://127.0.0.1:${ports.sharedWs}/same`;
-const hotWsUrl = `ws://127.0.0.1:${ports.hotWs}/hot`;
+let sharedWsUrl;
+let hotWsUrl;
+let alpha;
+let beta;
+let hot;
 
-const alpha = descriptor('alpha', 101, [
-    { name: 'same-http', kind: 'httpServer', listenPort: ports.alphaHttp },
-    { name: 'same-ws', kind: 'wsServer', listenPort: ports.alphaWs },
-    { name: 'path-http', kind: 'httpClient', targetUrl: httpUrl('/bot') },
-    { name: 'deep-http', kind: 'httpClient', targetUrl: httpUrl('/bot/deep') },
-    { name: 'path-ws', kind: 'wsClient', targetUrl: wsUrl('/bot') },
-    { name: 'deep-ws', kind: 'wsClient', targetUrl: wsUrl('/bot/deep') },
-    { name: 'same-reverse', kind: 'wsClient', targetUrl: sharedWsUrl },
-]);
-const beta = descriptor('beta', 202, [
-    { name: 'same-http', kind: 'httpServer', listenPort: ports.betaHttp },
-    { name: 'same-ws', kind: 'wsServer', listenPort: ports.betaWs },
-    { name: 'path-http', kind: 'httpClient', targetUrl: httpUrl('/botB') },
-    { name: 'path-ws', kind: 'wsClient', targetUrl: wsUrl('/botB') },
-    { name: 'same-reverse', kind: 'wsClient', targetUrl: sharedWsUrl },
-]);
-const hot = descriptor('hot', 303, [
-    { name: 'hot-ws', kind: 'wsClient', targetUrl: hotWsUrl },
-], false);
+function initializeDescriptors() {
+    sharedWsUrl = `ws://127.0.0.1:${ports.sharedWs}/same`;
+    hotWsUrl = `ws://127.0.0.1:${ports.hotWs}/hot`;
+    alpha = descriptor('alpha', 101, [
+        { name: 'same-http', kind: 'httpServer', listenPort: ports.alphaHttp },
+        { name: 'same-ws', kind: 'wsServer', listenPort: ports.alphaWs },
+        { name: 'path-http', kind: 'httpClient', targetUrl: httpUrl('/bot') },
+        { name: 'deep-http', kind: 'httpClient', targetUrl: httpUrl('/bot/deep') },
+        { name: 'path-ws', kind: 'wsClient', targetUrl: wsUrl('/bot') },
+        { name: 'deep-ws', kind: 'wsClient', targetUrl: wsUrl('/bot/deep') },
+        { name: 'same-reverse', kind: 'wsClient', targetUrl: sharedWsUrl },
+    ]);
+    beta = descriptor('beta', 202, [
+        { name: 'same-http', kind: 'httpServer', listenPort: ports.betaHttp },
+        { name: 'same-ws', kind: 'wsServer', listenPort: ports.betaWs },
+        { name: 'path-http', kind: 'httpClient', targetUrl: httpUrl('/botB') },
+        { name: 'path-ws', kind: 'wsClient', targetUrl: wsUrl('/botB') },
+        { name: 'same-reverse', kind: 'wsClient', targetUrl: sharedWsUrl },
+    ]);
+    hot = descriptor('hot', 303, [
+        { name: 'hot-ws', kind: 'wsClient', targetUrl: hotWsUrl },
+    ], false);
+    probe.writeSnapshot();
+}
 
 process.env.NCD_METRICS_ENABLED = '1';
 process.env.NCD_METRICS_REGISTRY_DIR = registryDir;
@@ -200,24 +192,26 @@ function recordReport(req, res) {
 }
 
 before(async () => {
-    await Promise.all([
-        listen(makeHttpServer(respond), ports.alphaHttp),
-        listen(makeHttpServer(respond), ports.betaHttp),
-        listen(makeHttpServer(respond), ports.httpPeer),
-        listen(makeWsServer((client) => {
+    const bound = await Promise.all([
+        ['alphaHttp', makeHttpServer(respond)],
+        ['betaHttp', makeHttpServer(respond)],
+        ['httpPeer', makeHttpServer(respond)],
+        ['alphaWs', makeWsServer((client) => {
             client.on('message', () => client.send(RESPONSE));
             client.send(event(101));
-        }), ports.alphaWs),
-        listen(makeWsServer((client) => {
+        })],
+        ['betaWs', makeWsServer((client) => {
             client.on('message', () => client.send(RESPONSE));
             client.send(event(202));
-        }), ports.betaWs),
-        listen(makeWsServer(wsPeer), ports.wsPeer),
-        listen(makeWsServer(wsPeer), ports.sharedWs),
-        listen(makeWsServer(wsPeer), ports.hotWs),
-        listen(makeHttpServer(recordReport), ports.sharedHttp),
-        listen(makeWsServer(wsPeer), ports.lateWs),
-    ]);
+        })],
+        ['wsPeer', makeWsServer(wsPeer)],
+        ['sharedWs', makeWsServer(wsPeer)],
+        ['hotWs', makeWsServer(wsPeer)],
+        ['sharedHttp', makeHttpServer(recordReport)],
+        ['lateWs', makeWsServer(wsPeer)],
+    ].map(async ([name, server]) => [name, await listen(server, 0)]));
+    Object.assign(ports, Object.fromEntries(bound));
+    initializeDescriptors();
 });
 
 async function post(port, requestPath, body, agent) {
@@ -408,12 +402,12 @@ test('shared reverse WS URL stays unowned until self_id or X-Self-ID identifies 
 });
 
 test('registry discovers new Bots both on an explicit snapshot and on its timer', async () => {
+    ports.addedHttp = await listen(makeHttpServer(respond), 0);
     const added = descriptor('added', 404, [
         { name: 'same-http', kind: 'httpServer', listenPort: ports.addedHttp },
     ]);
     probe.writeSnapshot();
     assert.equal(stats(added, 'same-http').actions_in, 0);
-    await listen(makeHttpServer(respond), ports.addedHttp);
     const alphaBefore = traffic(stats(alpha, 'same-http'));
     await post(ports.addedHttp, '/send_private_msg', ACTION);
     assert.equal(stats(added, 'same-http').actions_in, 1);
