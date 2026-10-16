@@ -166,6 +166,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(snapshot);
         }
         let scenario = RuntimeScenario::from_config(&config)?;
+        if matches!(scenario, RuntimeScenario::RemoteNative { .. }) {
+            if let Some(resolver) = &self.host_resolver {
+                let host = resolver
+                    .resolve(&config.bot.runtime_target)
+                    .await
+                    .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+                if host.os() == ncd_host::Os::Windows {
+                    return Ok(self
+                        .backend_for_config(&config)
+                        .await?
+                        .qr_login_snapshot(bot_id, refresh)
+                        .await?);
+                }
+            }
+        }
         if matches!(scenario, RuntimeScenario::RemoteDocker { .. }) {
             let backend = self.backend_for_config(&config).await?;
             if refresh {
@@ -323,6 +338,24 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await;
         if let Some(config) = self.get_bot_config(bot_id).await? {
             if config.bot.backend_type == BackendType::SnowLuma
+                && !config.bot.runtime_target.is_local()
+                && config.bot.deployment_type == DeploymentType::Native
+            {
+                if let Some(resolver) = &self.host_resolver {
+                    let host = resolver
+                        .resolve(&config.bot.runtime_target)
+                        .await
+                        .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+                    if host.os() == ncd_host::Os::Windows {
+                        return Ok(self
+                            .backend_for_config(&config)
+                            .await?
+                            .close_qr_login(bot_id)
+                            .await?);
+                    }
+                }
+            }
+            if config.bot.backend_type == BackendType::SnowLuma
                 && (config.bot.deployment_type == DeploymentType::Docker
                     || config.bot.runtime_target.is_local())
             {
@@ -359,9 +392,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
         if let Ok(configs) = self.list_bot_configs().await {
             for config in configs {
+                let windows_managed = if let Some(server) = config.bot.runtime_target.server_id() {
+                    self.windows_bots
+                        .manages(server, config.bot.qq_id, config.bot.backend_type)
+                        .await
+                } else {
+                    false
+                };
                 if config.bot.backend_type == BackendType::SnowLuma
                     && (config.bot.deployment_type == DeploymentType::Docker
-                        || config.bot.runtime_target.is_local())
+                        || config.bot.runtime_target.is_local()
+                        || windows_managed)
                 {
                     let bot_id = BotId::new(config.bot.qq_id.to_string());
                     let _ = self.close_remote_snowluma_qr_login(&bot_id).await;

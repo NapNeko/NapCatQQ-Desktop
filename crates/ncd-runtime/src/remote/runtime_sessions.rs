@@ -65,6 +65,16 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
                 return;
             }
         };
+        if let RuntimeScenario::RemoteNative { server_id, .. } = &scenario {
+            if let Some(host) = self.resolve_remote_host(bot_id, server_id).await {
+                if host.os() == ncd_host::Os::Windows {
+                    if let Err(error) = self.runtime_router.backend_for_config(config).await {
+                        warn!(%error, %bot_id, "Windows 远端会话接管失败");
+                    }
+                    return;
+                }
+            }
+        }
         match scenario {
             RuntimeScenario::RemoteDocker { server_id, .. } => {
                 let Some(host) = self.resolve_remote_host(bot_id, &server_id).await else {

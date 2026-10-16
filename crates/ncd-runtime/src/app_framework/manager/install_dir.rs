@@ -67,6 +67,11 @@ impl AppManager {
     /// 桌面端管理的运行时依赖落点（与对应组件的安装目录一致）；远端安装时由 factory 按远端路径
     /// 推断并写进实例标记，起停 / 探测时框架组件读标记，这里只管本机
     fn managed_component_dir(&self, host: &dyn Host, name: &str) -> Option<HostPath> {
+        if host.os() == Os::Windows && host.locality() == Locality::Remote {
+            return host
+                .target_managed_root()
+                .map(|root| root.join("components").join(name));
+        }
         if host.locality() != Locality::Local {
             return None;
         }
@@ -187,6 +192,11 @@ impl AppManager {
         host: &dyn Host,
         framework: &AppFrameworkId,
     ) -> Result<HostPath, AppFrameworkError> {
+        if host.os() == Os::Windows && host.locality() == Locality::Remote {
+            let info = host.remote_windows_info().await.map_err(host_err)?;
+            let root = parse_user_install_dir(&info.user_root, Os::Windows)?;
+            return Ok(root.join("apps").join(framework.as_str()));
+        }
         match host.locality() {
             Locality::Local => Ok(data_root_to_host_path(&self.data_root, host.os())
                 .join(LOCAL_APPS_DIR)

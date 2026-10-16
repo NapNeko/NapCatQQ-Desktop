@@ -117,6 +117,7 @@ pub fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) 
             | ComponentId::Qq
             | ComponentId::VcRedist
             | ComponentId::NcdWatch
+            | ComponentId::WindowsAgent
     ) || component_id.is_app_framework())
 }
 
@@ -166,6 +167,7 @@ pub fn component_catalog() -> Vec<ComponentInfo> {
         VcRedistComponent::info(),
         NoVncComponent::info(),
         NcdWatchComponent::info(),
+        ncd_component::WindowsAgentComponent::info(),
         DesktopSelfComponent::info(),
     ]
 }
@@ -348,6 +350,7 @@ mod tests {
                 ComponentId::VcRedist,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,
+                ComponentId::WindowsAgent,
                 ComponentId::DesktopSelf,
             ]
         );
@@ -607,8 +610,8 @@ mod tests {
     }
 
     #[test]
-    fn list_components_returns_eleven_items() {
-        assert_eq!(component_catalog().len(), 11);
+    fn list_components_returns_twelve_items() {
+        assert_eq!(component_catalog().len(), 12);
     }
 
     #[test]

@@ -11,6 +11,9 @@ use ncd_traits::AppFrameworkError;
 
 use super::listen_port::allocate_listen_port;
 
+#[path = "resident_link_windows.rs"]
+mod windows;
+
 pub const REMOTE_LINKS_REL: &str = "ncd/links";
 pub const LINK_PID_FILE: &str = ".ncd-link.pid";
 pub const LINK_STOP_FILE: &str = ".ncd-link.stop";
@@ -21,7 +24,6 @@ pub const LINK_RUN_SH: &str = "run.sh";
 pub const LINK_LOG: &str = "run.log";
 
 const COMMENT_PREFIX: &str = "ncd-link:";
-const KEYSCAN_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct ResidentLinkSpec<'a> {
     pub instance: &'a AppInstance,
@@ -161,11 +163,11 @@ pub fn render_run_sh(input: &ResidentLinkScriptInput<'_>) -> String {
              -o ServerAliveInterval=30 \\\n\
              -o ServerAliveCountMax=3 \\\n\
              -o StrictHostKeyChecking=yes \\\n\
-             -o UserKnownHostsFile=\"$KNOWN\" \\\n\
+             -o \"UserKnownHostsFile=\\\"$KNOWN\\\"\" \\\n\
              -o GlobalKnownHostsFile=/dev/null \\\n\
              -o BatchMode=yes \\\n\
              -N {tunnel} \\\n\
-             -p {ssh_port} {user_host} &\n\
+             -p {ssh_port} -- {user_host} &\n\
            SSH_PID=$!\n\
            wait \"$SSH_PID\" || true\n\
            SSH_PID=\n\
@@ -190,6 +192,9 @@ pub async fn ensure_resident_link(
     bot_host: &dyn Host,
     spec: ResidentLinkSpec<'_>,
 ) -> Result<u16, AppFrameworkError> {
+    if app_host.os() == Os::Windows {
+        return windows::ensure(app_host, bot_host, &spec).await;
+    }
     let mut created_dir = false;
     let mut wrote_auth = false;
     match ensure_resident_link_inner(app_host, bot_host, &spec, &mut created_dir, &mut wrote_auth)
@@ -230,7 +235,7 @@ async fn ensure_resident_link_inner(
     }
     let dial = bot_host.ssh_dial_target().ok_or_else(|| {
         AppFrameworkError::Validation(
-            "无法取得 Bot 所在机的 SSH 地址，两台远端对接需要 Bot 机是远端 Linux".into(),
+            "无法取得 Bot 所在机的 SSH 地址，请先验证该主机的 SSH 连接".into(),
         )
     })?;
     if !app_host.command_exists("ssh").await || !app_host.command_exists("ssh-keygen").await {
@@ -239,7 +244,7 @@ async fn ensure_resident_link_inner(
         ));
     }
 
-    let known = ssh_keyscan(app_host, &dial).await?;
+    let known = trusted_known_hosts(bot_host, &dial)?;
     let listen_host = match spec.forward {
         ResidentForward::ExposeApp { .. } => bot_host,
         ResidentForward::ReachBot { .. } => app_host,
@@ -261,8 +266,9 @@ async fn ensure_resident_link_inner(
         .await
         .map_err(host_err)?;
     let pub_line = String::from_utf8_lossy(&pub_bytes);
-    let auth_line = authorized_keys_line(&pub_line, &spec.instance.id, spec.forward, fwd)
-        .map_err(AppFrameworkError::Validation)?;
+    let auth_line =
+        authorized_keys_line_for_host(bot_host, &pub_line, &spec.instance.id, spec.forward, fwd)
+            .map_err(AppFrameworkError::Validation)?;
 
     upsert_bot_authorized_keys(bot_host, &spec.instance.id, &auth_line).await?;
     *wrote_auth = true;
@@ -287,6 +293,9 @@ pub async fn teardown_resident_link(
     bot_host: Option<&dyn Host>,
     instance_id: &AppInstanceId,
 ) -> Result<(), AppFrameworkError> {
+    if app_host.os() == Os::Windows {
+        return windows::teardown(app_host, bot_host, instance_id).await;
+    }
     if let Ok(home) = remote_home(app_host).await {
         let dir = remote_link_dir(&home, instance_id);
         let _ = stop_resident_script(app_host, &dir).await;
@@ -307,6 +316,9 @@ pub async fn reconcile_resident_link(
     forward: ResidentForward,
     forward_port: u16,
 ) -> Result<(), AppFrameworkError> {
+    if app_host.os() == Os::Windows {
+        return windows::reconcile(app_host, bot_host, instance, forward, forward_port).await;
+    }
     let home = remote_home(app_host).await?;
     let dir = remote_link_dir(&home, &instance.id);
     if resident_pid_alive(app_host, &dir).await {
@@ -327,6 +339,9 @@ pub async fn reconcile_resident_link(
 }
 
 async fn remote_home(host: &dyn Host) -> Result<String, AppFrameworkError> {
+    if host.os() == Os::Windows {
+        return Ok(host.remote_windows_info().await.map_err(host_err)?.home_dir);
+    }
     let out = host
         .run_to_string(
             HostCommand::new("sh")
@@ -345,46 +360,58 @@ async fn remote_home(host: &dyn Host) -> Result<String, AppFrameworkError> {
     Ok(home.to_string())
 }
 
-async fn ssh_keyscan(
-    app_host: &dyn Host,
+fn trusted_known_hosts(
+    bot_host: &dyn Host,
     dial: &SshDialTarget,
 ) -> Result<String, AppFrameworkError> {
-    let out = app_host
-        .run_to_string(
-            HostCommand::new("ssh-keyscan")
-                .arg("-T")
-                .arg("8")
-                .arg("-p")
-                .arg(dial.port.to_string())
-                .arg(&dial.host)
-                .timeout(KEYSCAN_TIMEOUT),
+    let key = bot_host.trusted_ssh_host_key().ok_or_else(|| {
+        AppFrameworkError::Validation(
+            "Bot 所在机尚未通过 SSH 主机密钥验证，不能建立常驻隧道".into(),
         )
-        .await
-        .map_err(|_| unreachable_ssh(dial))?;
-    let keys: String = out
-        .stdout
-        .lines()
-        .filter(|l| {
-            let t = l.trim();
-            !t.is_empty() && !t.starts_with('#')
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    if keys.is_empty() || !out.success() {
-        return Err(unreachable_ssh(dial));
+    })?;
+    let mut pieces = key.split_whitespace();
+    let kind = pieces
+        .next()
+        .ok_or_else(|| AppFrameworkError::Validation("SSH 主机公钥为空".into()))?;
+    let blob = pieces
+        .next()
+        .ok_or_else(|| AppFrameworkError::Validation("SSH 主机公钥不完整".into()))?;
+    if dial.host.is_empty()
+        || dial
+            .host
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || matches!(c, ',' | '|'))
+        || pieces.next().is_some()
+    {
+        return Err(AppFrameworkError::Validation(
+            "SSH 主机密钥或地址格式无效".into(),
+        ));
     }
-    let mut known = keys;
-    if !known.ends_with('\n') {
-        known.push('\n');
-    }
-    Ok(known)
+    let host = if dial.port == 22 {
+        dial.host.clone()
+    } else {
+        format!("[{}]:{}", dial.host, dial.port)
+    };
+    Ok(format!("{host} {kind} {blob}\n"))
 }
 
-fn unreachable_ssh(_dial: &SshDialTarget) -> AppFrameworkError {
-    AppFrameworkError::Validation(
-        "应用所在机无法连上 Bot 所在机的 SSH，请在 Bot 机防火墙或安全组开放「应用机 → Bot 机」的 SSH 端口"
-            .into(),
-    )
+fn authorized_keys_line_for_host(
+    bot_host: &dyn Host,
+    public_key: &str,
+    instance: &AppInstanceId,
+    forward: ResidentForward,
+    port: u16,
+) -> Result<String, String> {
+    let line = authorized_keys_line(public_key, instance, forward, port)?;
+    Ok(if bot_host.os() == Os::Windows {
+        line.replacen(
+            "command=\"/bin/false\"",
+            "command=\"cmd.exe /d /c exit 1\"",
+            1,
+        )
+    } else {
+        line
+    })
 }
 
 async fn allocate_forward_port(
@@ -413,6 +440,12 @@ async fn allocate_forward_port(
 }
 
 async fn remote_loopback_busy(host: &dyn Host, port: u16) -> bool {
+    if host.os() == Os::Windows {
+        return ncd_appframework::ports::remote_listening_ports(host)
+            .await
+            .map(|ports| ports.contains(&port))
+            .unwrap_or(true);
+    }
     let script = format!(
         "bash -c 'echo >/dev/tcp/127.0.0.1/{port}' >/dev/null 2>&1 \
          || (command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | grep -Eq ':{port}([[:space:]]|$)') \
@@ -442,6 +475,7 @@ async fn ensure_ed25519_key(
     let has_key = app_host.exists(&key).await.unwrap_or(false);
     let has_pub = app_host.exists(&pub_path).await.unwrap_or(false);
     if has_key && has_pub {
+        app_host.secure_private_key(&key).await.map_err(host_err)?;
         return Ok(());
     }
     let out = app_host
@@ -452,7 +486,7 @@ async fn ensure_ed25519_key(
                 .arg("-N")
                 .arg("")
                 .arg("-f")
-                .arg(key.as_posix())
+                .arg(key.render_for(app_host.os()))
                 .arg("-C")
                 .arg(link_comment(instance_id))
                 .arg("-q")
@@ -466,6 +500,7 @@ async fn ensure_ed25519_key(
             out.stderr.trim()
         )));
     }
+    app_host.secure_private_key(&key).await.map_err(host_err)?;
     Ok(())
 }
 
@@ -474,6 +509,12 @@ async fn upsert_bot_authorized_keys(
     instance_id: &AppInstanceId,
     line: &str,
 ) -> Result<(), AppFrameworkError> {
+    if bot_host.os() == Os::Windows {
+        return bot_host
+            .install_authorized_key(line, &link_comment(instance_id))
+            .await
+            .map_err(host_err);
+    }
     let (path, existing) = read_authorized_keys(bot_host).await?;
     let next = upsert_authorized_key(&existing, line, instance_id);
     write_authorized_keys(bot_host, &path, &next).await
@@ -483,6 +524,12 @@ async fn strip_bot_authorized_key(
     bot_host: &dyn Host,
     instance_id: &AppInstanceId,
 ) -> Result<(), AppFrameworkError> {
+    if bot_host.os() == Os::Windows {
+        return bot_host
+            .remove_authorized_key(&link_comment(instance_id))
+            .await
+            .map_err(host_err);
+    }
     let (path, existing) = match read_authorized_keys(bot_host).await {
         Ok(v) => v,
         Err(_) => return Ok(()),
@@ -705,7 +752,7 @@ mod tests {
         assert!(script.contains("IdentitiesOnly=yes"));
         assert!(script.contains("ExitOnForwardFailure=yes"));
         assert!(script.contains("ServerAliveInterval=30"));
-        assert!(script.contains("UserKnownHostsFile=\"$KNOWN\""));
+        assert!(script.contains(r#"-o "UserKnownHostsFile=\"$KNOWN\"""#));
         assert!(script.contains("GlobalKnownHostsFile=/dev/null"));
         assert!(script.contains("-p 2222"));
         assert!(script.contains("'alice@bot.example'"));

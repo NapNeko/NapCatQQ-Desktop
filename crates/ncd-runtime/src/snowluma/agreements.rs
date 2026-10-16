@@ -117,6 +117,11 @@ impl SnowLumaAgreementService {
         &self,
         server_id: &str,
     ) -> Result<Option<AgreementsPayload>, BotManagerError> {
+        if let Some((host, paths)) = self.windows_paths(server_id).await? {
+            return Ok(load_payload_from_remote(host.as_ref(), &paths)
+                .await?
+                .filter(|payload| payload.consent_required));
+        }
         let daemon = self.ensure_remote_daemon(server_id).await?;
         let host = daemon.host().await;
         let agreements = load_payload_from_remote(host.as_ref(), daemon.paths()).await?;
@@ -124,6 +129,29 @@ impl SnowLumaAgreementService {
     }
 
     async fn record_remote(&self, server_id: &str, version: &str) -> Result<bool, BotManagerError> {
+        if let Some((host, paths)) = self.windows_paths(server_id).await? {
+            record_consent_on_remote(host.as_ref(), &paths, version).await?;
+            if let Some((port, password, _)) = self
+                .runtime_router
+                .windows_snowluma_endpoint(server_id)
+                .await
+            {
+                let notify = async {
+                    let client =
+                        ReqwestSnowLumaWebUiClient::new(port, password).map_err(map_webui_io)?;
+                    client.login().await.map_err(map_webui_io)?;
+                    client
+                        .record_agreement_consent(version)
+                        .await
+                        .map_err(map_webui_io)
+                }
+                .await;
+                if let Err(error) = notify {
+                    tracing::warn!(%error, "Windows consent.json 已写入，运行中的 SnowLuma 尚未确认");
+                }
+            }
+            return Ok(true);
+        }
         let daemon = self.ensure_remote_daemon(server_id).await?;
         let host = daemon.host().await;
         record_consent_on_remote(host.as_ref(), daemon.paths(), version).await?;
@@ -190,6 +218,35 @@ impl SnowLumaAgreementService {
             .remote_snowluma_daemon_for_server(server_id, host)
             .await
             .map_err(BotManagerError::from)
+    }
+
+    async fn windows_paths(
+        &self,
+        server_id: &str,
+    ) -> Result<Option<(Arc<dyn Host>, SnowLumaRemotePaths)>, BotManagerError> {
+        let Some(resolver) = &self.host_resolver else {
+            return Ok(None);
+        };
+        let host = resolver
+            .resolve(&RuntimeTarget::server(server_id))
+            .await
+            .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+        if host.os() != ncd_host::Os::Windows {
+            return Ok(None);
+        }
+        let selected = self
+            .runtime_router
+            .selected_for_server(server_id, host.as_ref())
+            .await
+            .ok_or_else(|| BotManagerError::RemoteRead("目标 Windows 组件库存不可用".into()))?;
+        let directory = selected
+            .snowluma_dir
+            .ok_or_else(|| BotManagerError::RemoteRead("目标 Windows 未安装 SnowLuma".into()))?;
+        let root = host
+            .target_managed_root()
+            .ok_or_else(|| BotManagerError::RemoteRead("目标 Windows 用户数据目录不可用".into()))?;
+        let paths = SnowLumaRemotePaths::from_workspace_and_dir(root.as_posix(), &directory);
+        Ok(Some((host, paths)))
     }
 
     fn local_daemon(&self) -> Result<Arc<SnowLumaDaemon>, BotManagerError> {

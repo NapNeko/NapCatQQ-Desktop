@@ -199,6 +199,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 continue;
             };
             let schedule = &cfg.bot.auto_restart_schedule;
+            if let Some(server) = cfg.bot.runtime_target.server_id() {
+                if cfg.bot.deployment_type == ncd_domain::DeploymentType::Native
+                    && self
+                        .windows_bots
+                        .manages(server, cfg.bot.qq_id, cfg.bot.backend_type)
+                        .await
+                {
+                    planner.on_inactive(&bot_id);
+                    continue;
+                }
+            }
             let was_tracked = planner.tracked(&bot_id);
             match planner.on_tick(&bot_id, schedule, Local::now()) {
                 TickDecision::Fire => {

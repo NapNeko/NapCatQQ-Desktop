@@ -34,7 +34,7 @@ fn graph_placeholder_spec() -> AppComponentSpec {
 }
 
 /// catalog 顺序（与 component_catalog 一致）。应用端不写在这里，由注册表追加。
-const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 11] = [
+const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 12] = [
     ComponentId::NapCat,
     ComponentId::SnowLuma,
     ComponentId::NodeJs,
@@ -45,6 +45,7 @@ const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 11] = [
     ComponentId::VcRedist,
     ComponentId::NoVnc,
     ComponentId::NcdWatch,
+    ComponentId::WindowsAgent,
     ComponentId::DesktopSelf,
 ];
 
@@ -88,6 +89,7 @@ pub fn graph_component(
         ComponentId::VcRedist => Arc::new(VcRedistComponent::new(x)),
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => Arc::new(NcdWatchComponent::new(None)),
+        ComponentId::WindowsAgent => Arc::new(ncd_component::WindowsAgentComponent::new("0.0.0")),
         ComponentId::DesktopSelf => Arc::new(DesktopSelfComponent::new("0.0.0", x)),
         _ => return Err(format!("依赖图缺 {} 的占位实例", id.as_str())),
     };
@@ -211,6 +213,7 @@ pub fn catalog_version_reqs_for(
 pub fn render_dependency_graph(registry: &AppFrameworkRegistry) -> String {
     let targets = [
         (Os::Windows, Locality::Local),
+        (Os::Windows, Locality::Remote),
         (Os::Linux, Locality::Local),
         (Os::Linux, Locality::Remote),
     ];
@@ -224,7 +227,15 @@ pub fn render_dependency_graph(registry: &AppFrameworkRegistry) -> String {
             };
             for package in variants {
                 // 缺占位实例的组件直接不出现在快照里,黄金对比会把它暴露出来
-                let Ok(comp) = graph_component(registry, id, *package) else {
+                let built = if id == ComponentId::NcdWatch
+                    && os == Os::Windows
+                    && locality == Locality::Remote
+                {
+                    Ok(Arc::new(ncd_component::WindowsNcdWatchComponent) as Arc<dyn Component>)
+                } else {
+                    graph_component(registry, id, *package)
+                };
+                let Ok(comp) = built else {
                     continue;
                 };
                 if !comp.supported_targets().contains(&(os, locality)) {
@@ -300,6 +311,49 @@ Windows/Local yunzai
   component nodejs >=22.12.0 (Both)
   component git (Both)
   component redis (Both)
+Windows/Remote napcat
+  component qq (Both)
+  component windows_agent (Both)
+  component vcredist (Both)
+Windows/Remote snowluma[full]
+  component windows_agent (Both)
+  component qq (Both)
+Windows/Remote snowluma[lite]
+  component windows_agent (Both)
+  component nodejs ^22.13.0 || >=23.4.0 (Both)
+  component qq (Both)
+Windows/Remote nodejs
+Windows/Remote uv
+Windows/Remote git
+Windows/Remote redis
+Windows/Remote qq
+Windows/Remote vcredist
+Windows/Remote ncd_watch
+  component windows_agent (Both)
+Windows/Remote windows_agent
+Windows/Remote astrbot
+  component uv >=0.4 (Both)
+  component windows_agent (Both)
+Windows/Remote karin
+  component nodejs >=18 (Both)
+  component windows_agent (Both)
+Windows/Remote koishi
+  component nodejs >=18 (Both)
+  component windows_agent (Both)
+Windows/Remote maibot
+  component uv >=0.4 (Both)
+  component windows_agent (Both)
+Windows/Remote neobot
+  component uv >=0.4 (Both)
+  component windows_agent (Both)
+Windows/Remote nonebot2
+  component uv >=0.4 (Both)
+  component windows_agent (Both)
+Windows/Remote yunzai
+  component nodejs >=22.12.0 (Both)
+  component git (Both)
+  component redis (Both)
+  component windows_agent (Both)
 Linux/Local napcat
   component qq (Both)
   host_command unzip <- unzip (Install)
@@ -487,6 +541,7 @@ Linux/Remote yunzai
                 ComponentId::VcRedist,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,
+                ComponentId::WindowsAgent,
                 ComponentId::DesktopSelf,
             ]
         );

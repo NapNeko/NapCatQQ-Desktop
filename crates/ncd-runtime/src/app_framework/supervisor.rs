@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use ncd_host::{Host, HostCommand, Locality, shell_single_quote};
+use ncd_host::{Host, HostCommand, Locality, Os, shell_single_quote};
 use ncd_traits::AppFrameworkError;
 
 use super::native_runtime::program_file_name;
@@ -33,7 +33,7 @@ pub async fn list_supervisors(
     host: &dyn Host,
     install_dir: &str,
 ) -> Result<Vec<String>, AppFrameworkError> {
-    if host.locality() != Locality::Remote {
+    if host.locality() != Locality::Remote || host.os() != Os::Linux {
         return Ok(Vec::new());
     }
     let dir = shell_single_quote(install_dir);
@@ -81,7 +81,7 @@ pub async fn disable_now(
     host: &dyn Host,
     units: &[String],
 ) -> Result<Vec<String>, AppFrameworkError> {
-    if units.is_empty() || host.locality() != Locality::Remote {
+    if units.is_empty() || host.locality() != Locality::Remote || host.os() != Os::Linux {
         return Ok(Vec::new());
     }
     let mut done = Vec::new();
@@ -104,7 +104,7 @@ pub async fn enable_now(
     host: &dyn Host,
     units: &[String],
 ) -> Result<Vec<String>, AppFrameworkError> {
-    if units.is_empty() || host.locality() != Locality::Remote {
+    if units.is_empty() || host.locality() != Locality::Remote || host.os() != Os::Linux {
         return Ok(Vec::new());
     }
     let mut done = Vec::new();
@@ -237,6 +237,31 @@ pub async fn list_cwd_processes(
 ) -> Result<String, AppFrameworkError> {
     if host.locality() != Locality::Remote {
         return Ok(String::new());
+    }
+    if host.os() == Os::Windows {
+        let dir = ncd_host::HostPath::from_posix(install_dir)
+            .render_for(Os::Windows)
+            .trim_end_matches('\\')
+            .replace('\'', "''");
+        let script = format!(
+            "$dir='{dir}\\'; Get-CimInstance Win32_Process | Where-Object {{ ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($dir,[StringComparison]::OrdinalIgnoreCase)) -or ($_.CommandLine -and $_.CommandLine.IndexOf($dir,[StringComparison]::OrdinalIgnoreCase) -ge 0) }} | ForEach-Object {{ [string]$_.ProcessId + ' ' + ($_.CommandLine -replace '[\\r\\n]',' ') }}"
+        );
+        let out = host
+            .run_to_string(
+                HostCommand::new("powershell.exe")
+                    .args(["-NoProfile", "-NonInteractive", "-Command"])
+                    .arg(script)
+                    .timeout(Duration::from_secs(15)),
+            )
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+        if !out.success() {
+            return Err(AppFrameworkError::Host(format!(
+                "读取 Windows 应用进程失败：{}",
+                out.stderr.trim()
+            )));
+        }
+        return Ok(out.stdout);
     }
     let dir = shell_single_quote(install_dir);
     let script = format!(

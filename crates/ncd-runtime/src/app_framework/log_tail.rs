@@ -14,6 +14,9 @@ pub fn pick_first_log_path(listing: &str) -> Option<String> {
 }
 
 pub async fn file_size(host: &dyn Host, path: &HostPath) -> Option<u64> {
+    if host.os() == ncd_host::Os::Windows && host.locality() == Locality::Remote {
+        return host.file_size(path).await.ok().flatten();
+    }
     match host.locality() {
         Locality::Local => {
             let rendered = path.render(host_path_style(host));
@@ -27,6 +30,25 @@ pub async fn tail_file(host: &dyn Host, path: &HostPath, lines: usize) -> Vec<St
     if lines == 0 {
         return Vec::new();
     }
+    if host.os() == ncd_host::Os::Windows && host.locality() == Locality::Remote {
+        let quoted = path.render_for(ncd_host::Os::Windows).replace('\'', "''");
+        let script = format!(
+            "if (Test-Path -LiteralPath '{quoted}' -PathType Leaf) {{ Get-Content -LiteralPath '{quoted}' -Tail {} -Encoding UTF8 }}",
+            lines.min(2000)
+        );
+        return host
+            .run_to_string(
+                HostCommand::new("powershell.exe")
+                    .args(["-NoProfile", "-NonInteractive", "-Command"])
+                    .arg(script)
+                    .timeout(Duration::from_secs(10)),
+            )
+            .await
+            .ok()
+            .filter(|out| out.success())
+            .map(|out| out.stdout.lines().map(str::to_string).collect())
+            .unwrap_or_default();
+    }
     match host.locality() {
         Locality::Local => tail_local(path, lines).await,
         Locality::Remote => tail_remote(host, path.as_posix(), lines).await,
@@ -34,6 +56,29 @@ pub async fn tail_file(host: &dyn Host, path: &HostPath, lines: usize) -> Vec<St
 }
 
 pub async fn newest_project_log(host: &dyn Host, install_dir: &str) -> Option<HostPath> {
+    if host.os() == ncd_host::Os::Windows && host.locality() == Locality::Remote {
+        let root = HostPath::from_posix(install_dir);
+        let mut found = Vec::new();
+        for directory in [root.clone(), root.join("logs")] {
+            if let Ok(entries) = host.list_dir(&directory).await {
+                found.extend(
+                    entries
+                        .into_iter()
+                        .filter(|entry| {
+                            !entry.is_dir
+                                && !entry.is_symlink
+                                && entry.size != 0
+                                && entry.name.ends_with(".log")
+                        })
+                        .map(|entry| (entry.modified, directory.join(entry.name))),
+                );
+            }
+        }
+        return found
+            .into_iter()
+            .max_by_key(|(modified, _)| *modified)
+            .map(|(_, path)| path);
+    }
     match host.locality() {
         Locality::Remote => {
             let dir = shell_single_quote(install_dir);
@@ -54,7 +99,7 @@ pub async fn tail_journal(
     pid: Option<u32>,
     lines: usize,
 ) -> Vec<String> {
-    if host.locality() != Locality::Remote || lines == 0 {
+    if host.locality() != Locality::Remote || host.os() != ncd_host::Os::Linux || lines == 0 {
         return Vec::new();
     }
     let mut chunks = Vec::new();

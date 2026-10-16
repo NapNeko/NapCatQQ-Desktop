@@ -12,6 +12,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
         let (port, password) = match RuntimeScenario::from_config(&config)? {
             RuntimeScenario::RemoteNative { server_id, .. } => {
+                if let Some(resolver) = &self.host_resolver {
+                    let host = resolver
+                        .resolve(&config.bot.runtime_target)
+                        .await
+                        .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+                    if host.os() == ncd_host::Os::Windows {
+                        return Err(BotManagerError::Render(
+                            "Windows 原生实例请使用二维码窗口；需要操作 QQ 界面时，请连接目标用户的远程桌面".into(),
+                        ));
+                    }
+                }
                 // 路由会在 SSH 重连后替换 daemon 中的旧 Host。
                 self.backend_for_config(&config).await?;
                 let daemon = self

@@ -11,6 +11,40 @@ use ncd_host::HostCommand;
 use super::TerminalError;
 use super::manager::TerminalManager;
 
+#[derive(serde::Deserialize)]
+struct WindowsStats {
+    cpu_percent: Option<f32>,
+    cores: u32,
+    mem_total_kb: u64,
+    mem_available_kb: u64,
+    swap_total_kb: u64,
+    swap_used_kb: u64,
+    disk_total_kb: u64,
+    disk_used_kb: u64,
+    uptime_secs: u64,
+    net_rx: u64,
+    net_tx: u64,
+}
+
+const WINDOWS_STATS_SCRIPT: &str = r#"
+$ErrorActionPreference='Stop'
+$os=Get-CimInstance Win32_OperatingSystem
+$cpus=@(Get-CimInstance Win32_Processor)
+$pages=@(Get-CimInstance Win32_PageFileUsage)
+$drive=Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='"+$env:SystemDrive+"'")
+$rx=[UInt64]0; $tx=[UInt64]0
+foreach($nic in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+  if($nic.OperationalStatus -eq [Net.NetworkInformation.OperationalStatus]::Up -and $nic.NetworkInterfaceType -ne [Net.NetworkInformation.NetworkInterfaceType]::Loopback) {
+    $s=$nic.GetIPv4Statistics(); $rx += [UInt64]$s.BytesReceived; $tx += [UInt64]$s.BytesSent
+  }
+}
+@{cpu_percent=($cpus|Measure-Object LoadPercentage -Average).Average;cores=[UInt32](($cpus|Measure-Object NumberOfLogicalProcessors -Sum).Sum);
+mem_total_kb=[UInt64]$os.TotalVisibleMemorySize;mem_available_kb=[UInt64]$os.FreePhysicalMemory;
+swap_total_kb=[UInt64](($pages|Measure-Object AllocatedBaseSize -Sum).Sum)*1024;swap_used_kb=[UInt64](($pages|Measure-Object CurrentUsage -Sum).Sum)*1024;
+disk_total_kb=[UInt64]([Math]::Floor($drive.Size/1024));disk_used_kb=[UInt64]([Math]::Floor(($drive.Size-$drive.FreeSpace)/1024));
+uptime_secs=[UInt64]([DateTime]::UtcNow-$os.LastBootUpTime.ToUniversalTime()).TotalSeconds;net_rx=$rx;net_tx=$tx}|ConvertTo-Json -Compress
+"#;
+
 /// 上一次的原始读数
 pub(crate) struct StatsSample {
     at: Instant,
@@ -171,6 +205,62 @@ fn build_stats(raw: &RawStats, previous: Option<&StatsSample>, now: Instant) -> 
 impl TerminalManager {
     pub async fn host_stats(&self, id: &str) -> Result<ServerStats, TerminalError> {
         let (host, os, host_id) = self.session_host(id)?;
+        if os == TerminalHostOs::Windows {
+            let out = host
+                .run_to_string(
+                    HostCommand::new("powershell.exe")
+                        .args([
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            WINDOWS_STATS_SCRIPT,
+                        ])
+                        .timeout(Duration::from_secs(15)),
+                )
+                .await
+                .map_err(|e| TerminalError::Host(format!("读 Windows 状态失败：{e}")))?;
+            if !out.success() {
+                return Err(TerminalError::Host(format!(
+                    "读 Windows 状态失败：{}",
+                    out.stderr.trim()
+                )));
+            }
+            let windows: WindowsStats = serde_json::from_str(out.stdout.trim())
+                .map_err(|e| TerminalError::Host(format!("Windows 状态格式无效：{e}")))?;
+            let raw = RawStats {
+                load: (0.0, 0.0, 0.0),
+                cpu_total: 0,
+                cpu_idle: 0,
+                cores: windows.cores,
+                mem_total_kb: windows.mem_total_kb,
+                mem_available_kb: windows.mem_available_kb,
+                swap_total_kb: windows.swap_total_kb,
+                swap_free_kb: windows.swap_total_kb.saturating_sub(windows.swap_used_kb),
+                disk_total_kb: windows.disk_total_kb,
+                disk_used_kb: windows.disk_used_kb,
+                uptime_secs: windows.uptime_secs,
+                net_rx: windows.net_rx,
+                net_tx: windows.net_tx,
+            };
+            let now = Instant::now();
+            let mut samples = self.stats.lock().await;
+            let mut stats = build_stats(&raw, samples.get(&host_id), now);
+            stats.cpu_percent = windows
+                .cpu_percent
+                .filter(|p| p.is_finite())
+                .map(|p| p.clamp(0.0, 100.0));
+            samples.insert(
+                host_id,
+                StatsSample {
+                    at: now,
+                    cpu_total: 0,
+                    cpu_idle: 0,
+                    net_rx: raw.net_rx,
+                    net_tx: raw.net_tx,
+                },
+            );
+            return Ok(stats);
+        }
         if os != TerminalHostOs::Linux {
             return Err(TerminalError::Unsupported(
                 "只有远端 Linux 主机有状态条".into(),

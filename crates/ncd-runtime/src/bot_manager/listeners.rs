@@ -225,6 +225,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         };
 
         let settings = self.poller_settings.read().await.clone();
+        let windows_managed = if bot_cfg.bot.deployment_type == ncd_domain::DeploymentType::Native {
+            if let Some(server) = bot_cfg.bot.runtime_target.server_id() {
+                self.windows_bots
+                    .manages(server, qq_id, bot_cfg.bot.backend_type)
+                    .await
+            } else {
+                false
+            }
+        } else {
+            false
+        };
         // offline_notice: Bot 高级「掉线通知」；App 总开关由 OfflineNotifier 自行判断。
         let cfg = PollerConfig {
             login_check_interval: Duration::from_millis(settings.bot_login_check_interval_ms),
@@ -232,7 +243,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             auth_refresh_period: Duration::from_secs(30 * 60),
             auth_refresh_throttle: Duration::from_secs(5),
             http_timeout: Duration::from_secs(5),
-            offline_auto_restart: bot_cfg.bot.offline_auto_restart,
+            offline_auto_restart: bot_cfg.bot.offline_auto_restart && !windows_managed,
             offline_notice_enabled: bot_cfg.advanced.offline_notice,
         };
 

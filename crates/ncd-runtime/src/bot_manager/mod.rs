@@ -205,6 +205,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     docker_qr_login_locks: DockerQrLoginLocks,
     qr_login_restarts: qr_login::QrRestartTable,
     remote_native_napcat_sessions: Arc<RemoteNativeNapcatSessionRegistry>,
+    windows_bots: Arc<crate::launch::windows::WindowsBotRegistry>,
     remote_bot_log_follow: Arc<RemoteBotLogFollowRegistry>,
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
     /// 远端 SnowLuma:按 server_id 共享 daemon(多 Bot 同一 SSH 主机)
@@ -254,6 +255,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             docker_qr_login_locks: Arc::clone(&self.docker_qr_login_locks),
             qr_login_restarts: Arc::clone(&self.qr_login_restarts),
             remote_native_napcat_sessions: Arc::clone(&self.remote_native_napcat_sessions),
+            windows_bots: Arc::clone(&self.windows_bots),
             remote_bot_log_follow: Arc::clone(&self.remote_bot_log_follow),
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
             remote_snowluma_daemons: Arc::clone(&self.remote_snowluma_daemons),
@@ -342,6 +344,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             docker_qr_login_locks: Arc::new(Mutex::new(HashMap::new())),
             qr_login_restarts: Arc::new(Mutex::new(HashMap::new())),
             remote_native_napcat_sessions: Arc::new(RemoteNativeNapcatSessionRegistry::new()),
+            windows_bots: Arc::new(crate::launch::windows::WindowsBotRegistry::default()),
             remote_bot_log_follow: Arc::new(RemoteBotLogFollowRegistry::new()),
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
             remote_snowluma_daemons: Arc::new(Mutex::new(HashMap::new())),
@@ -651,7 +654,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
         )
-        .with_docker_qr_login_locks(Arc::clone(&self.docker_qr_login_locks));
+        .with_docker_qr_login_locks(Arc::clone(&self.docker_qr_login_locks))
+        .with_windows_bots(Arc::clone(&self.windows_bots));
         if let Some(mgr) = &self.server_manager {
             router = router.with_server_manager(Arc::clone(mgr));
         }
@@ -777,6 +781,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     async fn detach_remote_snowluma_sessions(&self, server_id: &str) {
+        self.windows_bots.detach_server(server_id).await;
         self.docker_sessions.detach_snowluma_server(server_id).await;
         let backend = {
             let backends = self.remote_snowluma_backends.lock().await;
@@ -1340,6 +1345,22 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.render_backend_config(&bot_id, &config, overrides)
             .await?;
 
+        if !is_new
+            && previous_config.as_ref().is_some_and(|previous| {
+                previous.bot.backend_type == config.bot.backend_type
+                    && previous.bot.runtime_target == config.bot.runtime_target
+            })
+            && self
+                .get_snapshot(&bot_id)
+                .await
+                .is_ok_and(|snapshot| snapshot.state.is_active())
+        {
+            self.backend_for_config(&config)
+                .await?
+                .sync_bot_config(&config)
+                .await?;
+        }
+
         // 2b. 指标节点映射热更新：连接配置可热改，探针按 mtime 重读 nodes.json
         // 本机写 data_root；远端若已缓存 host，同步写 ~/ncd-watch/metrics/<bot>/nodes.json
         if let Some(data_root) = self.store.config_dir().parent() {
@@ -1741,6 +1762,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         self.remote_snowluma_tunnels.shutdown_all().await;
+        self.windows_bots.close_all().await;
         {
             let daemons = self.remote_snowluma_daemons.lock().await;
             for daemon in daemons.values() {
@@ -2346,6 +2368,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         server_id: &str,
     ) -> Option<ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelEndpoints> {
+        if let Some((port, password, _)) = self.windows_bots.snowluma_endpoint(server_id).await {
+            return Some(
+                ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelEndpoints {
+                    webui_local_port: port,
+                    webui_password: password,
+                    novnc_local_port: 0,
+                    vnc_password: String::new(),
+                },
+            );
+        }
         self.remote_snowluma_tunnels
             .endpoints_for_server(server_id)
             .await
@@ -2508,6 +2540,22 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let Some(server_id) = config.bot.runtime_target.server_id() else {
             return "config_saved_pending_reload";
         };
+        if let Some((port, password, _)) = self
+            .windows_bots
+            .endpoint(server_id, config.bot.qq_id, BackendType::SnowLuma)
+            .await
+        {
+            let Ok(client) = ReqwestSnowLumaWebUiClient::new(port, password) else {
+                return "config_saved_pending_reload";
+            };
+            if client.login().await.is_err() {
+                return "config_saved_pending_reload";
+            }
+            return match client.update_onebot_config(uin, payload).await {
+                Ok(true) => "config_hot_reloaded",
+                _ => "config_saved_pending_reload",
+            };
+        }
         let daemon = {
             let daemons = self.remote_snowluma_daemons.lock().await;
             daemons.get(server_id).cloned()

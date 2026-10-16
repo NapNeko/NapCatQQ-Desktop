@@ -74,6 +74,50 @@ impl DesktopTerminalPlanner {
             }
             (RuntimeTarget::Server(server_id), DeploymentType::Native) => {
                 let host = self.resolve(&basic.runtime_target).await?;
+                if host.os() == ncd_host::Os::Windows {
+                    let info = host
+                        .remote_windows_info()
+                        .await
+                        .map_err(|e| TerminalError::Plan(e.to_string()))?;
+                    let selected = self
+                        .profile(server_id)
+                        .await
+                        .and_then(|p| p.inventory)
+                        .map(|inv| inv.selected)
+                        .unwrap_or_default();
+                    let root = host.target_managed_root().ok_or_else(|| {
+                        TerminalError::Plan("无法解析 Windows 用户受管目录".into())
+                    })?;
+                    let dir = match basic.backend_type {
+                        BackendType::NapCat => selected.napcat_root.unwrap_or_else(|| {
+                            root.join("components/NapCatQQ")
+                                .render_for(ncd_host::Os::Windows)
+                        }),
+                        BackendType::SnowLuma => selected.snowluma_dir.unwrap_or_else(|| {
+                            root.join("components/SnowLuma")
+                                .render_for(ncd_host::Os::Windows)
+                        }),
+                    };
+                    let prefix = selected
+                        .node_bin
+                        .and_then(|p| ncd_host::HostPath::from_windows(&p).parent())
+                        .map(|p| p.render_for(ncd_host::Os::Windows))
+                        .into_iter()
+                        .collect();
+                    let _ = info;
+                    return self
+                        .remote_plan(
+                            host,
+                            server_id,
+                            Some(name),
+                            RemoteStart::Dir(vec![dir]),
+                            prefix,
+                            Vec::new(),
+                            Vec::new(),
+                            Vec::new(),
+                        )
+                        .await;
+                }
                 let info = self
                     .remote_shell(&remote_host_id(server_id), host.as_ref())
                     .await?;

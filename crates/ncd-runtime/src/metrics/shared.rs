@@ -98,8 +98,9 @@ pub async fn write_remote_snowluma_registration(
     let registration = SnowLumaMetricsRegistration {
         bot_id: bot_id.to_string(),
         account_id: config.bot.qq_id.to_string(),
-        nodes_path,
-        stats_out: super::remote_metrics_stats_posix(home, bot_id),
+        nodes_path: HostPath::from_posix(nodes_path).render_for(host.os()),
+        stats_out: HostPath::from_posix(super::remote_metrics_stats_posix(home, bot_id))
+            .render_for(host.os()),
         enabled: prefs.enabled,
         interval_ms: prefs.interval_ms,
     };

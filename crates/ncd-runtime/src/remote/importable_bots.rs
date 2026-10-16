@@ -79,6 +79,7 @@ mod tests {
             host: "10.0.0.1".into(),
             port: 22,
             username: "root".into(),
+            platform: None,
             auth_method: AuthMethod::Key,
             private_key_path: None,
             remember_credential: false,
@@ -144,5 +145,31 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert!(rows[0].selectable);
         assert!(!rows[0].already_imported);
+    }
+
+    #[test]
+    fn windows_native_discovery_preserves_backend_and_host_without_linux_path_derivation() {
+        let mut windows = server(
+            "win",
+            "Windows",
+            vec![
+                discovered(10001, BackendType::NapCat),
+                discovered(10002, BackendType::SnowLuma),
+            ],
+        );
+        windows.platform = Some("windows".into());
+        windows.username = "owner".into();
+        let inventory = windows.inventory.as_mut().unwrap();
+        inventory.home = r"C:\Users\owner".into();
+        inventory.selected.home = inventory.home.clone();
+        inventory.selected.napcat_root =
+            Some(r"C:\ProgramData\NapCatQQ Desktop\remote\users\owner\components\NapCatQQ".into());
+        let rows = collect_importable_remote_bots(&[windows], &[]);
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|row| row.server_id == "win"
+            && row.selectable
+            && row.deployment == DeploymentType::Native));
+        assert!(rows.iter().any(|row| row.backend == BackendType::NapCat));
+        assert!(rows.iter().any(|row| row.backend == BackendType::SnowLuma));
     }
 }

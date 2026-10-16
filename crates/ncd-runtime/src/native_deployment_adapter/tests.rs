@@ -7,7 +7,6 @@ use bytes::Bytes;
 use ncd_deploy::DockerDeployment;
 use ncd_domain::ids::BotId;
 use ncd_domain::{BackendType, BotConfig, BotFlavor, DeploymentType, RuntimeTarget};
-use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteWindowsHost, SshCredentials};
 use ncd_host::{
     Arch, ArchiveKind, CommandOutput, DirEntry, Host, HostCommand, HostError, HostPath,
     HostProcess, HostShell, Locality, Os, ShellKind,
@@ -51,6 +50,7 @@ struct DockerRuntimeMockHost {
     writes: Mutex<Vec<RecordedWrite>>,
     created_dirs: Mutex<Vec<String>>,
     fail_login_overlay: bool,
+    fail_home_probe: bool,
 }
 
 impl DockerRuntimeMockHost {
@@ -61,6 +61,7 @@ impl DockerRuntimeMockHost {
             writes: Mutex::new(Vec::new()),
             created_dirs: Mutex::new(Vec::new()),
             fail_login_overlay: false,
+            fail_home_probe: false,
         }
     }
 
@@ -179,6 +180,9 @@ impl Host for DockerRuntimeMockHost {
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
         self.commands.lock().unwrap().push(cmd.clone());
         if cmd.program == "sh" && cmd.args == ["-c", "echo $HOME"] {
+            if self.fail_home_probe {
+                return Err(HostError::Io(std::io::Error::other("HOME unavailable")));
+            }
             return Ok(command_output(0, "/home/napcat\n", ""));
         }
         if cmd.program != "docker" {
@@ -297,15 +301,8 @@ fn docker_loads_real_config_from_default_runtime_path() {
 
 #[tokio::test]
 async fn docker_project_dir_home_probe_failure_is_hard_error() {
-    let host = RemoteWindowsHost::new_stub(
-        "stub",
-        ConnectionConfig::new(
-            "example.com",
-            22,
-            SshCredentials::password("u", "p"),
-            HostKeyPolicy::Insecure,
-        ),
-    );
+    let mut host = DockerRuntimeMockHost::new("");
+    host.fail_home_probe = true;
 
     let err = docker_project_dir(&host, "ncbot-10001").await.unwrap_err();
 
@@ -503,7 +500,10 @@ async fn docker_login_prepare_or_overlay_failure_still_launches_with_vnc() {
             assert!(host.commands().iter().any(|command| {
                 command.program == "chown"
                     && command.args.iter().any(|arg| arg == "1000:1000")
-                    && command.args.iter().any(|arg| arg.ends_with("/ncd-login/assets"))
+                    && command
+                        .args
+                        .iter()
+                        .any(|arg| arg.ends_with("/ncd-login/assets"))
             }));
             assert!(host.commands().iter().any(|command| {
                 command.program == "rm"

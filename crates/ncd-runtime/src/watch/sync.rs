@@ -416,10 +416,25 @@ pub fn merge_notify_preserve_webui(new: &mut NotifyConfig, prev: &NotifyConfig) 
 }
 
 pub fn remote_watch_root(home: &str) -> HostPath {
+    if home.as_bytes().get(1) == Some(&b':') {
+        return HostPath::from_windows(home).join("ncd-watch");
+    }
     HostPath::from_posix(format!("{}/ncd-watch", home.trim_end_matches('/')))
 }
 
+pub fn target_watch_home(host: &dyn Host, fallback: &str) -> Result<String, String> {
+    if host.os() == ncd_host::Os::Windows {
+        return host
+            .target_managed_root()
+            .map(|root| root.render(ncd_host::PathStyle::Windows))
+            .ok_or_else(|| "Windows user managed root is unavailable".into());
+    }
+    Ok(fallback.to_string())
+}
+
 pub async fn read_notify_json(host: &dyn Host, home: &str) -> Result<Option<NotifyConfig>, String> {
+    let resolved_home = target_watch_home(host, home)?;
+    let home = resolved_home.as_str();
     let path = remote_watch_root(home).join("config").join("notify.json");
     let exists = host.exists(&path).await.map_err(|e| e.to_string())?;
     if !exists {
@@ -436,6 +451,8 @@ pub async fn write_metrics_json(
     home: &str,
     metrics: &ncd_watch::WatchMetricsConfig,
 ) -> Result<(), String> {
+    let resolved_home = target_watch_home(host, home)?;
+    let home = resolved_home.as_str();
     let root = remote_watch_root(home);
     let config_dir = root.join("config");
     host.create_dir_all(&config_dir)
@@ -446,13 +463,15 @@ pub async fn write_metrics_json(
     host.write_file(&path, &body)
         .await
         .map_err(|e| e.to_string())?;
-    let _ = host
-        .run_to_string(
-            ncd_host::HostCommand::new("chmod")
-                .arg("600")
-                .arg(path.as_posix()),
-        )
-        .await;
+    if host.os() != ncd_host::Os::Windows {
+        let _ = host
+            .run_to_string(
+                ncd_host::HostCommand::new("chmod")
+                    .arg("600")
+                    .arg(path.as_posix()),
+            )
+            .await;
+    }
     Ok(())
 }
 
@@ -493,12 +512,41 @@ pub async fn write_notify_json(
     home: &str,
     notify: &NotifyConfig,
 ) -> Result<(), String> {
+    let resolved_home = target_watch_home(host, home)?;
+    let home = resolved_home.as_str();
     let root = remote_watch_root(home);
     let config_dir = root.join("config");
     host.create_dir_all(&config_dir)
         .await
         .map_err(|e| e.to_string())?;
     let path = config_dir.join("notify.json");
+    if host.os() == ncd_host::Os::Windows {
+        if notify.onebot.relogin.settings.enabled {
+            use ncd_domain::windows_remote::*;
+            let response = host
+                .windows_agent_request(WindowsAgentRequest {
+                    v: 1,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    action: WindowsAgentAction::Hello,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            if !matches!(response.result, WindowsAgentResult::Hello(ref status) if status.capabilities.iter().any(|feature| feature == ncd_watch::relogin_config::RELOGIN_CAPABILITY))
+            {
+                return Err("Windows Agent lacks the relogin watch capability".into());
+            }
+        }
+        let body = serde_json::to_vec_pretty(notify).map_err(|e| e.to_string())?;
+        let temporary = config_dir.join(format!(".notify-{}.json", uuid::Uuid::new_v4()));
+        host.write_file(&temporary, &body)
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Err(error) = host.rename(&temporary, &path).await {
+            let _ = host.remove_file(&temporary).await;
+            return Err(error.to_string());
+        }
+        return Ok(());
+    }
     let permissions = host
         .run_to_string(
             ncd_host::HostCommand::new("chmod")
@@ -562,6 +610,8 @@ pub async fn write_notify_json(
 }
 
 pub async fn relogin_loaded(host: &dyn Host, home: &str) -> Result<Option<NotifyConfig>, String> {
+    let resolved_home = target_watch_home(host, home)?;
+    let home = resolved_home.as_str();
     let Some(config) = read_notify_json(host, home).await? else {
         return Ok(None);
     };
@@ -611,6 +661,8 @@ pub async fn write_desktop_present(
     home: &str,
     desktop_version: Option<&str>,
 ) -> Result<(), String> {
+    let resolved_home = target_watch_home(host, home)?;
+    let home = resolved_home.as_str();
     let root = remote_watch_root(home);
     let state_dir = root.join("state");
     host.create_dir_all(&state_dir)
@@ -630,6 +682,8 @@ pub async fn write_desktop_present(
 /// Desktop 退出时删掉心跳文件,让 watch 立刻 allow_notify,不必干等 TTL。
 /// 文件缺失时 present 判定为 false(见 ncd-watch present.rs)。
 pub async fn clear_desktop_present(host: &dyn Host, home: &str) -> Result<(), String> {
+    let resolved_home = target_watch_home(host, home)?;
+    let home = resolved_home.as_str();
     let path = remote_watch_root(home)
         .join("state")
         .join("desktop_present");

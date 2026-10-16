@@ -59,15 +59,27 @@ impl RemoteMetricsPaths {
 
     /// 远端 SL 共享 node：NCD_* + NODE_OPTIONS=--require（与本机 daemon 子进程一致）
     pub fn env_map_for_snowluma(&self) -> BTreeMap<String, String> {
+        let registry = HostPath::from_posix(super::remote_snowluma_registry_posix(&self.home));
+        let registry = if self.probe_script.as_bytes().get(1) == Some(&b':') {
+            registry.render_for(ncd_host::Os::Windows)
+        } else {
+            registry.as_posix().to_owned()
+        };
         super::snowluma_metrics_env(
             std::path::Path::new(&self.probe_script),
-            std::path::Path::new(&super::remote_snowluma_registry_posix(&self.home)),
+            std::path::Path::new(&registry),
         )
     }
 }
 
 /// 探测远端 $HOME（单次 shell）
 pub async fn probe_remote_home(host: &dyn Host) -> Result<String, String> {
+    if host.os() == ncd_host::Os::Windows {
+        return host
+            .target_managed_root()
+            .map(|root| root.as_posix().to_owned())
+            .ok_or_else(|| "目标 Windows 用户数据目录不可用".into());
+    }
     let out = host
         .run_to_string(HostCommand::new("sh").arg("-c").arg("echo $HOME"))
         .await
@@ -121,9 +133,9 @@ pub async fn ensure_remote_metrics_assets(
 
     Ok(RemoteMetricsPaths {
         home: home.to_string(),
-        probe_script: remote_probe,
-        stats_out,
-        nodes_path,
+        probe_script: HostPath::from_posix(remote_probe).render_for(host.os()),
+        stats_out: HostPath::from_posix(stats_out).render_for(host.os()),
+        nodes_path: HostPath::from_posix(nodes_path).render_for(host.os()),
         interval_ms: prefs.interval_ms,
     })
 }
@@ -175,6 +187,10 @@ impl RuntimeRemoteMetricsInjector {
     pub fn prefs(&self) -> BotRuntimeMetricsPrefs {
         // Backend 按 server 缓存；不能把创建时的开关/间隔也永久缓存。
         BotRuntimeMetricsPrefs::from_data_root(&self.local_data_root)
+    }
+
+    pub fn data_root(&self) -> &std::path::Path {
+        &self.local_data_root
     }
 }
 
@@ -371,5 +387,20 @@ mod tests {
         assert!(napcat.contains_key("NCD_METRICS_OUT"));
         assert!(!napcat.contains_key("NCD_METRICS_REGISTRY_DIR"));
         assert!(!napcat.contains_key("NODE_OPTIONS"));
+    }
+
+    #[test]
+    fn windows_shared_probe_uses_target_drive_paths() {
+        let paths = RemoteMetricsPaths {
+            home: "/c/ProgramData/NapCatQQ Desktop/remote/users/owner".into(),
+            probe_script: "C:\\ProgramData\\NapCatQQ Desktop\\remote\\users\\owner\\ncd-watch\\metrics\\ncd-ob11-stats.cjs".into(),
+            stats_out: String::new(), nodes_path: String::new(), interval_ms: 1000,
+        };
+        let environment = paths.env_map_for_snowluma();
+        assert_eq!(
+            environment["NCD_METRICS_REGISTRY_DIR"],
+            "C:/ProgramData/NapCatQQ Desktop/remote/users/owner/ncd-watch/metrics/snowluma-shared"
+        );
+        assert!(environment["NODE_OPTIONS"].contains("ncd-ob11-stats.cjs"));
     }
 }

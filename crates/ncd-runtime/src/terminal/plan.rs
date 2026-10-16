@@ -300,6 +300,20 @@ impl DesktopTerminalPlanner {
         mut banner: Vec<String>,
         snippets: Vec<TerminalSnippet>,
     ) -> Result<TerminalLaunchPlan, TerminalError> {
+        if host.os() == ncd_host::Os::Windows {
+            return self
+                .remote_windows_plan(
+                    host,
+                    server_id,
+                    title_prefix,
+                    start,
+                    path_prefix,
+                    env,
+                    banner,
+                    snippets,
+                )
+                .await;
+        }
         let host_id = remote_host_id(server_id);
         let info = self.remote_shell(&host_id, host.as_ref()).await?;
         let profile = self.profile(server_id).await;
@@ -379,6 +393,91 @@ impl DesktopTerminalPlanner {
                 external: false,
             },
             snippets,
+            banner,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn remote_windows_plan(
+        &self,
+        host: Arc<dyn Host>,
+        server_id: &str,
+        title_prefix: Option<String>,
+        start: RemoteStart,
+        path_prefix: Vec<String>,
+        env: Vec<(String, String)>,
+        banner: Vec<String>,
+        _snippets: Vec<TerminalSnippet>,
+    ) -> Result<TerminalLaunchPlan, TerminalError> {
+        let info = host
+            .remote_windows_info()
+            .await
+            .map_err(|e| TerminalError::Plan(e.to_string()))?;
+        let host_id = remote_host_id(server_id);
+        let profile = self.profile(server_id).await;
+        let host_label = Self::server_label(profile.as_ref(), server_id);
+        let title = title_prefix
+            .map(|prefix| with_host_label(&prefix, &host_label))
+            .unwrap_or_else(|| host_label.clone());
+        let cwd = match start {
+            RemoteStart::Home => HostPath::from_windows(&info.home_dir),
+            RemoteStart::Dir(dirs) => {
+                let mut found = None;
+                for dir in dirs {
+                    let path = HostPath::from_posix(&dir);
+                    if host
+                        .exists(&path)
+                        .await
+                        .map_err(|e| TerminalError::Host(e.to_string()))?
+                    {
+                        found = Some(path);
+                        break;
+                    }
+                }
+                found.unwrap_or_else(|| HostPath::from_windows(&info.home_dir))
+            }
+            RemoteStart::Container(_) => {
+                return Err(TerminalError::Unsupported(
+                    "Windows 主机的 Linux 容器终端需要单独的容器执行目标".into(),
+                ));
+            }
+        };
+        let prefix: Vec<String> = path_prefix
+            .iter()
+            .map(|p| HostPath::from_posix(p).render_for(ncd_host::Os::Windows))
+            .collect();
+        let path = ncd_appframework::node_tooling::target_path_env(host.as_ref(), &prefix)
+            .await
+            .map_err(|e| TerminalError::Host(e.to_string()))?;
+        let mut environment: BTreeMap<String, String> = env.into_iter().collect();
+        environment.insert("PATH".into(), path);
+        let args = super::integration::powershell_args();
+        Ok(TerminalLaunchPlan {
+            host,
+            host_id,
+            host_label,
+            host_os: TerminalHostOs::Windows,
+            title,
+            program: PtyProgram::Program {
+                program: "powershell.exe".into(),
+                args,
+            },
+            cwd: Some(cwd.clone()),
+            env: environment,
+            cwd_display: Some(cwd.render_for(ncd_host::Os::Windows)),
+            shell: None,
+            features: TerminalFeatures {
+                files: true,
+                stats: true,
+                sudo_fill: false,
+                shell_integration: true,
+                external: false,
+            },
+            snippets: vec![
+                TerminalSnippet::new("当前用户", "whoami"),
+                TerminalSnippet::new("进程", "Get-Process"),
+                TerminalSnippet::new("监听端口", "Get-NetTCPConnection -State Listen"),
+            ],
             banner,
         })
     }

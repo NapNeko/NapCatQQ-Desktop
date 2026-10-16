@@ -58,7 +58,7 @@ impl FileSystemRuntimeLaunchPlanner {
         self
     }
 
-    /// 注入 QQ 安装目录(测试用假 QQ.exe;生产勿用,应走注册表)
+    /// 测试注入 QQ 安装目录；生产使用托管目录优先、注册表兜底的解析。
     pub fn with_qq_install_path(mut self, qq_install: impl Into<PathBuf>) -> Self {
         self.qq_install_path = Some(qq_install.into());
         self
@@ -467,7 +467,7 @@ fn path_to_file_uri(path: &Path) -> String {
 }
 
 fn ensure_runtime_file(path: &Path, message: &str) -> Result<(), RuntimeLaunchPlanError> {
-    if path.exists() {
+    if path.is_file() {
         Ok(())
     } else {
         Err(RuntimeLaunchPlanError::MissingFile {
@@ -523,6 +523,10 @@ fn resolve_system_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
 }
 
 #[cfg(test)]
+#[path = "plan_tests.rs"]
+mod managed_qq_tests;
+
+#[cfg(test)]
 mod snowluma_plan_tests {
     //! SnowLumaLaunchPlan 字段扩展锁定测试
     //! 覆盖:
@@ -564,24 +568,18 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// runtime_root 没有内置 node.exe 时，允许从系统 PATH 解析 Node.js。
+    /// 没有内置 node.exe 时使用同一组件根下的 Node.js，不依赖测试机的 PATH 或 QQ。
     #[tokio::test]
-    async fn snowluma_plan_accepts_node_exe_from_path() {
-        let runtime_root_dir = tempdir().unwrap();
-        let data_root_dir = tempdir().unwrap();
-        let runtime_root = runtime_root_dir.path();
-        let data_root = data_root_dir.path();
-        let bot_id = BotId::from("bot-1");
-        let config = make_config(Some(SnowLumaStartMode::ColdStart));
-
-        let result =
-            build_runtime_launch_plan(&bot_id, &config, runtime_root, runtime_root, data_root)
-                .await;
-
-        assert!(
-            result.is_ok(),
-            "PATH Node.js should satisfy the launch plan: {result:?}"
-        );
+    async fn snowluma_plan_accepts_managed_node_component() {
+        let components = tempdir().unwrap();
+        let node_dir = components.path().join("NodeJs");
+        tokio::fs::create_dir(&node_dir).await.unwrap();
+        let expected = node_dir.join("node.exe");
+        tokio::fs::write(&expected, b"stub").await.unwrap();
+        let node = resolve_snowluma_node_exe(&components.path().join("SnowLuma"))
+            .await
+            .unwrap();
+        assert_eq!(node, expected);
     }
 
     /// HotStart 路径:跳过 QQ install path 解析(即便 Windows 注册表查询失败也应该 OK)

@@ -60,6 +60,7 @@ use crate::remote::inventory::RemoteInventoryService;
 #[derive(Clone)]
 pub struct ComponentBuildInputs {
     pub data_root: PathBuf,
+    pub remote_windows_root: Option<String>,
     pub remote_home: Option<String>,
     pub layout: RemoteLayout,
     pub snapshot: Option<ReleaseSnapshot>,
@@ -81,6 +82,7 @@ impl ComponentBuildInputs {
             id,
             &BuildComponentCtx {
                 data_root: &self.data_root,
+                remote_windows_root: self.remote_windows_root.as_deref(),
                 host,
                 remote_home: self.remote_home.as_deref(),
                 layout: self.layout,
@@ -273,6 +275,14 @@ impl ComponentExecutor {
         });
         ComponentBuildInputs {
             data_root: self.data_root.clone(),
+            remote_windows_root: if host.os() == Os::Windows && !local {
+                host.remote_windows_info()
+                    .await
+                    .ok()
+                    .map(|info| info.user_root)
+            } else {
+                None
+            },
             remote_home: probe.home.clone(),
             layout: probe.layout,
             snapshot: read_cached_release_snapshot(&self.data_root),
@@ -293,9 +303,17 @@ impl ComponentExecutor {
         host: &dyn Host,
         snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     ) -> ComponentBuildInputs {
-        let (probe, selected) = self.inventory.host_probe_or_default(host_id, host).await;
-        self.build_inputs(host, &probe, selected, snowluma_linux_package)
-            .await
+        let result = self.inventory.host_probe(host_id, host).await;
+        let invalid_windows =
+            result.is_err() && host.os() == Os::Windows && host.locality() == Locality::Remote;
+        let (probe, selected) = result.unwrap_or_else(|_| (RemoteHostProbe::local_default(), None));
+        let mut inputs = self
+            .build_inputs(host, &probe, selected, snowluma_linux_package)
+            .await;
+        if invalid_windows {
+            inputs.remote_windows_root = None;
+        }
+        inputs
     }
 
     /// root 现在能不能跑(root 自己 + Run 依赖);组件页门禁和 Bot 启动预检共用。

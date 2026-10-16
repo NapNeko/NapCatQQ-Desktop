@@ -589,6 +589,16 @@ impl AppManager {
     ) -> Result<LogSnapshot, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         let host = self.resolve_host(&instance.host_id).await?;
+        if host.os() == Os::Windows && host.locality() == Locality::Remote {
+            let collected =
+                super::native_runtime::agent_log_tail(host.as_ref(), &instance, lines).await?;
+            if !collected.is_empty() {
+                return Ok(LogSnapshot {
+                    total_lines: collected.len(),
+                    lines: collected,
+                });
+            }
+        }
         let path = self.resolve_log_file(host.as_ref(), &instance).await;
         let mut collected = super::log_tail::tail_file(host.as_ref(), &path, lines).await;
         if collected.is_empty() {

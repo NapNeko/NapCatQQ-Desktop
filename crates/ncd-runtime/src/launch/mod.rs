@@ -2,6 +2,7 @@
 
 pub mod plan;
 pub mod router;
+pub mod windows;
 
 pub use plan::{
     FileSystemRuntimeLaunchPlanner, NapCatLaunchPlan, RuntimeLaunchPlan, RuntimeLaunchPlanError,

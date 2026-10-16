@@ -27,6 +27,10 @@ use tokio::task::JoinHandle;
 use super::instances::AppInstanceStore;
 use crate::events::{BroadcastEventBus, DomainEvent};
 
+#[path = "native_runtime_windows.rs"]
+mod windows;
+pub(crate) use windows::agent_log_tail;
+
 /// pid 文件名由运行时统一决定，框架适配器不用管
 pub const APP_PID_FILE: &str = ".ncd-app.pid";
 const REMOTE_POLL: Duration = Duration::from_secs(2);
@@ -85,6 +89,9 @@ impl NativeAppRuntime {
             return Err(AppFrameworkError::Runtime("实例已在运行".to_string()));
         }
         self.stop_follow(&instance.id).await;
+        if windows::applies(host.as_ref()) {
+            return self.start_windows(host, instance, spec).await;
+        }
         match host.locality() {
             Locality::Local => self.start_local(host, instance, spec).await,
             Locality::Remote => self.start_remote(host, instance, spec).await,
@@ -98,6 +105,9 @@ impl NativeAppRuntime {
         instance: &AppInstance,
     ) -> Result<(), AppFrameworkError> {
         self.stop_follow(&instance.id).await;
+        if windows::applies(host.as_ref()) {
+            return windows::stop(host.as_ref(), instance).await;
+        }
         let managed = self.local.lock().await.remove(&instance.id);
         if let Some(managed) = managed {
             for t in &managed.tasks {
@@ -149,6 +159,12 @@ impl NativeAppRuntime {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<Option<u32>, AppFrameworkError> {
+        if windows::applies(host) {
+            return match windows::status(host, instance).await? {
+                Some(status) => Ok(status.is_running().then_some(status.pid).flatten()),
+                None => windows::external_pid(host, instance).await,
+            };
+        }
         if let Some(m) = self.local.lock().await.get(&instance.id) {
             return Ok(Some(m.pid));
         }
@@ -182,6 +198,13 @@ impl NativeAppRuntime {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<Option<u32>, AppFrameworkError> {
+        if windows::applies(host) {
+            return match windows::status(host, instance).await? {
+                Some(status) if status.is_running() => Ok(status.pid),
+                Some(_) => Ok(None),
+                None => windows::external_pid(host, instance).await,
+            };
+        }
         let Some((pid, program)) = Self::discover_project_pid(host, instance).await? else {
             return Ok(None);
         };
@@ -212,6 +235,12 @@ impl NativeAppRuntime {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<bool, AppFrameworkError> {
+        if windows::applies(host) {
+            return Ok(windows::status(host, instance)
+                .await?
+                .is_some_and(|s| s.is_running())
+                || windows::external_pid(host, instance).await?.is_some());
+        }
         if self.local.lock().await.contains_key(&instance.id) {
             return Ok(true);
         }
@@ -243,6 +272,14 @@ impl NativeAppRuntime {
         log_file: HostPath,
     ) -> Result<(), AppFrameworkError> {
         self.stop_follow(&instance.id).await;
+        if windows::applies(host.as_ref()) {
+            let task = self.spawn_windows_follow(host, instance.clone(), true);
+            self.followers
+                .lock()
+                .await
+                .insert(instance.id.clone(), task);
+            return Ok(());
+        }
         let task = match host.locality() {
             Locality::Local => {
                 let Some((pid, program)) =
@@ -301,6 +338,17 @@ impl NativeAppRuntime {
         instance: &AppInstance,
         log_file: HostPath,
     ) -> Result<(), AppFrameworkError> {
+        if windows::applies(host.as_ref()) {
+            self.stop_follow(&instance.id).await;
+            self.event_bus
+                .publish(DomainEvent::app_instance_log_reset(instance.id.clone()));
+            let task = self.spawn_windows_follow(host, instance.clone(), false);
+            self.followers
+                .lock()
+                .await
+                .insert(instance.id.clone(), task);
+            return Ok(());
+        }
         let following = self.followers.lock().await.contains_key(&instance.id);
         self.stop_follow(&instance.id).await;
         self.event_bus

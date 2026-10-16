@@ -127,6 +127,7 @@ pub(crate) struct RuntimeBackendRouter {
     /// 本机 SnowLuma 数据根（app-config 固定密码），远端接管启动时读取
     snowluma_data_root: Option<PathBuf>,
     docker_qr_login_locks: DockerQrLoginLocks,
+    windows_bots: Arc<super::windows::WindowsBotRegistry>,
 }
 
 impl RuntimeBackendRouter {
@@ -158,6 +159,7 @@ impl RuntimeBackendRouter {
             remote_inventory: None,
             snowluma_data_root: None,
             docker_qr_login_locks: Arc::new(Mutex::new(HashMap::new())),
+            windows_bots: Arc::new(super::windows::WindowsBotRegistry::default()),
         }
     }
 
@@ -166,6 +168,14 @@ impl RuntimeBackendRouter {
         inventory: Arc<crate::remote::inventory::RemoteInventoryService>,
     ) -> Self {
         self.remote_inventory = Some(inventory);
+        self
+    }
+
+    pub(crate) fn with_windows_bots(
+        mut self,
+        registry: Arc<super::windows::WindowsBotRegistry>,
+    ) -> Self {
+        self.windows_bots = registry;
         self
     }
 
@@ -255,6 +265,32 @@ impl RuntimeBackendRouter {
             }
             RuntimeScenario::RemoteNative { server_id, backend } => {
                 let host = self.resolve_remote_host(server_id).await?;
+                if host.os() == Os::Windows {
+                    let selected = self
+                        .ensure_inventory(server_id, host.as_ref())
+                        .await?
+                        .selected;
+                    let resolver = self.host_resolver.clone().ok_or_else(|| {
+                        RuntimeRouterError::Render("HostResolver 未初始化".into())
+                    })?;
+                    let data_root = self
+                        .remote_metrics_injector
+                        .as_ref()
+                        .map(|injector| injector.data_root().to_path_buf());
+                    let backend = self
+                        .windows_bots
+                        .backend(
+                            server_id,
+                            qq_id,
+                            *backend,
+                            resolver,
+                            Arc::clone(&self.event_bus),
+                            selected,
+                            data_root,
+                        )
+                        .await;
+                    return Ok(backend as Arc<dyn BotBackend>);
+                }
                 if host.os() != Os::Linux {
                     return Err(RuntimeRouterError::Render(
                         "远端「直接运行」目前仅支持 Linux SSH 主机。".to_string(),
@@ -421,6 +457,13 @@ impl RuntimeBackendRouter {
             .await
             .ok()
             .map(|inv| inv.selected)
+    }
+
+    pub(crate) async fn windows_snowluma_endpoint(
+        &self,
+        server: &str,
+    ) -> Option<(u16, String, u16)> {
+        self.windows_bots.snowluma_endpoint(server).await
     }
 
     async fn ensure_inventory(

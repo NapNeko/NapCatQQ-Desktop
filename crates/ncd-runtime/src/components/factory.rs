@@ -10,7 +10,7 @@ use ncd_component::{
     Component, ComponentId, DesktopSelfComponent, GitComponent, MANAGED_QQ_DIR_NAME,
     MINGIT_DEFAULT_VERSION, NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent,
     QQComponent, RedisComponent, SnowLumaComponent, UV_DEFAULT_VERSION, UvComponent,
-    VcRedistComponent, ncd_watch_asset_name, ncd_watch_release_download_url,
+    VcRedistComponent, WindowsAgentComponent, ncd_watch_asset_name, ncd_watch_release_download_url,
     ncd_watch_release_download_url_for_tag,
 };
 use ncd_domain::RemoteSelectedPaths;
@@ -19,7 +19,7 @@ use ncd_domain::desktop_default_install_paths;
 use ncd_domain::release_snapshot::ReleaseSnapshot;
 use ncd_domain::require_qq_install_base;
 use ncd_domain::snowluma_install_candidates;
-use ncd_host::{Arch, Host, HostPath, Os};
+use ncd_host::{Arch, Host, HostPath, Locality, Os};
 
 use crate::components::action_policy::{
     RemoteLayout, asset_sha256, data_root_to_host_path, infer_snowluma_linux_package,
@@ -31,6 +31,7 @@ use crate::components::graph::catalog_version_reqs_for;
 /// 实例化 Component 时的上下文（避免过长参数列表）。
 pub struct BuildComponentCtx<'a> {
     pub data_root: &'a Path,
+    pub remote_windows_root: Option<&'a str>,
     pub host: &'a dyn Host,
     pub remote_home: Option<&'a str>,
     pub layout: RemoteLayout,
@@ -71,8 +72,29 @@ pub fn build_component_for_host(
     id: ComponentId,
     ctx: &BuildComponentCtx<'_>,
 ) -> Result<Arc<dyn Component>, String> {
-    let data_root_host = data_root_to_host_path(ctx.data_root, ctx.host.os());
+    let remote_windows = ctx.host.os() == Os::Windows && ctx.host.locality() == Locality::Remote;
+    let data_root_host = if remote_windows {
+        let root = ctx
+            .remote_windows_root
+            .filter(|root| !root.trim().is_empty())
+            .ok_or_else(|| "无法解析远端 Windows 受管目录，请先测试主机连接".to_string())?;
+        let path = HostPath::from_windows(root);
+        if !path.is_absolute() {
+            return Err("远端 Windows 受管目录必须为绝对路径".into());
+        }
+        path
+    } else {
+        data_root_to_host_path(ctx.data_root, ctx.host.os())
+    };
     let data_paths = crate::DataPaths::new(ctx.data_root);
+    let target_staging = if remote_windows {
+        data_root_host.join("tmp")
+    } else {
+        data_root_to_host_path(
+            &data_paths.download_cache_dir().join("staging"),
+            ctx.host.os(),
+        )
+    };
     let layout = ctx.layout;
     let remote_home = ctx.remote_home;
     let snapshot = ctx.snapshot;
@@ -99,7 +121,11 @@ pub fn build_component_for_host(
     let component: Arc<dyn Component> = match id {
         ComponentId::NapCat => {
             if ctx.host.os() == Os::Windows {
-                let install = data_root_host.join("components").join("NapCatQQ");
+                let install = ctx
+                    .selected
+                    .and_then(|s| s.napcat_root.as_deref())
+                    .map(HostPath::from_windows)
+                    .unwrap_or_else(|| data_root_host.join("components").join("NapCatQQ"));
                 let mut comp = NapCatComponent::for_windows(install);
                 if let Some(sha) = snapshot
                     .and_then(|s| s.napcat_latest.as_ref())
@@ -117,7 +143,11 @@ pub fn build_component_for_host(
         }
         ComponentId::SnowLuma => {
             if ctx.host.os() == Os::Windows {
-                let install = data_root_host.join("components").join("SnowLuma");
+                let install = ctx
+                    .selected
+                    .and_then(|s| s.snowluma_dir.as_deref())
+                    .map(HostPath::from_windows)
+                    .unwrap_or_else(|| data_root_host.join("components").join("SnowLuma"));
                 let latest = snapshot.and_then(|s| s.snowluma_latest.as_ref());
                 let tag = snowluma_github_release_tag(latest, local_snowluma_version);
                 if tag.is_empty() {
@@ -188,11 +218,19 @@ pub fn build_component_for_host(
             if ctx.host.os() == Os::Windows {
                 // 侧装根 components/QQ(启动链路 resolve_qq_install_path 同源);
                 // 安装包缓存独立于已安装组件，失败保留可复用
-                let qq_root = data_root_host.join("components").join(MANAGED_QQ_DIR_NAME);
-                let cache = data_root_to_host_path(
-                    &data_paths.installer_cache_dir().join("qq"),
-                    ctx.host.os(),
-                );
+                let qq_root = ctx
+                    .selected
+                    .and_then(|s| s.qq_install_base.as_deref())
+                    .map(HostPath::from_windows)
+                    .unwrap_or_else(|| data_root_host.join("components").join(MANAGED_QQ_DIR_NAME));
+                let cache = if remote_windows {
+                    target_staging.join("qq")
+                } else {
+                    data_root_to_host_path(
+                        &data_paths.installer_cache_dir().join("qq"),
+                        ctx.host.os(),
+                    )
+                };
                 Arc::new(QQComponent::default_v3_2_25(qq_root).with_tmp_dir(cache))
             } else {
                 Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
@@ -210,10 +248,7 @@ pub fn build_component_for_host(
                 let install_dir = data_root_host.join("components").join("NodeJs");
                 let mut comp = NodeJsComponent::new("22.13.0", install_dir)
                     .with_version_reqs(accept)
-                    .with_tmp_dir(data_root_to_host_path(
-                        &data_paths.download_cache_dir().join("staging"),
-                        ctx.host.os(),
-                    ));
+                    .with_tmp_dir(target_staging.clone());
                 if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
                     comp = comp.with_extra_detect_bin(bin);
                 }
@@ -233,16 +268,24 @@ pub fn build_component_for_host(
             }
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
+        ComponentId::WindowsAgent => Arc::new(WindowsAgentComponent::bundled()),
         ComponentId::VcRedist => {
             // 安装包缓存目录:稳定文件名 VC_redist.x64.exe(SHA256 匹配才复用),
             // 失败保留可复用;只在 Windows 本机生效,组件自身 check_target 拦截
-            let cache = data_root_to_host_path(
-                &data_paths.installer_cache_dir().join("vcredist"),
-                ctx.host.os(),
-            );
+            let cache = if remote_windows {
+                target_staging.join("vcredist")
+            } else {
+                data_root_to_host_path(
+                    &data_paths.installer_cache_dir().join("vcredist"),
+                    ctx.host.os(),
+                )
+            };
             Arc::new(VcRedistComponent::new(cache))
         }
         ComponentId::NcdWatch => {
+            if ctx.host.os() == Os::Windows {
+                return Ok(Arc::new(ncd_component::WindowsNcdWatchComponent));
+            }
             let mut comp = NcdWatchComponent::new(remote_home.map(|s| s.to_string()));
             if let Some(root) = ctx
                 .selected
@@ -293,10 +336,7 @@ pub fn build_component_for_host(
             };
             let mut component = UvComponent::new(UV_DEFAULT_VERSION, install_dir);
             if ctx.host.os() == Os::Windows {
-                component = component.with_tmp_dir(data_root_to_host_path(
-                    &data_paths.download_cache_dir().join("staging"),
-                    ctx.host.os(),
-                ));
+                component = component.with_tmp_dir(target_staging.clone());
             }
             Arc::new(component)
         }

@@ -44,15 +44,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .resolve(&config.bot.runtime_target)
                 .await
                 .map_err(|e| e.to_string())?;
-            let output = host
-                .run_to_string(ncd_host::HostCommand::new("printenv").arg("HOME"))
-                .await
-                .map_err(|e| e.to_string())?;
-            let home = output.stdout.trim();
-            if !output.success() || !home.starts_with('/') || home.contains(['\n', '\r']) {
-                return Err("远端 HOME 不可用".to_string());
-            }
-            let root = crate::ncd_watch_sync::remote_watch_root(home);
+            let home = if host.os() == ncd_host::Os::Windows {
+                crate::ncd_watch_sync::target_watch_home(host.as_ref(), "")?
+            } else {
+                let output = host
+                    .run_to_string(ncd_host::HostCommand::new("printenv").arg("HOME"))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let home = output.stdout.trim();
+                if !output.success() || !home.starts_with('/') || home.contains(['\n', '\r']) {
+                    return Err("远端 HOME 不可用".to_string());
+                }
+                home.to_string()
+            };
+            let root = crate::ncd_watch_sync::remote_watch_root(&home);
             if !host
                 .exists(&root.join("config").join("notify.json"))
                 .await
@@ -109,6 +114,27 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 qr_enabled: true,
                 ..Default::default()
             };
+            if !docker {
+                if let Some(resolver) = &self.host_resolver {
+                    if let Ok(host) = resolver.resolve(&config.bot.runtime_target).await {
+                        if host.os() == ncd_host::Os::Windows {
+                            target.qr_enabled = config.bot.backend_type == BackendType::NapCat
+                                || self.remote_snowluma_qr_login_enabled();
+                            let _ = self.backend_for_config(config).await;
+                            if let Some((_local, secret, remote)) = self
+                                .windows_bots
+                                .endpoint(server_id, config.bot.qq_id, config.bot.backend_type)
+                                .await
+                            {
+                                target.webui_port = remote;
+                                target.webui_secret = secret;
+                            }
+                            targets.push(target);
+                            continue;
+                        }
+                    }
+                }
+            }
             if config.bot.backend_type == BackendType::NapCat {
                 if let Some((port, secret)) = self.napcat_webui_for_watch(&bot).await {
                     target.webui_port = port;

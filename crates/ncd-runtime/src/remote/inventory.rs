@@ -3,7 +3,7 @@
 //! 禁止 `find` / `locate` / 扫盘。路径是真相。
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use ncd_domain::{
@@ -18,10 +18,13 @@ pub use ncd_domain::{
     snowluma_workspace_from_dir,
 };
 use ncd_host::{Host, HostCommand};
-use ncd_server::ServerManager;
+use ncd_server::{ServerManager, ServerProfile};
 use tokio::sync::Mutex;
 
 use crate::components::action_policy::{RemoteHostProbe, RemoteLayout};
+
+#[path = "inventory_windows.rs"]
+mod windows;
 
 /// 探测命令超时
 pub const INVENTORY_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
@@ -61,6 +64,20 @@ pub fn inventory_is_stale(probed_at: &str, now: chrono::DateTime<chrono::Utc>) -
         .to_std()
         .map(|d| d > INVENTORY_STALE_AFTER)
         .unwrap_or(true)
+}
+
+fn inventory_matches_target(
+    inventory: &RemoteInventory,
+    host: &dyn Host,
+    overrides: Option<&RemotePathOverrides>,
+) -> bool {
+    if host.os() != ncd_host::Os::Windows {
+        return inventory.home.starts_with('/');
+    }
+    let Some(root) = host.target_managed_root() else {
+        return false;
+    };
+    windows::selection_matches(inventory, host, &root, overrides)
 }
 
 /// 从探测脚本 stdout 构建库存
@@ -689,6 +706,9 @@ pub async fn probe_remote_inventory(
     overrides: Option<&RemotePathOverrides>,
     previous: Option<&RemoteInventory>,
 ) -> Result<RemoteInventory, String> {
+    if host.os() == ncd_host::Os::Windows {
+        return windows::probe(host, overrides).await;
+    }
     let prev_sl = previous.and_then(|p| p.selected.snowluma_dir.as_deref());
     let script = build_probe_script_with_previous(overrides, prev_sl);
     let cmd = HostCommand::new("sh")
@@ -715,11 +735,27 @@ pub async fn probe_remote_inventory(
 pub struct RemoteInventoryService {
     server_manager: Arc<ServerManager>,
     /// server_id → 最近一次拿到的库存
-    cache: Mutex<HashMap<String, RemoteInventory>>,
+    cache: Mutex<HashMap<String, CachedInventory>>,
     /// 装 / 卸过的机器：下一次 ensure 不信内存也不信档案里的副本，重探一次
     dirty: std::sync::Mutex<HashSet<String>>,
     /// 每台机器一把探测锁：冷缓存时并发进来的调用排队，后到的拿锁后先看前一个探到的
     probing: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
+}
+
+struct CachedInventory {
+    host: Weak<dyn Host>,
+    profile: ServerProfile,
+    inventory: RemoteInventory,
+}
+
+impl CachedInventory {
+    fn matches(&self, host: &dyn Host, profile: &ServerProfile) -> bool {
+        self.profile.same_inventory_target(profile)
+            && self
+                .host
+                .upgrade()
+                .is_some_and(|owner| std::ptr::addr_eq(owner.as_ref(), host))
+    }
 }
 
 impl RemoteInventoryService {
@@ -732,18 +768,44 @@ impl RemoteInventoryService {
         }
     }
 
-    /// force=false 时先用内存里、再用档案里没过期的那份；都过期、force 或装卸过才真去探，
-    /// 探到的写回档案。写档案失败不影响这次返回。
-    /// 装卸后的那次重探失败时回落档案里没过期的副本，SSH 抖一下不至于让探测整个报错
+    /// 缓存只对同一连接和配置有效；Windows 新连接先重探目标。
     pub async fn ensure(
         &self,
         server_id: &str,
         host: &dyn Host,
         force: bool,
     ) -> Result<RemoteInventory, String> {
+        let owner = self
+            .server_manager
+            .get_host(server_id)
+            .await
+            .filter(|owner| std::ptr::addr_eq(owner.as_ref(), host));
+        self.ensure_for_owner(server_id, host, owner.as_ref(), force)
+            .await
+    }
+
+    async fn ensure_for_owner(
+        &self,
+        server_id: &str,
+        host: &dyn Host,
+        owner: Option<&Arc<dyn Host>>,
+        force: bool,
+    ) -> Result<RemoteInventory, String> {
+        let profile = self
+            .server_manager
+            .list_servers()
+            .await
+            .into_iter()
+            .find(|p| p.id == server_id)
+            .ok_or_else(|| format!("server not found: {server_id}"))?;
+        let overrides = profile.path_overrides.as_ref();
         // 探的途中又装卸过一次时，内存里那份是装卸前探的，标记还在就不能拿
         if !force && !self.is_dirty(server_id) {
-            if let Some(inv) = self.fresh_cached(server_id).await {
+            if let Some(inv) = self
+                .fresh_cached(server_id, host, &profile)
+                .await
+                .filter(|inv| inventory_matches_target(inv, host, overrides))
+            {
                 return Ok(inv);
             }
         }
@@ -753,32 +815,40 @@ impl RemoteInventoryService {
         let dirty = self.take_dirty(server_id);
         let reuse = !force && !dirty;
         if reuse {
-            if let Some(inv) = self.fresh_cached(server_id).await {
+            if let Some(inv) = self
+                .fresh_cached(server_id, host, &profile)
+                .await
+                .filter(|inv| inventory_matches_target(inv, host, overrides))
+            {
                 return Ok(inv);
             }
         }
         let now = chrono::Utc::now();
-        let profile = self
-            .server_manager
-            .list_servers()
+        let same_connection = self
+            .cache
+            .lock()
             .await
-            .into_iter()
-            .find(|p| p.id == server_id);
-        let previous = profile.as_ref().and_then(|p| p.inventory.clone());
+            .get(server_id)
+            .is_none_or(|cached| cached.matches(host, &profile));
+        // 老版持久 Windows 快照没有目标身份；新连接必须先读取真实目标。
+        let previous = profile
+            .inventory
+            .clone()
+            .filter(|_| owner.is_some() && same_connection && host.os() != ncd_host::Os::Windows)
+            .filter(|inv| inventory_matches_target(inv, host, overrides));
         let saved_fresh = previous
             .clone()
             .filter(|i| !inventory_is_stale(&i.probed_at, now));
         if reuse {
             if let Some(inv) = &saved_fresh {
-                self.remember(server_id, inv).await;
+                self.remember(server_id, owner, &profile, inv).await;
                 return Ok(inv.clone());
             }
         }
-        let overrides = profile.as_ref().and_then(|p| p.path_overrides.clone());
-        let inv = match probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await {
+        let inv = match probe_remote_inventory(host, overrides, previous.as_ref()).await {
             Ok(inv) => inv,
             Err(err) => {
-                return match saved_fresh.filter(|_| !force) {
+                return match saved_fresh.filter(|_| !force && host.os() != ncd_host::Os::Windows) {
                     Some(inv) => {
                         tracing::warn!(server_id, error = %err, "re-probe after component action failed; using saved inventory");
                         Ok(inv)
@@ -787,29 +857,39 @@ impl RemoteInventoryService {
                 };
             }
         };
-        let _ = self
-            .server_manager
-            .set_inventory(server_id, inv.clone())
-            .await;
-        self.remember(server_id, &inv).await;
+        if let Some(current) = self.server_manager.get_host(server_id).await {
+            if !std::ptr::addr_eq(current.as_ref(), host) {
+                return Err("探测期间主机连接已更换，请重新探测".into());
+            }
+        }
+        self.server_manager
+            .set_inventory_for_profile(&profile, inv.clone())
+            .await?;
+        self.remember(server_id, owner, &profile, &inv).await;
         Ok(inv)
     }
 
-    /// 装 / 卸完之后布局可能变了：丢掉内存那份并标记，下次 ensure 真去探
+    /// 装卸后强制重探，同时保留旧连接身份用于隔离失败回退。
     pub async fn invalidate(&self, server_id: &str) {
         self.dirty
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(server_id.to_string());
-        self.cache.lock().await.remove(server_id);
+        // 保留连接身份供重探校验，dirty 标记使旧内容不可命中。
     }
 
-    async fn fresh_cached(&self, server_id: &str) -> Option<RemoteInventory> {
+    async fn fresh_cached(
+        &self,
+        server_id: &str,
+        host: &dyn Host,
+        profile: &ServerProfile,
+    ) -> Option<RemoteInventory> {
         let cache = self.cache.lock().await;
         cache
             .get(server_id)
-            .filter(|c| !inventory_is_stale(&c.probed_at, chrono::Utc::now()))
-            .cloned()
+            .filter(|c| c.matches(host, profile))
+            .filter(|c| !inventory_is_stale(&c.inventory.probed_at, chrono::Utc::now()))
+            .map(|c| c.inventory.clone())
     }
 
     fn is_dirty(&self, server_id: &str) -> bool {
@@ -855,11 +935,26 @@ impl RemoteInventoryService {
             .unwrap_or_else(|_| (RemoteHostProbe::local_default(), None))
     }
 
-    async fn remember(&self, server_id: &str, inv: &RemoteInventory) {
-        self.cache
-            .lock()
-            .await
-            .insert(server_id.to_string(), inv.clone());
+    async fn remember(
+        &self,
+        server_id: &str,
+        owner: Option<&Arc<dyn Host>>,
+        profile: &ServerProfile,
+        inv: &RemoteInventory,
+    ) {
+        let mut cache = self.cache.lock().await;
+        if let Some(owner) = owner {
+            cache.insert(
+                server_id.to_string(),
+                CachedInventory {
+                    host: Arc::downgrade(owner),
+                    profile: profile.clone(),
+                    inventory: inv.clone(),
+                },
+            );
+        } else {
+            cache.remove(server_id);
+        }
     }
 }
 
@@ -1150,6 +1245,7 @@ mod tests {
         probes: Arc<std::sync::atomic::AtomicUsize>,
         delay: Duration,
         fail: bool,
+        windows_root: Option<String>,
     }
 
     impl ScriptedHost {
@@ -1168,7 +1264,11 @@ mod tests {
     #[async_trait::async_trait]
     impl Host for ScriptedHost {
         fn os(&self) -> ncd_host::Os {
-            ncd_host::Os::Linux
+            if self.windows_root.is_some() {
+                ncd_host::Os::Windows
+            } else {
+                ncd_host::Os::Linux
+            }
         }
         fn arch(&self) -> ncd_host::Arch {
             ncd_host::Arch::X86_64
@@ -1178,6 +1278,16 @@ mod tests {
         }
         fn id(&self) -> &str {
             "scripted"
+        }
+        fn target_managed_root(&self) -> Option<ncd_host::HostPath> {
+            self.windows_root
+                .as_deref()
+                .map(ncd_host::HostPath::from_windows)
+        }
+        fn target_home(&self) -> Option<ncd_host::HostPath> {
+            self.windows_root
+                .as_ref()
+                .map(|_| ncd_host::HostPath::from_windows(r"C:\Users\owner"))
         }
         fn shell(&self) -> &dyn ncd_host::HostShell {
             &ncd_host::shell::BashShell
@@ -1291,6 +1401,7 @@ mod tests {
                     id: "s1".into(),
                     name: "s1".into(),
                     host: "192.0.2.1".into(),
+                    platform: None,
                     port: 22,
                     username: "root".into(),
                     auth_method: ncd_server::AuthMethod::Key,
@@ -1309,83 +1420,99 @@ mod tests {
         manager
     }
 
+    async fn ensure_scripted(
+        service: &RemoteInventoryService,
+        host: &Arc<ScriptedHost>,
+        force: bool,
+    ) -> Result<RemoteInventory, String> {
+        let owner: Arc<dyn Host> = host.clone();
+        service
+            .ensure_for_owner("s1", host.as_ref(), Some(&owner), force)
+            .await
+    }
+
     #[tokio::test]
-    async fn inventory_service_reuses_fresh_probe_until_invalidated() {
+    async fn inventory_service_reuses_only_the_same_host_arc_until_invalidated() {
         let tmp = tempfile::tempdir().unwrap();
         let manager = manager_with_server(tmp.path()).await;
         let service = RemoteInventoryService::new(Arc::clone(&manager));
-        let first = ScriptedHost::new(sample_stdout("/home/a", ""));
-        let second = ScriptedHost::new(sample_stdout("/home/b", ""));
+        let first = Arc::new(ScriptedHost::new(sample_stdout("/home/a", "")));
+        let second = Arc::new(ScriptedHost::new(sample_stdout("/home/b", "")));
 
         assert_eq!(
-            service.ensure("s1", &first, false).await.unwrap().home,
+            ensure_scripted(&service, &first, false).await.unwrap().home,
             "/home/a"
         );
-        // 没过期就不再探，换了输出也还是上次那份
         assert_eq!(
-            service.ensure("s1", &second, false).await.unwrap().home,
+            ensure_scripted(&service, &first, false).await.unwrap().home,
             "/home/a"
         );
-        let (probe, selected) = service.host_probe("remote:s1", &second).await.unwrap();
-        assert_eq!(probe.home.as_deref(), Some("/home/a"));
-        assert_eq!(selected.unwrap().home, "/home/a");
-        assert_eq!(second.probes(), 0);
-
-        // 档案里那份还没过期,装卸后也得真去探
-        service.invalidate("s1").await;
+        assert_eq!(first.probes(), 1);
         assert_eq!(
-            service.ensure("s1", &second, false).await.unwrap().home,
-            "/home/b"
-        );
-        assert_eq!(
-            service.ensure("s1", &first, false).await.unwrap().home,
+            ensure_scripted(&service, &second, false)
+                .await
+                .unwrap()
+                .home,
             "/home/b"
         );
         assert_eq!(second.probes(), 1);
 
-        // 新的内存副本从档案里读回重探后的值
-        let fresh = RemoteInventoryService::new(Arc::clone(&manager));
+        // 档案里那份还没过期,装卸后也得真去探
+        service.invalidate("s1").await;
         assert_eq!(
-            fresh.ensure("s1", &first, false).await.unwrap().home,
+            ensure_scripted(&service, &second, false)
+                .await
+                .unwrap()
+                .home,
             "/home/b"
         );
         assert_eq!(
-            service.ensure("s1", &first, true).await.unwrap().home,
+            ensure_scripted(&service, &first, false).await.unwrap().home,
+            "/home/a"
+        );
+        assert_eq!(second.probes(), 2);
+        assert_eq!(first.probes(), 2);
+
+        // 新的内存副本从档案里读回重探后的值
+        let fresh = RemoteInventoryService::new(Arc::clone(&manager));
+        assert_eq!(
+            ensure_scripted(&fresh, &first, false).await.unwrap().home,
+            "/home/a"
+        );
+        assert_eq!(
+            ensure_scripted(&service, &first, true).await.unwrap().home,
             "/home/a"
         );
     }
 
     #[tokio::test]
-    async fn failed_reprobe_after_invalidate_falls_back_to_saved_copy() {
+    async fn failed_reprobe_on_replacement_host_never_uses_old_saved_copy() {
         let tmp = tempfile::tempdir().unwrap();
         let service = RemoteInventoryService::new(manager_with_server(tmp.path()).await);
-        let ok = ScriptedHost::new(sample_stdout("/home/a", ""));
-        let down = ScriptedHost {
+        let ok = Arc::new(ScriptedHost::new(sample_stdout("/home/a", "")));
+        let down = Arc::new(ScriptedHost {
             fail: true,
             ..ScriptedHost::default()
-        };
-        service.ensure("s1", &ok, false).await.unwrap();
+        });
+        ensure_scripted(&service, &ok, false).await.unwrap();
 
         service.invalidate("s1").await;
-        assert_eq!(
-            service.ensure("s1", &down, false).await.unwrap().home,
-            "/home/a"
-        );
+        assert!(ensure_scripted(&service, &down, false).await.is_err());
         assert_eq!(down.probes(), 1);
         // 强制刷新要的就是这台机器现在的样子,探不到照旧报错
-        assert!(service.ensure("s1", &down, true).await.is_err());
+        assert!(ensure_scripted(&service, &down, true).await.is_err());
     }
 
     #[tokio::test]
     async fn concurrent_cold_ensure_probes_once() {
         let tmp = tempfile::tempdir().unwrap();
         let service = RemoteInventoryService::new(manager_with_server(tmp.path()).await);
-        let host = ScriptedHost {
+        let host = Arc::new(ScriptedHost {
             delay: Duration::from_millis(50),
             ..ScriptedHost::new(sample_stdout("/home/a", ""))
-        };
+        });
 
-        let calls = (0..6).map(|_| service.ensure("s1", &host, false));
+        let calls = (0..6).map(|_| ensure_scripted(&service, &host, false));
         for inv in futures_util::future::join_all(calls).await {
             assert_eq!(inv.unwrap().home, "/home/a");
         }
@@ -1393,9 +1520,86 @@ mod tests {
 
         // 装卸后同样只重探一次
         service.invalidate("s1").await;
-        let calls = (0..6).map(|_| service.ensure("s1", &host, false));
+        let calls = (0..6).map(|_| ensure_scripted(&service, &host, false));
         futures_util::future::join_all(calls).await;
         assert_eq!(host.probes(), 2);
+    }
+
+    #[tokio::test]
+    async fn cached_inventory_rechecks_host_username_and_path_fingerprint() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_with_server(tmp.path()).await;
+        let service = RemoteInventoryService::new(Arc::clone(&manager));
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/current", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+        for (index, field) in ["host", "username", "paths"].into_iter().enumerate() {
+            let mut profile = manager.list_servers().await.into_iter().next().unwrap();
+            match field {
+                "host" => profile.host = "192.0.2.88".into(),
+                "username" => profile.username = "different-user".into(),
+                _ => {
+                    profile.path_overrides = Some(RemotePathOverrides {
+                        napcat_root: Some("/explicit/napcat".into()),
+                        ..Default::default()
+                    })
+                }
+            }
+            manager.update_server(profile, None).await.unwrap();
+            ensure_scripted(&service, &host, false).await.unwrap();
+            assert_eq!(host.probes(), index + 2);
+        }
+    }
+
+    #[test]
+    fn windows_selection_checks_each_path_and_preserves_explicit_external_roots() {
+        use ncd_host::{HostPath, Os};
+        let root =
+            HostPath::from_windows(r"C:\ProgramData\NapCatQQ Desktop\remote\users\new-owner");
+        let host = ScriptedHost {
+            windows_root: Some(root.render_for(Os::Windows)),
+            ..Default::default()
+        };
+        let home = r"C:\Users\owner";
+        let mut inventory = RemoteInventory::empty(home, chrono::Utc::now().to_rfc3339());
+        inventory.selected = RemoteSelectedPaths {
+            home: home.into(),
+            qq_install_base: Some(root.join("components/QQ").render_for(Os::Windows)),
+            napcat_root: Some(root.join("components/NapCatQQ").render_for(Os::Windows)),
+            snowluma_dir: Some(root.join("components/SnowLuma").render_for(Os::Windows)),
+            snowluma_workspace: Some(root.join("components/SnowLuma").render_for(Os::Windows)),
+            ncd_watch_root: Some(root.join("ncd-watch").render_for(Os::Windows)),
+            ..Default::default()
+        };
+        assert!(inventory_matches_target(&inventory, &host, None));
+        let overrides = RemotePathOverrides {
+            qq_install_base: Some(r"C:\Program Files\Tencent\QQ".into()),
+            napcat_root: Some(r"D:\Bots\NapCatQQ".into()),
+            ..Default::default()
+        };
+        inventory.selected.qq_install_base = overrides.qq_install_base.clone();
+        inventory.selected.qq_bin = Some(r"C:\Program Files\Tencent\QQ\versions\9.9\QQ.exe".into());
+        inventory.selected.napcat_root = overrides.napcat_root.clone();
+        assert!(inventory_matches_target(
+            &inventory,
+            &host,
+            Some(&overrides)
+        ));
+        assert!(!inventory_matches_target(&inventory, &host, None));
+        inventory.selected.snowluma_dir = Some(r"C:\old-owner\SnowLuma".into());
+        assert!(!inventory_matches_target(
+            &inventory,
+            &host,
+            Some(&overrides)
+        ));
+        inventory.selected.snowluma_dir = Some(
+            root.join("components/SnowLuma/../old")
+                .render_for(Os::Windows),
+        );
+        assert!(!inventory_matches_target(
+            &inventory,
+            &host,
+            Some(&overrides)
+        ));
     }
 
     #[tokio::test]
