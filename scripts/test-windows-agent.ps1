@@ -32,6 +32,16 @@ $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 $account = $null
 $taskRegistered = $false
 $sandboxCreated = $false
+$fixtureStarted = Get-Date
+function Show-FixtureDiagnostics {
+    Get-Service -Name Schedule | Format-List Name, Status, StartType | Out-Host
+    Get-WinEvent -FilterHashtable @{
+        LogName = 'Microsoft-Windows-TaskScheduler/Operational'
+        StartTime = $fixtureStarted
+    } -MaxEvents 100 -ErrorAction SilentlyContinue |
+        Where-Object { $_.Message -like "*$taskName*" } |
+        Format-List TimeCreated, Id, Message | Out-Host
+}
 function Register-FixtureTask([switch]$ProbeOnly) {
     $arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden ' +
         "-File `"$wrapper`" -TestExecutable `"$testExecutable`" -ExpectedSid $($account.SID.Value) " +
@@ -58,13 +68,25 @@ function Register-FixtureTask([switch]$ProbeOnly) {
 
 function Invoke-FixtureTask {
     if (Test-Path -LiteralPath $resultPath) { Remove-Item -LiteralPath $resultPath }
-    Start-ScheduledTask -TaskName $taskName
-    $deadline = [DateTime]::UtcNow.AddSeconds(120)
+    $scheduler = New-Object -ComObject 'Schedule.Service'
+    $scheduler.Connect()
+    $registeredTask = $scheduler.GetFolder('\').GetTask($taskName)
+    try {
+        # TASK_RUN_IGNORE_CONSTRAINTS does not change the registered user or token.
+        $instance = $registeredTask.RunEx($null, 2, 0, $null)
+        if ($null -eq $instance) { throw 'Task Scheduler returned no running instance' }
+        Write-Host "Scheduled instance=$($instance.InstanceGuid), state=$($instance.State)"
+    } catch {
+        Show-FixtureDiagnostics
+        throw
+    }
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
     while (-not (Test-Path -LiteralPath $resultPath)) {
         if ([DateTime]::UtcNow -ge $deadline) {
             $info = Get-ScheduledTaskInfo -TaskName $taskName
             $task = Get-ScheduledTask -TaskName $taskName
             Write-Host (Export-ScheduledTask -TaskName $taskName)
+            Show-FixtureDiagnostics
             throw "Standard-account task timed out; state=$($task.State), result=$($info.LastTaskResult), lastRun=$($info.LastRunTime)"
         }
         Start-Sleep -Milliseconds 500
@@ -80,6 +102,8 @@ function Invoke-FixtureTask {
 }
 
 try {
+    wevtutil sl Microsoft-Windows-TaskScheduler/Operational /e:true
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot enable isolated runner task diagnostics' }
     $account = New-LocalUser -Name $username -Password $securePassword -AccountNeverExpires -PasswordNeverExpires
     $users = Get-LocalGroup -SID 'S-1-5-32-545'
     Add-LocalGroupMember -Group $users -Member $account
