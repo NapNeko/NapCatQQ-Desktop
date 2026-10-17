@@ -120,7 +120,7 @@ fn native_command_uses_byte_streams_and_literal_environment_keys() {
 #[tokio::test]
 async fn framed_stdin_completes_while_the_ssh_input_pipe_stays_open() {
     use std::process::Stdio;
-    use tokio::io::AsyncWriteExt;
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
     let payload = vec![0, 255, 13, 10, 254, 0];
     let command = HostCommand::new("powershell.exe")
@@ -129,7 +129,7 @@ async fn framed_stdin_completes_while_the_ssh_input_pipe_stays_open() {
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "[Console]::OpenStandardInput().CopyTo([Console]::OpenStandardOutput())",
+            "[Console]::Error.WriteLine('NCD_STDIN_FRAME_READY');[Console]::OpenStandardInput().CopyTo([Console]::OpenStandardOutput())",
         ])
         .env("NCD_STDIN_FRAME_PADDING", "x".repeat(2500))
         .stdin(payload.clone());
@@ -151,11 +151,27 @@ async fn framed_stdin_completes_while_the_ssh_input_pipe_stays_open() {
         .spawn()
         .unwrap();
     let mut input = child.stdin.take().unwrap();
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
     input
         .write_all(prepared.stdin.as_deref().unwrap())
         .await
         .unwrap();
-    let output = tokio::time::timeout(Duration::from_secs(15), child.wait_with_output())
+
+    // CI 的 PowerShell 冷启动可能超过 15 秒；就绪后仍须在输入管道未关闭时完成。
+    let mut ready = String::new();
+    tokio::time::timeout(Duration::from_secs(60), stderr.read_line(&mut ready))
+        .await
+        .expect("the isolated PowerShell process must become ready within 60 seconds")
+        .unwrap();
+    assert_eq!(ready.trim_end(), "NCD_STDIN_FRAME_READY");
+
+    let mut errors = Vec::new();
+    let completion = async {
+        let (output, _) =
+            tokio::try_join!(child.wait_with_output(), stderr.read_to_end(&mut errors))?;
+        Ok::<_, std::io::Error>(output)
+    };
+    let output = tokio::time::timeout(Duration::from_secs(15), completion)
         .await
         .expect("a complete input frame must not wait for SSH EOF")
         .unwrap();
@@ -163,10 +179,10 @@ async fn framed_stdin_completes_while_the_ssh_input_pipe_stays_open() {
     assert!(
         output.status.success(),
         "{}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&errors)
     );
     assert_eq!(output.stdout, payload);
-    assert!(output.stderr.is_empty());
+    assert!(errors.is_empty(), "{}", String::from_utf8_lossy(&errors));
 }
 
 #[test]
