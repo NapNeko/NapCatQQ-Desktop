@@ -92,7 +92,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
 
       - name: Setup pnpm
@@ -147,7 +147,7 @@ jobs:
     uses: ./.github/workflows/build-msi.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      git_ref: ${{ github.ref }}
+      git_ref: ${{ github.sha }}
     secrets: inherit
 
   publish:
@@ -215,6 +215,7 @@ jobs:
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ needs.resolve.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
           name: NapCatQQ Desktop ${{ needs.resolve.outputs.version_plain }}
           body_path: ${{ steps.notes.outputs.NOTES_PATH }}
           # 仓库首页的 Latest 只给 Desktop;release-ncd-watch.yml 那边是 false
