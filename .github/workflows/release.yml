@@ -135,6 +135,14 @@ jobs:
       - name: Frontend unit tests
         run: pnpm run test:unit
 
+      # 与常规 CI 一致，冷启动计划测试需要只读的 QQ 安装注册表夹具。
+      - name: Stub QQ install registry for launch plan tests
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Tencent\QQNT'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name Install -Value 'C:\Program Files\Tencent\QQNT' -PropertyType String -Force | Out-Null
+
       - name: Workspace tests
         run: cargo test --workspace
 
