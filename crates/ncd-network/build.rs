@@ -32,7 +32,7 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into()));
-    let out_dir = env::var_os("OUT_DIR").expect("Cargo must set OUT_DIR");
+    let out_dir = env::var_os("OUT_DIR").unwrap_or_else(|| panic!("Cargo must set OUT_DIR"));
     let out_path = PathBuf::from(out_dir).join(OUT_FILE);
 
     // 尝试从 workspace 根目录的 .env 加载(不覆盖已有系统环境变量)
