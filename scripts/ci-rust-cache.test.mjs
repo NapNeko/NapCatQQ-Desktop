@@ -145,8 +145,7 @@ test(
     { skip: process.env.CI_RUST_CACHE_TEST_CARGO !== '1' },
     (t) => {
         const { root, manifest } = fixture(t, {
-            'Cargo.toml':
-                '[workspace]\nmembers = ["crates/ncd-network"]\nresolver = "2"\n',
+            'Cargo.toml': '[workspace]\nmembers = ["crates/ncd-network"]\nresolver = "2"\n',
             'crates/ncd-network/Cargo.toml':
                 '[package]\nname = "ci-cache-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
             'crates/ncd-network/src/lib.rs': `include!(concat!(env!("OUT_DIR"), "/proxy_constants.rs"));
