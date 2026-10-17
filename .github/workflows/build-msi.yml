@@ -187,12 +187,24 @@ jobs:
           }
 
       - name: Build Tauri MSI
+        shell: pwsh
         env:
           NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
           # 首选新名;空则 build.rs 回退 SHARED_SECRET
           NCD_PROXY_SECRET: ${{ secrets.NCD_PROXY_SECRET }}
           NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
-        run: pnpm run tauri:build:msi
+        run: |
+          # Tauri 会整理 Cargo.toml，前端构建也会重建 dist。
+          # 在 hook 结束后再次校验内容并恢复时间戳，避免同一提交重复执行 fat LTO。
+          $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          $hook = $config.build.beforeBuildCommand
+          if ($hook -isnot [string] -or [string]::IsNullOrWhiteSpace($hook)) {
+            throw 'Expected a frontend build command in tauri.conf.json'
+          }
+          $override = Join-Path $env:RUNNER_TEMP 'tauri-ci-cache.json'
+          @{ build = @{ beforeBuildCommand = "$hook && node scripts/ci-rust-cache.mjs restore" } } |
+            ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $override -Encoding utf8
+          pnpm run tauri:build:msi --config $override
 
       # Tauri WiX 中间产物名：`{product}_{ver}_{arch}_{lang}.msi`
       # 例如 `NapCatQQ Desktop_3.1.1_x64_zh-CN.msi`（language=zh-CN 时）。

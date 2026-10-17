@@ -140,8 +140,29 @@ test('cached Agent resources reuse timestamps only when binary contents match', 
     assert.throws(() => statSync(resource), { code: 'ENOENT' });
 });
 
+test('rebuilt frontend assets reuse timestamps only when contents match', (t) => {
+    const { root, manifest } = fixture(t, { 'src/lib.rs': 'pub fn value() {}' });
+    const asset = resolve(root, 'dist/assets/app.js');
+    mkdirSync(dirname(asset), { recursive: true });
+    writeFileSync(asset, 'version one');
+    const oldTime = Math.floor((Date.now() - 60_000) / 1000);
+    utimesSync(asset, oldTime, oldTime);
+    captureInputs(root, manifest);
+    rmSync(resolve(root, 'dist'), { recursive: true });
+    restoreInputs(root, manifest);
+    assert.throws(() => statSync(asset), { code: 'ENOENT' });
+    mkdirSync(dirname(asset), { recursive: true });
+    writeFileSync(asset, 'version one');
+    assert.equal(restoreInputs(root, manifest).restored, 2);
+    assert.ok(Math.abs(statSync(asset).mtimeMs - oldTime * 1000) < 2);
+    writeFileSync(asset, 'version two');
+    const changedTime = statSync(asset).mtimeMs;
+    assert.equal(restoreInputs(root, manifest).changed, 1);
+    assert.equal(statSync(asset).mtimeMs, changedTime);
+});
+
 test(
-    'Cargo reuses generated proxy constants and invalidates changed credentials or source',
+    'Cargo reuses generated inputs and invalidates changed credentials, assets or source',
     { skip: process.env.CI_RUST_CACHE_TEST_CARGO !== '1' },
     (t) => {
         const { root, manifest } = fixture(t, {
@@ -149,10 +170,12 @@ test(
             'crates/ncd-network/Cargo.toml':
                 '[package]\nname = "ci-cache-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
             'crates/ncd-network/src/lib.rs': `include!(concat!(env!("OUT_DIR"), "/proxy_constants.rs"));
+const FRONTEND: &str = include_str!("../../../dist/index.html");
 #[test]
 fn value() {
     assert_eq!(PROXY_BASE_URL, std::env::var("NCD_PROXY_BASE_URL").unwrap());
     assert_eq!(PROXY_SHARED_SECRET, std::env::var("NCD_PROXY_SECRET").unwrap());
+    assert_eq!(FRONTEND, std::env::var("CI_CACHE_FRONTEND").unwrap());
 }
 `,
             'crates/ncd-network/build.rs': readFileSync(
@@ -162,8 +185,11 @@ fn value() {
                 new URL('../crates/ncd-network/src/proxy_constants.template.rs', import.meta.url),
             ),
         });
+        const asset = resolve(root, 'dist/index.html');
+        mkdirSync(dirname(asset), { recursive: true });
+        writeFileSync(asset, 'frontend one');
         restoreInputs(root, manifest);
-        const runCargo = (secret = 'ci-fixture-secret') => {
+        const runCargo = (secret = 'ci-fixture-secret', frontend = 'frontend one') => {
             return spawnSync('cargo', ['test', '--offline', '--lib', '--color', 'never'], {
                 cwd: root,
                 encoding: 'utf8',
@@ -178,6 +204,7 @@ fn value() {
                     NCD_PROXY_BASE_URL: 'https://proxy.example.test',
                     NCD_PROXY_SECRET: secret,
                     NCD_PROXY_SHARED_SECRET: '',
+                    CI_CACHE_FRONTEND: frontend,
                 },
             });
         };
@@ -187,6 +214,7 @@ fn value() {
         captureInputs(root, manifest);
         const source = resolve(root, 'crates/ncd-network/src/lib.rs');
         writeFileSync(source, readFileSync(source));
+        writeFileSync(asset, readFileSync(asset));
         rmSync(resolve(root, '.env'));
         restoreInputs(root, manifest);
         const reused = runCargo();
@@ -200,6 +228,13 @@ fn value() {
         assert.equal(rotated.status, 0, rotated.stderr);
         assert.match(rotated.stderr, /Compiling ci-cache-fixture/);
         assert.match(rotated.stdout, /1 passed; 0 failed/);
+        writeFileSync(asset, 'frontend two');
+        assert.equal(restoreInputs(root, manifest).changed, 1);
+        const rebuiltAsset = runCargo('ci-fixture-rotated-secret', 'frontend two');
+        assert.equal(rebuiltAsset.status, 0, rebuiltAsset.stderr);
+        assert.match(rebuiltAsset.stderr, /Compiling ci-cache-fixture/);
+        assert.match(rebuiltAsset.stdout, /1 passed; 0 failed/);
+        captureInputs(root, manifest);
         writeFileSync(source, '#[test]\nfn value() { assert_eq!(1 + 1, 3); }\n');
         assert.equal(restoreInputs(root, manifest).changed, 1);
         const changed = runCargo();

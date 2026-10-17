@@ -27,8 +27,18 @@ function trackedFiles(root) {
         .sort();
 }
 
+function frontendFiles(root, dir = 'dist') {
+    const path = resolve(root, dir);
+    if (!existsSync(path) || !lstatSync(path).isDirectory()) return [];
+    return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
+        const file = posix.join(dir, entry.name);
+        if (entry.isDirectory()) return frontendFiles(root, file);
+        return entry.isFile() ? [file] : [];
+    });
+}
+
 function inputFiles(root) {
-    const files = trackedFiles(root);
+    const files = [...trackedFiles(root), ...frontendFiles(root)];
     if (existsSync(resolve(root, generatedAgent))) files.push(generatedAgent);
     const dotenv = resolve(root, '.env');
     if (existsSync(dotenv) && statSync(dotenv).size === 0) files.push('.env');
