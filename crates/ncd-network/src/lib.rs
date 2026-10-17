@@ -1,17 +1,4 @@
-//! ncd-network:NapCatQQ-Desktop 的统一 HTTP 下载层
-//!
-//! 集中三件事:
-//! 1. 全工程共享 reqwest::Client(连接池 + TLS 会话复用)
-//! 2. 下载流水线:限量吞吐量测速选源 → 单流下载 / ≥16MB 切片并行，
-//!    持续低速或断流自动换源，所有候选都慢时保留可用源完成下载
-//! 3. 进度上报:通过 progress::DownloadProgressSink trait 把字节,瞬时速度,
-//!    阶段信息透出给调用层,避免与 ncd-component 形成强耦合
-//!
-//! 不做的事:
-//! - WebUI 客户端(127.0.0.1,不需要 mirror / race / 续传)
-//! - 解压 / 校验 SHA256(解压在 ncd-host,校验在 caller)
-//!
-//! GitHub API 中转代理 / HMAC 签名:见 proxy 模块
+//! 统一 HTTP 下载、镜像测速、并行分片、散列校验与进度上报。
 
 pub mod chunked;
 pub mod client;
@@ -24,12 +11,16 @@ pub mod proxy_constants;
 pub mod race;
 pub mod range;
 pub mod retry;
+mod segmented;
 pub mod settings;
 pub mod speed;
+mod staging;
 mod system_proxy;
 pub mod verify;
 
-pub use chunked::{CHUNKED_THRESHOLD, ChunkedConfig, DEFAULT_CHUNK_PARTS, download_smart};
+pub use chunked::{
+    CHUNKED_THRESHOLD, ChunkedConfig, DEFAULT_CHUNK_PARTS, download_smart, download_url,
+};
 pub use client::{
     NetworkProvider, NetworkSnapshot, build_configured_client, install_network_provider,
     network_snapshot, shared_client,

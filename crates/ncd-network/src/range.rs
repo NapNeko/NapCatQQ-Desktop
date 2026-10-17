@@ -118,3 +118,26 @@ pub fn parse_content_range_bounds(response: &reqwest::Response) -> Option<(u64, 
     }
     Some((start, end))
 }
+
+/// 分片必须确认同一个对象的总长度，不能只相信切片的起止位置。
+pub(crate) fn content_range(response: &reqwest::Response) -> Option<(u64, u64, u64)> {
+    let value = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)?
+        .to_str()
+        .ok()?;
+    let (bounds, total) = value.trim().strip_prefix("bytes ")?.split_once('/')?;
+    let (start, end) = bounds.split_once('-')?;
+    let (start, end, total) = (
+        start.parse::<u64>().ok()?,
+        end.parse::<u64>().ok()?,
+        total.parse::<u64>().ok()?,
+    );
+    (start <= end && end < total).then_some((start, end, total))
+}
+
+pub(crate) fn strong_etag(response: &reqwest::Response) -> Option<reqwest::header::HeaderValue> {
+    let value = response.headers().get(reqwest::header::ETAG)?;
+    let text = value.to_str().ok()?;
+    (text.starts_with('"') && text.ends_with('"') && text.len() >= 2).then(|| value.clone())
+}

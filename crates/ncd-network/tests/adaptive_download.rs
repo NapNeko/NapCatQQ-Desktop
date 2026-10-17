@@ -207,7 +207,7 @@ fn serve_request(
     };
     if write!(
         stream,
-        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\n{content_range}Connection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nETag: \"fixture-v1\"\r\n{content_range}Connection: close\r\n\r\n",
         end - start + 1,
     )
     .is_err()

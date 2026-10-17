@@ -87,7 +87,9 @@ pub fn build_configured_client(
         .user_agent(DEFAULT_USER_AGENT)
         .connect_timeout(CONNECT_TIMEOUT)
         .pool_idle_timeout(POOL_IDLE_TIMEOUT)
-        .gzip(true)
+        .pool_max_idle_per_host(16)
+        // Range 的偏移针对线上表示；禁止透明解压后将字节写进原始偏移。
+        .gzip(false)
         .no_proxy();
     let bypass = Some(
         NoProxy::from_string(&format!(

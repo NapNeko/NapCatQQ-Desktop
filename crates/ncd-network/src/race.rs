@@ -56,6 +56,7 @@ pub(crate) struct MirrorProbe {
     pub total: Option<u64>,
     pub supports_ranges: bool,
     pub speed_bps: u64,
+    pub etag: Option<header::HeaderValue>,
 }
 
 pub async fn download_with_mirror_race(
@@ -176,6 +177,7 @@ pub(crate) async fn select_mirrors(
                 total: None,
                 supports_ranges: false,
                 speed_bps: 0,
+                etag: None,
             });
         }
     }
@@ -240,12 +242,14 @@ async fn probe_throughput(
     } else {
         resp.content_length()
     };
+    let etag = crate::range::strong_etag(&resp);
     if total == Some(0) {
         return Ok(MirrorProbe {
             idx,
             total,
             supports_ranges: false,
             speed_bps: 0,
+            etag,
         });
     }
     let mut stream = resp.bytes_stream();
@@ -278,6 +282,7 @@ async fn probe_throughput(
         total,
         supports_ranges,
         speed_bps: (received as f64 / seconds) as u64,
+        etag,
     })
 }
 
@@ -377,7 +382,11 @@ pub(crate) async fn download_ranked_mirrors_with_fallback(
             .await
         {
             Ok(_) => {
-                let result = verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()).await;
+                let result = tokio::select! {
+                    biased;
+                    _ = cancel.cancelled() => Err(NetworkError::Cancelled),
+                    result = verify_sha256_if_needed(dest, cfg.expected_sha256.as_deref()) => result,
+                };
                 if result.is_err() {
                     remove_if_exists(dest).await?;
                 }

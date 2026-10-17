@@ -8,7 +8,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use bytes::Bytes;
 use futures_util::StreamExt;
 use reqwest::Client;
 use reqwest::header;
@@ -74,7 +73,7 @@ pub async fn download_with_client(
         return Err(NetworkError::Cancelled);
     }
 
-    let mut part = PartFile::open_or_create(dest).await?;
+    let part = PartFile::open_or_create(dest).await?;
     let resume_offset = part.existing_bytes;
     info!(
         target: "ncd_network::download",
@@ -97,9 +96,30 @@ pub async fn download_with_client(
             Err(_) => return Err(NetworkError::IdleTimeout(cfg.idle_timeout)),
         },
     };
+    stream_response(resp, part, dest, sink, cancel, cfg).await
+}
+
+pub(crate) async fn stream_response(
+    resp: reqwest::Response,
+    mut part: PartFile,
+    dest: &Path,
+    sink: Arc<dyn DownloadProgressSink>,
+    cancel: CancellationToken,
+    cfg: DownloadConfig,
+) -> Result<u64, NetworkError> {
+    let resume_offset = part.existing_bytes;
     let status = resp.status();
     if !status.is_success() {
         return Err(NetworkError::Status(status.as_u16()));
+    }
+    if resp
+        .headers()
+        .get(header::CONTENT_ENCODING)
+        .is_some_and(|value| value != "identity")
+    {
+        return Err(NetworkError::Http(
+            "unexpected Content-Encoding for file download".into(),
+        ));
     }
 
     let used_resume = supports_resume(status);
@@ -316,126 +336,4 @@ impl AggregatedProgress {
         g.sampler.record(Instant::now(), downloaded);
         (g.downloaded, g.total, g.sampler.current_bps())
     }
-}
-
-/// 固定 byte range 下载到指定文件(不走 .part 续传),chunked 切片用
-/// dest 是切片临时路径(如 <final-dest>.chunk-0),range inclusive 双闭
-/// aggregated 传 Some 时把每个 chunk bytes 加进聚合进度
-pub(crate) async fn download_byte_range(
-    client: &Client,
-    url: &str,
-    dest_chunk: &Path,
-    range: (u64, u64),
-    cancel: CancellationToken,
-    idle_timeout: Duration,
-    aggregated: Option<AggregatedProgress>,
-) -> Result<u64, NetworkError> {
-    if cancel.is_cancelled() {
-        return Err(NetworkError::Cancelled);
-    }
-    if range.1 < range.0 {
-        return Err(NetworkError::InvalidArgument(format!(
-            "invalid byte range: {range:?}"
-        )));
-    }
-
-    if let Some(parent) = dest_chunk.parent() {
-        if !parent.as_os_str().is_empty() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-    }
-
-    let header_val = format!("bytes={}-{}", range.0, range.1);
-    let request = client
-        .get(url)
-        .header(header::RANGE, header_val)
-        .header(header::ACCEPT_ENCODING, "identity");
-    let resp = tokio::select! {
-        biased;
-        _ = cancel.cancelled() => return Err(NetworkError::Cancelled),
-        result = timeout(idle_timeout, request.send()) => match result {
-            Ok(result) => result?,
-            Err(_) => return Err(NetworkError::IdleTimeout(idle_timeout)),
-        },
-    };
-    let status = resp.status();
-    if !supports_resume(status) {
-        return Err(NetworkError::Status(status.as_u16()));
-    }
-
-    // 服务器声称 206,但代理 / 反代不一定真切了 byte range;有些镜像会
-    // 拿一份缓存的"前 N 字节"副本贴 206 头返回,等于 byte range mismatch
-    // 这种情况下盲信会写出错位字节,merge 时拼出无法解析的 zip / tar,
-    // EOCD 找不到错的根因强制比对 Content-Range,不一致直接拒掉,让
-    // chunked 上层重试下个 mirror
-    match parse_content_range_bounds(&resp) {
-        Some((start, end)) if start == range.0 && end == range.1 => {}
-        Some((start, end)) => {
-            return Err(NetworkError::Http(format!(
-                "Content-Range mismatch: requested {}-{}, got {}-{}",
-                range.0, range.1, start, end
-            )));
-        }
-        None => {
-            return Err(NetworkError::Http(
-                "Content-Range header missing on 206 response".into(),
-            ));
-        }
-    }
-
-    let mut file = tokio::fs::File::create(dest_chunk).await?;
-    use tokio::io::AsyncWriteExt;
-
-    let mut downloaded: u64 = 0;
-    let expected = range.1 - range.0 + 1;
-    let mut stream = resp.bytes_stream();
-
-    loop {
-        let next = tokio::select! {
-            biased;
-            _ = cancel.cancelled() => {
-                drop(file);
-                let _ = tokio::fs::remove_file(dest_chunk).await;
-                return Err(NetworkError::Cancelled);
-            }
-            r = timeout(idle_timeout, stream.next()) => r,
-        };
-
-        let chunk_opt = match next {
-            Ok(opt) => opt,
-            Err(_) => return Err(NetworkError::IdleTimeout(idle_timeout)),
-        };
-
-        let chunk: Bytes = match chunk_opt {
-            Some(Ok(c)) => c,
-            Some(Err(e)) => return Err(NetworkError::from(e)),
-            None => break,
-        };
-
-        if chunk.is_empty() {
-            continue;
-        }
-
-        if downloaded.saturating_add(chunk.len() as u64) > expected {
-            return Err(NetworkError::Http(
-                "range response exceeds requested size".into(),
-            ));
-        }
-        file.write_all(&chunk).await?;
-        downloaded += chunk.len() as u64;
-
-        if let Some(a) = &aggregated {
-            a.add_bytes(chunk.len() as u64).await;
-        }
-    }
-
-    file.flush().await?;
-
-    if downloaded != expected {
-        return Err(NetworkError::Http(format!(
-            "chunk size mismatch: expected {expected}, got {downloaded}"
-        )));
-    }
-
-    Ok(downloaded)
 }

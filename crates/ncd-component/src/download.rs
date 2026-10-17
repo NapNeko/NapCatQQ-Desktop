@@ -1,13 +1,12 @@
 //! DownloadHelper:HTTP 下载 + SHA256 校验 + 多镜像 race + 切片并行
 //!
-//! 单 URL 路径走 ncd_network::download_with_resume(idle timeout + Range
-//! 续传);调用 [DownloadHelper::download_with_mirrors] 走 ncd_network 的
-//! mirror race + ≥16MB 切片并行下载,SHA256 在所有路径下载完成后做
+//! 单 URL 与多镜像路径共用 ncd-network 的自适应并发下载；单 URL 只探测
+//! Range 能力，多镜像先测速选源。SHA256 在所有路径下载完成后校验。
 //!
 //! 设计:
 //! - 进度桥接:实现一个 CtxSink,把 ncd_network::ProgressUpdate 翻成
 //!   ProgressKind::StepProgress + speed_bps,emit 到 ActionCtx
-//! - 校验失败:删除已落盘的 dest 文件,再返回 ChecksumMismatch
+//! - 单 URL 校验在暂存文件内完成，失败保留原目标并返回 ChecksumMismatch
 //! - 取消:cancel token 来自 ctx,原子传递给 ncd_network
 
 use std::path::Path;
@@ -15,12 +14,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_network::{
-    ChunkedConfig, DownloadConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig,
-    NetworkError, ProgressUpdate, download_smart, download_with_mirror_race, download_with_resume,
+    ChunkedConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig, NetworkError,
+    ProgressUpdate, download_smart, download_url,
 };
-use sha2::{Digest, Sha256};
 use tokio::fs;
-use tokio::io::AsyncReadExt;
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::error::ActionError;
@@ -36,7 +33,7 @@ impl DownloadHelper {
 
     /// 兼容旧 API:单 URL 下载到本地,可选 SHA256
     ///
-    /// 内部走 ncd_network::download_with_resume(带 idle timeout + 续传)
+    /// 支持 Range 的大文件并发下载，小文件和不支持 Range 的端点自动单流。
     pub async fn download_to_file(
         &self,
         url: &str,
@@ -61,19 +58,21 @@ impl DownloadHelper {
         let sink: Arc<dyn DownloadProgressSink> =
             Arc::new(CtxSink::new(ctx.clone(), step, url.to_string()));
 
-        let cfg = DownloadConfig {
-            mirror_url: Some(url.to_string()),
-            ..Default::default()
-        };
-
-        match download_with_resume(url, dest_path, sink, ctx.cancel_token(), cfg).await {
+        match download_url(
+            url,
+            dest_path,
+            sink,
+            ctx.cancel_token(),
+            ChunkedConfig {
+                expected_sha256: expected_sha256.map(str::to_owned),
+                ..Default::default()
+            },
+        )
+        .await
+        {
             Ok(_) => {}
             Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
             Err(e) => return Err(map_network_err(url, e)),
-        }
-
-        if let Some(expected) = expected_sha256 {
-            verify_sha256(dest_path, expected).await?;
         }
 
         emit_step(
@@ -87,7 +86,7 @@ impl DownloadHelper {
         Ok(())
     }
 
-    /// 多镜像下载:自动 race 选 winner,stall 时切镜像,≥16MB 自动切片
+    /// 多镜像下载：测速选源，断流时切镜像，大文件自动并发下载。
     ///
     /// mirrors:候选 URL 列表(一般用 ncd_network::build_mirror_urls(原始 URL) 生成)
     /// 第一个 URL 用作进度上报里的 "primary" 标识
@@ -186,13 +185,17 @@ impl DownloadHelper {
         let sink: Arc<dyn DownloadProgressSink> =
             Arc::new(CtxSink::new(ctx.clone(), step, mirrors[0].clone()));
 
-        let race_cfg = MirrorRaceConfig {
-            expected_sha256: expected_sha256.map(|s| s.to_string()),
+        let sha = expected_sha256.map(str::to_owned);
+        let cfg = ChunkedConfig {
+            parts: 1,
+            expected_sha256: sha.clone(),
+            race_cfg: MirrorRaceConfig {
+                expected_sha256: sha,
+                ..Default::default()
+            },
             ..Default::default()
         };
-        match download_with_mirror_race(mirrors, dest_path, sink, ctx.cancel_token(), race_cfg)
-            .await
-        {
+        match download_smart(mirrors, dest_path, sink, ctx.cancel_token(), cfg).await {
             Ok(_) => {}
             Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
             Err(e) => return Err(map_network_err(&mirrors[0], e)),
@@ -208,33 +211,6 @@ impl DownloadHelper {
         .await;
         Ok(())
     }
-}
-
-async fn verify_sha256(dest_path: &Path, expected: &str) -> Result<(), ActionError> {
-    let mut file = fs::File::open(dest_path)
-        .await
-        .map_err(|e| ActionError::install_step("open_for_hash", format!("{e}")))?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 256 * 1024];
-    loop {
-        let n = file
-            .read(&mut buf)
-            .await
-            .map_err(|e| ActionError::install_step("read_for_hash", format!("{e}")))?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    let actual = hex::encode(hasher.finalize());
-    if !expected.eq_ignore_ascii_case(&actual) {
-        let _ = fs::remove_file(dest_path).await;
-        return Err(ActionError::ChecksumMismatch {
-            expected: expected.to_string(),
-            actual,
-        });
-    }
-    Ok(())
 }
 
 fn map_network_err(url: &str, e: NetworkError) -> ActionError {
@@ -545,8 +521,9 @@ mod tests {
         let (ctx, _rx) = ActionCtx::new();
 
         let url = format!("{}/payload", server.uri());
+        let expected = "0".repeat(64);
         let err = helper
-            .download_to_file(&url, &dest, Some("0000bad000sha"), &ctx, 1)
+            .download_to_file(&url, &dest, Some(&expected), &ctx, 1)
             .await
             .unwrap_err();
         assert!(matches!(err, ActionError::ChecksumMismatch { .. }));
@@ -579,6 +556,99 @@ mod tests {
             .await
             .unwrap();
         assert!(dest.exists());
+    }
+
+    #[tokio::test]
+    async fn download_checksum_mismatch_preserves_existing_destination() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/payload"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"replacement".to_vec()))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("existing.bin");
+        fs::write(&dest, b"original").await.unwrap();
+        let (ctx, _rx) = ActionCtx::new();
+        let expected = "0".repeat(64);
+        let err = DownloadHelper::new()
+            .unwrap()
+            .download_to_file(
+                &format!("{}/payload", server.uri()),
+                &dest,
+                Some(&expected),
+                &ctx,
+                1,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, ActionError::ChecksumMismatch { .. }));
+        assert_eq!(fs::read(&dest).await.unwrap(), b"original");
+    }
+
+    #[tokio::test]
+    async fn encoded_single_stream_preserves_existing_destination() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/encoded"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Content-Encoding", "gzip")
+                    .set_body_bytes(b"encoded bytes".to_vec()),
+            )
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("existing.bin");
+        fs::write(&dest, b"original").await.unwrap();
+        let (ctx, _rx) = ActionCtx::new();
+        let err = DownloadHelper::new()
+            .unwrap()
+            .download_to_file(&format!("{}/encoded", server.uri()), &dest, None, &ctx, 1)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, ActionError::DownloadFailed { reason, .. }
+            if reason.contains("Content-Encoding")));
+        assert_eq!(fs::read(&dest).await.unwrap(), b"original");
+    }
+
+    #[tokio::test]
+    async fn no_chunk_checksum_mismatch_preserves_existing_destination() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/payload"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"replacement".to_vec()))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("existing.bin");
+        fs::write(&dest, b"original").await.unwrap();
+        let (ctx, _rx) = ActionCtx::new();
+        let expected = "0".repeat(64);
+        let url = format!("{}/payload", server.uri());
+        let err = DownloadHelper::new()
+            .unwrap()
+            .download_with_mirrors_no_chunk(
+                std::slice::from_ref(&url),
+                &dest,
+                Some(&expected),
+                &ctx,
+                1,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, ActionError::DownloadFailed { url: failed_url, reason }
+            if failed_url == url && reason.starts_with("all mirrors failed:")
+                && reason.contains("checksum mismatch"))
+        );
+        assert_eq!(fs::read(&dest).await.unwrap(), b"original");
     }
 
     #[tokio::test]

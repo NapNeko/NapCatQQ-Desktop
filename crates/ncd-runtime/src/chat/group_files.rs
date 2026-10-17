@@ -16,7 +16,7 @@ use ncd_domain::onebot_debug::{
     DEBUG_STREAM_VERSION, DebugCallOrigin, DebugCallRequest, DebugCallResult, DebugChannelId,
     DebugStreamProgress, DebugStreamStage,
 };
-use ncd_network::{DownloadConfig, DownloadProgressSink, NetworkError, ProgressUpdate};
+use ncd_network::{ChunkedConfig, DownloadProgressSink, NetworkError, ProgressUpdate};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -263,14 +263,7 @@ impl ChatManager {
             sink,
             token: token.clone(),
         });
-        match ncd_network::download_with_resume(
-            &url,
-            dest,
-            progress,
-            token,
-            DownloadConfig::default(),
-        )
-        .await
+        match ncd_network::download_url(&url, dest, progress, token, ChunkedConfig::default()).await
         {
             Ok(_) => Ok(()),
             Err(error) => {
