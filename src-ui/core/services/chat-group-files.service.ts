@@ -2,6 +2,7 @@
 import { Channel, invoke, isTauri, pickAnyFiles, saveFileAs } from '../ipc/transport';
 import { callProblem } from '../domain/debug/errorCopy';
 import { localFileTokenFor } from '../domain/debug/streamActions';
+import { downloadFileName } from '../domain/chat/groupFiles';
 import { chatService } from './chat.service';
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
 import type { DebugStreamProgress } from '../ipc/generated/debug/DebugStreamProgress';
@@ -78,9 +79,9 @@ export const chatGroupFilesService = {
                     ? chatGroupFilesMock.sizeOf(source.groupId, source.fileId)
                     : 1_000_000;
             await chatGroupFilesMock.transfer(requestId, name, size, 'downloading', onProgress);
-            return `C:\\Users\\预览\\Downloads\\${name}`;
+            return `C:\\Users\\预览\\Downloads\\${downloadFileName(name)}`;
         }
-        const dest = await saveFileAs('保存文件', name);
+        const dest = await saveFileAs('保存文件', downloadFileName(name));
         if (!dest) return null;
         const request: ChatFileDownloadRequest = {
             requestId,

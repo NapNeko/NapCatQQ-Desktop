@@ -41,6 +41,12 @@ pub(crate) enum Event {
     Hide,
     Show,
     Focus(bool),
+    /// 临时恢复页面执行能力，不显示原生窗口；结束后按原生窗口现状恢复资源策略。
+    BackgroundWork,
+    BackgroundWorkFinished {
+        hidden: bool,
+        focused: bool,
+    },
     /// 失焦计时到点，带安排时的代次；代次对不上说明中间有过别的事件，作废。
     Tick(u64),
     Retry(u64),
@@ -79,6 +85,7 @@ pub(crate) struct Entry {
     retries: u8,
     visibility_pending: bool,
     dormancy_pending: bool,
+    background_work: bool,
 }
 
 impl Entry {
@@ -158,6 +165,22 @@ pub(crate) fn step(
     _now: Instant,
 ) -> Vec<Action> {
     let mut actions = Vec::new();
+    if let Event::BackgroundWorkFinished { hidden, focused } = event {
+        if !entry.background_work {
+            return actions;
+        }
+        entry.background_work = false;
+        return step(
+            role,
+            entry,
+            if hidden {
+                Event::Hide
+            } else {
+                Event::Focus(focused)
+            },
+            _now,
+        );
+    }
     if !matches!(event, Event::Retry(_) | Event::Tick(_)) {
         entry.retries = 0;
         // 焦点计时不能取消仍在等待 controller 确认的同方向显示请求。
@@ -165,9 +188,10 @@ pub(crate) fn step(
     }
     match event {
         Event::Hide => {
-            if !entry.hidden || !entry.dormant {
+            if entry.background_work || !entry.hidden || !entry.dormant {
                 entry.generation = entry.generation.wrapping_add(1);
             }
+            entry.background_work = false;
             entry.focused = false;
             if !entry.hidden
                 || entry.confirmed_hidden != Some(true)
@@ -185,9 +209,10 @@ pub(crate) fn step(
             }
         }
         Event::Show => {
-            if entry.hidden || entry.dormant {
+            if entry.background_work || entry.hidden || entry.dormant {
                 entry.generation = entry.generation.wrapping_add(1);
             }
+            entry.background_work = false;
             wake(entry, &mut actions);
             // 显示时总是放一次可见：调度器之外有人藏过 WebView 时也能拉回来，重复设可见没有代价
             if !actions.contains(&Action::SetVisible(true)) {
@@ -195,9 +220,10 @@ pub(crate) fn step(
             }
         }
         Event::Focus(true) => {
-            if entry.hidden || entry.dormant {
+            if entry.background_work || entry.hidden || entry.dormant {
                 entry.generation = entry.generation.wrapping_add(1);
             }
+            entry.background_work = false;
             entry.focused = true;
             // 某条显示路径没经过调度器，窗口已经在前台了 WebView 还是藏着的：在这里补上
             wake(entry, &mut actions);
@@ -206,6 +232,7 @@ pub(crate) fn step(
             entry.focused = false;
             if !entry.hidden
                 && !entry.dormant
+                && !entry.background_work
                 && let Some(after) = role.idle_dormant_after()
             {
                 if entry.visibility_pending
@@ -226,6 +253,7 @@ pub(crate) fn step(
                 && !entry.focused
                 && !entry.hidden
                 && !entry.dormant
+                && !entry.background_work
             {
                 entry.generation = entry.generation.wrapping_add(1);
                 entry.dormant = true;
@@ -242,6 +270,15 @@ pub(crate) fn step(
                 }
             }
         }
+        Event::BackgroundWork => {
+            entry.generation = entry.generation.wrapping_add(1);
+            entry.background_work = true;
+            wake(entry, &mut actions);
+            if !actions.contains(&Action::SetVisible(true)) {
+                actions.push(Action::SetVisible(true));
+            }
+        }
+        Event::BackgroundWorkFinished { .. } => unreachable!(),
     }
     for action in &actions {
         match action {
@@ -298,6 +335,55 @@ mod tests {
             vec![Action::SetDormant(false), Action::SetVisible(true)]
         );
         assert!(!e.is_hidden() && !e.is_dormant());
+    }
+
+    #[test]
+    fn background_work_wakes_a_hidden_page_then_returns_it_to_dormancy() {
+        let mut entry = Entry::default();
+        run(WebviewRole::Main, &mut entry, Event::Hide);
+        assert_eq!(
+            run(WebviewRole::Main, &mut entry, Event::BackgroundWork),
+            vec![Action::SetDormant(false), Action::SetVisible(true)]
+        );
+        assert!(!entry.is_hidden() && !entry.is_dormant());
+        assert_eq!(
+            run(
+                WebviewRole::Main,
+                &mut entry,
+                Event::BackgroundWorkFinished {
+                    hidden: true,
+                    focused: false,
+                },
+            ),
+            vec![Action::SetVisible(false), Action::SetDormant(true)]
+        );
+        assert!(entry.is_hidden() && entry.is_dormant());
+    }
+
+    #[test]
+    fn blur_and_old_idle_timers_cannot_put_a_handoff_back_to_sleep() {
+        let mut entry = Entry::default();
+        run(WebviewRole::Main, &mut entry, Event::Show);
+        let actions = run(WebviewRole::Main, &mut entry, Event::Focus(false));
+        let Action::ScheduleTick { generation, .. } = actions[0] else {
+            panic!("失焦应安排计时");
+        };
+        run(WebviewRole::Main, &mut entry, Event::BackgroundWork);
+        assert!(run(WebviewRole::Main, &mut entry, Event::Focus(false)).is_empty());
+        assert!(run(WebviewRole::Main, &mut entry, Event::Tick(generation)).is_empty());
+        assert!(!entry.is_hidden() && !entry.is_dormant());
+        assert!(matches!(
+            run(
+                WebviewRole::Main,
+                &mut entry,
+                Event::BackgroundWorkFinished {
+                    hidden: false,
+                    focused: false,
+                },
+            )
+            .as_slice(),
+            [Action::ScheduleTick { .. }]
+        ));
     }
 
     #[test]

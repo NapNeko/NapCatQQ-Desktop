@@ -70,6 +70,61 @@ pub async fn is_stack_ready(
     Ok(out.success())
 }
 
+/// A successful bootstrap may be reused only while its exact node process lives.
+/// Include Linux start time and configuration metadata so a recycled pid or
+/// credentials edited outside Desktop cannot validate a stale session.
+fn managed_node_identity_script(paths: &SnowLumaRemotePaths) -> String {
+    format!(
+        r#"# ncd-snowluma-node-identity
+SL={sl}
+for pid_file in {pid_node} {pid_daemon}; do
+  pid=$(cat "$pid_file" 2>/dev/null) || continue
+  case "$pid" in ''|0|*[!0-9]*) continue ;; esac
+  kill -0 "$pid" 2>/dev/null || continue
+  comm=$(cat "/proc/$pid/comm" 2>/dev/null) || continue
+  case "$comm" in node|nodejs) ;; *) continue ;; esac
+  cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null) || continue
+  [ "$cwd" = "$SL" ] || continue
+  stat=$(cat "/proc/$pid/stat" 2>/dev/null) || continue
+  stat=${{stat##*) }}
+  set -- $stat
+  [ "$#" -ge 20 ] || continue
+  case "$1" in Z|X) continue ;; esac
+  shift 19
+  case "$1" in ''|*[!0-9]*) continue ;; esac
+  printf '%s:%s\n' "$pid" "$1"
+  stat -Lc '%d:%i:%s:%y:%z' -- {runtime_json} {webui_json} {webui_secret} {vnc_secret} || exit 1
+  exit 0
+done
+exit 1
+"#,
+        sl = shell_single_quote(&paths.snowluma_dir),
+        pid_node = shell_single_quote(&paths.pid_node_path()),
+        pid_daemon = shell_single_quote(&paths.pid_daemon),
+        runtime_json = shell_single_quote(&format!("{}/runtime.json", paths.config_dir)),
+        webui_json = shell_single_quote(&format!("{}/webui.json", paths.config_dir)),
+        webui_secret = shell_single_quote(&paths.webui_secret),
+        vnc_secret = shell_single_quote(&paths.vnc_secret),
+    )
+}
+
+pub(crate) async fn managed_node_identity(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Option<String> {
+    let out = host
+        .run_to_string(
+            HostCommand::new("sh")
+                .arg("-c")
+                .arg(managed_node_identity_script(paths))
+                .timeout(Duration::from_secs(5)),
+        )
+        .await
+        .ok()?;
+    let identity = out.stdout.trim();
+    (out.success() && !identity.is_empty()).then(|| identity.to_string())
+}
+
 pub(crate) fn qq_main_running_script(qq_bin: &str) -> String {
     let qq_bin = shell_single_quote(qq_bin);
     format!(
@@ -621,6 +676,68 @@ mod tests {
 
     fn sample_paths() -> SnowLumaRemotePaths {
         SnowLumaRemotePaths::from_remote_home("/home/u")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn managed_identity_detects_config_changes_process_exit_and_wrong_cwd() {
+        struct Child(std::process::Child);
+        impl Drop for Child {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let root = tempfile::Builder::new()
+            .prefix("sl identity '")
+            .tempdir()
+            .unwrap();
+        let dir = root.path().to_str().unwrap();
+        let paths = SnowLumaRemotePaths::from_workspace_and_dir(dir, dir);
+        std::fs::create_dir_all(&paths.runtime_dir).unwrap();
+        std::fs::create_dir_all(&paths.config_dir).unwrap();
+        for path in [
+            format!("{}/runtime.json", paths.config_dir),
+            format!("{}/webui.json", paths.config_dir),
+            paths.webui_secret.clone(),
+            paths.vnc_secret.clone(),
+        ] {
+            std::fs::write(path, b"initial").unwrap();
+        }
+        let node = root.path().join("node");
+        std::os::unix::fs::symlink("/bin/sleep", &node).unwrap();
+        let mut child = Child(
+            std::process::Command::new(&node)
+                .arg("30")
+                .current_dir(root.path())
+                .spawn()
+                .unwrap(),
+        );
+        std::fs::write(paths.pid_node_path(), child.0.id().to_string()).unwrap();
+        let probe = |paths: &SnowLumaRemotePaths| {
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg(managed_node_identity_script(paths))
+                .output()
+                .unwrap()
+        };
+        let first = probe(&paths);
+        assert!(
+            first.status.success(),
+            "{}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        assert_eq!(first.stdout, probe(&paths).stdout);
+        std::fs::write(&paths.webui_secret, b"changed credentials").unwrap();
+        let changed = probe(&paths);
+        assert!(changed.status.success());
+        assert_ne!(first.stdout, changed.stdout);
+        let mut other = paths.clone();
+        other.snowluma_dir = "/different/install".into();
+        assert!(!probe(&other).status.success());
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert!(!probe(&paths).status.success());
     }
 
     #[test]

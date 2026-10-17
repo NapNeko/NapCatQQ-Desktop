@@ -23,6 +23,7 @@ use ncd_traits::SecretStore;
 use ncd_traits::runtime_backend::BotBackend;
 
 pub(crate) type DockerQrLoginLocks = Arc<Mutex<HashMap<(String, u64), Arc<Mutex<()>>>>>;
+pub(crate) type RemoteSnowLumaInitLocks = Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeRouterError {
@@ -111,6 +112,7 @@ pub(crate) struct RuntimeBackendRouter {
     docker_secrets: DockerSecretProvider,
     event_bus: Arc<BroadcastEventBus>,
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
+    remote_snowluma_init_locks: RemoteSnowLumaInitLocks,
     // 必须缓存:RemoteSnowLumaBackend.pollers 持有 status poller 句柄。
     // 以前每次 start 新建 backend,函数返回后 Arc drop → poller Drop 补发
     // Disconnected,UI 永远显示「QQ 已掉线」即使 WebUI 在线。
@@ -150,6 +152,7 @@ impl RuntimeBackendRouter {
             docker_secrets,
             event_bus,
             remote_snowluma_daemons,
+            remote_snowluma_init_locks: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_backends,
             remote_snowluma_tunnels,
             remote_qq_entry_coordinator,
@@ -168,6 +171,14 @@ impl RuntimeBackendRouter {
         inventory: Arc<crate::remote::inventory::RemoteInventoryService>,
     ) -> Self {
         self.remote_inventory = Some(inventory);
+        self
+    }
+
+    pub(crate) fn with_remote_snowluma_init_locks(
+        mut self,
+        locks: RemoteSnowLumaInitLocks,
+    ) -> Self {
+        self.remote_snowluma_init_locks = locks;
         self
     }
 
@@ -366,6 +377,21 @@ impl RuntimeBackendRouter {
             daemon.replace_host(Arc::clone(&host)).await;
             return Ok(daemon);
         }
+        // A batch should probe a server's installation once. Keep other servers
+        // independent and release this guard on errors so a retry can initialize.
+        let init_lock = self
+            .remote_snowluma_init_locks
+            .lock()
+            .await
+            .entry(sid.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
+        let _init = init_lock.lock().await;
+        let cached = self.remote_snowluma_daemons.lock().await.get(&sid).cloned();
+        if let Some(daemon) = cached {
+            daemon.replace_host(Arc::clone(&host)).await;
+            return Ok(daemon);
+        }
         let daemon = if let Some(inv) = self.ensure_inventory(&sid, host.as_ref()).await.ok() {
             let layout =
                 ncd_backend_snowluma::remote_snowluma_layout::layout_from_selected_or_probe(
@@ -393,7 +419,7 @@ impl RuntimeBackendRouter {
                 .map_err(|e| RuntimeRouterError::Render(e.to_string()))?,
             )
         };
-        // 探测远端时不占整张表的锁；同主机并发探测时仍只保留一个 daemon。
+        // Do not hold the global registry lock across remote I/O.
         let daemon = {
             let mut guard = self.remote_snowluma_daemons.lock().await;
             Arc::clone(guard.entry(sid).or_insert(daemon))

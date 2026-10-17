@@ -1,9 +1,14 @@
 // 音频仅使用已转码的响应，失败保留原消息并允许重试。
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, LoaderCircle, Mic, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, LoaderCircle, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { errorText } from '../../../core/domain/errors';
 import { useChatView } from '../chatContext';
 import './chat-media.css';
+
+const playbackRates = [1, 1.25, 1.5, 2];
+const seconds = (value: number) =>
+    `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
+
 export function ChatRecord({
     data,
     fallback,
@@ -13,17 +18,29 @@ export function ChatRecord({
     fallback: ReactNode;
     messageId?: string;
 }) {
+    const { mediaScope, readRecord } = useChatView();
+    if (!readRecord) return fallback;
+    // 历史合并会重建段对象；只有账号、消息或资源变化时才重置播放器。
+    const identity = JSON.stringify([mediaScope, messageId, data.file, data.file_id, data.url]);
+    return <RecordPlayer key={identity} data={data} messageId={messageId} />;
+}
+
+function RecordPlayer({ data, messageId }: { data: Record<string, unknown>; messageId?: string }) {
     const { readRecord, readRecordText } = useChatView();
     const request = useRef(0);
     const textRequest = useRef(0);
+    const playAfterLoad = useRef(false);
     const audio = useRef<HTMLAudioElement>(null);
     const [source, setSource] = useState('');
     const [loading, setLoading] = useState(false);
+    const [buffering, setBuffering] = useState(false);
     const [error, setError] = useState('');
     const [playing, setPlaying] = useState(false);
     const [current, setCurrent] = useState(0);
     const [duration, setDuration] = useState(0);
+    const [volume, setVolume] = useState(1);
     const [muted, setMuted] = useState(false);
+    const [rate, setRate] = useState(1);
     const initialTranscript = [data.transcript, data.text, data.summary, data.record_text].find(
         (value) => typeof value === 'string' && value.trim(),
     ) as string | undefined;
@@ -31,200 +48,254 @@ export function ChatRecord({
     const [textLoading, setTextLoading] = useState(false);
     const [textError, setTextError] = useState('');
     useEffect(() => {
-        request.current++;
-        textRequest.current++;
-        setSource('');
-        setLoading(false);
-        setError('');
-        setPlaying(false);
-        setCurrent(0);
-        setDuration(0);
-        setTranscript(initialTranscript);
-        setTextLoading(false);
-        setTextError('');
-        return () => {
+        if (initialTranscript) setTranscript(initialTranscript);
+    }, [initialTranscript]);
+    useEffect(
+        () => () => {
             request.current++;
             textRequest.current++;
-        };
-    }, [data, initialTranscript, messageId]);
+        },
+        [],
+    );
     useEffect(() => {
         const node = audio.current;
         if (!node) return;
-        node.onloadedmetadata = () =>
-            setDuration(Number.isFinite(node.duration) ? node.duration : 0);
-        node.ontimeupdate = () => setCurrent(node.currentTime);
-        node.onplay = () => setPlaying(true);
-        node.onpause = () => setPlaying(false);
-        node.onended = () => {
-            setPlaying(false);
-            setCurrent(0);
-        };
-        node.onerror = () => {
-            setSource('');
-            setPlaying(false);
-            setError('音频解码失败，请重试');
-        };
-        return () => {
-            node.onloadedmetadata = null;
-            node.ontimeupdate = null;
-            node.onplay = null;
-            node.onpause = null;
-            node.onended = null;
-            node.onerror = null;
-        };
+        node.volume = volume;
+        node.muted = muted;
+        node.playbackRate = rate;
+    }, [source, volume, muted, rate]);
+    useEffect(() => {
+        const node = audio.current;
+        return () => node?.pause();
     }, [source]);
+    const play = useCallback(async (node: HTMLAudioElement) => {
+        const generation = request.current;
+        try {
+            await node.play();
+        } catch (e) {
+            if (generation !== request.current || audio.current !== node) return;
+            setPlaying(false);
+            setBuffering(false);
+            // 暂停或更换资源会中止尚未完成的 play，不属于播放失败。
+            if (e instanceof DOMException && e.name === 'AbortError') return;
+            if (e instanceof DOMException && e.name === 'NotAllowedError') {
+                setError('播放被浏览器阻止，请再次点击播放');
+            } else {
+                setSource('');
+                setError('音频无法播放，请重试');
+            }
+        }
+    }, []);
+    useEffect(() => {
+        if (!source || !audio.current || !playAfterLoad.current) return;
+        playAfterLoad.current = false;
+        void play(audio.current);
+    }, [source, play]);
+
     const load = async () => {
         if (!readRecord || loading) return;
-        const current = ++request.current;
+        const generation = ++request.current;
         setLoading(true);
         setError('');
-        setSource('');
-        setPlaying(false);
         setCurrent(0);
         setDuration(0);
         try {
             const value = await readRecord(data);
-            if (current === request.current) setSource(value);
+            if (!value) throw new Error('协议未返回可播放音频，请重试');
+            if (generation === request.current) {
+                playAfterLoad.current = true;
+                setSource(value);
+            }
         } catch (e) {
-            if (current === request.current) setError(errorText(e));
+            if (generation === request.current) setError(errorText(e));
         } finally {
-            if (current === request.current) setLoading(false);
+            if (generation === request.current) setLoading(false);
         }
+    };
+    const toggle = () => {
+        if (!source) {
+            void load();
+            return;
+        }
+        const node = audio.current;
+        if (!node) return;
+        setError('');
+        if (node.paused) {
+            if (node.ended) node.currentTime = 0;
+            void play(node);
+        } else node.pause();
     };
     const loadTranscript = async () => {
         if (!readRecordText || !messageId || textLoading || transcript) return;
-        const current = ++textRequest.current;
+        const generation = ++textRequest.current;
         setTextLoading(true);
         setTextError('');
         try {
             const value = await readRecordText(messageId);
-            if (current === textRequest.current) setTranscript(value);
+            if (generation === textRequest.current) setTranscript(value);
         } catch (e) {
-            if (current === textRequest.current) setTextError(errorText(e));
+            if (generation === textRequest.current) setTextError(errorText(e));
         } finally {
-            if (current === textRequest.current) setTextLoading(false);
+            if (generation === textRequest.current) setTextLoading(false);
         }
     };
-    const transcribe =
-        readRecordText && messageId && !transcript ? (
-            <button
-                type="button"
-                className="native-chat-voice-transcribe"
-                disabled={textLoading}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    void loadTranscript();
-                }}
-            >
-                {textLoading ? <LoaderCircle size={12} className="animate-spin" /> : '转文字'}
-            </button>
-        ) : null;
-    if (!readRecord) return fallback;
-    const toggle = async () => {
-        const node = audio.current;
-        if (!node) return;
-        try {
-            if (node.paused) await node.play();
-            else node.pause();
-        } catch {
-            setError('播放被浏览器阻止，请再次点击');
-        }
-    };
-    const seconds = (value: number) =>
-        `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
+    const durationHint = Number(data.duration);
+    const displayDuration =
+        duration || (Number.isFinite(durationHint) && durationHint > 0 ? durationHint : 0);
+    const silent = muted || volume === 0;
+    const playLabel = loading
+        ? '正在读取语音'
+        : playing
+          ? '暂停语音'
+          : error && !source
+            ? '重试语音'
+            : '播放语音';
     return (
-        <span className="native-chat-voice">
-            {source ? (
-                <>
-                    <audio
-                        ref={audio}
-                        aria-label="语音播放器"
-                        controls
-                        preload="metadata"
-                        src={source}
-                        className="native-chat-voice-audio"
+        <span className="native-chat-voice" onClick={(event) => event.stopPropagation()}>
+            {source && (
+                <audio
+                    ref={audio}
+                    aria-label="语音播放器"
+                    preload="metadata"
+                    src={source}
+                    className="native-chat-voice-audio"
+                    onLoadedMetadata={(event) => {
+                        const value = event.currentTarget.duration;
+                        setDuration(Number.isFinite(value) && value > 0 ? value : 0);
+                    }}
+                    onDurationChange={(event) => {
+                        const value = event.currentTarget.duration;
+                        setDuration(Number.isFinite(value) && value > 0 ? value : 0);
+                    }}
+                    onTimeUpdate={(event) => setCurrent(event.currentTarget.currentTime)}
+                    onPlay={() => setPlaying(true)}
+                    onPlaying={() => setBuffering(false)}
+                    onWaiting={() => setBuffering(true)}
+                    onCanPlay={() => setBuffering(false)}
+                    onPause={() => {
+                        setPlaying(false);
+                        setBuffering(false);
+                    }}
+                    onEnded={() => {
+                        setPlaying(false);
+                        setBuffering(false);
+                    }}
+                    onError={() => {
+                        setSource('');
+                        setPlaying(false);
+                        setBuffering(false);
+                        setCurrent(0);
+                        setDuration(0);
+                        setError('音频解码失败，请重试');
+                    }}
+                />
+            )}
+            <span className="native-chat-voice-player" aria-busy={loading || buffering}>
+                <button
+                    type="button"
+                    className="native-chat-voice-play"
+                    aria-label={playLabel}
+                    title={buffering ? '正在缓冲，点击暂停' : playLabel}
+                    disabled={loading}
+                    onClick={toggle}
+                >
+                    {loading || buffering ? (
+                        <LoaderCircle size={15} className="animate-spin" />
+                    ) : playing ? (
+                        <Pause size={14} fill="currentColor" />
+                    ) : error && !source ? (
+                        <RotateCcw size={14} />
+                    ) : (
+                        <Play size={14} fill="currentColor" />
+                    )}
+                </button>
+                <span className="native-chat-voice-track">
+                    <input
+                        className="native-chat-voice-progress"
+                        aria-label="语音进度"
+                        aria-valuetext={`${seconds(current)} / ${displayDuration ? seconds(displayDuration) : '未知时长'}`}
+                        type="range"
+                        min={0}
+                        max={duration || 1}
+                        step={0.1}
+                        disabled={!source || !duration}
+                        value={Math.min(current, duration || 1)}
+                        onChange={(event) => {
+                            const value = Number(event.target.value);
+                            if (audio.current) audio.current.currentTime = value;
+                            setCurrent(value);
+                        }}
                     />
-                    <span className="native-chat-voice-player">
+                    <span className="native-chat-voice-settings">
+                        <span className="native-chat-voice-time">
+                            {seconds(current)} /{' '}
+                            {displayDuration ? seconds(displayDuration) : '--:--'}
+                        </span>
                         <button
                             type="button"
-                            className="native-chat-voice-play"
-                            aria-label={playing ? '暂停语音' : '播放语音'}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                void toggle();
-                            }}
+                            className="native-chat-voice-rate"
+                            aria-label={`播放速度：${rate} 倍，点击切换`}
+                            title="切换播放速度"
+                            onClick={() =>
+                                setRate(
+                                    playbackRates[
+                                        (playbackRates.indexOf(rate) + 1) % playbackRates.length
+                                    ],
+                                )
+                            }
                         >
-                            {playing ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
+                            {rate}×
                         </button>
-                        <input
-                            aria-label="语音进度"
-                            type="range"
-                            min={0}
-                            max={duration || 1}
-                            step={0.1}
-                            value={Math.min(current, duration || 1)}
-                            onChange={(event) => {
-                                const value = Number(event.target.value);
-                                if (audio.current) audio.current.currentTime = value;
-                                setCurrent(value);
-                            }}
-                        />
-                        <span className="native-chat-voice-time">
-                            {seconds(current)} / {duration ? seconds(duration) : '--:--'}
-                        </span>
                         <button
                             type="button"
                             className="native-chat-voice-mute"
-                            aria-label={muted ? '取消静音' : '静音'}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                setMuted((value) => {
-                                    const next = !value;
-                                    if (audio.current) audio.current.muted = next;
-                                    return next;
-                                });
+                            aria-label={silent ? '取消静音' : '静音'}
+                            aria-pressed={silent}
+                            title={silent ? '取消静音' : '静音'}
+                            onClick={() => {
+                                if (silent) {
+                                    setMuted(false);
+                                    if (!volume) setVolume(1);
+                                } else setMuted(true);
                             }}
                         >
-                            {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
+                            {silent ? <VolumeX size={13} /> : <Volume2 size={13} />}
                         </button>
+                        <input
+                            className="native-chat-voice-volume"
+                            aria-label="语音音量"
+                            aria-valuetext={`${Math.round((muted ? 0 : volume) * 100)}%`}
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={muted ? 0 : volume}
+                            onChange={(event) => {
+                                setVolume(Number(event.target.value));
+                                setMuted(false);
+                            }}
+                        />
                     </span>
-                    {transcript ? (
-                        <span className="native-chat-voice-transcript">
-                            <Check size={12} />
-                            {transcript}
-                        </span>
-                    ) : (
-                        transcribe
-                    )}
-                </>
+                </span>
+            </span>
+            {transcript ? (
+                <span className="native-chat-voice-transcript">
+                    <Check size={12} />
+                    {transcript}
+                </span>
             ) : (
-                <>
+                readRecordText &&
+                messageId && (
                     <button
                         type="button"
-                        disabled={loading}
-                        aria-label={loading ? '正在读取语音' : error ? '重试语音' : '播放语音'}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            void load();
-                        }}
+                        className="native-chat-voice-transcribe"
+                        disabled={textLoading}
+                        onClick={() => void loadTranscript()}
                     >
-                        {loading ? (
-                            <LoaderCircle size={15} className="animate-spin" />
-                        ) : error ? (
-                            <RotateCcw size={14} />
-                        ) : (
-                            <Mic size={15} />
-                        )}
-                        {loading ? '正在读取语音…' : error ? '重试语音' : '播放语音'}
+                        {textLoading && <LoaderCircle size={12} className="animate-spin" />}
+                        {textLoading ? '正在转文字…' : '转文字'}
                     </button>
-                    {transcribe}
-                    {transcript && (
-                        <span className="native-chat-voice-transcript">
-                            <Check size={12} />
-                            {transcript}
-                        </span>
-                    )}
-                </>
+                )
             )}
             {error && (
                 <span role="status" className="text-danger">

@@ -183,33 +183,36 @@ impl ChatManager {
         name: &str,
     ) -> Result<String, String> {
         let backend = self.file_backend(bot_id).await?;
-        let params = match source {
+        let (action, params, fallback) = match source {
             ChatFileSource::Group {
                 group_id,
                 file_id,
                 busid,
+                url,
             } => {
                 let mut params = json!({ "group_id": group_number(group_id)?, "file_id": file_id });
                 if let Some(busid) = busid {
                     params["busid"] = json!(busid);
                 }
-                ("get_group_file_url", params)
+                ("get_group_file_url", params, url.as_deref())
             }
             ChatFileSource::Private {
                 user_id,
                 file_id,
                 file_hash,
+                url,
             } => {
                 let mut params = json!({ "file_id": file_id });
                 if backend == BackendType::SnowLuma {
                     params["user_id"] = json!(group_number(user_id)?);
                     params["file_hash"] = json!(file_hash.clone().unwrap_or_default());
                 }
-                ("get_private_file_url", params)
+                ("get_private_file_url", params, url.as_deref())
             }
+            ChatFileSource::Url { url } => return download_url(url, name),
         };
-        let data = self.file_call(bot_id, params.0, params.1).await?;
-        download_url(data["url"].as_str().unwrap_or_default(), name)
+        // 优先重取链接，避免消息里保存的临时 URL 过期；旧端不能重取时再用消息直链。
+        resolve_download_url(self.file_call(bot_id, action, params).await, fallback, name)
     }
 
     /// 下到 `dest`，成功返回落盘路径。同名 `.part` 先清掉：它可能是另一份文件没下完的残留
@@ -497,10 +500,27 @@ fn action_call(
     })
 }
 
+fn resolve_download_url(
+    response: Result<Value, String>,
+    fallback: Option<&str>,
+    name: &str,
+) -> Result<String, String> {
+    response
+        .and_then(|data| download_url(data["url"].as_str().unwrap_or_default(), name))
+        .or_else(|error| match fallback {
+            Some(url) => download_url(url, name),
+            None => Err(error),
+        })
+}
+
 /// 只认 http(s)。NapCat 给的链接 `fname=` 是空的，补上文件名，有的节点不带名字会拒
 fn download_url(raw: &str, name: &str) -> Result<String, String> {
     let mut url = reqwest::Url::parse(raw.trim()).map_err(|_| "上游没有给出下载链接".to_owned())?;
-    if !matches!(url.scheme(), "http" | "https") {
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
         return Err("上游给出的不是网页下载链接".to_owned());
     }
     let pairs: Vec<(String, String)> = url
@@ -639,7 +659,35 @@ mod tests {
             "https://x.qq.com/f/?fname=keep"
         );
         assert!(download_url("file:///etc/passwd", "n").is_err());
+        assert!(download_url("https://user:password@x.qq.com/file", "n").is_err());
         assert!(download_url("", "n").is_err());
+    }
+
+    #[test]
+    fn file_download_refreshes_links_and_falls_back_for_legacy_backends() {
+        let old = "https://x.qq.com/file?token=old";
+        let fresh = "https://x.qq.com/file?token=new";
+        assert_eq!(
+            resolve_download_url(Ok(json!({ "url": fresh })), Some(old), "a.txt").unwrap(),
+            fresh
+        );
+        assert_eq!(
+            resolve_download_url(Err("real fileUUID not found!".into()), Some(old), "a.txt")
+                .unwrap(),
+            old
+        );
+        assert_eq!(
+            resolve_download_url(Ok(json!({})), Some(old), "a.txt").unwrap(),
+            old
+        );
+        assert_eq!(
+            resolve_download_url(Err("文件已过期".into()), None, "a.txt"),
+            Err("文件已过期".into())
+        );
+        assert!(
+            resolve_download_url(Err("无效 ID".into()), Some("file:///tmp/a.txt"), "a.txt")
+                .is_err()
+        );
     }
 
     #[test]

@@ -210,6 +210,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
     /// 远端 SnowLuma:按 server_id 共享 daemon(多 Bot 同一 SSH 主机)
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
+    remote_snowluma_init_locks: crate::launch::router::RemoteSnowLumaInitLocks,
     watch_relogin_owners: Arc<Mutex<HashMap<String, Vec<String>>>>,
     /// 远端 SL backend 单例缓存:持有 status poller,绝不能每次 start 新建
     remote_snowluma_backends: Arc<
@@ -259,6 +260,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_bot_log_follow: Arc::clone(&self.remote_bot_log_follow),
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
             remote_snowluma_daemons: Arc::clone(&self.remote_snowluma_daemons),
+            remote_snowluma_init_locks: Arc::clone(&self.remote_snowluma_init_locks),
             watch_relogin_owners: Arc::clone(&self.watch_relogin_owners),
             remote_snowluma_backends: Arc::clone(&self.remote_snowluma_backends),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
@@ -348,6 +350,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_bot_log_follow: Arc::new(RemoteBotLogFollowRegistry::new()),
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
             remote_snowluma_daemons: Arc::new(Mutex::new(HashMap::new())),
+            remote_snowluma_init_locks: Arc::new(Mutex::new(HashMap::new())),
             watch_relogin_owners: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_backends: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
@@ -654,6 +657,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
         )
+        .with_remote_snowluma_init_locks(Arc::clone(&self.remote_snowluma_init_locks))
         .with_docker_qr_login_locks(Arc::clone(&self.docker_qr_login_locks))
         .with_windows_bots(Arc::clone(&self.windows_bots));
         if let Some(mgr) = &self.server_manager {

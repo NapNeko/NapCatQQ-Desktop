@@ -16,9 +16,9 @@ use super::orchestrator::{
     daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
 };
 use super::probe::{
-    remote_qq_main_running, resolve_remote_novnc_port, resolve_remote_vnc_secret_from_x11vnc,
-    resolve_remote_webui_port, resolve_remote_webui_secret_near_snowluma_dir,
-    wait_remote_webui_ready,
+    managed_node_identity, remote_qq_main_running, resolve_remote_novnc_port,
+    resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_port,
+    resolve_remote_webui_secret_near_snowluma_dir, wait_remote_webui_ready,
 };
 use super::stack::{recover_node_for_reconcile, restart_node_with_env};
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
@@ -106,6 +106,8 @@ pub struct RemoteSnowLumaDaemon {
     tunnel_remote_ports: Mutex<Option<(u16, u16)>>,
     /// 仅在共享 node 真正启动或显式重载时更新，其他 Bot 启动保留现有探针。
     metrics_node_env: Mutex<Option<BTreeMap<String, String>>>,
+    /// Only successful full startup records a node identity; reconnect/stop invalidate it.
+    ready_node_identity: Mutex<Option<String>>,
 }
 
 impl RemoteSnowLumaDaemon {
@@ -139,6 +141,7 @@ impl RemoteSnowLumaDaemon {
             tunnel_eps: Mutex::new(None),
             tunnel_remote_ports: Mutex::new(None),
             metrics_node_env: Mutex::new(None),
+            ready_node_identity: Mutex::new(None),
         }
     }
 
@@ -160,6 +163,7 @@ impl RemoteSnowLumaDaemon {
         self.tunnels.drop_server(&self.server_id).await;
         *self.tunnel_eps.lock().await = None;
         *self.tunnel_remote_ports.lock().await = None;
+        *self.ready_node_identity.lock().await = None;
         tracing::info!(
             target: "ncd_backend_snowluma::remote",
             server_id = %self.server_id,
@@ -266,6 +270,17 @@ impl RemoteSnowLumaDaemon {
         bot_id: Option<&BotId>,
     ) -> Result<(), BotBackendError> {
         let host = self.current_host().await;
+        if !restart_node
+            && webui_password.is_none()
+            && self.reuse_running_node(host.as_ref(), bot_id).await
+        {
+            if metrics_env.is_some() {
+                *self.metrics_node_env.lock().await = metrics_env;
+            }
+            return Ok(());
+        }
+        // A failed repair must never leave a previous success eligible for reuse.
+        *self.ready_node_identity.lock().await = None;
         let creds = ensure_remote_daemon_prereqs(
             host.as_ref(),
             &self.layout.home,
@@ -337,6 +352,9 @@ impl RemoteSnowLumaDaemon {
             *self.metrics_node_env.lock().await = metrics_env;
         }
 
+        *self.ready_node_identity.lock().await =
+            managed_node_identity(host.as_ref(), &self.layout.paths).await;
+
         let mut guard = self.leases.lock().await;
         guard.acquire(bot_id);
         let rc = guard.count();
@@ -350,6 +368,41 @@ impl RemoteSnowLumaDaemon {
                 Some(self.server_id.clone()),
             ));
         Ok(())
+    }
+
+    /// Batch starts share configuration, credentials and tunnels. Rechecking all of
+    /// them (including scrypt) under the bootstrap lock adds one full SSH sequence
+    /// per account. A single process-identity probe validates this existing session.
+    async fn reuse_running_node(&self, host: &dyn Host, bot_id: Option<&BotId>) -> bool {
+        let Some(expected) = self.ready_node_identity.lock().await.clone() else {
+            return false;
+        };
+        if self.leases.lock().await.count() == 0
+            || self.tunnel_eps.lock().await.is_none()
+            || self
+                .tunnels
+                .endpoints_for_server(&self.server_id)
+                .await
+                .is_none()
+            || managed_node_identity(host, &self.layout.paths)
+                .await
+                .as_ref()
+                != Some(&expected)
+        {
+            return false;
+        }
+        let mut leases = self.leases.lock().await;
+        leases.acquire(bot_id);
+        let count = leases.count();
+        drop(leases);
+        self.event_bus
+            .publish(DomainEvent::snowluma_daemon_state_changed(
+                DaemonState::Ready,
+                count,
+                None,
+                Some(self.server_id.clone()),
+            ));
+        true
     }
 
     pub async fn release(&self) {
@@ -371,6 +424,7 @@ impl RemoteSnowLumaDaemon {
         drop(guard);
 
         if stop_daemon {
+            *self.ready_node_identity.lock().await = None;
             let host = self.current_host().await;
             // 冷启动接管尚未完成时，本地租约数不包含所有远端 QQ。
             match remote_qq_main_running(host.as_ref(), &self.layout.qq_bin).await {
@@ -451,6 +505,7 @@ impl RemoteSnowLumaDaemon {
             self.tunnels.release(&self.server_id).await;
         }
         *self.tunnel_remote_ports.lock().await = None;
+        *self.ready_node_identity.lock().await = None;
     }
 
     /// 接管存活 QQ；缺失时只恢复 node，保留 QQ 使用中的图形会话和配置。
@@ -599,8 +654,14 @@ impl RemoteSnowLumaDaemon {
 
         let previous_ports = *self.tunnel_remote_ports.lock().await;
         let previous_eps = self.tunnel_eps.lock().await.clone();
+        let had_bundle = self
+            .tunnels
+            .endpoints_for_server(&self.server_id)
+            .await
+            .is_some();
         if let Some(previous) = previous_eps.as_ref() {
-            if previous_ports == Some((webui_port, novnc_port))
+            if had_bundle
+                && previous_ports == Some((webui_port, novnc_port))
                 && (webui_plain.is_empty() || previous.webui_password == webui_plain)
                 && (vnc_plain.is_empty() || previous.vnc_password == vnc_plain)
             {
@@ -628,7 +689,8 @@ impl RemoteSnowLumaDaemon {
             }
         };
         // daemon 持有一个 bundle 引用；端口变动时 registry 已替换旧 bundle。
-        if previous_eps.is_some() && previous_ports == Some((webui_port, novnc_port)) {
+        if had_bundle && previous_eps.is_some() && previous_ports == Some((webui_port, novnc_port))
+        {
             self.tunnels.release(&self.server_id).await;
         }
         *self.tunnel_eps.lock().await = Some(eps);

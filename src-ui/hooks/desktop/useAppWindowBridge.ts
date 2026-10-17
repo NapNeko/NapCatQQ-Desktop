@@ -40,8 +40,12 @@ export function useAppWindowBridge({
     useEffect(() => {
         let disposed = false;
         let resumeChat = false;
+        let requestVersion = 0;
+        let pending = Promise.resolve();
         const handoff = chatDesktopService.onRequest((request) => {
             if (disposed || request.v !== 1) return;
+            const version = ++requestVersion;
+            const current = () => !disposed && version === requestVersion;
             if (!featureTogglesStore.getSnapshot().chat) {
                 if (request.action !== 'resume') {
                     void chatDesktopService
@@ -51,37 +55,43 @@ export function useAppWindowBridge({
                 return;
             }
             if (request.action === 'resume') {
-                if (resumeChat) showChat();
+                // 旧保存/释放全部结束后再认领视图，避免迟到清理影响恢复后的账号与草稿。
+                pending = pending.then(() => {
+                    if (current() && resumeChat) showChat();
+                });
                 return;
             }
-            void (async () => {
+            pending = pending.then(async () => {
+                if (!current()) return;
                 try {
                     // chatStore / react-dom 不在主窗首屏依赖图里：只有聊天交接发生的
                     // 那一刻才拉，静态引会把整个聊天 store 钉进主包（沿用原动态 import）
                     const { prepareChatHandoff, getChatSelectedBot } =
                         await import('../chat/chatStore');
                     const { flushSync } = await import('react-dom');
+                    if (!current()) return;
                     const wasChat = routeRef.current === 'chat';
                     resumeChat = wasChat;
                     try {
                         await prepareChatHandoff(
                             getChatSelectedBot(),
                             () => {
-                                if (wasChat) flushSync(() => showOverview());
+                                if (current() && wasChat) flushSync(() => showOverview());
                             },
                             request.action === 'popout',
                         );
-                        await chatDesktopService.reply(request.requestId, null);
+                        if (current()) await chatDesktopService.reply(request.requestId, null);
                     } catch (error) {
-                        if (wasChat) flushSync(() => showChat());
+                        if (current() && wasChat) flushSync(() => showChat());
                         throw error;
                     }
                 } catch (error) {
-                    await chatDesktopService
-                        .reply(request.requestId, String(error))
-                        .catch(() => {});
+                    if (current())
+                        await chatDesktopService
+                            .reply(request.requestId, String(error))
+                            .catch(() => {});
                 }
-            })();
+            });
         });
         const embedded = chatDesktopService.onEmbedRequested(() => {
             if (!featureTogglesStore.getSnapshot().chat) return;

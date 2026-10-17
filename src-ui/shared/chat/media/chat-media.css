@@ -237,51 +237,32 @@
 /* 语音条和「转文字」横排，转写结果和报错另起一行。 */
 .native-chat-voice {
     display: flex;
-    max-width: 360px;
+    width: fit-content;
+    min-width: 0;
+    max-width: min(360px, 100%);
     flex-wrap: wrap;
     align-items: center;
     gap: 6px 10px;
     margin: 4px 0 2px;
+    border-radius: var(--radius-md);
     font-size: 12px;
 }
 .native-chat-voice > :is(.native-chat-voice-transcript, [role="status"]) {
     flex-basis: 100%;
 }
 .native-chat-voice-audio {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-}
-.native-chat-voice > button:not(.native-chat-voice-transcribe) {
-    display: inline-flex;
-    width: fit-content;
-    align-items: center;
-    gap: 8px;
-    padding: 3px 14px 3px 3px;
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--action-primary) 10%, transparent);
-    color: var(--text-primary);
-}
-.native-chat-voice > button:not(.native-chat-voice-transcribe) > svg {
-    box-sizing: content-box;
-    padding: 6px;
-    border-radius: 50%;
-    background: var(--action-primary);
-    color: var(--text-on-brand);
-}
-.native-chat-voice > button:not(.native-chat-voice-transcribe):hover {
-    background: color-mix(in srgb, var(--action-primary) 16%, transparent);
+    display: none;
 }
 .native-chat-voice-player {
     display: flex;
-    min-width: 230px;
+    width: 290px;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     gap: 8px;
-    padding: 3px 10px 3px 3px;
+    padding: 7px 10px 7px 7px;
     border: 0;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--action-primary) 10%, transparent);
 }
 .native-chat-voice-player button {
@@ -291,28 +272,66 @@
     color: var(--action-primary);
 }
 .native-chat-voice-player .native-chat-voice-play {
-    width: 26px;
-    height: 26px;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     background: var(--action-primary);
     color: var(--text-on-brand);
 }
-.native-chat-voice-player .native-chat-voice-play:hover {
+.native-chat-voice-player .native-chat-voice-play:hover:not(:disabled) {
     background: var(--action-primary-hover);
 }
+.native-chat-voice-track {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
 .native-chat-voice-player input[type="range"] {
-    min-width: 55px;
-    width: 100%;
+    min-width: 0;
+    height: 14px;
+    margin: 0;
     accent-color: var(--action-primary);
+    cursor: pointer;
+}
+.native-chat-voice-player input[type="range"]:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.native-chat-voice-progress {
+    width: 100%;
+}
+.native-chat-voice-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 6px;
 }
 .native-chat-voice-time {
-    min-width: 70px;
+    margin-right: auto;
     color: var(--text-tertiary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.native-chat-voice-rate {
+    min-width: 30px;
     font-size: 10px;
     font-variant-numeric: tabular-nums;
 }
 .native-chat-voice-mute {
     color: var(--text-tertiary) !important;
+}
+.native-chat-voice-player .native-chat-voice-volume {
+    flex: 0 1 46px;
+    width: 46px;
+}
+.native-chat-voice :is(button, input):focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
 }
 .native-chat-voice-transcript {
     display: inline-flex;
@@ -320,6 +339,11 @@
     gap: 4px;
     color: var(--text-secondary);
     line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+.native-chat-voice-transcript > svg {
+    flex: 0 0 auto;
+    margin-top: 2px;
 }
 .native-chat-voice-transcribe {
     display: inline-flex;

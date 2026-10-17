@@ -126,9 +126,11 @@ pub async fn open_from_tray(
 }
 
 async fn prepare(app: &AppHandle, owner: &str, action: &str) -> Result<(), String> {
-    if app.get_webview_window(owner).is_none() {
+    let Some(window) = app.get_webview_window(owner) else {
         return Ok(());
-    }
+    };
+    // 隐藏页的事件与 IPC 回调可能被限频；先唤醒页面再开始交接计时，原生窗口保持隐藏。
+    let _awake = crate::webview_scheduler::wake_for_background_work(&window).await?;
     let coordinator = app.state::<ChatWindowCoordinator>();
     let request_id = uuid::Uuid::new_v4().to_string();
     let (send, receive) = oneshot::channel();

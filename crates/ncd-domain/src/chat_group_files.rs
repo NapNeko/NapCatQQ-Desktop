@@ -115,7 +115,8 @@ pub enum GroupFileAction {
     },
 }
 
-/// 要下载的文件在哪个会话里。私聊文件 SnowLuma 还要文件段里的 `file_hash`
+/// 要下载的文件在哪个会话里。私聊文件 SnowLuma 还要文件段里的 `file_hash`。
+/// 消息直链只作重取失败的回退；没有文件 ID 的旧消息也可直接下载 HTTP(S) URL。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(
     tag = "kind",
@@ -129,11 +130,20 @@ pub enum ChatFileSource {
         file_id: String,
         #[ts(type = "number | null")]
         busid: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        url: Option<String>,
     },
     Private {
         user_id: String,
         file_id: String,
         file_hash: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        url: Option<String>,
+    },
+    Url {
+        url: String,
     },
 }
 
@@ -172,8 +182,22 @@ mod tests {
             ChatFileSource::Private {
                 user_id: "1".into(),
                 file_id: "f".into(),
-                file_hash: None
+                file_hash: None,
+                url: None
             }
         );
+    }
+
+    #[test]
+    fn file_sources_keep_optional_urls_and_accept_url_only_messages() {
+        let value = serde_json::json!({
+            "kind": "group", "groupId": "1", "fileId": "f", "busid": null,
+            "url": "https://example.com/file"
+        });
+        let source: ChatFileSource = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap(), value);
+        let value = serde_json::json!({ "kind": "url", "url": "https://example.com/file" });
+        let source: ChatFileSource = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap(), value);
     }
 }

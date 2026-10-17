@@ -20,6 +20,10 @@ struct RecoveryHost {
     fail_start: bool,
     qq_probe: &'static str,
     commands: StdMutex<Vec<String>>,
+    files: StdMutex<BTreeMap<String, Vec<u8>>>,
+    reads: AtomicUsize,
+    identity: AtomicUsize,
+    tunnels: AtomicUsize,
 }
 
 impl RecoveryHost {
@@ -30,6 +34,10 @@ impl RecoveryHost {
             fail_start,
             qq_probe,
             commands: StdMutex::new(Vec::new()),
+            files: StdMutex::new(BTreeMap::new()),
+            reads: AtomicUsize::new(0),
+            identity: AtomicUsize::new(1),
+            tunnels: AtomicUsize::new(0),
         }
     }
 }
@@ -54,6 +62,10 @@ impl Host for RecoveryHost {
 
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
         let path_str = path.as_posix();
+        self.reads.fetch_add(1, Ordering::SeqCst);
+        if let Some(bytes) = self.files.lock().unwrap().get(path_str) {
+            return Ok(Bytes::copy_from_slice(bytes));
+        }
         if path_str.ends_with("runtime.json") {
             return Ok(Bytes::from_static(br#"{"webuiPort":13105}"#));
         }
@@ -62,7 +74,11 @@ impl Host for RecoveryHost {
         }
         Err(HostError::PathNotFound { path: path.clone() })
     }
-    async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
+    async fn write_file(&self, path: &HostPath, bytes: &[u8]) -> Result<(), HostError> {
+        self.files
+            .lock()
+            .unwrap()
+            .insert(path.as_posix().into(), bytes.to_vec());
         Ok(())
     }
     async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {
@@ -101,6 +117,7 @@ impl Host for RecoveryHost {
         Ok(Some("/bin/bash".into()))
     }
     async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        self.tunnels.fetch_add(1, Ordering::SeqCst);
         Ok(TunnelHandle::detached(spec.local_port, 0))
     }
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
@@ -124,6 +141,12 @@ impl Host for RecoveryHost {
             } else {
                 1
             });
+        } else if script.starts_with("# ncd-snowluma-node-identity") {
+            if self.node_running.load(Ordering::SeqCst) {
+                out.stdout = format!("901:{}", self.identity.load(Ordering::SeqCst));
+            } else {
+                out.exit_code = Some(1);
+            }
         } else if script.starts_with("QQ_BIN=") {
             out.stdout = self.qq_probe.into();
         } else if script.contains("node_pid=$!") {
@@ -133,6 +156,7 @@ impl Host for RecoveryHost {
                 out.stderr = "node launch failed".into();
             } else {
                 self.node_running.store(true, Ordering::SeqCst);
+                self.identity.fetch_add(1, Ordering::SeqCst);
                 out.stdout = "901\n".into();
             }
         } else if script.contains("node_not_started") {
@@ -142,6 +166,118 @@ impl Host for RecoveryHost {
         }
         Ok(out)
     }
+}
+
+#[tokio::test]
+async fn batch_start_reuses_one_bootstrap_and_only_probes_node_for_following_accounts() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    let ids = [
+        BotId::new("10001"),
+        BotId::new("10002"),
+        BotId::new("10003"),
+    ];
+    let (a, b, c) = tokio::join!(
+        daemon.ensure_running_for_bot(&ids[0], None, true, Some("test-secret")),
+        daemon.ensure_running_for_bot(&ids[1], None, true, Some("test-secret")),
+        daemon.ensure_running_for_bot(&ids[2], None, true, Some("test-secret")),
+    );
+    a.unwrap();
+    b.unwrap();
+    c.unwrap();
+    assert_eq!(daemon.leases.lock().await.count(), 3);
+    assert_eq!(host.starts.load(Ordering::SeqCst), 1);
+    assert_eq!(host.tunnels.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        host.commands
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|cmd| cmd.contains("command -v Xvfb"))
+            .count(),
+        1
+    );
+
+    let reads = host.reads.load(Ordering::SeqCst);
+    let commands = host.commands.lock().unwrap().len();
+    daemon
+        .ensure_running_for_bot(&BotId::new("10004"), None, true, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        host.reads.load(Ordering::SeqCst),
+        reads,
+        "warm start must not reread shared credentials/config"
+    );
+    assert_eq!(
+        host.commands.lock().unwrap().len(),
+        commands + 1,
+        "warm start needs one identity probe"
+    );
+}
+
+#[tokio::test]
+async fn changed_node_or_config_identity_revalidates_shared_startup() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    daemon
+        .ensure_running_for_bot(&BotId::new("10001"), None, false, None)
+        .await
+        .unwrap();
+    let reads = host.reads.load(Ordering::SeqCst);
+    host.identity.fetch_add(1, Ordering::SeqCst);
+    daemon
+        .ensure_running_for_bot(&BotId::new("10002"), None, false, None)
+        .await
+        .unwrap();
+    assert!(host.reads.load(Ordering::SeqCst) > reads);
+    assert_eq!(daemon.leases.lock().await.count(), 2);
+}
+
+#[tokio::test]
+async fn dropped_tunnel_bundle_is_recreated_without_stopping_existing_bots() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    daemon
+        .ensure_running_for_bot(&BotId::new("10001"), None, false, None)
+        .await
+        .unwrap();
+    let starts = host.starts.load(Ordering::SeqCst);
+    daemon.tunnels.drop_server("server").await;
+    daemon
+        .ensure_running_for_bot(&BotId::new("10002"), None, false, None)
+        .await
+        .unwrap();
+    assert_eq!(host.tunnels.load(Ordering::SeqCst), 4);
+    assert_eq!(host.starts.load(Ordering::SeqCst), starts);
+    assert!(
+        daemon
+            .tunnels
+            .endpoints_for_server("server")
+            .await
+            .is_some()
+    );
+    assert_eq!(daemon.leases.lock().await.count(), 2);
+}
+
+#[tokio::test]
+async fn reconnect_invalidates_success_and_bootstrap_uses_new_host() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    daemon
+        .ensure_running_for_bot(&BotId::new("10001"), None, false, None)
+        .await
+        .unwrap();
+    let replacement = Arc::new(RecoveryHost::new(true, "running", false));
+    daemon.replace_host(replacement.clone()).await;
+    assert!(daemon.ready_node_identity.lock().await.is_none());
+    assert!(daemon.tunnel_endpoints().await.is_none());
+    daemon
+        .ensure_running_for_bot(&BotId::new("10002"), None, false, None)
+        .await
+        .unwrap();
+    assert!(replacement.reads.load(Ordering::SeqCst) > 0);
+    assert_eq!(replacement.tunnels.load(Ordering::SeqCst), 2);
 }
 
 fn layout() -> RemoteSnowLumaLayout {

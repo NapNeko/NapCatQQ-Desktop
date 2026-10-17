@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
     canChangeFile,
     canManageFolders,
+    downloadFileName,
     expiryLabel,
     fileKind,
+    fileSegmentName,
     fileSegmentSource,
     groupFileRows,
     transferPercent,
@@ -105,5 +107,80 @@ describe('file segment source', () => {
         expect(
             fileSegmentSource({ file_id: 'x', file_hash: 'h' }, { type: 'private', id: '8' }),
         ).toEqual({ kind: 'private', userId: '8', fileId: 'x', fileHash: 'h' });
+    });
+
+    it('accepts legacy SnowLuma ids for group and friend file messages', () => {
+        const data = { id: 'legacy-id', name: '资料.zip', size: 1024, file_hash: 'hash' };
+        expect(fileSegmentSource(data, { type: 'group', id: '3' })).toEqual({
+            kind: 'group',
+            groupId: '3',
+            fileId: 'legacy-id',
+            busid: null,
+        });
+        expect(fileSegmentSource(data, { type: 'private', id: '8' })).toEqual({
+            kind: 'private',
+            userId: '8',
+            fileId: 'legacy-id',
+            fileHash: 'hash',
+        });
+        expect(
+            fileSegmentSource(
+                { fileId: 'camel-id', fileHash: 'camel-hash' },
+                { type: 'private', id: '8' },
+            ),
+        ).toEqual({ kind: 'private', userId: '8', fileId: 'camel-id', fileHash: 'camel-hash' });
+    });
+
+    it('preserves a download URL without mistaking a filename or local path for an id', () => {
+        const url = 'https://cdn.example/file?token=download';
+        const session = { type: 'group' as const, id: '3' };
+        expect(
+            fileSegmentSource(
+                { file_id: 'canonical', id: 'legacy', file: '资料.zip', url },
+                session,
+            ),
+        ).toEqual({ kind: 'group', groupId: '3', fileId: 'canonical', busid: null, url });
+        expect(fileSegmentSource({ name: '资料.zip', url }, session)).toEqual({ kind: 'url', url });
+        expect(fileSegmentSource({ file: url }, session)).toEqual({ kind: 'url', url });
+        for (const value of [
+            '资料.zip',
+            'C:\\Downloads\\资料.zip',
+            'file:///tmp/a.txt',
+            'ncd-local-file:///tmp/a.txt',
+            'javascript:alert(1)',
+            'https://user:pass@cdn.example/a',
+        ]) {
+            expect(fileSegmentSource({ file: value }, session)).toBeNull();
+            expect(fileSegmentSource({ url: value }, session)).toBeNull();
+        }
+    });
+});
+
+describe('file download names', () => {
+    it('derives URL-only filenames from the decoded path without leaking signed query strings', () => {
+        expect(fileSegmentName({ file: 'https://cdn.example/report.pdf?token=secret#part' })).toBe(
+            'report.pdf',
+        );
+        expect(
+            fileSegmentName({ url: 'https://cdn.example/%E6%8A%A5%E5%91%8A%201.pdf?token=secret' }),
+        ).toBe('报告 1.pdf');
+        expect(fileSegmentName({ file: 'https://cdn.example/report%3A%3F%2F.pdf' })).toBe(
+            'report___.pdf',
+        );
+        expect(fileSegmentName({ url: 'https://cdn.example/?token=secret' })).toBe('文件');
+        expect(fileSegmentName({ url: 'https://cdn.example/%E6.pdf' })).toBe('%E6.pdf');
+    });
+
+    it('keeps protocol filenames for display and makes only the save suggestion Windows-safe', () => {
+        expect(fileSegmentName({ name: '报告:最终.pdf', url: 'https://cdn.example/opaque' })).toBe(
+            '报告:最终.pdf',
+        );
+        expect(fileSegmentName({ file_name: '资料.zip', file: 'https://cdn.example/opaque' })).toBe(
+            '资料.zip',
+        );
+        expect(downloadFileName('报告:最终?.pdf')).toBe('报告_最终_.pdf');
+        expect(downloadFileName('folder/name\u0000.txt. ')).toBe('folder_name_.txt');
+        expect(downloadFileName('CON.txt')).toBe('_CON.txt');
+        expect(downloadFileName('..')).toBe('文件');
     });
 });

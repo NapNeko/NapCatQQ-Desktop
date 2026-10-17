@@ -57,7 +57,9 @@ const isCancel = (message: string) => /已取消|cancel/i.test(message);
 
 export const scopeOf = (target: DebugTarget) => accountKey(target.bot_id, String(target.qq_id));
 export const downloadKey = (scope: string, source: ChatFileSource) =>
-    `${scope}:download:${source.kind}:${source.kind === 'group' ? source.groupId : source.userId}:${source.fileId}`;
+    source.kind === 'url'
+        ? `${scope}:download:url:${source.url}`
+        : `${scope}:download:${source.kind}:${source.kind === 'group' ? source.groupId : source.userId}:${source.fileId}`;
 
 export function useFileTransfers(): FileTransfer[] {
     return useSyncExternalStore(subscribe, () => snapshot);

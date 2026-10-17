@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPopoutApp } from './ChatPopoutApp';
+import type { ChatWindowRequest } from '../core/ipc/generated/chat/ChatWindowRequest';
 
 const bridge = vi.hoisted(() => ({
     onRequest: vi.fn(),
@@ -9,12 +10,13 @@ const bridge = vi.hoisted(() => ({
     reveal: vi.fn(),
     showMainWindow: vi.fn(),
     notice: vi.fn(),
+    prepare: vi.fn(),
 }));
 vi.mock('../hooks/desktop/useChatPopoutBridge', () => ({
     useChatPopoutBridge: () => bridge,
 }));
 vi.mock('../hooks/chat/chatStore', () => ({
-    prepareChatHandoff: vi.fn(async () => {}),
+    prepareChatHandoff: bridge.prepare,
     getChatSelectedBot: () => 'bot',
 }));
 vi.mock('../hooks/chat/useChatNotice', () => ({ useChatNotice: bridge.notice }));
@@ -34,6 +36,8 @@ vi.mock('../modules/chat/ChatPage', () => ({ ChatPage: () => <div>聊天工作�
 beforeEach(() => {
     vi.clearAllMocks();
     bridge.reveal.mockResolvedValue(undefined);
+    bridge.prepare.mockReset().mockResolvedValue(undefined);
+    bridge.reply.mockResolvedValue(undefined);
 });
 afterEach(() => {
     cleanup();
@@ -87,5 +91,63 @@ describe('chat popout startup', () => {
             '聊天窗口切换失败',
             '监听失败',
         );
+    });
+
+    it('waits for old draft cleanup before remounting after a timed-out handoff', async () => {
+        let receive!: (request: ChatWindowRequest) => void;
+        bridge.onRequest.mockImplementationOnce(async (cb) => {
+            receive = cb;
+            return vi.fn();
+        });
+        let reject!: (error: Error) => void;
+        bridge.prepare.mockImplementationOnce((_bot, unmount) => {
+            unmount();
+            return new Promise<void>((_resolve, fail) => {
+                reject = fail;
+            });
+        });
+        render(<ChatPopoutApp />);
+        await screen.findByText('聊天工作区');
+        await act(async () => receive({ v: 1, requestId: 'old', action: 'close' }));
+        expect(screen.queryByText('聊天工作区')).not.toBeInTheDocument();
+        await act(async () => receive({ v: 1, requestId: '', action: 'resume' }));
+        expect(screen.queryByText('聊天工作区')).not.toBeInTheDocument();
+        await act(async () => reject(new Error('聊天交接已取消')));
+        expect(screen.getByText('聊天工作区')).toBeInTheDocument();
+        expect(bridge.reply).not.toHaveBeenCalled();
+        expect(bridge.notice).not.toHaveBeenCalledWith(
+            'window:handoff',
+            '聊天窗口切换失败',
+            '聊天交接已取消',
+        );
+    });
+
+    it('ignores a late unmount after resume and serializes the next handoff', async () => {
+        let receive!: (request: ChatWindowRequest) => void;
+        bridge.onRequest.mockImplementationOnce(async (cb) => {
+            receive = cb;
+            return vi.fn();
+        });
+        let finish!: () => void;
+        let lateUnmount!: () => void;
+        bridge.prepare.mockImplementationOnce((_bot, unmount) => {
+            lateUnmount = unmount;
+            return new Promise<void>((resolve) => {
+                finish = resolve;
+            });
+        });
+        render(<ChatPopoutApp />);
+        await screen.findByText('聊天工作区');
+        await act(async () => receive({ v: 1, requestId: 'old', action: 'close' }));
+        await act(async () => receive({ v: 1, requestId: '', action: 'resume' }));
+        act(() => lateUnmount());
+        expect(screen.getByText('聊天工作区')).toBeInTheDocument();
+        await act(async () => receive({ v: 1, requestId: 'new', action: 'embed' }));
+        expect(bridge.prepare).toHaveBeenCalledOnce();
+        await act(async () => finish());
+        expect(bridge.prepare).toHaveBeenCalledTimes(2);
+        expect(bridge.prepare).toHaveBeenLastCalledWith('bot', expect.any(Function), true);
+        expect(bridge.reply).toHaveBeenCalledOnce();
+        expect(bridge.reply).toHaveBeenCalledWith('new', null);
     });
 });

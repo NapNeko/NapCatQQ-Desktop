@@ -24,20 +24,37 @@ export function ChatPopoutApp() {
     const { onRequest, reply, reveal, showMainWindow } = useChatPopoutBridge();
     useEffect(() => {
         let alive = true;
+        let requestVersion = 0;
+        let pending = Promise.resolve();
         const subscription = onRequest((request) => {
             if (!alive || request.v !== 1) return;
+            const version = ++requestVersion;
+            const current = () => alive && version === requestVersion;
             if (request.action === 'resume') {
-                setMounted(true);
+                setHandoffError('');
+                // 保存与释放不能取消已发出的 IPC；完成清理后再挂载，避免旧草稿覆盖新输入。
+                pending = pending.then(() => {
+                    if (current()) setMounted(true);
+                });
                 return;
             }
             setHandoffError('');
-            void prepareChatHandoff(
-                getChatSelectedBot(),
-                () => flushSync(() => setMounted(false)),
-                request.action === 'embed',
-            )
-                .then(() => reply(request.requestId, null))
+            // 超时恢复会作废旧请求；迟到的保存/回执不能再次卸载界面或弹出旧错误。
+            // 新请求等旧保存结束，避免两轮交接同时修改草稿状态。
+            pending = pending
+                .then(async () => {
+                    if (!current()) return;
+                    await prepareChatHandoff(
+                        getChatSelectedBot(),
+                        () => {
+                            if (current()) flushSync(() => setMounted(false));
+                        },
+                        request.action === 'embed',
+                    );
+                    if (current()) await reply(request.requestId, null);
+                })
                 .catch((error) => {
+                    if (!current()) return;
                     const message = errorText(error);
                     setMounted(true);
                     setHandoffError(message);

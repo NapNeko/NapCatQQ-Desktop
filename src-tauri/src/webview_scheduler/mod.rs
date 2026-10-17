@@ -152,9 +152,26 @@ struct Revision {
 
 impl WebviewScheduler {
     fn step(&self, label: &str, event: Event) -> Option<(Revision, Vec<Action>)> {
+        self.step_if_current(label, event, None)
+    }
+
+    fn step_if_current(
+        &self,
+        label: &str,
+        event: Event,
+        expected: Option<Revision>,
+    ) -> Option<(Revision, Vec<Action>)> {
         let Ok(mut entries) = self.entries.lock() else {
             return None;
         };
+        if let Some(expected) = expected {
+            let registration = entries.get(label)?;
+            if registration.id != expected.window_id
+                || registration.entry.generation() != expected.generation
+            {
+                return None;
+            }
+        }
         let registration = entries
             .entry(label.to_owned())
             .or_insert_with(|| Registration {
@@ -265,6 +282,15 @@ async fn finish_show(
     revision: Revision,
     actions: Vec<Action>,
 ) -> Result<(), String> {
+    restore_webview(window, revision, actions).await?;
+    window.show().map_err(|e| e.to_string())
+}
+
+async fn restore_webview(
+    window: &WebviewWindow,
+    revision: Revision,
+    actions: Vec<Action>,
+) -> Result<(), String> {
     for action in actions {
         if action == Action::SetVisible(true) {
             let result = set_visible(window, true, revision).await;
@@ -281,7 +307,52 @@ async fn finish_show(
     {
         return Err("窗口显示请求已失效".into());
     }
-    window.show().map_err(|e| e.to_string())
+    Ok(())
+}
+
+/// 草稿交接依赖源页面的 JS/IPC；长期隐藏的页面必须先解除隐藏限频。
+/// 只恢复 WebView，不弹出原生窗口，离开作用域（含出错/取消）后归还资源。
+pub async fn wake_for_background_work(
+    window: &WebviewWindow,
+) -> Result<BackgroundWorkGuard, String> {
+    let scheduler = window
+        .app_handle()
+        .try_state::<WebviewScheduler>()
+        .ok_or("WebView 调度器未初始化")?;
+    let (revision, actions) = scheduler
+        .step(window.label(), Event::BackgroundWork)
+        .ok_or("WebView 调度状态不可用")?;
+    let guard = BackgroundWorkGuard {
+        window: window.clone(),
+        revision,
+    };
+    restore_webview(window, revision, actions).await?;
+    Ok(guard)
+}
+
+pub struct BackgroundWorkGuard {
+    window: WebviewWindow,
+    revision: Revision,
+}
+
+impl Drop for BackgroundWorkGuard {
+    fn drop(&mut self) {
+        let Some(scheduler) = self.window.app_handle().try_state::<WebviewScheduler>() else {
+            return;
+        };
+        let hidden = !self.window.is_visible().unwrap_or(false)
+            || self.window.is_minimized().unwrap_or(false);
+        let focused = self.window.is_focused().unwrap_or(false);
+        if let Some((revision, actions)) = scheduler.step_if_current(
+            self.window.label(),
+            Event::BackgroundWorkFinished { hidden, focused },
+            Some(self.revision),
+        ) {
+            for action in actions {
+                apply(&self.window, revision, action);
+            }
+        }
+    }
 }
 
 /// 藏起窗口：先藏原生窗口，再让 WebView 不可见并降到休眠。
@@ -556,5 +627,55 @@ mod tests {
         assert!(scheduler.can_expose(label, show));
         scheduler.step(label, Event::Hide).unwrap();
         assert!(!scheduler.can_expose(label, show));
+    }
+
+    #[test]
+    fn background_work_cleanup_cannot_hide_a_window_the_user_has_reopened() {
+        let scheduler = WebviewScheduler::default();
+        scheduler.step("main", Event::Hide).unwrap();
+        let (work, _) = scheduler.step("main", Event::BackgroundWork).unwrap();
+        let (show, _) = scheduler.step("main", Event::Show).unwrap();
+        assert!(!scheduler.is_current("main", work));
+        assert!(
+            scheduler
+                .step_if_current(
+                    "main",
+                    Event::BackgroundWorkFinished {
+                        hidden: true,
+                        focused: false,
+                    },
+                    Some(work),
+                )
+                .is_none()
+        );
+        scheduler.complete("main", show, Action::SetVisible(true), Ok(()));
+        assert!(scheduler.can_expose("main", show));
+    }
+
+    #[test]
+    fn dropped_background_work_does_not_register_a_destroyed_window_again() {
+        let scheduler = WebviewScheduler::default();
+        let (work, _) = scheduler.step("main", Event::BackgroundWork).unwrap();
+        scheduler.forget("main");
+        assert!(
+            scheduler
+                .step_if_current(
+                    "main",
+                    Event::BackgroundWorkFinished {
+                        hidden: true,
+                        focused: false,
+                    },
+                    Some(work),
+                )
+                .is_none()
+        );
+        assert!(scheduler.levels().is_empty());
+        scheduler.step("main", Event::Show).unwrap();
+        assert!(
+            scheduler
+                .step_if_current("main", Event::Hide, Some(work))
+                .is_none()
+        );
+        assert!(!scheduler.levels()[0].hidden);
     }
 }

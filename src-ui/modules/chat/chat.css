@@ -815,6 +815,7 @@
     transition: none !important;
 }
 .native-chat-message-content-line {
+    position: relative;
     display: flex;
     align-items: flex-start;
     gap: 6px;
@@ -839,6 +840,8 @@
 }
 /* 每组第一条气泡靠头像那角收小，读起来像从头像里说出来；连续消息四角都圆。 */
 .native-chat-bubble {
+    min-width: 0;
+    max-width: 100%;
     padding: 8px 12px;
     background: var(--chat-bubble-in);
     border-radius: 14px;
@@ -876,12 +879,16 @@
     background: color-mix(in srgb, var(--state-warning) 12%, var(--surface-card));
     border: 1px dashed color-mix(in srgb, var(--state-warning) 45%, transparent);
 }
-.native-chat-message[data-highlight="true"] .native-chat-bubble {
+.native-chat-message[data-highlight="true"] .native-chat-bubble:not(.is-media-only),
+.native-chat-message[data-highlight="true"] .native-chat-bubble.is-media-only > * {
     outline: 2px solid var(--border-focus);
     outline-offset: 3px;
 }
 .native-chat-message-actions {
-    position: relative;
+    /* 气泡宽度不计入悬浮快捷条，多选收起操作时媒体不会扩宽或重新换行。 */
+    position: absolute;
+    top: 0;
+    left: calc(100% + 6px);
     display: flex;
     flex-shrink: 0;
     align-self: flex-start;
@@ -894,6 +901,10 @@
     opacity: 0;
     transform: translateX(var(--chat-action-shift, 0px));
     pointer-events: none;
+}
+.native-chat-message.is-mine .native-chat-message-actions {
+    left: auto;
+    right: calc(100% + 6px);
 }
 .native-chat-message-actions .native-chat-icon {
     width: 26px;

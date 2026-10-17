@@ -100,13 +100,24 @@ const str = (value: unknown) =>
         : typeof value === 'number' && Number.isFinite(value)
           ? String(value)
           : '';
-/** 时间线文件段 → 下载来源。没有 file_id 的段（自己刚发、还没回显）下不了 */
+const webUrl = (value: unknown): string | undefined => {
+    const raw = str(value).trim();
+    if (!/^https?:\/\//i.test(raw)) return undefined;
+    try {
+        const url = new URL(raw);
+        return url.hostname && !url.username && !url.password ? raw : undefined;
+    } catch {
+        return undefined;
+    }
+};
+/** SnowLuma 旧版用 id；file 是显示名或发送路径，不能当作下载 ID。 */
 export function fileSegmentSource(
     data: Record<string, unknown>,
     session: { type: 'group' | 'private'; id: string },
 ): ChatFileSource | null {
-    const fileId = str(data.file_id);
-    if (!fileId) return null;
+    const fileId = str(data.file_id).trim() || str(data.fileId).trim() || str(data.id).trim();
+    const url = webUrl(data.url) || webUrl(data.file);
+    if (!fileId) return url ? { kind: 'url', url } : null;
     if (session.type === 'group') {
         const busid = Number(data.busid);
         return {
@@ -114,10 +125,41 @@ export function fileSegmentSource(
             groupId: session.id,
             fileId,
             busid: Number.isFinite(busid) && busid > 0 ? busid : null,
+            ...(url ? { url } : {}),
         };
     }
-    return { kind: 'private', userId: session.id, fileId, fileHash: str(data.file_hash) || null };
+    return {
+        kind: 'private',
+        userId: session.id,
+        fileId,
+        fileHash: str(data.file_hash) || str(data.fileHash) || null,
+        ...(url ? { url } : {}),
+    };
 }
 
-export const fileSegmentName = (data: Record<string, unknown>) =>
-    str(data.name) || str(data.file_name) || str(data.file) || '文件';
+/** 原生另存为只接收文件名；原始消息名仍留给界面和上游 fname 参数。 */
+export function downloadFileName(name: string): string {
+    const safe = Array.from(name, (character) => (character.charCodeAt(0) < 32 ? '_' : character))
+        .join('')
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .trim()
+        .replace(/[. ]+$/, '');
+    if (!safe) return '文件';
+    return /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(safe) ? `_${safe}` : safe;
+}
+
+export function fileSegmentName(data: Record<string, unknown>): string {
+    const name = str(data.name) || str(data.file_name);
+    if (name) return name;
+    const file = str(data.file);
+    if (file && !webUrl(file)) return file;
+    const url = webUrl(data.url) || webUrl(file);
+    if (!url) return '文件';
+    let basename = new URL(url).pathname.split('/').pop() || '';
+    try {
+        basename = decodeURIComponent(basename);
+    } catch {
+        // 保留不完整编码的原路径片段，避免损坏的 URL 阻止消息渲染。
+    }
+    return downloadFileName(basename);
+}

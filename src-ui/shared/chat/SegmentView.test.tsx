@@ -350,6 +350,8 @@ describe('native media segments', () => {
         expect(readForward).toHaveBeenNthCalledWith(2, { id: 'nested' });
     });
     it('retries failed audio resolution and creates a real audio control', async () => {
+        vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+        vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
         const readRecord = vi
             .fn()
             .mockRejectedValueOnce(new Error('转码失败'))
@@ -367,7 +369,9 @@ describe('native media segments', () => {
             'src',
             'data:audio/mpeg;base64,SUQzAA==',
         );
-        expect(screen.getByLabelText('语音播放器')).toHaveAttribute('controls');
+        expect(screen.getByRole('slider', { name: '语音进度' })).toBeInTheDocument();
+        expect(screen.getByRole('slider', { name: '语音音量' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /播放速度/ })).toBeInTheDocument();
     });
     it('requests voice transcription after audio is resolved', async () => {
         const readRecord = vi.fn().mockResolvedValue('data:audio/mpeg;base64,SUQzAA==');
