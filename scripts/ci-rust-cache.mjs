@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
     appendFileSync,
-    copyFileSync,
     existsSync,
     lstatSync,
     mkdirSync,
@@ -17,7 +16,7 @@ import { dirname, posix, resolve } from 'node:path';
 import { arch, homedir, platform } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const generatedProxy = 'crates/ncd-network/src/proxy_constants.rs';
+const generatedAgent = 'src-tauri/resources/remote-agent/ncd-agent.exe';
 const proxyTemplate = 'crates/ncd-network/src/proxy_constants.template.rs';
 const digest = (data) => createHash('sha256').update(data).digest('hex');
 
@@ -30,7 +29,7 @@ function trackedFiles(root) {
 
 function inputFiles(root) {
     const files = trackedFiles(root);
-    if (existsSync(resolve(root, generatedProxy))) files.push(generatedProxy);
+    if (existsSync(resolve(root, generatedAgent))) files.push(generatedAgent);
     const dotenv = resolve(root, '.env');
     if (existsSync(dotenv) && statSync(dotenv).size === 0) files.push('.env');
     return [...new Set(files)].filter((file) => lstatSync(resolve(root, file)).isFile());
@@ -122,10 +121,7 @@ export function captureInputs(root, manifest) {
 }
 
 export function restoreInputs(root, manifest, onChanged = () => {}) {
-    // build.rs 在源码树生成此文件；缓存命中时仍须让 dep-info 找到它。
-    const proxy = resolve(root, generatedProxy);
     const template = resolve(root, proxyTemplate);
-    if (!existsSync(proxy) && existsSync(template)) copyFileSync(template, proxy);
     // 缺失的 rerun-if-changed 输入会让 build.rs 每轮都运行；只补空文件。
     const dotenv = resolve(root, '.env');
     if (!existsSync(dotenv) && existsSync(template)) writeFileSync(dotenv, '');

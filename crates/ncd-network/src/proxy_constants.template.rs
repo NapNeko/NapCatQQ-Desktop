@@ -1,7 +1,7 @@
 // 编译期注入的中转代理常量 —— 模板文件(入库)
 //
 // 构建时 build.rs 会根据环境变量 NCD_PROXY_BASE_URL / NCD_PROXY_SECRET 生成
-// 真实的 src/proxy_constants.rs(被 .gitignore 忽略,仓库 clone 拿不到真实值)
+// 真实常量生成在 Cargo OUT_DIR 中，仓库 clone 拿不到真实值
 // 本模板仅作为「缺失环境变量时」的占位 fallback,保证开发环境可编译,运行
 // 时自动降级到 GitHub 直连(见 ProxySigner::is_configured)
 //

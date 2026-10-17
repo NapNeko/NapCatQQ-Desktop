@@ -92,11 +92,31 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Exclude build dirs from Defender scan
+        shell: pwsh
+        run: |
+          $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
+          foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
+
+      - name: Compute Cargo cache keys
+        id: inputs
+        run: node scripts/ci-rust-cache.mjs keys
+
+      # 保留 workspace 产物和 Agent 的静态 CRT target；依赖缓存会清掉这些产物。
       - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+        uses: actions/cache@v4
         with:
-          shared-key: build-msi-windows
-          workspaces: ". -> target"
+          path: |
+            target
+            src-tauri/resources/remote-agent/ncd-agent.exe
+            ${{ steps.inputs.outputs.cargo-home }}/registry
+            ${{ steps.inputs.outputs.cargo-home }}/git
+          key: rust-msi-v1-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
+          restore-keys: |
+            rust-msi-v1-${{ steps.inputs.outputs.environment-key }}-
+
+      - name: Restore Cargo input timestamps
+        run: node scripts/ci-rust-cache.mjs restore
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
@@ -159,6 +179,13 @@ jobs:
 
       # 不要用 `pnpm run tauri:build -- --bundles msi`：
       # pnpm 会把中间的 `--` 原样传给 tauri，导致 `--bundles` 落到 cargo 上失败。
+      - name: Clear restored MSI bundles
+        shell: pwsh
+        run: |
+          if (Test-Path 'target/release/bundle') {
+            Remove-Item -LiteralPath 'target/release/bundle' -Recurse -Force
+          }
+
       - name: Build Tauri MSI
         env:
           NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
@@ -259,3 +286,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: release-assets/*
+
+      - name: Capture Cargo input timestamps
+        run: node scripts/ci-rust-cache.mjs capture
