@@ -561,20 +561,26 @@ mod tests {
 
     #[tokio::test]
     async fn close_ends_the_whole_tree() {
-        let session =
+        let mut session =
             tokio::task::spawn_blocking(|| open_conpty(cmd(&["/c", "ping -n 30 127.0.0.1"])))
                 .await
                 .unwrap()
                 .unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        session.control.close();
+        // 等 ping 子进程真正接上控制台，冷启动不计入关闭耗时。
+        let ready = wait_for_text(&mut session, "TTL=").await;
+        assert!(ready.contains("TTL="), "ping did not become ready: {ready:?}");
         let started = Instant::now();
+        session.control.close();
         let (_, exit) = collect(session).await;
         assert!(
             matches!(exit, Some(PtyExit::Exited(_))),
             "exit was {exit:?}"
         );
-        assert!(started.elapsed() < Duration::from_secs(8));
+        assert!(
+            started.elapsed() < Duration::from_secs(8),
+            "terminal close took {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]
