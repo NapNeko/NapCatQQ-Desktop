@@ -163,6 +163,7 @@ KB：`.claude/kb/napcat-runtime.md`
 | 进程树 / login probe | `.../snowluma/proc_tree.rs`, `qq_login_probe.rs`, `linux_proc_probe.rs` |
 | 本机 runtime backend | `.../snowluma/runtime_backend.rs` |
 | 远端 backend 总装 | `.../remote_snowluma/`（backend/daemon/inject/config/helpers） |
+| 远端启动缓存与释放 | [SL 启动缓存生命周期](sl-startup-cache-lifecycle.md)：初始化槽、连接代、身份指纹、Bot 租约与隧道 |
 | 扫码登录 | 远端 `.../remote_snowluma/login_helper.rs` / `.../docker_login.rs` + `resources/login-helper/atspi-login.py`（短期 AT-SPI / X11、PID/starttime/UID/display绑定）；Windows `.../snowluma/windows_qr_login.rs`（UIA） / `windows_qr_capture.rs`（WGC 单帧） + `runtime_backend.rs`；`qr_guard.rs`（SL 显式状态与账号门控）→ `ncd-domain/src/snowluma_login.rs` / `ncd-traits/BotBackend` → `ncd-runtime/src/bot_manager/qr_login.rs` → `commands/snowluma.rs`；Docker 复用 `remote/docker_session.rs` 已认证 client；UI `useRemoteSnowlumaQrLogin` / `RemoteSnowLumaQrLoginDialog`；本机与远端独立开关，默认开启、显式关闭保留、冷启动生效，保留 QQ / VNC 回退 |
 | 远端编排 / 栈 / 布局 / 隧道 / 日志 | `.../remote_snowluma/{orchestrator,stack,layout,tunnel,log}.rs`；远端 bash 路径 `remote_bash.rs`（经 `Host::which` 按连接记住，不放进程级 static） |
 | 协议同意 / consent 文件 | `crates/ncd-runtime/src/snowluma/{agreements,consent_files}.rs` |
@@ -321,6 +322,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 网络 | `crates/ncd-network/src/**` |
+| 并行下载与临时状态 | [HTTP 下载](downloads.md)：动态分片、版本校验、取消、并发预算和校验后提交 |
 | 代理与下载线路设置 | `ncd-domain/network_settings.rs` → `ncd-runtime/desktop/{network,network_settings}.rs` → `commands/network.rs` / `app_settings.rs`；`NetworkManager` 持有客户端快照，保存与导入后热应用，密码走 SecretStore；`ncd-network/{client,settings,mirror}.rs` 处理代理、校验与线路，下载任务固定客户端；UI `settings/tabs/NetworkTab.tsx` + `hooks/settings/useNetworkSettings.ts`；用户说明 [network.md](../user/network.md) |
 | 日志 crate | `crates/ncd-log/src/**` |
 | 系统指标 command | `src-tauri/src/commands/system_metrics.rs` |
