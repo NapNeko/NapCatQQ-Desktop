@@ -85,6 +85,84 @@ struct ObservedResolver {
     first_gate: Mutex<Option<oneshot::Receiver<()>>>,
 }
 
+#[tokio::test]
+async fn snowluma_start_serializes_with_same_bot_reconcile_cleanup_and_can_cancel_while_waiting() {
+    for cancel_while_waiting in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let target = RuntimeTarget::server("server-snowluma");
+        let config = ncd_test_support::BotConfigBuilder::new()
+            .backend_type(BackendType::SnowLuma)
+            .runtime_target(target.clone())
+            .build();
+        let bot_id = BotId::new(config.bot.qq_id.to_string());
+        let (calls_tx, mut calls_rx) = mpsc::unbounded_channel();
+        let (release_start, start_gate) = oneshot::channel();
+        let manager = BotManager::new(
+            Arc::new(FixedBotRepo(config.clone())),
+            Arc::new(crate::LocalConfigStore::new(root.path())),
+            Arc::new(crate::DispatchRenderer::new(root.path(), root.path())),
+            Arc::new(UnusedBackend(BotId::new("unused"))),
+            Arc::new(crate::FileSystemRuntimeLaunchPlanner::new(root.path())),
+            Arc::new(BroadcastEventBus::default()),
+            Arc::new(crate::ReqwestNapCatWebUiClient::new().unwrap()),
+            Arc::new(crate::NoopOfflineNotifier),
+            Arc::new(RwLock::new(WebUiPollerSettings::default())),
+            Arc::new(RwLock::new(DesktopNotifySettings::default())),
+        )
+        .with_host_resolver(Arc::new(ObservedResolver {
+            calls: calls_tx,
+            first_gate: Mutex::new(Some(start_gate)),
+        }));
+        let actor = BotActorHandle::spawn(bot_id.clone());
+        actor.request_start().await.unwrap();
+        let cleanup =
+            crate::bootstrap_reconcile::lock_bot_reconcile(&manager.reconcile_locks, &bot_id).await;
+        let start = manager.start_runtime_from_starting(&bot_id, &actor, &config);
+        tokio::pin!(start);
+        tokio::select! {
+            biased;
+            _ = &mut start => panic!("start crossed the unfinished observation cleanup"),
+            _ = std::future::ready(()) => {}
+        }
+        assert!(
+            calls_rx.try_recv().is_err(),
+            "no remote startup before old cleanup"
+        );
+        let other = crate::bootstrap_reconcile::lock_bot_reconcile(
+            &manager.reconcile_locks,
+            &BotId::new("another-bot"),
+        )
+        .await;
+        drop(other);
+
+        if cancel_while_waiting {
+            actor.request_stop().await.unwrap();
+            assert!(matches!(start.await, Err(BotManagerError::Cancelled)));
+            assert!(calls_rx.try_recv().is_err());
+            drop(cleanup);
+        } else {
+            drop(cleanup);
+            tokio::select! {
+                biased;
+                _ = &mut start => panic!("fixture must pause startup at host resolution"),
+                called = calls_rx.recv() => assert_eq!(called, Some(target)),
+            }
+            let cleanup_after_start =
+                crate::bootstrap_reconcile::lock_bot_reconcile(&manager.reconcile_locks, &bot_id);
+            tokio::pin!(cleanup_after_start);
+            tokio::select! {
+                biased;
+                _ = &mut cleanup_after_start => panic!("cleanup crossed an in-flight start"),
+                _ = std::future::ready(()) => {}
+            }
+            release_start.send(()).unwrap();
+            assert!(start.await.is_err());
+            drop(cleanup_after_start.await);
+        }
+        actor.shutdown().await.unwrap();
+    }
+}
+
 #[async_trait]
 impl HostResolver for ObservedResolver {
     async fn resolve(

@@ -785,8 +785,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     async fn detach_remote_snowluma_sessions(&self, server_id: &str) {
+        crate::launch::router::cancel_remote_snowluma_initialization(
+            &self.remote_snowluma_init_locks,
+            Some(server_id),
+        )
+        .await;
         self.windows_bots.detach_server(server_id).await;
         self.docker_sessions.detach_snowluma_server(server_id).await;
+        let daemon = {
+            let daemons = self.remote_snowluma_daemons.lock().await;
+            daemons.get(server_id).cloned()
+        };
+        if let Some(daemon) = daemon {
+            daemon.detach_local_sessions().await;
+        }
         let backend = {
             let backends = self.remote_snowluma_backends.lock().await;
             backends.get(server_id).cloned()
@@ -795,13 +807,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             backend.detach_login_pollers().await;
         }
         self.remote_snowluma_tunnels.drop_server(server_id).await;
-        let daemon = {
-            let daemons = self.remote_snowluma_daemons.lock().await;
-            daemons.get(server_id).cloned()
-        };
-        if let Some(daemon) = daemon {
-            daemon.detach_local_sessions().await;
-        }
         info!(
             target: "ncd_runtime::bot_manager",
             server_id,
@@ -1730,6 +1735,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             target: "ncd_runtime::bot_manager",
             "桌面退出：停止本机 Bot，远端保持运行"
         );
+        crate::launch::router::cancel_remote_snowluma_initialization(
+            &self.remote_snowluma_init_locks,
+            None,
+        )
+        .await;
         let configs = self.repo.list().await.unwrap_or_default();
         let snapshots: Vec<BotActorSnapshot> = {
             let actors = self.actors.read().await;
@@ -1767,11 +1777,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         self.remote_snowluma_tunnels.shutdown_all().await;
         self.windows_bots.close_all().await;
-        {
-            let daemons = self.remote_snowluma_daemons.lock().await;
-            for daemon in daemons.values() {
-                daemon.detach_local_sessions().await;
-            }
+        let daemons: Vec<_> = self
+            .remote_snowluma_daemons
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect();
+        for daemon in daemons {
+            daemon.detach_local_sessions().await;
         }
 
         self.remote_runtime_sessions().shutdown_all().await;
@@ -2093,11 +2107,27 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         handle: &BotActorHandle,
         config: &BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
-        self.write_watch_intent(config, true).await;
         // 取消令牌:stop_bot 在 Starting 阶段会 cancel,检测到后静默退出,避免重复报错
         let cancel = handle.cancellation_token();
-
         let scenario = RuntimeScenario::from_config(config)?;
+        // A completed old probe must finish releasing its lease before this Bot
+        // can acquire a new one. Different Bots retain their parallel startup.
+        let _reconcile_guard = if matches!(
+            &scenario,
+            RuntimeScenario::RemoteNative {
+                backend: BackendType::SnowLuma,
+                ..
+            }
+        ) {
+            Some(tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err(BotManagerError::Cancelled),
+                guard = crate::bootstrap_reconcile::lock_bot_reconcile(&self.reconcile_locks, bot_id) => guard,
+            })
+        } else {
+            None
+        };
+        self.write_watch_intent(config, true).await;
         let mut runtime_config = match &scenario {
             RuntimeScenario::LocalNative { .. } => {
                 let base = self.build_runtime_config(bot_id, config);
@@ -2303,6 +2333,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// - 任何错误只记录到返回值,不会阻塞其它 Bot 的清理
     pub async fn shutdown_all(&self) -> BatchResult {
         info!(target: "ncd_runtime::bot_manager", "应用退出：正在停止所有运行中的 Bot");
+        crate::launch::router::cancel_remote_snowluma_initialization(
+            &self.remote_snowluma_init_locks,
+            None,
+        )
+        .await;
         let snapshots: Vec<BotActorSnapshot> = {
             let actors = self.actors.read().await;
             actors.values().map(|h| h.snapshot()).collect()

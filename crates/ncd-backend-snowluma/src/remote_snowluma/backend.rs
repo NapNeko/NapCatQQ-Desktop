@@ -699,6 +699,7 @@ impl RemoteSnowLumaBackend {
     pub async fn detach_status_poller(&self, bot_id: &BotId) {
         self.dispose_poller(bot_id).await;
         self.login_clients.lock().await.remove(bot_id);
+        self.daemon.release_bot(bot_id).await;
     }
 
     /// 供 bootstrap reconcile 取日志 follow 路径,不暴露整个 daemon
@@ -717,113 +718,117 @@ impl RemoteSnowLumaBackend {
         pid: u32,
         config: &BotConfig,
     ) -> Result<(), BotBackendError> {
-        // SSH 重连可能换了本地端口；旧 poller 存在不代表仍能访问新的隧道。
-        self.dispose_poller(&bot_id).await;
-        self.login_clients.lock().await.remove(&bot_id);
-        let qq_id = config.bot.qq_id.to_string();
-        let host = self.daemon.current_host().await;
-        self.remember_login_pid(&bot_id, host.as_ref(), pid).await;
-        if let Ok(Some(session)) = LoginSession::recover(
-            host.as_ref(),
-            self.daemon.paths(),
-            &bot_id,
-            pid,
-            &self.daemon.layout().node_bin,
-        )
-        .await
-        {
-            self.login_sessions
-                .lock()
-                .await
-                .insert(bot_id.clone(), session);
-            if !self.qr_login_enabled() {
-                let _ = self.close_qr_login(&bot_id).await;
-            }
-        }
-        if let Err(err) =
-            remember_remote_bot_pid(host.as_ref(), self.daemon.paths(), &qq_id, pid).await
-        {
-            tracing::warn!(
-                target: "ncd_runtime::remote_snowluma",
-                bot_id = %bot_id,
-                %err,
-                "reconcile: 未能写下 pid_bot（仍按进程认运行）"
-            );
-        }
-
-        self.start_modes
-            .lock()
-            .await
-            .insert(bot_id.clone(), resolve_start_mode(config));
-
-        // Desktop 重开后重新注册已存活账号，恢复缺失 node 时仍预加载共享探针。
-        if let Some(injector) = &self.metrics_injector {
-            if let Some(env) = injector
-                .prepare(
+        self.daemon
+            .in_current_session(async {
+                // SSH 重连可能换了本地端口；旧 poller 存在不代表仍能访问新的隧道。
+                self.dispose_poller(&bot_id).await;
+                self.login_clients.lock().await.remove(&bot_id);
+                let qq_id = config.bot.qq_id.to_string();
+                let host = self.daemon.current_host().await;
+                self.remember_login_pid(&bot_id, host.as_ref(), pid).await;
+                if let Ok(Some(session)) = LoginSession::recover(
                     host.as_ref(),
-                    self.daemon.remote_home(),
-                    bot_id.as_str(),
-                    config,
+                    self.daemon.paths(),
+                    &bot_id,
+                    pid,
+                    &self.daemon.layout().node_bin,
                 )
                 .await
-            {
-                self.daemon.apply_metrics_node_env(Some(env)).await?;
-            }
-        }
+                {
+                    self.login_sessions
+                        .lock()
+                        .await
+                        .insert(bot_id.clone(), session);
+                    if !self.qr_login_enabled() {
+                        let _ = self.close_qr_login(&bot_id).await;
+                    }
+                }
+                if let Err(err) =
+                    remember_remote_bot_pid(host.as_ref(), self.daemon.paths(), &qq_id, pid).await
+                {
+                    tracing::warn!(
+                        target: "ncd_runtime::remote_snowluma",
+                        bot_id = %bot_id,
+                        %err,
+                        "reconcile: 未能写下 pid_bot（仍按进程认运行）"
+                    );
+                }
 
-        if let Err(err) = self.daemon.ensure_running_for_reconcile_bot(&bot_id).await {
-            tracing::warn!(
-                target: "ncd_runtime::remote_snowluma",
-                bot_id = %bot_id,
-                %err,
-                "reconcile: SnowLuma 隧道未建立，跳过 WebUI 注入"
-            );
-            self.event_bus
-                .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
-            return Err(err);
-        }
-        let Some(endpoints) = self.daemon.tunnel_endpoints().await else {
-            tracing::info!(
-                target: "ncd_runtime::remote_snowluma",
-                bot_id = %bot_id,
-                "reconcile: 无 WebUI 隧道（node 未在或端口未解析），仅同步运行态"
-            );
-            self.event_bus
-                .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
-            return Err(BotBackendError::Io("SnowLuma WebUI 隧道尚未建立".into()));
-        };
-        let http = match inject_via_tunnel(&endpoints, pid).await {
-            Ok(c) => c,
-            Err(err) => {
-                tracing::warn!(
-                    target: "ncd_runtime::remote_snowluma",
-                    bot_id = %bot_id,
-                    pid,
-                    %err,
-                    "reconcile: WebUI 注入失败（密码未知或端口刚换），Bot 仍标为运行中"
-                );
+                self.start_modes
+                    .lock()
+                    .await
+                    .insert(bot_id.clone(), resolve_start_mode(config));
+
+                // Desktop 重开后重新注册已存活账号，恢复缺失 node 时仍预加载共享探针。
+                if let Some(injector) = &self.metrics_injector {
+                    if let Some(env) = injector
+                        .prepare(
+                            host.as_ref(),
+                            self.daemon.remote_home(),
+                            bot_id.as_str(),
+                            config,
+                        )
+                        .await
+                    {
+                        self.daemon.apply_metrics_node_env(Some(env)).await?;
+                    }
+                }
+
+                if let Err(err) = self.daemon.ensure_running_for_reconcile_bot(&bot_id).await {
+                    tracing::warn!(
+                        target: "ncd_runtime::remote_snowluma",
+                        bot_id = %bot_id,
+                        %err,
+                        "reconcile: SnowLuma 隧道未建立，跳过 WebUI 注入"
+                    );
+                    self.event_bus
+                        .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+                    return Err(err);
+                }
+                let Some(endpoints) = self.daemon.tunnel_endpoints().await else {
+                    tracing::info!(
+                        target: "ncd_runtime::remote_snowluma",
+                        bot_id = %bot_id,
+                        "reconcile: 无 WebUI 隧道（node 未在或端口未解析），仅同步运行态"
+                    );
+                    self.event_bus
+                        .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+                    return Err(BotBackendError::Io("SnowLuma WebUI 隧道尚未建立".into()));
+                };
+                let http = match inject_via_tunnel(&endpoints, pid).await {
+                    Ok(c) => c,
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "ncd_runtime::remote_snowluma",
+                            bot_id = %bot_id,
+                            pid,
+                            %err,
+                            "reconcile: WebUI 注入失败（密码未知或端口刚换），Bot 仍标为运行中"
+                        );
+                        self.event_bus
+                            .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
+                        return Err(err);
+                    }
+                };
                 self.event_bus
-                    .publish(DomainEvent::snowluma_login_probe_unavailable(bot_id));
-                return Err(err);
-            }
-        };
-        self.event_bus
-            .publish(DomainEvent::snowluma_bot_injected(bot_id.clone(), pid));
-        self.event_bus
-            .publish(DomainEvent::SnowLumaDockerEndpointsReady {
-                bot_id: bot_id.clone(),
-            });
+                    .publish(DomainEvent::snowluma_bot_injected(bot_id.clone(), pid));
+                self.event_bus
+                    .publish(DomainEvent::SnowLumaDockerEndpointsReady {
+                        bot_id: bot_id.clone(),
+                    });
 
-        let poller_deps = PollerDeps {
-            event_bus: Arc::clone(&self.event_bus),
-            http: Arc::clone(&http),
-            proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
-                pid,
-            )),
-            expected_uin: Some(qq_id),
-        };
-        self.replace_poller(bot_id, pid, poller_deps).await;
-        Ok(())
+                let poller_deps = PollerDeps {
+                    event_bus: Arc::clone(&self.event_bus),
+                    http: Arc::clone(&http),
+                    proc_tree: Arc::new(
+                        crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(pid),
+                    ),
+                    expected_uin: Some(qq_id),
+                };
+                self.replace_poller(bot_id, pid, poller_deps).await;
+                Ok(())
+            })
+            .await
     }
 }
 
@@ -854,6 +859,7 @@ impl BotBackend for RemoteSnowLumaBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        self.daemon.in_current_session(async {
         let config = ctx
             .bot_config
             .as_ref()
@@ -1045,6 +1051,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                 expected_uin: Some(qq_id_str.clone()),
             };
             self.replace_poller(bot_id.clone(), pid, poller_deps).await;
+            self.daemon.confirm_bot_started(&bot_id).await;
 
             self.event_bus
                 .publish(DomainEvent::SnowLumaDockerEndpointsReady {
@@ -1058,6 +1065,7 @@ impl BotBackend for RemoteSnowLumaBackend {
             self.daemon.release_bot(&bot_id).await;
         }
         started
+        }).await
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {

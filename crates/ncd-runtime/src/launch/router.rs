@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use rand::RngCore;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::events::BroadcastEventBus;
 use crate::host_resolver::HostResolver;
@@ -23,7 +24,45 @@ use ncd_traits::SecretStore;
 use ncd_traits::runtime_backend::BotBackend;
 
 pub(crate) type DockerQrLoginLocks = Arc<Mutex<HashMap<(String, u64), Arc<Mutex<()>>>>>;
-pub(crate) type RemoteSnowLumaInitLocks = Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>;
+pub(crate) type RemoteSnowLumaInitLocks = Arc<Mutex<HashMap<String, Weak<RemoteSnowLumaInit>>>>;
+
+pub(crate) struct RemoteSnowLumaInit {
+    lock: Mutex<()>,
+    cancel: CancellationToken,
+}
+
+async fn remote_snowluma_init_lock(
+    locks: &RemoteSnowLumaInitLocks,
+    server_id: &str,
+) -> Arc<RemoteSnowLumaInit> {
+    let mut locks = locks.lock().await;
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(server_id).and_then(Weak::upgrade) {
+        return lock;
+    }
+    let lock = Arc::new(RemoteSnowLumaInit {
+        lock: Mutex::new(()),
+        cancel: CancellationToken::new(),
+    });
+    locks.insert(server_id.to_string(), Arc::downgrade(&lock));
+    lock
+}
+
+pub(crate) async fn cancel_remote_snowluma_initialization(
+    locks: &RemoteSnowLumaInitLocks,
+    server_id: Option<&str>,
+) {
+    let mut locks = locks.lock().await;
+    if let Some(server_id) = server_id {
+        if let Some(slot) = locks.remove(server_id).and_then(|slot| slot.upgrade()) {
+            slot.cancel.cancel();
+        }
+    } else {
+        for slot in locks.drain().filter_map(|(_, slot)| slot.upgrade()) {
+            slot.cancel.cancel();
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeRouterError {
@@ -374,22 +413,21 @@ impl RuntimeBackendRouter {
         let sid = server_id.to_string();
         let cached = self.remote_snowluma_daemons.lock().await.get(&sid).cloned();
         if let Some(daemon) = cached {
-            daemon.replace_host(Arc::clone(&host)).await;
+            self.refresh_remote_snowluma_host(&daemon, server_id, Arc::clone(&host))
+                .await?;
             return Ok(daemon);
         }
         // A batch should probe a server's installation once. Keep other servers
         // independent and release this guard on errors so a retry can initialize.
-        let init_lock = self
-            .remote_snowluma_init_locks
-            .lock()
-            .await
-            .entry(sid.clone())
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone();
-        let _init = init_lock.lock().await;
+        let init_lock = remote_snowluma_init_lock(&self.remote_snowluma_init_locks, &sid).await;
+        tokio::select! {
+        biased;
+        _ = init_lock.cancel.cancelled() => Err(RuntimeRouterError::Render("远端 SnowLuma 初始化已取消，请重试".into())),
+        result = async {
+        let _init = init_lock.lock.lock().await;
         let cached = self.remote_snowluma_daemons.lock().await.get(&sid).cloned();
         if let Some(daemon) = cached {
-            daemon.replace_host(Arc::clone(&host)).await;
+            self.refresh_remote_snowluma_host(&daemon, server_id, Arc::clone(&host)).await?;
             return Ok(daemon);
         }
         let daemon = if let Some(inv) = self.ensure_inventory(&sid, host.as_ref()).await.ok() {
@@ -421,11 +459,45 @@ impl RuntimeBackendRouter {
         };
         // Do not hold the global registry lock across remote I/O.
         let daemon = {
+            let initializing = self.remote_snowluma_init_locks.lock().await;
+            if !initializing.get(&sid).is_some_and(|slot| Weak::ptr_eq(slot, &Arc::downgrade(&init_lock))) {
+                return Err(RuntimeRouterError::Render("远端 SnowLuma 初始化已取消，请重试".into()));
+            }
             let mut guard = self.remote_snowluma_daemons.lock().await;
             Arc::clone(guard.entry(sid).or_insert(daemon))
         };
-        daemon.replace_host(host).await;
+        self.refresh_remote_snowluma_host(&daemon, server_id, host).await?;
         Ok(daemon)
+        } => result,
+        }
+    }
+
+    async fn refresh_remote_snowluma_host(
+        &self,
+        daemon: &RemoteSnowLumaDaemon,
+        server_id: &str,
+        host: Arc<dyn Host>,
+    ) -> Result<(), RuntimeRouterError> {
+        let expected = Arc::clone(&host);
+        daemon
+            .replace_host_if_current(host, async {
+                let current = if let Some(manager) = &self.server_manager {
+                    manager.get_host(server_id).await
+                } else if let Some(resolver) = &self.host_resolver {
+                    resolver
+                        .resolve(&RuntimeTarget::server(server_id.to_string()))
+                        .await
+                        .ok()
+                } else {
+                    // An explicitly injected Host has no external connection registry.
+                    Some(Arc::clone(&expected))
+                };
+                current
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, &expected))
+            })
+            .await
+            .map_err(|error| RuntimeRouterError::Render(error.to_string()))
     }
 
     /// 同 server 的远端 SL backend 单例:持有 per-bot status poller。
@@ -550,5 +622,44 @@ impl RuntimeBackendRouter {
                 .unwrap_or_else(|| Arc::clone(&self.local_backend)),
             BackendType::NapCat => Arc::clone(&self.local_backend),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn snowluma_init_lock_is_shared_only_while_initialization_is_live() {
+        let locks = Arc::new(Mutex::new(HashMap::new()));
+        let first = remote_snowluma_init_lock(&locks, "first").await;
+        let waiter = remote_snowluma_init_lock(&locks, "first").await;
+        assert!(Arc::ptr_eq(&first, &waiter));
+        let other = remote_snowluma_init_lock(&locks, "other").await;
+        assert!(!Arc::ptr_eq(&first, &other));
+        drop(first);
+        drop(waiter);
+
+        let retry = remote_snowluma_init_lock(&locks, "first").await;
+        assert_eq!(locks.lock().await.len(), 2);
+        drop(retry);
+        drop(other);
+        let next = remote_snowluma_init_lock(&locks, "next").await;
+        assert_eq!(locks.lock().await.len(), 1);
+        assert_eq!(Arc::strong_count(&next), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelling_initialization_detaches_the_old_generation_before_retry() {
+        let locks = Arc::new(Mutex::new(HashMap::new()));
+        let old = remote_snowluma_init_lock(&locks, "server").await;
+        cancel_remote_snowluma_initialization(&locks, Some("server")).await;
+        assert!(old.cancel.is_cancelled());
+        let fresh = remote_snowluma_init_lock(&locks, "server").await;
+        assert!(!Arc::ptr_eq(&old, &fresh));
+        assert!(!fresh.cancel.is_cancelled());
+        cancel_remote_snowluma_initialization(&locks, None).await;
+        assert!(fresh.cancel.is_cancelled());
+        assert!(locks.lock().await.is_empty());
     }
 }

@@ -5,6 +5,7 @@
 //! 多 Bot 同 server_id 共享隧道,引用计数归零后关闭
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError};
@@ -34,8 +35,10 @@ struct TunnelBundle {
 }
 
 pub struct RemoteSnowLumaTunnelRegistry {
-    by_server: Mutex<HashMap<String, TunnelBundle>>,
+    by_server: Mutex<HashMap<String, TunnelSlot>>,
 }
+
+type TunnelSlot = Arc<Mutex<Option<TunnelBundle>>>;
 
 impl Default for RemoteSnowLumaTunnelRegistry {
     fn default() -> Self {
@@ -54,8 +57,12 @@ impl RemoteSnowLumaTunnelRegistry {
         &self,
         server_id: &str,
     ) -> Option<RemoteSnowLumaTunnelEndpoints> {
-        let guard = self.by_server.lock().await;
-        guard.get(server_id).map(|b| RemoteSnowLumaTunnelEndpoints {
+        let slot = self.by_server.lock().await.get(server_id).cloned()?;
+        let guard = slot.lock().await;
+        if !self.is_current(server_id, &slot).await {
+            return None;
+        }
+        guard.as_ref().map(|b| RemoteSnowLumaTunnelEndpoints {
             webui_local_port: b.webui.local_port(),
             novnc_local_port: b.novnc.local_port(),
             webui_password: b.webui_password.clone(),
@@ -74,8 +81,19 @@ impl RemoteSnowLumaTunnelRegistry {
         remote_webui_port: u16,
         remote_novnc_port: u16,
     ) -> Result<RemoteSnowLumaTunnelEndpoints, HostError> {
-        let mut guard = self.by_server.lock().await;
-        if let Some(bundle) = guard.get(server_id) {
+        let slot = self
+            .by_server
+            .lock()
+            .await
+            .entry(server_id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(None)))
+            .clone();
+        // Only this server waits for SSH. Dropping its slot invalidates every pending opener.
+        let mut guard = slot.lock().await;
+        if !self.is_current(server_id, &slot).await {
+            return Err(HostError::Cancelled);
+        }
+        if let Some(bundle) = guard.as_ref() {
             if tunnel_remote_ports_changed(
                 bundle.remote_webui_port,
                 remote_webui_port,
@@ -89,10 +107,10 @@ impl RemoteSnowLumaTunnelRegistry {
                     new_webui = remote_webui_port,
                     "SnowLuma 远端端口已变，重建 SSH 隧道"
                 );
-                guard.remove(server_id);
+                *guard = None;
             }
         }
-        if let Some(bundle) = guard.get_mut(server_id) {
+        if let Some(bundle) = guard.as_mut() {
             // 复用隧道句柄，但密码以本次从 secret 读到的为准（接管会换密）。
             bundle.webui_password = adopt_incoming_secret(&bundle.webui_password, &webui_password);
             bundle.vnc_password = adopt_incoming_secret(&bundle.vnc_password, &vnc_password);
@@ -115,8 +133,21 @@ impl RemoteSnowLumaTunnelRegistry {
         } else {
             remote_novnc_port
         };
-        let webui = open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, remote_webui).await?;
-        let novnc = open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, remote_novnc).await?;
+        let opened = async {
+            let webui =
+                open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, remote_webui).await?;
+            let novnc =
+                open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, remote_novnc).await?;
+            Ok::<_, HostError>((webui, novnc))
+        }
+        .await;
+        let (webui, novnc) = match opened {
+            Ok(opened) => opened,
+            Err(error) => {
+                self.remove_current(server_id, &slot).await;
+                return Err(error);
+            }
+        };
 
         let eps = RemoteSnowLumaTunnelEndpoints {
             webui_local_port: webui.local_port(),
@@ -124,24 +155,32 @@ impl RemoteSnowLumaTunnelRegistry {
             webui_password: webui_password.clone(),
             vnc_password: vnc_password.clone(),
         };
-        guard.insert(
-            server_id.to_string(),
-            TunnelBundle {
-                webui,
-                novnc,
-                webui_password,
-                vnc_password,
-                remote_webui_port: remote_webui,
-                remote_novnc_port: remote_novnc,
-                refcount: 1,
-            },
-        );
+        let current = self.by_server.lock().await;
+        if !current
+            .get(server_id)
+            .is_some_and(|entry| Arc::ptr_eq(entry, &slot))
+        {
+            return Err(HostError::Cancelled);
+        }
+        *guard = Some(TunnelBundle {
+            webui,
+            novnc,
+            webui_password,
+            vnc_password,
+            remote_webui_port: remote_webui,
+            remote_novnc_port: remote_novnc,
+            refcount: 1,
+        });
         Ok(eps)
     }
 
     pub async fn release(&self, server_id: &str) {
-        let mut guard = self.by_server.lock().await;
-        let Some(bundle) = guard.get_mut(server_id) else {
+        let Some(slot) = self.by_server.lock().await.get(server_id).cloned() else {
+            return;
+        };
+        let mut guard = slot.lock().await;
+        let Some(bundle) = guard.as_mut() else {
+            self.remove_current(server_id, &slot).await;
             return;
         };
         if bundle.refcount == 0 {
@@ -149,7 +188,26 @@ impl RemoteSnowLumaTunnelRegistry {
         }
         bundle.refcount -= 1;
         if bundle.refcount == 0 {
-            guard.remove(server_id);
+            *guard = None;
+            self.remove_current(server_id, &slot).await;
+        }
+    }
+
+    async fn is_current(&self, server_id: &str, slot: &TunnelSlot) -> bool {
+        self.by_server
+            .lock()
+            .await
+            .get(server_id)
+            .is_some_and(|current| Arc::ptr_eq(current, slot))
+    }
+
+    async fn remove_current(&self, server_id: &str, slot: &TunnelSlot) {
+        let mut entries = self.by_server.lock().await;
+        if entries
+            .get(server_id)
+            .is_some_and(|current| Arc::ptr_eq(current, slot))
+        {
+            entries.remove(server_id);
         }
     }
 

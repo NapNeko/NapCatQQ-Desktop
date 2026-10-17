@@ -36,6 +36,21 @@ pub(crate) fn count_native_snowluma_bots(configs: &[BotConfig]) -> HashMap<Strin
 
 pub(crate) type ReconcileLocks = Arc<Mutex<HashMap<BotId, Arc<Mutex<()>>>>>;
 
+pub(crate) async fn lock_bot_reconcile(
+    locks: &ReconcileLocks,
+    bot_id: &BotId,
+) -> tokio::sync::OwnedMutexGuard<()> {
+    let gate = {
+        let mut locks = locks.lock().await;
+        Arc::clone(
+            locks
+                .entry(bot_id.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        )
+    };
+    gate.lock_owned().await
+}
+
 pub(crate) struct BootstrapReconciler<R: BotConfigRepo + 'static> {
     actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
     host_resolver: Option<Arc<dyn HostResolver>>,
@@ -103,15 +118,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         refresh_stopped: bool,
     ) -> Result<bool, BotManagerError> {
         let bot_id = BotId::new(config.bot.qq_id.to_string());
-        let gate = {
-            let mut locks = self.locks.lock().await;
-            Arc::clone(
-                locks
-                    .entry(bot_id.clone())
-                    .or_insert_with(|| Arc::new(Mutex::new(()))),
-            )
-        };
-        let _guard = gate.lock().await;
+        let _guard = lock_bot_reconcile(&self.locks, &bot_id).await;
         let handle = self
             .actors
             .read()
@@ -210,6 +217,14 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             RuntimeScenario::LocalNative { .. } => return Ok(false),
         };
         if pid.is_none() && !refresh_stopped {
+            if handle.snapshot().revision != before.revision {
+                return Err(BotManagerError::RemoteRead(
+                    "探测期间 Bot 状态已变化，请稍后刷新".into(),
+                ));
+            }
+            if let Some(backend) = sl_backend {
+                backend.detach_status_poller(&bot_id).await;
+            }
             return Ok(false);
         }
         let snapshot = handle

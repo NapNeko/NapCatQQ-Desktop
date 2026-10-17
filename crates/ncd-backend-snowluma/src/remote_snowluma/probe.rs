@@ -73,56 +73,106 @@ pub async fn is_stack_ready(
 /// A successful bootstrap may be reused only while its exact node process lives.
 /// Include Linux start time and configuration metadata so a recycled pid or
 /// credentials edited outside Desktop cannot validate a stale session.
-fn managed_node_identity_script(paths: &SnowLumaRemotePaths) -> String {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManagedNodeIdentity {
+    pub pid: u32,
+    fingerprint: String,
+}
+
+fn managed_node_identity_script(
+    paths: &SnowLumaRemotePaths,
+    pid_hint: Option<u32>,
+    secret_paths: &[String],
+) -> String {
     format!(
         r#"# ncd-snowluma-node-identity
-SL={sl}
-for pid_file in {pid_node} {pid_daemon}; do
-  pid=$(cat "$pid_file" 2>/dev/null) || continue
-  case "$pid" in ''|0|*[!0-9]*) continue ;; esac
-  kill -0 "$pid" 2>/dev/null || continue
-  comm=$(cat "/proc/$pid/comm" 2>/dev/null) || continue
-  case "$comm" in node|nodejs) ;; *) continue ;; esac
-  cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null) || continue
-  [ "$cwd" = "$SL" ] || continue
-  stat=$(cat "/proc/$pid/stat" 2>/dev/null) || continue
+SL_PATH={sl}
+SL=$(readlink -f "$SL_PATH") || exit 1
+file_identity() {{
+  for path in "$@"; do
+    if [ -e "$path" ] || [ -L "$path" ]; then
+      stat -Lc '%d:%i:%s:%y:%z' -- "$path" || return 1
+    elif [ -x "$(dirname "$path")" ]; then
+      printf 'missing:%s\n' "$path"
+    else
+      return 1
+    fi
+  done
+}}
+identity() {{
+  pid="$1"
+  case "$pid" in ''|0|*[!0-9]*) return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  comm=$(cat "/proc/$pid/comm" 2>/dev/null) || return 1
+  case "$comm" in node|nodejs) ;; *) return 1 ;; esac
+  cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null) || return 1
+  if [ "$cwd" != "$SL" ]; then
+    args=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
+    printf '%s\n' "$args" | grep -Fx -e "$SL/index.mjs" -e "$SL_PATH/index.mjs" >/dev/null || return 1
+  fi
+  stat=$(cat "/proc/$pid/stat" 2>/dev/null) || return 1
   stat=${{stat##*) }}
   set -- $stat
-  [ "$#" -ge 20 ] || continue
-  case "$1" in Z|X) continue ;; esac
+  [ "$#" -ge 20 ] || return 1
+  case "$1" in Z|X) return 1 ;; esac
   shift 19
-  case "$1" in ''|*[!0-9]*) continue ;; esac
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  files=$(file_identity {runtime_json} {webui_json} {webui_secret} {vnc_secret} {secret_paths}) || return 1
   printf '%s:%s\n' "$pid" "$1"
-  stat -Lc '%d:%i:%s:%y:%z' -- {runtime_json} {webui_json} {webui_secret} {vnc_secret} || exit 1
-  exit 0
+  printf '%s\n' "$files"
+}}
+PID_HINT={pid_hint}
+if [ -n "$PID_HINT" ]; then
+  identity "$PID_HINT"
+  exit $?
+fi
+for pid_file in {pid_node} {pid_daemon}; do
+  pid=$(cat "$pid_file" 2>/dev/null) || continue
+  identity "$pid" && exit 0
+done
+# Imported services do not write Desktop pid files. Scan once, then keep the verified pid.
+for proc in /proc/[0-9]*; do
+  identity "${{proc#/proc/}}" && exit 0
 done
 exit 1
 "#,
         sl = shell_single_quote(&paths.snowluma_dir),
+        pid_hint = shell_single_quote(&pid_hint.map(|pid| pid.to_string()).unwrap_or_default()),
         pid_node = shell_single_quote(&paths.pid_node_path()),
         pid_daemon = shell_single_quote(&paths.pid_daemon),
         runtime_json = shell_single_quote(&format!("{}/runtime.json", paths.config_dir)),
         webui_json = shell_single_quote(&format!("{}/webui.json", paths.config_dir)),
         webui_secret = shell_single_quote(&paths.webui_secret),
         vnc_secret = shell_single_quote(&paths.vnc_secret),
+        secret_paths = secret_paths
+            .iter()
+            .map(|path| shell_single_quote(path))
+            .collect::<Vec<_>>()
+            .join(" "),
     )
 }
 
 pub(crate) async fn managed_node_identity(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
-) -> Option<String> {
+    pid_hint: Option<u32>,
+    secret_paths: &[String],
+) -> Option<ManagedNodeIdentity> {
     let out = host
         .run_to_string(
             HostCommand::new("sh")
                 .arg("-c")
-                .arg(managed_node_identity_script(paths))
+                .arg(managed_node_identity_script(paths, pid_hint, secret_paths))
                 .timeout(Duration::from_secs(5)),
         )
         .await
         .ok()?;
-    let identity = out.stdout.trim();
-    (out.success() && !identity.is_empty()).then(|| identity.to_string())
+    if !out.success() {
+        return None;
+    }
+    let fingerprint = out.stdout.trim().to_string();
+    let pid = fingerprint.split_once(':')?.0.parse().ok()?;
+    (pid != 0).then_some(ManagedNodeIdentity { pid, fingerprint })
 }
 
 pub(crate) fn qq_main_running_script(qq_bin: &str) -> String {
@@ -717,7 +767,7 @@ mod tests {
         let probe = |paths: &SnowLumaRemotePaths| {
             std::process::Command::new("sh")
                 .arg("-c")
-                .arg(managed_node_identity_script(paths))
+                .arg(managed_node_identity_script(paths, None, &[]))
                 .output()
                 .unwrap()
         };
@@ -728,10 +778,48 @@ mod tests {
             String::from_utf8_lossy(&first.stderr)
         );
         assert_eq!(first.stdout, probe(&paths).stdout);
+        std::fs::remove_file(paths.pid_node_path()).unwrap();
+        assert_eq!(
+            first.stdout,
+            probe(&paths).stdout,
+            "imported node has no Desktop pid file"
+        );
+        let hinted = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(managed_node_identity_script(
+                &paths,
+                Some(child.0.id()),
+                &[],
+            ))
+            .output()
+            .unwrap();
+        assert_eq!(first.stdout, hinted.stdout);
         std::fs::write(&paths.webui_secret, b"changed credentials").unwrap();
         let changed = probe(&paths);
         assert!(changed.status.success());
         assert_ne!(first.stdout, changed.stdout);
+        std::fs::remove_file(&paths.webui_secret).unwrap();
+        let fallback = root.path().join("external-webui.secret");
+        std::fs::write(&fallback, b"external credentials").unwrap();
+        let imported = || {
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg(managed_node_identity_script(
+                    &paths,
+                    Some(child.0.id()),
+                    &[fallback.to_str().unwrap().into()],
+                ))
+                .output()
+                .unwrap()
+        };
+        let absent_primary = imported();
+        assert!(absent_primary.status.success());
+        assert_eq!(absent_primary.stdout, imported().stdout);
+        std::fs::write(&fallback, b"rotated external credentials").unwrap();
+        assert_ne!(absent_primary.stdout, imported().stdout);
+        let rotated = imported();
+        std::fs::write(&paths.webui_secret, b"new primary credentials").unwrap();
+        assert_ne!(rotated.stdout, imported().stdout);
         let mut other = paths.clone();
         other.snowluma_dir = "/different/install".into();
         assert!(!probe(&other).status.success());
