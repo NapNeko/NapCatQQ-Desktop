@@ -41,7 +41,13 @@ export function ComponentManageCard({
     const desc = description != null && description.trim() !== '' ? description.trim() : null;
 
     return (
-        <article className={cn(SHELL, accent === 'brand' && 'ring-1 ring-inset ring-brand/25')}>
+        <article
+            className={cn(
+                SHELL,
+                gridStyles.componentCard,
+                accent === 'brand' && 'ring-1 ring-inset ring-brand/25',
+            )}
+        >
             {accent === 'brand' ? (
                 <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-brand" />
             ) : null}
@@ -53,8 +59,11 @@ export function ComponentManageCard({
 
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex min-w-0 items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <h3 className="min-w-0 truncate font-display text-[14.5px] font-semibold leading-snug text-text">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                            <h3
+                                className="min-w-0 max-w-full truncate font-display text-[14.5px] font-semibold leading-snug text-text"
+                                title={title}
+                            >
                                 {title}
                             </h3>
                             <Badge
@@ -63,7 +72,9 @@ export function ComponentManageCard({
                                 dot={statusBadge.dot}
                                 className="max-w-[9rem] shrink-0 truncate text-[11px]"
                             >
-                                {statusBadge.label}
+                                <span className="truncate" title={statusBadge.label}>
+                                    {statusBadge.label}
+                                </span>
                             </Badge>
                         </div>
                         {titleAside ? <div className="shrink-0">{titleAside}</div> : null}
@@ -78,9 +89,21 @@ export function ComponentManageCard({
                 </div>
             </div>
 
-            <footer className="flex min-h-[2.375rem] shrink-0 items-center justify-between gap-3 border-t border-border-subtle/75 bg-inset/35 px-3.5 py-1.5">
+            <footer
+                className={cn(
+                    'flex min-h-[2.375rem] shrink-0 items-center justify-between gap-3 border-t border-border-subtle/75 bg-inset/35 px-3.5 py-1.5',
+                    gridStyles.cardFooter,
+                )}
+            >
                 <div className="min-w-0 flex-1">{meta}</div>
-                <div className="flex shrink-0 items-center justify-end gap-1.5">{footer}</div>
+                <div
+                    className={cn(
+                        'flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5',
+                        gridStyles.cardActions,
+                    )}
+                >
+                    {footer}
+                </div>
             </footer>
 
             {progressOverlay}

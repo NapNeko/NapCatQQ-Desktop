@@ -20,7 +20,12 @@ import {
     DialogFooter,
 } from '../../shared/ui';
 import { CopyCodeBlock } from '../../shared/ui/CopyCodeBlock';
-import { ActionMotionIcon, refreshMotion } from '../../shared/ui/motion';
+import {
+    ActionMotionIcon,
+    DialogStepTransition,
+    ExpandPresence,
+    refreshMotion,
+} from '../../shared/ui/motion';
 import {
     canInstallWindowsAgent,
     registerWindowsSessionCommand,
@@ -53,12 +58,20 @@ export function WindowsRemoteStatus({ server }: { server: ServerProfile }) {
                 </span>
                 <span className="text-brand">管理</span>
             </button>
-            {open ? <WindowsRemoteDetails server={server} onClose={() => setOpen(false)} /> : null}
+            <WindowsRemoteDetails open={open} server={server} onClose={() => setOpen(false)} />
         </>
     );
 }
 
-function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onClose: () => void }) {
+function WindowsRemoteDetails({
+    open,
+    server,
+    onClose,
+}: {
+    open: boolean;
+    server: ServerProfile;
+    onClose: () => void;
+}) {
     const query = useWindowsRemoteInfo(server);
     const queryClient = useQueryClient();
     const { startAction, isInstalling, onTaskTerminal } = useComponentAction();
@@ -109,7 +122,7 @@ function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onCl
 
     return (
         <Dialog
-            open
+            open={open}
             onOpenChange={(next) => {
                 if (!next) onClose();
             }}
@@ -131,10 +144,13 @@ function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onCl
                     <p className="text-sm text-text-secondary">正在读取主机状态…</p>
                 ) : null}
                 {info ? (
-                    <div className="flex flex-col gap-4">
+                    <DialogStepTransition
+                        stepKey={`${ready}:${sessionState}`}
+                        className="flex min-w-0 flex-col gap-4"
+                    >
                         <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
                             <dt className="text-text-tertiary">系统</dt>
-                            <dd className="text-text">
+                            <dd className="min-w-0 break-words text-text">
                                 {info.osVersion} · {info.architecture}
                             </dd>
                             <dt className="text-text-tertiary">SSH 账户</dt>
@@ -142,7 +158,7 @@ function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onCl
                                 {info.username} · {info.elevated ? '管理员' : '普通用户'}
                             </dd>
                             <dt className="text-text-tertiary">托管服务</dt>
-                            <dd className="text-text">
+                            <dd className="min-w-0 break-words text-text">
                                 {connected
                                     ? ready
                                         ? `运行中 · ${info.agent?.version}`
@@ -150,7 +166,9 @@ function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onCl
                                     : '状态待刷新'}
                             </dd>
                             <dt className="text-text-tertiary">QQ 会话</dt>
-                            <dd className="text-text">{sessionLabels[sessionState]}</dd>
+                            <dd className="min-w-0 break-words text-text">
+                                {sessionLabels[sessionState]}
+                            </dd>
                             <dt className="text-text-tertiary">用户目录</dt>
                             <dd className="break-all font-mono text-text-secondary">
                                 {info.homeDir}
@@ -181,11 +199,11 @@ function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onCl
                                 ))}
                             </ul>
                         ) : null}
-                        {workerUpdatePending ? (
+                        <ExpandPresence visible={workerUpdatePending}>
                             <p role="status" className="text-xs text-warning">
                                 托管服务已更新；现有QQ继续运行，重新登录目标用户后更新会话工作进程。
                             </p>
-                        ) : null}
+                        </ExpandPresence>
                         {!ready && connected ? (
                             <div className="flex flex-col gap-2 text-xs text-text-secondary">
                                 <p>1. 启用托管服务，后台任务可在 Desktop 退出后继续。</p>
@@ -216,12 +234,12 @@ function WindowsRemoteDetails({ server, onClose }: { server: ServerProfile; onCl
                                 请在目标机解锁该用户桌面后扫码。
                             </p>
                         ) : null}
-                        {installing ? (
+                        <ExpandPresence visible={installing}>
                             <p role="status" className="text-xs text-brand">
                                 正在安装，进度见任务队列。
                             </p>
-                        ) : null}
-                    </div>
+                        </ExpandPresence>
+                    </DialogStepTransition>
                 ) : null}
                 <DialogFooter>
                     <Button size="sm" variant="ghost" onClick={onClose}>

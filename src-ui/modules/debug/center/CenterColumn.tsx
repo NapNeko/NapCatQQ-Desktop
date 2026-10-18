@@ -396,6 +396,11 @@ function TabWorkspace({
     const splitHostRef = useRef<HTMLDivElement>(null);
     const topRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
+    const splitTransition = {
+        transitionProperty: 'flex-grow, flex-shrink, flex-basis, min-height',
+        transitionDuration: `var(--debug-split-duration, ${m.duration('base')}s)`,
+        transitionTimingFunction: cssEase(m.ease.enter),
+    };
 
     return (
         <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
@@ -444,6 +449,7 @@ function TabWorkspace({
                     ref={topRef}
                     className="flex min-h-0 flex-col overflow-hidden"
                     style={{
+                        ...splitTransition,
                         flex: requestCollapsed
                             ? '0 0 36px'
                             : `${responseCollapsed ? 1 : splitRatio} 1 0px`,
@@ -477,6 +483,7 @@ function TabWorkspace({
                     ref={bottomRef}
                     className="flex min-h-0 flex-col overflow-hidden border-t border-border-subtle/70"
                     style={{
+                        ...splitTransition,
                         flex: responseCollapsed
                             ? '0 0 32px'
                             : `${requestCollapsed ? 1 : 1 - splitRatio} 1 0px`,
@@ -589,6 +596,8 @@ function SplitHandle({
         if (!host) return;
         e.preventDefault();
         e.currentTarget.setPointerCapture?.(e.pointerId);
+        // 收起 / 展开平滑分配空间，手动拖拽仍即时跟随指针。
+        host.style.setProperty('--debug-split-duration', '0s');
         const rect = host.getBoundingClientRect();
         drag.current = {
             pointerId: e.pointerId,
@@ -619,7 +628,16 @@ function SplitHandle({
         if (d.frame) cancelAnimationFrame(d.frame);
         setDragging(false);
         commit(d.ratio);
+        // 先提交拖拽的终点，再恢复折叠过渡，避免松手时补播一次位移。
+        void topRef.current?.offsetHeight;
+        hostRef.current?.style.removeProperty('--debug-split-duration');
     };
+    useEffect(
+        () => () => {
+            hostRef.current?.style.removeProperty('--debug-split-duration');
+        },
+        [hostRef],
+    );
     const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
         const height = hostRef.current?.getBoundingClientRect().height ?? 0;
         let next: number | null = null;

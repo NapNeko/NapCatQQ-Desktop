@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { Select, type SelectItem } from '../../shared/ui';
+import { ExpandPresence } from '../../shared/ui/motion';
 import { isPrerelease, parsePep440 } from '../../core/domain/apps/appVersions';
 import { useAppFrameworkVersions } from '../../hooks/apps/useAppFrameworkVersions';
 
@@ -41,9 +42,6 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
     hint,
 }) => {
     const versions = useAppFrameworkVersions(frameworkId);
-    // null = 框架不支持按版本安装：整个控件不出现
-    if (versions.data === null) return null;
-
     const latest = versions.data?.latest ?? null;
     const items: SelectItem[] = [
         {
@@ -75,18 +73,20 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
         ) : undefined;
 
     return (
-        <Select
-            label={label}
-            items={items}
-            value={value ?? '__latest__'}
-            onValueChange={(next) => onChange(next === '__latest__' ? null : next)}
-            disabled={disabled || versions.isLoading}
-            hint={
-                <>
-                    {hint}
-                    {notesNode}
-                </>
-            }
-        />
+        <ExpandPresence visible={versions.data !== null}>
+            <Select
+                label={label}
+                items={items}
+                value={value ?? '__latest__'}
+                onValueChange={(next) => onChange(next === '__latest__' ? null : next)}
+                disabled={disabled || versions.isLoading}
+                hint={
+                    <>
+                        {hint}
+                        {notesNode}
+                    </>
+                }
+            />
+        </ExpandPresence>
     );
 };

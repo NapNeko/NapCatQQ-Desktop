@@ -39,7 +39,11 @@ export function TerminalFileEditor({ file, onSave, onClose }: Props) {
 
     return (
         <Dialog open={file !== null} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent size="sheetWide" dismissOnOutsideClick={false}>
+            <DialogContent
+                size="sheetWide"
+                className="h-[min(640px,calc(100dvh-3rem))]"
+                dismissOnOutsideClick={false}
+            >
                 <div
                     className="flex min-h-0 flex-1 flex-col gap-3"
                     onKeyDown={(e) => {
@@ -49,8 +53,10 @@ export function TerminalFileEditor({ file, onSave, onClose }: Props) {
                         }
                     }}
                 >
-                    <DialogHeader>
-                        <DialogTitle>{file ? baseName(file.path) : ''}</DialogTitle>
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle className="break-all">
+                            {file ? baseName(file.path) : ''}
+                        </DialogTitle>
                         <p className="truncate font-mono text-[11px] text-text-tertiary">
                             {file?.path}
                         </p>
@@ -60,9 +66,9 @@ export function TerminalFileEditor({ file, onSave, onClose }: Props) {
                         onChange={setDraft}
                         mode={file ? editorSyntaxOf(file.path) : 'plain'}
                         aria-label="文件内容"
-                        className="min-h-[360px] flex-1"
+                        className="min-h-0 flex-1"
                     />
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0">
                         <Button variant="ghost" onClick={onClose}>
                             {dirty ? '不保存' : '关闭'}
                         </Button>

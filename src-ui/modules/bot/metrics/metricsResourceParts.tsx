@@ -107,7 +107,7 @@ export function SystemResourceCard({
                       ? '进程内存可用；主机 CPU/磁盘需 ncd-watch 写 host-stats'
                       : '进程内存可用；主机资源来自本机采样'
             }
-            className="min-h-0"
+            className="min-h-[22rem] lg:min-h-0"
         >
             <div className="flex h-full min-h-0 flex-col gap-2">
                 <ResourceMeter

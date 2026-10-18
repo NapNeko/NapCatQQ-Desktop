@@ -122,7 +122,7 @@ export function InfoBarStack({
     const node = (
         <div
             className={cn(
-                'pointer-events-none fixed right-6 top-[calc(var(--titlebar-height)+1rem)] z-50 flex w-[min(360px,calc(100vw-3rem))] flex-col gap-2.5',
+                'pointer-events-auto fixed right-6 top-[calc(var(--titlebar-height)+1rem)] z-50 flex max-h-[calc(100dvh-var(--titlebar-height)-2rem)] w-[min(360px,calc(100vw-3rem))] flex-col gap-2.5 overflow-y-auto overscroll-contain',
                 className,
             )}
         >
@@ -158,6 +158,6 @@ export function InfoBarStack({
 /// 内层 forwardRef wrapper:把 ref 直接转给 InfoBar(InfoBar 已 forwardRef)。
 import { forwardRef } from 'react';
 const InfoBarRow = forwardRef<HTMLDivElement, InfoBarProps>((props, ref) => (
-    <InfoBar ref={ref} {...props} />
+    <InfoBar ref={ref} {...props} className={cn('shrink-0', props.className)} />
 ));
 InfoBarRow.displayName = 'InfoBarRow';

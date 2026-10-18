@@ -17,6 +17,7 @@ import {
 import type { SettingsDraft } from '../../settings-draft';
 import { OneBotMessageEditor } from './OneBotMessageEditor';
 import { OneBotMessengerPicker, type OneBotCandidate } from './OneBotMessengerPicker';
+import { ExpandPresence } from '../../../../shared/ui/motion';
 import { TargetIdChipsInput } from './TargetIdChipsInput';
 
 const ONEBOT_TARGET_ITEMS = [
@@ -155,8 +156,8 @@ export function OneBotEditorDialog({
                                     }
                                 />
                             </div>
-                            {draft.onebotRelogin.enabled && (
-                                <>
+                            <ExpandPresence visible={draft.onebotRelogin.enabled}>
+                                <div className="space-y-2.5">
                                     <p className="text-xs text-text-secondary">
                                         由同机 ncd-watch 值守，需升级并同步。互助 Bot 需启用通用正向
                                         WebSocket。二维码仅私发管理员，过期后回复「刷新二维码」。监控范围沿用各
@@ -174,7 +175,7 @@ export function OneBotEditorDialog({
                                             })
                                         }
                                     />
-                                    <div className="flex items-center justify-between text-[13px]">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
                                         <span>持续掉线后通知（秒）</span>
                                         <NumberField
                                             value={draft.onebotRelogin.offlineGraceSeconds}
@@ -194,8 +195,8 @@ export function OneBotEditorDialog({
                                             }
                                         />
                                     </div>
-                                </>
-                            )}
+                                </div>
+                            </ExpandPresence>
                         </section>
 
                         <div className="flex min-h-[16rem] min-w-0 flex-1 flex-col">

@@ -1,8 +1,8 @@
 // 小节标题右边的「高级选项」：每节各自展开，展开了哪些整个详情页共用，切页回来还开着。
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { Button } from '../../../../shared/ui';
+import { ExpandChevron } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 
 export interface AdvancedSections {
@@ -52,10 +52,6 @@ export const AdvancedToggle: React.FC<{ open: boolean; onToggle: () => void }> =
         className={cn('gap-1 px-2 last:-mr-2', open ? 'text-text-secondary' : 'text-text-tertiary')}
     >
         高级选项
-        <ChevronDown
-            size={13}
-            aria-hidden
-            className={cn('transition-transform duration-200', open && 'rotate-180')}
-        />
+        <ExpandChevron open={open} size={13} />
     </Button>
 );

@@ -15,7 +15,7 @@ import {
     TextField,
     type SelectItem,
 } from '../../shared/ui';
-import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
+import { ActionMotionIcon, EMPHASIS_MOTION, ExpandPresence } from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
 import { errorText } from '../../core/domain/errors';
 import { useProbeAppProject } from '../../hooks/apps/useAppInstanceSetup';
@@ -181,7 +181,7 @@ export const ImportInstanceDialog: React.FC<{
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="flex flex-col gap-3">
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <Select
                                         label="框架"
                                         items={frameworkItems}
@@ -208,9 +208,9 @@ export const ImportInstanceDialog: React.FC<{
                                     <span className="text-xs font-medium text-text-secondary">
                                         项目目录
                                     </span>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
                                         <TextField
-                                            className="min-w-0 flex-1"
+                                            className="min-w-0 basis-40 flex-1"
                                             aria-label="项目目录"
                                             placeholder={isRemote ? '/root/my-bot' : undefined}
                                             value={path}
@@ -263,7 +263,9 @@ export const ImportInstanceDialog: React.FC<{
                                     value={displayName}
                                     onValueChange={setDisplayName}
                                 />
-                                {probe && <ProbePreview probe={probe} />}
+                                <ExpandPresence visible={probe !== null}>
+                                    {probe && <ProbePreview probe={probe} />}
+                                </ExpandPresence>
                             </div>
                             <DialogFooter>
                                 <Button
@@ -336,17 +338,17 @@ const ProbePreview: React.FC<{ probe: AppProjectProbe }> = ({ probe }) => {
 
     return (
         <div className="flex flex-col gap-2 rounded-md border border-border-subtle bg-inset/40 px-3 py-2.5">
-            <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm text-text">{probe.display_name}</p>
+            <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+                <p className="min-w-0 break-words text-sm text-text">{probe.display_name}</p>
                 {probe.version && (
                     <p className="shrink-0 text-2xs text-text-tertiary">v{probe.version}</p>
                 )}
             </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
                 {rows.map(([k, v]) => (
                     <React.Fragment key={k}>
                         <dt className="text-text-tertiary">{k}</dt>
-                        <dd className="min-w-0 text-text">{v}</dd>
+                        <dd className="min-w-0 break-all text-text">{v}</dd>
                     </React.Fragment>
                 ))}
             </dl>

@@ -79,7 +79,7 @@ export function BotFleetOverviewCard({
                 : '所有实例已停止';
 
     return (
-        <Card padding="md" className="flex flex-col gap-3.5">
+        <Card padding="md" className="flex min-h-0 flex-1 flex-col gap-3.5">
             {/* 卡片头部 */}
             <div className="flex shrink-0 items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
@@ -104,7 +104,7 @@ export function BotFleetOverviewCard({
             </div>
 
             {/* 三列关键指标 */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid shrink-0 grid-cols-3 gap-2">
                 <GlanceCell
                     label="运行中"
                     value={String(stats.running)}
@@ -145,7 +145,7 @@ export function BotFleetOverviewCard({
                     </Button>
                 </div>
             ) : (
-                <div className="space-y-2.5">
+                <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto">
                     {/* 待处置列表 */}
                     {actionable.length > 0 && (
                         <section

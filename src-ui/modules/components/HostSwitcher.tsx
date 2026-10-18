@@ -15,6 +15,10 @@ interface HostSwitcherProps {
 export const HostSwitcher: React.FC<HostSwitcherProps> = ({ machines, activeHostId, onSelect }) => {
     const tabRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
 
+    React.useEffect(() => {
+        tabRefs.current[activeHostId]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    }, [activeHostId]);
+
     const focusHost = (hostId: string) => {
         queueMicrotask(() => tabRefs.current[hostId]?.focus());
     };
@@ -61,7 +65,7 @@ export const HostSwitcher: React.FC<HostSwitcherProps> = ({ machines, activeHost
             role="tablist"
             aria-label="选择主机"
             data-tour-id="host-switcher"
-            className="inline-flex max-w-full shrink-0 flex-wrap items-center gap-1 rounded-md border border-border-subtle bg-inset/50 p-1"
+            className="flex w-max max-w-full shrink-0 items-center gap-1 overflow-x-auto rounded-md border border-border-subtle bg-inset/50 p-1"
             onKeyDown={handleKeyDown}
         >
             {machines.map((machine) => (
@@ -107,7 +111,7 @@ const HostTab = React.forwardRef<
             tabIndex={active ? 0 : -1}
             onClick={onSelect}
             className={cn(
-                'group flex min-w-0 max-w-full items-center gap-2 rounded-sm border px-2.5 py-1.5 text-left transition-all duration-fast',
+                'group flex min-w-0 max-w-full shrink-0 items-center gap-2 rounded-sm border px-2.5 py-1.5 text-left transition-all duration-fast',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                 isFailed
                     ? active

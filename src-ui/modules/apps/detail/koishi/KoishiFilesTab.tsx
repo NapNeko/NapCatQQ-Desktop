@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react';
 import {
-    ChevronRight,
     FilePlus2,
     FileText,
     Folder,
@@ -26,6 +25,7 @@ import {
     TextField,
 } from '../../../../shared/ui';
 import type { SyntaxMode } from '../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import {
     useKoishiExplorerTree,
@@ -34,6 +34,7 @@ import {
 } from '../../../../hooks/apps/useKoishiConsole';
 import { PaneLoading } from '../PaneStatus';
 import type { AppInstance, KoishiFileEntry } from '../../../../core/ipc/types';
+import { KoishiSplitPane } from './KoishiSplitPane';
 
 /** 按扩展名挑编辑器的着色模式 */
 function modeOf(name: string): SyntaxMode {
@@ -90,8 +91,8 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
     const [removing, setRemoving] = useState<string | null>(null);
 
     return (
-        <div className="flex min-h-0 flex-1 gap-4 pb-3">
-            <aside className="flex w-[260px] shrink-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
+        <KoishiSplitPane>
+            <aside className="flex h-44 max-h-[35vh] min-h-0 w-full min-w-0 shrink-0 flex-col @min-[44rem]/koishi:h-auto @min-[44rem]/koishi:max-h-none @min-[44rem]/koishi:w-[260px] overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 <div className="flex items-center gap-0.5 border-b border-border-subtle/70 px-2 py-1.5">
                     <span className="px-1 text-2xs text-text-tertiary">实例目录</span>
                     <div className="ml-auto flex items-center">
@@ -142,7 +143,7 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
                 </div>
             </aside>
 
-            <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 {openPath ? (
                     <FileView
                         key={openPath}
@@ -222,7 +223,7 @@ export const KoishiFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </KoishiSplitPane>
     );
 };
 
@@ -287,16 +288,11 @@ function Tree({
                                 <button
                                     type="button"
                                     aria-label={open ? '收起' : '展开'}
+                                    aria-expanded={open}
                                     className="flex h-5 w-4 shrink-0 items-center justify-center text-text-tertiary"
                                     onClick={() => setFolded((f) => ({ ...f, [path]: open }))}
                                 >
-                                    <ChevronRight
-                                        size={12}
-                                        className={cn(
-                                            'transition-transform duration-200',
-                                            open && 'rotate-90',
-                                        )}
-                                    />
+                                    <ExpandChevron open={open} size={12} />
                                 </button>
                             ) : (
                                 <span className="w-4 shrink-0" />
@@ -304,6 +300,7 @@ function Tree({
                             <button
                                 type="button"
                                 className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                                aria-expanded={dir ? open : undefined}
                                 onClick={() =>
                                     dir ? setFolded((f) => ({ ...f, [path]: open })) : onOpen(path)
                                 }
@@ -333,17 +330,19 @@ function Tree({
                                 </TreeAction>
                             </span>
                         </div>
-                        {dir && open && e.children && e.children.length > 0 && (
-                            <div className="pl-4">
-                                <Tree
-                                    entries={e.children}
-                                    base={path}
-                                    openPath={openPath}
-                                    onOpen={onOpen}
-                                    onRename={onRename}
-                                    onRemove={onRemove}
-                                />
-                            </div>
+                        {dir && e.children && e.children.length > 0 && (
+                            <ExpandPresence visible={open}>
+                                <div className="pl-4">
+                                    <Tree
+                                        entries={e.children}
+                                        base={path}
+                                        openPath={openPath}
+                                        onOpen={onOpen}
+                                        onRename={onRename}
+                                        onRemove={onRemove}
+                                    />
+                                </div>
+                            </ExpandPresence>
                         )}
                     </li>
                 );
@@ -414,7 +413,7 @@ function FileView({
         <>
             <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle/70 px-3.5 py-2">
                 <span className="min-w-0 truncate font-mono text-[12.5px] text-text">{path}</span>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                     {dirty && <span className="text-2xs text-warning">未保存</span>}
                     {state.phase === 'text' && (
                         <Button

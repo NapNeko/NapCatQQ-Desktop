@@ -171,7 +171,7 @@ export function TrendChartCard({
         <Panel
             title="流量趋势"
             description="约每分钟一点"
-            className="min-h-[18rem] lg:col-span-5 lg:row-span-2"
+            className="h-96 min-h-[18rem] shrink-0 lg:col-span-5 lg:row-span-2 lg:h-auto"
             aside={aside}
         >
             <div className="flex h-full min-h-0 flex-col gap-2">

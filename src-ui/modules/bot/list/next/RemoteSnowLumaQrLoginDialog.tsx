@@ -70,7 +70,7 @@ function LoginQrImage({ payload, onError }: { payload: string; onError: () => vo
             alt="QQ 登录二维码"
             width={QR_PIXEL_SIZE}
             height={QR_PIXEL_SIZE}
-            className="h-[280px] w-[280px] select-none rounded-sm"
+            className="h-full w-full select-none rounded-sm object-contain"
             draggable={false}
             onError={onError}
         />

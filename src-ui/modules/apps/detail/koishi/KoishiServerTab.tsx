@@ -3,6 +3,7 @@
 
 import { AlertTriangle, SquareArrowOutUpRight } from 'lucide-react';
 import { Button, FormSection, NumberField, Select, TextField } from '../../../../shared/ui';
+import { ExpandPresence } from '../../../../shared/ui/motion';
 import { CopyCodeBlock } from '../../../../shared/ui/CopyCodeBlock';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import { koishiServer, setServerField } from '../../../../core/domain/apps/koishiConfig';
@@ -58,7 +59,7 @@ export const KoishiServerTab: React.FC<{
                         }
                     />
                 </div>
-                {open && (
+                <ExpandPresence visible={open}>
                     <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-[13px] leading-relaxed text-text">
                         <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
                         <span>
@@ -66,7 +67,7 @@ export const KoishiServerTab: React.FC<{
                             auth 插件设好账号
                         </span>
                     </div>
-                )}
+                </ExpandPresence>
             </FormSection>
 
             <FormSection title="对外地址">

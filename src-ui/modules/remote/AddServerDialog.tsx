@@ -21,7 +21,7 @@ import {
     DialogClose,
     Button,
 } from '../../shared/ui';
-import { ActionMotionIcon } from '../../shared/ui/motion';
+import { ActionMotionIcon, DialogStepTransition, ExpandPresence } from '../../shared/ui/motion';
 import { cn } from '../../shared/utils/cn';
 import { useLocalSshKeys } from '../../hooks/remote/useLocalSsh';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
@@ -178,7 +178,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         </select>
                     </Field>
 
-                    <div className="grid grid-cols-[80px_1fr] gap-2">
+                    <div className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] gap-2">
                         <Field id={portId} label="端口">
                             <TextInput
                                 id={portId}
@@ -213,99 +213,106 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         </select>
                     </Field>
 
-                    {authMethod === 'password' && (
-                        <Field
-                            id={passwordId}
-                            label="SSH 密码"
-                            description={
-                                isEdit
-                                    ? '留空表示不改动已保存的凭据。'
-                                    : '留空时仅添加档案，下次连接时再填。'
-                            }
-                        >
-                            <TextInput
+                    <DialogStepTransition
+                        stepKey={authMethod}
+                        className="flex min-w-0 flex-col gap-3"
+                    >
+                        {authMethod === 'password' && (
+                            <Field
                                 id={passwordId}
-                                ariaDescribedBy={`${passwordId}-desc`}
-                                type="password"
-                                placeholder="SSH 密码"
-                                value={password}
-                                onChange={setPassword}
-                            />
-                        </Field>
-                    )}
+                                label="SSH 密码"
+                                description={
+                                    isEdit
+                                        ? '留空表示不改动已保存的凭据。'
+                                        : '留空时仅添加档案，下次连接时再填。'
+                                }
+                            >
+                                <TextInput
+                                    id={passwordId}
+                                    ariaDescribedBy={`${passwordId}-desc`}
+                                    type="password"
+                                    placeholder="SSH 密码"
+                                    value={password}
+                                    onChange={setPassword}
+                                />
+                            </Field>
+                        )}
 
-                    {!isEdit && authMethod === 'password' && (
-                        <label
-                            htmlFor={autoKeyId}
-                            className="flex cursor-pointer items-center gap-2 text-xs text-text-secondary"
-                        >
-                            <input
-                                id={autoKeyId}
-                                type="checkbox"
-                                className="h-3.5 w-3.5 rounded-sm accent-brand"
-                                checked={autoKey}
-                                onChange={(e) => setAutoKey(e.target.checked)}
-                            />
-                            <span>自动配置免密登录</span>
-                        </label>
-                    )}
+                        {!isEdit && authMethod === 'password' && (
+                            <label
+                                htmlFor={autoKeyId}
+                                className="flex cursor-pointer items-center gap-2 text-xs text-text-secondary"
+                            >
+                                <input
+                                    id={autoKeyId}
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 rounded-sm accent-brand"
+                                    checked={autoKey}
+                                    onChange={(e) => setAutoKey(e.target.checked)}
+                                />
+                                <span>自动配置免密登录</span>
+                            </label>
+                        )}
 
-                    {authMethod === 'key' && (
-                        <Field
-                            id={scannedKeys.length > 0 ? keyPathSelectId : keyPathCustomId}
-                            label="私钥文件路径"
-                            description={
-                                scannedKeys.length > 0
-                                    ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。`
-                                    : '~/.ssh/ 下未发现标准命名密钥，手动填路径。'
-                            }
-                        >
-                            {scannedKeys.length > 0 ? (
-                                <div className="flex flex-col gap-1.5">
-                                    <select
-                                        id={keyPathSelectId}
-                                        aria-describedby={`${keyPathSelectId}-desc`}
-                                        className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none focus:ring-1 focus:ring-brand"
-                                        value={
-                                            scannedKeys.includes(keyPath) ? keyPath : '__custom__'
-                                        }
-                                        onChange={(e) => {
-                                            if (e.target.value === '__custom__') {
-                                                setKeyPath('');
-                                            } else {
-                                                setKeyPath(e.target.value);
+                        {authMethod === 'key' && (
+                            <Field
+                                id={scannedKeys.length > 0 ? keyPathSelectId : keyPathCustomId}
+                                label="私钥文件路径"
+                                description={
+                                    scannedKeys.length > 0
+                                        ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。`
+                                        : '~/.ssh/ 下未发现标准命名密钥，手动填路径。'
+                                }
+                            >
+                                {scannedKeys.length > 0 ? (
+                                    <div className="flex flex-col gap-1.5">
+                                        <select
+                                            id={keyPathSelectId}
+                                            aria-describedby={`${keyPathSelectId}-desc`}
+                                            className="h-8 w-full rounded-sm bg-inset px-2 text-sm text-text outline-none focus:ring-1 focus:ring-brand"
+                                            value={
+                                                scannedKeys.includes(keyPath)
+                                                    ? keyPath
+                                                    : '__custom__'
                                             }
-                                        }}
-                                    >
-                                        {scannedKeys.map((path) => (
-                                            <option key={path} value={path}>
-                                                {fileName(path)}
-                                            </option>
-                                        ))}
-                                        <option value="__custom__">自定义路径…</option>
-                                    </select>
-                                    {!scannedKeys.includes(keyPath) && (
+                                            onChange={(e) => {
+                                                if (e.target.value === '__custom__') {
+                                                    setKeyPath('');
+                                                } else {
+                                                    setKeyPath(e.target.value);
+                                                }
+                                            }}
+                                        >
+                                            {scannedKeys.map((path) => (
+                                                <option key={path} value={path}>
+                                                    {fileName(path)}
+                                                </option>
+                                            ))}
+                                            <option value="__custom__">自定义路径…</option>
+                                        </select>
+                                        <ExpandPresence visible={!scannedKeys.includes(keyPath)}>
+                                            <TextInput
+                                                id={keyPathCustomId}
+                                                placeholder="例：~/.ssh/id_ed25519"
+                                                value={keyPath}
+                                                onChange={setKeyPath}
+                                            />
+                                        </ExpandPresence>
+                                    </div>
+                                ) : (
+                                    <div className="flex min-w-0 flex-col gap-1">
                                         <TextInput
                                             id={keyPathCustomId}
+                                            ariaDescribedBy={`${keyPathCustomId}-desc`}
                                             placeholder="例：~/.ssh/id_ed25519"
                                             value={keyPath}
                                             onChange={setKeyPath}
                                         />
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="flex flex-col gap-1">
-                                    <TextInput
-                                        id={keyPathCustomId}
-                                        ariaDescribedBy={`${keyPathCustomId}-desc`}
-                                        placeholder="例：~/.ssh/id_ed25519"
-                                        value={keyPath}
-                                        onChange={setKeyPath}
-                                    />
-                                </div>
-                            )}
-                        </Field>
-                    )}
+                                    </div>
+                                )}
+                            </Field>
+                        )}
+                    </DialogStepTransition>
 
                     <label
                         htmlFor={rememberId}
@@ -359,7 +366,7 @@ interface FieldProps {
 }
 
 const Field: React.FC<FieldProps> = ({ id, label, required, description, children }) => (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
         <label htmlFor={id} className="text-2xs font-medium text-text-secondary">
             {label}
             {required && <span className="ml-0.5 text-danger">*</span>}

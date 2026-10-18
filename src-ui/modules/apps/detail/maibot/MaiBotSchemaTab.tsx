@@ -120,6 +120,7 @@ export const MaiBotSchemaTab: React.FC<{
                         key={key}
                         title={def.title}
                         description={def.description}
+                        contentVisible={visible}
                         actions={
                             collapsible ? (
                                 <AdvancedToggle
@@ -129,7 +130,7 @@ export const MaiBotSchemaTab: React.FC<{
                             ) : undefined
                         }
                     >
-                        {visible && <FieldGrid ctx={ctx} path={def.path} node={node} />}
+                        <FieldGrid ctx={ctx} path={def.path} node={node} />
                     </FormSection>
                 );
             })}

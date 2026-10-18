@@ -1,4 +1,4 @@
-/* 远端主机列表双列：与 Bot 列表 botCardGrid 同规则。 */
+/* 按主机页面实际可用宽度切双列，避免侧栏或窄窗口把卡片挤成细条。 */
 .serverCardGrid {
     display: grid;
     width: 100%;
@@ -11,7 +11,7 @@
     gap: 0.625rem;
 }
 
-@media (min-width: 768px) {
+@container remote-host (min-width: 44rem) {
     .serverCardGrid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.625rem 0.75rem;

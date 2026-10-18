@@ -315,13 +315,10 @@ const OverlayBody = forwardRef<HTMLDivElement, { className?: string; layer?: num
 OverlayBody.displayName = 'OverlayBody';
 
 function contentHeightCap(size: DialogSize): number {
-    // sheet / sheetWide 外层 portal 有 p-6，ContentBody 自己也有 p-6。
-    // clip 高度只能吃「视口 - 两层上下 padding」，否则会顶出外层 overflow-y-auto。
-    if (size === 'sheet' || size === 'sheetWide') {
-        return Math.max(240, Math.floor(window.innerHeight - 96));
-    }
+    // 普通弹窗也有两层 p-6：portal + 卡片。只扣一层会把底栏推出视口。
+    const viewport = window.visualViewport?.height ?? window.innerHeight;
     if (size === 'taskQueue') return Math.floor(window.innerHeight * 0.96);
-    return Math.floor(window.innerHeight - 48);
+    return Math.max(0, Math.floor(viewport - (size === 'onboarding' ? 48 : 96)));
 }
 
 function useDialogContentHeight(open: boolean, size: DialogSize, contentReady: boolean) {
@@ -404,8 +401,15 @@ function useDialogContentHeight(open: boolean, size: DialogSize, contentReady: b
         inner.style.overflowY = scrollable ? 'auto' : '';
         inner.style.maxHeight = scrollable ? `${cap}px` : '';
 
-        if (!m.enabled) {
+        // 子区域已经逐帧改变高度时直接跟随；再叠一层补间会拖慢底栏并反复重启动画。
+        const expanding = Array.from(
+            inner.querySelectorAll(
+                '[data-expand-phase="opening"], [data-expand-phase="closing"], [data-expand-phase="resizing"]',
+            ),
+        ).some((element) => !element.closest('[hidden]'));
+        if (!m.enabled || expanding) {
             tweenRef.current?.kill();
+            tweenRef.current = null;
             clip.style.height = scrollable ? `${cap}px` : 'auto';
             primedRef.current = false;
             return;
@@ -432,7 +436,7 @@ function useDialogContentHeight(open: boolean, size: DialogSize, contentReady: b
                 overwrite: 'auto',
             },
         );
-    }, [open, size, m.enabled, m.level, m.speed]);
+    }, [open, size, m]);
 
     // open 变化时重置状态
     useEffect(() => {
@@ -462,12 +466,22 @@ function useDialogContentHeight(open: boolean, size: DialogSize, contentReady: b
         const inner = innerRef.current;
         if (!clip || !inner) return;
 
-        const ro = new ResizeObserver(() => requestAnimationFrame(apply));
+        let frame = 0;
+        const schedule = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(apply);
+        };
+        const ro = new ResizeObserver(schedule);
         ro.observe(inner);
+        window.addEventListener('resize', schedule);
+        window.visualViewport?.addEventListener('resize', schedule);
         apply();
 
         return () => {
             ro.disconnect();
+            cancelAnimationFrame(frame);
+            window.removeEventListener('resize', schedule);
+            window.visualViewport?.removeEventListener('resize', schedule);
             tweenRef.current?.kill();
             tweenRef.current = null;
         };
@@ -517,7 +531,7 @@ const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(
                 // 起始态交给 GSAP 接管；Radix 给的样式（多层对话框时的 pointer-events）照样带上
                 style={{ ...style, visibility: 'hidden', opacity: 0 }}
                 className={cn(
-                    'pointer-events-auto relative w-full',
+                    'pointer-events-auto relative min-w-0 w-full',
                     'rounded-md bg-elevated p-6 shadow-popover',
                     'transition-[max-width] duration-300 ease-out',
                     className,
@@ -535,7 +549,7 @@ const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(
                 <div
                     ref={setClipRef}
                     className={cn(
-                        'overflow-x-clip overflow-y-hidden',
+                        'min-w-0 overflow-x-clip overflow-y-hidden',
                         size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
                         size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col',
                         size === 'onboarding' && 'min-h-0 flex-1',
@@ -545,6 +559,7 @@ const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(
                     <div
                         ref={setInnerRef}
                         className={cn(
+                            'min-w-0',
                             size === 'onboarding' || size === 'taskQueue' ? 'px-0' : 'px-1',
                             size === 'sheet' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
                             size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
@@ -578,7 +593,10 @@ const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(
 ContentBody.displayName = 'ContentBody';
 
 export const DialogHeader: React.FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
-    <div className={cn('mb-3 flex shrink-0 flex-col gap-1', className)} {...props} />
+    <div
+        className={cn('mb-3 flex min-w-0 shrink-0 flex-col gap-1 break-words', className)}
+        {...props}
+    />
 );
 
 export const DialogTitle = forwardRef<
@@ -615,7 +633,10 @@ export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
     ...props
 }) => (
     <div
-        className={cn('mt-5 flex shrink-0 items-center justify-end gap-2', className)}
+        className={cn(
+            'mt-5 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2',
+            className,
+        )}
         {...props}
     />
 );

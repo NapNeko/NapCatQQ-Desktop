@@ -1,8 +1,8 @@
 // 嵌套卡片：数组 / 字典 / 对象字段的容器，标题行可折叠。
 
-import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../../shared/ui/motion';
 import { cn } from '../../../../../shared/utils/cn';
 import type { SNode } from '../../../../../core/domain/apps/koishiSchema';
 import { FieldLabel, fieldText } from '../schemaLabel';
@@ -42,13 +42,7 @@ export function NestedCard({
                     className="flex min-w-0 flex-1 items-center gap-2 text-left text-[13px] font-medium text-text"
                     onClick={() => setOpen((v) => !v)}
                 >
-                    <ChevronRight
-                        size={14}
-                        className={cn(
-                            'shrink-0 text-text-tertiary transition-transform duration-200',
-                            open && 'rotate-90',
-                        )}
-                    />
+                    <ExpandChevron open={open} />
                     <FieldLabel name={name} node={node} />
                     {count !== undefined && (
                         <span className="rounded-pill bg-inset px-1.5 text-2xs font-normal tabular-nums text-text-tertiary">
@@ -70,7 +64,9 @@ export function NestedCard({
                     {hint}
                 </p>
             )}
-            {open && <div className="border-t border-border-subtle/70 px-3.5 py-3">{children}</div>}
+            <ExpandPresence visible={open}>
+                <div className="border-t border-border-subtle/70 px-3.5 py-3">{children}</div>
+            </ExpandPresence>
         </div>
     );
 }

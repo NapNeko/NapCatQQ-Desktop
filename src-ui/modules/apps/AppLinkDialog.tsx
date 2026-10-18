@@ -20,7 +20,7 @@ import {
     Spinner,
     type SelectItem,
 } from '../../shared/ui';
-import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
+import { ActionMotionIcon, EMPHASIS_MOTION, ExpandPresence } from '../../shared/ui/motion';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useServerManager } from '../../hooks/remote/useServerManager';
@@ -191,12 +191,12 @@ export function AppLinkDialog({
                         />
                     </div>
 
-                    {botIsDocker && (
+                    <ExpandPresence visible={botIsDocker}>
                         <p className="text-2xs text-warning">
                             这个 Bot 是 Docker 部署的，它在容器里，容器里的 127.0.0.1
                             不是宿主机，应用端连不上，暂不支持对接。
                         </p>
-                    )}
+                    </ExpandPresence>
 
                     {previewing && (
                         <div className="flex items-center gap-2 text-sm text-text-secondary">
@@ -205,13 +205,15 @@ export function AppLinkDialog({
                         </div>
                     )}
 
-                    {plan && !previewing && (
-                        <PlanPreview
-                            plan={plan}
-                            rebindingFrom={rebinding}
-                            topology={classifyAppLink(botHost, instance?.host_id ?? '')}
-                        />
-                    )}
+                    <ExpandPresence visible={!!plan && !previewing}>
+                        {plan && (
+                            <PlanPreview
+                                plan={plan}
+                                rebindingFrom={rebinding}
+                                topology={classifyAppLink(botHost, instance?.host_id ?? '')}
+                            />
+                        )}
+                    </ExpandPresence>
                 </div>
 
                 <DialogFooter>
@@ -293,9 +295,14 @@ function PlanPreview({
                 </p>
                 <ul className="flex flex-col gap-1">
                     {plan.app_side_writes.map((w) => (
-                        <li key={w.path} className="flex items-baseline gap-2 text-2xs">
-                            <span className="shrink-0 font-mono text-text">{w.path}</span>
-                            <span className="text-text-secondary">{w.summary}</span>
+                        <li
+                            key={w.path}
+                            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-2xs"
+                        >
+                            <span className="min-w-0 break-all font-mono text-text">{w.path}</span>
+                            <span className="min-w-0 break-words text-text-secondary">
+                                {w.summary}
+                            </span>
                         </li>
                     ))}
                 </ul>

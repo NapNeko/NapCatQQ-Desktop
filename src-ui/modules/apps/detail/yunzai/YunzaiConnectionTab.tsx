@@ -29,15 +29,15 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
     return (
         <ConfigForm>
             <FormSection title="对接协议 Bot">
-                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
                     <dt className="text-text-tertiary">对接</dt>
-                    <dd className="text-text">
+                    <dd className="min-w-0 break-words text-text">
                         {linked
                             ? `已对接 Bot ${instance.link?.bot_id}`
                             : '还没对接，到「概览」点对接'}
                     </dd>
                     <dt className="text-text-tertiary">鉴权</dt>
-                    <dd className="text-text">
+                    <dd className="min-w-0 break-words text-text">
                         {server.access_token ? '要 token（Authorization: Bearer）' : '不鉴权'}
                     </dd>
                 </dl>
@@ -48,7 +48,7 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
                     <CopyCodeBlock command={`ws://127.0.0.1:${server.port}/OneBotv11`} />
                 </div>
                 {server.extra_auth_headers.length > 0 && (
-                    <p className="text-xs text-warning">
+                    <p className="break-words text-xs text-warning">
                         auth 里还有 {server.extra_auth_headers.join('、')}
                         ：上游要求每一条都对上，NapCat 只带 Authorization， 再点一次对接会把它们去掉
                     </p>

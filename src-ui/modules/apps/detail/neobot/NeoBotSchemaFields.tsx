@@ -7,6 +7,7 @@ import {
     type NeoBotField,
     type PanelObject,
 } from '../../../../core/domain/apps/neobotWorkspace';
+import { PanelDisclosure } from './PanelDisclosure';
 
 export function JsonDraftField({
     label,
@@ -117,17 +118,14 @@ export function NeoBotSchemaFields({
                 const label = <span title={f.description}>{f.label}</span>;
                 if (f.kind === 'group')
                     return (
-                        <details
+                        <PanelDisclosure
                             key={f.name}
-                            open
+                            defaultOpen
+                            label={f.label}
+                            description={f.description}
                             className="rounded-sm border border-border-subtle p-3"
+                            triggerClassName="font-medium text-text"
                         >
-                            <summary
-                                className="mb-3 cursor-pointer text-xs font-medium text-text"
-                                title={f.description}
-                            >
-                                {f.label}
-                            </summary>
                             <NeoBotSchemaFields
                                 fields={f.fields}
                                 value={record(current)}
@@ -136,7 +134,7 @@ export function NeoBotSchemaFields({
                                 onValidity={onValidity}
                                 onChange={set}
                             />
-                        </details>
+                        </PanelDisclosure>
                     );
                 if (typeof current === 'boolean' || f.type === 'bool')
                     return (

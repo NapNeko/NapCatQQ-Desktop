@@ -18,6 +18,7 @@ import {
 import { VersionSelect } from '../VersionSelect';
 import { isInstalled } from '../../../core/domain/apps/instanceState';
 import type { AppInstance } from '../../../core/ipc/types';
+import { ExpandPresence } from '../../../shared/ui/motion';
 
 export const ReinstallDialog: React.FC<{
     open: boolean;
@@ -61,11 +62,11 @@ export const ReinstallDialog: React.FC<{
                             {reinstall ? '将重装：' : '将安装：'}
                             <span className="ml-1 font-mono text-text">{targetText}</span>
                         </span>
-                        {same && (
+                        <ExpandPresence visible={same}>
                             <span className="text-text-tertiary">
                                 与当前版本相同——重装会重新同步依赖，但不会换代码
                             </span>
-                        )}
+                        </ExpandPresence>
                     </div>
 
                     {/* 不支持按版本安装的框架里，VersionSelect 自己返回 null */}

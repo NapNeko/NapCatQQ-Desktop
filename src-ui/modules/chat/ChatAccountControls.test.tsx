@@ -137,6 +137,29 @@ describe('chat settings organization', () => {
         );
         await waitFor(() => expect(screen.queryByText('本地免打扰群聊')).not.toBeInTheDocument());
     });
+    it('keeps the muted list mounted while collapsed and exposes a keyboard disclosure', async () => {
+        const { user } = await setup();
+        const trigger = screen.getByRole('button', { name: /本地免打扰群聊/ });
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('button', { name: '恢复提醒' })).not.toBeInTheDocument();
+
+        trigger.focus();
+        await user.keyboard('{Enter}');
+        const restore = screen.getByRole('button', { name: '恢复提醒' });
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect(document.getElementById(trigger.getAttribute('aria-controls')!)).toContainElement(
+            restore,
+        );
+
+        await user.keyboard(' ');
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(restore).toBeInTheDocument();
+        expect(restore.closest('[inert]')).not.toBeNull();
+        expect(screen.queryByRole('button', { name: '恢复提醒' })).not.toBeInTheDocument();
+
+        await user.keyboard('{Enter}');
+        expect(screen.getByRole('button', { name: '恢复提醒' })).toBe(restore);
+    });
     it('turns off dependent features when the account is disabled and keeps reconnect alongside the status', async () => {
         const { user, save, reconnect } = await setup();
         await user.click(screen.getByRole('button', { name: '重新连接' }));

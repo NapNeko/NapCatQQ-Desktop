@@ -61,7 +61,7 @@ describe('network settings tab', () => {
     it('validates editable URLs, reveals passwords, and tests the unsaved draft', async () => {
         render(<Form />);
         expect(screen.getByLabelText('代理密码')).toHaveAttribute('type', 'password');
-        fireEvent.click(screen.getByRole('button', { name: '显示代理密码' }));
+        fireEvent.click(await screen.findByRole('button', { name: '显示代理密码' }));
         expect(screen.getByLabelText('代理密码')).toHaveAttribute('type', 'text');
         fireEvent.change(screen.getByLabelText('代理地址'), {
             target: { value: 'http://user:secret@localhost:7890' },
@@ -85,7 +85,9 @@ describe('network settings tab', () => {
         );
         expect(screen.getByText('24 ms')).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('代理密码'), { target: { value: 'edited-secret' } });
-        expect(screen.queryByText('fixture: mirror unavailable')).not.toBeInTheDocument();
+        await waitFor(() =>
+            expect(screen.queryByText('fixture: mirror unavailable')).not.toBeInTheDocument(),
+        );
     });
 
     it('shows unsupported preview diagnostics without reporting a connection success', async () => {

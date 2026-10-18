@@ -22,6 +22,7 @@ import {
     PanelSection,
     type NeoBotPageProps,
 } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
 function PluginConfig({ name, ...props }: NeoBotPageProps & { name: string }) {
     const path = `/api/plugins/${encodeURIComponent(name)}/config`;
@@ -119,9 +120,8 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                             )}
                     </div>
                 )}
-                <details className="mt-3 text-xs text-text-secondary">
-                    <summary className="cursor-pointer">探测插件 ID</summary>
-                    <div className="mt-3 flex items-end gap-2">
+                <PanelDisclosure label="探测插件 ID" className="mt-3">
+                    <div className="flex flex-wrap items-end gap-2">
                         <TextField label="插件 ID" value={probeName} onValueChange={setProbeName} />
                         <Button
                             size="sm"
@@ -140,7 +140,7 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                             探测
                         </Button>
                     </div>
-                </details>
+                </PanelDisclosure>
             </PanelSection>
             <PanelSection title="下载代理">
                 <div className="grid gap-3 sm:grid-cols-3">

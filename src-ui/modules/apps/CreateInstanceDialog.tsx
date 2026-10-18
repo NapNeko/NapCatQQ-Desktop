@@ -17,7 +17,12 @@ import {
     TextField,
     type SelectItem,
 } from '../../shared/ui';
-import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
+import {
+    ActionMotionIcon,
+    DialogStepTransition,
+    EMPHASIS_MOTION,
+    ExpandPresence,
+} from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
 import { useAppInstallDirPreview } from '../../hooks/apps/useAppInstanceSetup';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
@@ -172,105 +177,109 @@ export const CreateInstanceDialog: React.FC<{
                                     error={portInvalid ? '端口需在 1–65535 之间' : undefined}
                                     hint="留空则随机分配高位端口，并避开同机已有实例"
                                 />
-                                {isRemote ? (
-                                    <div className="flex flex-col gap-1.5">
-                                        <span className="text-xs font-medium text-text-secondary">
-                                            安装目录
-                                        </span>
-                                        <div className="flex items-center gap-1.5">
-                                            <TextField
-                                                className="min-w-0 flex-1"
-                                                aria-label="安装目录"
-                                                placeholder={defaultDisplay}
-                                                value={draft.installDirOverride ?? ''}
-                                                onValueChange={(v) =>
-                                                    setDraft({
-                                                        ...draft,
-                                                        installDirOverride:
-                                                            v.trim() === '' ? null : v,
-                                                    })
-                                                }
-                                                error={
-                                                    remoteDirInvalid
-                                                        ? '远端路径必须是绝对路径'
-                                                        : undefined
-                                                }
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="md"
-                                                className="shrink-0"
-                                                disabled={isCreating || !remoteId}
-                                                onClick={() => setPickerOpen(true)}
-                                            >
-                                                <FolderOpen size={14} strokeWidth={2.2} />
-                                                选择
-                                            </Button>
+                                <DialogStepTransition stepKey={isRemote ? 'remote' : 'local'}>
+                                    {isRemote ? (
+                                        <div className="flex flex-col gap-1.5">
+                                            <span className="text-xs font-medium text-text-secondary">
+                                                安装目录
+                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <TextField
+                                                    className="min-w-0 flex-1"
+                                                    aria-label="安装目录"
+                                                    placeholder={defaultDisplay}
+                                                    value={draft.installDirOverride ?? ''}
+                                                    onValueChange={(v) =>
+                                                        setDraft({
+                                                            ...draft,
+                                                            installDirOverride:
+                                                                v.trim() === '' ? null : v,
+                                                        })
+                                                    }
+                                                    error={
+                                                        remoteDirInvalid
+                                                            ? '远端路径必须是绝对路径'
+                                                            : undefined
+                                                    }
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="md"
+                                                    className="shrink-0"
+                                                    disabled={isCreating || !remoteId}
+                                                    onClick={() => setPickerOpen(true)}
+                                                >
+                                                    <FolderOpen size={14} strokeWidth={2.2} />
+                                                    选择
+                                                </Button>
+                                            </div>
+                                            <p className="text-2xs leading-snug text-text-tertiary">
+                                                目录必须为空或不存在；装完不能改路径
+                                            </p>
                                         </div>
-                                        <p className="text-2xs leading-snug text-text-tertiary">
-                                            目录必须为空或不存在；装完不能改路径
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col gap-1.5">
-                                        <span className="text-xs font-medium text-text-secondary">
-                                            安装目录
-                                        </span>
-                                        <div className="flex items-center gap-1.5">
-                                            <TextField
-                                                className="min-w-0 flex-1"
-                                                aria-label="安装目录"
-                                                value={draft.installDirOverride ?? defaultDisplay}
-                                                readOnly
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="md"
-                                                className="shrink-0"
-                                                disabled={isCreating}
-                                                onClick={() => {
-                                                    void pickDirectory('选择实例安装目录').then(
-                                                        (dir) => {
-                                                            if (dir) {
+                                    ) : (
+                                        <div className="flex flex-col gap-1.5">
+                                            <span className="text-xs font-medium text-text-secondary">
+                                                安装目录
+                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <TextField
+                                                    className="min-w-0 flex-1"
+                                                    aria-label="安装目录"
+                                                    value={
+                                                        draft.installDirOverride ?? defaultDisplay
+                                                    }
+                                                    readOnly
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="md"
+                                                    className="shrink-0"
+                                                    disabled={isCreating}
+                                                    onClick={() => {
+                                                        void pickDirectory('选择实例安装目录').then(
+                                                            (dir) => {
+                                                                if (dir) {
+                                                                    setDraft({
+                                                                        ...draft,
+                                                                        installDirOverride: dir,
+                                                                    });
+                                                                }
+                                                            },
+                                                        );
+                                                    }}
+                                                >
+                                                    <FolderOpen size={14} strokeWidth={2.2} />
+                                                    选择
+                                                </Button>
+                                            </div>
+                                            <p className="text-2xs leading-snug text-text-tertiary">
+                                                目录必须为空或不存在；装完不能改路径
+                                                {draft.installDirOverride != null && (
+                                                    <>
+                                                        {' · '}
+                                                        <button
+                                                            type="button"
+                                                            disabled={isCreating}
+                                                            className="text-text-secondary underline-offset-2 hover:text-text hover:underline disabled:opacity-50"
+                                                            onClick={() =>
                                                                 setDraft({
                                                                     ...draft,
-                                                                    installDirOverride: dir,
-                                                                });
+                                                                    installDirOverride: null,
+                                                                })
                                                             }
-                                                        },
-                                                    );
-                                                }}
-                                            >
-                                                <FolderOpen size={14} strokeWidth={2.2} />
-                                                选择
-                                            </Button>
+                                                        >
+                                                            恢复默认
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </p>
                                         </div>
-                                        <p className="text-2xs leading-snug text-text-tertiary">
-                                            目录必须为空或不存在；装完不能改路径
-                                            {draft.installDirOverride != null && (
-                                                <>
-                                                    {' · '}
-                                                    <button
-                                                        type="button"
-                                                        disabled={isCreating}
-                                                        className="text-text-secondary underline-offset-2 hover:text-text hover:underline disabled:opacity-50"
-                                                        onClick={() =>
-                                                            setDraft({
-                                                                ...draft,
-                                                                installDirOverride: null,
-                                                            })
-                                                        }
-                                                    >
-                                                        恢复默认
-                                                    </button>
-                                                </>
-                                            )}
-                                        </p>
-                                    </div>
-                                )}
-                                {showAccount && (
+                                    )}
+                                </DialogStepTransition>
+                                <ExpandPresence visible={showAccount}>
                                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                         <TextField
                                             label="WebUI 用户名"
@@ -295,8 +304,8 @@ export const CreateInstanceDialog: React.FC<{
                                             hint="留空随机生成；8 位以上，含大小写和数字"
                                         />
                                     </div>
-                                )}
-                                {showRenderer && (
+                                </ExpandPresence>
+                                <ExpandPresence visible={showRenderer}>
                                     <Checkbox
                                         {...(manifest?.id === 'yunzai'
                                             ? {
@@ -312,8 +321,8 @@ export const CreateInstanceDialog: React.FC<{
                                             setDraft({ ...draft, installRenderer: c })
                                         }
                                     />
-                                )}
-                                {terms.length > 0 && (
+                                </ExpandPresence>
+                                <ExpandPresence visible={terms.length > 0}>
                                     <div className="flex flex-col gap-1">
                                         <Checkbox
                                             label="我已阅读并同意下面的上游条款"
@@ -339,7 +348,7 @@ export const CreateInstanceDialog: React.FC<{
                                             ))}
                                         </div>
                                     </div>
-                                )}
+                                </ExpandPresence>
                                 {/* 不支持按版本安装的框架里，VersionSelect 自己返回 null */}
                                 <VersionSelect
                                     frameworkId={draft.frameworkId}

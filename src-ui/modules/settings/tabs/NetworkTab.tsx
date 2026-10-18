@@ -12,6 +12,7 @@ import {
     Spinner,
     TextField,
 } from '../../../shared/ui';
+import { ExpandPresence } from '../../../shared/ui/motion';
 import type { DownloadMirror, NetworkSettings } from '../../../core/domain/settings/network';
 import { validateNetworkSettings } from '../../../core/domain/settings/network';
 import { useNetworkSettings } from '../../../hooks/settings/useNetworkSettings';
@@ -57,48 +58,53 @@ function DownloadRoute({
                 </label>
                 <Select
                     id={`network-${label}-route`}
-                    className="w-72"
+                    className="w-72 max-w-full"
                     value={mode}
                     onValueChange={onModeChange}
                     items={routeItems}
                 />
             </FieldRow>
-            {(mode === 'mirror' || error) && (
-                <FieldRow label={`${label} 镜像`}>
-                    <div className="flex w-72 flex-col gap-2">
-                        <label htmlFor={`network-${label}-mirror`} className="sr-only">
-                            {label} 镜像
-                        </label>
-                        <Select
-                            id={`network-${label}-mirror`}
-                            value={selected}
-                            items={[
-                                ...mirrors.map((item) => ({ value: item.url, label: item.label })),
-                                { value: 'custom', label: '自定义地址' },
-                            ]}
-                            onValueChange={(value) => {
-                                setCustom(value === 'custom');
-                                if (value !== 'custom') onMirrorChange(value);
-                            }}
-                        />
-                        {selected === 'custom' && (
-                            <TextField
-                                aria-label={`${label} 自定义镜像地址`}
-                                value={mirror}
-                                onValueChange={onMirrorChange}
-                                placeholder="https://mirror.example.com"
-                                spellCheck={false}
-                                error={error}
-                                hint={
-                                    label === 'Node.js'
-                                        ? '填写包含版本目录的 dist 根地址'
-                                        : '填写镜像前缀，下载时自动追加完整 GitHub URL'
-                                }
+            <ExpandPresence visible={mode === 'mirror' || !!error}>
+                <div className="pt-4">
+                    <FieldRow label={`${label} 镜像`}>
+                        <div className="flex w-72 min-w-0 max-w-full flex-col gap-2">
+                            <label htmlFor={`network-${label}-mirror`} className="sr-only">
+                                {label} 镜像
+                            </label>
+                            <Select
+                                id={`network-${label}-mirror`}
+                                value={selected}
+                                items={[
+                                    ...mirrors.map((item) => ({
+                                        value: item.url,
+                                        label: item.label,
+                                    })),
+                                    { value: 'custom', label: '自定义地址' },
+                                ]}
+                                onValueChange={(value) => {
+                                    setCustom(value === 'custom');
+                                    if (value !== 'custom') onMirrorChange(value);
+                                }}
                             />
-                        )}
-                    </div>
-                </FieldRow>
-            )}
+                            <ExpandPresence visible={selected === 'custom'}>
+                                <TextField
+                                    aria-label={`${label} 自定义镜像地址`}
+                                    value={mirror}
+                                    onValueChange={onMirrorChange}
+                                    placeholder="https://mirror.example.com"
+                                    spellCheck={false}
+                                    error={error}
+                                    hint={
+                                        label === 'Node.js'
+                                            ? '填写包含版本目录的 dist 根地址'
+                                            : '填写镜像前缀，下载时自动追加完整 GitHub URL'
+                                    }
+                                />
+                            </ExpandPresence>
+                        </div>
+                    </FieldRow>
+                </div>
+            </ExpandPresence>
         </>
     );
 }
@@ -155,7 +161,7 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                         </label>
                         <Select<NetworkSettings['proxyMode']>
                             id="network-proxy-mode"
-                            className="w-72"
+                            className="w-72 max-w-full"
                             value={network.proxyMode}
                             onValueChange={(proxyMode) => patchNetwork({ proxyMode })}
                             items={[
@@ -165,13 +171,17 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                             ]}
                         />
                     </FieldRow>
-                    {(network.proxyMode === 'manual' ||
-                        errors.proxyUrl ||
-                        errors.proxyUsername) && (
-                        <>
+                    <ExpandPresence
+                        visible={
+                            network.proxyMode === 'manual' ||
+                            !!errors.proxyUrl ||
+                            !!errors.proxyUsername
+                        }
+                    >
+                        <div className="divide-y divide-border-subtle/70 py-4">
                             <FieldRow label="代理地址">
                                 <TextField
-                                    className="w-72"
+                                    className="w-72 max-w-full"
                                     aria-label="代理地址"
                                     value={network.proxyUrl}
                                     onValueChange={(proxyUrl) => patchNetwork({ proxyUrl })}
@@ -183,7 +193,7 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                             </FieldRow>
                             <FieldRow label="代理用户名（可选）">
                                 <TextField
-                                    className="w-72"
+                                    className="w-72 max-w-full"
                                     aria-label="代理用户名"
                                     value={network.proxyUsername}
                                     onValueChange={(proxyUsername) =>
@@ -196,29 +206,33 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                             </FieldRow>
                             <FieldRow label="代理密码（可选）">
                                 <SecretField
-                                    className="w-72"
+                                    className="w-72 max-w-full"
                                     aria-label="代理密码"
                                     value={draft.proxyPassword}
                                     onValueChange={(proxyPassword) => patchDraft({ proxyPassword })}
                                     error={errors.proxyPassword}
                                 />
                             </FieldRow>
-                        </>
-                    )}
-                    {(network.proxyMode !== 'direct' || errors.proxyBypass) && (
-                        <FieldRow label="不使用代理的地址">
-                            <TextField
-                                className="w-72"
-                                aria-label="不使用代理的地址"
-                                value={network.proxyBypass}
-                                onValueChange={(proxyBypass) => patchNetwork({ proxyBypass })}
-                                placeholder="localhost,127.0.0.1,::1"
-                                hint="逗号分隔主机、域名、IP 或 CIDR"
-                                error={errors.proxyBypass}
-                                spellCheck={false}
-                            />
-                        </FieldRow>
-                    )}
+                        </div>
+                    </ExpandPresence>
+                    <ExpandPresence
+                        visible={network.proxyMode !== 'direct' || !!errors.proxyBypass}
+                    >
+                        <div className="pt-4">
+                            <FieldRow label="不使用代理的地址">
+                                <TextField
+                                    className="w-72 max-w-full"
+                                    aria-label="不使用代理的地址"
+                                    value={network.proxyBypass}
+                                    onValueChange={(proxyBypass) => patchNetwork({ proxyBypass })}
+                                    placeholder="localhost,127.0.0.1,::1"
+                                    hint="逗号分隔主机、域名、IP 或 CIDR"
+                                    error={errors.proxyBypass}
+                                    spellCheck={false}
+                                />
+                            </FieldRow>
+                        </div>
+                    </ExpandPresence>
                 </SettingsSection>
 
                 <SettingsSection
@@ -257,7 +271,7 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                         </label>
                         <Select<SettingsDraft['githubApiMode']>
                             id="network-github-api-mode"
-                            className="w-72"
+                            className="w-72 max-w-full"
                             value={draft.githubApiMode}
                             onValueChange={(githubApiMode) => patchDraft({ githubApiMode })}
                             items={[
@@ -271,7 +285,7 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                         description="仅发送给 GitHub，留空使用匿名额度。保存至系统密钥库或本机加密存储。"
                     >
                         <SecretField
-                            className="w-72 font-mono"
+                            className="w-72 max-w-full font-mono"
                             aria-label="GitHub Token"
                             value={draft.githubPat}
                             onValueChange={(githubPat) => patchDraft({ githubPat })}
@@ -281,7 +295,7 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                 </SettingsSection>
 
                 <SettingsSection title="连接测试" layout="panel">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <span className="text-xs text-text-tertiary">
                             使用当前代理与下载线路草稿，不会保存设置。
                         </span>
@@ -289,18 +303,19 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                             variant="secondary"
                             size="sm"
                             onClick={() => void probe.test()}
+                            className="shrink-0"
                             disabled={probe.busy || saving || Object.keys(errors).length > 0}
                         >
                             {probe.busy && <Spinner size="xs" />}
                             {probe.busy ? '测试中…' : '测试连接'}
                         </Button>
                     </div>
-                    {probe.error && (
+                    <ExpandPresence visible={!!probe.error}>
                         <p role="alert" className="mt-3 text-xs text-danger">
                             {probe.error}
                         </p>
-                    )}
-                    {probe.results.length > 0 && (
+                    </ExpandPresence>
+                    <ExpandPresence visible={probe.results.length > 0}>
                         <ul aria-live="polite" className="mt-4 divide-y divide-border-subtle">
                             {probe.results.map((result, index) => (
                                 <li
@@ -333,7 +348,7 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                                 </li>
                             ))}
                         </ul>
-                    )}
+                    </ExpandPresence>
                 </SettingsSection>
             </SettingsTabSections>
         </fieldset>

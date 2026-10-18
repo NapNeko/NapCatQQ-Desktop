@@ -6,6 +6,7 @@ import type {
     UiModeOnStartup,
 } from '../../../core/services/settings.service';
 import { Select, Switch } from '../../../shared/ui';
+import { ExpandPresence } from '../../../shared/ui/motion';
 import type { SettingsDraft } from '../settings-draft';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
 
@@ -33,8 +34,8 @@ export function WindowTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
 
-                {draft.closeAction === 'tray' && (
-                    <>
+                <ExpandPresence visible={draft.closeAction === 'tray'}>
+                    <div className="divide-y divide-border-subtle/70 pt-4">
                         <FieldRow label="关窗后界面">
                             <Select
                                 value={draft.afterCloseUiBehavior}
@@ -59,27 +60,31 @@ export function WindowTab({ draft, patchDraft }: Props) {
                                 ]}
                             />
                         </FieldRow>
-                        {draft.afterCloseUiBehavior === 'delayed_lightweight' && (
-                            <FieldRow label="释放前等待">
-                                <Select
-                                    value={String(draft.enterLightweightDelaySecs)}
-                                    onValueChange={(v) =>
-                                        patchDraft({
-                                            enterLightweightDelaySecs: Number(v),
-                                        })
-                                    }
-                                    items={[
-                                        { value: '60', label: '1 分钟' },
-                                        { value: '180', label: '3 分钟' },
-                                        { value: '300', label: '5 分钟' },
-                                        { value: '900', label: '15 分钟' },
-                                        { value: '1800', label: '30 分钟' },
-                                    ]}
-                                />
-                            </FieldRow>
-                        )}
-                    </>
-                )}
+                        <ExpandPresence
+                            visible={draft.afterCloseUiBehavior === 'delayed_lightweight'}
+                        >
+                            <div className="pt-4">
+                                <FieldRow label="释放前等待">
+                                    <Select
+                                        value={String(draft.enterLightweightDelaySecs)}
+                                        onValueChange={(v) =>
+                                            patchDraft({
+                                                enterLightweightDelaySecs: Number(v),
+                                            })
+                                        }
+                                        items={[
+                                            { value: '60', label: '1 分钟' },
+                                            { value: '180', label: '3 分钟' },
+                                            { value: '300', label: '5 分钟' },
+                                            { value: '900', label: '15 分钟' },
+                                            { value: '1800', label: '30 分钟' },
+                                        ]}
+                                    />
+                                </FieldRow>
+                            </div>
+                        </ExpandPresence>
+                    </div>
+                </ExpandPresence>
             </SettingsSection>
 
             <SettingsSection title="启动">

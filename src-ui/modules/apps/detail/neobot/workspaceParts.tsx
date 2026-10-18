@@ -18,6 +18,7 @@ import {
     type PanelObject,
 } from '../../../../core/domain/apps/neobotWorkspace';
 import { PanelStateView } from './PanelStateView';
+import { PanelDisclosure } from './PanelDisclosure';
 
 export interface NeoBotPageProps {
     instanceId: string;
@@ -166,20 +167,19 @@ const LABELS: Record<string, string> = {
 export function ObjectView({ data }: { data: unknown }) {
     const obj = record(data);
     return (
-        <dl className="grid grid-cols-[minmax(7rem,auto)_1fr] gap-x-4 gap-y-2 text-xs">
+        <dl className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
             {Object.entries(obj)
                 .filter(([key]) => !['ok', 'avatar_url'].includes(key))
                 .map(([key, value]) => (
                     <div key={key} className="contents">
-                        <dt className="break-words text-text-tertiary">{LABELS[key] ?? key}</dt>
-                        <dd className="min-w-0 break-words text-text">
+                        <dt className="min-w-0 break-all text-text-tertiary">
+                            {LABELS[key] ?? key}
+                        </dt>
+                        <dd className="min-w-0 break-all text-text">
                             {typeof value === 'object' && value !== null ? (
-                                <details>
-                                    <summary className="cursor-pointer text-brand">
-                                        查看详情
-                                    </summary>
+                                <PanelDisclosure label="查看详情" triggerClassName="text-brand">
                                     <FullText value={value} />
-                                </details>
+                                </PanelDisclosure>
                             ) : typeof value === 'boolean' ? (
                                 value ? (
                                     '是'

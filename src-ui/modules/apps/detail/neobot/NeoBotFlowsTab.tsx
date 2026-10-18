@@ -20,6 +20,7 @@ import {
     RecordTable,
     type NeoBotPageProps,
 } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
 export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
     const flows = usePanelJson(instanceId, 'flows', '/api/chat-flows', asRecord, true, 5000);
@@ -105,10 +106,9 @@ export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                     background_tasks: data.background_tasks,
                                 }}
                             />
-                            <details className="mt-4 text-xs text-text-secondary">
-                                <summary className="cursor-pointer">系统提示词</summary>
+                            <PanelDisclosure label="系统提示词" className="mt-4">
                                 <FullText value={data.system_prompt} />
-                            </details>
+                            </PanelDisclosure>
                             <ol className="mt-4 flex flex-col gap-3">
                                 {records(data.messages).map((message, i) => (
                                     <li key={i} className="border-l-2 border-brand/40 pl-3">

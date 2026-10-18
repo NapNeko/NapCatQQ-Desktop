@@ -3,6 +3,7 @@ import { asRecord } from '../../../../core/domain/apps/neobotPanel';
 import { records, text } from '../../../../core/domain/apps/neobotWorkspace';
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 import { FullText, PanelPage, PanelSection, type NeoBotPageProps } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
 export function NeoBotAnalysisTab({ instanceId, onGoTab }: NeoBotPageProps) {
     const query = usePanelJson(instanceId, 'analysis', '/api/analysis/prompts', asRecord);
@@ -40,19 +41,19 @@ export function NeoBotAnalysisTab({ instanceId, onGoTab }: NeoBotPageProps) {
                             )}
                             <div className="flex flex-col gap-3">
                                 {records(agent.parts).map((part, index) => (
-                                    <details
+                                    <PanelDisclosure
                                         key={index}
                                         className="rounded-sm border border-border-subtle p-3"
+                                        label={
+                                            <>
+                                                {text(part.label)} · {text(part.chars)} 字符 ·{' '}
+                                                {text(part.tokens)} Token
+                                                {part.truncated ? ' · 上游展示已截断' : ''}
+                                            </>
+                                        }
                                     >
-                                        <summary className="cursor-pointer text-xs text-text-secondary">
-                                            {text(part.label)} · {text(part.chars)} 字符 ·{' '}
-                                            {text(part.tokens)} Token
-                                            {part.truncated ? ' · 上游展示已截断' : ''}
-                                        </summary>
-                                        <div className="mt-3">
-                                            <FullText value={part.text} />
-                                        </div>
-                                    </details>
+                                        <FullText value={part.text} />
+                                    </PanelDisclosure>
                                 ))}
                             </div>
                         </PanelSection>

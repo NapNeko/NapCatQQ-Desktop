@@ -45,4 +45,31 @@ describe('下载来源和切换原因', () => {
         expect(screen.getByText(message)).toBeInTheDocument();
         expect(screen.getByText('切换镜像')).toBeInTheDocument();
     });
+
+    it('卡片摘要保留阶段、速度和百分比，将完整来源与字节信息放入可访问提示', () => {
+        const message = '镜像 ghfast.top · 下载中，重试后已恢复连接';
+        render(
+            <ProgressLine
+                compact
+                progress={{
+                    ...initialActionProgress,
+                    status: 'running',
+                    downloadStage: 'streaming',
+                    percent: 25,
+                    speedBps: 2 * 1024 * 1024,
+                    downloadedBytes: 1024 * 1024,
+                    totalBytes: 4 * 1024 * 1024,
+                    message,
+                }}
+            />,
+        );
+
+        const summary = screen.getByRole('group', { name: new RegExp(message) });
+        expect(summary).toHaveAttribute('title', expect.stringContaining('1.0 MB / 4.0 MB'));
+        expect(summary).toHaveAttribute('title', expect.stringContaining(message));
+        expect(screen.getByText('下载中')).toBeInTheDocument();
+        expect(screen.getByText('2.0 MB/s')).toBeInTheDocument();
+        expect(screen.getByText('25%')).toBeInTheDocument();
+        expect(screen.queryByText(message)).not.toBeInTheDocument();
+    });
 });

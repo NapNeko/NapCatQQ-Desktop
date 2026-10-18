@@ -185,7 +185,7 @@ const NodePanel: React.FC<{
     onDelete: (d: MaiBotMemoryNodeDetail) => void;
     onClose: () => void;
 }> = ({ id, detail, loading, busy, onGo, onDelete, onClose }) => (
-    <aside className="absolute bottom-3 right-3 top-3 flex w-80 max-w-[60%] flex-col overflow-hidden rounded-md bg-elevated shadow-popover ring-1 ring-border-subtle">
+    <aside className="absolute bottom-3 right-3 top-3 flex w-80 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-md bg-elevated shadow-popover ring-1 ring-border-subtle sm:max-w-[60%]">
         <header className="flex items-start gap-2 border-b border-border-subtle px-4 py-3">
             <div className="min-w-0 flex-1">
                 <h3 className="truncate font-display text-md font-semibold text-text">{id}</h3>

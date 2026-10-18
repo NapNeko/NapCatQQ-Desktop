@@ -15,6 +15,7 @@ import type { BypassConfig } from '../../../../core/ipc/generated/domain/BypassC
 import type { StatusCommandConfig } from '../../../../core/ipc/generated/domain/StatusCommandConfig';
 import type { SnowLumaAppConfig } from '../../../../core/ipc/generated/domain/SnowLumaAppConfig';
 import { SnowLumaGlobalWebuiSection } from './SnowLumaGlobalWebuiSection';
+import { ExpandPresence } from '../../../../shared/ui/motion/ExpandPresence';
 
 interface AdvancedTabProps {
     data: AdvancedConfig;
@@ -88,7 +89,7 @@ export function AdvancedTab({
     };
 
     return (
-        <div className="flex w-full flex-col gap-6">
+        <div className="flex w-full min-w-0 flex-col">
             <FormSection title="桌面端集成">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
@@ -118,8 +119,8 @@ export function AdvancedTab({
                 </div>
             </FormSection>
 
-            {isSnowLuma ? (
-                <>
+            <ExpandPresence visible={isSnowLuma}>
+                <div className="flex min-w-0 flex-col gap-6 pt-6">
                     <SnowLumaGlobalWebuiSection
                         value={snowlumaAppConfig}
                         onChange={onSnowlumaAppConfigChange}
@@ -129,7 +130,7 @@ export function AdvancedTab({
 
                     <FormSection title="扫码与鉴权">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {localNative && (
+                            <ExpandPresence visible={localNative}>
                                 <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
                                     <div className="w-full">
                                         <Switch
@@ -146,9 +147,9 @@ export function AdvancedTab({
                                         />
                                     </div>
                                 </div>
-                            )}
+                            </ExpandPresence>
 
-                            {remoteTarget && (
+                            <ExpandPresence visible={remoteTarget}>
                                 <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
                                     <div className="w-full">
                                         <Switch
@@ -165,7 +166,7 @@ export function AdvancedTab({
                                         />
                                     </div>
                                 </div>
-                            )}
+                            </ExpandPresence>
 
                             <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
                                 <div className="w-full">
@@ -224,9 +225,10 @@ export function AdvancedTab({
                             </div>
                         </div>
                     </FormSection>
-                </>
-            ) : (
-                <>
+                </div>
+            </ExpandPresence>
+            <ExpandPresence visible={!isSnowLuma}>
+                <div className="flex min-w-0 flex-col gap-6 pt-6">
                     <FormSection title="OneBot 行为">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
@@ -312,7 +314,7 @@ export function AdvancedTab({
                                     <span className="block text-xs font-medium text-text-secondary">
                                         反检测绕过 (Bypass)
                                     </span>
-                                    <div className="grid grid-cols-3 gap-2.5">
+                                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                                         {BYPASS_FIELDS.map(({ key, label }) => (
                                             <Checkbox
                                                 key={key}
@@ -333,8 +335,8 @@ export function AdvancedTab({
                             </div>
                         </div>
                     </FormSection>
-                </>
-            )}
+                </div>
+            </ExpandPresence>
         </div>
     );
 }

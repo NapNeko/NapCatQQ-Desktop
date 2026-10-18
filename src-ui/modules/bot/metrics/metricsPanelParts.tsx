@@ -23,7 +23,7 @@ export function Panel({
                 className,
             )}
         >
-            <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border-subtle/70 px-3 py-2.5">
+            <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-border-subtle/70 px-3 py-2.5">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <span
@@ -36,7 +36,7 @@ export function Panel({
                         <p className="mt-1 pl-2.5 text-2xs text-text-tertiary">{description}</p>
                     ) : null}
                 </div>
-                {aside ? <div className="shrink-0">{aside}</div> : null}
+                {aside ? <div className="ml-auto max-w-full shrink-0">{aside}</div> : null}
             </div>
             <div className="min-h-0 flex-1 overflow-hidden p-3">{children}</div>
         </section>

@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import gsap from 'gsap';
 import { TooltipProvider } from '../../../shared/ui';
 import type { MessageItem } from '../../../core/domain/debug/chatFormat';
 import { MessageBubble } from './MessageBubble';
+import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 
 // 让「折叠着的正文」的 scrollHeight 可控，并接住 ResizeObserver 的回调，模拟栏宽变了
 let contentHeight = 200;
@@ -49,6 +51,7 @@ afterEach(() => {
     cleanup();
     observers.length = 0;
     contentHeight = 200;
+    preferencesStore.setMotionEnabled(true);
 });
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -72,6 +75,71 @@ function item(text: string): MessageItem {
 }
 
 describe('MessageBubble', () => {
+    it('长消息可在展开中途反向收起，期间保留操作按钮并在终点恢复自然高度', () => {
+        contentHeight = 600;
+        render(
+            <MessageBubble
+                item={item('长'.repeat(200))}
+                continued={false}
+                selected={false}
+                showSessionName={false}
+            />,
+            { wrapper },
+        );
+        const body = screen.getByRole('button', { name: '展开' })
+            .previousElementSibling as HTMLElement;
+        Object.defineProperty(body, 'scrollHeight', { get: () => contentHeight });
+        vi.spyOn(body, 'getBoundingClientRect').mockImplementation(
+            () =>
+                new DOMRect(
+                    0,
+                    0,
+                    300,
+                    body.style.maxHeight === 'none'
+                        ? contentHeight
+                        : parseFloat(body.style.maxHeight),
+                ),
+        );
+        fireEvent.click(screen.getByRole('button', { name: '展开' }));
+        act(() => {
+            gsap.getTweensOf(body)[0].progress(0.4);
+        });
+        const middle = parseFloat(body.style.maxHeight);
+        expect(middle).toBeGreaterThan(240);
+        expect(middle).toBeLessThan(600);
+        fireEvent.click(screen.getByRole('button', { name: '收起' }));
+        expect(parseFloat(body.style.maxHeight)).toBeCloseTo(middle);
+        act(() => {
+            observers.forEach((fn) => fn());
+            gsap.getTweensOf(body)[0].progress(1);
+        });
+        expect(body.style.maxHeight).toBe('240px');
+        fireEvent.click(screen.getByRole('button', { name: '展开' }));
+        act(() => {
+            gsap.getTweensOf(body)[0].progress(1);
+        });
+        expect(body.style.maxHeight).toBe('none');
+    });
+
+    it('关闭动画时长消息立即展开，不留下固定高度或待运行的补间', () => {
+        preferencesStore.setMotionEnabled(false);
+        contentHeight = 600;
+        render(
+            <MessageBubble
+                item={item('长'.repeat(200))}
+                continued={false}
+                selected={false}
+                showSessionName={false}
+            />,
+            { wrapper },
+        );
+        const body = screen.getByRole('button', { name: '展开' })
+            .previousElementSibling as HTMLElement;
+        fireEvent.click(screen.getByRole('button', { name: '展开' }));
+        expect(body.style.maxHeight).toBe('none');
+        expect(gsap.getTweensOf(body)).toHaveLength(0);
+    });
+
     it('栏变窄、长消息超过 12 行时才出「展开」', () => {
         render(
             <MessageBubble

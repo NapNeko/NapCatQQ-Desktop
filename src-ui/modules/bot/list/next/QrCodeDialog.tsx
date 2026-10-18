@@ -252,7 +252,7 @@ function QrCanvas({ content }: { content: string }) {
             <img
                 src={content}
                 alt="WebUI 登录二维码"
-                className="h-[280px] w-[280px] select-none"
+                className="h-full w-full select-none object-contain"
                 draggable={false}
             />
         );
@@ -260,7 +260,7 @@ function QrCanvas({ content }: { content: string }) {
 
     if (error) {
         return (
-            <div className="flex h-[280px] w-[280px] flex-col items-center justify-center gap-1 text-center text-xs">
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 break-words text-center text-xs">
                 <span className="font-medium">二维码渲染失败</span>
                 <span className="text-2xs opacity-70">{error}</span>
             </div>
@@ -273,7 +273,7 @@ function QrCanvas({ content }: { content: string }) {
 
     return (
         <div
-            className="h-[280px] w-[280px] select-none"
+            className="h-full w-full select-none [&>svg]:h-full [&>svg]:w-full"
             // SVG 来自 qrcode 库本地编码，输入是后端透传字符串；尽管字符串可控且
             // 库本身只输出 <svg> 元素，仍把 SVG 当受信本地资源处理（无 onerror、
             // 不会发外网请求）。
@@ -284,8 +284,6 @@ function QrCanvas({ content }: { content: string }) {
 
 function QrPending() {
     return (
-        <div className="flex h-[280px] w-[280px] items-center justify-center text-sm">
-            等待二维码…
-        </div>
+        <div className="flex h-full w-full items-center justify-center text-sm">等待二维码…</div>
     );
 }

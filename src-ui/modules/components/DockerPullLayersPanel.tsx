@@ -66,7 +66,7 @@ export function DockerPullLayersPanel({
             </div>
             <ul
                 className={cn(
-                    'space-y-2 overflow-y-auto pr-0.5',
+                    'min-w-0 space-y-2 overflow-y-auto pr-0.5',
                     fillHeight ? 'min-h-0 flex-1' : 'max-h-52',
                 )}
             >
@@ -98,7 +98,7 @@ export function DockerPullLayersPanel({
                                     />
                                 )}
                                 <span
-                                    className="shrink-0 font-mono text-[10.5px] tabular-nums text-text-tertiary"
+                                    className="min-w-0 max-w-[40%] shrink-0 truncate font-mono text-[10.5px] tabular-nums text-text-tertiary"
                                     title={layer.id}
                                 >
                                     {layer.id}
@@ -108,11 +108,15 @@ export function DockerPullLayersPanel({
                                         'min-w-0 truncate text-[11px]',
                                         layer.done ? 'text-success' : 'text-text',
                                     )}
+                                    title={layer.phase}
                                 >
                                     {layer.phase}
                                 </span>
                                 {layer.detail ? (
-                                    <span className="ml-auto min-w-0 max-w-[55%] truncate font-mono text-[10px] tabular-nums text-text-tertiary">
+                                    <span
+                                        className="ml-auto min-w-0 max-w-[55%] truncate font-mono text-[10px] tabular-nums text-text-tertiary"
+                                        title={layer.detail}
+                                    >
                                         {layer.detail}
                                     </span>
                                 ) : null}

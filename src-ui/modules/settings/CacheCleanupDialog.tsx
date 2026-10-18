@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { ExpandChevron, ExpandPresence } from '../../shared/ui/motion';
 import type { CacheCategory } from '../../core/ipc/types';
 import { useCacheCleanup } from '../../hooks/preferences/useCacheCleanup';
 import {
@@ -44,6 +45,8 @@ export function CacheCleanupDialog({
     onOpenChange: (open: boolean) => void;
 }) {
     const { scan, clean, busy, result, error } = useCacheCleanup(open);
+    const [showWarnings, setShowWarnings] = useState(false);
+    const warningsId = useId();
     const [selected, setSelected] = useState<CacheCategory[]>([
         'installers',
         'desktop_updates',
@@ -123,14 +126,28 @@ export function CacheCleanupDialog({
                         </p>
                     )}
                     {warnings.length > 0 && (
-                        <details className="text-[12px] text-text-tertiary">
-                            <summary className="cursor-pointer">查看未清理项目的原因</summary>
-                            <ul className="mt-2 max-h-32 space-y-1 overflow-auto break-all">
-                                {[...new Set(warnings)].map((warning) => (
-                                    <li key={warning}>{warning}</li>
-                                ))}
-                            </ul>
-                        </details>
+                        <div className="text-[12px] text-text-tertiary">
+                            <button
+                                type="button"
+                                aria-expanded={showWarnings}
+                                aria-controls={warningsId}
+                                onClick={() => setShowWarnings((current) => !current)}
+                                className="inline-flex items-center gap-1.5 rounded-sm text-left hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                            >
+                                <ExpandChevron open={showWarnings} />
+                                查看未清理项目的原因
+                            </button>
+                            <ExpandPresence visible={showWarnings}>
+                                <ul
+                                    id={warningsId}
+                                    className="mt-2 max-h-32 space-y-1 overflow-auto break-all"
+                                >
+                                    {[...new Set(warnings)].map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                    ))}
+                                </ul>
+                            </ExpandPresence>
+                        </div>
                     )}
                     {totalFiles > 0 && (
                         <p className="text-sm text-text-tertiary">

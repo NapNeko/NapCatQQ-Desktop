@@ -4,19 +4,19 @@
 // GSAP 没有内置等价物。Dialog/InfoBar/路由切换/Tabs 内容切换都依赖这个。
 //
 // 设计:外部传受控 visible 信号,组件内部 mounted 控制 DOM 渲染:
-//   visible=true:  立即 mount → useGSAP 在 children 节点上跑 enter
-//   visible=false: 不立即 unmount → useGSAP 跑 exit → onComplete 后 setMounted(false)
+//   visible=true:  立即 mount → 在 children 节点上跑 enter
+//   visible=false: 不立即 unmount → 跑 exit → onComplete 后 setMounted(false)
 //
 // children 必须是单个 React element,接受一个 ref。GsapPresence 通过 cloneElement
 // 把内部 ref 注入。enter/exit timeline 工厂由调用方提供;空时走默认 autoAlpha
 // 0↔1。reduced/enabled=false 时直接 set 终态跳过动画。
 
-import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import {
     cloneElement,
+    forwardRef,
     isValidElement,
-    useEffect,
+    useCallback,
     useLayoutEffect,
     useRef,
     useState,
@@ -25,14 +25,13 @@ import {
 } from 'react';
 import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion';
 
-/// useGSAP 插件注册(模块级,只跑一次)。
-gsap.registerPlugin(useGSAP);
-
 export type EnterFn = (el: HTMLElement, env: MotionEnv) => gsap.core.Timeline | gsap.core.Tween;
 export type ExitFn = EnterFn;
 
 interface GsapPresenceProps {
     visible: boolean;
+    /** 收起后隐藏 DOM，保留编辑器等子组件的本地草稿。 */
+    keepMounted?: boolean;
     /// 单个 React element,会被注入 ref。通常是一个 div / forwardRef 组件。
     children: ReactElement;
     /// enter 工厂。返回 timeline / tween,GsapPresence 会监听 onComplete 翻 phase。
@@ -45,95 +44,112 @@ interface GsapPresenceProps {
     onExited?: () => void;
 }
 
-export function GsapPresence({ visible, children, onEnter, onExit, onExited }: GsapPresenceProps) {
+export const GsapPresence = forwardRef<HTMLElement, GsapPresenceProps>(function GsapPresence(
+    { visible, keepMounted = false, children, onEnter, onExit, onExited },
+    forwardedRef,
+) {
     const env = useMotion();
+    const latestMotion = useRef(env);
+    latestMotion.current = env;
+    const callbacks = useRef({ onEnter, onExit, onExited });
+    callbacks.current = { onEnter, onExit, onExited };
     const ref = useRef<HTMLElement | null>(null);
+    const setRef = useCallback(
+        (node: HTMLElement | null) => {
+            ref.current = node;
+            if (typeof forwardedRef === 'function') forwardedRef(node);
+            else if (forwardedRef) forwardedRef.current = node;
+        },
+        [forwardedRef],
+    );
     const activeAnimRef = useRef<gsap.core.Tween | gsap.core.Timeline | null>(null);
     const [mounted, setMounted] = useState<boolean>(visible);
-    /** ref 挂上 DOM 后再触发 useGSAP，避免首屏 PageTransition 一直 visibility:hidden */
-    const [refReady, setRefReady] = useState(0);
-
-    // 只在「要显示且已挂上」时重绑 ref。visible 变 false 也 bump 的话，
-    // useGSAP 会立刻 kill 刚起的 exit，onInterrupt → finishExit，收起动画直接没了。
-    useLayoutEffect(() => {
-        if (!mounted || !visible) return;
-        setRefReady((n) => n + 1);
-    }, [mounted, visible]);
-
-    // visible→true:立即 mount。后面 useGSAP 会跑 enter。
-    // visible→false:不立即 unmount,留给 useGSAP 跑 exit + 完成时 setMounted(false)。
-    useEffect(() => {
-        if (visible && !mounted) {
-            setMounted(true);
-        }
-    }, [visible, mounted]);
+    // 提交前同步挂载状态，避免 ref 就绪后再次重播 enter、把反转中的高度清零。
+    if (visible && !mounted) setMounted(true);
+    const latestVisible = useRef(visible);
+    latestVisible.current = visible;
+    const hasMounted = useRef(visible);
+    if (visible) hasMounted.current = true;
 
     // 退场必须落到终态再 unmount：exit 被 kill（依赖抖动、快速连点状态）时若只
     // kill 不设 visibility，按钮会卡在半透明仍占位（日志/WebUI/VNC 不消失）。
-    useGSAP(
-        () => {
-            const el = ref.current;
-            if (!el) return;
+    useLayoutEffect(() => {
+        const { onEnter, onExit, onExited } = callbacks.current;
+        const el = ref.current;
+        if (!el) return;
+        let cancelled = false;
+        let exited = false;
 
-            const finishExit = () => {
+        const finishExit = () => {
+            // 快速切回或设置变化会取消旧动画；迟到的回调不能再卸载新内容。
+            if (cancelled || exited || latestVisible.current) return;
+            exited = true;
+            gsap.set(el, {
+                autoAlpha: 0,
+                opacity: 0,
+                visibility: 'hidden',
+                clearProps: 'willChange',
+            });
+            setMounted(false);
+            onExited?.();
+        };
+
+        const prev = activeAnimRef.current;
+        if (prev) {
+            prev.eventCallback('onInterrupt', null);
+            prev.kill();
+            activeAnimRef.current = null;
+        }
+
+        if (visible) {
+            gsap.set(el, { visibility: 'visible' });
+            if (!env.enabled || !onEnter) {
                 gsap.set(el, {
-                    autoAlpha: 0,
-                    opacity: 0,
-                    visibility: 'hidden',
-                    clearProps: 'willChange',
+                    autoAlpha: 1,
+                    opacity: 1,
+                    visibility: 'visible',
+                    ...(!env.enabled ? { clearProps: 'transform' } : {}),
                 });
-                setMounted(false);
-                onExited?.();
-            };
+                return;
+            }
+            const anim = onEnter(el, env);
+            activeAnimRef.current = anim;
+            anim.eventCallback('onInterrupt', () => {
+                gsap.set(el, { autoAlpha: 1, opacity: 1, visibility: 'visible' });
+            });
+        } else {
+            if (!mounted) return;
+            if (!env.enabled || !onExit) {
+                finishExit();
+                return;
+            }
+            const anim = onExit(el, env);
+            activeAnimRef.current = anim;
+            anim.eventCallback('onComplete', finishExit);
+            anim.eventCallback('onInterrupt', finishExit);
+        }
 
-            const prev = activeAnimRef.current;
-            if (prev) {
-                prev.eventCallback('onInterrupt', null);
-                prev.kill();
+        return () => {
+            cancelled = true;
+            const anim = activeAnimRef.current;
+            if (anim) {
+                anim.eventCallback('onInterrupt', null);
+                // 中途关闭动效时先交付入场终态，不能留下半缩放的弹窗或半高面板。
+                if (visible && latestVisible.current && !latestMotion.current.enabled) {
+                    anim.progress(1);
+                }
+                anim.eventCallback('onComplete', null);
+                anim.kill();
                 activeAnimRef.current = null;
             }
+        };
+    }, [visible, mounted, env]);
 
-            if (visible) {
-                if (!env.enabled || !onEnter) {
-                    gsap.set(el, { autoAlpha: 1, opacity: 1, visibility: 'visible' });
-                    return;
-                }
-                const anim = onEnter(el, env);
-                activeAnimRef.current = anim;
-                anim.eventCallback('onInterrupt', () => {
-                    gsap.set(el, { autoAlpha: 1, opacity: 1, visibility: 'visible' });
-                });
-            } else {
-                if (!mounted) return;
-                if (!env.enabled || !onExit) {
-                    finishExit();
-                    return;
-                }
-                const anim = onExit(el, env);
-                activeAnimRef.current = anim;
-                anim.eventCallback('onComplete', finishExit);
-                anim.eventCallback('onInterrupt', finishExit);
-            }
-
-            return () => {
-                const anim = activeAnimRef.current;
-                if (anim) {
-                    anim.eventCallback('onInterrupt', null);
-                    anim.kill();
-                    activeAnimRef.current = null;
-                    if (!visible && mounted) {
-                        finishExit();
-                    }
-                }
-            };
-        },
-        { dependencies: [visible, mounted, env.enabled, refReady] },
-    );
-
-    if (!visible && !mounted) return null;
+    if (!visible && !mounted && (!keepMounted || !hasMounted.current)) return null;
 
     if (!isValidElement(children)) return children;
-    return cloneElement(children as ReactElement<{ ref?: Ref<HTMLElement> }>, {
-        ref,
+    return cloneElement(children as ReactElement<{ ref?: Ref<HTMLElement>; hidden?: boolean }>, {
+        ref: setRef,
+        ...(keepMounted ? { hidden: !visible && !mounted } : {}),
     });
-}
+});

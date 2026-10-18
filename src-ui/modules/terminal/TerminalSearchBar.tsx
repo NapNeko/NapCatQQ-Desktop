@@ -28,7 +28,7 @@ function Toggle({
             aria-pressed={active}
             onClick={onClick}
             className={cn(
-                'flex h-6 w-6 items-center justify-center rounded-xs transition-colors',
+                'flex h-6 w-6 shrink-0 items-center justify-center rounded-xs transition-colors',
                 active
                     ? 'bg-accent-soft text-text'
                     : 'text-text-tertiary hover:bg-inset hover:text-text',
@@ -81,52 +81,57 @@ export function TerminalSearchBar({ runtime, onClose }: Props) {
         : '';
 
     return (
-        <div className="ncd-term-drop-down absolute right-4 top-2 z-20 flex items-center gap-1 rounded-sm border border-border bg-elevated px-1.5 py-1 shadow-popover">
-            <input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => {
-                    setQuery(e.target.value);
-                    find('next', e.target.value);
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        find(e.shiftKey ? 'prev' : 'next');
-                    } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        close();
-                    }
-                }}
-                placeholder="搜索输出"
-                spellCheck={false}
-                className="h-6 w-44 rounded-xs bg-field px-2 text-[12px] text-text outline-none placeholder:text-text-tertiary"
-            />
-            <span className="w-12 text-center text-[11px] tabular-nums text-text-tertiary">
-                {count}
-            </span>
-            <Toggle
-                active={caseSensitive}
-                onClick={() => setCaseSensitive((v) => !v)}
-                title="区分大小写"
-            >
-                <CaseSensitive size={14} />
-            </Toggle>
-            <Toggle active={wholeWord} onClick={() => setWholeWord((v) => !v)} title="全字匹配">
-                <WholeWord size={14} />
-            </Toggle>
-            <Toggle active={regex} onClick={() => setRegex((v) => !v)} title="正则">
-                <Regex size={14} />
-            </Toggle>
-            <Toggle active={false} onClick={() => find('prev')} title="上一个（Shift+Enter）">
-                <ArrowUp size={14} />
-            </Toggle>
-            <Toggle active={false} onClick={() => find('next')} title="下一个（Enter）">
-                <ArrowDown size={14} />
-            </Toggle>
-            <Toggle active={false} onClick={close} title="关闭（Esc）">
-                <X size={14} />
-            </Toggle>
+        <div className="ncd-term-drop-down absolute right-2 top-2 z-20 flex w-[416px] max-w-[calc(100%-1rem)] flex-wrap items-center justify-end gap-1 rounded-sm border border-border bg-elevated px-1.5 py-1 shadow-popover">
+            <div className="flex min-w-0 flex-1 basis-40 items-center gap-1">
+                <input
+                    ref={inputRef}
+                    value={query}
+                    onChange={(e) => {
+                        setQuery(e.target.value);
+                        find('next', e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            find(e.shiftKey ? 'prev' : 'next');
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            close();
+                        }
+                    }}
+                    placeholder="搜索输出"
+                    spellCheck={false}
+                    aria-label="搜索终端输出"
+                    className="h-6 w-0 min-w-0 flex-1 rounded-xs bg-field px-2 text-[12px] text-text outline-none placeholder:text-text-tertiary"
+                />
+                <span className="w-12 shrink-0 text-center text-[11px] tabular-nums text-text-tertiary">
+                    {count}
+                </span>
+            </div>
+            <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
+                <Toggle
+                    active={caseSensitive}
+                    onClick={() => setCaseSensitive((v) => !v)}
+                    title="区分大小写"
+                >
+                    <CaseSensitive size={14} />
+                </Toggle>
+                <Toggle active={wholeWord} onClick={() => setWholeWord((v) => !v)} title="全字匹配">
+                    <WholeWord size={14} />
+                </Toggle>
+                <Toggle active={regex} onClick={() => setRegex((v) => !v)} title="正则">
+                    <Regex size={14} />
+                </Toggle>
+                <Toggle active={false} onClick={() => find('prev')} title="上一个（Shift+Enter）">
+                    <ArrowUp size={14} />
+                </Toggle>
+                <Toggle active={false} onClick={() => find('next')} title="下一个（Enter）">
+                    <ArrowDown size={14} />
+                </Toggle>
+                <Toggle active={false} onClick={close} title="关闭（Esc）">
+                    <X size={14} />
+                </Toggle>
+            </div>
         </div>
     );
 }

@@ -16,6 +16,7 @@ import {
     Trend,
     type NeoBotPageProps,
 } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
 export function NeoBotStatisticsTab({ instanceId, onGoTab }: NeoBotPageProps) {
     const [hours, setHours] = useState('24');
@@ -129,9 +130,8 @@ export function NeoBotStatisticsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                             <Trend data={data} field="output_tokens" title="输出 Token" />
                             <Trend data={data} field="calls" title="调用次数" />
                         </div>
-                        <details className="mt-4 text-xs text-text-secondary">
-                            <summary className="cursor-pointer">模型 / 模块排行</summary>
-                            <div className="mt-3">
+                        <PanelDisclosure label="模型 / 模块排行" className="mt-4">
+                            <div>
                                 <RecordTable
                                     items={[...records(data.models), ...records(data.modules)]}
                                     columns={[
@@ -142,7 +142,7 @@ export function NeoBotStatisticsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                     ]}
                                 />
                             </div>
-                        </details>
+                        </PanelDisclosure>
                     </PanelSection>
                 )}
             </PanelPage>

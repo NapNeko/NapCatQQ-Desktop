@@ -2,7 +2,7 @@
 
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Badge, Button, Switch } from '../../../../shared/ui';
-import { ActionMotionIcon } from '../../../../shared/ui/motion';
+import { ActionMotionIcon, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import type { WebhookChannelDraft } from '../../../../core/domain/settings/offline-notify-defaults';
 import type { SettingsDraft } from '../../settings-draft';
@@ -45,70 +45,10 @@ export function WebhookChannelsSection({
                 />
             </FieldRow>
 
-            {draft.botOfflineWebHookNotice ? (
-                channels.length === 0 ? (
-                    <FieldRow label="推送通道" description="还没有通道" isLast>
-                        <Button type="button" variant="secondary" size="sm" onClick={onOpenCreate}>
-                            <ActionMotionIcon icon={Plus} size={14} />
-                            添加
-                        </Button>
-                    </FieldRow>
-                ) : (
-                    <>
-                        {channels.map((ch) => {
-                            const ready = ch.enabled && !!ch.url.trim();
-                            const status = !ch.enabled
-                                ? '已关闭'
-                                : !ch.url.trim()
-                                  ? '缺地址'
-                                  : ch.method || 'POST';
-                            return (
-                                <FieldRow
-                                    key={ch.id}
-                                    label={channelDisplayName(ch)}
-                                    description={`${channelSummary(ch)} · ${status}`}
-                                    isLast={false}
-                                >
-                                    <div className="flex items-center gap-1.5">
-                                        <span
-                                            className={cn(
-                                                'mr-1 h-1.5 w-1.5 shrink-0 rounded-full',
-                                                ready ? 'bg-success' : 'bg-text-tertiary/45',
-                                            )}
-                                            aria-hidden
-                                        />
-                                        {!ch.enabled ? (
-                                            <Badge tone="neutral" appearance="soft">
-                                                已关闭
-                                            </Badge>
-                                        ) : !ch.url.trim() ? (
-                                            <Badge tone="warning" appearance="soft">
-                                                缺地址
-                                            </Badge>
-                                        ) : null}
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            aria-label={`编辑 ${channelDisplayName(ch)}`}
-                                            onClick={() => onOpenEdit(ch)}
-                                        >
-                                            <ActionMotionIcon icon={Pencil} size={14} />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            aria-label={`删除 ${channelDisplayName(ch)}`}
-                                            onClick={() => onRequestDelete(ch.id)}
-                                        >
-                                            <ActionMotionIcon icon={Trash2} size={14} />
-                                        </Button>
-                                    </div>
-                                </FieldRow>
-                            );
-                        })}
-                        <FieldRow label="添加通道" isLast>
+            <ExpandPresence visible={draft.botOfflineWebHookNotice}>
+                <div className="divide-y divide-border-subtle/70 pt-4">
+                    {channels.length === 0 ? (
+                        <FieldRow label="推送通道" description="还没有通道" isLast>
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -119,9 +59,76 @@ export function WebhookChannelsSection({
                                 添加
                             </Button>
                         </FieldRow>
-                    </>
-                )
-            ) : null}
+                    ) : (
+                        <>
+                            {channels.map((ch) => {
+                                const ready = ch.enabled && !!ch.url.trim();
+                                const status = !ch.enabled
+                                    ? '已关闭'
+                                    : !ch.url.trim()
+                                      ? '缺地址'
+                                      : ch.method || 'POST';
+                                return (
+                                    <FieldRow
+                                        key={ch.id}
+                                        label={channelDisplayName(ch)}
+                                        description={`${channelSummary(ch)} · ${status}`}
+                                        isLast={false}
+                                    >
+                                        <div className="flex items-center gap-1.5">
+                                            <span
+                                                className={cn(
+                                                    'mr-1 h-1.5 w-1.5 shrink-0 rounded-full',
+                                                    ready ? 'bg-success' : 'bg-text-tertiary/45',
+                                                )}
+                                                aria-hidden
+                                            />
+                                            {!ch.enabled ? (
+                                                <Badge tone="neutral" appearance="soft">
+                                                    已关闭
+                                                </Badge>
+                                            ) : !ch.url.trim() ? (
+                                                <Badge tone="warning" appearance="soft">
+                                                    缺地址
+                                                </Badge>
+                                            ) : null}
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                aria-label={`编辑 ${channelDisplayName(ch)}`}
+                                                onClick={() => onOpenEdit(ch)}
+                                            >
+                                                <ActionMotionIcon icon={Pencil} size={14} />
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                aria-label={`删除 ${channelDisplayName(ch)}`}
+                                                onClick={() => onRequestDelete(ch.id)}
+                                            >
+                                                <ActionMotionIcon icon={Trash2} size={14} />
+                                            </Button>
+                                        </div>
+                                    </FieldRow>
+                                );
+                            })}
+                            <FieldRow label="添加通道" isLast>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={onOpenCreate}
+                                >
+                                    <ActionMotionIcon icon={Plus} size={14} />
+                                    添加
+                                </Button>
+                            </FieldRow>
+                        </>
+                    )}
+                </div>
+            </ExpandPresence>
         </SettingsSection>
     );
 }

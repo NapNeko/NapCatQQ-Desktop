@@ -23,9 +23,9 @@ export const MaiBotConnectionTab: React.FC<{
                         实例里没有 NapCat 适配器插件，重新安装实例可以补上。
                     </p>
                 ) : (
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
                         <dt className="text-text-tertiary">对接</dt>
-                        <dd className="text-text">
+                        <dd className="min-w-0 break-words text-text">
                             {linked
                                 ? `已对接 Bot ${instance.link?.bot_id}`
                                 : '还没对接，到「概览」点对接'}
@@ -35,7 +35,7 @@ export const MaiBotConnectionTab: React.FC<{
                         <dt className="text-text-tertiary">连接地址</dt>
                         {/* 没对接时适配器里是上游默认的 3001，Bot 并没在那儿听，显示出来只会误导 */}
                         {adapter.enabled || linked ? (
-                            <dd className="font-mono text-text">
+                            <dd className="min-w-0 break-all font-mono text-text">
                                 ws://{adapter.napcat_host}:{adapter.napcat_port}
                                 <span className="ml-2 font-sans text-2xs text-text-tertiary">
                                     {adapter.has_token ? '带 token' : '没设 token'}

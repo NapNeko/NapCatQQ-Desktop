@@ -26,6 +26,7 @@ import type { WebsocketClientConfig } from '../../../../core/ipc/generated/domai
 import type { MessagePostFormat } from '../../../../core/ipc/generated/domain/MessagePostFormat';
 import type { WsRole } from '../../../../core/ipc/generated/domain/WsRole';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
+import { ExpandPresence } from '../../../../shared/ui/motion/ExpandPresence';
 
 const MSG_FORMAT_ITEMS = [
     { value: 'array' as MessagePostFormat, label: 'Array（结构化数组）' },
@@ -100,7 +101,7 @@ export function ConnectionEditor({
     const isSnowLuma = backendType === 'snowluma';
 
     return (
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
             {/* 公共字段 */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TextField
@@ -143,13 +144,13 @@ export function ConnectionEditor({
             />
 
             {/* Footer：启用开关靠左，操作按钮靠右 */}
-            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border-subtle pt-4">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-4">
                 <Switch
                     checked={data.enable}
                     onCheckedChange={(v) => patch('enable', v)}
                     label="启用此连接"
                 />
-                <div className="flex items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={onCancel}>
                         取消
                     </Button>
@@ -257,30 +258,32 @@ function HttpServerFields({
                     error={error?.includes('端口') ? error : undefined}
                 />
             </div>
-            <TextField
-                label="监听路径"
-                value={data.path}
-                onValueChange={(v) => patch('path' as keyof ConnectionConfig, v as never)}
-                placeholder="/"
-            />
-            {!isSnowLuma && (
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                    <Checkbox
-                        label="允许跨域请求 (CORS)"
-                        checked={data.enableCors}
-                        onCheckedChange={(v) =>
-                            patch('enableCors' as keyof ConnectionConfig, v as never)
-                        }
-                    />
-                    <Checkbox
-                        label="兼任 WebSocket 握手"
-                        checked={data.enableWebsocket}
-                        onCheckedChange={(v) =>
-                            patch('enableWebsocket' as keyof ConnectionConfig, v as never)
-                        }
-                    />
-                </div>
-            )}
+            <div>
+                <TextField
+                    label="监听路径"
+                    value={data.path}
+                    onValueChange={(v) => patch('path' as keyof ConnectionConfig, v as never)}
+                    placeholder="/"
+                />
+                <ExpandPresence visible={!isSnowLuma}>
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-3">
+                        <Checkbox
+                            label="允许跨域请求 (CORS)"
+                            checked={data.enableCors}
+                            onCheckedChange={(v) =>
+                                patch('enableCors' as keyof ConnectionConfig, v as never)
+                            }
+                        />
+                        <Checkbox
+                            label="兼任 WebSocket 握手"
+                            checked={data.enableWebsocket}
+                            onCheckedChange={(v) =>
+                                patch('enableWebsocket' as keyof ConnectionConfig, v as never)
+                            }
+                        />
+                    </div>
+                </ExpandPresence>
+            </div>
         </>
     );
 }
@@ -367,23 +370,30 @@ function HttpClientFields({
                 hint="必须以 http:// 或 https:// 开头"
                 error={error?.includes('Webhook URL') || error?.includes('URL') ? error : undefined}
             />
-            <Checkbox
-                label="上报 Bot 自身发出的消息"
-                checked={data.reportSelfMessage}
-                onCheckedChange={(v) =>
-                    patch('reportSelfMessage' as keyof ConnectionConfig, v as never)
-                }
-            />
-            {isSnowLuma && (
-                <NumberField
-                    label="请求超时 (ms)"
-                    value={data.timeoutMs ?? null}
-                    onValueChange={(v) =>
-                        patch('timeoutMs' as keyof ConnectionConfig, (v ?? undefined) as never)
+            <div>
+                <Checkbox
+                    label="上报 Bot 自身发出的消息"
+                    checked={data.reportSelfMessage}
+                    onCheckedChange={(v) =>
+                        patch('reportSelfMessage' as keyof ConnectionConfig, v as never)
                     }
-                    placeholder="留空使用引擎默认值"
                 />
-            )}
+                <ExpandPresence visible={isSnowLuma}>
+                    <div className="pt-3">
+                        <NumberField
+                            label="请求超时 (ms)"
+                            value={data.timeoutMs ?? null}
+                            onValueChange={(v) =>
+                                patch(
+                                    'timeoutMs' as keyof ConnectionConfig,
+                                    (v ?? undefined) as never,
+                                )
+                            }
+                            placeholder="留空使用引擎默认值"
+                        />
+                    </div>
+                </ExpandPresence>
+            </div>
         </>
     );
 }

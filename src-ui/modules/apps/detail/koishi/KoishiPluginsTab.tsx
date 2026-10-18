@@ -3,17 +3,7 @@
 // 「添加」从已装的包里挑（没进树的排前面），装新包去插件市场。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ChevronRight,
-    Folder,
-    FolderOpen,
-    FolderPlus,
-    Lock,
-    Plus,
-    Puzzle,
-    Search,
-    Store,
-} from 'lucide-react';
+import { Folder, FolderOpen, FolderPlus, Lock, Plus, Puzzle, Search, Store } from 'lucide-react';
 import {
     Badge,
     Button,
@@ -24,6 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import {
     KOISHI_CORE_PLUGINS,
@@ -48,6 +39,7 @@ import type {
     KoishiInstanceConfig,
     KoishiPluginNode,
 } from '../../../../core/ipc/types';
+import { KoishiSplitPane } from './KoishiSplitPane';
 
 function findPath(
     nodes: readonly KoishiPluginNode[],
@@ -202,16 +194,11 @@ function TreeRows(props: RowsProps) {
                                 <button
                                     type="button"
                                     aria-label={open ? '收起' : '展开'}
+                                    aria-expanded={open}
                                     className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-tertiary hover:text-text"
                                     onClick={() => setFolded((f) => ({ ...f, [key]: open }))}
                                 >
-                                    <ChevronRight
-                                        size={13}
-                                        className={cn(
-                                            'transition-transform duration-200',
-                                            open && 'rotate-90',
-                                        )}
-                                    />
+                                    <ExpandChevron open={open} size={13} />
                                 </button>
                             ) : (
                                 <span
@@ -284,16 +271,18 @@ function TreeRows(props: RowsProps) {
                                 />
                             )}
                         </div>
-                        {group && open && n.children.length > 0 && (
-                            <ul className="flex flex-col">
-                                <TreeRows
-                                    {...props}
-                                    nodes={n.children}
-                                    base={path}
-                                    depth={depth + 1}
-                                    parentOn={live}
-                                />
-                            </ul>
+                        {group && n.children.length > 0 && (
+                            <ExpandPresence visible={open}>
+                                <ul className="flex flex-col">
+                                    <TreeRows
+                                        {...props}
+                                        nodes={n.children}
+                                        base={path}
+                                        depth={depth + 1}
+                                        parentOn={live}
+                                    />
+                                </ul>
+                            </ExpandPresence>
                         )}
                     </li>
                 );
@@ -351,8 +340,8 @@ export const KoishiPluginsTab: React.FC<{
     const on = effective(config.plugins).filter((n) => !isGroup(n)).length;
 
     return (
-        <div className="flex min-h-0 flex-1 gap-5 pb-3">
-            <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
+        <KoishiSplitPane>
+            <aside className="flex h-44 max-h-[35vh] min-h-0 w-full min-w-0 shrink-0 flex-col @min-[44rem]/koishi:h-auto @min-[44rem]/koishi:max-h-none @min-[44rem]/koishi:w-[280px] overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 <div className="flex flex-col gap-2.5 border-b border-border-subtle/70 p-3">
                     <SearchBox value={query} onChange={setQuery} />
                     <div className="flex items-center justify-between gap-2">
@@ -412,7 +401,7 @@ export const KoishiPluginsTab: React.FC<{
                     )}
                 </ul>
             </aside>
-            <section className="min-w-0 flex-1 overflow-y-auto pb-6 pr-1">
+            <section className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-6 pr-1">
                 {node && path ? (
                     <KoishiNodeDetail
                         instanceId={instance.id}
@@ -445,7 +434,7 @@ export const KoishiPluginsTab: React.FC<{
                     setAdding(false);
                 }}
             />
-        </div>
+        </KoishiSplitPane>
     );
 };
 

@@ -9,6 +9,7 @@ import {
     Switch,
     TextField,
 } from '../../../../shared/ui';
+import { ExpandPresence } from '../../../../shared/ui/motion';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import { modelsOfType } from '../../../../core/domain/apps/astrbotConfig';
 import { JumpLink } from './parts';
@@ -149,8 +150,8 @@ export const AstrBotTalkTab: React.FC<{
                     onCheckedChange={(on) => setAi({ max_context_length: on ? 20 : -1 })}
                 />
                 <div className={CONFIG_PAIR}>
-                    {limitOn && (
-                        <>
+                    <ExpandPresence visible={limitOn} className="sm:col-span-2" keepMounted>
+                        <div className={CONFIG_PAIR}>
                             <NumberField
                                 label="保留轮数"
                                 value={a.max_context_length}
@@ -175,8 +176,8 @@ export const AstrBotTalkTab: React.FC<{
                                     setAi({ context_limit_reached_strategy })
                                 }
                             />
-                        </>
-                    )}
+                        </div>
+                    </ExpandPresence>
                     <NumberField
                         label="工具调用步数上限"
                         value={a.max_agent_step}
@@ -265,7 +266,7 @@ const ProviderToggle: React.FC<{
                 disabled={disabled}
                 onCheckedChange={onEnable}
             />
-            {enabled && (
+            <ExpandPresence visible={enabled} keepMounted>
                 <Select
                     label="提供商"
                     value={providerId || undefined}
@@ -282,7 +283,7 @@ const ProviderToggle: React.FC<{
                     }
                     onValueChange={onProvider}
                 />
-            )}
+            </ExpandPresence>
         </div>
     );
 };

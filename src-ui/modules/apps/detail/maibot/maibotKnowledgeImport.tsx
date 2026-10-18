@@ -13,6 +13,7 @@ import {
     TextField,
 } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
+import { ExpandPresence } from '../../../../shared/ui/motion';
 import type {
     MaiBotLocalTextFile,
     MaiBotMemoryImportKind,
@@ -402,6 +403,7 @@ const TaskRow: React.FC<{
                 <button
                     type="button"
                     onClick={onToggle}
+                    aria-expanded={open}
                     className="min-w-0 flex-1 text-left focus-visible:outline-none"
                 >
                     <span className="block truncate text-[13px] text-text" title={title}>
@@ -450,7 +452,7 @@ const TaskRow: React.FC<{
                     )
                 )}
             </div>
-            {open && (
+            <ExpandPresence visible={open}>
                 <div className="border-t border-border-subtle px-3 py-2">
                     {detail.data ? (
                         <ul className="flex flex-col gap-1.5">
@@ -487,7 +489,7 @@ const TaskRow: React.FC<{
                         </p>
                     )}
                 </div>
-            )}
+            </ExpandPresence>
         </div>
     );
 };

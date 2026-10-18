@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 /** Tab 内多个分组：组间大留白，不用横线切（避免和行内分隔叠在一起显得乱）。 */
 export function SettingsTabSections({ children }: { children: ReactNode }) {
-    return <div className="flex w-full flex-col gap-14">{children}</div>;
+    return <div className="flex min-w-0 w-full flex-col gap-14">{children}</div>;
 }
 
 function SettingsSectionHeader({
@@ -43,12 +43,12 @@ export function SettingsSection({
     layout?: 'fields' | 'panel';
 }) {
     return (
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
             <SettingsSectionHeader title={title} description={description} />
             {layout === 'panel' ? (
                 <div className="min-w-0">{children}</div>
             ) : (
-                <div className="border-l border-border-subtle/80 pl-4 sm:pl-5">
+                <div className="min-w-0 border-l border-border-subtle/80 pl-4 sm:pl-5">
                     <div className="flex flex-col divide-y divide-border-subtle/70">{children}</div>
                 </div>
             )}
@@ -75,7 +75,7 @@ export function FieldRow({
 }) {
     if (layout === 'stacked') {
         return (
-            <div className="flex flex-col gap-2 py-5 first:pt-1 last:pb-1">
+            <div className="flex min-w-0 flex-col gap-2 py-5 first:pt-1 last:pb-1">
                 <div className="space-y-1">
                     <label className="block text-[13px] font-medium leading-snug text-text">
                         {label}
@@ -86,13 +86,13 @@ export function FieldRow({
                         </p>
                     )}
                 </div>
-                {children && <div>{children}</div>}
+                {children && <div className="min-w-0 max-w-full">{children}</div>}
             </div>
         );
     }
     return (
-        <div className="flex items-center justify-between gap-6 py-5 first:pt-1 last:pb-1">
-            <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 py-5 first:pt-1 last:pb-1">
+            <div className="min-w-0 flex-[1_1_12rem] space-y-1 [overflow-wrap:anywhere]">
                 <label className="block text-[13px] font-medium leading-snug text-text">
                     {label}
                 </label>
@@ -100,7 +100,11 @@ export function FieldRow({
                     <p className="text-[12px] leading-relaxed text-text-tertiary">{description}</p>
                 )}
             </div>
-            {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+            {children && (
+                <div className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2 [&>*]:max-w-full">
+                    {children}
+                </div>
+            )}
         </div>
     );
 }

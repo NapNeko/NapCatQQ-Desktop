@@ -133,7 +133,11 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                         <ChevronDown size={13} />
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-64 p-1.5" sideOffset={6}>
+                <PopoverContent
+                    align="end"
+                    className="max-h-[var(--radix-popover-content-available-height)] w-64 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-1.5"
+                    sideOffset={6}
+                >
                     <p className="px-2 py-1.5 text-[11px] font-medium text-text-tertiary">
                         选择镜像源
                     </p>

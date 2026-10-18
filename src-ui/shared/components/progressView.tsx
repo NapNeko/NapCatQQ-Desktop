@@ -24,10 +24,12 @@ function taskLevelPercent(progress: ActionProgressView): number {
     return progress.dockerLayers.length > 0 ? progress.percent : progress.overallPercent;
 }
 
-export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: string }> = ({
-    progress,
-    className,
-}) => {
+export const ProgressLine: React.FC<{
+    progress: ActionProgressView;
+    className?: string;
+    /** 卡片底栏只展示一行摘要；完整下载信息仍可通过提示和辅助技术读取。 */
+    compact?: boolean;
+}> = ({ progress, className, compact = false }) => {
     const row = (inner: React.ReactNode) => (
         <div className={cn('mt-1 flex min-w-0 max-w-full items-center gap-2', className)}>
             {inner}
@@ -77,7 +79,10 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
                     size={12}
                     className="shrink-0 text-brand"
                 />
-                <span className="min-w-0 truncate text-[12px] text-text-secondary">
+                <span
+                    className="min-w-0 truncate text-[12px] text-text-secondary"
+                    title={progress.message || '处理中…'}
+                >
                     {progress.message || '处理中…'}
                 </span>
                 <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
@@ -101,13 +106,27 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
             : eta != null
               ? `ETA ${formatEta(eta)}`
               : null;
+    const downloadDetails = [
+        stageLabel,
+        bytesText,
+        trailingMetric,
+        indeterminate ? null : `${progress.percent}%`,
+        progress.message.trim(),
+    ]
+        .filter(Boolean)
+        .join(' · ');
 
     return (
-        <div className={cn('mt-1 min-w-0 max-w-full text-[11.5px]', className)}>
+        <div
+            className={cn('mt-1 min-w-0 max-w-full text-[11.5px]', className)}
+            role={compact ? 'group' : undefined}
+            title={compact ? downloadDetails : undefined}
+            aria-label={compact ? downloadDetails : undefined}
+        >
             <div className="flex min-w-0 items-center gap-2">
                 <StageIcon stage={progress.downloadStage} />
                 <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
-                {bytesText && (
+                {bytesText && !compact && (
                     <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">
                         {bytesText}
                     </span>
@@ -121,7 +140,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
                     {indeterminate ? '—' : `${progress.percent}%`}
                 </span>
             </div>
-            {progress.message.trim() && (
+            {!compact && progress.message.trim() && (
                 <div
                     className="mt-0.5 truncate text-[11px] text-text-tertiary"
                     title={progress.message}

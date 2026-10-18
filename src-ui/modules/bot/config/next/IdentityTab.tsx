@@ -25,7 +25,7 @@ import {
     Switch,
     TextField,
 } from '../../../../shared/ui';
-import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
+import { ExpandPresence } from '../../../../shared/ui/motion/ExpandPresence';
 import { AutoRestartScheduleEditor } from './AutoRestartScheduleEditor';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useFeatures } from '../../../../hooks/preferences/featureTogglesStore';
@@ -201,6 +201,17 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         remoteHostId != null;
 
     const dockerFlavorLabel = data.backend_type === 'snowluma' ? 'SnowLuma' : 'NapCat';
+    const localBlocking = localReadiness.readiness
+        ? describeBlocking(localReadiness.readiness, componentNames)
+        : null;
+    const localNotice = localBlocking
+        ? `本机${localBlocking}，请到「组件」页安装后再使用本机直接运行`
+        : localReadiness.probing && !localReadiness.readiness
+          ? '正在检测本机运行时组件…'
+          : null;
+    const remoteNotice = remoteTransportFailed
+        ? '远端主机不可达，保存后无法启动。请先在「远程主机」页恢复连接。'
+        : missingDirectRunNotice;
 
     // 当前运行场景的机制说明，收进 Popover 默认折叠，不常驻长文。
     const sceneExplainer = useMemo(() => {
@@ -304,6 +315,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
             <div data-tour-id="bot-runtime-section">
                 <FormSection
                     title="运行场景"
+                    layout="none"
                     description="本机固定直接运行；远程 Linux 可选 Docker"
                     actions={
                         sceneExplainer ? (
@@ -363,157 +375,147 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         </div>
                     </div>
 
-                    <GsapPresence visible={isRemote}>
-                        <div className="flex flex-col gap-3 rounded-md border border-border-subtle/80 bg-field/30 p-3.5">
-                            {!hasRemoteHosts && !serversLoading && (
-                                <InlineNotice tone="warn">
-                                    请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
-                                </InlineNotice>
-                            )}
-                            <div
-                                className={cn(
-                                    'grid grid-cols-1 gap-3',
-                                    hasRemoteHosts && serverItems.length > 0 && 'sm:grid-cols-2',
-                                )}
-                            >
-                                {hasRemoteHosts && serverItems.length > 0 && (
-                                    <Select
-                                        label="目标远程主机"
-                                        items={serverItems}
-                                        value={remoteHostSelectValue}
-                                        onValueChange={(v) => onChange({ runtime_target: v })}
-                                        placeholder="选择主机"
-                                    />
-                                )}
+                    <ExpandPresence visible={isRemote}>
+                        <div className="pt-3">
+                            <div className="flex flex-col rounded-md border border-border-subtle/80 bg-field/30 p-3.5">
+                                <ExpandPresence visible={!hasRemoteHosts && !serversLoading}>
+                                    <div className="pb-3">
+                                        <InlineNotice tone="warn">
+                                            请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
+                                        </InlineNotice>
+                                    </div>
+                                </ExpandPresence>
+                                <div
+                                    className={cn(
+                                        'grid grid-cols-1 gap-3',
+                                        hasRemoteHosts &&
+                                            serverItems.length > 0 &&
+                                            'sm:grid-cols-2',
+                                    )}
+                                >
+                                    {hasRemoteHosts && serverItems.length > 0 && (
+                                        <Select
+                                            label="目标远程主机"
+                                            items={serverItems}
+                                            value={remoteHostSelectValue}
+                                            onValueChange={(v) => onChange({ runtime_target: v })}
+                                            placeholder="选择主机"
+                                        />
+                                    )}
 
-                                <div className="flex flex-col gap-1.5">
-                                    <span className="text-xs font-medium text-text-secondary">
-                                        启动方式
-                                    </span>
-                                    <div
-                                        role="radiogroup"
-                                        aria-label="启动方式"
-                                        className="grid h-[38px] grid-cols-2 gap-1 rounded-sm border border-border-subtle bg-inset p-0.5"
-                                    >
-                                        {DEPLOYMENT_ITEMS.map((item) => {
-                                            const selected = deploymentType === item.value;
-                                            const Icon = item.icon;
-                                            return (
-                                                <button
-                                                    key={item.value}
-                                                    type="button"
-                                                    role="radio"
-                                                    aria-checked={selected}
-                                                    onClick={() =>
-                                                        onChange({ deploymentType: item.value })
-                                                    }
-                                                    className={cn(
-                                                        'inline-flex items-center justify-center gap-1.5 rounded-xs px-2.5 text-xs font-medium transition-all',
-                                                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
-                                                        selected
-                                                            ? 'border border-border/50 bg-surface text-text shadow-xs'
-                                                            : 'border border-transparent text-text-tertiary hover:text-text',
-                                                    )}
-                                                >
-                                                    <Icon
-                                                        size={13}
-                                                        className={
-                                                            selected
-                                                                ? 'text-brand'
-                                                                : 'text-text-tertiary'
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-xs font-medium text-text-secondary">
+                                            启动方式
+                                        </span>
+                                        <div
+                                            role="radiogroup"
+                                            aria-label="启动方式"
+                                            className="grid h-[38px] grid-cols-2 gap-1 rounded-sm border border-border-subtle bg-inset p-0.5"
+                                        >
+                                            {DEPLOYMENT_ITEMS.map((item) => {
+                                                const selected = deploymentType === item.value;
+                                                const Icon = item.icon;
+                                                return (
+                                                    <button
+                                                        key={item.value}
+                                                        type="button"
+                                                        role="radio"
+                                                        aria-checked={selected}
+                                                        onClick={() =>
+                                                            onChange({ deploymentType: item.value })
                                                         }
-                                                    />
-                                                    <span>{item.label}</span>
-                                                </button>
-                                            );
-                                        })}
+                                                        className={cn(
+                                                            'inline-flex items-center justify-center gap-1.5 rounded-xs px-2.5 text-xs font-medium transition-all',
+                                                            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
+                                                            selected
+                                                                ? 'border border-border/50 bg-surface text-text shadow-xs'
+                                                                : 'border border-transparent text-text-tertiary hover:text-text',
+                                                        )}
+                                                    >
+                                                        <Icon
+                                                            size={13}
+                                                            className={
+                                                                selected
+                                                                    ? 'text-brand'
+                                                                    : 'text-text-tertiary'
+                                                            }
+                                                        />
+                                                        <span>{item.label}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
+
+                                <ExpandPresence visible={!!showDockerBlock && !!remoteHostId}>
+                                    <div className="pt-3">
+                                        <DockerReadinessLine
+                                            flavorLabel={dockerFlavorLabel}
+                                            status={
+                                                remoteHostId
+                                                    ? statusByHost[remoteHostId]
+                                                    : undefined
+                                            }
+                                            probing={
+                                                remoteHostId
+                                                    ? (probingByHost[remoteHostId] ?? false)
+                                                    : false
+                                            }
+                                            imageReady={
+                                                remoteHostId
+                                                    ? imageReadyByHost[remoteHostId]?.[
+                                                          data.backend_type === 'snowluma'
+                                                              ? 'snowluma'
+                                                              : 'napcat'
+                                                      ]
+                                                    : undefined
+                                            }
+                                        />
+                                    </div>
+                                </ExpandPresence>
+
+                                <ExpandPresence
+                                    visible={
+                                        deploymentType === 'native' &&
+                                        !!remoteHostId &&
+                                        !!remoteNotice
+                                    }
+                                >
+                                    <div className="pt-3">
+                                        <InlineNotice
+                                            tone={remoteTransportFailed ? 'danger' : 'warn'}
+                                        >
+                                            {remoteNotice}
+                                        </InlineNotice>
+                                    </div>
+                                </ExpandPresence>
                             </div>
-
-                            <GsapPresence visible={!!showDockerBlock && !!remoteHostId}>
-                                <div>
-                                    <DockerReadinessLine
-                                        flavorLabel={dockerFlavorLabel}
-                                        status={
-                                            remoteHostId ? statusByHost[remoteHostId] : undefined
-                                        }
-                                        probing={
-                                            remoteHostId
-                                                ? (probingByHost[remoteHostId] ?? false)
-                                                : false
-                                        }
-                                        imageReady={
-                                            remoteHostId
-                                                ? imageReadyByHost[remoteHostId]?.[
-                                                      data.backend_type === 'snowluma'
-                                                          ? 'snowluma'
-                                                          : 'napcat'
-                                                  ]
-                                                : undefined
-                                        }
-                                    />
-                                </div>
-                            </GsapPresence>
-
-                            {isRemote &&
-                                deploymentType === 'native' &&
-                                remoteHostId &&
-                                (() => {
-                                    if (remoteTransportFailed) {
-                                        return (
-                                            <InlineNotice tone="danger">
-                                                远端主机不可达，保存后无法启动。请先在「远程主机」页恢复连接。
-                                            </InlineNotice>
-                                        );
-                                    }
-                                    if (missingDirectRunNotice) {
-                                        return (
-                                            <InlineNotice tone="warn">
-                                                {missingDirectRunNotice}
-                                            </InlineNotice>
-                                        );
-                                    }
-                                    return null;
-                                })()}
                         </div>
-                    </GsapPresence>
+                    </ExpandPresence>
 
-                    {!isRemote &&
-                        (() => {
-                            if (!localReadiness.readiness) {
-                                return localReadiness.probing ? (
-                                    <InlineNotice tone="neutral">
-                                        正在检测本机运行时组件…
-                                    </InlineNotice>
-                                ) : null;
-                            }
-                            const blocking = describeBlocking(
-                                localReadiness.readiness,
-                                componentNames,
-                            );
-                            if (blocking) {
-                                return (
-                                    <InlineNotice tone="warn">
-                                        本机{blocking}，请到「组件」页安装后再使用本机直接运行
-                                    </InlineNotice>
-                                );
-                            }
-                            return null;
-                        })()}
+                    <ExpandPresence visible={!isRemote && !!localNotice}>
+                        <div className="pt-3">
+                            <InlineNotice tone={localBlocking ? 'warn' : 'neutral'}>
+                                {localNotice}
+                            </InlineNotice>
+                        </div>
+                    </ExpandPresence>
 
-                    {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
-                        <div className="flex flex-col gap-1.5">
+                    <ExpandPresence
+                        visible={data.backend_type === 'snowluma' && deploymentType !== 'docker'}
+                    >
+                        <div className="flex flex-col gap-1.5 pt-3">
                             <span className="text-xs font-medium text-text-secondary">
                                 SnowLuma 启动模式
                             </span>
                             <SnowLumaStartModeBlock data={data} onChange={onChange} />
                         </div>
-                    )}
+                    </ExpandPresence>
                 </FormSection>
             </div>
 
-            <FormSection title="自愈与附加服务">
+            <FormSection title="自愈与附加服务" layout="none">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex items-center rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5">
                         <div className="w-full">
@@ -536,28 +538,32 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         </div>
                     </div>
                 </div>
-                {data.autoRestartSchedule.enable && (
-                    <div className="rounded-md border border-border-subtle/70 bg-field/30 px-3.5 py-3">
-                        <AutoRestartScheduleEditor
-                            schedule={data.autoRestartSchedule}
-                            onChange={patchSchedule}
-                        />
-                    </div>
-                )}
-                <div className="grid grid-cols-1 items-center gap-3 rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5 sm:grid-cols-2">
-                    <div className="min-w-0">
-                        <div className="text-sm font-medium text-text">音乐签名接口</div>
-                        <div className="text-2xs text-text-tertiary">
-                            仅发送音乐卡片时需要，留空则不启用
+                <ExpandPresence visible={data.autoRestartSchedule.enable}>
+                    <div className="pt-3">
+                        <div className="rounded-md border border-border-subtle/70 bg-field/30 px-3.5 py-3">
+                            <AutoRestartScheduleEditor
+                                schedule={data.autoRestartSchedule}
+                                onChange={patchSchedule}
+                            />
                         </div>
                     </div>
-                    <TextField
-                        aria-label="音乐签名接口"
-                        value={data.musicSignUrl}
-                        onValueChange={(v) => onChange({ musicSignUrl: v })}
-                        placeholder="http://127.0.0.1:8081/sign"
-                        className="font-mono"
-                    />
+                </ExpandPresence>
+                <div className="pt-3">
+                    <div className="grid grid-cols-1 items-center gap-3 rounded-md border border-border-subtle/80 bg-field/35 px-3.5 py-2.5 sm:grid-cols-2">
+                        <div className="min-w-0">
+                            <div className="text-sm font-medium text-text">音乐签名接口</div>
+                            <div className="text-2xs text-text-tertiary">
+                                仅发送音乐卡片时需要，留空则不启用
+                            </div>
+                        </div>
+                        <TextField
+                            aria-label="音乐签名接口"
+                            value={data.musicSignUrl}
+                            onValueChange={(v) => onChange({ musicSignUrl: v })}
+                            placeholder="http://127.0.0.1:8081/sign"
+                            className="font-mono"
+                        />
+                    </div>
                 </div>
             </FormSection>
         </div>
@@ -692,7 +698,7 @@ function SnowLumaStartModeBlock({
     };
 
     return (
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col">
             <div
                 role="radiogroup"
                 aria-label="SnowLuma 启动模式"
@@ -741,13 +747,15 @@ function SnowLumaStartModeBlock({
                     );
                 })}
             </div>
-            {mode === 'hot_start' && (
-                <InlineNotice tone="neutral">
-                    启动前需在此 QQ 号（
-                    <span className="font-mono">{data.QQID || '未填'}</span>
-                    ）下登录 QQ；找不到匹配进程时启动会失败
-                </InlineNotice>
-            )}
+            <ExpandPresence visible={mode === 'hot_start'}>
+                <div className="pt-2.5">
+                    <InlineNotice tone="neutral">
+                        启动前需在此 QQ 号（
+                        <span className="font-mono">{data.QQID || '未填'}</span>
+                        ）下登录 QQ；找不到匹配进程时启动会失败
+                    </InlineNotice>
+                </div>
+            </ExpandPresence>
         </div>
     );
 }

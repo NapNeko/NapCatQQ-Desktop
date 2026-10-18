@@ -154,7 +154,7 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
                         <TaskQueueEmptyState variant="no-filter-match" />
                     ) : (
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
-                            <aside className="flex min-h-0 flex-col border-b border-border-subtle lg:border-b-0 lg:border-r">
+                            <aside className="flex min-h-0 max-h-[40%] shrink-0 flex-col border-b border-border-subtle lg:max-h-none lg:border-b-0 lg:border-r">
                                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-subtle/70 px-3 py-2.5">
                                     <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
                                         任务列表

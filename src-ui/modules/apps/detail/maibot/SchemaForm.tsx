@@ -12,7 +12,7 @@ import {
     TextAreaField,
     TextField,
 } from '../../../../shared/ui';
-import { ActionMotionIcon } from '../../../../shared/ui/motion';
+import { ActionMotionIcon, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import {
     fieldOf,
@@ -414,39 +414,84 @@ export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node
 }) => {
     const cells: React.ReactNode[] = [];
     const subs: React.ReactNode[] = [];
+    const advancedCells: React.ReactNode[] = [];
+    const advancedSubs: React.ReactNode[] = [];
     for (const field of node.fields) {
-        if (hidden(ctx, path, field)) continue;
+        const key = shapeKey(path, field.name);
+        if (field.hidden || ctx.skip?.has(key)) continue;
         const sub = node.nested?.[field.name];
-        if (ctx.widgets?.[shapeKey(path, field.name)]) {
-            cells.push(<SimpleField key={field.name} ctx={ctx} path={path} field={field} />);
+        const advanced =
+            !!field.advanced ||
+            !!ctx.advanced?.has(key) ||
+            (!!sub?.uiAdvanced && field.type !== 'array' && !ctx.widgets?.[key]);
+        // 高级控件在折叠期间保留自己的值和焦点之外的编辑状态，收尾后由 presence 隐藏。
+        const fieldCtx = advanced ? { ...ctx, showAdvanced: true } : ctx;
+        const targetCells = advanced ? advancedCells : cells;
+        const targetSubs = advanced ? advancedSubs : subs;
+        if (ctx.widgets?.[key]) {
+            targetCells.push(
+                <SimpleField key={field.name} ctx={fieldCtx} path={path} field={field} />,
+            );
         } else if (sub && field.type === 'array') {
-            cells.push(
-                <ObjectListField key={field.name} ctx={ctx} path={path} field={field} item={sub} />,
+            targetCells.push(
+                <ObjectListField
+                    key={field.name}
+                    ctx={fieldCtx}
+                    path={path}
+                    field={field}
+                    item={sub}
+                />,
             );
         } else if (sub) {
-            if (sub.uiAdvanced && !ctx.showAdvanced) continue;
-            subs.push(
+            targetSubs.push(
                 <SubSection
                     key={field.name}
                     title={sub.uiLabel ?? field.label ?? field.name}
                     hint={field.description}
                 >
-                    <FieldGrid ctx={ctx} path={[...path, field.name]} node={sub} />
+                    <FieldGrid ctx={fieldCtx} path={[...path, field.name]} node={sub} />
                 </SubSection>,
             );
         } else if (field.type === 'object') {
-            cells.push(<StringMapField key={field.name} ctx={ctx} path={path} field={field} />);
+            targetCells.push(
+                <StringMapField key={field.name} ctx={fieldCtx} path={path} field={field} />,
+            );
         } else {
-            cells.push(<SimpleField key={field.name} ctx={ctx} path={path} field={field} />);
+            targetCells.push(
+                <SimpleField key={field.name} ctx={fieldCtx} path={path} field={field} />,
+            );
         }
     }
-    if (!cells.length && !subs.length) return null;
+    if (!cells.length && !subs.length && !advancedCells.length && !advancedSubs.length) return null;
     return (
-        <div className="flex flex-col gap-5">
-            {cells.length > 0 && (
-                <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">{cells}</div>
+        <div className="flex flex-col">
+            {(cells.length > 0 || subs.length > 0) && (
+                <div className="flex flex-col gap-5">
+                    {cells.length > 0 && (
+                        <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+                            {cells}
+                        </div>
+                    )}
+                    {subs}
+                </div>
             )}
-            {subs}
+            {(advancedCells.length > 0 || advancedSubs.length > 0) && (
+                <ExpandPresence visible={ctx.showAdvanced} keepMounted>
+                    <div
+                        className={cn(
+                            'flex flex-col gap-5',
+                            (cells.length > 0 || subs.length > 0) && 'pt-5',
+                        )}
+                    >
+                        {advancedCells.length > 0 && (
+                            <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+                                {advancedCells}
+                            </div>
+                        )}
+                        {advancedSubs}
+                    </div>
+                </ExpandPresence>
+            )}
         </div>
     );
 };

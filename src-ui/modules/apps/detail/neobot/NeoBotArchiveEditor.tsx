@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, TextAreaField, TextField } from '../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { asRecord } from '../../../../core/domain/apps/neobotPanel';
 import {
     NeoBotPanelError,
@@ -144,8 +145,14 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
                     disabled={!props.canCompress || dirty || action.isPending}
                     onConfirm={props.onCompress}
                 />
-                <Button size="sm" variant="secondary" onClick={() => setShowHistory(!showHistory)}>
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    aria-expanded={showHistory}
+                    onClick={() => setShowHistory((value) => !value)}
+                >
                     压缩快照
+                    <ExpandChevron open={showHistory} size={12} />
                 </Button>
             </div>
             {Object.keys(current).length > 0 && (
@@ -156,7 +163,7 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
                     <FullText label="冲突时服务器内容" value={text(current.value)} />
                 </div>
             )}
-            {showHistory && (
+            <ExpandPresence visible={showHistory}>
                 <div className="mt-4">
                     <PanelPage query={snapshots} onGoTab={props.onGoTab}>
                         {(data) => (
@@ -173,7 +180,7 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
                         )}
                     </PanelPage>
                 </div>
-            )}
+            </ExpandPresence>
             {snapshotId && (
                 <div className="mt-4">
                     <PanelPage query={snapshot} onGoTab={props.onGoTab}>

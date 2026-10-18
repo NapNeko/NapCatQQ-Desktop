@@ -132,9 +132,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     const canShowNotes = !!latestRelease && !!onShowReleaseNotes;
     const lifecycleDisabled = disabled || inFlight || !!lifecycleBlockedReason;
     const uninstallAction =
-        !inFlight && managedActionsAllowed
-            ? uninstallEntryAction(info.uninstall, status)
-            : 'none';
+        !inFlight && managedActionsAllowed ? uninstallEntryAction(info.uninstall, status) : 'none';
 
     const componentActions = usesSystemQq ? (
         <Button
@@ -466,7 +464,7 @@ const StatusMeta: React.FC<{
 }> = ({ status, latestRemoteVersion, activeProgress }) => {
     const dismissProgress = useTerminalDismiss(activeProgress);
     if (activeProgress && !dismissProgress) {
-        return <ProgressLine progress={activeProgress.progress} className="mt-0" />;
+        return <ProgressLine progress={activeProgress.progress} className="mt-0" compact />;
     }
     switch (status.state) {
         case 'installed': {

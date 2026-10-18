@@ -2,8 +2,9 @@
 // 改别名走上游 command/aliases，改配置走 command/update——和网页控制台同一条协议。
 
 import { useMemo, useState } from 'react';
-import { ChevronRight, CornerDownRight, TerminalSquare } from 'lucide-react';
+import { CornerDownRight, TerminalSquare } from 'lucide-react';
 import { Badge, Button, NumberField, StringListField } from '../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import { useKoishiCommandOps, useKoishiCommands } from '../../../../hooks/apps/useKoishiConsole';
 import { PaneLoading } from '../PaneStatus';
@@ -147,13 +148,7 @@ function Row({
                 onClick={onToggle}
                 className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-inset/60"
             >
-                <ChevronRight
-                    size={14}
-                    className={cn(
-                        'shrink-0 text-text-tertiary transition-transform duration-200',
-                        open && 'rotate-90',
-                    )}
-                />
+                <ExpandChevron open={open} size={14} />
                 <span className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="font-mono text-[13px] font-medium text-text">
                         {parent && (
@@ -177,7 +172,7 @@ function Row({
                     </span>
                 </span>
             </button>
-            {open && (
+            <ExpandPresence visible={open}>
                 <div className="border-t border-border-subtle/60 bg-inset/40 px-4 py-4">
                     <div className="grid max-w-3xl gap-x-5 gap-y-4 sm:grid-cols-3">
                         <NumberField
@@ -238,7 +233,7 @@ function Row({
                         </Button>
                     </div>
                 </div>
-            )}
+            </ExpandPresence>
         </li>
     );
 }

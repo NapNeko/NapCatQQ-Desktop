@@ -75,7 +75,7 @@ export function ThemePicker({
             {/* 弹窗内容 — 用户通过点击外部 / Escape / 再点触发器关闭 */}
             <PopoverContent side="bottom" align="start" sideOffset={6}>
                 <div
-                    className="-mr-1.5 grid grid-cols-[repeat(4,84px)] gap-x-1.5 gap-y-3 overflow-y-auto pr-1.5"
+                    className="-mr-1.5 grid w-[22.5rem] max-w-[calc(100vw-3.5rem)] grid-cols-[repeat(4,minmax(0,1fr))] gap-x-1.5 gap-y-3 overflow-y-auto pr-1.5"
                     style={PICKER_SCROLL_STYLE}
                 >
                     {THEME_GROUPS.map((group) => (
@@ -104,7 +104,7 @@ export function ThemePicker({
                                             title={item.fullLabel}
                                             onClick={() => onChange(item.value)}
                                             className={
-                                                'relative flex flex-col items-stretch gap-1 rounded-md p-1 transition-colors ' +
+                                                'relative flex min-w-0 flex-col items-stretch gap-1 rounded-md p-1 transition-colors ' +
                                                 (selected ? 'bg-surface' : 'hover:bg-muted/40')
                                             }
                                             style={

@@ -12,6 +12,7 @@ import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
 import { JsonDraftField } from './NeoBotSchemaFields';
 import { ConfirmAction, PanelPage, PanelSection, type NeoBotPageProps } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
 export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
     const query = usePanelJson(
@@ -287,10 +288,7 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                             patch({ one_shot_notification: checked === true })
                                         }
                                     />
-                                    <details>
-                                        <summary className="cursor-pointer text-xs text-text-secondary">
-                                            高级元数据
-                                        </summary>
+                                    <PanelDisclosure label="高级元数据">
                                         <JsonDraftField
                                             label="元数据"
                                             value={record(draft.metadata)}
@@ -298,7 +296,7 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                             onValidity={setValid}
                                             onChange={(metadata) => patch({ metadata })}
                                         />
-                                    </details>
+                                    </PanelDisclosure>
                                 </div>
                                 <div className="mt-4 flex gap-2">
                                     <Button

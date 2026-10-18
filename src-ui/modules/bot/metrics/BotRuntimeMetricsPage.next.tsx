@@ -240,10 +240,14 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
                 </Button>
             </header>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden pt-2.5 lg:grid-cols-12 lg:grid-rows-2">
-                <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:col-span-7 lg:row-span-2 lg:grid-rows-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pt-2.5 lg:grid lg:grid-cols-12 lg:grid-rows-2 lg:overflow-hidden">
+                <div className="grid shrink-0 grid-cols-1 gap-2.5 lg:col-span-7 lg:row-span-2 lg:min-h-0 lg:grid-rows-2">
                     <div className="grid min-h-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
-                        <Panel title="总览" className="min-h-0" aside={overviewAside}>
+                        <Panel
+                            title="总览"
+                            className="min-h-[15rem] lg:min-h-0"
+                            aside={overviewAside}
+                        >
                             <div className="flex h-full min-h-0 flex-col gap-2">
                                 {statusBanner}
                                 <div className="@container min-h-0 flex-1">
@@ -295,7 +299,7 @@ export function BotRuntimeMetricsPageNext({ botId, onBack }: BotRuntimeMetricsPa
 
                     <Panel
                         title="节点与出入流量"
-                        className="min-h-0"
+                        className="h-64 lg:h-auto lg:min-h-0"
                         aside={
                             <span className="font-mono text-[10px] tabular-nums text-text-tertiary">
                                 出 {formatBytes(totals.bytesOut)} · 入 {formatBytes(totals.bytesIn)}

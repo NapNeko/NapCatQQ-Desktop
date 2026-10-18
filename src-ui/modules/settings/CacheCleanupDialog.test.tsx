@@ -54,7 +54,8 @@ describe('下载缓存清理', () => {
         await screen.findByText(/已删除 3 个文件/);
         expect(screen.getByText(/跳过 1 项，失败 1 项/)).toBeInTheDocument();
         expect(service.scan).toHaveBeenCalledTimes(2);
-        expect(screen.getByText('package.zip：权限不足')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '查看未清理项目的原因' }));
+        expect(await screen.findByText('package.zip：权限不足')).toBeInTheDocument();
     });
 
     it('活跃安装使清理不可用，重新扫描空缓存后也不能提交', async () => {

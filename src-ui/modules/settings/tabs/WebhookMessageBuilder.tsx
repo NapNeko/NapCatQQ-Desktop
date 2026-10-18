@@ -13,6 +13,7 @@ import {
     type WebhookServiceKind,
     type WebhookVisualFields,
 } from '../../../core/domain/settings/webhook-message-visual';
+import { DialogStepTransition } from '../../../shared/ui/motion';
 import { Badge, TextField } from '../../../shared/ui';
 import { cn } from '../../../shared/utils/cn';
 import { ThemeJsonEditor } from './ThemeJsonEditor';
@@ -202,115 +203,120 @@ export function WebhookMessageBuilder({
             )}
             onKeyDown={onKeyDown}
         >
-            <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-sm border border-border-subtle bg-inset/20 p-3">
-                <div className="flex shrink-0 items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-0.5">
-                        <p className="text-xs font-medium text-text-secondary">消息内容</p>
-                        {isCustom ? (
-                            <p className="text-[11.5px] leading-relaxed text-text-tertiary">
-                                结构未识别，直接编辑 JSON
-                            </p>
-                        ) : null}
-                    </div>
-                    <Badge tone={isCustom ? 'warning' : 'brand'} appearance="soft">
-                        {isCustom ? '自定义' : labelOf(kind)}
-                    </Badge>
-                </div>
-
-                {isCustom ? (
-                    <div className="flex flex-1 flex-col justify-center gap-2 rounded-sm border border-dashed border-border-subtle bg-field/40 px-3 py-6 text-center">
-                        <p className="text-[13px] text-text-secondary">自定义 payload</p>
-                        <p className="text-[11.5px] leading-relaxed text-text-tertiary">
-                            可选服务类型套用模板，或直接编辑 JSON
-                        </p>
-                    </div>
-                ) : (
-                    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden p-0.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] text-text-tertiary">插入变量</span>
-                            {TEMPLATE_VARS.map((v) => (
-                                <button
-                                    key={v.key}
-                                    type="button"
-                                    onClick={() => insertVar(`{${v.key}}`)}
-                                    className={cn(
-                                        'rounded-sm border border-border-subtle bg-field px-1.5 py-0.5',
-                                        'text-[11px] text-text-secondary transition-colors',
-                                        'hover:border-brand/40 hover:bg-brand/10 hover:text-text',
-                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                                    )}
-                                    title={`插入 {${v.key}}`}
-                                >
-                                    {v.label}
-                                </button>
-                            ))}
+            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-sm border border-border-subtle bg-inset/20 p-3">
+                <DialogStepTransition
+                    stepKey={kind}
+                    className="flex min-h-0 flex-1 flex-col gap-2.5"
+                >
+                    <div className="flex shrink-0 items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-0.5">
+                            <p className="text-xs font-medium text-text-secondary">消息内容</p>
+                            {isCustom ? (
+                                <p className="text-[11.5px] leading-relaxed text-text-tertiary">
+                                    结构未识别，直接编辑 JSON
+                                </p>
+                            ) : null}
                         </div>
-
-                        {meta.showTitle ? (
-                            <label className="block min-w-0 space-y-1">
-                                <span className="text-xs font-medium text-text-secondary">
-                                    {meta.titleLabel}
-                                </span>
-                                <TextField
-                                    name="webhook-msg-title"
-                                    autoComplete="off"
-                                    value={fields.title}
-                                    onValueChange={(v) => patchFields({ title: v })}
-                                    onFocus={() => {
-                                        activeFieldRef.current = 'title';
-                                    }}
-                                />
-                            </label>
-                        ) : null}
-
-                        {meta.showBody ? (
-                            <label className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
-                                <span className="text-xs font-medium text-text-secondary">
-                                    {meta.bodyLabel}
-                                </span>
-                                {meta.bodyHint ? (
-                                    <span className="text-[11px] text-text-tertiary">
-                                        {meta.bodyHint}
-                                    </span>
-                                ) : null}
-                                <textarea
-                                    name="webhook-msg-body"
-                                    value={fields.body}
-                                    rows={6}
-                                    spellCheck={false}
-                                    onFocus={() => {
-                                        activeFieldRef.current = 'body';
-                                    }}
-                                    onChange={(e) => patchFields({ body: e.target.value })}
-                                    className={cn(
-                                        'block min-h-[8rem] w-full flex-1 resize-none rounded-sm bg-field px-3 py-2',
-                                        'text-sm leading-relaxed text-text',
-                                        'border border-border-subtle outline-none transition-colors duration-150',
-                                        'placeholder:text-text-tertiary',
-                                        'focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
-                                    )}
-                                />
-                            </label>
-                        ) : null}
-
-                        {meta.showGroup ? (
-                            <label className="block min-w-0 space-y-1">
-                                <span className="text-xs font-medium text-text-secondary">
-                                    分组
-                                </span>
-                                <TextField
-                                    name="webhook-msg-group"
-                                    autoComplete="off"
-                                    value={fields.group}
-                                    onValueChange={(v) => patchFields({ group: v })}
-                                    onFocus={() => {
-                                        activeFieldRef.current = 'group';
-                                    }}
-                                />
-                            </label>
-                        ) : null}
+                        <Badge tone={isCustom ? 'warning' : 'brand'} appearance="soft">
+                            {isCustom ? '自定义' : labelOf(kind)}
+                        </Badge>
                     </div>
-                )}
+
+                    {isCustom ? (
+                        <div className="flex flex-1 flex-col justify-center gap-2 rounded-sm border border-dashed border-border-subtle bg-field/40 px-3 py-6 text-center">
+                            <p className="text-[13px] text-text-secondary">自定义 payload</p>
+                            <p className="text-[11.5px] leading-relaxed text-text-tertiary">
+                                可选服务类型套用模板，或直接编辑 JSON
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden p-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] text-text-tertiary">插入变量</span>
+                                {TEMPLATE_VARS.map((v) => (
+                                    <button
+                                        key={v.key}
+                                        type="button"
+                                        onClick={() => insertVar(`{${v.key}}`)}
+                                        className={cn(
+                                            'rounded-sm border border-border-subtle bg-field px-1.5 py-0.5',
+                                            'text-[11px] text-text-secondary transition-colors',
+                                            'hover:border-brand/40 hover:bg-brand/10 hover:text-text',
+                                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                                        )}
+                                        title={`插入 {${v.key}}`}
+                                    >
+                                        {v.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {meta.showTitle ? (
+                                <label className="block min-w-0 space-y-1">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        {meta.titleLabel}
+                                    </span>
+                                    <TextField
+                                        name="webhook-msg-title"
+                                        autoComplete="off"
+                                        value={fields.title}
+                                        onValueChange={(v) => patchFields({ title: v })}
+                                        onFocus={() => {
+                                            activeFieldRef.current = 'title';
+                                        }}
+                                    />
+                                </label>
+                            ) : null}
+
+                            {meta.showBody ? (
+                                <label className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        {meta.bodyLabel}
+                                    </span>
+                                    {meta.bodyHint ? (
+                                        <span className="text-[11px] text-text-tertiary">
+                                            {meta.bodyHint}
+                                        </span>
+                                    ) : null}
+                                    <textarea
+                                        name="webhook-msg-body"
+                                        value={fields.body}
+                                        rows={6}
+                                        spellCheck={false}
+                                        onFocus={() => {
+                                            activeFieldRef.current = 'body';
+                                        }}
+                                        onChange={(e) => patchFields({ body: e.target.value })}
+                                        className={cn(
+                                            'block min-h-[8rem] w-full flex-1 resize-none rounded-sm bg-field px-3 py-2',
+                                            'text-sm leading-relaxed text-text',
+                                            'border border-border-subtle outline-none transition-colors duration-150',
+                                            'placeholder:text-text-tertiary',
+                                            'focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
+                                        )}
+                                    />
+                                </label>
+                            ) : null}
+
+                            {meta.showGroup ? (
+                                <label className="block min-w-0 space-y-1">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        分组
+                                    </span>
+                                    <TextField
+                                        name="webhook-msg-group"
+                                        autoComplete="off"
+                                        value={fields.group}
+                                        onValueChange={(v) => patchFields({ group: v })}
+                                        onFocus={() => {
+                                            activeFieldRef.current = 'group';
+                                        }}
+                                    />
+                                </label>
+                            ) : null}
+                        </div>
+                    )}
+                </DialogStepTransition>
             </section>
 
             <section className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden rounded-sm border border-border-subtle bg-inset/20 p-3">

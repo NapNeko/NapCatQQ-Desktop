@@ -54,19 +54,16 @@
         animation: none !important;
     }
 }
-.native-chat-muted summary {
+.native-chat-muted-trigger {
     display: flex;
+    width: 100%;
     align-items: center;
     gap: 8px;
     padding: 12px 0;
     cursor: pointer;
-    list-style: none;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
-}
-.native-chat-muted summary::-webkit-details-marker {
-    display: none;
 }
 .native-chat-muted-count {
     padding: 1px 7px;
@@ -81,7 +78,7 @@
     color: var(--text-tertiary);
     transition: transform 0.16s ease;
 }
-.native-chat-muted[open] .native-chat-muted-chevron {
+.native-chat-muted-trigger[aria-expanded="true"] .native-chat-muted-chevron {
     transform: rotate(180deg);
 }
 .native-chat-muted ul {

@@ -74,6 +74,8 @@ flowchart TB
   - 商店页的工具条、槽位 id、卸载确认 → `modules/apps/detail/storeToolbar.tsx`；通用商店页 `detail/AppStoreTab.tsx` + `hooks/apps/useAppStore.ts` + `core/domain/apps/appStore.ts`
   - 四个框架的配置表单状态 → `hooks/apps/useAppConfigForm.ts`，各框架只给一份 `validate` 和保存文案（`core/domain/apps/<框架>Config.ts`），字段错误按路径挂（`core/domain/apps/appConfigForm.ts` 的 `issuesByPath`）
   - 安装 / 下载进度行 → `shared/components/progressView.tsx`（组件页、应用端安装进度、任务详情共用）
+  - 字段显隐 / 折叠 → `shared/ui/motion/ExpandPresence.tsx`。保持组件挂载，用 `visible` 驱动收放；收起时自动禁止交互并保留退出内容。内部间距放进动画容器，编辑器用 `keepMounted` 懒挂载并保留草稿，整节高级字段用 `FormSection.contentVisible` 同时收起引导线和间距。虚拟列表和分屏保留现有测量节点，在节点自身过渡高度或 flex 比例。
+  - 动态布局按正文容器宽度分列；卡片底栏用 `ProgressLine compact`，完整下载来源与原因留在详情和提示。矮窗口的 flex 滚动链必须有 `min-h-0`，保留标题与操作按钮，让中间内容滚动；普通 Dialog 已按两层内边距限制内容高度，并随视口缩放重算。
   - 主题 id、明暗、选择器分组 → `core/design/themes/registry.ts`；社区主题只加 `palettes.ts` 里一份调色板，token 由 `paletteCss.ts` 展开注入。样式里按明暗 / 纯色平面分支用 `<html>` 上的 `data-theme-scheme` / `data-theme-flat`，别逐个列主题名；跟随系统的暗色块写 `:root:not([data-theme])`
 - 服务端数据一律 react-query，别在组件里 `useEffect` + `let cancelled` 手搓 fetch：
   - 缓存键就近导出成工厂（`appConfigKey(id)` / `astrbotPersonasKey(id)` …），只在本文件用的键不导出。根组件也要的键单独成文件：实例列表的 `APP_INSTANCES_KEY` + `upsertInstance` 在 `hooks/apps/appInstancesCache.ts`，免得事件桥把整套应用端 hook 拖进主包。

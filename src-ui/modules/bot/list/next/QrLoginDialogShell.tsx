@@ -2,19 +2,12 @@
 //
 // 视觉语言：
 //   - 顶部：图标徽章 + 标题「扫码登录」+ 右侧协议/账号胶囊 + 副标题说明
-//   - 中部：固定 280×280 视口的居中画布容器。有码时铺 --qr-background 静区底色；
+//   - 中部：最大 280×280、随弹窗宽度缩小的正方形画布。有码时铺 --qr-background 静区底色；
 //     无码时为柔和内嵌占位面板（加载动画 / 手机确认 / 异常或过期图标）
 //   - 底部：状态胶囊 + 可选辅助信息（等待秒表等）+ 操作按钮栏
 
 import type { ReactNode } from 'react';
-import {
-    AlertTriangle,
-    CheckCircle2,
-    Loader2,
-    QrCode,
-    RefreshCw,
-    Smartphone,
-} from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, QrCode, RefreshCw, Smartphone } from 'lucide-react';
 import {
     Badge,
     Dialog,
@@ -41,7 +34,7 @@ export interface QrLoginDialogShellProps {
     /** 是否正在展示真实二维码图像（决定外框是否铺 --qr-background 扫码静区） */
     hasQrCode: boolean;
     ariaBusy?: boolean;
-    /** 280×280 视口内的内容（二维码图像或 QrStagePlaceholder） */
+    /** 自适应正方形视口内的内容（二维码图像或 QrStagePlaceholder） */
     viewport: ReactNode;
     /** 底部状态栏主文案（带 role="status"） */
     statusText: ReactNode;
@@ -94,8 +87,8 @@ export function QrLoginDialogShell({
                             <QrCode size={16} strokeWidth={2.1} aria-hidden />
                         </span>
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                                <DialogTitle className="truncate text-[15px] leading-snug">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <DialogTitle className="min-w-0 truncate text-[15px] leading-snug">
                                     扫码登录 · {botId}
                                 </DialogTitle>
                                 {flavorLabel && (
@@ -118,27 +111,27 @@ export function QrLoginDialogShell({
                 <div
                     aria-busy={ariaBusy}
                     className={cn(
-                        'relative mx-auto flex w-full flex-col items-center justify-center overflow-hidden rounded-lg p-5 ring-1 transition-colors duration-200',
+                        'relative mx-auto flex w-full min-w-0 flex-col items-center justify-center overflow-hidden rounded-lg p-3 ring-1 transition-colors duration-200 sm:p-5',
                         hasQrCode
                             ? 'shadow-card ring-border-subtle'
                             : 'bg-inset/55 text-text-secondary ring-border-subtle/80',
                     )}
                     style={hasQrCode ? QR_FRAME_STYLE : undefined}
                 >
-                    <div className="relative flex h-[280px] w-[280px] items-center justify-center">
+                    <div className="relative flex aspect-square w-full max-w-[280px] items-center justify-center">
                         {viewport}
                     </div>
                 </div>
 
-                <div className="mt-3 flex min-h-7 items-center justify-between gap-3 rounded-md border border-border-subtle/70 bg-inset/40 px-3 py-1.5">
-                    <div className="flex min-w-0 items-center gap-2">
+                <div className="mt-3 flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-border-subtle/70 bg-inset/40 px-3 py-1.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
                         <span
                             aria-hidden
                             className={cn('h-2 w-2 shrink-0 rounded-full', dotClass)}
                         />
                         <p
                             role="status"
-                            className={cn('truncate text-xs font-medium', textClass)}
+                            className={cn('min-w-0 break-words text-xs font-medium', textClass)}
                         >
                             {statusText}
                         </p>
@@ -160,12 +153,7 @@ export function QrLoginDialogShell({
     );
 }
 
-export type QrPlaceholderVariant =
-    | 'loading'
-    | 'scanned'
-    | 'expired'
-    | 'success'
-    | 'warning';
+export type QrPlaceholderVariant = 'loading' | 'scanned' | 'expired' | 'success' | 'warning';
 
 export function QrStagePlaceholder({
     variant,

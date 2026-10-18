@@ -16,6 +16,7 @@ import {
     type RefObject,
 } from 'react';
 import { Braces, Check, Copy, FileInput, Reply } from 'lucide-react';
+import gsap from 'gsap';
 import { cn } from '../../../shared/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui';
 import { messagePreview } from '../../../core/domain/debug/segments';
@@ -32,6 +33,7 @@ import {
 } from '../../../core/domain/debug/chatFormat';
 import { Avatar, IconAction, useCopy } from '../../../shared/chat/rightParts';
 import { SegmentList, isPictureOnly } from '../../../shared/chat/SegmentView';
+import { useMotion } from '../../../hooks/preferences/useMotion';
 
 /** 折叠后的最大高度：12 行 × 20px 行高 */
 const CLAMP_PX = 12 * 20;
@@ -230,6 +232,9 @@ export const MessageBubble = memo(function MessageBubble({
     const out = item.direction === 'out';
     const rowRef = useRef<HTMLDivElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
+    const motion = useMotion();
+    const expandFrom = useRef<number | null>(null);
+    const expandTween = useRef<gsap.core.Tween | null>(null);
     const hover = useRowHover();
     const [expanded, setExpandedState] = useState(() => api.isExpanded(item.key));
     const [overflowing, setOverflowing] = useState(false);
@@ -240,7 +245,7 @@ export const MessageBubble = memo(function MessageBubble({
     useLayoutEffect(() => {
         const el = bodyRef.current;
         if (!clamped || !el) return;
-        const check = () => setOverflowing(el.scrollHeight > el.clientHeight + 1);
+        const check = () => setOverflowing(el.scrollHeight > CLAMP_PX + 1);
         check();
         if (typeof ResizeObserver === 'undefined') return;
         const ro = new ResizeObserver(check);
@@ -248,7 +253,44 @@ export const MessageBubble = memo(function MessageBubble({
         return () => ro.disconnect();
     }, [clamped, item.segments]);
 
+    useLayoutEffect(() => {
+        const el = bodyRef.current;
+        if (!el) return;
+        const from =
+            expandFrom.current ?? (expandTween.current ? el.getBoundingClientRect().height : null);
+        expandFrom.current = null;
+        expandTween.current?.kill();
+        expandTween.current = null;
+        if (!clampable || !motion.enabled || from === null) {
+            gsap.set(el, { maxHeight: clamped ? `${CLAMP_PX}px` : 'none', clearProps: 'overflow' });
+            return;
+        }
+        const target = clamped ? Math.min(CLAMP_PX, el.scrollHeight) : el.scrollHeight;
+        if (Math.abs(from - target) < 1) {
+            gsap.set(el, { maxHeight: clamped ? `${CLAMP_PX}px` : 'none', clearProps: 'overflow' });
+            return;
+        }
+        // 不换正文节点：虚拟列表继续通过 ResizeObserver 实测每帧行高。
+        gsap.set(el, { maxHeight: `${from}px`, overflow: 'hidden' });
+        expandTween.current = gsap.to(el, {
+            maxHeight: `${target}px`,
+            duration: motion.duration('base'),
+            ease: clamped ? motion.ease.exit : motion.ease.enter,
+            onComplete: () => {
+                expandTween.current = null;
+                gsap.set(el, {
+                    maxHeight: clamped ? `${CLAMP_PX}px` : 'none',
+                    clearProps: 'overflow',
+                });
+            },
+        });
+        return () => {
+            expandTween.current?.kill();
+        };
+    }, [clampable, clamped, item.segments, motion]);
+
     const setExpanded = (v: boolean) => {
+        expandFrom.current = bodyRef.current?.getBoundingClientRect().height ?? null;
         api.setExpanded(item.key, v);
         setExpandedState(v);
     };

@@ -18,6 +18,7 @@ import {
     DialogTitle,
     Progress,
 } from '../../shared/ui';
+import { DialogStepTransition } from '../../shared/ui/motion';
 import { cn } from '../../shared/utils/cn';
 
 type Phase = 'guide' | 'preview' | 'running' | 'done' | 'error';
@@ -233,7 +234,7 @@ export function DataRootMigrateDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-3 text-[13px] text-text">
+                <DialogStepTransition stepKey={phase} className="space-y-3 text-[13px] text-text">
                     <div className="rounded-md border border-border-subtle bg-inset/40 px-3 py-2">
                         <div className="text-[11px] text-text-tertiary">当前数据根</div>
                         <div className="mt-0.5 break-all font-mono text-[12px]">
@@ -361,7 +362,7 @@ export function DataRootMigrateDialog({
                     {(phase === 'error' || (phase === 'preview' && errorMsg)) && errorMsg ? (
                         <p className="text-danger">{errorMsg}</p>
                     ) : null}
-                </div>
+                </DialogStepTransition>
 
                 <DialogFooter className="gap-2">
                     {phase === 'running' ? (

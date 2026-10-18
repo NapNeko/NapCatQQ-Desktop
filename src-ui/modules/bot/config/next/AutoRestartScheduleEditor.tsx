@@ -20,6 +20,7 @@ import {
 import { useCronPreview } from '../../../../hooks/bot/useCronPreview';
 import type { AutoRestartSchedule } from '../../../../core/ipc/generated/domain/AutoRestartSchedule';
 import type { TimeUnit } from '../../../../core/ipc/generated/domain/TimeUnit';
+import { DialogStepTransition, ExpandPresence } from '../../../../shared/ui/motion';
 
 type Shape = 'interval' | CronRecipeKind;
 
@@ -98,77 +99,88 @@ export function AutoRestartScheduleEditor({ schedule, onChange }: AutoRestartSch
     })();
 
     return (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col">
             <div className="flex flex-wrap items-start gap-2">
                 <Select
                     className="w-32"
+                    aria-label="重启频率"
                     items={SHAPE_ITEMS}
                     value={shape}
                     onValueChange={setShape}
                 />
 
-                {shape === 'interval' && (
-                    <>
-                        <NumberField
-                            className="w-20"
-                            value={schedule.duration}
-                            min={1}
-                            onValueChange={(v) => onChange({ duration: v ?? 0 })}
-                        />
+                <DialogStepTransition
+                    stepKey={shape}
+                    className="flex min-w-0 max-w-full flex-wrap items-start gap-2"
+                >
+                    {shape === 'interval' && (
+                        <>
+                            <NumberField
+                                className="w-20"
+                                aria-label="重启间隔"
+                                value={schedule.duration}
+                                min={1}
+                                onValueChange={(v) => onChange({ duration: v ?? 0 })}
+                            />
+                            <Select
+                                className="w-24"
+                                aria-label="重启间隔单位"
+                                items={TIME_UNIT_ITEMS}
+                                value={schedule.time_unit}
+                                onValueChange={(v) => onChange({ time_unit: v })}
+                            />
+                        </>
+                    )}
+
+                    {structured?.kind === 'weekly' && (
                         <Select
                             className="w-24"
-                            items={TIME_UNIT_ITEMS}
-                            value={schedule.time_unit}
-                            onValueChange={(v) => onChange({ time_unit: v })}
+                            items={WEEKDAY_ITEMS}
+                            value={String(structured.weekday)}
+                            onValueChange={(v) => setRecipe({ ...structured, weekday: Number(v) })}
                         />
-                    </>
-                )}
+                    )}
 
-                {structured?.kind === 'weekly' && (
-                    <Select
-                        className="w-24"
-                        items={WEEKDAY_ITEMS}
-                        value={String(structured.weekday)}
-                        onValueChange={(v) => setRecipe({ ...structured, weekday: Number(v) })}
-                    />
-                )}
+                    {structured?.kind === 'monthly' && (
+                        <DayOfMonthPicker
+                            day={structured.day}
+                            onChange={(day) => setRecipe({ ...structured, day })}
+                            className={PICKER_TRIGGER_CLASS}
+                        />
+                    )}
 
-                {structured?.kind === 'monthly' && (
-                    <DayOfMonthPicker
-                        day={structured.day}
-                        onChange={(day) => setRecipe({ ...structured, day })}
-                        className={PICKER_TRIGGER_CLASS}
-                    />
-                )}
+                    {structured && (
+                        <TimePicker
+                            variant="field"
+                            align="start"
+                            hours={structured.hour}
+                            minutes={structured.minute}
+                            // 5 分钟一档够用；手写进来的非整档分钟（如 7）退回逐分，避免显示被四舍五入
+                            minuteStep={structured.minute % 5 === 0 ? 5 : 1}
+                            onChange={({ hours, minutes }) =>
+                                setRecipe({ ...structured, hour: hours, minute: minutes })
+                            }
+                            className={PICKER_TRIGGER_CLASS}
+                        />
+                    )}
 
-                {structured && (
-                    <TimePicker
-                        variant="field"
-                        align="start"
-                        hours={structured.hour}
-                        minutes={structured.minute}
-                        // 5 分钟一档够用；手写进来的非整档分钟（如 7）退回逐分，避免显示被四舍五入
-                        minuteStep={structured.minute % 5 === 0 ? 5 : 1}
-                        onChange={({ hours, minutes }) =>
-                            setRecipe({ ...structured, hour: hours, minute: minutes })
-                        }
-                        className={PICKER_TRIGGER_CLASS}
-                    />
-                )}
-
-                {shape === 'custom' && (
-                    <TextField
-                        className="w-56"
-                        value={schedule.cron}
-                        onValueChange={(v) => onChange({ cron: v })}
-                        placeholder="0 4 * * *"
-                        spellCheck={false}
-                        autoComplete="off"
-                        error={preview.status === 'error' ? preview.message : undefined}
-                    />
-                )}
+                    {shape === 'custom' && (
+                        <TextField
+                            className="w-56 max-w-full"
+                            aria-label="Cron 表达式"
+                            value={schedule.cron}
+                            onValueChange={(v) => onChange({ cron: v })}
+                            placeholder="0 4 * * *"
+                            spellCheck={false}
+                            autoComplete="off"
+                            error={preview.status === 'error' ? preview.message : undefined}
+                        />
+                    )}
+                </DialogStepTransition>
             </div>
-            {status && <p className="text-2xs leading-snug text-text-tertiary">{status}</p>}
+            <ExpandPresence visible={!!status}>
+                <p className="pt-1.5 text-2xs leading-snug text-text-tertiary">{status}</p>
+            </ExpandPresence>
         </div>
     );
 }

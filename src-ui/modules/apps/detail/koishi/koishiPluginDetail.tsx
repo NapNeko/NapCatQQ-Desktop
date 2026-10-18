@@ -16,6 +16,7 @@ import {
     Switch,
     TextField,
 } from '../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import {
     KOISHI_CORE_PLUGINS,
@@ -324,22 +325,30 @@ function PluginDetail(props: DetailProps) {
                 <FormSection
                     title="使用说明"
                     actions={
-                        <Button size="sm" variant="ghost" onClick={() => setShowUsage((v) => !v)}>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-expanded={showUsage}
+                            onClick={() => setShowUsage((v) => !v)}
+                        >
                             <BookOpen size={13} />
                             {showUsage ? '收起' : '展开'}
+                            <ExpandChevron open={showUsage} size={12} />
                         </Button>
                     }
                 >
-                    {showUsage ? (
-                        <SimpleMarkdown
-                            text={schema.data.usage}
-                            className="text-[13px] leading-relaxed"
-                        />
-                    ) : (
-                        <p className="line-clamp-2 text-xs leading-relaxed text-text-tertiary">
-                            {schema.data.usage.replace(/[#>*`_-]/g, '').trim()}
-                        </p>
-                    )}
+                    <ExpandPresence visible>
+                        {showUsage ? (
+                            <SimpleMarkdown
+                                text={schema.data.usage}
+                                className="text-[13px] leading-relaxed"
+                            />
+                        ) : (
+                            <p className="line-clamp-2 text-xs leading-relaxed text-text-tertiary">
+                                {schema.data.usage.replace(/[#>*`_-]/g, '').trim()}
+                            </p>
+                        )}
+                    </ExpandPresence>
                 </FormSection>
             )}
 

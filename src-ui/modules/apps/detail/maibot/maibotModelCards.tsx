@@ -12,6 +12,7 @@ import {
     type SelectItem,
 } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
+import { ExpandPresence } from '../../../../shared/ui/motion';
 import { MAIBOT_PLACEHOLDER_API_KEY } from '../../../../core/domain/apps/maibotConfig';
 import type {
     MaiBotAPIProvider,
@@ -231,7 +232,7 @@ export const ProviderCard: React.FC<{
                     onValueChange={(api_key) => set({ api_key })}
                 />
             </div>
-            {showAdvanced && (
+            <ExpandPresence visible={showAdvanced} keepMounted>
                 <div className={CONFIG_PAIR}>
                     <Select
                         label="鉴权方式"
@@ -246,8 +247,8 @@ export const ProviderCard: React.FC<{
                         disabled={disabled}
                         onValueChange={(model_list_endpoint) => set({ model_list_endpoint })}
                     />
-                    {p.auth_type === 'header' && (
-                        <>
+                    <ExpandPresence visible={p.auth_type === 'header'} className={WIDE} keepMounted>
+                        <div className={CONFIG_PAIR}>
                             <TextField
                                 label="请求头名"
                                 value={p.auth_header_name}
@@ -262,9 +263,9 @@ export const ProviderCard: React.FC<{
                                 disabled={disabled}
                                 onValueChange={(auth_header_prefix) => set({ auth_header_prefix })}
                             />
-                        </>
-                    )}
-                    {p.auth_type === 'query' && (
+                        </div>
+                    </ExpandPresence>
+                    <ExpandPresence visible={p.auth_type === 'query'} keepMounted>
                         <TextField
                             label="查询参数名"
                             value={p.auth_query_name}
@@ -272,7 +273,7 @@ export const ProviderCard: React.FC<{
                             disabled={disabled}
                             onValueChange={(auth_query_name) => set({ auth_query_name })}
                         />
-                    )}
+                    </ExpandPresence>
                     <Select
                         label="推理内容解析"
                         items={withCurrent(REASONING_MODES, p.reasoning_parse_mode)}
@@ -315,8 +316,12 @@ export const ProviderCard: React.FC<{
                             set({ retry_interval: numOrKeep(v, p.retry_interval) })
                         }
                     />
-                    {p.client_type !== 'gemini' && (
-                        <>
+                    <ExpandPresence
+                        visible={p.client_type !== 'gemini'}
+                        className={WIDE}
+                        keepMounted
+                    >
+                        <div className={CONFIG_PAIR}>
                             <TextField
                                 label="Organization"
                                 hint="OpenAI 官方接口可选"
@@ -331,8 +336,8 @@ export const ProviderCard: React.FC<{
                                 disabled={disabled}
                                 onValueChange={(v) => set({ project: v || undefined })}
                             />
-                        </>
-                    )}
+                        </div>
+                    </ExpandPresence>
                     <StringMapEditor
                         className={WIDE}
                         label="默认请求头"
@@ -349,7 +354,7 @@ export const ProviderCard: React.FC<{
                         onChange={(default_query) => set({ default_query })}
                     />
                 </div>
-            )}
+            </ExpandPresence>
             {footer}
         </Card>
     );
@@ -456,7 +461,7 @@ export const ModelCard: React.FC<{
                     onValueChange={(v) => set({ max_tokens: v ?? undefined })}
                 />
             </div>
-            {showAdvanced && (
+            <ExpandPresence visible={showAdvanced} keepMounted>
                 <div className={CONFIG_PAIR}>
                     <NumberField
                         label="输入价格"
@@ -483,7 +488,7 @@ export const ModelCard: React.FC<{
                         disabled={disabled}
                         onCheckedChange={(cache) => set({ cache })}
                     />
-                    {m.cache ? (
+                    <ExpandPresence visible={m.cache} keepMounted>
                         <NumberField
                             label="缓存命中价格"
                             hint="元 / 百万 token"
@@ -495,9 +500,7 @@ export const ModelCard: React.FC<{
                                 set({ cache_price_in: numOrKeep(v, m.cache_price_in) })
                             }
                         />
-                    ) : (
-                        <span className="hidden sm:block" />
-                    )}
+                    </ExpandPresence>
                     <Switch
                         label="发送温度参数"
                         hint="有的模型不收 temperature，关掉就不发"
@@ -524,7 +527,7 @@ export const ModelCard: React.FC<{
                         onValueChange={(extra_params) => set({ extra_params })}
                     />
                 </div>
-            )}
+            </ExpandPresence>
         </Card>
     );
 };
@@ -656,7 +659,7 @@ export const TaskCard: React.FC<{
                     disabled={disabled}
                     onValueChange={(v) => set({ max_tokens: numOrKeep(v, t.max_tokens) })}
                 />
-                {t.model_list.length > 1 && (
+                <ExpandPresence visible={t.model_list.length > 1} className={WIDE} keepMounted>
                     <Select
                         className={WIDE}
                         label="挑了多个时怎么选"
@@ -665,9 +668,9 @@ export const TaskCard: React.FC<{
                         disabled={disabled}
                         onValueChange={(selection_strategy) => set({ selection_strategy })}
                     />
-                )}
-                {showAdvanced && (
-                    <>
+                </ExpandPresence>
+                <ExpandPresence visible={showAdvanced} className={WIDE} keepMounted>
+                    <div className={CONFIG_PAIR}>
                         <NumberField
                             label="慢请求警告（秒）"
                             hint="超过这么久在日志里提醒"
@@ -692,8 +695,8 @@ export const TaskCard: React.FC<{
                                 set({ hard_timeout: numOrKeep(v, t.hard_timeout) })
                             }
                         />
-                    </>
-                )}
+                    </div>
+                </ExpandPresence>
             </div>
         </Card>
     );

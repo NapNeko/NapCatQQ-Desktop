@@ -11,6 +11,7 @@ import {
 } from '../../../../hooks/apps/useKoishiConsole';
 import { PaneLoading } from '../PaneStatus';
 import type { AppInstance } from '../../../../core/ipc/types';
+import { KoishiSplitPane } from './KoishiSplitPane';
 
 const PAGE_SIZE = 50;
 
@@ -35,8 +36,8 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
     };
 
     return (
-        <div className="flex min-h-0 flex-1 gap-4 pb-3">
-            <aside className="flex w-[220px] shrink-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
+        <KoishiSplitPane>
+            <aside className="flex h-44 max-h-[35vh] min-h-0 w-full min-w-0 shrink-0 flex-col @min-[44rem]/koishi:h-auto @min-[44rem]/koishi:max-h-none @min-[44rem]/koishi:w-[220px] overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 <div className="flex items-center justify-between border-b border-border-subtle/70 px-3 py-2.5">
                     <span className="text-2xs text-text-tertiary">
                         {tables.data?.length ?? 0} 张表
@@ -85,7 +86,7 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                 </ul>
             </aside>
 
-            <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 {!table ? (
                     <Empty text="左边挑一张表；行数据是活的，改翻页才重新取" />
                 ) : rows.isLoading ? (
@@ -94,12 +95,12 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                     <Empty text={rows.error.message} error />
                 ) : (
                     <>
-                        <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle/70 px-3.5 py-2">
-                            <span className="font-mono text-[13px] font-medium text-text">
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border-subtle/70 px-3.5 py-2">
+                            <span className="min-w-0 break-all font-mono text-[13px] font-medium text-text">
                                 {table}
                             </span>
                             {current && current.primary.length > 0 && (
-                                <span className="text-2xs text-text-tertiary">
+                                <span className="min-w-0 break-all text-2xs text-text-tertiary">
                                     主键 {current.primary.join(' + ')}
                                 </span>
                             )}
@@ -170,7 +171,7 @@ export const KoishiDatabaseTab: React.FC<{ instance: AppInstance }> = ({ instanc
                     </>
                 )}
             </section>
-        </div>
+        </KoishiSplitPane>
     );
 };
 

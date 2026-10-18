@@ -1,5 +1,5 @@
 // 聊天账号设置弹窗：账号 / 消息提醒 / 窗口单栏分区，沿用设置页 FormSection 行式。
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { ChevronDown, PanelTop, PanelsTopLeft, RefreshCw, Settings2 } from 'lucide-react';
 import {
     isChatPopoutWindow,
@@ -24,20 +24,28 @@ import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import type { Contact } from '../../core/domain/chat/model';
 import { ChatAvatar } from '../../shared/chat/ChatAvatar';
+import { ExpandPresence } from '../../shared/ui/motion/ExpandPresence';
 
 function SettingsRow({
     id,
     label,
     hint,
     children,
+    trimEdges = true,
 }: {
     id?: string;
     label: string;
     hint?: string;
     children: ReactNode;
+    trimEdges?: boolean;
 }) {
     return (
-        <div className="flex items-center justify-between gap-6 py-3.5 first:pt-1 last:pb-1">
+        <div
+            className={
+                'flex items-center justify-between gap-6 py-3.5' +
+                (trimEdges ? ' first:pt-1 last:pb-1' : '')
+            }
+        >
             <div className="min-w-0 flex-1 space-y-1">
                 <label
                     htmlFor={id}
@@ -118,6 +126,8 @@ export function ChatAccountControls({
     const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [mutedExpanded, setMutedExpanded] = useState(false);
+    const mutedListId = useId();
     const motion = useMotion();
     const desktop = useChatDesktop();
     const status = useChatDesktopStatus({ enabled: open });
@@ -301,8 +311,8 @@ export function ChatAccountControls({
                                             onCheckedChange={(tray) => void update({ tray })}
                                         />
                                     </SettingsRow>
-                                    {preference.tray && (
-                                        <SettingsRow label="托盘提醒">
+                                    <ExpandPresence visible={preference.tray}>
+                                        <SettingsRow label="托盘提醒" trimEdges={false}>
                                             <span
                                                 className="native-chat-tray-live"
                                                 data-flash={preference.trayNotification === 'flash'}
@@ -321,7 +331,7 @@ export function ChatAccountControls({
                                                 }
                                             />
                                         </SettingsRow>
-                                    )}
+                                    </ExpandPresence>
                                     <SettingsRow
                                         id="chat-unknown-groups"
                                         label="免打扰状态未知的群"
@@ -350,8 +360,16 @@ export function ChatAccountControls({
                                         />
                                     </SettingsRow>
                                     {ignored.length > 0 && (
-                                        <details className="native-chat-muted">
-                                            <summary>
+                                        <div className="native-chat-muted">
+                                            <button
+                                                type="button"
+                                                className="native-chat-muted-trigger rounded-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                                aria-expanded={mutedExpanded}
+                                                aria-controls={mutedListId}
+                                                onClick={() =>
+                                                    setMutedExpanded((current) => !current)
+                                                }
+                                            >
                                                 <span>本地免打扰群聊</span>
                                                 <span className="native-chat-muted-count">
                                                     {ignored.length}
@@ -361,29 +379,31 @@ export function ChatAccountControls({
                                                     className="native-chat-muted-chevron"
                                                     aria-hidden
                                                 />
-                                            </summary>
-                                            <ul className="scrollbar-hide">
-                                                {ignored.map((groupId) => (
-                                                    <li key={groupId}>
-                                                        <span title={groupId}>
-                                                            {contacts.find(
-                                                                (contact) =>
-                                                                    contact.type === 'group' &&
-                                                                    contact.id === groupId,
-                                                            )?.name || groupId}
-                                                        </span>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            disabled={busy}
-                                                            onClick={() => void unmute(groupId)}
-                                                        >
-                                                            恢复提醒
-                                                        </Button>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </details>
+                                            </button>
+                                            <ExpandPresence visible={mutedExpanded} keepMounted>
+                                                <ul id={mutedListId} className="scrollbar-hide">
+                                                    {ignored.map((groupId) => (
+                                                        <li key={groupId}>
+                                                            <span title={groupId}>
+                                                                {contacts.find(
+                                                                    (contact) =>
+                                                                        contact.type === 'group' &&
+                                                                        contact.id === groupId,
+                                                                )?.name || groupId}
+                                                            </span>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                disabled={busy}
+                                                                onClick={() => void unmute(groupId)}
+                                                            >
+                                                                恢复提醒
+                                                            </Button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </ExpandPresence>
+                                        </div>
                                     )}
                                 </div>
                             </FormSection>

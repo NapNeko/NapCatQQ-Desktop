@@ -247,7 +247,9 @@ const Section: React.FC<{ title: string; count?: number; children: ReactNode }> 
 const Block: React.FC<{ title: string; text: string }> = ({ title, text }) => (
     <div className="rounded-md bg-field px-3 py-2.5">
         <p className="text-2xs text-text-tertiary">{title}</p>
-        <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-text">{text}</p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text">
+            {text}
+        </p>
     </div>
 );
 
@@ -268,7 +270,7 @@ const SceneBreakdown: React.FC<{ tags: readonly MaiBotBehaviorTag[] }> = ({ tags
             {tags.map((t) => (
                 <li
                     key={`${t.kind}:${t.label}`}
-                    className="grid grid-cols-[3rem_minmax(0,1fr)_8rem] items-center gap-2 text-xs"
+                    className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-xs sm:grid-cols-[3rem_minmax(0,1fr)_8rem]"
                 >
                     <span className="flex items-center gap-1.5 text-text-tertiary">
                         <span
@@ -277,7 +279,7 @@ const SceneBreakdown: React.FC<{ tags: readonly MaiBotBehaviorTag[] }> = ({ tags
                         {KIND_LABEL[t.kind]}
                     </span>
                     <span className="truncate text-text">{t.label}</span>
-                    <span className="flex items-center gap-1.5">
+                    <span className="col-start-2 flex min-w-0 items-center gap-1.5 sm:col-start-auto">
                         <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-inset">
                             <span
                                 className={cn(

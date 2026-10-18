@@ -1,9 +1,10 @@
 // 「文档」子页：说明、参数表、返回结构、示例（可一键填进参数）、常见错误、SnowLuma 的约束、NC ↔ SL 差异、目录来源。
 
-import { memo, useMemo, useState, type ReactNode } from 'react';
+import { memo, useId, useMemo, useState, type ReactNode } from 'react';
 import { Check, CornerDownLeft } from 'lucide-react';
 import { JsonTree, SimpleMarkdown } from '../../../shared/ui';
 import { cn } from '../../../shared/utils/cn';
+import { ExpandChevron, ExpandPresence } from '../../../shared/ui/motion/ExpandPresence';
 import { buildFormModel } from '../../../core/domain/debug/schemaForm';
 import { formatParams } from '../../../core/domain/debug/paramsText';
 import { retcodeHint } from '../../../core/domain/debug/errorCopy';
@@ -79,6 +80,8 @@ export const DocsPane = memo(function DocsPane({
     dirty,
     onUseExample,
 }: DocsPaneProps) {
+    const [returnExampleOpen, setReturnExampleOpen] = useState(false);
+    const returnExampleId = useId();
     const model = useMemo(() => buildFormModel(spec.params_schema), [spec.params_schema]);
     const properties = (spec.params_schema.properties ?? {}) as Record<string, unknown>;
     const returns = useMemo(
@@ -230,14 +233,23 @@ export const DocsPane = memo(function DocsPane({
                     <p className="text-text-tertiary">上游没有写返回结构。</p>
                 )}
                 {spec.return_example !== null && spec.return_example !== undefined && (
-                    <details className="group">
-                        <summary className="cursor-pointer select-none text-2xs text-text-secondary hover:text-text">
+                    <div className="group">
+                        <button
+                            type="button"
+                            aria-expanded={returnExampleOpen}
+                            aria-controls={returnExampleId}
+                            onClick={() => setReturnExampleOpen((current) => !current)}
+                            className="inline-flex cursor-pointer select-none items-center gap-1 rounded-xs text-2xs text-text-secondary hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        >
+                            <ExpandChevron open={returnExampleOpen} size={12} />
                             返回示例
-                        </summary>
-                        <div className="mt-1.5">
-                            <SizedTree value={spec.return_example} depth={2} />
-                        </div>
-                    </details>
+                        </button>
+                        <ExpandPresence visible={returnExampleOpen} keepMounted>
+                            <div id={returnExampleId} className="pt-1.5">
+                                <SizedTree value={spec.return_example} depth={2} />
+                            </div>
+                        </ExpandPresence>
+                    </div>
                 )}
             </Section>
 

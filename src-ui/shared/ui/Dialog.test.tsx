@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './Dialog';
 
@@ -21,6 +21,30 @@ function Open() {
 }
 
 describe('Dialog', () => {
+    it('矮窗口为两层内边距留出空间，缩放窗口后重算滚动高度', async () => {
+        preferencesStore.setMotionEnabled(false);
+        const height = window.innerHeight;
+        const scrollHeight = vi
+            .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+            .mockReturnValue(1000);
+        try {
+            window.innerHeight = 400;
+            render(<Open />);
+            const input = await screen.findByRole('textbox', { name: '名字' });
+            const inner = input.parentElement!;
+            await waitFor(() => expect(inner.style.maxHeight).toBe('304px'));
+            window.innerHeight = 280;
+            fireEvent(window, new Event('resize'));
+            await waitFor(() => expect(inner.style.maxHeight).toBe('184px'));
+            window.innerHeight = 1200;
+            fireEvent(window, new Event('resize'));
+            await waitFor(() => expect(inner.style.maxHeight).toBe(''));
+        } finally {
+            window.innerHeight = height;
+            scrollHeight.mockRestore();
+        }
+    });
+
     // 调试台等页面的快捷键靠 [role="dialog"] 在对话框里让路，读屏靠它认出对话框；
     // 内容节点经 asChild 包了一层，Radix 给的属性不能在这一层丢掉
     it('内容节点带着 Radix 的 role、标题和说明', async () => {

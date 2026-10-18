@@ -188,31 +188,34 @@ export const ComponentsPageNext: React.FC = () => {
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 pb-3 pt-1">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
                     <h1 className="font-display text-xl font-semibold text-text">组件管理</h1>
                     {machines.length === 1 && activeMachine && singleMachineSummary ? (
-                        <div className="inline-flex items-center gap-2 rounded-sm border border-border-subtle bg-inset/60 px-2.5 py-1 text-2xs text-text-secondary">
+                        <div className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm border border-border-subtle bg-inset/60 px-2.5 py-1 text-2xs text-text-secondary">
                             <span
                                 aria-hidden
                                 className={cn(
-                                    'h-1.5 w-1.5 rounded-full',
+                                    'h-1.5 w-1.5 shrink-0 rounded-full',
                                     activeMachine.host.locality === 'remote'
                                         ? 'bg-success shadow-glow-success'
                                         : 'bg-brand',
                                 )}
                             />
                             {activeMachine.host.locality === 'remote' ? (
-                                <Server size={12} className="text-text-tertiary" />
+                                <Server size={12} className="shrink-0 text-text-tertiary" />
                             ) : (
-                                <Monitor size={12} className="text-brand" />
+                                <Monitor size={12} className="shrink-0 text-brand" />
                             )}
-                            <span className="font-medium text-text">
+                            <span
+                                className="min-w-0 truncate font-medium text-text"
+                                title={activeMachine.host.display_name}
+                            >
                                 {activeMachine.host.display_name}
                             </span>
-                            <span className="font-mono text-[10px] uppercase text-text-tertiary">
+                            <span className="shrink-0 font-mono text-[10px] uppercase text-text-tertiary">
                                 {activeMachine.host.os}
                             </span>
-                            <span className="rounded-xs bg-brand/12 px-1.5 py-0.5 font-mono text-[10px] leading-none text-brand tabular-nums">
+                            <span className="shrink-0 rounded-xs bg-brand/12 px-1.5 py-0.5 font-mono text-[10px] leading-none text-brand tabular-nums">
                                 已装 {singleMachineSummary.installed}/{singleMachineSummary.total}
                             </span>
                         </div>
@@ -235,7 +238,7 @@ export const ComponentsPageNext: React.FC = () => {
             </header>
 
             {machines.length > 1 && activeHostId ? (
-                <div className="pb-1">
+                <div className="min-w-0 shrink-0 pb-1">
                     <HostSwitcher
                         machines={machines}
                         activeHostId={activeHostId}

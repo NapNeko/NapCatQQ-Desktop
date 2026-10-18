@@ -2,8 +2,9 @@
 // 刚启动、WebUI 还没起来时整页等它，免得一边读盘一边读接口两头对不上。
 
 import { useState } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Select } from '../../../../shared/ui';
+import { ExpandChevron, ExpandPresence } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import {
     promptDisplayName,
@@ -164,16 +165,14 @@ export const MaiBotPromptsTab: React.FC<{
                                     className="mt-2 flex w-full items-center gap-1 rounded-sm px-2.5 py-1.5 text-2xs font-medium text-text-tertiary hover:text-text-secondary"
                                 >
                                     高级 · {advanced.length}
-                                    <ChevronDown
-                                        size={12}
-                                        className={cn(
-                                            'ml-auto transition-transform duration-200',
-                                            showAdvanced && 'rotate-180',
-                                        )}
-                                    />
+                                    <span className="ml-auto">
+                                        <ExpandChevron open={showAdvanced} size={12} />
+                                    </span>
                                 </button>
                             )}
-                            {showAdvanced && advanced.map(row)}
+                            <ExpandPresence visible={showAdvanced}>
+                                <div>{advanced.map(row)}</div>
+                            </ExpandPresence>
                         </>
                     )}
                 </nav>

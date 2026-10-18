@@ -186,13 +186,13 @@ export const RemoteHostPanelNext: React.FC = () => {
     const [keyAuthTarget, setKeyAuthTarget] = useState<ServerProfile | null>(null);
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col">
-            <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
+        <div className="@container/remote-host flex min-h-0 min-w-0 flex-1 flex-col">
+            <header className="flex shrink-0 flex-wrap items-end justify-between gap-3 pb-4 pt-2">
                 <div>
                     <p className="text-2xs uppercase tracking-widest text-text-tertiary">servers</p>
                     <h1 className="font-display text-xl font-semibold text-text">远端主机</h1>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button
@@ -436,7 +436,7 @@ function FloatingAddButton({ onClick }: { onClick: () => void }) {
 }
 
 // 已添加服务器配置免密时弹的密码输入框。只问当前 SSH 密码，确认后把公钥推到
-// 远端。target 为 null 时不渲染。
+// 远端。关闭时保留最后一份目标，留给 Dialog 播完退场。
 function KeyAuthPasswordDialog({
     target,
     isSubmitting,
@@ -453,16 +453,19 @@ function KeyAuthPasswordDialog({
         if (target) setPassword('');
     }, [target]);
 
-    if (!target) return null;
+    const retainedTarget = useRef(target);
+    if (target) retainedTarget.current = target;
+    const displayedTarget = target ?? retainedTarget.current;
+    if (!displayedTarget) return null;
 
     return (
-        <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <Dialog open={!!target} onOpenChange={(o) => !o && onClose()}>
             <DialogContent size="sm" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>配置免密登录</DialogTitle>
                     <DialogDescription>
-                        输入 {target.name || target.host} 的当前 SSH 密码。会用它连一次，把本机
-                        密钥写进远端，之后免密码连接。
+                        输入 {displayedTarget.name || displayedTarget.host} 的当前 SSH
+                        密码。会用它连一次，把本机 密钥写进远端，之后免密码连接。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -511,10 +514,13 @@ function HostKeyConfirmDialog({
     onClose: () => void;
     onTrust: () => void;
 }) {
-    if (!ctx) return null;
-    const { prompt } = ctx;
+    const retainedContext = useRef(ctx);
+    if (ctx) retainedContext.current = ctx;
+    const displayedContext = ctx ?? retainedContext.current;
+    if (!displayedContext) return null;
+    const { prompt } = displayedContext;
     return (
-        <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <Dialog open={!!ctx} onOpenChange={(o) => !o && onClose()}>
             <DialogContent size="sm" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>

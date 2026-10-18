@@ -1,5 +1,6 @@
 /* 组件页主滚动区：预留滚动条槽位，避免右列卡片右缘被滚动条/子像素裁切。 */
 .componentsPageScroll {
+    container: components-page / inline-size;
     overflow-y: auto;
     overflow-x: visible;
     min-width: 0;
