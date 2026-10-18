@@ -55,6 +55,12 @@ todo = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
