@@ -22,14 +22,6 @@ pub fn legacy_config_fixture() -> io::Result<String> {
     read_fixture("legacy/config.json")
 }
 
-pub fn legacy_bot_fixture() -> io::Result<String> {
-    read_fixture("legacy/bot.json")
-}
-
-pub fn legacy_servers_fixture() -> io::Result<String> {
-    read_fixture("legacy/servers.json")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -104,16 +104,6 @@ impl BotConfigBuilder {
         self
     }
 
-    pub fn with_status_command(mut self, status_command: StatusCommandConfig) -> Self {
-        self.status_command = Some(status_command);
-        self
-    }
-
-    pub fn without_status_command(mut self) -> Self {
-        self.status_command = None;
-        self
-    }
-
     pub fn build(self) -> BotConfig {
         BotConfig {
             bot: BotBasicConfig {

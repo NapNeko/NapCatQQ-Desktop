@@ -30,25 +30,6 @@ impl MockSecretStore {
         Self::default()
     }
 
-    pub fn with_entries<I, K, V>(entries: I) -> Self
-    where
-        I: IntoIterator<Item = (K, V)>,
-        K: Into<String>,
-        V: Into<String>,
-    {
-        let mut secrets = HashMap::new();
-        for (key, value) in entries {
-            secrets.insert(key.into(), value.into());
-        }
-
-        Self {
-            secrets: Mutex::new(secrets),
-            next_put_failure: Mutex::new(None),
-            next_get_failure: Mutex::new(None),
-            next_delete_failure: Mutex::new(None),
-        }
-    }
-
     pub fn fail_next_put(&self, message: impl Into<String>) {
         *self
             .next_put_failure
@@ -59,13 +40,6 @@ impl MockSecretStore {
     pub fn fail_next_get(&self, message: impl Into<String>) {
         *self
             .next_get_failure
-            .lock()
-            .expect("mock secret store mutex poisoned") = Some(message.into());
-    }
-
-    pub fn fail_next_delete(&self, message: impl Into<String>) {
-        *self
-            .next_delete_failure
             .lock()
             .expect("mock secret store mutex poisoned") = Some(message.into());
     }
