@@ -54,14 +54,6 @@ pub mod windows_remote;
 pub use migration as models;
 pub use migration as report;
 
-// 向后兼容: 已合并到 bootstrap / app_config, 模块路径保留
-pub mod version_snapshot {
-    pub use crate::bootstrap::LocalVersionSnapshot;
-}
-pub mod system_resource {
-    pub use crate::app_config::SystemResourceSnapshot;
-}
-
 // 顶层 re-export(对齐旧 ncd-core API, 方便下游 crate 引用)
 
 pub use app_config::{

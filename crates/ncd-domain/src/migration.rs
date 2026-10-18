@@ -144,18 +144,6 @@ impl MigrationReport {
         }
     }
 
-    pub fn migrating() -> Self {
-        Self {
-            stage: MigrationStage::Running,
-            outcome: MigrationOutcome::NoChange,
-            warnings: Vec::new(),
-            source: None,
-            backup: None,
-            rules_applied: Vec::new(),
-            repair_actions: Vec::new(),
-        }
-    }
-
     pub fn repair_required(warnings: Vec<MigrationWarning>) -> Self {
         Self {
             stage: MigrationStage::RepairRequired,
@@ -198,13 +186,6 @@ impl MigrationReport {
 
     pub fn with_warnings(mut self, warnings: Vec<MigrationWarning>) -> Self {
         self.warnings = warnings;
-        self
-    }
-
-    pub fn with_repair_action(mut self, action: RepairAction) -> Self {
-        if !self.repair_actions.contains(&action) {
-            self.repair_actions.push(action);
-        }
         self
     }
 }

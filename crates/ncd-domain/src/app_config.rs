@@ -225,15 +225,6 @@ fn default_task_queue_cleanup_linger_ms() -> u64 {
     600_000
 }
 
-/// InfoBar 非 danger 自动关闭时长上限(毫秒),0 = 不自动关
-pub const INFOBAR_DISMISS_MS_MAX: u64 = 60_000;
-
-pub fn clamp_infobar_dismiss_ms(raw: u64) -> u64 {
-    if raw == 0 {
-        return 0;
-    }
-    raw.clamp(1000, INFOBAR_DISMISS_MS_MAX)
-}
 
 /// 任务队列终态条目保留时长下限(毫秒),0 = 关闭自动清理
 pub const TASK_QUEUE_CLEANUP_LINGER_MIN_MS: u64 = 3_000;

@@ -117,34 +117,6 @@ pub fn default_webhook_body_template() -> String {
     )
 }
 
-/// DingTalk robot markdown
-pub fn dingtalk_webhook_body_template() -> String {
-    String::from(
-        "{\n  \"msgtype\": \"markdown\",\n  \"markdown\": {\n    \"title\": \"Account status: {event}\",\n    \"text\": \"Account status: {event}\\n\\n- **name**: {nickname}\\n- **qq**: {uin}\\n- **status**: {event}\\n- **time**: {time}\"\n  }\n}",
-    )
-}
-
-/// Feishu text
-pub fn feishu_webhook_body_template() -> String {
-    String::from(
-        "{\n  \"msg_type\": \"text\",\n  \"content\": {\n    \"text\": \"Account status: {event}\\nname: {nickname}\\nqq: {uin}\\ntime: {time}\"\n  }\n}",
-    )
-}
-
-/// Discord inbound webhook
-pub fn discord_webhook_body_template() -> String {
-    String::from(
-        "{\n  \"content\": null,\n  \"embeds\": [\n    {\n      \"title\": \"Account status: {event}\",\n      \"description\": \"**name**: {nickname}\\n**qq**: {uin}\\n**status**: {event}\\n**time**: {time}\",\n      \"color\": 15158332\n    }\n  ]\n}",
-    )
-}
-
-/// Bark
-pub fn bark_webhook_body_template() -> String {
-    String::from(
-        "{\n  \"title\": \"Account status: {event}\",\n  \"body\": \"name: {nickname}\\nqq: {uin}\\nstatus: {event}\\ntime: {time}\",\n  \"group\": \"NapCatQQ Desktop\"\n}",
-    )
-}
-
 fn default_webhook_method() -> String {
     "POST".to_string()
 }
@@ -512,10 +484,6 @@ pub enum OneBotMessengerScope {
 impl OneBotMessengerScope {
     pub const fn is_local(self) -> bool {
         matches!(self, Self::Local)
-    }
-
-    pub const fn is_remote(self) -> bool {
-        matches!(self, Self::Remote)
     }
 }
 
