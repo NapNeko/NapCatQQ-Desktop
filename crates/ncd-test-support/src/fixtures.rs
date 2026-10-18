@@ -10,6 +10,7 @@ pub fn fixture_path(relative: impl AsRef<Path>) -> PathBuf {
     fixtures_root().join(relative)
 }
 
+#[cfg(test)]
 pub fn read_fixture(relative: impl AsRef<Path>) -> io::Result<String> {
     fs::read_to_string(fixture_path(relative))
 }
@@ -18,6 +19,7 @@ pub fn fixture_bytes(relative: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     fs::read(fixture_path(relative))
 }
 
+#[cfg(test)]
 pub fn legacy_config_fixture() -> io::Result<String> {
     read_fixture("legacy/config.json")
 }

@@ -1,5 +1,7 @@
 use std::fmt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
+#[cfg(test)]
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathSafetyError {
@@ -8,6 +10,7 @@ pub enum PathSafetyError {
     PrefixPath,
     ParentComponent,
     CurrentDirComponent,
+    #[cfg(test)]
     RootNotAbsolute,
 }
 
@@ -21,6 +24,7 @@ impl fmt::Display for PathSafetyError {
             Self::CurrentDirComponent => {
                 f.write_str("current directory components are not allowed")
             }
+            #[cfg(test)]
             Self::RootNotAbsolute => f.write_str("workspace root must be absolute"),
         }
     }
@@ -48,6 +52,7 @@ pub fn assert_safe_relative_path(path: impl AsRef<Path>) -> Result<(), PathSafet
     Ok(())
 }
 
+#[cfg(test)]
 pub fn assert_path_within_root(
     root: impl AsRef<Path>,
     relative: impl AsRef<Path>,
@@ -80,11 +85,12 @@ mod tests {
 
     #[test]
     fn joins_root_safely() {
-        let root = Path::new("C:/temp/workspace");
+        let workspace = crate::TempWorkspace::new().unwrap();
+        let root = workspace.path();
         let joined = assert_path_within_root(root, "runtime/config/config.json").unwrap();
         assert_eq!(
             joined,
-            PathBuf::from("C:/temp/workspace/runtime/config/config.json")
+            root.join("runtime/config/config.json")
         );
     }
 }
