@@ -108,6 +108,7 @@ jobs:
           workspaces: ". -> target"
           cache-workspace-crates: "false"
           cache-bin: "false"
+          cache-on-failure: "false"
 
       - name: Verify dependency-only cache
         shell: pwsh
@@ -288,3 +289,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: release-assets/*
+
+      # 不仅依赖缓存 action 的 post 清理；删除失败就令 job 失败，禁止保存缓存。
+      # MSI 已复制到 release-assets 并上传，此时可移除 target 中的本仓库产物。
+      - name: Remove workspace artifacts before caching
+        shell: pwsh
+        run: |
+          $pattern = '^(?:lib)?ncd[-_]|^NapCatQQ-Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$'
+          $artifacts = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
+            Where-Object { $_.Name -match $pattern } |
+            Sort-Object { $_.FullName.Length } -Descending)
+          foreach ($artifact in $artifacts) {
+            Remove-Item -LiteralPath $artifact.FullName -Recurse -Force -ErrorAction Stop
+          }
+          $remaining = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
+            Where-Object { $_.Name -match $pattern })
+          if ($remaining.Count -gt 0) { throw 'Workspace artifacts remain; refusing to cache' }
+          Write-Host "Removed $($artifacts.Count) workspace and packaging cache entries"
