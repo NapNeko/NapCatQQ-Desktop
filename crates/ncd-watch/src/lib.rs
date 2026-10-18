@@ -33,17 +33,11 @@ pub mod webhook;
 
 pub use config::{
     DesktopPresentFile, NotifyBotTarget, NotifyConfig, WatchConfig, WatchOneBotMessenger,
-    WatchOneBotSettings, WatchPaths, WatchRoot,
+    WatchOneBotSettings, WatchPaths,
 };
 pub use metrics::{WatchMetricsBot, WatchMetricsConfig};
 
 #[cfg(feature = "daemon")]
-pub use edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
-#[cfg(feature = "daemon")]
-pub use present::desktop_is_present;
-#[cfg(feature = "daemon")]
 pub use probe::{LoginStatus, ProbeKind, ProbeResult, ProbeStatus, Prober};
 #[cfg(feature = "daemon")]
-pub use run::{RunOnceOutcome, run_loop, run_once};
-#[cfg(feature = "daemon")]
-pub use webhook::send_watch_webhooks;
+pub use run::run_loop;

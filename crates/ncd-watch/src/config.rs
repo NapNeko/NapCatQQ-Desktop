@@ -380,10 +380,6 @@ impl NotifyConfig {
         Ok(config)
     }
 
-    pub fn enabled_bots(&self) -> impl Iterator<Item = &NotifyBotTarget> {
-        self.bots.iter().filter(|b| b.enabled)
-    }
-
     pub fn enabled_webhooks(&self) -> Vec<&OfflineWebhookChannel> {
         self.webhooks
             .iter()

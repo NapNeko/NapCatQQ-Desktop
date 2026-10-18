@@ -86,29 +86,6 @@ impl EdgeTracker {
         actions.into_iter().next().unwrap_or(EdgeAction::None)
     }
 
-    /// 账号态优先 + 进程回退。
-    ///
-    /// `prefer_account=true`（有 WebUI 凭据）:
-    /// - 登录 LoggedIn/LoggedOut 明确:跟登录边沿;进程 Online 不代表在线
-    /// - 登录 Unknown 且进程 Online→Offline:回退 Process(进程/WebUI 同死)
-    ///
-    /// `prefer_account=false`: 进程层为主(Docker/无 token 的 native)
-    ///
-    /// 共用:
-    /// 1. Unknown 不更新该层快照(进程 Unknown 例外于不触发)
-    /// 2. 冷启动首次已 offline / LoggedOut 不告警
-    /// 3. offline→online 发 FireRecovered
-    /// 4. 防抖按 bot 共享,仅作用于 offline 边沿
-    pub fn observe_layers(
-        &mut self,
-        bot_id: &str,
-        process: ProbeStatus,
-        login: LoginStatus,
-    ) -> Vec<EdgeAction> {
-        let prefer_account = !matches!(login, LoginStatus::Unknown);
-        self.observe_layers_prefer(bot_id, process, login, prefer_account)
-    }
-
     pub fn observe_layers_prefer(
         &mut self,
         bot_id: &str,
