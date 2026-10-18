@@ -14,8 +14,7 @@ use ncd_domain::{
 use ncd_host::{Host, HostPath};
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
-    TailOpts,
+    BotBackend, BotBackendError, BotStartCtx, BotStatus, LogSnapshot, StopMode, TailOpts,
 };
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
@@ -1114,18 +1113,6 @@ impl BotBackend for RemoteSnowLumaBackend {
             }
         }
         Ok(BotStatus::stopped(bot_id))
-    }
-
-    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        Err(BotBackendError::ConfigNotFound(bot_id))
-    }
-
-    async fn write_config(
-        &self,
-        _bot_id: BotId,
-        _cfg: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        Ok(())
     }
 
     async fn tail_log(

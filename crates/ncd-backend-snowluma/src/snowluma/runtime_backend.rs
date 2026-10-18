@@ -5,7 +5,7 @@
 //! Phase A(COLD spawn QQ.exe / HOT 按 qq_id 自动匹配 PID)
 //! - :BotBackend trait impl,Phase C/D(daemon.ensure_running +
 //!   client.load_process + spawn poller),stop / abort_start / zombie reaper /
-//!   kill_process_tree / read_config / write_config / tail_log
+//!   kill_process_tree / tail_log
 //! - :单元测试
 //!   红线:所有跨边界类型派生 ts-rs;不使用 serde_json::Value 透传业务字段
 //!   
@@ -42,6 +42,7 @@ struct SnowLumaProcessRecord {
     /// COLD 模式持有;HOT 模式 None(用户已开的 QQ 不归 backend 管)
     qq_child: Option<tokio::process::Child>,
     started_at: u64,
+    #[cfg(windows)]
     config: BotRuntimeConfig,
     start_mode: SnowLumaStartMode,
     /// 由 status poller 锁定后回写(poller 通过事件总线报;MVP 不在本 record 内
@@ -719,26 +720,6 @@ impl BotBackend for SnowLumaRuntimeBackend {
         }
         #[cfg(not(windows))]
         let _ = bot_id;
-        Ok(())
-    }
-
-    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        let processes = self.processes.read().await;
-        match processes.get(&bot_id) {
-            Some(rec) => Ok(rec.config.clone()),
-            None => Err(BotBackendError::ConfigNotFound(bot_id)),
-        }
-    }
-
-    async fn write_config(
-        &self,
-        bot_id: BotId,
-        cfg: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        let mut processes = self.processes.write().await;
-        if let Some(rec) = processes.get_mut(&bot_id) {
-            rec.config = cfg.clone();
-        }
         Ok(())
     }
 

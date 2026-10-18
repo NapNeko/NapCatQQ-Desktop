@@ -495,19 +495,4 @@ impl BotBackend for RemoteWindowsBotBackend {
             )),
         }
     }
-    async fn read_config(&self, id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        self.runtime
-            .lock()
-            .await
-            .clone()
-            .ok_or(BotBackendError::ConfigNotFound(id))
-    }
-    async fn write_config(
-        &self,
-        _: BotId,
-        config: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        *self.runtime.lock().await = Some(config.clone());
-        Ok(())
-    }
 }

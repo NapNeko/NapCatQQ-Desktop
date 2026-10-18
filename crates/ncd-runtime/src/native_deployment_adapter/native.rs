@@ -103,20 +103,6 @@ impl BotBackend for NativeDeploymentBackend {
         }
     }
 
-    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        // 过渡期不支持,BotManager 不从 backend 读 config(用 repo 读)
-        Err(BotBackendError::ConfigNotFound(bot_id))
-    }
-
-    async fn write_config(
-        &self,
-        _bot_id: BotId,
-        _cfg: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        // 过渡期:config 落盘已由 BotManager 自己做,backend 不需要管
-        Ok(())
-    }
-
     async fn tail_log(
         &self,
         bot_id: BotId,

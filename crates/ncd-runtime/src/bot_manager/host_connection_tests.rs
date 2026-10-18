@@ -59,18 +59,6 @@ impl BotBackend for UnusedBackend {
         unreachable!("this test stops at the host resolution boundary")
     }
 
-    async fn read_config(&self, _bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        unreachable!("connection recovery must not read backend configuration")
-    }
-
-    async fn write_config(
-        &self,
-        _bot_id: BotId,
-        _config: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        unreachable!("connection recovery must not write backend configuration")
-    }
-
     async fn tail_log(
         &self,
         _bot_id: BotId,

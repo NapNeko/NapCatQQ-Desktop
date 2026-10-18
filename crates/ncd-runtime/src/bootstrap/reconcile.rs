@@ -343,7 +343,7 @@ mod windows_tests {
     use async_trait::async_trait;
     use ncd_domain::{BackendKind, BotFlavor, StopMode};
     use ncd_traits::runtime_backend::{
-        BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
+        BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
     };
 
     struct StatusOnlyBackend {
@@ -370,16 +370,6 @@ mod windows_tests {
         }
         async fn stop(&self, _: BotId, _: StopMode) -> Result<(), BotBackendError> {
             panic!("recovery must not stop the remote bot")
-        }
-        async fn read_config(&self, _: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-            panic!("recovery must not read Linux configuration")
-        }
-        async fn write_config(
-            &self,
-            _: BotId,
-            _: &BotRuntimeConfig,
-        ) -> Result<(), BotBackendError> {
-            panic!("recovery must not rewrite configuration")
         }
         async fn tail_log(&self, _: BotId, _: TailOpts) -> Result<LogSnapshot, BotBackendError> {
             panic!("status recovery must not start a Linux log follower")

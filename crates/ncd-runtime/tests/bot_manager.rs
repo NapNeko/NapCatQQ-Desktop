@@ -138,18 +138,6 @@ impl BotBackend for FakeBackend {
         }
     }
 
-    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        Err(BotBackendError::ConfigNotFound(bot_id))
-    }
-
-    async fn write_config(
-        &self,
-        _bot_id: BotId,
-        _cfg: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        Ok(())
-    }
-
     async fn tail_log(
         &self,
         _bot_id: BotId,

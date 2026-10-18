@@ -12,9 +12,7 @@ use ncd_domain::windows_bot::WindowsBotSpec;
 use ncd_domain::{BackendKind, BotConfig, BotFlavor, BotId, BotStatus, LogSnapshot, StopMode};
 use ncd_host::local::LocalWindowsHost;
 use ncd_traits::events::BroadcastEventBus;
-use ncd_traits::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, TailOpts,
-};
+use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotStartCtx, TailOpts};
 
 struct Translator(WindowsBotSpec);
 
@@ -165,11 +163,5 @@ impl BotBackend for NapCatBackend {
     }
     async fn tail_log(&self, id: BotId, options: TailOpts) -> Result<LogSnapshot, BotBackendError> {
         Ok(self.deployment.tail_log(&id, options.lines).await)
-    }
-    async fn read_config(&self, id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        Err(BotBackendError::ConfigNotFound(id))
-    }
-    async fn write_config(&self, _: BotId, _: &BotRuntimeConfig) -> Result<(), BotBackendError> {
-        Ok(())
     }
 }

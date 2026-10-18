@@ -400,7 +400,7 @@ mod tests {
     use ncd_traits::{
         ConfigStore, SecretStore,
         runtime_backend::{
-            BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
+            BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
         },
     };
     use tempfile::tempdir;
@@ -429,16 +429,6 @@ mod tests {
         }
         async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
             Ok(BotStatus::stopped(bot_id))
-        }
-        async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-            Err(BotBackendError::ConfigNotFound(bot_id))
-        }
-        async fn write_config(
-            &self,
-            _bot_id: BotId,
-            _cfg: &BotRuntimeConfig,
-        ) -> Result<(), BotBackendError> {
-            Ok(())
         }
         async fn tail_log(
             &self,

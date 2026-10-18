@@ -13,7 +13,7 @@ use ncd_domain::kinds::{BackendKind, StopMode};
 use ncd_domain::{BotFlavor, RuntimeTarget};
 use ncd_host::{Host, HostPath};
 use ncd_traits::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
+    BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
 };
 
 use super::config::{bot_config_for_start, status_for_deployment_state};
@@ -195,18 +195,6 @@ impl BotBackend for RemoteNativeDeploymentBackend {
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
         Ok(status_for_deployment_state(bot_id, state))
-    }
-
-    async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        Err(BotBackendError::ConfigNotFound(bot_id))
-    }
-
-    async fn write_config(
-        &self,
-        _bot_id: BotId,
-        _cfg: &BotRuntimeConfig,
-    ) -> Result<(), BotBackendError> {
-        Ok(())
     }
 
     async fn tail_log(
