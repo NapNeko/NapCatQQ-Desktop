@@ -18,7 +18,6 @@ use super::dashboard_auth::{is_hash_format, md5_hex};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
-const UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
 const TOKEN_TTL: Duration = Duration::from_secs(7 * 24 * 3600);
 const TOKEN_SKEW: Duration = Duration::from_secs(60);
 
@@ -470,22 +469,6 @@ impl DashboardClient {
             .send_json(Method::POST, path, Some(body), true, None)
             .await?;
         expect_ok(env, "请求失败")
-    }
-
-    pub async fn post_multipart_ok(
-        &self,
-        path: &str,
-        form: reqwest::multipart::Form,
-    ) -> Result<(), AppFrameworkError> {
-        let url = format!("{}{path}", self.base);
-        let mut req = self.http.post(&url).timeout(UPLOAD_TIMEOUT).multipart(form);
-        if let Some(token) = self.token() {
-            req = req.bearer_auth(token);
-        }
-        let resp = req.send().await.map_err(map_transport)?;
-        parse_envelope::<Value>(resp)
-            .await
-            .and_then(|env| expect_ok(env, "上传失败"))
     }
 
     async fn send_json<B: Serialize, T: DeserializeOwned>(

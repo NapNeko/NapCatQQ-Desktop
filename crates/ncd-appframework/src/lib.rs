@@ -44,112 +44,71 @@ pub mod yunzai;
 
 pub use adapter::{
     AppComponentSpec, AppFrameworkAdapter, AppPanelOutcomeKind, AppPanelResult, PluginLogSink,
-    apply_with_backup, apply_with_backup_ex, restore_from_backup,
 };
 pub use adopt::{
-    AdoptRestoreScope, AdoptedFile, capture_adopted_files, list_dotenv_rels, merge_rels,
-    remove_ncd_debris, restore_adopted_files, write_project_sidecar,
+    AdoptRestoreScope, AdoptedFile, capture_adopted_files,
+    remove_ncd_debris, restore_adopted_files,
 };
 pub use astrbot::{
-    ASTRBOT_FRAMEWORK_ID, ASTRBOT_PLUGINS_URL, AstrBotAbconfInfo, AstrBotAdapter,
-    AstrBotAiSettings, AstrBotComponent, AstrBotDashboardGate, AstrBotDashboardStatus,
-    AstrBotInstanceConfig, AstrBotIntegration, AstrBotKbBind, AstrBotKbCreate,
-    AstrBotKnowledgeBase, AstrBotOneBotRow, AstrBotPersona, AstrBotPlatformGates,
-    AstrBotProviderModel, AstrBotProviderSource, AstrBotRuntimeApi, AstrBotSession,
-    AstrBotSessionRule, AstrBotSttSettings, AstrBotSubagentConfig, AstrBotSubagentRow,
-    AstrBotTtsSettings, AstrBotWebSearchSettings, astrbot_manifest, astrbot_plugin_market_urls,
-    join_webui_url, parse_astrbot_plugins_json,
+    AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate, AstrBotKnowledgeBase,
+    AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule, join_webui_url,
 };
-pub use config_doc::{
-    AppConfigDocumentRevision, AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope,
-    DocumentSnapshot, MISSING_REVISION, combined_revision, revision_of,
-};
-pub use env_file::{EnvEntry, EnvFile, EnvWrite};
-pub use karin::config::{KarinEnv, KarinInstanceConfig};
+pub use config_doc::{AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope};
 pub use karin::plugin::{
-    KARIN_PLUGINS_LIST_URL, KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled,
-    KarinPluginKind, KarinPluginMarketEntry, KarinPluginRepo, app_file_basename,
-    apply_plugin_enabled, confirm_plugin_on_disk, git_clone_url, parse_karin_plugins_list,
-    write_app_file_bytes,
+    KARIN_PLUGINS_LIST_URL, KarinPluginInstalled, KarinPluginMarketEntry, app_file_basename,
 };
-pub use karin::{
-    KARIN_FRAMEWORK_ID, KarinAdapter, KarinComponent, KarinIntegration, karin_manifest,
-};
+pub use karin::KarinAdapter;
 pub use koishi::{
-    KOISHI_FRAMEWORK_ID, KoishiAdapter, KoishiBotState, KoishiBotStatus, KoishiCommandRow,
+    KoishiBotState, KoishiBotStatus, KoishiCommandRow,
     KoishiComponent, KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry, KoishiInstanceConfig,
-    KoishiIntegration, KoishiPackageInfo, KoishiPluginNode, KoishiPluginSchema, KoishiRuntimeApi,
-    KoishiRuntimeGate, KoishiRuntimeStatus, KoishiSandboxMessage, koishi_manifest,
+    KoishiPackageInfo, KoishiPluginNode, KoishiPluginSchema, KoishiRuntimeApi,
+    KoishiRuntimeGate, KoishiRuntimeStatus, KoishiSandboxMessage,
 };
 pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
 pub use maibot::resources::behavior::{
-    MaiBotBehavior, MaiBotBehaviorActor, MaiBotBehaviorChat, MaiBotBehaviorDetail,
-    MaiBotBehaviorEvidence, MaiBotBehaviorFeedback, MaiBotBehaviorFeedbackKind,
-    MaiBotBehaviorFilter, MaiBotBehaviorOrigin, MaiBotBehaviorOverview, MaiBotBehaviorPage,
-    MaiBotBehaviorQuery, MaiBotBehaviorSort, MaiBotBehaviorTag, MaiBotBehaviorTagKind,
+    MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
 };
 pub use maibot::resources::chat::MaiBotChatTicket;
 pub use maibot::resources::emoji::{
-    MaiBotEmoji, MaiBotEmojiAction, MaiBotEmojiFilter, MaiBotEmojiImage, MaiBotEmojiOverview,
-    MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiSort, MaiBotEmojiStatus, MaiBotEmojiUpload,
-    MaiBotEmojiUploadDone, MaiBotLocalImage, MaiBotUploadFailure, inspect_local_images,
+    MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview,
+    MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiUpload,
+    MaiBotEmojiUploadDone, MaiBotLocalImage, inspect_local_images,
 };
 pub use maibot::resources::expression::{
-    MaiBotExpression, MaiBotExpressionAction, MaiBotExpressionFilter, MaiBotExpressionOverview,
-    MaiBotExpressionPage, MaiBotExpressionQuery,
+    MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
 };
 pub use maibot::resources::jargon::{
-    MaiBotJargon, MaiBotJargonAction, MaiBotJargonFilter, MaiBotJargonOverview, MaiBotJargonPage,
-    MaiBotJargonQuery,
+    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
 };
 pub use maibot::resources::memory::{
-    MaiBotLocalTextFile, MaiBotMemoryCounts, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteKind,
-    MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryDeleteSample,
-    MaiBotMemoryDeleteTarget, MaiBotMemoryGraph, MaiBotMemoryGraphEdge, MaiBotMemoryGraphHit,
-    MaiBotMemoryGraphNode, MaiBotMemoryGraphParagraph, MaiBotMemoryGraphRelation,
-    MaiBotMemoryImport, MaiBotMemoryImportKind, MaiBotMemoryImportLimits,
-    MaiBotMemoryImportOptions, MaiBotMemoryImportSetup, MaiBotMemoryKindCounts,
-    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecord, MaiBotMemoryRecordDetail,
-    MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryState,
+    MaiBotLocalTextFile, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
+    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
+    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail,
+    MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource,
     MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
-    MaiBotMemoryTaskFile, MaiBotMemoryTaskStatus, inspect_local_texts,
+    inspect_local_texts,
 };
 pub use maibot::resources::person::{
-    MaiBotGroupCard, MaiBotPerson, MaiBotPersonAction, MaiBotPersonFilter, MaiBotPersonOverview,
-    MaiBotPersonPage, MaiBotPersonQuery,
+    MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
 };
 pub use maibot::resources::prompts::{
-    MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptInfo,
-    MaiBotPromptLanguage, MaiBotPromptTarget, MaiBotPromptVersion,
+    MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptTarget,
 };
-pub use maibot::resources::{MaiBotLearningChat, MaiBotResourceDone};
+pub use maibot::resources::MaiBotResourceDone;
 pub use maibot::runtime::{
-    MaiBotChatSession, MaiBotMcpServerStatus, MaiBotMcpStatus, MaiBotMcpTest, MaiBotMcpTool,
+    MaiBotChatSession, MaiBotMcpStatus, MaiBotMcpTest,
     MaiBotProviderCheck, MaiBotProviderModel, MaiBotRuntimeGate, MaiBotRuntimeStatus,
     MaiBotStatsSummary,
 };
 pub use maibot::schema::{MaiBotAPIProvider, MaiBotMCPServerItemConfig};
-pub use maibot::{
-    MAIBOT_FRAMEWORK_ID, MaiBotAdapter, MaiBotAdapterConfig, MaiBotChatFilter, MaiBotComponent,
-    MaiBotInstanceConfig, MaiBotIntegration, MaiBotListMode, maibot_manifest,
-};
-pub use neobot::{
-    NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT, NEOBOT_FRAMEWORK_ID,
-    NeoBotComponent, PackageVersions, neobot_manifest,
-};
+pub use maibot::MaiBotAdapterConfig;
+pub use neobot::PackageVersions;
 pub use nonebot2::{
-    NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter,
-    NoneBot2Component, NoneBot2EnvEntry, NoneBot2EnvProd, NoneBot2InstanceConfig,
-    NoneBot2Integration, nonebot_registry_urls, nonebot2_manifest, parse_nonebot_adapters_json,
-    parse_nonebot_plugins_json,
+    NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NoneBot2Adapter, nonebot_registry_urls,
 };
-pub use ports::{PortUsage, local_port_free, parse_proc_net_listen, remote_listening_ports};
+pub use ports::remote_listening_ports;
 pub use registry::AppFrameworkRegistry;
 pub use store::{
     AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
 };
 pub use terminal::AppTerminalProfile;
-pub use yunzai::{
-    YUNZAI_FRAMEWORK_ID, YunzaiAdapter, YunzaiComponent, YunzaiInstanceConfig, YunzaiIntegration,
-    yunzai_manifest,
-};

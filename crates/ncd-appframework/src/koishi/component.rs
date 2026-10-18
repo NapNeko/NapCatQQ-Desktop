@@ -23,7 +23,7 @@ use super::manifest::{
     ONEBOT_ADAPTER_PACKAGE, PACKAGE_JSON, PRESERVED_ON_UPDATE, STAGE_DIR,
 };
 use super::release::{BoilerplateAsset, fetch_latest_asset, pinned_asset, platform_slug};
-use super::yarn::{path_env, resolve_node, resolve_yarn_rel, yarn_command};
+use super::yarn::{resolve_node, resolve_yarn_rel, yarn_command};
 use super::yml::KoishiInstanceConfig;
 use crate::node_tooling::{NodeToolchain, write_node_marker};
 
@@ -561,11 +561,6 @@ impl Component for KoishiComponent {
             args,
         ))
     }
-}
-
-/// 给终端 / 编排层拼 PATH 用
-pub fn launch_path_env(tc: &NodeToolchain, os: Os, locality: Locality) -> String {
-    path_env(tc, os, locality)
 }
 
 async fn begin(ctx: &ActionCtx, step: u32, message: impl Into<String>) {

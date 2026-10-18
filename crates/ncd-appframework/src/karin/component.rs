@@ -97,11 +97,6 @@ impl KarinComponent {
         self
     }
 
-    pub fn with_version_spec(mut self, spec: impl Into<String>) -> Self {
-        self.version_spec = spec.into();
-        self
-    }
-
     pub fn package_json(&self) -> HostPath {
         self.install_dir.join(KARIN_PACKAGE_JSON)
     }

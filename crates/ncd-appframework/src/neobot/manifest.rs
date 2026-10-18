@@ -53,7 +53,6 @@ pub const ENV_NEOBOT_DATA_DIR: &str = "NEOBOT_DATA_DIR";
 pub const ENV_NEOBOT_ENV_FILE: &str = "NEOBOT_ENV_FILE";
 pub const NEOBOT_CONFIG_TOML: &str = "app/data/config.toml";
 pub const NEOBOT_DASHBOARD_CONFIG: &str = "app/data/plugins_data/dashboard/config.toml";
-pub const NEOBOT_DASHBOARD_AUTH: &str = "app/data/plugins_data/dashboard/auth.json";
 /// 旧布局的 config.toml：打包运行（exe 目录/data），以及 3.0.x 早期桌面端误写的那份。
 /// 桌面端不按它读写，只用于导入时给出明确报错、启动时把旧对接搬过去
 pub const NEOBOT_CONFIG_TOML_LEGACY: &str = "data/config.toml";

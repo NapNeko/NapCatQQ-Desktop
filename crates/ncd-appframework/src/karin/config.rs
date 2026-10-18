@@ -20,7 +20,7 @@ use crate::adapter::apply_with_backup_ex;
 use crate::config_doc::{
     DocumentSnapshot, IssueSink, ensure_parent_dir, read_documents, render_json_pretty,
 };
-use crate::env_file::{EnvEntry, EnvFile};
+use crate::env_file::EnvFile;
 
 use super::manifest::{ENV_HTTP_PORT, ENV_WS_SERVER_AUTH_KEY, KARIN_ENV_FILE};
 
@@ -1078,19 +1078,6 @@ pub async fn write_karin_config(
 /// 对接依赖的两把钥匙是否变了（编排层据此决定要不要重新 upsert 协议 Bot 侧连接）
 pub fn link_inputs_changed(before: &KarinEnv, after: &KarinEnv) -> bool {
     before.http_port != after.http_port || before.ws_server_auth_key != after.ws_server_auth_key
-}
-
-/// 把 `.env` 条目列表转成 `KarinEnvEntry`（测试 / mock 用）
-pub fn env_entries_to_custom(entries: &[EnvEntry]) -> Vec<KarinEnvEntry> {
-    entries
-        .iter()
-        .filter(|e| !KarinEnv::is_system_key(&e.key))
-        .map(|e| KarinEnvEntry {
-            key: e.key.clone(),
-            value: e.value.clone(),
-            comment: e.comment.clone(),
-        })
-        .collect()
 }
 
 #[cfg(test)]

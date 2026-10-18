@@ -4,7 +4,7 @@
 //! `ENVIRONMENT` 从 `.env` 读（大小写不敏感），缺省 `prod`，再加载 `.env.{ENVIRONMENT}` 覆盖。
 //! 桌面端探测远程项目时只看项目文件，不读本机进程环境。
 
-use super::manifest::{NONEBOT2_ENV_FILE, NONEBOT2_ENV_PROD_FILE};
+use super::manifest::NONEBOT2_ENV_FILE;
 use crate::env_file::EnvFile;
 
 pub const DEFAULT_ENVIRONMENT: &str = "prod";
@@ -50,11 +50,6 @@ pub fn environment_from_dotenv(text: &str) -> String {
 
 pub fn overlay_rel(environment: &str) -> String {
     format!(".env.{environment}")
-}
-
-/// 官方脚手架把具体配置放 `.env.prod`；真实项目常只有一份 `.env`。
-pub fn is_standard_overlay_rel(rel: &str) -> bool {
-    rel == NONEBOT2_ENV_PROD_FILE || rel.starts_with(".env.")
 }
 
 #[cfg(test)]

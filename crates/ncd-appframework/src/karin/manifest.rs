@@ -28,13 +28,10 @@ pub const KARIN_DIRECT_ENTRY: &str = "node_modules/node-karin/dist/start/app.mjs
 pub const KARIN_CLI_ENTRY: &str = "node_modules/node-karin/dist/cli/index.mjs";
 /// 桌面端接管的日志文件（实例目录内；Karin 自身的 @karinjs/logs 另算）
 pub const KARIN_STDOUT_LOG: &str = ".ncd-karin.log";
-pub const KARIN_PID_FILE: &str = ".ncd-karin.pid";
 
 /// `.env` 键
-pub const ENV_HTTP_ENABLE: &str = "HTTP_ENABLE";
 pub const ENV_HTTP_PORT: &str = "HTTP_PORT";
 pub const ENV_HTTP_HOST: &str = "HTTP_HOST";
-pub const ENV_HTTP_AUTH_KEY: &str = "HTTP_AUTH_KEY";
 pub const ENV_WS_SERVER_AUTH_KEY: &str = "WS_SERVER_AUTH_KEY";
 
 /// 反向 WS 路径（Karin 同时接受 `/`，用带语义的那条）
