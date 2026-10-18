@@ -1,6 +1,6 @@
 //! 编译期注入中转代理常量(base url + HMAC secret)
 //!
-//! 读环境变量生成 src/proxy_constants.rs(.gitignore 忽略):
+//! 读环境变量生成 OUT_DIR/proxy_constants.rs（随 Cargo 构建产物缓存）:
 //! - NCD_PROXY_BASE_URL
 //! - NCD_PROXY_SECRET(首选)或 NCD_PROXY_SHARED_SECRET(仓库 secrets 历史名)
 //! 都缺失时拷贝 template.rs 占位,运行时 is_configured() 返 false 走 GitHub 直连
@@ -22,7 +22,7 @@ const ENV_SECRET: &str = "NCD_PROXY_SECRET";
 const ENV_SECRET_LEGACY: &str = "NCD_PROXY_SHARED_SECRET";
 
 const TEMPLATE_FILE: &str = "src/proxy_constants.template.rs";
-const OUT_FILE: &str = "src/proxy_constants.rs";
+const OUT_FILE: &str = "proxy_constants.rs";
 
 fn main() {
     println!("cargo:rerun-if-env-changed={ENV_BASE_URL}");
@@ -32,7 +32,8 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into()));
-    let out_path = crate_dir.join(OUT_FILE);
+    let out_dir = env::var_os("OUT_DIR").unwrap_or_else(|| panic!("Cargo must set OUT_DIR"));
+    let out_path = PathBuf::from(out_dir).join(OUT_FILE);
 
     // 尝试从 workspace 根目录的 .env 加载(不覆盖已有系统环境变量)
     // workspace root = crate_dir/../../(crates/ncd-network → 项目根)

@@ -92,11 +92,34 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo
+      - name: Exclude build dirs from Defender scan
+        shell: pwsh
+        run: |
+          $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
+          foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
+
+      # workspace 产物包含编译期代理密钥，不能进入 fork PR 可读的 Actions 缓存。
+      # 仅缓存第三方依赖；新命名空间也不恢复旧的完整 target 缓存。
+      - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
         with:
+          prefix-key: rust-msi-deps-v2
           shared-key: build-msi-windows
           workspaces: ". -> target"
+          cache-workspace-crates: "false"
+          cache-bin: "false"
+          cache-on-failure: "false"
+
+      - name: Verify dependency-only cache
+        shell: pwsh
+        run: |
+          if (Test-Path 'target') {
+            $forbidden = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
+              Where-Object { $_.Name -match '^(?:lib)?ncd[-_]|^(?:lib)?NapCatQQ[-_]Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$' })
+            if ($forbidden.Count -gt 0) {
+              throw "Dependency cache contains workspace or packaging artifacts: $($forbidden[0].FullName)"
+            }
+          }
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
@@ -159,6 +182,13 @@ jobs:
 
       # 不要用 `pnpm run tauri:build -- --bundles msi`：
       # pnpm 会把中间的 `--` 原样传给 tauri，导致 `--bundles` 落到 cargo 上失败。
+      - name: Clear restored MSI bundles
+        shell: pwsh
+        run: |
+          if (Test-Path 'target/release/bundle') {
+            Remove-Item -LiteralPath 'target/release/bundle' -Recurse -Force
+          }
+
       - name: Build Tauri MSI
         env:
           NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
@@ -259,3 +289,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: release-assets/*
+
+      # 不仅依赖缓存 action 的 post 清理；删除失败就令 job 失败，禁止保存缓存。
+      # MSI 已复制到 release-assets 并上传，此时可移除 target 中的本仓库产物。
+      - name: Remove workspace artifacts before caching
+        shell: pwsh
+        run: |
+          $pattern = '^(?:lib)?ncd[-_]|^(?:lib)?NapCatQQ[-_]Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$'
+          $artifacts = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
+            Where-Object { $_.Name -match $pattern } |
+            Sort-Object { $_.FullName.Length } -Descending)
+          foreach ($artifact in $artifacts) {
+            Remove-Item -LiteralPath $artifact.FullName -Recurse -Force -ErrorAction Stop
+          }
+          $remaining = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
+            Where-Object { $_.Name -match $pattern })
+          if ($remaining.Count -gt 0) { throw 'Workspace artifacts remain; refusing to cache' }
+          Write-Host "Removed $($artifacts.Count) workspace and packaging cache entries"

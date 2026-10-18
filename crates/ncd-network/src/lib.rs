@@ -7,7 +7,9 @@ pub mod error;
 pub mod mirror;
 pub mod progress;
 pub mod proxy;
-pub mod proxy_constants;
+pub mod proxy_constants {
+    include!(concat!(env!("OUT_DIR"), "/proxy_constants.rs"));
+}
 pub mod race;
 pub mod range;
 pub mod retry;

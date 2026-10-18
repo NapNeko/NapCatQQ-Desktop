@@ -1,5 +1,5 @@
 # Desktop MSI 发版。与 ncd-watch 的 watch-v* 分流；本工作流只响应 v*.*.*。
-# 质量门禁默认信任 ci.yml；需要时可勾选 run_gates 再测一遍。
+# 质量门禁默认信任 ci.yml；run_gates 复用同一套并行测试和缓存，与打包并行。
 
 name: Release MSI
 
@@ -24,19 +24,19 @@ on:
         required: false
         default: false
         type: boolean
+      dry_run:
+        description: "只验证门禁与 MSI 打包，不创建或更新 GitHub Release"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: release-msi-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
-  CARGO_BUILD_JOBS: "4"
-  RUST_TEST_THREADS: "4"
 
 jobs:
   resolve:
@@ -85,73 +85,18 @@ jobs:
 
   gates:
     name: Optional release gates
-    needs: resolve
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_gates }}
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: release-gates-windows
-          workspaces: ". -> target"
-
-      - name: Install frontend deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Check version metadata
-        run: pnpm run check:versions
-
-      - name: Export ts-rs bindings
-        shell: pwsh
-        run: |
-          pnpm run build:remote-agent
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo test --workspace --lib export_bindings_ -- --quiet
-
-      - name: Assert generated IPC types committed
-        shell: pwsh
-        run: git diff --exit-code -- src-ui/core/ipc/generated
-
-      - name: Frontend unit tests
-        run: pnpm run test:unit
-
-      # 与常规 CI 一致，冷启动计划测试需要只读的 QQ 安装注册表夹具。
-      - name: Stub QQ install registry for launch plan tests
-        shell: pwsh
-        run: |
-          $key = 'HKLM:\SOFTWARE\WOW6432Node\Tencent\QQNT'
-          New-Item -Path $key -Force | Out-Null
-          New-ItemProperty -Path $key -Name Install -Value 'C:\Program Files\Tencent\QQNT' -PropertyType String -Force | Out-Null
-
-      - name: Workspace tests
-        run: cargo test --workspace
+    uses: ./.github/workflows/ci.yml
+    with:
+      force_full: true
+    # 测试不需要发布凭据；复用主线测试缓存，不传入构建 secrets。
+    permissions:
+      contents: read
+      pull-requests: read
 
   build-msi:
-    needs:
-      - resolve
-      - gates
-    # gates 跳过时 needs.gates.result = skipped，仍应继续打包。
-    if: ${{ always() && needs.resolve.result == 'success' && (needs.gates.result == 'success' || needs.gates.result == 'skipped') }}
+    needs: resolve
+    # 打包与测试并行；publish 统一等待两者通过。
     uses: ./.github/workflows/build-msi.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
@@ -161,15 +106,16 @@ jobs:
   publish:
     needs:
       - resolve
+      - gates
       - build-msi
-    # gates 跳过时 build-msi 仍会 success；但若 publish 无 always()，
-    # GitHub 会因上游链路上有 skipped job 而把 publish 一并跳过（v3.1.0 已踩坑）。
-    if: ${{ always() && needs.resolve.result == 'success' && needs.build-msi.result == 'success' }}
+    # 可选门禁跳过时仍可发布；失败、取消或整次取消都不能发布。
+    if: ${{ !cancelled() && !inputs.dry_run && needs.resolve.result == 'success' && needs.build-msi.result == 'success' && (needs.gates.result == 'success' || needs.gates.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Download MSI artifact

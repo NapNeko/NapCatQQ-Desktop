@@ -19,6 +19,13 @@
 name: CI
 
 on:
+  workflow_call:
+    inputs:
+      force_full:
+        description: "发布门禁复用全部测试，忽略路径过滤和手动 suite"
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -66,11 +73,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Test gate policy
+        env:
+          CI_RUST_CACHE_TEST_CARGO: "1"
         run: node --test scripts/ci-gate.test.mjs scripts/ci-rust-cache.test.mjs
 
       # 版本检查在 frontend，版本文件必须进 frontend 过滤；
       # tauri.conf.json 同时在两端过滤内。
       - name: Detect changed areas
+        if: ${{ !inputs.force_full }}
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -114,6 +124,7 @@ jobs:
     name: Frontend
     needs: changes
     if: >-
+      inputs.force_full ||
       ((github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.frontend == 'true') ||
       (github.event_name == 'workflow_dispatch' &&
         (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'frontend'))
@@ -164,6 +175,7 @@ jobs:
     name: Rust core (Windows)
     needs: changes
     if: >-
+      inputs.force_full ||
       ((github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.rust_core == 'true') ||
       (github.event_name == 'workflow_dispatch' &&
         (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust' || github.event.inputs.suite == 'rust-smoke'))
@@ -206,16 +218,16 @@ jobs:
             target
             ${{ steps.inputs.outputs.cargo-home }}/registry
             ${{ steps.inputs.outputs.cargo-home }}/git
-          key: rust-tests-v4-core-${{ github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
+          key: rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
           restore-keys: |
-            rust-tests-v4-core-${{ github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-
+            rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-
 
       - name: Restore Cargo input timestamps
         run: node scripts/ci-rust-cache.mjs restore
 
       # 全量测试已包含导出用例；只有 smoke 需要单独导出。
       - name: Export ts-rs bindings
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'rust-smoke'
+        if: ${{ !inputs.force_full && github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'rust-smoke' }}
         shell: pwsh
         run: cargo test --workspace --exclude ncd-tauri --lib export_bindings_ -- --quiet
 
@@ -230,7 +242,7 @@ jobs:
 
       # 快速回归：只跑近期易碎的 integration / compose，不跑全 workspace
       - name: Smoke tests
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'rust-smoke'
+        if: ${{ !inputs.force_full && github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'rust-smoke' }}
         shell: pwsh
         run: |
           cargo test -p ncd-runtime --test bot_manager -- --quiet
@@ -239,6 +251,7 @@ jobs:
 
       - name: Windows Agent tests under a standard account
         if: >-
+          inputs.force_full ||
           github.event_name != 'workflow_dispatch' ||
           github.event.inputs.suite == 'full' ||
           github.event.inputs.suite == 'rust'
@@ -247,6 +260,7 @@ jobs:
 
       - name: Workspace tests
         if: >-
+          inputs.force_full ||
           github.event_name != 'workflow_dispatch' ||
           github.event.inputs.suite == 'full' ||
           github.event.inputs.suite == 'rust'
@@ -272,13 +286,14 @@ jobs:
             target
             ${{ steps.inputs.outputs.cargo-home }}/registry
             ${{ steps.inputs.outputs.cargo-home }}/git
-          key: rust-tests-v4-core-${{ github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
+          key: rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
 
   # Tauri 独立编译；其导出用例也必须检查 generated 差异。
   rust-shell:
     name: Rust shell / Tauri (Windows)
     needs: changes
     if: >-
+      inputs.force_full ||
       ((github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.rust_shell == 'true') ||
       (github.event_name == 'workflow_dispatch' &&
         (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust'))
@@ -327,6 +342,10 @@ jobs:
         # Tauri validates packaged resources even for shell unit tests.
         run: node scripts/build-remote-agent.mjs
 
+      # Agent 是 gitignored 资源，首次 restore 时尚不存在；生成后再按内容校验恢复时间戳。
+      - name: Restore generated Agent input timestamp
+        run: node scripts/ci-rust-cache.mjs restore
+
       - name: Run shell tests (ncd-tauri)
         run: cargo test -p ncd-tauri
 
@@ -356,7 +375,7 @@ jobs:
 
       - name: Require green jobs
         env:
-          CI_EVENT: ${{ github.event_name }}
-          CI_SUITE: ${{ github.event.inputs.suite || 'full' }}
+          CI_EVENT: ${{ inputs.force_full && 'workflow_dispatch' || github.event_name }}
+          CI_SUITE: ${{ inputs.force_full && 'full' || github.event.inputs.suite || 'full' }}
           CI_JOB_RESULTS: ${{ toJSON(needs) }}
         run: node scripts/ci-gate.mjs
