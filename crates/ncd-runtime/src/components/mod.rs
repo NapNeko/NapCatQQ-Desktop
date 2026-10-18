@@ -5,7 +5,6 @@ pub mod active_tasks;
 pub mod executor;
 pub mod factory;
 pub mod graph;
-pub mod package_lock;
 pub mod readiness_gate;
 pub mod resolver;
 pub mod system_package;

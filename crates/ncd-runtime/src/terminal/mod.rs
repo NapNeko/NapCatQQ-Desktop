@@ -20,9 +20,8 @@ mod tests;
 #[cfg(windows)]
 mod local_smoke;
 
-pub use manager::{MAX_SESSIONS, TerminalManager, TerminalSink};
+pub use manager::{TerminalManager, TerminalSink};
 pub use plan::{DesktopTerminalPlanner, TerminalLaunchPlan, TerminalPlanner};
-pub use shells::detect_local_shells;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TerminalError {

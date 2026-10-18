@@ -1158,36 +1158,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 监听 actor 的 watch::Receiver 直到进入指定 target 状态或超时
-    /// 用 watch::Receiver::borrow_and_update 先消化已有快照,再 changed
-    /// 等下次更新;超时返回 BotManagerError::Render,邮箱关闭则返回
-    /// BotManagerError::Actor(MailboxClosed)
-    ///
-    /// 当前 restart 路径全部走 fast-path(confirm_stopped 直接推进),不再
-    /// 用这个 helper;保留是为了将来真正需要等异步状态转移时可以复用
-    #[allow(dead_code)]
-    async fn wait_until_state(
-        &self,
-        bot_id: &BotId,
-        target: BotActorState,
-        timeout: Duration,
-    ) -> Result<(), BotManagerError> {
-        let handle = self.get_actor(bot_id).await?;
-        let mut rx = handle.subscribe();
-        tokio::time::timeout(timeout, async {
-            loop {
-                if rx.borrow_and_update().state == target {
-                    return Ok::<(), BotManagerError>(());
-                }
-                if rx.changed().await.is_err() {
-                    return Err(BotManagerError::Actor(BotActorError::MailboxClosed));
-                }
-            }
-        })
-        .await
-        .map_err(|_| BotManagerError::Render(format!("wait_until_state {target:?} timeout")))?
-    }
-
     // ─── 批量操作 ─────────────────────────────────────────────────────────
 
     /// 批量启动并发调度所有目标 Bot,收集成功/失败

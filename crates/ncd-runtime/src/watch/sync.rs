@@ -5,6 +5,7 @@
 use ncd_deploy::{DockerDeployment, bot_docker_container_name};
 use ncd_domain::bot_config::{BackendType, BotConfig, DeploymentType};
 use ncd_domain::docker::DockerDeploySpec;
+#[cfg(test)]
 use ncd_domain::kinds::RuntimeTarget;
 use ncd_domain::{
     OfflineEmailSettings, OfflineOneBotSettings, OfflineWebhookChannel, OfflineWebhookSettings,
@@ -13,7 +14,7 @@ use ncd_domain::{
 use ncd_host::{Host, HostPath};
 use ncd_watch::config::{
     DesktopPresentFile, NotifyBotTarget, NotifyConfig, WATCH_PROTOCOL_V1, WatchOneBotMessenger,
-    WatchOneBotSettings, WatchPaths, normalize_onebot_path,
+    WatchOneBotSettings, normalize_onebot_path,
 };
 
 pub use ncd_watch::config::NotifyConfig as WatchNotifyConfig;
@@ -692,17 +693,6 @@ pub async fn clear_desktop_present(host: &dyn Host, home: &str) -> Result<(), St
         return Ok(());
     }
     host.remove_file(&path).await.map_err(|e| e.to_string())
-}
-
-pub fn local_paths_under(root: impl AsRef<std::path::Path>) -> WatchPaths {
-    WatchPaths::from_root(root.as_ref())
-}
-
-pub fn server_id_of(config: &BotConfig) -> Option<&str> {
-    match &config.bot.runtime_target {
-        RuntimeTarget::Server(id) => Some(id.as_str()),
-        RuntimeTarget::Local => None,
-    }
 }
 
 #[cfg(test)]

@@ -149,20 +149,6 @@ impl MetricsCollector {
         &self.data_root
     }
 
-    pub async fn get_cached(&self, bot_id: &BotId) -> BotRuntimeMetrics {
-        let state = self.state.read().await;
-        state
-            .cache
-            .get(bot_id.as_str())
-            .cloned()
-            .unwrap_or_else(|| BotRuntimeMetrics::unavailable(bot_id.clone()))
-    }
-
-    pub async fn list_cached(&self) -> Vec<BotRuntimeMetrics> {
-        let state = self.state.read().await;
-        state.cache.values().cloned().collect()
-    }
-
     /// 读本机探针文件并更新缓存；可选写历史
     pub async fn refresh_local_bot(&self, bot_id: &BotId) -> BotRuntimeMetrics {
         let prefs = self.prefs.read().await.clone();

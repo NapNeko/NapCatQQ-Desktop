@@ -5,7 +5,6 @@
 mod adopt;
 mod download;
 mod existing_link;
-mod export;
 mod instances;
 mod listen_port;
 mod log_tail;
@@ -17,7 +16,6 @@ mod resident_link;
 mod supervisor;
 
 pub use adopt::AdoptSnapshot;
-pub use export::{OneBotExportError, export_onebot_endpoint};
 pub use instances::{APP_INSTANCES_FILE, AppInstanceStore};
 pub use manager::{
     AppManager, AppTerminalContext, BotConfigPort, app_link_connections, upsert_ws_client,

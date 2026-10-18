@@ -92,17 +92,6 @@ impl AppManager {
             .await
     }
 
-    pub async fn run_plugin_op(
-        &self,
-        id: &AppInstanceId,
-        name: &str,
-        action: AppPluginAction,
-        log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        self.run_store_op(id, name, action, AppStoreResource::Plugin, log)
-            .await
-    }
-
     /// 装更卸排成部署任务，返回 task id；同一实例同一项的同一动作还在排着时，队列按去重键复用那个任务
     pub async fn submit_store_op(
         self: &Arc<Self>,
@@ -246,17 +235,6 @@ impl AppManager {
                     .await
             }
         }
-    }
-
-    pub async fn set_plugin_enabled(
-        &self,
-        id: &AppInstanceId,
-        name: &str,
-        enabled: bool,
-        overwrite: bool,
-    ) -> Result<AppConfigWriteResult, AppFrameworkError> {
-        self.set_store_enabled(id, name, AppStoreResource::Plugin, enabled, overwrite)
-            .await
     }
 
     pub async fn set_store_enabled(

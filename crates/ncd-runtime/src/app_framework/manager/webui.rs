@@ -36,14 +36,6 @@ impl AppManager {
         self.fallback_webui_username(instance)
     }
 
-    /// 桌面端打开 WebUI 用的本机口：本机即实例口，远端是 SSH `-L` 分配口。
-    pub async fn desktop_loopback_port(
-        &self,
-        instance: &AppInstance,
-    ) -> Result<u16, AppFrameworkError> {
-        self.ensure_local_to_remote_tunnel(instance).await
-    }
-
     /// WebUI 在应用机上的 HTTP 口（AstrBot 是 dashboard.port，不是 OneBot 口）。
     pub async fn webui_listen_port(&self, instance: &AppInstance) -> u16 {
         self.webui_endpoint(instance).await.listen_port
