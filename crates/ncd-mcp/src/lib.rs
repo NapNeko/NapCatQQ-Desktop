@@ -16,4 +16,4 @@ mod server;
 mod tests_support;
 mod tools;
 
-pub use server::{McpApplyOutcome, McpServer};
+pub use server::McpServer;
