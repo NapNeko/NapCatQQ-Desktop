@@ -163,29 +163,6 @@ impl RedisComponent {
         }
     }
 
-    /// 能给云崽 `redis.yaml` 填的二进制：托管的优先，其次 PATH 上的（写绝对路径，
-    /// 云崽的进程环境里 PATH 不一定和 SSH 探测时一样）。都没有是 None
-    pub async fn resolve_binary(&self, host: &dyn Host) -> Result<Option<HostPath>, ActionError> {
-        let managed = Self::managed_binary_path_for_os(&self.install_dir, host.os());
-        if host.exists(&managed).await?
-            && self
-                .probe(host, managed.as_posix(), managed.as_posix())
-                .await?
-                .is_some()
-        {
-            return Ok(Some(managed));
-        }
-        for name in ["redis-server", "valkey-server"] {
-            if let Some(path) = host.which(name).await? {
-                return Ok(Some(match host.os() {
-                    Os::Windows => HostPath::from_windows(&path),
-                    _ => HostPath::from_posix(path),
-                }));
-            }
-        }
-        Ok(None)
-    }
-
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::Redis,

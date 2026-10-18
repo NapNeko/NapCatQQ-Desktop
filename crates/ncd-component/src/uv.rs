@@ -91,11 +91,6 @@ impl UvComponent {
         }
     }
 
-    pub fn with_url_template(mut self, template: impl Into<String>) -> Self {
-        self.download_url_template = Some(template.into());
-        self
-    }
-
     pub fn with_tmp_dir(mut self, tmp: HostPath) -> Self {
         self.tmp_dir = tmp;
         self

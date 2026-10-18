@@ -44,23 +44,21 @@ pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
 pub use git::{GitComponent, MINGIT_DEFAULT_VERSION};
-pub use host_download::download_url_to_host_with_progress;
 pub use napcat::NapCatComponent;
 pub use ncd_watch::{
-    NcdWatchComponent, discover_local_ncd_watch_binary, ncd_watch_asset_name, ncd_watch_bin_path,
-    ncd_watch_musl_target, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
-    ncd_watch_version_from_tag, normalize_detected_version, probe_remote_arch,
+    NcdWatchComponent, ncd_watch_asset_name, ncd_watch_bin_path,
+    ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
+    probe_remote_arch,
 };
 pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
-pub use pkg_install_stream::run_pkg_command_with_progress;
 pub use qq::{
-    LinuxQqRelease, MANAGED_QQ_DIR_NAME, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQ_REGISTRY_SUBKEY,
-    QQ_URL_SIGN_URL, QQComponent, managed_qq_current_dir, managed_qq_root, probe_linux_qq_latest,
+    MANAGED_QQ_DIR_NAME, QQ_PCCONFIG_URL, QQ_REGISTRY_SUBKEY,
+    QQComponent, managed_qq_current_dir, managed_qq_root, probe_linux_qq_latest,
     probe_windows_qq_latest,
 };
 pub use qq_linux_pid::linux_qq_running_pid_script;
-pub use redis::{REDIS_WINDOWS_VERSION, RedisComponent, VALKEY_LINUX_VERSION};
+pub use redis::{RedisComponent};
 
 pub use remote_qq_entry::{
     QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, load_napcat_js_path, napcat_mjs_path,
@@ -68,7 +66,7 @@ pub use remote_qq_entry::{
 };
 pub use requirement::{
     DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, Requirement,
-    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionMatch, VersionReq,
+    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
     all_versions_match,
 };
 pub use snowluma::SnowLumaComponent;
@@ -78,6 +76,6 @@ pub use types::{
     DetectedVersion, LaunchArgs, SupportedTarget, UninstallSupport, UnusableInstall, VerifyReport,
 };
 pub use uv::{UV_DEFAULT_VERSION, UvComponent};
-pub use vcredist::{VCREDIST_VERSION, VCREDIST_X64_SHA256, VCREDIST_X64_URL, VcRedistComponent};
-pub use windows_agent::{WindowsAgentComponent, discover_local_windows_agent_binary};
+pub use vcredist::{VcRedistComponent};
+pub use windows_agent::{WindowsAgentComponent};
 pub use windows_watch::WindowsNcdWatchComponent;

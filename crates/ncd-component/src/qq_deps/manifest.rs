@@ -1,23 +1,12 @@
 //! QQ Linux 运行时依赖清单定义
 
 use ncd_domain::{DependencyCategory, SystemDependency};
-use std::collections::HashMap;
 
 /// QQ Linux 运行时完整依赖清单
 pub struct QQDependencyManifest {
     pub schema_version: u32,
     pub for_qq_version: String,
     pub dependencies: Vec<SystemDependency>,
-}
-
-impl QQDependencyManifest {
-    pub fn group_by_category(&self) -> HashMap<DependencyCategory, Vec<&SystemDependency>> {
-        let mut groups: HashMap<DependencyCategory, Vec<&SystemDependency>> = HashMap::new();
-        for dep in &self.dependencies {
-            groups.entry(dep.category).or_default().push(dep);
-        }
-        groups
-    }
 }
 
 /// 获取 QQ 3.2.25 的官方依赖清单

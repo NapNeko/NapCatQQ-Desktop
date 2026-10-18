@@ -22,7 +22,6 @@
 //! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
 //! 可通过 NodeJsComponent::with_url(...) 覆盖镜像
 
-use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -184,11 +183,6 @@ impl NodeJsComponent {
 
     pub fn accepted_versions(&self) -> &[VersionReq] {
         &self.accept
-    }
-
-    pub fn with_url_template(mut self, template: impl Into<String>) -> Self {
-        self.download_url_template = Some(template.into());
-        self
     }
 
     pub fn with_sha256(mut self, sha256: impl Into<String>) -> Self {
@@ -605,9 +599,6 @@ async fn copy_dir_all(host: &dyn Host, src: &HostPath, dst: &HostPath) -> Result
     }
     Ok(())
 }
-
-#[allow(dead_code)]
-fn _ensure_send_sync(_: Arc<NodeJsComponent>) {}
 
 /// 枚举本机可复用的 Node 候选;`accept` 是消费方(要用这个 Node 的组件)的版本约束
 pub async fn probe_local_system_nodes(

@@ -26,10 +26,6 @@ impl WindowsAgentComponent {
             binary: discover_local_windows_agent_binary(),
         }
     }
-    pub fn with_binary(mut self, path: PathBuf) -> Self {
-        self.binary = Some(path);
-        self
-    }
     pub fn info() -> ComponentInfo {
         ComponentInfo {
             id: ComponentId::WindowsAgent,
