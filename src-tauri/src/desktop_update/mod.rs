@@ -21,7 +21,8 @@ use ncd_network::{
 };
 use ncd_runtime::release::fetch_release_snapshot;
 use ncd_runtime::{BroadcastEventBus, DomainEvent, EventBus};
-use ncd_update::{AvailableUpdate, UpdateChannel, UpdateError, UpdateProvider};
+use ncd_update::types::UPDATE_PROTOCOL_VERSION;
+use ncd_update::{AvailableUpdate, UpdateChannel, UpdateError, UpdateOrchestrator, UpdateProvider};
 use semver::Version;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -178,7 +179,7 @@ pub fn release_info_to_available_update(
         Utc::now()
     };
     Ok(AvailableUpdate {
-        v: ncd_update::types::UPDATE_PROTOCOL_VERSION,
+        v: UPDATE_PROTOCOL_VERSION,
         version,
         // MSI 路径暂固定当前 schema；跨版本迁移元数据以后可从 release notes/manifest 读
         schema_version: SchemaVersion::CURRENT,
@@ -712,22 +713,28 @@ fn spawn_post_install_relaunch_helper_windows(expected_version: &str) -> Result<
 
 /// 启动时消费 resume / 失败记录，生成一次性用户提示。
 ///
-/// 只读 `update-resume.json` / `update-failures.jsonl`，不构造 Mock provider、
-/// 不触网，避免把测试桩带进生产启动路径。
+/// 经 orchestrator 读取并消费恢复记录；provider 仅构造，不检查更新或触网。
 pub async fn consume_startup_update_notice(
     data_root: &Path,
     current_version: &str,
 ) -> Option<DesktopUpdateStartupNotice> {
-    let store = ncd_update::ResumeStore::new(data_root);
-    if let Ok(Some(point)) = store.load().await {
+    let cur = normalize_version_label(current_version);
+    // 恢复读取不使用版本字段；非 semver 标签仍按原字符串规则比较。
+    let version = Version::parse(&cur).unwrap_or_else(|_| Version::new(0, 0, 0));
+    let orch = UpdateOrchestrator::new(
+        Arc::new(GithubMsiUpdateProvider::new(data_root, None)),
+        data_root,
+        version,
+        SchemaVersion::CURRENT,
+    );
+    if let Ok(Some(point)) = orch.resume_after_update().await {
         // 成功路径清 resume；未完成也清，避免每次启动刷 incomplete
         //（用户可到关于页重试；失败细节仍可能在 failures 里）
-        let _ = store.clear().await;
-        let cur = normalize_version_label(current_version);
+        let _ = orch.clear_resume().await;
         let target = normalize_version_label(&point.to_version);
         if !target.is_empty() && cur == target {
             return Some(DesktopUpdateStartupNotice {
-                v: 1,
+                v: UPDATE_PROTOCOL_VERSION,
                 kind: DesktopUpdateNoticeKind::Success,
                 from_version: Some(point.from_version),
                 to_version: Some(point.to_version.clone()),
@@ -735,7 +742,7 @@ pub async fn consume_startup_update_notice(
             });
         }
         return Some(DesktopUpdateStartupNotice {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             kind: DesktopUpdateNoticeKind::Incomplete,
             from_version: Some(point.from_version),
             to_version: Some(point.to_version.clone()),
@@ -745,23 +752,15 @@ pub async fn consume_startup_update_notice(
         });
     }
 
-    let failures_path = data_root.join("update-failures.jsonl");
-    if let Ok(content) = tokio::fs::read_to_string(&failures_path).await {
-        let mut last_install: Option<ncd_update::RecordedFailure> = None;
-        for line in content.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            if let Ok(f) = serde_json::from_str::<ncd_update::RecordedFailure>(line) {
-                if matches!(f.phase, ncd_update::UpdatePhase::Install) {
-                    last_install = Some(f);
-                }
-            }
-        }
+    if let Ok(failures) = orch.detect_pending_failures().await {
+        let last_install = failures
+            .into_iter()
+            .rev()
+            .find(|failure| matches!(failure.phase, ncd_update::UpdatePhase::Install));
         if let Some(last) = last_install {
             let _ = clear_update_failures_file(data_root).await;
             return Some(DesktopUpdateStartupNotice {
-                v: 1,
+                v: UPDATE_PROTOCOL_VERSION,
                 kind: DesktopUpdateNoticeKind::Failure,
                 from_version: None,
                 to_version: last.target_version.clone(),
@@ -1165,5 +1164,136 @@ mod tests {
         assert_eq!(notice.kind, DesktopUpdateNoticeKind::Failure);
         assert!(notice.message.contains("timeout"));
         assert!(!path.exists());
+    }
+
+    fn startup_notice_orchestrator(data_root: &Path) -> UpdateOrchestrator {
+        UpdateOrchestrator::new(
+            Arc::new(ncd_update::provider::MockUpdateProvider::new()),
+            data_root,
+            Version::new(3, 1, 4),
+            SchemaVersion::CURRENT,
+        )
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_preserves_non_semver_version_comparison() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ncd_update::ResumeStore::new(dir.path());
+        for (current, expected) in [
+            (" Vrelease-next ", DesktopUpdateNoticeKind::Success),
+            ("release-old", DesktopUpdateNoticeKind::Incomplete),
+        ] {
+            store
+                .save(&ncd_update::UpdateResumePoint::new(
+                    "release-old",
+                    "release-next",
+                ))
+                .await
+                .unwrap();
+            let notice = consume_startup_update_notice(dir.path(), current)
+                .await
+                .expect("non-semver labels still produce a startup notice");
+            assert_eq!(notice.kind, expected);
+            assert_eq!(notice.v, UPDATE_PROTOCOL_VERSION);
+            assert!(store.load().await.unwrap().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_prefers_resume_then_consumes_pending_failure_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ncd_update::ResumeStore::new(dir.path());
+        store
+            .save(&ncd_update::UpdateResumePoint::new("3.1.4", "3.1.5"))
+            .await
+            .unwrap();
+        let orch = startup_notice_orchestrator(dir.path());
+        orch.record_failure(
+            ncd_update::UpdatePhase::Install,
+            "prior install failed",
+            Some("3.1.5".into()),
+        )
+        .await;
+
+        let first = consume_startup_update_notice(dir.path(), "3.1.5")
+            .await
+            .unwrap();
+        assert_eq!(first.kind, DesktopUpdateNoticeKind::Success);
+        assert!(orch.resume_after_update().await.unwrap().is_none());
+        assert_eq!(orch.detect_pending_failures().await.unwrap().len(), 1);
+
+        let second = consume_startup_update_notice(dir.path(), "3.1.5")
+            .await
+            .unwrap();
+        assert_eq!(second.kind, DesktopUpdateNoticeKind::Failure);
+        assert!(second.message.contains("prior install failed"));
+        assert!(orch.detect_pending_failures().await.unwrap().is_empty());
+        assert!(
+            consume_startup_update_notice(dir.path(), "3.1.5")
+                .await
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_selects_last_install_failure_among_other_phases() {
+        let dir = tempfile::tempdir().unwrap();
+        let failures_path = dir.path().join("update-failures.jsonl");
+        tokio::fs::write(&failures_path, "invalid json\n\n")
+            .await
+            .unwrap();
+        let orch = startup_notice_orchestrator(dir.path());
+        for (phase, error, target) in [
+            (ncd_update::UpdatePhase::Install, "old install", "3.1.5"),
+            (ncd_update::UpdatePhase::Check, "check failed", "3.1.6"),
+            (ncd_update::UpdatePhase::Install, "latest install", "3.1.6"),
+            (ncd_update::UpdatePhase::Resume, "resume failed", "3.1.6"),
+        ] {
+            orch.record_failure(phase, error, Some(target.into())).await;
+        }
+
+        let notice = consume_startup_update_notice(dir.path(), "3.1.4")
+            .await
+            .unwrap();
+        assert_eq!(notice.kind, DesktopUpdateNoticeKind::Failure);
+        assert_eq!(notice.v, UPDATE_PROTOCOL_VERSION);
+        assert_eq!(notice.to_version.as_deref(), Some("3.1.6"));
+        assert!(notice.message.contains("latest install"));
+        assert!(!failures_path.exists());
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_retains_failures_without_install_phase() {
+        let dir = tempfile::tempdir().unwrap();
+        let orch = startup_notice_orchestrator(dir.path());
+        orch.record_failure(ncd_update::UpdatePhase::Check, "check failed", None)
+            .await;
+
+        assert!(
+            consume_startup_update_notice(dir.path(), "3.1.4")
+                .await
+                .is_none()
+        );
+        assert_eq!(orch.detect_pending_failures().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_reads_failure_when_resume_is_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        let snapshot_path = dir.path().join("update-resume.json");
+        tokio::fs::write(&snapshot_path, "invalid json")
+            .await
+            .unwrap();
+        let orch = startup_notice_orchestrator(dir.path());
+        orch.record_failure(ncd_update::UpdatePhase::Install, "install failed", None)
+            .await;
+
+        let notice = consume_startup_update_notice(dir.path(), "3.1.4")
+            .await
+            .unwrap();
+        assert_eq!(notice.kind, DesktopUpdateNoticeKind::Failure);
+        assert!(notice.message.contains("install failed"));
+        assert!(snapshot_path.exists());
+        assert!(orch.detect_pending_failures().await.unwrap().is_empty());
     }
 }

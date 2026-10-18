@@ -76,7 +76,7 @@ pub struct PrecheckReport {
 impl PrecheckReport {
     pub fn ok() -> Self {
         Self {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             can_upgrade: true,
             blocking: Vec::new(),
             warnings: Vec::new(),
@@ -86,7 +86,7 @@ impl PrecheckReport {
 
     pub fn blocked(reason: impl Into<String>) -> Self {
         Self {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             can_upgrade: false,
             blocking: vec![reason.into()],
             warnings: Vec::new(),
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn available_update_serializes_with_v_field() {
         let u = AvailableUpdate {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             version: Version::new(0, 2, 0),
             schema_version: SchemaVersion::V3,
             notes: "test".into(),

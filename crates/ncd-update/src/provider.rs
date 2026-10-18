@@ -81,7 +81,7 @@ impl UpdateProvider for MockUpdateProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::AvailableUpdate;
+    use crate::types::{AvailableUpdate, UPDATE_PROTOCOL_VERSION};
     use chrono::Utc;
     use ncd_domain::SchemaVersion;
     use semver::Version;
@@ -89,7 +89,7 @@ mod tests {
 
     fn fake_update() -> AvailableUpdate {
         AvailableUpdate {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             version: Version::new(0, 2, 0),
             schema_version: SchemaVersion::V3,
             notes: "x".into(),

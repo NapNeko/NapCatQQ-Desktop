@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::fs;
 
 use crate::error::UpdateError;
+use crate::types::{UPDATE_PROTOCOL_VERSION, default_v};
 
 /// 自更新 resume snapshot
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -28,14 +29,10 @@ pub struct UpdateResumePoint {
     pub note: Option<String>,
 }
 
-fn default_v() -> u32 {
-    1
-}
-
 impl UpdateResumePoint {
     pub fn new(from_version: impl Into<String>, to_version: impl Into<String>) -> Self {
         Self {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             from_version: from_version.into(),
             to_version: to_version.into(),
             initiated_at: Utc::now(),
@@ -120,6 +117,15 @@ mod tests {
         let json = serde_json::to_string(&p).unwrap();
         assert!(json.contains("\"v\":1"));
         assert!(json.contains("\"from_version\":\"0.1.0\""));
+    }
+
+    #[test]
+    fn resume_point_without_v_uses_update_protocol_version() {
+        let point = UpdateResumePoint::new("0.1.0", "0.2.0");
+        let mut value = serde_json::to_value(point).unwrap();
+        value.as_object_mut().unwrap().remove("v");
+        let loaded: UpdateResumePoint = serde_json::from_value(value).unwrap();
+        assert_eq!(loaded.v, UPDATE_PROTOCOL_VERSION);
     }
 
     #[tokio::test]

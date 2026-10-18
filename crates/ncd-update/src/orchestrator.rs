@@ -217,13 +217,14 @@ impl UpdateOrchestrator {
 mod tests {
     use super::*;
     use crate::provider::MockUpdateProvider;
+    use crate::types::UPDATE_PROTOCOL_VERSION;
     use chrono::Utc;
     use ncd_domain::SchemaVersion;
     use tempfile::tempdir;
 
     fn fake_update(version: &str, schema: SchemaVersion) -> AvailableUpdate {
         AvailableUpdate {
-            v: 1,
+            v: UPDATE_PROTOCOL_VERSION,
             version: Version::parse(version).unwrap(),
             schema_version: schema,
             notes: "release notes".into(),
@@ -374,6 +375,37 @@ mod tests {
         assert_eq!(pending[0].phase, UpdatePhase::Install);
         assert!(pending[0].error.contains("simulated"));
         assert_eq!(pending[0].target_version.as_deref(), Some("0.2.0"));
+    }
+
+    #[tokio::test]
+    async fn new_orchestrator_reads_snapshot_and_clears_it_without_calling_provider() {
+        let dir = tempdir().unwrap();
+        let writer = make_orch(Arc::new(MockUpdateProvider::new()), dir.path());
+        writer
+            .install_with_graceful_shutdown(
+                fake_update("0.2.0", SchemaVersion::V3),
+                vec!["100001".into()],
+                true,
+            )
+            .await
+            .unwrap();
+
+        let provider = Arc::new(MockUpdateProvider::new());
+        let reader = make_orch(provider.clone(), dir.path());
+        let point = reader.resume_after_update().await.unwrap().unwrap();
+        assert_eq!(point.to_version, "0.2.0");
+        assert_eq!(point.running_bots, vec!["100001"]);
+        assert!(point.snowluma_daemon_running);
+        reader.clear_resume().await.unwrap();
+        assert!(reader.resume_after_update().await.unwrap().is_none());
+        assert_eq!(
+            provider.check_calls.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+        assert_eq!(
+            provider.install_calls.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
     }
 
     #[tokio::test]

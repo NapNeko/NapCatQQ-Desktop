@@ -13,7 +13,7 @@ async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs"] }
+tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs", "io-util"] }
 tracing = "0.1"
 semver = { version = "1", features = ["serde"] }
 ts-rs = { version = "12", features = ["serde-compat"] }
