@@ -342,6 +342,10 @@ jobs:
         # Tauri validates packaged resources even for shell unit tests.
         run: node scripts/build-remote-agent.mjs
 
+      # Agent 是 gitignored 资源，首次 restore 时尚不存在；生成后再按内容校验恢复时间戳。
+      - name: Restore generated Agent input timestamp
+        run: node scripts/ci-rust-cache.mjs restore
+
       - name: Run shell tests (ncd-tauri)
         run: cargo test -p ncd-tauri
 
