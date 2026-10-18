@@ -5,9 +5,8 @@
 //! 2. 同步密码到 Host(缓存 + 隔离连接)
 //! 3. 密码变更时触发缓存失效
 
-use crate::server_manager::{AuthMethod, ServerCredentialStore, ServerProfile};
+use crate::server_manager::ServerCredentialStore;
 use ncd_host::Host;
-use ncd_host::remote::SshCredentials;
 use std::sync::Arc;
 
 /// 凭据同步层:桥接 keyring 持久化与 Host 内存缓存
@@ -18,31 +17,6 @@ pub struct CredentialSyncLayer {
 impl CredentialSyncLayer {
     pub fn new(credentials: Arc<dyn ServerCredentialStore>) -> Self {
         Self { credentials }
-    }
-
-    /// 获取 SSH 认证凭据(登录用)
-    pub fn ssh_credentials(&self, profile: &ServerProfile) -> Result<SshCredentials, String> {
-        match profile.auth_method {
-            AuthMethod::Password => {
-                let password = self
-                    .credentials
-                    .get_password(&profile.id)
-                    .ok_or_else(|| "密码认证但未保存密码".to_string())?;
-                Ok(SshCredentials::password(&profile.username, password))
-            }
-            AuthMethod::Key => {
-                let key_path = profile
-                    .private_key_path
-                    .as_ref()
-                    .ok_or_else(|| "密钥认证但未配置密钥路径".to_string())?;
-                let passphrase = self.credentials.get_password(&profile.id);
-                Ok(SshCredentials::key_file(
-                    &profile.username,
-                    key_path,
-                    passphrase,
-                ))
-            }
-        }
     }
 
     /// 获取提权密码(sudo 用)

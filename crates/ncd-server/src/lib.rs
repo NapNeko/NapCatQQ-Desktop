@@ -14,12 +14,12 @@ pub mod ssh_keygen;
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
 pub use host_resolver::{HostResolveError, HostResolver, LocalOnlyHostResolver};
 pub use server_manager::{
-    AuthMethod, ConnectionHealth, HostKeyPrompt, InMemoryCredentialStore, KeyringCredentialStore,
+    AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore,
     ProbeReport, ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
 pub use server_profile_migration::{
     SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
-pub use ssh_config::{DiscoveredSshHost, default_ssh_username, discover_ssh_hosts};
+pub use ssh_config::{DiscoveredSshHost};
 pub use ssh_keygen::{GeneratedKeyPair, SshKeygenError, generate_ed25519};
