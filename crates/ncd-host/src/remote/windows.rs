@@ -191,9 +191,6 @@ impl Host for RemoteWindowsHost {
     fn target_managed_root(&self) -> Option<HostPath> {
         Some(HostPath::from_windows(&self.info.user_root))
     }
-    fn supports_refresh(&self) -> bool {
-        true
-    }
     async fn invalidate_connection(&self) {
         self.transport.invalidate_connection().await;
     }

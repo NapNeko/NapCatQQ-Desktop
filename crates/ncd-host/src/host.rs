@@ -337,11 +337,6 @@ pub trait Host: Send + Sync {
         })
     }
 
-    /// 是否支持连接刷新/失效语义本地/stub 返回 false,远端返回 true
-    fn supports_refresh(&self) -> bool {
-        false
-    }
-
     /// 请求该 host 主动失效底层连接(使后续操作快速失败,便于上层观测)
     /// 本地/stub 为 no-op;RemoteLinuxHost 实现为 poison 主句柄 + 清 SFTP
     async fn invalidate_connection(&self) {}

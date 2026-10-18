@@ -888,10 +888,6 @@ impl Host for RemoteLinuxHost {
         self.open_pty_channel(req).await
     }
 
-    fn supports_refresh(&self) -> bool {
-        true
-    }
-
     async fn invalidate_connection(&self) {
         self.invalidate_main_handle().await;
         self.invalidate_sftp().await;
