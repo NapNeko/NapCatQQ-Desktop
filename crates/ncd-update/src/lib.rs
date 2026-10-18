@@ -18,7 +18,7 @@ pub mod types;
 pub use channel::UpdateChannel;
 pub use error::UpdateError;
 pub use orchestrator::UpdateOrchestrator;
-pub use provider::{MockUpdateProvider, UpdateProvider};
+pub use provider::{UpdateProvider};
 pub use resume::{ResumeStore, UpdateResumePoint};
 pub use types::{
     AvailableUpdate, DesktopUpdateNoticeKind, DesktopUpdateStartupNotice, PrecheckReport,

@@ -54,11 +54,6 @@ impl UpdateResumePoint {
         self.snowluma_daemon_running = running;
         self
     }
-
-    pub fn with_note(mut self, note: impl Into<String>) -> Self {
-        self.note = Some(note.into());
-        self
-    }
 }
 
 /// Resume 持久化

@@ -24,10 +24,6 @@ impl UpdateChannel {
             Self::Nightly => "nightly",
         }
     }
-
-    pub fn default_stable() -> Self {
-        Self::Stable
-    }
 }
 
 impl std::fmt::Display for UpdateChannel {

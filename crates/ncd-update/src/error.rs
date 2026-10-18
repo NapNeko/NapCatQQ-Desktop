@@ -64,12 +64,6 @@ impl UpdateError {
             reason: reason.into(),
         }
     }
-
-    pub fn precheck_blocked(reason: impl Into<String>) -> Self {
-        Self::PrecheckBlocked {
-            reason: reason.into(),
-        }
-    }
 }
 
 #[cfg(test)]
