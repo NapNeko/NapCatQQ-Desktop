@@ -27,19 +27,6 @@ impl HostKeyPolicy {
             known_hosts_path: known_hosts_path.into(),
         }
     }
-
-    /// 默认的用户级 known_hosts(<data_root>/secrets/known_hosts)
-    pub fn strict_in(data_root: &std::path::Path) -> Self {
-        Self::Strict {
-            known_hosts_path: data_root.join("secrets").join("known_hosts"),
-        }
-    }
-    /// TOFU 模式的用户级 known_hosts(<data_root>/secrets/known_hosts)
-    pub fn accept_on_first_use_in(data_root: &std::path::Path) -> Self {
-        Self::AcceptOnFirstUse {
-            known_hosts_path: data_root.join("secrets").join("known_hosts"),
-        }
-    }
 }
 
 /// known_hosts 查询结果未知与不匹配必须拆开:未知可走 TOFU 确认,不匹配应阻断

@@ -1,7 +1,4 @@
 //! Ubuntu/Debian 上 apt 与 unattended-upgrades 争用 dpkg 锁时的公共处理
-//!
-//! Desktop 侧 [PackageManagerLock] 只能串行本应用的 apt;无法阻止系统里的
-//! unattended-upgr 占锁装完 Docker 后立刻装 noVNC 时常见此冲突
 
 use std::time::Duration;
 

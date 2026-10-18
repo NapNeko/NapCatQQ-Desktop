@@ -42,8 +42,8 @@ pub mod stream_chunk;
 pub mod subprocess;
 
 pub use apt_lock::{
-    dpkg_lock_wait_preamble_sh, host_command_wrap_dpkg_wait_for_apt, normalize_posix_sh_script,
-    output_indicates_dpkg_lock_hold, wrap_sh_script_with_dpkg_wait,
+    host_command_wrap_dpkg_wait_for_apt,
+    output_indicates_dpkg_lock_hold,
 };
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
@@ -51,7 +51,7 @@ pub use host::{Arch, Host, Locality, Os, SshDialTarget, StreamSource};
 pub use linux_pkg::LinuxPackageManager;
 pub use path::{ArchiveKind, DirEntry, DriveEntry, DriveKind, HostPath, PathStyle};
 pub use pkg_output::{
-    PkgLineParse, PkgPhase, fallback_percent_from_line_no, parse_pkg_mgr_line, truncate_pkg_line,
+    PkgPhase, parse_pkg_mgr_line, truncate_pkg_line,
 };
 pub use process::{ExitStatus, HostProcess, ProcessId};
 pub use pty::{
@@ -60,7 +60,7 @@ pub use pty::{
 };
 pub use remote::download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
 pub use remote::url_download::{
-    REMOTE_URL_DOWNLOAD_TIMEOUT, curl_url_download_command, wget_url_download_command,
+    curl_url_download_command, wget_url_download_command,
 };
 pub use remote_file::{
     LOG_FOLLOW_CHUNK_BYTES, remote_file_size, remote_read_from, remote_tail_lines,
