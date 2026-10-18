@@ -80,14 +80,6 @@ impl DockerDeployment {
         }
     }
 
-    /// SnowLuma Docker: VNC_PASSWD(noVNC 入口密码)
-    pub fn with_vnc_passwd(passwd: impl Into<String>) -> Self {
-        Self {
-            compose_secret: Some(passwd.into()),
-            ..Self::new()
-        }
-    }
-
     /// 附加实例指标 compose overlay(None = 关,与现网 compose 一致)
     pub fn with_metrics_overlay(mut self, overlay: Option<DockerMetricsOverlay>) -> Self {
         self.metrics_overlay = overlay;

@@ -23,25 +23,21 @@ pub mod result;
 pub mod runner;
 
 pub use deployment::{
-    Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
+    Deployment, DeploymentError, DeploymentHandle, DeploymentState,
     NativeLaunchCommand, NativeLaunchTranslator, NullProgressSink,
 };
 pub use deployments::{
-    DockerDeployment, EventBusSink, ExternalDeployment, NativeDeployment, NativeRuntimeEventSink,
-    NullRuntimeEventSink, bot_docker_container_candidates, bot_docker_container_name,
+    DockerDeployment, EventBusSink, NativeDeployment, NativeRuntimeEventSink,
+    bot_docker_container_candidates, bot_docker_container_name,
     docker_project_dir, parse_napcat_webui_line, resolve_bot_container_name, strip_ansi_escapes,
 };
 pub use docker::{
-    DOCKER_METRICS_CONTAINER_ROOT, DOCKER_NAPCAT_LOAD_CONTAINER_PATH, DOCKER_NAPCAT_MJS_URI,
-    DockerCli, DockerCliError, DockerInstallOutcome, DockerMetricsOverlay, install_docker,
-    render_compose, render_compose_with_env, render_compose_with_metrics,
-    render_snowluma_compose_with_env, render_snowluma_compose_with_metrics,
+    DOCKER_NAPCAT_MJS_URI,
+    DockerCli, DockerCliError, DockerMetricsOverlay,
 };
-pub use error::DeployError;
 pub use napcat_log_sanitize::{
-    NapcatLogNoiseAction, NapcatLogNoiseFilter, filter_napcat_console_lines,
-    sanitize_napcat_console_line,
+    NapcatLogNoiseFilter, filter_napcat_console_lines, sanitize_napcat_console_line,
 };
-pub use plan::{DeployBuilder, DeployPlan, DeployStep, StepKind};
-pub use qq_console_noise::{QqConsoleNoiseFilter, is_qq_console_noise_line};
-pub use result::{DeployOutcome, StepOutcome, StepStatus};
+pub use plan::{DeployPlan, StepKind};
+pub use qq_console_noise::{QqConsoleNoiseFilter};
+pub use result::{DeployOutcome};

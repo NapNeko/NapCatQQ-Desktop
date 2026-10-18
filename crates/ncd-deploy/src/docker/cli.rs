@@ -410,21 +410,6 @@ impl<'h> DockerCli<'h> {
     /// 无任何输出超过此时长 → 判定卡死,换下一个源(不是用户取消)
     pub const PULL_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8 * 60);
 
-    /// docker pull <image> 流式版本,on_line 每收到一行就被调用,调用方
-    /// 可在回调里更新 PullProgress 并推进度事件,命令结束后返回 CommandOutput
-    /// 失败(exit code 非 0)时返回 DockerCliError::CommandFailed
-    ///
-    /// 不加 --progress=plain:部分远端(apt 装的老版 docker/cli)会直接 exit 125
-    /// unknown flag,非 TTY 下 pull 仍会按行输出 layer 进度,PullProgress 可解析
-    pub async fn pull_streaming(
-        &self,
-        image: &str,
-        on_line: impl FnMut(StreamSource, String) + Send + 'static,
-    ) -> Result<(), DockerCliError> {
-        self.pull_streaming_with_cancel(image, None, on_line).await
-    }
-
-    /// 同 [Self::pull_streaming],可绑取消令牌(任务队列停止时杀 docker pull)
     ///
     /// 超时策略:
     /// - 硬上限 [PULL_PER_CANDIDATE_TIMEOUT](有进度可拉满)
@@ -540,37 +525,6 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// 带镜像站 fallback 的拉取:按 candidates 顺序逐个 docker pull,第一个
-    /// 成功的即采用;若它不是 official_image(走了镜像站前缀),再 docker tag
-    /// 回官方名,这样后续 docker compose up(compose.yml 写的是官方名)能命中
-    /// 本地缓存,不会再去 Docker Hub 直连,全部候选都失败才返回最后一次的错误
-    ///
-    /// new_line_cb 是回调工厂:每开始尝试一个候选就调一次,参数是候选的
-    /// 0-based 序号和镜像引用,返回该次拉取专用的逐行回调,每个候选独立计数,
-    /// 避免上一个站失败的 layer 状态串进下一个站
-    pub async fn pull_with_fallback<F, L, M>(
-        &self,
-        candidates: &[String],
-        official_image: &str,
-        new_line_cb: F,
-        on_mirror_fail: Option<M>,
-    ) -> Result<String, DockerCliError>
-    where
-        F: FnMut(usize, &str) -> L,
-        L: FnMut(StreamSource, String) + Send + 'static,
-        M: FnMut(usize, &str, &DockerCliError),
-    {
-        self.pull_with_fallback_cancel(
-            candidates,
-            official_image,
-            None,
-            new_line_cb,
-            on_mirror_fail,
-        )
-        .await
-    }
-
-    /// 同 [Self::pull_with_fallback],支持任务取消
     pub async fn pull_with_fallback_cancel<F, L, M>(
         &self,
         candidates: &[String],
@@ -946,12 +900,6 @@ impl PullProgress {
                 done: phase.counts_toward_progress_complete(),
             })
             .collect()
-    }
-
-    /// 兼容旧调用: (completed, total, message)
-    pub fn summary_legacy(&self) -> (usize, usize, String) {
-        let (c, t, m, _) = self.summary();
-        (c, t, m)
     }
 }
 
