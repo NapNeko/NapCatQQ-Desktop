@@ -70,6 +70,8 @@ pub enum RuntimeRouterError {
     Config(#[from] BotConfigError),
     #[error("{0}")]
     Render(String),
+    #[error("本机 SnowLuma backend 未注入，无法路由运行时")]
+    MissingLocalSnowLumaBackend,
 }
 
 #[derive(Clone)]
@@ -275,7 +277,7 @@ impl RuntimeBackendRouter {
         qq_id: u64,
     ) -> Result<Arc<dyn BotBackend>, RuntimeRouterError> {
         match scenario {
-            RuntimeScenario::LocalNative { backend } => Ok(self.local_backend_for(*backend)),
+            RuntimeScenario::LocalNative { backend } => self.local_backend_for(*backend),
             RuntimeScenario::RemoteDocker { server_id, backend } => {
                 let host = self.resolve_remote_host(server_id).await?;
                 let backend_id = BotId::new(format!("docker-{qq_id}"));
@@ -614,13 +616,16 @@ impl RuntimeBackendRouter {
             .map_err(|e| RuntimeRouterError::Render(e.to_string()))
     }
 
-    fn local_backend_for(&self, backend: BackendType) -> Arc<dyn BotBackend> {
+    fn local_backend_for(
+        &self,
+        backend: BackendType,
+    ) -> Result<Arc<dyn BotBackend>, RuntimeRouterError> {
         match backend {
             BackendType::SnowLuma => self
                 .local_snowluma_backend
                 .clone()
-                .unwrap_or_else(|| Arc::clone(&self.local_backend)),
-            BackendType::NapCat => Arc::clone(&self.local_backend),
+                .ok_or(RuntimeRouterError::MissingLocalSnowLumaBackend),
+            BackendType::NapCat => Ok(Arc::clone(&self.local_backend)),
         }
     }
 }

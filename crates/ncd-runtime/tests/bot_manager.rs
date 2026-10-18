@@ -1241,6 +1241,53 @@ async fn delete_bot_removes_actor_and_config() {
 }
 
 #[tokio::test]
+async fn delete_active_bot_without_config_preserves_actor_and_never_stops_local_backend() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (store, repo, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10122");
+    manager.upsert_bot_config(bot_config(10122, "bot")).await.unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    let rendered = store.config_dir().join("napcat_10122.json");
+    let original = std::fs::read(&rendered).unwrap();
+
+    // 模拟运行中配置被另一条路径移除；真实 repo 此时返回 Ok(None)。
+    repo.delete(10122).await.unwrap();
+    assert!(repo.get(10122).await.unwrap().is_none());
+    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
+
+    assert!(matches!(err, BotManagerError::BotNotFound(ref id) if id == &bot_id));
+    assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
+    assert_eq!(manager.bot_count().await, 1);
+    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    assert_eq!(std::fs::read(rendered).unwrap(), original);
+}
+
+#[tokio::test]
+async fn delete_active_bot_with_unreadable_config_has_no_delete_side_effects() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (store, repo, backend, manager) = make_manager(temp.path());
+    let bot_id = BotId::new("10123");
+    manager.upsert_bot_config(bot_config(10123, "bot")).await.unwrap();
+    manager.start_bot(&bot_id).await.unwrap();
+    let rendered = store.config_dir().join("napcat_10123.json");
+    let original = std::fs::read(&rendered).unwrap();
+
+    let broken_config = b"{invalid bot config";
+    std::fs::write(store.bot_config_path(), broken_config).unwrap();
+    repo.invalidate_cache().await;
+    assert!(repo.get(10123).await.is_err());
+    let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
+
+    assert!(matches!(err, BotManagerError::Config(_)));
+    assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
+    assert_eq!(manager.bot_count().await, 1);
+    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    assert_eq!(std::fs::read(rendered).unwrap(), original);
+    assert_eq!(std::fs::read(store.bot_config_path()).unwrap(), broken_config);
+}
+
+#[tokio::test]
 async fn delete_napcat_bot_keeps_shared_napcat_json() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (store, _, _, manager) = make_manager(temp.path());
@@ -1349,8 +1396,10 @@ async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
         err.to_string().contains("Docker"),
         "expected Docker routing error, got: {err}"
     );
-    assert_eq!(backend.stop_count(bot_id).await, 0);
+    assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
     assert!(repo.get(10121).await.unwrap().is_some());
+    assert_eq!(manager.bot_count().await, 1);
+    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
 }
 
 #[tokio::test]

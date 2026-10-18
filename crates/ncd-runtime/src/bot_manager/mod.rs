@@ -33,7 +33,7 @@ use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
 use ncd_domain::app_config::WebUiPollerSettings;
 use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError};
 use ncd_domain::ids::BotId;
-use ncd_domain::kinds::{BotFlavor, RuntimeTarget, StopMode};
+use ncd_domain::kinds::{RuntimeTarget, StopMode};
 use ncd_domain::{DesktopNotifySettings, RuntimeScenario};
 use ncd_traits::backend_config_renderer::BackendConfigRenderer;
 use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
@@ -123,6 +123,7 @@ impl From<RuntimeRouterError> for BotManagerError {
         match err {
             RuntimeRouterError::Config(err) => Self::Config(err),
             RuntimeRouterError::Render(message) => Self::Render(message),
+            err @ RuntimeRouterError::MissingLocalSnowLumaBackend => Self::Render(err.to_string()),
         }
     }
 }
@@ -617,18 +618,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 server_id,
                 "metrics: refreshed remote nodes.json for hot map"
             );
-        }
-    }
-
-    /// 按 flavor 选择 backend:SnowLuma 时优先用注入的 SL backend,否则
-    /// 回落到默认 backend(向后兼容:未注入 SL 时与历史行为一致)
-    fn backend_for(&self, flavor: BotFlavor) -> Arc<dyn BotBackend> {
-        match flavor {
-            BotFlavor::SnowLuma => self
-                .snowluma_backend
-                .clone()
-                .unwrap_or_else(|| Arc::clone(&self.backend)),
-            _ => Arc::clone(&self.backend),
         }
     }
 
@@ -2442,12 +2431,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         if let Some(handle) = &maybe_handle {
             let current = handle.snapshot();
             if current.state.is_active() {
+                let config = previous_config
+                    .as_ref()
+                    .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))?;
+                let backend = self.backend_for_lifecycle(config).await?;
                 let stopping = handle.request_stop().await?;
                 self.publish_state_change(&stopping, "delete_stop_requested");
-                let backend = match &previous_config {
-                    Some(cfg) => self.backend_for_lifecycle(cfg).await?,
-                    None => self.backend_for(BotFlavor::NapCat),
-                };
                 if let Err(err) = backend.stop(bot_id.clone(), StopMode::Force).await {
                     let message = err.to_string();
                     self.event_bus.publish(DomainEvent::bot_error(

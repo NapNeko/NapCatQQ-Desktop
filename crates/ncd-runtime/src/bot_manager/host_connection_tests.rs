@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{HostResolveError, HostResolver};
-use ncd_domain::BackendKind;
+use ncd_domain::{BackendKind, BotFlavor};
 use ncd_traits::runtime_backend::{BotStatus, LogSnapshot, TailOpts};
 use tokio::sync::{mpsc, oneshot};
 
@@ -83,6 +83,67 @@ impl BotBackend for UnusedBackend {
 struct ObservedResolver {
     calls: mpsc::UnboundedSender<RuntimeTarget>,
     first_gate: Mutex<Option<oneshot::Receiver<()>>>,
+}
+
+fn local_routing_manager(
+    root: &std::path::Path,
+    config: BotConfig,
+) -> BotManager<FixedBotRepo, crate::LocalConfigStore> {
+    BotManager::new(
+        Arc::new(FixedBotRepo(config)),
+        Arc::new(crate::LocalConfigStore::new(root)),
+        Arc::new(crate::DispatchRenderer::new(root, root)),
+        Arc::new(UnusedBackend(BotId::new("local-napcat"))),
+        Arc::new(crate::FileSystemRuntimeLaunchPlanner::new(root)),
+        Arc::new(BroadcastEventBus::default()),
+        Arc::new(crate::ReqwestNapCatWebUiClient::new().unwrap()),
+        Arc::new(crate::NoopOfflineNotifier),
+        Arc::new(RwLock::new(WebUiPollerSettings::default())),
+        Arc::new(RwLock::new(DesktopNotifySettings::default())),
+    )
+}
+
+#[tokio::test]
+async fn local_native_snowluma_without_injection_returns_missing_backend_error() {
+    let root = tempfile::tempdir().unwrap();
+    let config = ncd_test_support::BotConfigBuilder::new()
+        .backend_type(BackendType::SnowLuma)
+        .build();
+    let manager = local_routing_manager(root.path(), config.clone());
+    assert!(matches!(
+        manager.runtime_router().backend_for_config(&config).await,
+        Err(RuntimeRouterError::MissingLocalSnowLumaBackend)
+    ));
+    let err = match manager.backend_for_config(&config).await {
+        Err(err) => err,
+        Ok(_) => panic!("missing SnowLuma backend must not route to NapCat"),
+    };
+    assert!(err.to_string().contains("本机 SnowLuma backend 未注入"));
+}
+
+#[tokio::test]
+async fn local_native_snowluma_routes_to_injected_backend() {
+    let root = tempfile::tempdir().unwrap();
+    let config = ncd_test_support::BotConfigBuilder::new()
+        .backend_type(BackendType::SnowLuma)
+        .build();
+    let mut manager = local_routing_manager(root.path(), config.clone());
+    let snowluma: Arc<dyn BotBackend> = Arc::new(UnusedBackend(BotId::new("local-snowluma")));
+    manager.snowluma_backend = Some(snowluma.clone());
+    let routed = manager.runtime_router().backend_for_config(&config).await.unwrap();
+    assert!(Arc::ptr_eq(&routed, &snowluma));
+    assert!(!Arc::ptr_eq(&routed, &manager.backend));
+}
+
+#[tokio::test]
+async fn local_native_napcat_routes_to_default_backend_without_snowluma() {
+    let root = tempfile::tempdir().unwrap();
+    let config = ncd_test_support::BotConfigBuilder::new()
+        .backend_type(BackendType::NapCat)
+        .build();
+    let manager = local_routing_manager(root.path(), config.clone());
+    let routed = manager.runtime_router().backend_for_config(&config).await.unwrap();
+    assert!(Arc::ptr_eq(&routed, &manager.backend));
 }
 
 #[tokio::test]
