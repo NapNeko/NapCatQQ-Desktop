@@ -112,14 +112,6 @@ impl SnowLumaRuntimeBackend {
         }
     }
 
-    /// 测试入口:注入自定义 ProcessTreeProbe(HotStart PID 二次校验时使用)
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn with_proc_tree(mut self, probe: Arc<dyn ProcessTreeProbe>) -> Self {
-        self.proc_tree = probe;
-        self
-    }
-
     #[cfg(windows)]
     async fn local_qr_snapshot(
         &self,
