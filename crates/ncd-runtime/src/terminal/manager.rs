@@ -24,6 +24,7 @@ use super::TerminalError;
 use super::plan::{TerminalLaunchPlan, TerminalPlanner};
 use super::replay::{REPLAY_CAPACITY, ReplayBuffer};
 use super::stats::StatsSample;
+use super::sudo_prompt::SudoPrompt;
 
 /// 前端那头：一条收输出字节，一条收状态事件
 pub trait TerminalSink: Send + Sync {
@@ -59,6 +60,7 @@ struct SessionState {
     unacked: u64,
     closed: bool,
     restarting: bool,
+    sudo_prompt: SudoPrompt,
 }
 
 impl Session {
@@ -73,6 +75,7 @@ impl Session {
             if st.epoch != epoch || st.closed {
                 return;
             }
+            st.sudo_prompt.observe(bytes);
             st.replay.push(bytes);
             let sink = st.sink.clone();
             if sink.is_some() {
@@ -132,6 +135,7 @@ impl Session {
                 return;
             }
             st.control = None;
+            st.sudo_prompt = SudoPrompt::default();
             let status = match exit {
                 PtyExit::Exited(code) => TerminalStatus::Exited { code },
                 PtyExit::Disconnected(reason) => TerminalStatus::Disconnected { reason },
@@ -338,6 +342,7 @@ impl TerminalManager {
                 unacked: 0,
                 closed: false,
                 restarting: false,
+                sudo_prompt: SudoPrompt::default(),
             }),
             acked: Notify::new(),
         });
@@ -390,8 +395,13 @@ impl TerminalManager {
     }
 
     pub fn write(&self, id: &str, data: &str) -> Result<(), TerminalError> {
-        let control = self.get(id)?.lock().control.clone();
-        control
+        let session = self.get(id)?;
+        let mut st = session.lock();
+        if !data.is_empty() {
+            st.sudo_prompt.input();
+        }
+        st.control
+            .as_ref()
             .ok_or(TerminalError::NotRunning)?
             .write(Bytes::copy_from_slice(data.as_bytes()))
             .map_err(|_| TerminalError::NotRunning)
@@ -418,6 +428,7 @@ impl TerminalManager {
             }
             st.restarting = true;
             st.epoch += 1;
+            st.sudo_prompt = SudoPrompt::default();
             st.info.status = TerminalStatus::Starting;
             (st.request.clone(), st.epoch)
         };
@@ -482,6 +493,7 @@ impl TerminalManager {
             let mut st = session.lock();
             st.closed = true;
             st.sink = None;
+            st.sudo_prompt = SudoPrompt::default();
             if let Some(control) = st.control.take() {
                 control.close();
             }
@@ -513,18 +525,32 @@ impl TerminalManager {
     /// 出现 sudo 密码提示时，用户点了「填入密码」：把这台主机存的密码直接写进终端，不经过前端
     pub fn fill_sudo(&self, id: &str) -> Result<(), TerminalError> {
         let session = self.get(id)?;
-        let (host_id, control) = {
-            let st = session.lock();
-            (st.info.host_id.clone(), st.control.clone())
-        };
-        let control = control.ok_or(TerminalError::NotRunning)?;
-        let password = self.planner.sudo_password(&host_id).ok_or_else(|| {
+        // control.write 只做非阻塞入队；持锁直到入队，防止校验后被输入或重开推进。
+        let mut st = session.lock();
+        let control = st.control.clone().ok_or(TerminalError::NotRunning)?;
+        if !st.sudo_prompt.is_current() {
+            return Err(TerminalError::Invalid(
+                "当前终端不在有效的 sudo 密码提示中，请等待新的提示后再试".into(),
+            ));
+        }
+        let password = self.planner.sudo_password(&st.info.host_id).ok_or_else(|| {
             TerminalError::Invalid("这台主机没存提权密码，先到远端页的主机设置里存一个".into())
         })?;
-        let mut bytes = password.into_bytes();
+        let mut password_bytes = password.into_bytes();
+        // 预留回车空间，避免给原密码 Vec 追加时重分配留下未清理的旧 allocation。
+        let mut bytes = Vec::with_capacity(password_bytes.len() + 1);
+        bytes.extend_from_slice(&password_bytes);
         bytes.push(b'\r');
+        let input = Bytes::copy_from_slice(&bytes);
+        // 清理本函数拥有的原 buffer；运输所需的 Bytes 和凭据库副本不在此边界内。
+        password_bytes.fill(0);
+        bytes.fill(0);
+        std::hint::black_box(&mut password_bytes);
+        std::hint::black_box(&mut bytes);
+        std::sync::atomic::compiler_fence(Ordering::SeqCst);
+        st.sudo_prompt.input();
         control
-            .write(Bytes::from(bytes))
+            .write(input)
             .map_err(|_| TerminalError::NotRunning)
     }
 

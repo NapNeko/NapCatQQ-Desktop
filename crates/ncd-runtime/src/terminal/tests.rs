@@ -376,21 +376,301 @@ async fn close_tells_the_backend_and_forgets_the_session() {
 }
 
 #[tokio::test]
-async fn sudo_fill_types_the_saved_password() {
+async fn sudo_fill_rejects_non_prompt_without_writing() {
     let (manager, mut backends, _) = fixture(Some("s3cret"));
     let info = manager.open(request()).await.unwrap();
     let mut backend = backends.recv().await.unwrap();
+    let err = manager.fill_sudo(info.id.as_str()).unwrap_err();
+    assert!(err.to_string().contains("当前终端不在有效的 sudo 密码提示中"));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn sudo_fill_types_the_saved_password_once_for_a_current_prompt() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let mut backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"\x1b[3"))
+        .await
+        .unwrap();
+    eventually("partial ANSI", || sink.text().ends_with("\x1b[3")).await;
+    backend
+        .output
+        .send(Bytes::from_static(b"1m[sudo] password for u:\x1b[0m "))
+        .await
+        .unwrap();
+    eventually("sudo prompt", || sink.text().contains("password for u:")).await;
     manager.fill_sudo(info.id.as_str()).unwrap();
     match backend.input.recv().await {
         Some(PtyInput::Write(data)) => assert_eq!(&data[..], b"s3cret\r"),
         other => panic!("unexpected {other:?}"),
     }
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
 
+#[tokio::test]
+async fn sudo_fill_rejects_generic_password_after_cached_sudo_ssh() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let mut backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"\x1b]633;E;sudo ssh host\x07\x1b]633;C\x07Password:"))
+        .await
+        .unwrap();
+    eventually("SSH password prompt", || sink.text().ends_with("Password:")).await;
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn sudo_fill_rejects_ssh_password_after_filling_sudo() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let mut backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(
+            b"\x1b]633;E;sudo ssh host\x07\x1b]633;C\x07[sudo] password for u:",
+        ))
+        .await
+        .unwrap();
+    eventually("sudo prompt", || sink.text().contains("password for u:")).await;
+    manager.fill_sudo(info.id.as_str()).unwrap();
+    match backend.input.recv().await {
+        Some(PtyInput::Write(data)) => assert_eq!(&data[..], b"s3cret\r"),
+        other => panic!("unexpected {other:?}"),
+    }
+    backend
+        .output
+        .send(Bytes::from_static(b"\r\nPassword:"))
+        .await
+        .unwrap();
+    eventually("SSH password prompt", || sink.text().ends_with("Password:")).await;
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn sudo_fill_rejects_echoed_command_and_osc_command_editing() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let mut backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"u@host$ echo [sudo] password for u:"))
+        .await
+        .unwrap();
+    eventually("echoed command", || sink.text().ends_with("password for u:")).await;
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+    backend
+        .output
+        .send(Bytes::from_static(b"\r\n\x1b]633;A\x07\x1b]633;B\x07[sudo] password for other:"))
+        .await
+        .unwrap();
+    eventually("editing command", || sink.text().ends_with("password for other:")).await;
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn sudo_fill_reports_missing_password_without_writing() {
     let (no_password, mut others, _) = fixture(None);
     let other = no_password.open(request()).await.unwrap();
-    let _backend = others.recv().await.unwrap();
+    let mut backend = others.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    no_password.attach(other.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"[sudo] password for u:"))
+        .await
+        .unwrap();
+    eventually("sudo prompt", || sink.text().contains("password for u:")).await;
+    let err = no_password.fill_sudo(other.id.as_str()).unwrap_err();
+    assert!(err.to_string().contains("这台主机没存提权密码"));
     assert!(matches!(
-        no_password.fill_sudo(other.id.as_str()),
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn sudo_fill_rejects_prompt_after_input_or_output_moves_on() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let mut backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"[sudo] password for u:"))
+        .await
+        .unwrap();
+    eventually("first sudo prompt", || sink.text().contains("password for u:")).await;
+    manager.write(info.id.as_str(), "x").unwrap();
+    match backend.input.recv().await {
+        Some(PtyInput::Write(data)) => assert_eq!(&data[..], b"x"),
+        other => panic!("unexpected {other:?}"),
+    }
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+
+    backend
+        .output
+        .send(Bytes::from_static(b"\r\n[sudo] password for u:\r\nu@host$ "))
+        .await
+        .unwrap();
+    eventually("shell prompt", || sink.text().ends_with("u@host$ ")).await;
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test(start_paused = true)]
+async fn sudo_fill_rejects_expired_prompt_without_writing() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let mut backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"[sudo] password for u:"))
+        .await
+        .unwrap();
+    eventually("sudo prompt", || sink.text().contains("password for u:")).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        backend.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn sudo_fill_old_session_prompt_cannot_authorize_restarted_session() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let id = info.id.as_str();
+    let backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(id, sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"[sudo] password for u:"))
+        .await
+        .unwrap();
+    eventually("sudo prompt", || sink.text().contains("password for u:")).await;
+    let PtyBackend { output, exit, .. } = backend;
+    drop(output);
+    exit.send(PtyExit::Exited(Some(0))).unwrap();
+    eventually("exit status", || {
+        manager.list().iter().all(|info| !info.status.is_live())
+    })
+    .await;
+    manager.restart(id).await.unwrap();
+    let mut fresh = backends.recv().await.unwrap();
+    assert!(matches!(
+        manager.fill_sudo(id),
+        Err(TerminalError::Invalid(_))
+    ));
+    assert!(matches!(
+        fresh.input.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+
+    fresh
+        .output
+        .send(Bytes::from_static(b"[sudo] password for new:"))
+        .await
+        .unwrap();
+    eventually("fresh sudo prompt", || sink.text().contains("password for new:")).await;
+    manager.fill_sudo(id).unwrap();
+    match fresh.input.recv().await {
+        Some(PtyInput::Write(data)) => assert_eq!(&data[..], b"s3cret\r"),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn sudo_fill_write_failure_consumes_the_prompt() {
+    let (manager, mut backends, _) = fixture(Some("s3cret"));
+    let info = manager.open(request()).await.unwrap();
+    let backend = backends.recv().await.unwrap();
+    let sink = RecordingSink::new();
+    manager.attach(info.id.as_str(), sink.clone()).unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"[sudo] password for u:"))
+        .await
+        .unwrap();
+    eventually("sudo prompt", || sink.text().contains("password for u:")).await;
+    drop(backend.input);
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
+        Err(TerminalError::NotRunning)
+    ));
+    assert!(matches!(
+        manager.fill_sudo(info.id.as_str()),
         Err(TerminalError::Invalid(_))
     ));
 }

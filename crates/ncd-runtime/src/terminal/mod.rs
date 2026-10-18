@@ -12,6 +12,7 @@ mod plan;
 mod replay;
 mod shells;
 mod stats;
+mod sudo_prompt;
 
 #[cfg(test)]
 mod tests;
