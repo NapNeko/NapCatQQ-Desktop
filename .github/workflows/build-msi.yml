@@ -115,7 +115,7 @@ jobs:
         run: |
           if (Test-Path 'target') {
             $forbidden = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
-              Where-Object { $_.Name -match '^(?:lib)?ncd[-_]|^NapCatQQ-Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$' })
+              Where-Object { $_.Name -match '^(?:lib)?ncd[-_]|^(?:lib)?NapCatQQ[-_]Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$' })
             if ($forbidden.Count -gt 0) {
               throw "Dependency cache contains workspace or packaging artifacts: $($forbidden[0].FullName)"
             }
@@ -295,7 +295,7 @@ jobs:
       - name: Remove workspace artifacts before caching
         shell: pwsh
         run: |
-          $pattern = '^(?:lib)?ncd[-_]|^NapCatQQ-Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$'
+          $pattern = '^(?:lib)?ncd[-_]|^(?:lib)?NapCatQQ[-_]Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$'
           $artifacts = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
             Where-Object { $_.Name -match $pattern } |
             Sort-Object { $_.FullName.Length } -Descending)
