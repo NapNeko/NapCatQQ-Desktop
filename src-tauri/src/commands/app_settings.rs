@@ -76,6 +76,17 @@ pub async fn set_app_settings(
     let (settings, network_changed) =
         save_desktop_settings(&state.data_root, &state.app_settings, &state.network, dto).await?;
 
+    #[cfg(windows)]
+    {
+        let refresh_app = app.clone();
+        if let Err(error) = app.run_on_main_thread(move || {
+            crate::tray_panel_native::sync_ui_preferences(&refresh_app);
+            crate::native_panel::window::refresh_visible_themes();
+        }) {
+            tracing::warn!(%error, "界面偏好已保存，刷新原生托盘主题失败");
+        }
+    }
+
     if network_changed {
         if let Err(err) = ncd_runtime::release::invalidate_release_cache(&state.data_root) {
             // 配置已经落盘，缓存清理失败不应阻断其他设置的热更新。

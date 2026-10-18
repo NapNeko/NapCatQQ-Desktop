@@ -13,8 +13,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows::Win32::UI::WindowsAndMessaging::{
     WM_APP, WM_CLOSE, WM_CREATE, WM_DESTROY, WM_DPICHANGED, WM_ERASEBKGND, WM_KEYDOWN,
     WM_KILLFOCUS, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT,
-    WM_SETCURSOR, WM_SIZE, WM_TIMER, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    WM_SETCURSOR, WM_SETTINGCHANGE, WM_SIZE, WM_THEMECHANGED, WM_TIMER, WS_CLIPCHILDREN,
+    WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
 use super::gfx::{Canvas, Rect, shared};
@@ -332,6 +332,28 @@ fn with_window<R>(hwnd: Hwnd, f: impl FnOnce(&Rc<RefCell<WindowData>>) -> R) -> 
     data.map(|data| f(&data))
 }
 
+fn refresh_window_theme(hwnd: Hwnd, data: &Rc<RefCell<WindowData>>) {
+    if data
+        .try_borrow()
+        .is_ok_and(|data| data.composition.is_none())
+    {
+        hwnd.set_dark_frame(theme().is_dark());
+    }
+    hwnd.invalidate();
+}
+
+/// 偏好同步后刷新已显示的面板，不改变显隐或焦点。只从窗口所属主线程调用。
+pub(crate) fn refresh_visible_themes() {
+    // 不持有注册表或 WindowData 借用调用 Win32，防止同步消息重入或窗口销毁。
+    let windows = WINDOWS.with(|slot| slot.borrow().values().cloned().collect::<Vec<_>>());
+    for data in windows {
+        let hwnd = data.try_borrow().ok().map(|data| data.handle_slot.get());
+        if let Some(hwnd) = hwnd.filter(|hwnd| hwnd.is_visible()) {
+            refresh_window_theme(hwnd, &data);
+        }
+    }
+}
+
 fn register(hwnd: Hwnd, data: WindowData) {
     WINDOWS.with(|slot| {
         slot.borrow_mut()
@@ -479,6 +501,10 @@ impl WndHandler for PanelProc {
                 Some(LRESULT(0))
             }
             WM_ERASEBKGND => Some(LRESULT(1)),
+            WM_SETTINGCHANGE | WM_THEMECHANGED => {
+                with_window(hwnd, |data| refresh_window_theme(hwnd, data));
+                Some(LRESULT(0))
+            }
             WM_PAINT => {
                 // 不走 BeginPaint/EndPaint 的话更新区域一直无效，系统会不停补发 WM_PAINT，主线程空转重画
                 let paint = hwnd.begin_paint();
@@ -1381,14 +1407,7 @@ impl NativePanel {
     }
 
     pub fn refresh_theme(&self) {
-        if self
-            .data
-            .try_borrow()
-            .is_ok_and(|data| data.composition.is_none())
-        {
-            self.hwnd.get().set_dark_frame(theme().is_dark());
-        }
-        self.hwnd.get().invalidate();
+        refresh_window_theme(self.hwnd.get(), &self.data);
     }
 }
 
@@ -1559,6 +1578,74 @@ mod tests {
         }
         assert!(!panel.hwnd.get().is_visible());
         panel.destroy();
+    }
+
+    #[test]
+    fn system_theme_notifications_invalidate_visible_panel_during_reentry() {
+        let panel = NativePanel::create((400, 400), 260.0, Box::new(Probe)).expect("create panel");
+        panel.show_with((400, 400), false, tray_panel_xy);
+        let hwnd = panel.hwnd();
+        let focused = panel.hwnd.get().is_foreground();
+        for message in [WM_SETTINGCHANGE, WM_THEMECHANGED] {
+            panel.hwnd.get().paint_now();
+            assert!(!unsafe { GetUpdateRect(hwnd, None, false) }.as_bool());
+            let paints = panel.data.borrow().paints;
+            let caught = sys::caught_panics();
+            {
+                // 系统通知可能在内容回调持有 WindowData 时同步重入。
+                let _borrow = panel.data.borrow_mut();
+                unsafe {
+                    let _ = SendMessageW(hwnd, message, None, None);
+                }
+            }
+            assert_eq!(sys::caught_panics(), caught);
+            assert!(unsafe { GetUpdateRect(hwnd, None, false) }.as_bool());
+            panel.hwnd.get().paint_now();
+            assert!(panel.data.borrow().paints > paints);
+            assert_eq!(panel.hwnd(), hwnd);
+            assert!(panel.is_visible());
+            assert_eq!(panel.hwnd.get().is_foreground(), focused);
+        }
+        panel.destroy();
+    }
+
+    #[test]
+    fn preference_refresh_repaints_visible_panels_without_showing_hidden_panels() {
+        let first = NativePanel::create((400, 400), 260.0, Box::new(Probe)).expect("first panel");
+        let second = NativePanel::create((700, 400), 260.0, Box::new(Probe)).expect("second panel");
+        let hidden = NativePanel::create((1000, 400), 260.0, Box::new(Probe)).expect("hidden panel");
+        first.show_with((400, 400), false, tray_panel_xy);
+        second.show_with((700, 400), false, tray_panel_xy);
+        first.hwnd.get().paint_now();
+        second.hwnd.get().paint_now();
+        let first_paints = first.data.borrow().paints;
+        let second_paints = second.data.borrow().paints;
+        let hidden_paints = hidden.data.borrow().paints;
+        let focused = (
+            first.hwnd.get().is_foreground(),
+            second.hwnd.get().is_foreground(),
+        );
+
+        refresh_visible_themes();
+
+        assert!(unsafe { GetUpdateRect(first.hwnd(), None, false) }.as_bool());
+        assert!(unsafe { GetUpdateRect(second.hwnd(), None, false) }.as_bool());
+        first.hwnd.get().paint_now();
+        second.hwnd.get().paint_now();
+        assert!(first.data.borrow().paints > first_paints);
+        assert!(second.data.borrow().paints > second_paints);
+        assert_eq!(hidden.data.borrow().paints, hidden_paints);
+        assert!(!hidden.is_shown());
+        assert_eq!(
+            (
+                first.hwnd.get().is_foreground(),
+                second.hwnd.get().is_foreground(),
+            ),
+            focused
+        );
+        first.destroy();
+        second.destroy();
+        hidden.destroy();
     }
 
     #[test]
