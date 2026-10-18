@@ -43,7 +43,6 @@ impl Default for PollerConfig {
 
 /// Poller 主循环维护的登录子状态
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct LoginState {
     pub auth: Option<String>,
     pub is_logged_in: bool,
@@ -72,7 +71,6 @@ pub(crate) struct LoginState {
 }
 
 impl LoginState {
-    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self {
             auth: None,
@@ -119,7 +117,6 @@ pub(crate) enum PollerCommand {
     UpdateInterval(Duration),
 }
 
-#[allow(dead_code)]
 pub struct PollerDeps {
     pub event_bus: Arc<BroadcastEventBus>,
     pub http: Arc<dyn NapCatWebUiClient>,
@@ -132,7 +129,6 @@ pub trait RestartHandle: Send + Sync {
     async fn restart_bot(&self, bot_id: &BotId);
 }
 
-#[allow(dead_code)]
 pub struct NapCatLoginPoller {
     // pub(crate): 单测可直接构造句柄验证 dispose/Drop
     pub(crate) bot_id: BotId,
