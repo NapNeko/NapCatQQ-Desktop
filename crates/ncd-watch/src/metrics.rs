@@ -305,6 +305,7 @@ fn read_meminfo_bytes() -> Option<(u64, u64)> {
     Some((total, used))
 }
 
+#[cfg(not(windows))]
 fn parse_meminfo_kb(s: &str) -> Option<u64> {
     s.split_whitespace().next()?.parse().ok()
 }
@@ -407,6 +408,7 @@ fn read_root_disk_bytes() -> Option<(u64, u64)> {
     Some((total, total.saturating_sub(free)))
 }
 
+#[cfg(not(windows))]
 fn run_df(args: &[&str]) -> Option<String> {
     let out = std::process::Command::new("df").args(args).output().ok()?;
     if !out.status.success() {
@@ -416,6 +418,7 @@ fn run_df(args: &[&str]) -> Option<String> {
 }
 
 /// `block_scale`：df 输出块大小（字节）。`df -B1` → 1；`df -k` → 1024。
+#[cfg(any(not(windows), test))]
 fn parse_df_output(text: &str, block_scale: u64) -> Option<(u64, u64)> {
     // Filesystem blocks Used Available Use% Mounted on
     for line in text.lines().skip(1) {

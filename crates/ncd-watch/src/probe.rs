@@ -1,5 +1,6 @@
 //! 进程 / Docker 探活(登录态探活另层,见 LoginStatus)
 
+#[cfg(not(windows))]
 use std::path::Path;
 use std::process::Stdio;
 
@@ -161,6 +162,7 @@ fn probe_docker(bot: &NotifyBotTarget) -> ProbeResult {
     }
 }
 
+#[cfg(not(windows))]
 fn probe_pid_file(bot: &NotifyBotTarget, path: &Path) -> ProbeResult {
     if !path.is_file() {
         return process_only(
@@ -205,6 +207,7 @@ fn probe_pid_file(bot: &NotifyBotTarget, path: &Path) -> ProbeResult {
     )
 }
 
+#[cfg(not(windows))]
 fn probe_process_match(bot: &NotifyBotTarget, pattern: &str) -> ProbeResult {
     // processMatch 常为 `-q <qq>$`；若不加 `--`，procps pgrep 会把 `-q` 当选项并失败，
     // 探活永远 Offline，边沿/Webhook/Email 全哑火。
@@ -236,6 +239,7 @@ fn probe_process_match(bot: &NotifyBotTarget, pattern: &str) -> ProbeResult {
     }
 }
 
+#[cfg(not(windows))]
 fn pid_alive(pid: i32) -> bool {
     std::process::Command::new("kill")
         .args(["-0", &pid.to_string()])
