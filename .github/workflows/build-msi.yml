@@ -98,25 +98,27 @@ jobs:
           $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
           foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
 
-      - name: Compute Cargo cache keys
-        id: inputs
-        run: node scripts/ci-rust-cache.mjs keys
-
-      # 保留 workspace 产物和 Agent 的静态 CRT target；依赖缓存会清掉这些产物。
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      # workspace 产物包含编译期代理密钥，不能进入 fork PR 可读的 Actions 缓存。
+      # 仅缓存第三方依赖；新命名空间也不恢复旧的完整 target 缓存。
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            target
-            src-tauri/resources/remote-agent/ncd-agent.exe
-            ${{ steps.inputs.outputs.cargo-home }}/registry
-            ${{ steps.inputs.outputs.cargo-home }}/git
-          key: rust-msi-v1-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
-          restore-keys: |
-            rust-msi-v1-${{ steps.inputs.outputs.environment-key }}-
+          prefix-key: rust-msi-deps-v2
+          shared-key: build-msi-windows
+          workspaces: ". -> target"
+          cache-workspace-crates: "false"
+          cache-bin: "false"
 
-      - name: Restore Cargo input timestamps
-        run: node scripts/ci-rust-cache.mjs restore
+      - name: Verify dependency-only cache
+        shell: pwsh
+        run: |
+          if (Test-Path 'target') {
+            $forbidden = @(Get-ChildItem -LiteralPath 'target' -Recurse -Force |
+              Where-Object { $_.Name -match '^(?:lib)?ncd[-_]|^NapCatQQ-Desktop|^proxy_constants\.rs$|^(?:bundle|wix)$' })
+            if ($forbidden.Count -gt 0) {
+              throw "Dependency cache contains workspace or packaging artifacts: $($forbidden[0].FullName)"
+            }
+          }
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
@@ -187,24 +189,12 @@ jobs:
           }
 
       - name: Build Tauri MSI
-        shell: pwsh
         env:
           NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
           # 首选新名;空则 build.rs 回退 SHARED_SECRET
           NCD_PROXY_SECRET: ${{ secrets.NCD_PROXY_SECRET }}
           NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
-        run: |
-          # Tauri 会整理 Cargo.toml，前端构建也会重建 dist。
-          # 在 hook 结束后再次校验内容并恢复时间戳，避免同一提交重复执行 fat LTO。
-          $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
-          $hook = $config.build.beforeBuildCommand
-          if ($hook -isnot [string] -or [string]::IsNullOrWhiteSpace($hook)) {
-            throw 'Expected a frontend build command in tauri.conf.json'
-          }
-          $override = Join-Path $env:RUNNER_TEMP 'tauri-ci-cache.json'
-          @{ build = @{ beforeBuildCommand = "$hook && node scripts/ci-rust-cache.mjs restore" } } |
-            ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $override -Encoding utf8
-          pnpm run tauri:build:msi --config $override
+        run: pnpm run tauri:build:msi
 
       # Tauri WiX 中间产物名：`{product}_{ver}_{arch}_{lang}.msi`
       # 例如 `NapCatQQ Desktop_3.1.1_x64_zh-CN.msi`（language=zh-CN 时）。
@@ -298,6 +288,3 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: release-assets/*
-
-      - name: Capture Cargo input timestamps
-        run: node scripts/ci-rust-cache.mjs capture
