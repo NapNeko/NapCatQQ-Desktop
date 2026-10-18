@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ts_rs::TS)]
-#[serde(transparent)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotId(String);
 
@@ -87,11 +86,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn serializes_ids_as_strings() {
+    fn ids_round_trip_as_strings() {
         let bot_id = BotId::new("10001");
         let backend_id = BackendId::new("server-1");
 
         assert_eq!(serde_json::to_string(&bot_id).unwrap(), "\"10001\"");
         assert_eq!(serde_json::to_string(&backend_id).unwrap(), "\"server-1\"");
+        assert_eq!(serde_json::from_str::<BotId>("\"10001\"").unwrap(), bot_id);
+        assert_eq!(
+            serde_json::from_str::<BackendId>("\"server-1\"").unwrap(),
+            backend_id
+        );
     }
 }
