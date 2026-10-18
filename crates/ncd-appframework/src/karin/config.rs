@@ -797,6 +797,74 @@ impl KarinInstanceConfig {
         }
     }
 
+    /// 调用方只提交已建模字段时，从最新磁盘配置补回未知键；本次显式提交的值优先。
+    pub(super) fn restore_extras(&mut self, current: &Self) {
+        restore_extra(&mut self.config.extra, &current.config.extra);
+        restore_extra(&mut self.config.user.extra, &current.config.user.extra);
+        for (scope, old) in [
+            (&mut self.config.friend, &current.config.friend),
+            (&mut self.config.group, &current.config.group),
+            (&mut self.config.directs, &current.config.directs),
+            (&mut self.config.guilds, &current.config.guilds),
+            (&mut self.config.channels, &current.config.channels),
+        ] {
+            restore_extra(&mut scope.extra, &old.extra);
+        }
+
+        restore_extra(&mut self.adapter.extra, &current.adapter.extra);
+        restore_extra(
+            &mut self.adapter.console.extra,
+            &current.adapter.console.extra,
+        );
+        restore_extra(&mut self.adapter.onebot.extra, &current.adapter.onebot.extra);
+        restore_extra(
+            &mut self.adapter.onebot.ws_server.extra,
+            &current.adapter.onebot.ws_server.extra,
+        );
+        restore_collection_extras(
+            &mut self.adapter.onebot.ws_client,
+            &current.adapter.onebot.ws_client,
+            |row| row.url.clone(),
+            |row, old| restore_extra(&mut row.extra, &old.extra),
+        );
+        restore_collection_extras(
+            &mut self.adapter.onebot.http_server,
+            &current.adapter.onebot.http_server,
+            |row| (row.self_id.clone(), row.url.clone()),
+            |row, old| restore_extra(&mut row.extra, &old.extra),
+        );
+        for (rules, old) in [
+            (&mut self.groups, &current.groups),
+            (&mut self.privates, &current.privates),
+        ] {
+            restore_collection_extras(
+                rules,
+                old,
+                |row| row.key.clone(),
+                |row, old| restore_extra(&mut row.extra, &old.extra),
+            );
+        }
+
+        restore_extra(&mut self.render.extra, &current.render.extra);
+        restore_extra(
+            &mut self.render.ws_server.extra,
+            &current.render.ws_server.extra,
+        );
+        restore_collection_extras(
+            &mut self.render.ws_client,
+            &current.render.ws_client,
+            |row| row.url.clone(),
+            |row, old| restore_extra(&mut row.extra, &old.extra),
+        );
+        restore_collection_extras(
+            &mut self.render.http_server,
+            &current.render.http_server,
+            |row| row.url.clone(),
+            |row, old| restore_extra(&mut row.extra, &old.extra),
+        );
+        restore_extra(&mut self.redis.extra, &current.redis.extra);
+    }
+
     pub fn validate(&self) -> Vec<AppConfigIssue> {
         let mut sink = IssueSink::default();
         self.env.validate(&mut sink);
@@ -852,6 +920,34 @@ impl KarinInstanceConfig {
             sink.push("redis/url", "须以 redis:// 或 rediss:// 开头");
         }
         sink.into_vec()
+    }
+}
+
+fn restore_extra(extra: &mut Extra, current: &Extra) {
+    for (key, value) in current {
+        extra.entry(key.clone()).or_insert_with(|| value.clone());
+    }
+}
+
+/// 数组只按新旧双方都唯一的业务身份匹配，不按位置猜测。
+/// 规则 key 或连接 URL 变化时视为新项；要随身份变更保留未知键，调用方需一并带回。
+fn restore_collection_extras<T, K: Eq>(
+    rows: &mut [T],
+    current: &[T],
+    identity: impl Fn(&T) -> K,
+    restore: impl Fn(&mut T, &T),
+) {
+    let identities: Vec<K> = rows.iter().map(&identity).collect();
+    for (row, key) in rows.iter_mut().zip(&identities) {
+        if identities.iter().filter(|other| *other == key).count() != 1 {
+            continue;
+        }
+        let mut matches = current.iter().filter(|old| identity(old) == *key);
+        if let Some(old) = matches.next()
+            && matches.next().is_none()
+        {
+            restore(row, old);
+        }
     }
 }
 
@@ -1208,6 +1304,107 @@ mod tests {
         assert_eq!(rv["userCD"], json!(3));
         assert_eq!(rv["memberEnable"], json!(["legacy"]));
         assert!(rv.get("member_enable").is_none());
+    }
+
+    #[test]
+    fn restore_extras_matches_collections_by_unique_identity() {
+        let rules = json!([
+            {"key":"a","future":"a"},
+            {"key":"b","future":"b"},
+            {"key":"removed","future":"removed"}
+        ]);
+        let clients = json!([
+            {"url":"ws://a","future":"a"},
+            {"url":"ws://b","future":"b"},
+            {"url":"ws://removed","future":"removed"}
+        ]);
+        let servers = json!([
+            {"url":"http://same","self_id":"a","future":"a"},
+            {"url":"http://same","self_id":"b","future":"b"},
+            {"url":"http://removed","self_id":"removed","future":"removed"}
+        ]);
+        let render_servers = json!([
+            {"url":"http://a","future":"a"},
+            {"url":"http://b","future":"b"},
+            {"url":"http://removed","future":"removed"}
+        ]);
+        let current: KarinInstanceConfig = serde_json::from_value(json!({
+            "groups":rules.clone(), "privates":rules,
+            "adapter":{"onebot":{"ws_client":clients.clone(),"http_server":servers}},
+            "render":{"ws_client":clients,"http_server":render_servers}
+        }))
+        .unwrap();
+        let rules = json!([{"key":"b","cd":7},{"key":"new"},{"key":"a"}]);
+        let clients = json!([
+            {"url":"ws://b","token":"new"},{"url":"ws://new"},{"url":"ws://a"}
+        ]);
+        let servers = json!([
+            {"url":"http://same","self_id":"b"},
+            {"url":"http://same","self_id":"new"},
+            {"url":"http://same","self_id":"a"}
+        ]);
+        let render_servers = json!([{"url":"http://b"},{"url":"http://new"},{"url":"http://a"}]);
+        let mut submitted: KarinInstanceConfig = serde_json::from_value(json!({
+            "groups":rules.clone(), "privates":rules,
+            "adapter":{"onebot":{"ws_client":clients.clone(),"http_server":servers}},
+            "render":{"ws_client":clients,"http_server":render_servers}
+        }))
+        .unwrap();
+
+        submitted.restore_extras(&current);
+        let saved = serde_json::to_value(&submitted).unwrap();
+        for path in [
+            "/groups",
+            "/privates",
+            "/adapter/onebot/ws_client",
+            "/adapter/onebot/http_server",
+            "/render/ws_client",
+            "/render/http_server",
+        ] {
+            let rows = saved.pointer(path).unwrap();
+            assert_eq!(rows[0]["future"], json!("b"), "{path}");
+            assert!(rows[1].get("future").is_none(), "{path}");
+            assert_eq!(rows[2]["future"], json!("a"), "{path}");
+        }
+        assert_eq!(submitted.groups[0].cd, 7);
+        assert_eq!(submitted.adapter.onebot.ws_client[0].token, "new");
+    }
+
+    #[test]
+    fn restore_extras_does_not_guess_duplicate_or_changed_identities() {
+        let current: KarinInstanceConfig = serde_json::from_value(json!({
+            "groups":[{"key":"old","future":1}],
+            "adapter":{"onebot":{"ws_client":[
+                {"url":"ws://same","future":1},
+                {"url":"ws://same","future":2}
+            ]}},
+            "render":{"ws_client":[{"url":"ws://same","future":3}],
+                "http_server":[{"url":"http://old","future":4}]},
+            "redis":{"future":1,"disk_only":2}
+        }))
+        .unwrap();
+        let mut submitted: KarinInstanceConfig = serde_json::from_value(json!({
+            "groups":[{"key":"renamed"}],
+            "adapter":{"onebot":{"ws_client":[{"url":"ws://same"}]}},
+            "render":{"ws_client":[{"url":"ws://same"},{"url":"ws://same"}],
+                "http_server":[{"url":"http://new"}]},
+            "redis":{"future":9}
+        }))
+        .unwrap();
+
+        submitted.restore_extras(&current);
+        assert!(submitted.groups[0].extra.is_empty());
+        assert!(submitted.adapter.onebot.ws_client[0].extra.is_empty());
+        assert!(
+            submitted
+                .render
+                .ws_client
+                .iter()
+                .all(|row| row.extra.is_empty())
+        );
+        assert!(submitted.render.http_server[0].extra.is_empty());
+        assert_eq!(submitted.redis.extra["future"], json!(9));
+        assert_eq!(submitted.redis.extra["disk_only"], json!(2));
     }
 
     #[test]

@@ -321,11 +321,13 @@ impl AppFrameworkAdapter for KarinAdapter {
             ));
         };
         let install_dir = HostPath::from_posix(&instance.install_dir);
-        let (_, current) = config::read_karin_config(host, &install_dir).await?;
+        let (on_disk, current) = config::read_karin_config(host, &install_dir).await?;
+        let mut karin = karin.clone();
+        karin.restore_extras(&on_disk);
         let (config, snaps) = config::write_karin_config(
             host,
             &install_dir,
-            karin,
+            &karin,
             &current,
             write_project_sidecar(instance),
         )
@@ -512,6 +514,122 @@ impl AppFrameworkAdapter for KarinAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_backup::tests::TestHost;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn write_config_restores_disk_extras_for_modeled_only_submission() {
+        let host = TestHost::new("karin-config");
+        let install = HostPath::from_posix("/apps/karin");
+        host.put("/apps/karin/.env", b"HTTP_PORT=7777\n");
+        for (id, value) in [
+            ("config", json!({"master":["old"],"future":{"root":[1,2]},
+                "submitted":"old","user":{"future":1},"friend":{"future":2},
+                "group":{"future":3},"directs":{"future":4},
+                "guilds":{"future":5},"channels":{"future":6}})),
+            ("adapter", json!({"future":"adapter","console":{"future":"console"},
+                "onebot":{"future":"onebot","ws_server":{"future":"ws-server"},
+                "ws_client":[{"url":"ws://bot","future":"bot-ws"}],
+                "http_server":[{"url":"http://bot","self_id":"bot","future":"bot-http"}]}})),
+            ("groups", json!([{"key":"default","future":{"group":true}}])),
+            ("privates", json!([{"key":"default","future":{"private":true}}])),
+            ("render", json!({"future":"render","ws_server":{"future":"render-ws-server"},
+                "ws_client":[{"url":"ws://render","future":"render-ws"}],
+                "http_server":[{"url":"http://render","future":"render-http"}]})),
+            ("redis", json!({"future":{"redis":true}})),
+        ] {
+            host.put(
+                install.join(format!("@karinjs/config/{id}.json")).as_posix(),
+                serde_json::to_string(&value).unwrap().as_bytes(),
+            );
+        }
+        let instance: AppInstance = serde_json::from_value(json!({
+            "id":"karin","framework_id":"karin","display_name":"Karin",
+            "placement":"remote_native","host_id":"remote:example",
+            "install_dir":install.as_posix(),"port":7777,"state":"stopped","created_at_ms":1
+        }))
+        .unwrap();
+        let adapter = KarinAdapter::new();
+        let before = adapter.read_config(host.as_ref(), &instance).await.unwrap();
+        let before_value = serde_json::to_value(&before.config).unwrap();
+        // 模拟仅按已建模字段重新构造的调用方；不是断言当前 JS 表单会丢弃运行时键。
+        let submitted: KarinInstanceConfig = serde_json::from_value(json!({
+            "config":{"master":["new"],"friend":{"enable":false},"submitted":"new"},
+            "adapter":{"console":{"isLocal":false},"onebot":{
+                "ws_server":{"timeout":30},"ws_client":[{"url":"ws://bot","token":"new"}],
+                "http_server":[{"url":"http://bot","self_id":"bot","api_token":"new"}]}},
+            "groups":[{"key":"default","cd":7}],"privates":[{"key":"default","mode":2}],
+            "render":{"ws_server":{"enable":false},
+                "ws_client":[{"url":"ws://render","enable":true}],
+                "http_server":[{"url":"http://render","enable":true}]},
+            "redis":{"database":3}
+        }))
+        .unwrap();
+        let after = adapter
+            .write_config(host.as_ref(), &instance, &AppInstanceConfig::Karin(submitted))
+            .await
+            .unwrap();
+        let after_value = serde_json::to_value(&after.config).unwrap();
+        for path in [
+            "/data/config/future",
+            "/data/config/user/future",
+            "/data/config/friend/future",
+            "/data/config/group/future",
+            "/data/config/directs/future",
+            "/data/config/guilds/future",
+            "/data/config/channels/future",
+            "/data/adapter/future",
+            "/data/adapter/console/future",
+            "/data/adapter/onebot/future",
+            "/data/adapter/onebot/ws_server/future",
+            "/data/adapter/onebot/ws_client/0/future",
+            "/data/adapter/onebot/http_server/0/future",
+            "/data/groups/0/future",
+            "/data/privates/0/future",
+            "/data/render/future",
+            "/data/render/ws_server/future",
+            "/data/render/ws_client/0/future",
+            "/data/render/http_server/0/future",
+            "/data/redis/future",
+        ] {
+            assert!(before_value.pointer(path).is_some(), "{path}");
+            assert_eq!(
+                after_value.pointer(path),
+                before_value.pointer(path),
+                "{path}"
+            );
+        }
+        for (path, expected) in [
+            ("/config/master", json!(["new"])),
+            ("/config/friend/enable", json!(false)),
+            ("/config/submitted", json!("new")),
+            ("/adapter/console/isLocal", json!(false)),
+            ("/adapter/onebot/ws_server/timeout", json!(30)),
+            ("/adapter/onebot/ws_client/0/token", json!("new")),
+            ("/adapter/onebot/http_server/0/api_token", json!("new")),
+            ("/groups/0/cd", json!(7)),
+            ("/privates/0/mode", json!(2)),
+            ("/render/ws_server/enable", json!(false)),
+            ("/render/ws_client/0/enable", json!(true)),
+            ("/render/http_server/0/enable", json!(true)),
+            ("/redis/database", json!(3)),
+        ] {
+            assert_eq!(after_value["data"].pointer(path), Some(&expected), "{path}");
+        }
+        for doc in karin_config_documents()
+            .into_iter()
+            .filter(|doc| doc.id != config::DOC_ENV)
+        {
+            let bytes = host.read_file(&install.join(&doc.rel_path)).await.unwrap();
+            let on_disk: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(on_disk, after_value["data"][&doc.id], "{}", doc.id);
+        }
+        assert_ne!(after.revision, before.revision);
+        assert_eq!(
+            after,
+            adapter.read_config(host.as_ref(), &instance).await.unwrap()
+        );
+    }
 
     #[test]
     fn enable_ws_server_only_rewrites_when_disabled() {
