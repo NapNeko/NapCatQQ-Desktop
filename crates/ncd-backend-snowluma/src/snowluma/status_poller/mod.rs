@@ -66,7 +66,6 @@ pub struct PollerDeps {
 /// spawn 启动后台 task 驱动主循环;dispose 取消其 CancellationToken
 /// 主循环当轮 select 结束后退出Drop 兜底——任何路径忘掉显式 dispose
 /// 也不会泄漏 task
-#[allow(dead_code)]
 pub struct SnowLumaStatusPoller {
     bot_id: BotId,
     cancel: CancellationToken,

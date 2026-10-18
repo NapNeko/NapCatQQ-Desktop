@@ -272,21 +272,6 @@ impl RemoteSnowLumaDaemon {
         self.ensure_running_ex(false, None, None).await
     }
 
-    /// 接管刚覆盖 webui.json 之后：已在跑的 node 仍持旧哈希，必须重启再开隧道。
-    pub async fn ensure_running_after_webui_takeover(&self) -> Result<(), BotBackendError> {
-        self.ensure_running_ex(true, None, None).await
-    }
-
-    pub async fn ensure_running_with_metrics(
-        &self,
-        restart_node: bool,
-        metrics_env: Option<BTreeMap<String, String>>,
-        webui_password: Option<String>,
-    ) -> Result<(), BotBackendError> {
-        self.ensure_running_ex(restart_node, metrics_env, webui_password)
-            .await
-    }
-
     pub async fn has_other_bot_leases(&self, bot_id: &BotId) -> bool {
         self.leases.lock().await.has_other_bots(bot_id)
     }

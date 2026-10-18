@@ -1,7 +1,6 @@
 //! 远端 SnowLuma daemon / bot 启停:编排委托 [remote_snowluma_stack],Bot 用 QQComponent + 短 detach
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use ncd_component::{Component, LaunchArgs, QQComponent};
 use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
@@ -17,7 +16,7 @@ use super::layout::{
 };
 use super::stack::{
     LOG_PREV_MAX_BYTES, ensure_dbus_env, ensure_stack_running, is_stack_ready, run_remote_bash,
-    stack_stop, wait_webui_tcp as wait_webui_tcp_on_host,
+    stack_stop,
 };
 
 fn display_str(num: i32) -> String {
@@ -44,14 +43,6 @@ pub async fn daemon_stop(
     paths: &SnowLumaRemotePaths,
 ) -> Result<(), BotBackendError> {
     stack_stop(host, paths).await
-}
-
-pub async fn wait_webui_tcp(
-    host: &dyn Host,
-    port: i32,
-    timeout: Duration,
-) -> Result<(), BotBackendError> {
-    wait_webui_tcp_on_host(host, port, timeout).await
 }
 
 async fn prepare_bot_launch_env(host: &dyn Host) -> Result<Option<String>, BotBackendError> {
@@ -206,38 +197,6 @@ getcap "$node" 2>/dev/null || true
     let _ = host.run_to_string(set).await;
 }
 
-/// Collect live diagnostics on the remote relevant to a PTRACE_ATTACH failure for pid.
-/// Includes: ptrace_scope, node path + getcap, target /proc/<pid>/status (TracerPid, Caps, Uid, etc.),
-/// exe/cwd links, and current user. All reads are best-effort; permission errors are reported as text.
-pub async fn collect_ptrace_diagnostics(host: &dyn Host, pid: u32) -> String {
-    let script = format!(
-        r#"set -e
-echo '=== ptrace diagnostics for target pid {pid} ==='
-echo 'date:'; date -u
-echo 'uname:'; uname -a || true
-echo 'ptrace_scope:'; cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 'unreadable or no yama'
-node=$(command -v node 2>/dev/null || echo 'node not in PATH')
-echo "node_path: $node"
-if [ -n "$node" ] && [ "$node" != "node not in PATH" ]; then
-  echo 'getcap node:'; getcap "$node" 2>/dev/null || echo 'getcap not available or permission denied'
-fi
-echo 'target status excerpt:'
-cat /proc/{pid}/status 2>/dev/null | grep -E '^(Name:|State:|TracerPid:|Uid:|Gid:|CapInh:|CapPrm:|CapEff:|CapBnd:|CapAmb:|NoNewPrivs:)' || echo 'no /proc/{pid}/status or not permitted'
-echo 'target exe:'; ls -l /proc/{pid}/exe 2>/dev/null || echo 'no exe link or not permitted'
-echo 'target cwd:'; ls -l /proc/{pid}/cwd 2>/dev/null || echo 'no'
-echo 'current user:'; id -a 2>/dev/null || echo 'id failed'
-echo '=== end diagnostics ==='
-"#
-    );
-    match host
-        .run_to_string(HostCommand::new("sh").arg("-c").arg(&script))
-        .await
-    {
-        Ok(o) => o.stdout,
-        Err(e) => format!("(diagnostic collection via host failed: {e})"),
-    }
-}
-
 pub(crate) fn bot_pid_if_running_script(pidfile: &str, qq_id: &str) -> String {
     let pidfile = shell_single_quote(pidfile);
     let qid = shell_single_quote(qq_id);
@@ -320,15 +279,6 @@ fi
 echo "$pid"
 "#
     )
-}
-
-pub async fn bot_cold_start(
-    host: &dyn Host,
-    layout: &RemoteSnowLumaLayout,
-    qq_id: &str,
-    uin: &str,
-) -> Result<u32, BotBackendError> {
-    bot_cold_start_with_login(host, layout, qq_id, uin, None).await
 }
 
 pub(crate) async fn bot_cold_start_with_login(

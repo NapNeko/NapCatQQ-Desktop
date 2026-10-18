@@ -345,13 +345,6 @@ fi
     )
 }
 
-pub async fn start_node(
-    host: &dyn Host,
-    layout: &RemoteSnowLumaLayout,
-) -> Result<u32, BotBackendError> {
-    start_node_with_env(host, layout, None).await
-}
-
 pub(crate) async fn recover_node_for_reconcile(
     host: &dyn Host,
     layout: &RemoteSnowLumaLayout,
