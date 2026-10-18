@@ -5,7 +5,7 @@
 //! 真实 secret 时 is_configured() 返 false,release 拉取走 GitHub 直连
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -174,11 +174,6 @@ impl ProxySigner {
             );
         }
     }
-}
-
-/// 把已生成的 ProxySigner 偏移文件删除(测试 / dev 用)
-pub fn _clear_offset_file(config_dir: &Path) {
-    let _ = std::fs::remove_file(config_dir.join(OFFSET_FILENAME));
 }
 
 /// 从 HeaderMap 抽 X-Server-Time(大小写不敏感)

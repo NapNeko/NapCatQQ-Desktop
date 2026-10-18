@@ -21,13 +21,13 @@ mod system_proxy;
 pub mod verify;
 
 pub use chunked::{
-    CHUNKED_THRESHOLD, ChunkedConfig, DEFAULT_CHUNK_PARTS, download_smart, download_url,
+    ChunkedConfig, download_smart, download_url,
 };
 pub use client::{
     NetworkProvider, NetworkSnapshot, build_configured_client, install_network_provider,
-    network_snapshot, shared_client,
+    shared_client,
 };
-pub use download::{AggregatedProgress, DownloadConfig, download_with_resume};
+pub use download::{DownloadConfig, download_with_resume};
 pub use error::NetworkError;
 pub use mirror::{
     DEFAULT_MIRROR_PREFIXES, build_mirror_urls, download_mirror_catalog, mirror_urls_for_settings,
@@ -35,6 +35,6 @@ pub use mirror::{
 pub use progress::{DownloadProgressSink, DownloadStage, NoopProgressSink, ProgressUpdate};
 pub use proxy::{ProxySigner, ReleaseAlias, is_proxy_configured, proxy_release_url, proxy_signer};
 pub use race::{MirrorRaceConfig, download_with_mirror_race};
-pub use retry::{RetryPolicy, is_retryable, retry_with_backoff};
+pub use retry::{RetryPolicy, retry_with_backoff};
 pub use settings::validate_network_settings;
-pub use speed::{LowSpeedConfig, SpeedSampler};
+pub use speed::{LowSpeedConfig};

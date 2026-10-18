@@ -11,7 +11,6 @@ use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use reqwest::Client;
 use reqwest::header;
-use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -296,44 +295,4 @@ async fn push_update(
         message,
     })
     .await;
-}
-
-/// 共享进度状态:chunked 多片并发聚合到同一 sink;每片往 add_bytes 累加,独立
-/// 任务定时读 snapshot 推 sink,避免每片各推导致 UI 闪烁与数字回退
-#[derive(Clone, Default)]
-pub struct AggregatedProgress {
-    inner: Arc<Mutex<AggregatedInner>>,
-}
-
-#[derive(Default)]
-struct AggregatedInner {
-    pub downloaded: u64,
-    pub total: Option<u64>,
-    pub sampler: SpeedSampler,
-}
-
-impl AggregatedProgress {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub async fn set_total(&self, total: Option<u64>) {
-        let mut g = self.inner.lock().await;
-        g.total = total;
-    }
-
-    pub async fn add_bytes(&self, bytes: u64) -> (u64, Option<u64>, Option<u64>) {
-        let mut g = self.inner.lock().await;
-        g.downloaded += bytes;
-        let downloaded = g.downloaded;
-        g.sampler.record(Instant::now(), downloaded);
-        (downloaded, g.total, g.sampler.current_bps())
-    }
-
-    pub async fn snapshot(&self) -> (u64, Option<u64>, Option<u64>) {
-        let mut g = self.inner.lock().await;
-        let downloaded = g.downloaded;
-        g.sampler.record(Instant::now(), downloaded);
-        (g.downloaded, g.total, g.sampler.current_bps())
-    }
 }
