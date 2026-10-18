@@ -52,13 +52,6 @@ pub fn get_bootstrap_status(state: State<'_, AppState>) -> BootstrapSnapshot {
 }
 
 #[tauri::command]
-pub async fn get_all_bot_statuses(
-    state: State<'_, AppState>,
-) -> Result<Vec<ncd_domain::bot_status::BotStatus>, String> {
-    Ok(state.runtime.get_all_bot_statuses().await)
-}
-
-#[tauri::command]
 pub async fn connect_remote_host(
     state: State<'_, AppState>,
     request: ConnectRemoteHostRequest,

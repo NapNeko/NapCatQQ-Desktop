@@ -1293,18 +1293,6 @@ pub fn refresh_if_visible(app: &tauri::AppHandle) {
     });
 }
 
-/// 主窗把面板配色推过来时叫。
-pub fn sync_theme(app: &tauri::AppHandle) {
-    let _ = app.run_on_main_thread(move || {
-        with_content(|c| {
-            if let Some(panel) = c.panel() {
-                panel.refresh_theme();
-            }
-            c.mark_dirty();
-        });
-    });
-}
-
 #[cfg(all(test, windows))]
 pub(crate) mod tests {
     use super::*;

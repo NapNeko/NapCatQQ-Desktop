@@ -187,19 +187,6 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
     Ok(result)
 }
 
-/// 更新 App 级 SnowLuma WebUI 密码 override
-/// 当前仅原子写 state/snowluma/app-config.json,下次 daemon 启动时
-/// 由 render_daemon_globals 读取;配置层热更新可再接到 BotManager
-#[tauri::command]
-pub async fn set_snowluma_password_override(
-    state: State<'_, AppState>,
-    password: Option<String>,
-) -> Result<(), String> {
-    let mut cfg = read_snowluma_app_config(&state.data_root);
-    cfg.webui_password_override = password.unwrap_or_default();
-    write_snowluma_app_config(&state.data_root, &cfg)
-}
-
 /// SnowLuma WebUI 登录端点
 /// SnowLuma WebUI 走**表单登录**,不接受 ?token= query 参数前端拿到这个
 /// payload 后:

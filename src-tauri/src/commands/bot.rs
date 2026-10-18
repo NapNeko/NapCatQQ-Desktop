@@ -20,12 +20,6 @@ pub struct BatchResultResponse {
     pub failed: Vec<(String, String)>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BootstrapResultResponse {
-    pub started: BatchResultResponse,
-    pub skipped: Vec<String>,
-}
-
 fn map_err(err: ncd_runtime::BotManagerError) -> String {
     err.to_string()
 }
@@ -43,26 +37,6 @@ fn batch_to_response(result: ncd_runtime::BatchResult) -> BatchResultResponse {
             .map(|(id, err)| (id.to_string(), err.to_string()))
             .collect(),
     }
-}
-
-#[tauri::command]
-pub async fn bootstrap_bot_manager(
-    state: State<'_, AppState>,
-) -> Result<BootstrapResultResponse, String> {
-    let allow_auto_start = !desktop_consent::is_consent_required(&state.data_root);
-    let result = state
-        .bot_manager
-        .bootstrap_with_auto_start(allow_auto_start)
-        .await
-        .map_err(map_err)?;
-    Ok(BootstrapResultResponse {
-        started: batch_to_response(result.started),
-        skipped: result
-            .skipped
-            .into_iter()
-            .map(|id| id.to_string())
-            .collect(),
-    })
 }
 
 #[tauri::command]
@@ -385,11 +359,6 @@ pub async fn batch_delete_bots(
         .await
         .map_err(map_err)?;
     Ok(batch_to_response(result))
-}
-
-#[tauri::command]
-pub async fn count_bot_configs(state: State<'_, AppState>) -> Result<usize, String> {
-    Ok(state.bot_manager.bot_count().await)
 }
 
 #[tauri::command]

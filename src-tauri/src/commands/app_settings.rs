@@ -174,19 +174,6 @@ pub async fn set_app_settings(
     Ok(())
 }
 
-/// 启动期把磁盘上的 closeAction 同步给前端(localStorage 偏好)
-#[tauri::command]
-pub fn sync_close_action_preference(
-    _app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let settings = ncd_runtime::desktop::load_app_settings(&state.data_root);
-    serde_json::to_value(&settings.close_action)
-        .ok()
-        .and_then(|v| v.as_str().map(String::from))
-        .ok_or_else(|| "serialize close_action failed".to_string())
-}
-
 /// 发送测试 Webhook
 ///
 /// 优先用前端传入的草稿通道(改完即测,无需先保存);未传时回退到已保存配置。

@@ -39,15 +39,3 @@ pub fn local_host() -> Result<Arc<dyn Host>, String> {
 pub fn local_host() -> Result<Arc<dyn Host>, String> {
     Err("local host on non-Windows targets is not yet implemented".to_string())
 }
-
-/// 把 host_id 解析成"展示用主机地址",拼 WebUI / noVNC URL 用
-/// 本机返回 127.0.0.1;远端返回 ServerProfile.host(IP 或域名)
-pub async fn host_display_address(host_id: &str, state: &AppState) -> String {
-    if let Some(server_id) = host_id.strip_prefix("remote:") {
-        let profiles = state.server_manager.list_servers().await;
-        if let Some(p) = profiles.into_iter().find(|p| p.id == server_id) {
-            return p.host;
-        }
-    }
-    "127.0.0.1".to_string()
-}

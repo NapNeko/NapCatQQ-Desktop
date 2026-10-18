@@ -97,28 +97,6 @@ pub struct AppState {
     pub(crate) mcp: Arc<ncd_mcp::McpServer>,
 }
 
-/// 开发验证用：把原生主托盘摆到指定屏幕坐标。只在 debug 构建里有。
-#[cfg(all(windows, debug_assertions))]
-#[tauri::command]
-fn debug_native_tray_at(app: tauri::AppHandle, x: i32, y: i32) -> Result<(), String> {
-    crate::tray_panel_native::open(&app, (x, y));
-    Ok(())
-}
-
-/// 开发验证用：把原生账号托盘（菜单）摆到指定屏幕坐标。只在 debug 构建里有。
-#[cfg(all(windows, debug_assertions))]
-#[tauri::command]
-fn debug_native_chat_tray_at(
-    app: tauri::AppHandle,
-    bot: String,
-    qq: String,
-    x: i32,
-    y: i32,
-) -> Result<(), String> {
-    crate::chat_tray_panel_native::show(&app, bot, qq, (x, y), true);
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let data_root = bootstrap::resolve_data_root();
@@ -878,7 +856,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::connect_remote_host,
             commands::export_migration_report,
-            commands::get_all_bot_statuses,
             commands::get_bootstrap_status,
             commands::get_remote_runtime_status,
             commands::get_remote_webui_endpoint,
@@ -907,7 +884,6 @@ pub fn run() {
             commands::desktop_onboarding::skip_desktop_onboarding,
             commands::desktop_onboarding::complete_desktop_onboarding,
             commands::desktop_onboarding::reopen_desktop_onboarding,
-            commands::app_settings::sync_close_action_preference,
             commands::app_settings::test_offline_webhook,
             commands::app_settings::test_offline_email,
             commands::app_settings::list_offline_delivery_history,
@@ -1061,7 +1037,6 @@ pub fn run() {
             commands::deployment_tasks::cancel_deployment_task,
             commands::deployment_tasks::delete_deployment_task,
             commands::deployment_tasks::clear_finished_deployment_tasks,
-            commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
             commands::bot::refresh_bot_statuses,
             commands::bot::list_importable_remote_bots,
@@ -1087,14 +1062,12 @@ pub fn run() {
             commands::bot::batch_start_bots,
             commands::bot::batch_stop_bots,
             commands::bot::batch_delete_bots,
-            commands::bot::count_bot_configs,
             commands::bot::active_bot_count,
             commands::bot::tail_bot_log,
             commands::snowluma::list_qq_processes,
             commands::snowluma::probe_qq_login_info,
             commands::snowluma::get_snowluma_app_config,
             commands::snowluma::set_snowluma_app_config,
-            commands::snowluma::set_snowluma_password_override,
             commands::snowluma::get_snowluma_agreements,
             commands::snowluma::accept_snowluma_agreements,
             commands::snowluma::prepare_snowluma_agreements,
@@ -1203,10 +1176,6 @@ pub fn run() {
             chat_window::chat_window_state,
             chat_window::chat_window_handoff_ready,
             chat_window::chat_take_tray_navigation,
-            #[cfg(all(windows, debug_assertions))]
-            debug_native_tray_at,
-            #[cfg(all(windows, debug_assertions))]
-            debug_native_chat_tray_at,
             commands::onebot_debug::onebot_debug_channels,
             commands::onebot_debug::onebot_debug_test_channel,
             commands::onebot_debug::onebot_debug_catalog,

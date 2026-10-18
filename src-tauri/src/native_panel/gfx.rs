@@ -541,12 +541,6 @@ impl Canvas {
         )
     }
 
-    pub fn set_scale(&mut self, scale: f32) {
-        self.scale = scale;
-        // SAFETY: 设置渲染目标 DPI，不涉及外部内存。
-        unsafe { self.rt.SetDpi(96.0 * scale, 96.0 * scale) };
-    }
-
     pub fn resize(&mut self, width: u32, height: u32) -> bool {
         #[cfg(test)]
         {

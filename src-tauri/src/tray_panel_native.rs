@@ -1165,7 +1165,7 @@ pub(crate) fn schedule_release(app: &tauri::AppHandle) {
     });
 }
 
-// ---------- 对外入口：open / refresh_if_visible / sync_theme ----------
+// ---------- 对外入口：open / refresh_if_visible ----------
 
 /// 托盘右键入口。任意线程可调；内部把创建与打开都切到主线程。
 pub fn open(app: &tauri::AppHandle, anchor: (i32, i32)) {
@@ -1194,18 +1194,6 @@ pub fn open(app: &tauri::AppHandle, anchor: (i32, i32)) {
 pub fn refresh_if_visible(app: &tauri::AppHandle) {
     let _ = app.run_on_main_thread(move || {
         with_content(|content| content.refresh_if_visible());
-    });
-}
-
-/// 主窗把面板配色推过来时叫；下次 paint 用新主题。
-pub fn sync_theme(app: &tauri::AppHandle) {
-    let _ = app.run_on_main_thread(move || {
-        with_content(|content| {
-            if let Some(panel) = content.panel() {
-                panel.refresh_theme();
-            }
-            content.mark_dirty();
-        });
     });
 }
 

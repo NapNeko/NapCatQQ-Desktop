@@ -58,19 +58,6 @@ pub fn normalize_registered_path(path: PathBuf) -> PathBuf {
     PathBuf::from(trimmed)
 }
 
-/// 合并 HKLM + HKCU 产品路径(InstallDir 仅 HKLM)。
-#[cfg(windows)]
-pub fn read_product_paths() -> ProductPaths {
-    let mut paths = read_product_paths_from_hklm().unwrap_or_default();
-    paths.user_data_root = read_user_data_root();
-    paths
-}
-
-#[cfg(not(windows))]
-pub fn read_product_paths() -> ProductPaths {
-    ProductPaths::default()
-}
-
 /// 权威 DataRoot 指针:用户迁移(HKCU)优先于机器默认(HKLM)。
 #[cfg(windows)]
 pub fn read_data_root() -> Option<PathBuf> {
@@ -111,29 +98,6 @@ pub fn write_user_data_root(path: &Path) -> Result<PathBuf, String> {
 #[cfg(not(windows))]
 pub fn write_user_data_root(_path: &Path) -> Result<PathBuf, String> {
     Err("user DataRoot registry is only supported on Windows".into())
-}
-
-/// 清除用户级 DataRoot(回退到 HKLM/默认);迁移失败排障用。
-#[cfg(windows)]
-pub fn clear_user_data_root() -> Result<(), String> {
-    use winreg::RegKey;
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_WRITE};
-
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let key = match hkcu.open_subkey_with_flags(PRODUCT_REGISTRY_KEY, KEY_WRITE) {
-        Ok(k) => k,
-        Err(_) => return Ok(()),
-    };
-    match key.delete_value(VALUE_DATA_ROOT) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-#[cfg(not(windows))]
-pub fn clear_user_data_root() -> Result<(), String> {
-    Ok(())
 }
 
 #[cfg(windows)]
