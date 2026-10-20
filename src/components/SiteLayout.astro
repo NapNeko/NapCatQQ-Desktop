@@ -9,11 +9,11 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f8f9fb" />
-    <title>NapCatQQ Desktop · Bot 的桌面工作台</title>
+    <title>NapCatQQ Desktop · NapCat / SnowLuma 桌面控制台</title>
     <meta name="description" content="NapCat / SnowLuma 的 Windows 桌面控制台。管理本机与远端 Bot、安装应用端、聊天与截图，使用 OneBot 调试台和内嵌终端。" />
     <link rel="icon" type="image/png" href={`${base}media/logo.png`} />
-    <meta property="og:title" content="NapCatQQ Desktop · Bot 的桌面工作台" />
-    <meta property="og:description" content="从部署到聊天，在一个窗口里完成。" />
+    <meta property="og:title" content="NapCatQQ Desktop · NapCat / SnowLuma 桌面控制台" />
+    <meta property="og:description" content="支持本机与远端 Bot 管理、应用端配置、聊天、截图和 OneBot 调试。" />
   </head>
   <body>
     <a class="skip-link" href="#main">跳到正文</a>
@@ -23,7 +23,7 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
         <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav">菜单 <span aria-hidden="true">＋</span></button>
         <div id="main-nav" class="main-nav">
           <details class="feature-menu"><summary>功能 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.3" /></svg></summary>
-            <div class="feature-menu-list"><a href="#management">机器人与远端</a><a href="#applications">应用端管理</a><a href="#chat">聊天与截图</a><a href="#tools">调试与终端</a><a href="#watch">监控与值守</a></div>
+            <div class="feature-menu-list"><a href="#management">Bot 与远端管理</a><a href="#applications">应用端管理</a><a href="#chat">聊天与截图</a><a href="#tools">OneBot 调试与终端</a><a href="#watch">远端监控</a></div>
           </details>
           <a href={`${repo}/blob/main/docs/user/README.md`}>使用文档</a>
           <a href={`${repo}/releases`}>更新日志</a>
@@ -34,8 +34,8 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
     </header>
     <main id="main"><slot /></main>
     <footer class="site-footer">
-      <div class="container footer-main"><div><a class="brand" href={base}><img src={`${base}media/logo.png`} width="30" height="30" alt="" /><span>NapCatQQ Desktop</span></a><p>把软件装好，把 Bot 管好。</p></div><div class="footer-links"><a href={`${repo}/blob/main/docs/README.md`}>文档</a><a href={`${repo}/issues`}>问题反馈</a><a href="https://qm.qq.com/q/8UK5ecfDyw">交流社区</a><a href={`${repo}/blob/main/CONTRIBUTING.md`}>参与开发</a></div></div>
-      <div class="container footer-bottom"><span>开源于 <a href={`${repo}/blob/main/LICENSE`}>GPL-3.0</a></span><span>感谢 NapCat、SnowLuma 和各应用端项目。</span></div>
+      <div class="container footer-main"><div><a class="brand" href={base}><img src={`${base}media/logo.png`} width="30" height="30" alt="" /><span>NapCatQQ Desktop</span></a><p>NapCat / SnowLuma 的 Windows 桌面控制台。</p></div><div class="footer-links"><a href={`${repo}/blob/main/docs/README.md`}>文档</a><a href={`${repo}/issues`}>问题反馈</a><a href="https://qm.qq.com/q/8UK5ecfDyw">QQ 交流群</a><a href={`${repo}/blob/main/CONTRIBUTING.md`}>参与开发</a></div></div>
+      <div class="container footer-bottom"><span>开源许可证：<a href={`${repo}/blob/main/LICENSE`}>GPL-3.0</a></span><span>感谢 NapCat、SnowLuma 和各应用端项目。</span></div>
     </footer>
     <dialog id="image-viewer" class="image-viewer" aria-label="软件界面大图"><button type="button" class="viewer-close" aria-label="关闭大图">关闭 <kbd>Esc</kbd></button><img width="1440" height="900" alt="" /><p></p></dialog>
     <script>

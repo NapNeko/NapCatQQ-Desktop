@@ -5,58 +5,58 @@ const media = import.meta.env.BASE_URL + 'media/';
 const guides = 'https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/';
 const frameworks = [
   {
-    id: 'karin', name: 'Karin', title: '连接、配置和插件，一起打理。',
-    description: '从 OneBot 对接到插件管理，常用操作就在实例旁边。',
+    id: 'karin', name: 'Karin', title: '配置与插件管理',
+    description: '支持框架配置编辑、插件安装和 OneBot 对接。',
     features: ['编辑框架配置', '安装与管理插件', '对接 OneBot 连接'],
   },
   {
-    id: 'nonebot', name: 'NoneBot2', title: '给实例配好适配器与插件。',
-    description: '管理连接，挑选插件，让已有项目也能进入同一套工作流程。',
+    id: 'nonebot', name: 'NoneBot2', title: '适配器与插件管理',
+    description: '可新建实例或导入已有项目，编辑连接配置。',
     features: ['管理适配器', '浏览插件商店', '编辑连接配置'],
   },
   {
-    id: 'astrbot', name: 'AstrBot', title: '模型与人格，都有对应入口。',
-    description: '围绕实际对话配置应用，也能继续管理知识库、会话和插件。',
+    id: 'astrbot', name: 'AstrBot', title: '模型、人格与知识库',
+    description: '编辑模型提供商、人格、知识库、会话和插件配置。',
     features: ['配置模型提供商与人格', '管理知识库与会话', '调整插件配置'],
   },
   {
-    id: 'maibot', name: 'MaiBot（麦麦）', title: '调好麦麦，再聊上几句。',
-    description: '深入调整配置、模型与提示词，通过试聊观察效果。',
-    features: ['编辑深度配置与模型', '调整提示词和学习数据', '打开试聊'],
+    id: 'maibot', name: 'MaiBot（麦麦）', title: '配置与学习数据管理',
+    description: '可调整模型、提示词与学习数据，并通过试聊检查效果。',
+    features: ['编辑框架与模型配置', '管理提示词和学习数据', '打开试聊'],
   },
   {
-    id: 'koishi', name: 'Koishi', title: '顺着插件树，找到要改的配置。',
-    description: '把配置表单、插件结构与连接管理放在同一个实例里。',
+    id: 'koishi', name: 'Koishi', title: '配置表单与插件树',
+    description: '按插件树查看与编辑配置，并管理连接。',
     features: ['编辑配置表单', '查看与管理插件树', '管理连接'],
   },
   {
-    id: 'yunzai', name: 'TRSS-Yunzai（云崽）', title: '云崽实例，接好再运行。',
-    description: '管理实例与配置，并将需要的 OneBot 连接接入应用。',
+    id: 'yunzai', name: 'TRSS-Yunzai（云崽）', title: '实例管理与 OneBot 对接',
+    description: '创建或导入云崽实例，编辑框架配置与 Bot 连接。',
     features: ['管理应用实例', '编辑框架配置', '对接 OneBot 连接'],
   },
   {
-    id: 'neobot', name: 'NeoBot', title: '从模型设置，看到运行与用量。',
-    description: '模型、提示词、记忆与插件的配置，都能从实例进入。',
+    id: 'neobot', name: 'NeoBot', title: '模型配置与运行面板',
+    description: '配置模型、提示词、记忆和插件，查看运行状态与用量。',
     features: ['配置模型、提示词与记忆', '管理插件', '查看运行与用量面板'],
   },
 ];
 const chatModes = [
   {
-    id: 'conversations', name: '私聊与群聊', summary: '消息和联系人，按账号分开。',
-    description: '好友分组、置顶、未读筛选与聊天记录搜索，让多个 Bot 的日常会话也好整理。支持回复、@、撤回自己的消息，以及逐条或合并转发。',
+    id: 'conversations', name: '私聊与群聊', summary: '按账号管理联系人与消息',
+    description: '支持好友分组、置顶、未读筛选和聊天记录搜索。消息可回复、@、撤回自己发送的内容，也可逐条或合并转发。',
     note: '图片和文件可拖入或粘贴到输入框。',
     path: 'M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-3 3v-10a7.5 7.5 0 0 1 15-1',
   },
   {
-    id: 'files', name: '媒体与群文件', summary: '从消息里的图片，到群里的文件。',
+    id: 'files', name: '媒体与群文件', summary: '媒体预览与群文件管理',
     description: '查看图片、语音、视频、Markdown 与转发记录。群文件支持浏览、上传和下载；有相应权限时，也能管理文件与目录。',
     note: '群文件管理依账号权限提供。',
     path: 'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z',
   },
   {
-    id: 'capture', name: '原生截图', summary: '框选、标注，再发到对话里。',
-    description: '支持标注、撤销重做和双向滚动长截图。完成后加入聊天草稿，也可以只复制或保存，继续手头的事。',
-    note: '默认使用 Ctrl + Alt + S，也可以修改快捷键。',
+    id: 'capture', name: '原生截图', summary: '标注与滚动长截图',
+    description: '支持框选、标注、撤销重做和双向滚动长截图。截图可加入聊天草稿，也可只复制或保存。',
+    note: '默认快捷键为 Ctrl + Alt + S，可修改。',
     path: 'M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3M8 8h8v8H8Z',
   },
 ];
@@ -66,8 +66,8 @@ const chatModes = [
   <div class="container">
     <header class="section-heading product-section-heading">
       <div>
-        <h2 id="applications-heading">应用端，从安装到日常管理。</h2>
-        <p>新建实例，或导入已有项目。启停、日志、配置和 Bot 对接，都从这里开始。</p>
+        <h2 id="applications-heading">应用端管理</h2>
+        <p>支持新建或导入实例，管理启停、日志、配置及 Bot 对接。</p>
       </div>
       <a class="product-guide-link" href={guides + 'app-instances.md'}>
         应用端使用指南
@@ -118,7 +118,7 @@ const chatModes = [
     <div class="apps-lifecycle" aria-label="应用端管理流程">
       <div><span>准备环境</span><p>在组件页安装运行时与框架。</p></div>
       <svg viewBox="0 0 32 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 8h28m-6-6 6 6-6 6" /></svg>
-      <div><span>管理实例</span><p>新建项目，或导入已有项目。</p></div>
+      <div><span>管理实例</span><p>新建实例，或导入已有项目。</p></div>
       <svg viewBox="0 0 32 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 8h28m-6-6 6 6-6 6" /></svg>
       <div><span>连接 Bot</span><p>配置对接，查看连接和日志。</p></div>
     </div>
@@ -157,8 +157,8 @@ const chatModes = [
   <div class="container">
     <header class="section-heading product-section-heading">
       <div>
-        <h2 id="chat-heading">管理之外，也能好好聊。</h2>
-        <p>私聊、群聊、文件和截图。需要的时候，直接打开这个账号的聊天窗口。</p>
+        <h2 id="chat-heading">聊天与截图</h2>
+        <p>按 Bot 账号管理私聊和群聊，支持媒体消息、群文件与原生截图。</p>
       </div>
       <a class="product-guide-link" href={guides + 'chat.md'}>
         聊天与截图指南
@@ -195,6 +195,6 @@ const chatModes = [
       </div>
       <figcaption>聊天工作区 · 演示数据</figcaption>
     </figure>
-    <p class="chat-account-note">后台接收、头像托盘和消息提醒可按账号开启；群聊也能单独免打扰。</p>
+    <p class="chat-account-note">后台接收、头像托盘和消息提醒需按账号开启；群聊可单独设置免打扰。</p>
   </div>
 </section>
