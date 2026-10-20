@@ -2,10 +2,9 @@
 // 缓存放模块级，虚拟列表重新挂载时复用已知宽高与已解析地址。
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Check, Copy, Image as ImageIcon, ImageOff } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useChatView } from '../chatContext';
-import { useCopy } from '../rightParts';
 import { CACHE_MAX, LruCache, imageCacheKey } from '../boundedCache';
 import type { ImageReadOptions, ImageSourceContext } from '../../../core/domain/chat/media';
 import {
@@ -258,16 +257,7 @@ export function ImageSeg({
     };
     const waiting = refreshing || (!url && canRead && !failed);
     if (failed || waiting)
-        return waiting ? (
-            <span
-                className="my-0.5 flex items-center justify-center rounded-md bg-inset text-text-tertiary"
-                style={boxStyle}
-            >
-                <ImageIcon size={18} className="animate-pulse" aria-label="正在读取图片" />
-            </span>
-        ) : (
-            <BrokenImage url={url} style={boxStyle} onRetry={() => refresh(true)} />
-        );
+        return <ImagePlaceholder busy={waiting} style={boxStyle} onRetry={() => refresh(true)} />;
 
     return (
         <button
@@ -304,6 +294,7 @@ export function ImageSeg({
                 openImage(url);
             }}
             aria-label={sticker ? `看大图：${summary}` : '看大图'}
+            aria-busy={!loaded}
             className={cn(
                 'relative my-0.5 block cursor-zoom-in overflow-hidden rounded-md',
                 !loaded && 'bg-inset',
@@ -313,7 +304,11 @@ export function ImageSeg({
         >
             {!loaded && (
                 <span className="absolute inset-0 flex items-center justify-center text-text-disabled">
-                    <ImageIcon size={18} aria-hidden />
+                    <ImageIcon
+                        size={18}
+                        className="animate-pulse motion-reduce:animate-none"
+                        aria-hidden
+                    />
                 </span>
             )}
             <img
@@ -362,44 +357,36 @@ export function ImageSeg({
     );
 }
 
-function BrokenImage({
-    url,
+function ImagePlaceholder({
+    busy,
     style,
     onRetry,
 }: {
-    url: string;
+    busy: boolean;
     style: CSSProperties;
     onRetry: () => void;
 }) {
-    const { copied, copy } = useCopy();
     return (
         <span
-            className="my-0.5 flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-inset/60 px-2 text-center text-2xs text-text-tertiary"
+            className="my-0.5 flex flex-col items-center justify-center gap-2 rounded-md bg-inset text-text-disabled"
             style={style}
+            aria-busy={busy}
         >
-            <ImageOff size={16} aria-hidden />
-            <span>[图片加载失败]</span>
-            <button
-                type="button"
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onRetry();
-                }}
-                className="rounded-xs px-1.5 py-0.5 text-text-secondary hover:bg-inset hover:text-text"
-            >
-                重试图片
-            </button>
-            {url && (
+            <ImageIcon
+                size={18}
+                className={cn(busy && 'animate-pulse motion-reduce:animate-none')}
+                aria-label={busy ? '正在读取图片' : '图片暂未就绪'}
+            />
+            {!busy && (
                 <button
                     type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        copy(url);
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onRetry();
                     }}
-                    className="inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-text-secondary hover:bg-inset hover:text-text"
+                    className="rounded-xs px-1.5 py-0.5 text-2xs text-text-tertiary hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
-                    {copied ? <Check size={11} aria-hidden /> : <Copy size={11} aria-hidden />}
-                    {copied ? '已复制' : '复制地址'}
+                    重试图片
                 </button>
             )}
         </span>

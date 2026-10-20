@@ -536,6 +536,62 @@ describe('native media segments', () => {
             ),
         );
     });
+    it('keeps a quiet placeholder after read failures and loads again on manual retry', async () => {
+        let finish!: (url: string) => void;
+        const readImage = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('临时网络错误'))
+            .mockRejectedValueOnce(new Error('临时网络错误'))
+            .mockImplementationOnce(
+                () =>
+                    new Promise<string>((resolve) => {
+                        finish = resolve;
+                    }),
+            );
+        render(
+            <NativeSegments
+                api={{ readImage }}
+                segments={[
+                    {
+                        type: 'image',
+                        data: {
+                            url: 'https://cdn.example/quiet-placeholder.png',
+                            width: 800,
+                            height: 400,
+                        },
+                    },
+                ]}
+            />,
+        );
+        const style = screen.getByAltText('图片').parentElement!.getAttribute('style');
+        fireEvent.error(screen.getByAltText('图片'));
+        await screen.findByRole('button', { name: '重试图片' });
+        const placeholder = screen.getByLabelText('图片暂未就绪').parentElement!;
+        expect(placeholder).toHaveAttribute('aria-busy', 'false');
+        expect(placeholder.getAttribute('style')).toBe(style);
+        expect(screen.queryByText('[图片加载失败]')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: '复制地址' })).not.toBeInTheDocument();
+        expect(readImage).toHaveBeenCalledTimes(2);
+
+        fireEvent.click(screen.getByRole('button', { name: '重试图片' }));
+        expect(screen.getByLabelText('正在读取图片').parentElement).toHaveAttribute(
+            'aria-busy',
+            'true',
+        );
+        expect(screen.queryByRole('button', { name: '重试图片' })).not.toBeInTheDocument();
+        await act(async () => finish('https://cdn.example/quiet-placeholder-fresh.png'));
+        const image = screen.getByAltText('图片');
+        expect(image).toHaveAttribute('src', 'https://cdn.example/quiet-placeholder-fresh.png');
+        Object.defineProperties(image, {
+            naturalWidth: { value: 800 },
+            naturalHeight: { value: 400 },
+        });
+        fireEvent.load(image);
+        expect(image).toHaveClass('opacity-100');
+        expect(image.parentElement).toHaveAttribute('aria-busy', 'false');
+        expect(image.parentElement!.getAttribute('style')).toBe(style);
+        expect(readImage).toHaveBeenCalledTimes(3);
+    });
     it('reuses a successfully refreshed URL when virtualization remounts the image', async () => {
         const data = { file: 'remounted-image', url: 'https://cdn.example/remount-expired.png' };
         const readImage = vi.fn().mockResolvedValue('https://cdn.example/remount-fresh.png');
