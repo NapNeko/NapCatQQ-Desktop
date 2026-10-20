@@ -3,48 +3,188 @@ import '../styles/hero.css';
 const base = import.meta.env.BASE_URL;
 const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
 const views = [
-  { id:'terminal', label:'机器人与终端', file:'terminal.png', alt:'机器人列表与内嵌终端，使用演示数据' },
-  { id:'apps', label:'应用端', file:'apps.png', alt:'七种应用端框架的实例列表，使用演示数据' },
-  { id:'chat', label:'聊天', file:'chat.png', alt:'多账号聊天工作区，使用演示数据' },
-  { id:'debug', label:'OneBot 调试', file:'debug.png', alt:'OneBot 请求、回包与事件界面，使用演示数据' },
+  { id: 'apps', label: '应用端', short: '应用端', file: 'apps.png',
+    description: '安装、启动和配置应用端，支持 Karin、NoneBot2、AstrBot 等七种框架。', alt: '七种应用端框架的实例列表，使用演示数据',
+    icon: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z' },
+  { id: 'terminal', label: '机器人与终端', short: '机器人', file: 'terminal.png',
+    description: '管理本机与远端 Bot，查看登录状态、日志和终端。', alt: '机器人列表与内嵌终端，使用演示数据',
+    icon: 'M5 8h14v12H5z M9 4h6v4 M9 12v2 M15 12v2 M9 17h6 M2 12h3 M19 12h3' },
+  { id: 'chat', label: '聊天', short: '聊天', file: 'chat.png',
+    description: '收发私聊和群聊消息，发送图片、文件和截图。', alt: '多账号聊天工作区，使用演示数据',
+    icon: 'M4 5h16v12H9l-5 4z M8 9h8 M8 13h5' },
+  { id: 'debug', label: 'OneBot 调试', short: '调试台', file: 'debug.png',
+    description: '调用 OneBot API，检查响应、请求历史与实时事件。', alt: 'OneBot 请求、回包与事件界面，使用演示数据',
+    icon: 'm8 6-6 6 6 6 M16 6l6 6-6 6 M14 3l-4 18' },
 ];
 ---
 <section class="hero" aria-labelledby="hero-title">
-  <div class="container">
-    <div class="hero-heading"><p class="platform"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3.2 7 2.4v5H1zm7-1L15 1v6.4H8zM1 8.4h6v5l-6-.8zm7 0h7V15l-7-1.2z" /></svg> Windows 桌面控制台<span class="platform-divider"></span>NapCat / SnowLuma</p><h1 id="hero-title">从部署到聊天，<br />一个窗口。</h1><p class="hero-description">装组件、管 Bot、接应用端。<br class="mobile-break" />也把聊天、截图和调试留在手边。</p><div class="hero-actions"><a class="button" href={`${repo}/releases/latest`}>下载 Windows 版 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5" /></svg></a><a class="button button-secondary" href="#getting-started">第一次使用</a></div><p class="hero-system">Windows 10 / 11 x64 <span>开源 · 本机与远端管理</span></p></div>
-    <div class="hero-stage">
-      <div class="stage-label"><span class="stage-line"></span><span>你的 Bot 工作台</span><span class="stage-label-note">点击下方，换个工作区看看</span></div>
-      <div class="hero-tabs" role="tablist" aria-label="软件工作区预览">{views.map((view,index)=><button type="button" id={`hero-tab-${view.id}`} role="tab" aria-selected={index===0?'true':'false'} aria-controls={`hero-panel-${view.id}`} tabindex={index===0?0:-1} data-hero-view={view.id}><span class="tab-indicator" aria-hidden="true"></span>{view.label}</button>)}</div>
-      <div class="hero-window"><div class="window-bar"><span class="window-app"><img src={`${base}media/logo.png`} width="18" height="18" alt="" /> NapCatQQ Desktop</span><span class="window-controls" aria-hidden="true">― <span>□</span> ×</span></div>
-        {views.map((view,index)=><div id={`hero-panel-${view.id}`} role="tabpanel" aria-labelledby={`hero-tab-${view.id}`} class="hero-panel" hidden={index!==0}><button class="hero-image-button" type="button" data-lightbox data-lightbox-src={`${base}media/${view.file}`} data-lightbox-alt={view.alt} aria-label={`放大${view.label}界面`}><img src={`${base}media/${view.file}`} width="1440" height="900" alt={view.alt} loading={index===0?'eager':'lazy'} fetchpriority={index===0?'high':'auto'} /><span class="image-zoom">查看大图 <span aria-hidden="true">↗</span></span></button></div>)}
+  <div class="container hero-composition">
+    <div class="hero-masthead">
+      <h1 id="hero-title" aria-label="NapCatQQ Desktop"><span>NapCatQQ</span><span>Desktop</span></h1>
+    </div>
+    <div class="hero-heading">
+      <p class="hero-product">NapCat / SnowLuma 桌面管理器</p>
+      <p class="hero-description">管理 Bot、部署应用端。<br />内置聊天、截图和 OneBot 调试。</p>
+      <div class="hero-actions">
+        <a class="button hero-download" href={`${repo}/releases/latest`}><svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3.2 7 2.4v5H1zm7-1L15 1v6.4H8zM1 8.4h6v5l-6-.8zm7 0h7V15l-7-1.2z" /></svg> 下载 Windows 版 <span class="download-arrow" aria-hidden="true">↗</span></a>
+        <a class="hero-guide" href="#getting-started">安装指南 <span aria-hidden="true">→</span></a>
       </div>
-      <p class="screenshot-note">界面使用演示数据，功能依协议端、应用端及运行环境提供。</p>
+      <p class="hero-system">Windows 10 / 11 x64 <span>免费 · 开源</span></p>
+      <div class="workspace-dock" role="tablist" aria-label="软件工作区预览">
+        <span class="dock-indicator" aria-hidden="true"></span>
+        {views.map((view, index) => (
+          <button type="button" id={`hero-tab-${view.id}`} role="tab" aria-selected={index === 0 ? 'true' : 'false'} aria-controls={`hero-panel-${view.id}`} tabindex={index === 0 ? 0 : -1} data-hero-view={view.id} data-description={view.description} aria-label={view.label}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={view.icon} /></svg>
+            <span>{view.short}</span><span class="view-arrow" aria-hidden="true">↗</span>
+          </button>
+        ))}
+      </div>
+      <p class="workspace-description" aria-live="polite">{views[0].description}</p>
+    </div>
+    <div class="hero-stage">
+      <svg class="terminal-sculpture" viewBox="0 0 1000 700" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="prompt-material" x1="100" y1="100" x2="700" y2="650" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb196" /><stop offset=".48" stop-color="#ef795d" /><stop offset="1" stop-color="#df5e47" /></linearGradient>
+        </defs>
+        <path class="sculpture-side" d="m141 83 272 213q26 20 0 41L141 550 M530 550h232q140 0 140-143" />
+        <path class="sculpture-face" d="m123 63 272 213q26 20 0 41L123 530 M512 530h232q140 0 140-143" />
+        <path class="sculpture-edge" d="m111 24 299 234q51 39 0 79L109 575 M510 486h234q95 0 95-99" />
+      </svg>
+      <div class="workspace-preview">
+        <div class="workspace-screen">
+          <div class="hero-window">
+            {views.map((view, index) => (
+              <div id={`hero-panel-${view.id}`} role="tabpanel" aria-labelledby={`hero-tab-${view.id}`} class="hero-panel" hidden={index !== 0}>
+                <button class="hero-image-button" type="button" data-lightbox data-lightbox-src={`${base}media/${view.file}`} data-lightbox-alt={view.alt} aria-label={`放大${view.label}界面`}>
+                  <img src={`${base}media/${view.file}`} width="1440" height="900" alt={view.alt} loading="eager" fetchpriority={index === 0 ? 'high' : 'low'} />
+                  <span class="image-zoom">查看大图 <span aria-hidden="true">↗</span></span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div class="workspace-caption">
+          <span class="preview-label">界面截图使用演示数据</span>
+          <span class="preview-hint">点击图片放大 <span aria-hidden="true">↗</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="hero-footnote">
+      <a class="hero-explore" href="#management"><span class="explore-arrow" aria-hidden="true">↓</span> 功能介绍</a>
     </div>
   </div>
 </section>
 <script>
-  const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-hero-view]')];
-  const select = (tab: HTMLButtonElement) => {
-    tabs.forEach(item => {
-      const active = item === tab;
-      item.setAttribute('aria-selected',String(active));
-      item.tabIndex = active ? 0 : -1;
-      document.getElementById(item.getAttribute('aria-controls')!)!.hidden = !active;
-    });
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      document.getElementById(tab.getAttribute('aria-controls')!)!.animate([{opacity:.65,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:240,easing:'cubic-bezier(.2,.8,.2,1)'});
-    }
+  const stage = document.querySelector<HTMLElement>('.hero')!;
+  const dock = stage.querySelector<HTMLElement>('.workspace-dock')!;
+  const indicator = dock.querySelector<HTMLElement>('.dock-indicator')!;
+  const tabs = [...dock.querySelectorAll<HTMLButtonElement>('[data-hero-view]')];
+  const panels = tabs.map(tab => document.getElementById(tab.getAttribute('aria-controls')!)!);
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const caption = stage.querySelector<HTMLElement>('.workspace-description')!;
+  let current = 0;
+  let selection = 0;
+  let transitions: Animation[] = [];
+
+  const positionIndicator = () => {
+    indicator.style.width = `${tabs[current].offsetWidth}px`;
+    indicator.style.height = `${tabs[current].offsetHeight}px`;
+    indicator.style.transform = `translate(${tabs[current].offsetLeft}px, ${tabs[current].offsetTop}px)`;
   };
-  tabs.forEach((tab,index) => {
-    tab.addEventListener('click',()=>select(tab));
-    tab.addEventListener('keydown',(event) => {
+  new ResizeObserver(positionIndicator).observe(dock);
+  document.fonts.ready.then(positionIndicator);
+  const verticalTabs = matchMedia('(min-width: 541px)');
+  const setOrientation = () => dock.setAttribute('aria-orientation', verticalTabs.matches ? 'vertical' : 'horizontal');
+  setOrientation();
+  verticalTabs.addEventListener('change', setOrientation);
+
+  const settlePanels = () => {
+    transitions.forEach(animation => animation.cancel());
+    transitions = [];
+    panels.forEach((panel, index) => {
+      panel.hidden = index !== current;
+      panel.inert = index !== current;
+      panel.removeAttribute('aria-hidden');
+    });
+  };
+
+  const select = async (index: number) => {
+    const request = ++selection;
+    if (index === current) return;
+    await panels[index].querySelector('img')!.decode().catch(() => {});
+    if (request !== selection) return;
+    settlePanels();
+    const previous = current;
+    current = index;
+    if (panels[previous].contains(document.activeElement)) tabs[current].focus({ preventScroll: true });
+    tabs.forEach((tab, i) => {
+      const active = i === current;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      panels[i].hidden = !active;
+      panels[i].inert = !active;
+    });
+    caption.textContent = tabs[current].dataset.description!;
+    positionIndicator();
+    if (reducedMotion.matches) return;
+
+    // Keep the outgoing image visible during the blend, but out of focus and the accessibility tree.
+    panels[previous].hidden = false;
+    panels[previous].setAttribute('aria-hidden', 'true');
+    const direction = current > previous ? 1 : -1;
+    const outgoing = panels[previous].animate([
+      { opacity: 1, transform: 'translateX(0)' },
+      { opacity: 0, transform: `translateX(${-direction * 8}px)` },
+    ], { duration: 360, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' });
+    transitions = [
+      outgoing,
+      panels[current].animate([
+        { opacity: 0, transform: `translateX(${direction * 18}px) scale(.985)` },
+        { opacity: 1, transform: 'translateX(0) scale(1)' },
+      ], { duration: 420, easing: 'cubic-bezier(.22,1,.36,1)' }),
+      caption.animate([{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'translateY(0)' }],
+        { duration: 320, easing: 'cubic-bezier(.22,1,.36,1)' }),
+    ];
+    outgoing.finished.then(() => {
+      panels[previous].hidden = true;
+      panels[previous].removeAttribute('aria-hidden');
+    }).catch(() => {});
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => select(index));
+    tab.addEventListener('keydown', event => {
       let next = index;
-      if (event.key === 'ArrowRight') next = (index+1)%tabs.length;
-      else if (event.key === 'ArrowLeft') next = (index-1+tabs.length)%tabs.length;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index+1)%tabs.length;
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index-1+tabs.length)%tabs.length;
       else if (event.key === 'Home') next = 0;
       else if (event.key === 'End') next = tabs.length-1;
       else return;
-      event.preventDefault(); select(tabs[next]); tabs[next].focus();
+      event.preventDefault();
+      select(next);
+      tabs[next].focus();
     });
   });
+
+  const scene = stage.querySelector<HTMLElement>('.hero-stage')!;
+  const finePointer = matchMedia('(hover: hover) and (pointer: fine) and (min-width: 801px)');
+  let pointerFrame = 0;
+  const resetScene = () => {
+    cancelAnimationFrame(pointerFrame);
+    scene.style.setProperty('--pointer-x', '0deg');
+    scene.style.setProperty('--pointer-y', '0deg');
+  };
+  scene.addEventListener('pointermove', event => {
+    if (reducedMotion.matches || !finePointer.matches) return;
+    cancelAnimationFrame(pointerFrame);
+    pointerFrame = requestAnimationFrame(() => {
+      const bounds = scene.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width - .5;
+      const y = (event.clientY - bounds.top) / bounds.height - .5;
+      scene.style.setProperty('--pointer-x', `${Math.max(-1.2, Math.min(1.2, x * 2.4))}deg`);
+      scene.style.setProperty('--pointer-y', `${Math.max(-.8, Math.min(.8, -y * 1.6))}deg`);
+    });
+  });
+  scene.addEventListener('pointerleave', resetScene);
+  finePointer.addEventListener('change', resetScene);
+  reducedMotion.addEventListener('change', () => { resetScene(); settlePanels(); });
 </script>
