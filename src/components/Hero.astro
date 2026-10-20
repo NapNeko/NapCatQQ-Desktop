@@ -1,0 +1,50 @@
+---
+import '../styles/hero.css';
+const base = import.meta.env.BASE_URL;
+const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
+const views = [
+  { id:'terminal', label:'机器人与终端', file:'terminal.png', alt:'机器人列表与内嵌终端，使用演示数据' },
+  { id:'apps', label:'应用端', file:'apps.png', alt:'七种应用端框架的实例列表，使用演示数据' },
+  { id:'chat', label:'聊天', file:'chat.png', alt:'多账号聊天工作区，使用演示数据' },
+  { id:'debug', label:'OneBot 调试', file:'debug.png', alt:'OneBot 请求、回包与事件界面，使用演示数据' },
+];
+---
+<section class="hero" aria-labelledby="hero-title">
+  <div class="container">
+    <div class="hero-heading"><p class="platform"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3.2 7 2.4v5H1zm7-1L15 1v6.4H8zM1 8.4h6v5l-6-.8zm7 0h7V15l-7-1.2z" /></svg> Windows 桌面控制台<span class="platform-divider"></span>NapCat / SnowLuma</p><h1 id="hero-title">从部署到聊天，<br />一个窗口。</h1><p class="hero-description">装组件、管 Bot、接应用端。<br class="mobile-break" />也把聊天、截图和调试留在手边。</p><div class="hero-actions"><a class="button" href={`${repo}/releases/latest`}>下载 Windows 版 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5" /></svg></a><a class="button button-secondary" href="#getting-started">第一次使用</a></div><p class="hero-system">Windows 10 / 11 x64 <span>开源 · 本机与远端管理</span></p></div>
+    <div class="hero-stage">
+      <div class="stage-label"><span class="stage-line"></span><span>你的 Bot 工作台</span><span class="stage-label-note">点击下方，换个工作区看看</span></div>
+      <div class="hero-tabs" role="tablist" aria-label="软件工作区预览">{views.map((view,index)=><button type="button" id={`hero-tab-${view.id}`} role="tab" aria-selected={index===0?'true':'false'} aria-controls={`hero-panel-${view.id}`} tabindex={index===0?0:-1} data-hero-view={view.id}><span class="tab-indicator" aria-hidden="true"></span>{view.label}</button>)}</div>
+      <div class="hero-window"><div class="window-bar"><span class="window-app"><img src={`${base}media/logo.png`} width="18" height="18" alt="" /> NapCatQQ Desktop</span><span class="window-controls" aria-hidden="true">― <span>□</span> ×</span></div>
+        {views.map((view,index)=><div id={`hero-panel-${view.id}`} role="tabpanel" aria-labelledby={`hero-tab-${view.id}`} class="hero-panel" hidden={index!==0}><button class="hero-image-button" type="button" data-lightbox data-lightbox-src={`${base}media/${view.file}`} data-lightbox-alt={view.alt} aria-label={`放大${view.label}界面`}><img src={`${base}media/${view.file}`} width="1440" height="900" alt={view.alt} loading={index===0?'eager':'lazy'} fetchpriority={index===0?'high':'auto'} /><span class="image-zoom">查看大图 <span aria-hidden="true">↗</span></span></button></div>)}
+      </div>
+      <p class="screenshot-note">界面使用演示数据，功能依协议端、应用端及运行环境提供。</p>
+    </div>
+  </div>
+</section>
+<script>
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-hero-view]')];
+  const select = (tab: HTMLButtonElement) => {
+    tabs.forEach(item => {
+      const active = item === tab;
+      item.setAttribute('aria-selected',String(active));
+      item.tabIndex = active ? 0 : -1;
+      document.getElementById(item.getAttribute('aria-controls')!)!.hidden = !active;
+    });
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.getElementById(tab.getAttribute('aria-controls')!)!.animate([{opacity:.65,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:240,easing:'cubic-bezier(.2,.8,.2,1)'});
+    }
+  };
+  tabs.forEach((tab,index) => {
+    tab.addEventListener('click',()=>select(tab));
+    tab.addEventListener('keydown',(event) => {
+      let next = index;
+      if (event.key === 'ArrowRight') next = (index+1)%tabs.length;
+      else if (event.key === 'ArrowLeft') next = (index-1+tabs.length)%tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length-1;
+      else return;
+      event.preventDefault(); select(tabs[next]); tabs[next].focus();
+    });
+  });
+</script>

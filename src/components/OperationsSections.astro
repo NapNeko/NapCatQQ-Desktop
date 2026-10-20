@@ -1,0 +1,165 @@
+---
+import '../styles/operations-sections.css';
+
+const media = `${import.meta.env.BASE_URL}media/`;
+const watchGuide = 'https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/ncd-watch.md';
+---
+
+<div class="operations-sections" data-operations>
+  <section class="section ops-tools" id="tools" aria-labelledby="ops-tools-title">
+    <div class="container">
+      <div class="ops-tools-intro">
+        <div class="section-heading">
+          <h2 id="ops-tools-title">接口、回包和事件，<br />放在一起看。</h2>
+        </div>
+        <p>调试 OneBot，或打开熟悉的终端。<br />排查问题时，需要的工具就在手边。</p>
+      </div>
+
+      <div class="ops-tool-tabs" role="tablist" aria-label="查看调试工具">
+        <button class="ops-tool-tab" type="button" id="ops-tab-debug" role="tab" aria-selected="true" aria-controls="ops-panel-debug" data-tool-tab="debug">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16" /></svg>
+          OneBot 调试台
+        </button>
+        <button class="ops-tool-tab" type="button" id="ops-tab-terminal" role="tab" aria-selected="false" aria-controls="ops-panel-terminal" tabindex="-1" data-tool-tab="terminal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg>
+          内嵌终端
+        </button>
+      </div>
+
+      <div id="ops-panel-debug" role="tabpanel" aria-labelledby="ops-tab-debug" data-tool-panel="debug">
+        <div class="ops-tool-notes">
+          <p><strong>发出请求，看清结果</strong><span>搜索接口，填写表单或 JSON，查看回包与请求历史。</span></p>
+          <p><strong>事件流也在同一侧</strong><span>观察实时事件，把常用请求留在收藏里，下次接着用。</span></p>
+        </div>
+        <button class="ops-screenshot" type="button" data-lightbox data-lightbox-src={`${media}debug.png`} data-lightbox-alt="OneBot 调试台界面：左侧接口目录，中间请求与回包，右侧事件流" aria-label="放大查看 OneBot 调试台界面" aria-haspopup="dialog">
+          <img src={`${media}debug.png`} alt="OneBot 调试台的接口目录、请求、回包与实时事件流" width="1440" height="900" loading="lazy" decoding="async" />
+          <span class="ops-image-action">放大查看 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6" /></svg></span>
+        </button>
+      </div>
+
+      <div id="ops-panel-terminal" role="tabpanel" aria-labelledby="ops-tab-terminal" data-tool-panel="terminal" hidden>
+        <div class="ops-tool-notes">
+          <p><strong>从正在管理的地方打开</strong><span>本机、远端、Bot 和应用端，都有各自的终端入口。</span></p>
+          <p><strong>给熟悉命令行的你</strong><span>多标签与分屏，配上文件栏和常用命令。</span></p>
+        </div>
+        <button class="ops-screenshot" type="button" data-lightbox data-lightbox-src={`${media}terminal.png`} data-lightbox-alt="机器人管理界面底部展开的内嵌终端" aria-label="放大查看内嵌终端界面" aria-haspopup="dialog">
+          <img src={`${media}terminal.png`} alt="机器人管理页面与底部展开的 PowerShell 终端" width="1440" height="900" loading="lazy" decoding="async" />
+          <span class="ops-image-action">放大查看 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6" /></svg></span>
+        </button>
+      </div>
+      <p class="ops-preview-caption">界面预览使用演示数据。</p>
+    </div>
+  </section>
+
+  <section class="section ops-watch" id="watch" aria-labelledby="ops-watch-title">
+    <div class="container">
+      <div class="ops-watch-layout">
+        <div class="ops-watch-copy">
+          <div class="section-heading">
+            <h2 id="ops-watch-title">你离开桌面，<br />远端继续值守。</h2>
+          </div>
+          <p class="ops-watch-lead">在 Desktop 集中查看运行情况，为远端安装 ncd-watch，让监控与通知留在服务器上。</p>
+          <dl class="ops-watch-features">
+            <div><dt>看运行情况</dt><dd>主机 CPU、内存、磁盘，以及 Bot 运行指标。</dd></div>
+            <div><dt>留好运行策略</dt><dd>在 Desktop 按需配置自动重启与掉线通知。</dd></div>
+          </dl>
+          <a class="ops-watch-guide" href={watchGuide} target="_blank" rel="noopener noreferrer">了解 ncd-watch 值守 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 4h10v10M16 4 4 16" /></svg></a>
+        </div>
+
+        <div class="ops-watch-demo" data-watch-mode="connected">
+          <div class="ops-watch-demo-header"><span>值守流程示意</span><span class="ops-watch-demo-mark" aria-hidden="true">ncd-watch</span></div>
+          <div class="ops-watch-scene" aria-hidden="true">
+            <svg class="ops-watch-wires" viewBox="0 0 620 330" fill="none" preserveAspectRatio="none"><path class="ops-desktop-wire" d="M165 131H410" /><path class="ops-notify-wire" d="M490 160v92H316" /></svg>
+            <div class="ops-desktop-node">
+              <div class="ops-desktop-screen"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M15 18v-7l8 4h2l8-4v7c4 3 6 7 5 13-1 6-6 9-14 9s-13-3-14-9c-1-6 1-10 5-13Z" /><path d="M18 26h2m8 0h2m-9 7h6" /></svg></div>
+              <span class="ops-desktop-stand"></span>
+              <strong>Desktop</strong>
+              <span data-watch-desktop-status>集中管理</span>
+            </div>
+            <div class="ops-wire-label" data-watch-link-label>连接与配置同步</div>
+            <div class="ops-remote-node">
+              <div class="ops-remote-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="8" rx="2" /><rect x="4" y="13" width="16" height="8" rx="2" /><path d="M7 7h1m-1 10h1m8-10h1m-1 10h1" /></svg><strong>远端主机</strong></div>
+              <div class="ops-remote-bot"><span class="ops-bot-dot"></span>协议 Bot</div>
+              <div class="ops-remote-watch"><span class="ops-watch-orbit"></span>ncd-watch<span class="ops-watch-running">值守</span></div>
+            </div>
+            <div class="ops-notification"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><span>按配置发送掉线通知</span></div>
+          </div>
+          <div class="ops-watch-modes" role="group" aria-label="选择值守状态">
+            <button type="button" aria-pressed="true" data-watch-switch="connected">Desktop 连接时</button>
+            <button type="button" aria-pressed="false" data-watch-switch="away">Desktop 关闭后</button>
+          </div>
+          <p class="ops-watch-state" aria-live="polite" aria-atomic="true"><strong data-watch-state-title>Desktop 与远端保持连接</strong><span data-watch-state-copy>在桌面统一管理，远端 ncd-watch 同时值守。</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-operations]');
+
+  if (root) {
+    const toolTabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-tool-tab]'));
+    const toolPanels = root.querySelectorAll<HTMLElement>('[data-tool-panel]');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let activeTool = 'debug';
+
+    function selectTool(tab: HTMLButtonElement) {
+      const name = tab.dataset.toolTab;
+      if (!name || name === activeTool) return;
+      activeTool = name;
+      toolTabs.forEach((item) => {
+        const selected = item === tab;
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+      });
+      toolPanels.forEach((panel) => {
+        const selected = panel.dataset.toolPanel === name;
+        panel.hidden = !selected;
+        if (selected && !reducedMotion.matches) {
+          panel.animate(
+            [{ opacity: 0.5, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }],
+            { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' },
+          );
+        }
+      });
+    }
+
+    toolTabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectTool(tab));
+      tab.addEventListener('keydown', (event) => {
+        let nextIndex = index;
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % toolTabs.length;
+        else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + toolTabs.length) % toolTabs.length;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = toolTabs.length - 1;
+        else return;
+        event.preventDefault();
+        toolTabs[nextIndex].focus();
+        selectTool(toolTabs[nextIndex]);
+      });
+    });
+
+    const watchDemo = root.querySelector<HTMLElement>('[data-watch-mode]');
+    const watchSwitches = root.querySelectorAll<HTMLButtonElement>('[data-watch-switch]');
+    const desktopStatus = root.querySelector<HTMLElement>('[data-watch-desktop-status]');
+    const linkLabel = root.querySelector<HTMLElement>('[data-watch-link-label]');
+    const stateTitle = root.querySelector<HTMLElement>('[data-watch-state-title]');
+    const stateCopy = root.querySelector<HTMLElement>('[data-watch-state-copy]');
+
+    watchSwitches.forEach((button) => {
+      button.addEventListener('click', () => {
+        const away = button.dataset.watchSwitch === 'away';
+        if (!watchDemo || watchDemo.dataset.watchMode === button.dataset.watchSwitch) return;
+        watchDemo.dataset.watchMode = away ? 'away' : 'connected';
+        watchSwitches.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        if (desktopStatus) desktopStatus.textContent = away ? '已退出' : '集中管理';
+        if (linkLabel) linkLabel.textContent = away ? '管理连接已断开' : '连接与配置同步';
+        if (stateTitle) stateTitle.textContent = away ? 'Desktop 已关闭，远端继续值守' : 'Desktop 与远端保持连接';
+        if (stateCopy) stateCopy.textContent = away
+          ? '已安装并配置的 ncd-watch 留在远端，继续监控与发送通知。'
+          : '在桌面统一管理，远端 ncd-watch 同时值守。';
+      });
+    });
+  }
+</script>
