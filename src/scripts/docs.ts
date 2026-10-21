@@ -27,6 +27,7 @@ const sidebar = document.querySelector<HTMLElement>('#docs-sidebar')!;
 const sidebarToggle = document.querySelector<HTMLButtonElement>('[data-sidebar-toggle]')!;
 const backdrop = document.querySelector<HTMLButtonElement>('[data-sidebar-close]')!;
 function setSidebar(open: boolean) {
+  if (open) closeToc();
   sidebar.classList.toggle('is-open', open);
   sidebarToggle.setAttribute('aria-expanded', String(open));
   backdrop.hidden = !open;
@@ -36,6 +37,74 @@ backdrop.addEventListener('click', () => setSidebar(false));
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setSidebar(false); });
 const current = sidebar.querySelector<HTMLElement>('[aria-current=page]');
 if (current && current.offsetTop > sidebar.clientHeight - 100) sidebar.scrollTop = current.offsetTop - sidebar.clientHeight / 2;
+
+const toc = document.querySelector<HTMLDetailsElement>('[data-doc-toc]');
+const tocSummary = toc?.querySelector<HTMLElement>('summary');
+const tocCurrent = toc?.querySelector<HTMLElement>('[data-toc-current]');
+const outlineLinks = [...document.querySelectorAll<HTMLAnchorElement>('[data-toc-link]')];
+function anchorTarget(link: HTMLAnchorElement) {
+  let id = link.hash.slice(1);
+  try { id = decodeURIComponent(id); } catch { /* Keep literal IDs if decoding fails. */ }
+  return document.getElementById(id);
+}
+const outlineTargets = outlineLinks.flatMap(link => {
+  const target = anchorTarget(link);
+  return target ? [{ link, target }] : [];
+});
+function closeToc(restoreFocus = false) {
+  if (!toc?.open) return;
+  toc.open = false;
+  if (restoreFocus) tocSummary?.focus({ preventScroll: true });
+}
+function updateOutline() {
+  if (!tocCurrent) return;
+  const threshold = parseFloat(getComputedStyle(root).scrollPaddingTop) || 98;
+  let active: typeof outlineTargets[number] | undefined;
+  for (const item of outlineTargets) {
+    if (item.target.getBoundingClientRect().top > threshold + 2) break;
+    active = item;
+  }
+  if (window.scrollY > 0 && window.innerHeight + window.scrollY >= root.scrollHeight - 8) active = outlineTargets.at(-1);
+  for (const item of outlineTargets) {
+    if (item === active) item.link.setAttribute('aria-current', 'location');
+    else item.link.removeAttribute('aria-current');
+  }
+  tocCurrent.textContent = active?.link.textContent || '概览';
+  tocCurrent.title = tocCurrent.textContent;
+}
+let outlineFrame = 0;
+function scheduleOutlineUpdate() {
+  if (outlineFrame) return;
+  outlineFrame = requestAnimationFrame(() => { outlineFrame = 0; updateOutline(); });
+}
+if (toc) {
+  toc.addEventListener('click', event => {
+    const link = (event.target as Element).closest<HTMLAnchorElement>('a');
+    if (!link) return;
+    const target = anchorTarget(link);
+    closeToc();
+    if (target) {
+      const addedTabIndex = !target.hasAttribute('tabindex');
+      if (addedTabIndex) target.tabIndex = -1;
+      target.focus({ preventScroll: true });
+      if (addedTabIndex) target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
+    }
+  });
+  toc.addEventListener('focusout', event => {
+    if (!(event.relatedTarget instanceof Node) || !toc.contains(event.relatedTarget)) closeToc();
+  });
+  document.addEventListener('pointerdown', event => { if (!toc.contains(event.target as Node)) closeToc(); });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && toc.open) { event.preventDefault(); closeToc(true); }
+  });
+  window.addEventListener('scroll', scheduleOutlineUpdate, { passive: true });
+  window.addEventListener('resize', scheduleOutlineUpdate);
+  window.addEventListener('hashchange', scheduleOutlineUpdate);
+  window.addEventListener('load', scheduleOutlineUpdate);
+  const prose = document.querySelector('.doc-prose');
+  if (prose) new ResizeObserver(scheduleOutlineUpdate).observe(prose);
+  updateOutline();
+}
 
 const lightbox = document.querySelector<HTMLDialogElement>('[data-lightbox]')!;
 document.querySelectorAll<HTMLElement>('[data-shot]').forEach(shot => {
@@ -82,6 +151,7 @@ let selected = -1;
 let dataPromise: Promise<SearchEntry[]> | undefined;
 async function openSearch() {
   setSidebar(false);
+  closeToc();
   if (!searchDialog.open) searchDialog.showModal();
   searchInput.focus();
   if (searchData) return;
@@ -148,12 +218,3 @@ searchInput.addEventListener('keydown', event => {
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); selectResult(selected + (event.key === 'ArrowDown' ? 1 : -1)); }
   if (event.key === 'Enter') { const link = results.querySelector<HTMLAnchorElement>('.is-selected'); if (link) { event.preventDefault(); location.href = link.href; } }
 });
-
-const outlineLinks = [...document.querySelectorAll<HTMLAnchorElement>('.docs-outline nav a')];
-const visibleHeadings = new Set<string>();
-const observer = new IntersectionObserver(entries => {
-  for (const entry of entries) { if (entry.isIntersecting) visibleHeadings.add(entry.target.id); else visibleHeadings.delete(entry.target.id); }
-  const first = outlineLinks.find(link => visibleHeadings.has(decodeURIComponent(link.hash.slice(1))));
-  if (first) outlineLinks.forEach(link => link.classList.toggle('is-active', link === first));
-}, { rootMargin: '-90px 0px -55% 0px' });
-for (const link of outlineLinks) { const target = document.getElementById(decodeURIComponent(link.hash.slice(1))); if (target) observer.observe(target); }
