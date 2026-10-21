@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/NapNeko/NapCatQQ-Desktop.git",
+  "commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "version": "3.5.2",
+  "include": ["src-ui", "package.json", "pnpm-lock.yaml"]
+}

@@ -2,6 +2,7 @@ node_modules/
 dist/
 .astro/
 .cache/
+/public/demo/
 .env
 .env.*
 !.env.example

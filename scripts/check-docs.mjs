@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 const root = path.resolve(import.meta.dirname, '..');
-const output = path.join(root, 'dist');
+const output = path.resolve(root, process.env.DOCS_CHECK_OUT_DIR || 'dist');
 const base = `/${(process.env.SITE_BASE || '/').replace(/^\/+|\/+$/g, '')}`.replace(/\/?$/, '/');
 const errors = [];
 const assert = (condition, message) => { if (!condition) errors.push(message); };

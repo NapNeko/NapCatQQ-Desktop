@@ -1,0 +1,14 @@
+@import "../.cache/desktop/src-ui/app/index.css";
+@source "../.cache/desktop/src-ui";
+@source "./";
+
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+.demo-desktop { --titlebar-height: 0px; }
+.demo-cursor { position: fixed; z-index: 2147483646; top: 0; left: 0; pointer-events: none; color: #bf5738; transform: translate(150px, 110px); transition: transform .48s cubic-bezier(.22,.8,.24,1); filter: drop-shadow(0 2px 3px #40221833); }
+.demo-cursor svg path { fill: currentColor; }
+.demo-cursor[hidden] { display: none; }
+.demo-cursor span { position: absolute; top: 28px; left: 20px; white-space: nowrap; background: #bf5738; color: white; border-radius: 5px; padding: 3px 7px; font: 500 11px/1.5 system-ui,sans-serif; }
+[data-demo-target] { outline: 2px solid #bf5738 !important; outline-offset: 5px; border-radius: 6px; }
+.demo-cursor.is-clicking svg { animation: demo-click .24s ease; }
+@keyframes demo-click { 50% { transform: scale(.82); } }
+@media (prefers-reduced-motion: reduce) { .demo-cursor { transition: none; } .demo-cursor.is-clicking svg { animation: none; } }

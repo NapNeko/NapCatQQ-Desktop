@@ -6,10 +6,14 @@
   "packageManager": "pnpm@9.15.9",
   "engines": { "node": ">=22.22.0" },
   "scripts": {
-    "dev": "astro dev --host 127.0.0.1",
-    "build": "astro build",
+    "dev": "pnpm run build:demo && astro dev --host 127.0.0.1",
+    "build": "pnpm run build:demo && astro build",
     "preview": "astro preview --host 127.0.0.1",
-    "check:docs": "node scripts/check-docs.mjs"
+    "check:docs": "node scripts/check-docs.mjs",
+    "demo:plan": "node scripts/build-desktop-demo.mjs --dry-run",
+    "demo:prepare": "node scripts/build-desktop-demo.mjs --prepare",
+    "build:demo": "node scripts/build-desktop-demo.mjs",
+    "test:demo": "node --test demo/*.test.mjs"
   },
   "dependencies": { "astro": "7.4.1", "@astrojs/markdown-satteri": "0.4.4" },
   "pnpm": {

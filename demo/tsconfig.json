@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@desktop/*": ["../.cache/desktop/src-ui/*"],
+      "@/*": ["../.cache/desktop/src-ui/*"],
+      "react": ["../.cache/desktop/node_modules/@types/react"],
+      "react/*": ["../.cache/desktop/node_modules/@types/react/*"],
+      "react-dom/*": ["../.cache/desktop/node_modules/@types/react-dom/*"],
+      "*": ["../.cache/desktop/node_modules/*"]
+    }
+  },
+  "include": ["./**/*.ts", "./**/*.tsx", "../src/scripts/tutorial-demo.ts", "../.cache/desktop/src-ui/vite-env.d.ts"]
+}

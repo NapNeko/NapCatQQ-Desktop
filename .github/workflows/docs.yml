@@ -25,3 +25,5 @@ jobs:
       - run: pnpm build && pnpm check:docs
         env:
           SITE_BASE: ${{ matrix.base }}
+      - run: node .cache/desktop/node_modules/typescript/bin/tsc -p demo/tsconfig.json --noEmit
+      - run: pnpm test:demo

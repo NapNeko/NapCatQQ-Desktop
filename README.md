@@ -15,7 +15,7 @@ pnpm.cmd install
 pnpm.cmd dev
 ```
 
-`pnpm.cmd build` 构建静态页面到 `dist/`，`pnpm.cmd preview` 预览构建结果。
+`pnpm.cmd build` 先构建教程中的前端演示，再构建静态页面到 `dist/`，`pnpm.cmd preview` 预览构建结果。
 
 首页与 `/docs/` 文档站一起构建。文档包含从安装、创建 Bot、连接应用端到远端部署、聊天、调试和维护的教程，提供全文搜索、明暗主题、截图主题切换和大图查看。
 
@@ -51,6 +51,10 @@ Remove-Item Env:SITE_BASE
 - 只读并整理明确公开的用户文档与相关实现，不导入 `docs/dev/`、配置、凭据或开发笔记。
 
 构建依赖将 `@shikijs/vscode-textmate` 固定为已发布较久的 `10.0.2`，避免原锁文件中刚发布的传递依赖触发安装环境的最短发布时间限制。`package.json` 和 `pnpm-workspace.yaml` 保留相同覆盖项，分别兼容 pnpm 9 与新版本。
+
+## 交互演示
+
+`demo/` 使用固定软件版本的真实前端页面。源码从 Git 对象导出到忽略目录，不修改软件主线；首次构建需要安装该版本的前端依赖。准备与构建方法见 [demo/README.md](demo/README.md)。
 
 ## 素材
 
