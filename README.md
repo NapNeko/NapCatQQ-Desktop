@@ -19,6 +19,8 @@ pnpm.cmd dev
 
 首页与 `/docs/` 文档站一起构建。文档包含从安装、创建 Bot、连接应用端到远端部署、聊天、调试和维护的教程，提供全文搜索、明暗主题、浮动阅读导航和截图大图查看。截图与演示界面跟随文档主题。
 
+首页使用本地打包的 GSAP / ScrollTrigger：首屏标题揭幕、产品截图视差、功能区滚动入场，以及桌面宽屏的三段横向叙事。动画入口为 `src/scripts/home-motion.ts`，视觉样式在 `src/styles/home.css` 与 `hero.css`，叙事内容在 `src/components/WorkflowStory.astro`。触屏、窄屏和矮屏采用自然排版；系统开启「减少动态效果」时保留静态内容，关闭 JavaScript 也能阅读功能介绍并进入文档或下载。
+
 `SITE_BASE` 可设置构建时的站点前缀；GitHub Pages 使用 `/NapCatQQ-Desktop/`。
 
 ## 线上发布

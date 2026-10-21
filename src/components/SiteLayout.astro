@@ -1,23 +1,25 @@
 ---
 import '../styles/global.css';
+import '../styles/home.css';
 const base = import.meta.env.BASE_URL;
 const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
 ---
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="home-document">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f8f9fb" />
+    <meta name="theme-color" content="#f5f2eb" />
     <title>NapCatQQ Desktop · NapCat / SnowLuma 桌面控制台</title>
     <meta name="description" content="NapCat / SnowLuma 的 Windows 桌面控制台。管理本机与远端 Bot、安装应用端、聊天与截图，使用 OneBot 调试台和内嵌终端。" />
     <link rel="icon" type="image/png" href={`${base}media/logo.png`} />
     <meta property="og:title" content="NapCatQQ Desktop · NapCat / SnowLuma 桌面控制台" />
     <meta property="og:description" content="支持本机与远端 Bot 管理、应用端配置、聊天、截图和 OneBot 调试。" />
   </head>
-  <body>
+  <body class="home-page">
     <a class="skip-link" href="#main">跳到正文</a>
     <header class="site-header">
+      <div class="reading-progress" aria-hidden="true"></div>
       <nav class="container nav-inner" aria-label="主导航">
         <a class="brand" href={base} aria-label="NapCatQQ Desktop 首页"><img src={`${base}media/logo.png`} width="34" height="34" alt="" /><span>NapCatQQ <span class="brand-desktop">Desktop</span></span></a>
         <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav">菜单 <span aria-hidden="true">＋</span></button>
@@ -38,6 +40,9 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
       <div class="container footer-bottom"><span>开源许可证：<a href={`${repo}/blob/main/LICENSE`}>GPL-3.0</a></span><span>感谢 NapCat、SnowLuma 和各应用端项目。</span></div>
     </footer>
     <dialog id="image-viewer" class="image-viewer" aria-label="软件界面大图"><button type="button" class="viewer-close" aria-label="关闭大图">关闭 <kbd>Esc</kbd></button><img width="1440" height="900" alt="" /><p></p></dialog>
+    <script>
+      import '../scripts/home-motion';
+    </script>
     <script>
       const toggle = document.querySelector<HTMLButtonElement>('.menu-toggle');
       const nav = document.querySelector<HTMLElement>('#main-nav');

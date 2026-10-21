@@ -15,7 +15,7 @@
     "build:demo": "node scripts/build-desktop-demo.mjs",
     "test:demo": "node --test demo/*.test.mjs"
   },
-  "dependencies": { "astro": "7.4.1", "@astrojs/markdown-satteri": "0.4.4" },
+  "dependencies": { "astro": "7.4.1", "@astrojs/markdown-satteri": "0.4.4", "gsap": "3.15.0" },
   "pnpm": {
     "overrides": { "@shikijs/vscode-textmate": "10.0.2" }
   }

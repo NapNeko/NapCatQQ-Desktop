@@ -19,11 +19,16 @@ const views = [
 ---
 <section class="hero" aria-labelledby="hero-title">
   <div class="container hero-composition">
-    <div class="hero-masthead">
-      <h1 id="hero-title" aria-label="NapCatQQ Desktop"><span>NapCatQQ</span><span>Desktop</span></h1>
+    <div class="hero-eyebrow" data-hero-reveal>
+      <span><i aria-hidden="true"></i> A SMALL DESKTOP. A BIG WORLD.</span>
+      <span>为热爱，留一点时间。</span>
     </div>
-    <div class="hero-heading">
+    <div class="hero-masthead">
+      <h1 id="hero-title" aria-label="NapCatQQ Desktop"><span class="hero-word-mask" aria-hidden="true"><span class="hero-word">NapCatQQ</span></span><span class="hero-word-mask hero-word-serif" aria-hidden="true"><span class="hero-word">Desktop<span class="hero-period">.</span></span></span></h1>
+    </div>
+    <div class="hero-heading" data-hero-reveal>
       <p class="hero-product">NapCat / SnowLuma 桌面管理器</p>
+      <p class="hero-statement">把日常理顺，<br />让想法自由生长。</p>
       <p class="hero-description">管理 Bot、部署应用端。<br />内置聊天、截图和 OneBot 调试。</p>
       <div class="hero-actions">
         <a class="button hero-download" href={`${repo}/releases/latest`}><svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3.2 7 2.4v5H1zm7-1L15 1v6.4H8zM1 8.4h6v5l-6-.8zm7 0h7V15l-7-1.2z" /></svg> 下载 Windows 版 <span class="download-arrow" aria-hidden="true">↗</span></a>
@@ -41,7 +46,9 @@ const views = [
       </div>
       <p class="workspace-description" aria-live="polite">{views[0].description}</p>
     </div>
-    <div class="hero-stage">
+    <div class="hero-stage" data-hero-reveal>
+      <div class="hero-art-orbit" aria-hidden="true"><span></span></div>
+      <span class="hero-art-note" aria-hidden="true">LESS FRICTION.<br />MORE CREATION.</span>
       <svg class="terminal-sculpture" viewBox="0 0 1000 700" fill="none" aria-hidden="true">
         <defs>
           <linearGradient id="prompt-material" x1="100" y1="100" x2="700" y2="650" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb196" /><stop offset=".48" stop-color="#ef795d" /><stop offset="1" stop-color="#df5e47" /></linearGradient>
@@ -70,7 +77,8 @@ const views = [
       </div>
     </div>
     <div class="hero-footnote">
-      <a class="hero-explore" href="#management"><span class="explore-arrow" aria-hidden="true">↓</span> 功能介绍</a>
+      <a class="hero-explore" href="#story"><span class="explore-arrow" aria-hidden="true">↓</span> 向下探索 <span class="hero-scroll-label">SCROLL TO DISCOVER</span></a>
+      <span class="hero-edition">为你的 Bot，也为你的每一天。 <span aria-hidden="true">↗</span></span>
     </div>
   </div>
 </section>
