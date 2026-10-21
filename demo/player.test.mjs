@@ -41,7 +41,13 @@ const compiled = await build({
     resolveDir: demoRoot,
     loader: 'ts',
   },
-  alias: { '@desktop': path.join(desktopRoot, 'src-ui') },
+  // Pin peers as well as the fixture imports; pnpm may otherwise resolve a second React via the parent repository.
+  alias: {
+    '@desktop': path.join(desktopRoot, 'src-ui'),
+    react: path.join(dependencyRoot, 'node_modules/react'),
+    'react-dom': path.join(dependencyRoot, 'node_modules/react-dom'),
+    '@radix-ui/react-select': path.join(dependencyRoot, 'node_modules/@radix-ui/react-select'),
+  },
   nodePaths: [path.join(dependencyRoot, 'node_modules')],
   bundle: true,
   platform: 'browser',
