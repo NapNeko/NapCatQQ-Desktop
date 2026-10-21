@@ -65,6 +65,39 @@ def main():
     def no_overflow(page):
         require(page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Horizontal page overflow at {page.url}")
 
+    def table_and_demo_layout(page):
+        tables = page.locator(".doc-prose table").evaluate_all("""tables => tables.map(table => {
+            const wrapper = table.parentElement, bounds = table.getBoundingClientRect();
+            const row = table.querySelector('tr')?.getBoundingClientRect();
+            return { wrapped: wrapper.classList.contains('doc-table'),
+                keyboard: wrapper.tabIndex === 0, layout: getComputedStyle(table).display,
+                fills: bounds.width >= wrapper.clientWidth - 1,
+                rowFills: !row || Math.abs(row.right - bounds.right) <= 1 };
+        })""")
+        for index, table in enumerate(tables):
+            require(table["wrapped"] and table["keyboard"] and table["layout"] == "table", f"Table {index + 1} lost its native layout or keyboard scroll container")
+            require(table["fills"] and table["rowFills"], f"Table {index + 1} leaves an empty strip beside its cells")
+        theme = page.locator("html").get_attribute("data-theme")
+        shots = page.locator("[data-shot]")
+        require(shots.locator("[data-shot-theme]").count() == 0, "Per-image theme controls must not override the document theme")
+        for index in range(shots.count()):
+            shot = shots.nth(index)
+            expect(shot.locator(".shot-" + theme)).to_be_visible()
+            expect(shot.locator(".shot-" + ("dark" if theme == "light" else "light"))).not_to_be_visible()
+        demo = page.locator("[data-tutorial-demo]")
+        if demo.count():
+            expect(demo.locator(".fbd-toolbar")).to_have_count(1)
+            for action in ["play", "manual", "expand"]:
+                expect(demo.locator(f".fbd-toolbar [data-fbd-{action}]")).to_be_visible()
+            expect(demo.locator("[data-fbd-progress] > summary")).to_be_visible()
+            expect(demo.locator("[data-fbd-reset]")).not_to_be_visible()
+            require(demo.locator(".fbd-controls, .fbd-topbar, .fbd-status, [data-fbd-close]").count() == 0, "Duplicate demo controls remain outside the compact toolbar")
+            ratio = demo.locator(".fbd-canvas").evaluate("el => el.getBoundingClientRect().width / el.getBoundingClientRect().height")
+            require(abs(ratio - 16 / 9) < 0.02, f"Demo canvas lost its 16:9 ratio: {ratio}")
+            expect(demo.locator(".fbd-poster-" + theme)).to_be_visible()
+        no_overflow(page)
+        return {"tables": len(tables), "screenshots": shots.count(), "demo": bool(demo.count()), "theme": theme}
+
     def set_theme(page, theme):
         if page.locator("html").get_attribute("data-theme") != theme:
             page.locator("[data-theme-toggle]").click()
@@ -140,28 +173,31 @@ def main():
 
             def outline():
                 goto(page, "docs/connections/")
-                link = page.locator(".docs-outline nav a").filter(has_text="手动配置正向 WebSocket").first
+                navigation = page.locator("[data-reading-nav]")
+                navigation.locator("summary").press("Enter")
+                link = navigation.locator("[data-reading-link]").filter(has_text="手动配置正向 WebSocket").first
                 fragment = unquote(link.get_attribute("href"))
-                link.click()
+                link.press("Enter")
                 page.wait_for_function("hash => decodeURIComponent(location.hash) === hash", arg=fragment)
-                expect(link).to_have_class("is-active")
+                expect(link).to_have_attribute("aria-current", "location")
+                expect(navigation).not_to_have_attribute("open", "")
+                expect(navigation.locator("[data-reading-current]")).to_have_text("手动配置正向 WebSocket")
                 heading = page.locator(f'[id="{fragment[1:]}"]')
-                page.wait_for_function("el => el.getBoundingClientRect().top >= 72 && el.getBoundingClientRect().top < innerHeight", arg=heading.element_handle())
+                page.wait_for_function("el => el.getBoundingClientRect().top >= parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) - 2 && el.getBoundingClientRect().top < innerHeight", arg=heading.element_handle())
+                progress = int(navigation.locator("[data-reading-percent]").inner_text().rstrip("%"))
+                require(0 < progress < 100, f"Intermediate reading progress is invalid: {progress}%")
 
-            record("desktop outline anchors and active heading", outline)
+            record("floating outline anchors, current section and reading progress", outline)
 
             def screenshot_controls():
                 goto(page, "docs/connections/")
-                set_theme(page, "dark")
                 shot = page.locator("[data-shot]").first
-                expect(shot).to_have_attribute("data-mode", "auto")
-                expect(shot.locator(".shot-dark")).to_be_visible()
-                decoded_image(page, "[data-shot] .shot-dark")
+                require(shot.locator("[data-shot-theme]").count() == 0, "Screenshot controls must follow the document theme")
                 for theme in ["light", "dark"]:
-                    shot.locator(f"[data-shot-theme={theme}]").click()
-                    expect(shot.locator(f"[data-shot-theme={theme}]")).to_have_attribute("aria-pressed", "true")
+                    set_theme(page, theme)
                     image = decoded_image(page, f"[data-shot] .shot-{theme}")
                     expect(image).to_be_visible()
+                    expect(shot.locator(".shot-" + ("dark" if theme == "light" else "light"))).not_to_be_visible()
                     shot.locator("[data-shot-open]").click()
                     expect(page.locator("[data-lightbox]")).to_be_visible()
                     expect(page.locator("[data-lightbox] img")).to_have_attribute("src", image.evaluate("img => img.src"))
@@ -169,20 +205,55 @@ def main():
                     page.keyboard.press("Escape")
                     expect(page.locator("[data-lightbox]")).not_to_be_visible()
 
-            record("real screenshot pairs, theme controls and lightbox", screenshot_controls)
+            record("document theme selects the matching screenshot and lightbox", screenshot_controls)
+
+            def demo_controls():
+                goto(page, "docs/first-bot/")
+                demo = page.locator("[data-tutorial-demo]")
+                play = demo.locator("[data-fbd-play]")
+                play.press("Enter")
+                expect(demo).to_have_attribute("data-mode", "playing", timeout=30000)
+                play.press("Enter")
+                expect(demo).to_have_attribute("data-mode", "paused")
+                expect(play).to_have_text("继续")
+                play.press("Enter")
+                expect(demo).to_have_attribute("data-mode", "complete", timeout=45000)
+                demo.locator("[data-fbd-manual]").press("Enter")
+                expect(demo).to_have_attribute("data-mode", "manual")
+                expect(demo.locator("[data-fbd-manual]")).to_have_attribute("aria-pressed", "true")
+                expand = demo.locator("[data-fbd-expand]")
+                expand.press("Enter")
+                expect(demo).to_have_attribute("role", "dialog")
+                expect(expand).to_have_text("收起")
+                navigation = page.locator("[data-reading-nav]")
+                expect(navigation).not_to_be_visible()
+                summary = demo.locator("[data-fbd-progress] > summary")
+                summary.press("Enter")
+                expect(demo.locator("[data-fbd-reset]")).to_be_visible()
+                summary.press("Escape")
+                expect(demo).to_have_attribute("data-expanded", "true")
+                summary.press("Escape")
+                expect(demo).to_have_attribute("data-expanded", "false")
+                summary.press("Enter")
+                demo.locator("[data-fbd-reset]").press("Enter")
+                expect(demo).to_have_attribute("data-mode", "ready", timeout=30000)
+                expect(demo.locator("[data-fbd-step][aria-current=step]")).to_have_count(1)
+
+            record("compact demo toolbar: play, pause, resume, manual, expand, details and reset", demo_controls)
 
             def clipboard():
                 goto(page, "docs/connections/")
-                block = page.locator(".doc-prose pre").first
-                expected = block.locator("code").inner_text()
-                block.locator(".copy-code").click()
-                expect(block.locator(".copy-code")).to_have_text("已复制")
+                block = page.locator(".doc-code-block").first
+                expected = block.locator("pre code").inner_text()
+                block.locator(".doc-code-copy").click()
+                expect(block.locator(".doc-code-copy")).to_have_text("已复制")
                 actual = page.evaluate("navigator.clipboard.readText()")
                 require(actual == expected, "Copied code differs from the displayed code block")
 
             record("copy code to clipboard", clipboard)
             for url in routes:
-                record("desktop route " + urlparse(url).path, lambda url=url: (goto(page, url), no_overflow(page)))
+                for theme in ["light", "dark"]:
+                    record("desktop " + theme + " route " + urlparse(url).path, lambda url=url, theme=theme: (goto(page, url), set_theme(page, theme), table_and_demo_layout(page)))
 
             mobile = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, color_scheme="light", reduced_motion="reduce")
             mobile.set_default_timeout(10000)
@@ -206,13 +277,16 @@ def main():
                 phone.locator(".sidebar-group a").filter(has_text="备份、迁移与升级").click()
                 phone.wait_for_url(site("docs/backup/"))
                 expect(phone.locator("[data-sidebar-toggle]")).to_have_attribute("aria-expanded", "false")
-                phone.locator(".mobile-outline summary").click()
-                link = phone.locator(".mobile-outline a").filter(has_text="清理下载缓存").first
+                navigation = phone.locator("[data-reading-nav]")
+                navigation.locator("summary").press("Enter")
+                link = navigation.locator("[data-reading-link]").filter(has_text="清理下载缓存").first
                 fragment = unquote(link.get_attribute("href"))
-                link.click()
+                link.press("Enter")
                 phone.wait_for_function("hash => decodeURIComponent(location.hash) === hash", arg=fragment)
+                expect(link).to_have_attribute("aria-current", "location")
+                expect(navigation).not_to_have_attribute("open", "")
                 heading = phone.locator(f'[id="{fragment[1:]}"]')
-                phone.wait_for_function("el => el.getBoundingClientRect().top >= 108 && el.getBoundingClientRect().top < innerHeight", arg=heading.element_handle())
+                phone.wait_for_function("el => el.getBoundingClientRect().top >= parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) - 2 && el.getBoundingClientRect().top < innerHeight", arg=heading.element_handle())
                 set_theme(phone, "dark")
                 goto(phone, "docs/first-bot/")
                 expect(phone.locator("html")).to_have_attribute("data-theme", "dark")
@@ -226,7 +300,8 @@ def main():
 
             record("mobile keyboard, sidebar, outline, theme and search", mobile_navigation)
             for url in routes:
-                record("mobile route " + urlparse(url).path, lambda url=url: (goto(phone, url), no_overflow(phone)))
+                for theme in ["light", "dark"]:
+                    record("mobile " + theme + " route " + urlparse(url).path, lambda url=url, theme=theme: (goto(phone, url), set_theme(phone, theme), table_and_demo_layout(phone)))
 
             # Check hidden and lazy theme variants too, not only images loaded above the fold.
             for url in sorted(images):

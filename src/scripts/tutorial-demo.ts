@@ -26,6 +26,7 @@ function setupDemo(root: HTMLElement) {
   const channel = `ncd-docs-demo:${root.dataset.demoLesson}`;
   const frame = root.querySelector<HTMLIFrameElement>('[data-fbd-frame]')!;
   const viewport = root.querySelector<HTMLElement>('[data-fbd-viewport]')!;
+  const toolbar = root.querySelector<HTMLElement>('.fbd-toolbar')!;
   const cover = root.querySelector<HTMLElement>('[data-fbd-cover]')!;
   const loading = root.querySelector<HTMLElement>('[data-fbd-loading]')!;
   const playButton = root.querySelector<HTMLButtonElement>('[data-fbd-play]')!;
@@ -36,7 +37,9 @@ function setupDemo(root: HTMLElement) {
   const resetButton = root.querySelector<HTMLButtonElement>('[data-fbd-reset]')!;
   const expandButton = root.querySelector<HTMLButtonElement>('[data-fbd-expand]')!;
   const expandLabel = root.querySelector<HTMLElement>('[data-fbd-expand-label]')!;
-  const closeButton = root.querySelector<HTMLButtonElement>('[data-fbd-close]')!;
+  const progress = root.querySelector<HTMLDetailsElement>('[data-fbd-progress]')!;
+  const progressSummary = progress.querySelector<HTMLElement>('summary')!;
+  const stepPanel = progress.querySelector<HTMLElement>('.fbd-step-panel')!;
   const modeLabel = root.querySelector<HTMLElement>('[data-fbd-mode]')!;
   const position = root.querySelector<HTMLElement>('[data-fbd-position]')!;
   const title = root.querySelector<HTMLElement>('[data-fbd-title]')!;
@@ -91,9 +94,12 @@ function setupDemo(root: HTMLElement) {
   }
 
   function updateStep(state: DemoState) {
-    setText(position, `第 ${state.step + 1} 步 / ${steps.length}`);
+    setText(position, `${state.step + 1} / ${steps.length}`);
     setText(title, state.title);
+    title.title = state.title;
     setText(detail, state.detail);
+    root.style.setProperty('--fbd-progress', String((state.step + 1) / steps.length));
+    progressSummary.setAttribute('aria-label', `第 ${state.step + 1} 步，共 ${steps.length} 步：${state.title}，查看步骤与说明`);
     steps.forEach((step, index) => {
       step.classList.toggle('is-done', index < state.step || state.mode === 'complete');
       if (index === state.step) step.setAttribute('aria-current', 'step');
@@ -132,8 +138,11 @@ function setupDemo(root: HTMLElement) {
     setText(errorNotice, '');
     errorNotice.hidden = true;
     setFrameAvailable(false);
-    setText(position, '准备演示');
-    setText(title, '正在加载软件界面');
+    setText(position, `0 / ${steps.length}`);
+    setText(title, '正在加载');
+    title.title = '';
+    root.style.setProperty('--fbd-progress', '0');
+    progressSummary.setAttribute('aria-label', '演示正在加载，查看步骤与说明');
     setText(detail, '演示中的操作只在演示环境内生效。');
     steps.forEach(step => { step.removeAttribute('aria-current'); step.classList.remove('is-done'); });
     renderControls();
@@ -176,7 +185,7 @@ function setupDemo(root: HTMLElement) {
   }
 
   function focusableElements() {
-    return Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), iframe, [tabindex]'))
+    return Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled]), summary, a[href], input:not([disabled]), iframe, [tabindex]'))
       .filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0 && !element.closest('[hidden], [inert]'));
   }
 
@@ -199,8 +208,8 @@ function setupDemo(root: HTMLElement) {
     root.dataset.expanded = 'false';
     root.setAttribute('role', 'region');
     root.removeAttribute('aria-modal');
-    closeButton.hidden = true;
     expandButton.setAttribute('aria-expanded', 'false');
+    expandButton.title = '放大演示';
     setText(expandLabel, '放大');
     anchor.style.removeProperty('height');
     document.documentElement.style.overflow = previousOverflow;
@@ -220,13 +229,13 @@ function setupDemo(root: HTMLElement) {
     root.dataset.expanded = 'true';
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
-    closeButton.hidden = false;
     expandButton.setAttribute('aria-expanded', 'true');
+    expandButton.title = '收起演示';
     setText(expandLabel, '收起');
     document.documentElement.style.overflow = 'hidden';
     isolateExpandedView();
     resize();
-    closeButton.focus({ preventScroll: true });
+    expandButton.focus({ preventScroll: true });
   }
 
   window.addEventListener('message', (event: MessageEvent<unknown>) => {
@@ -262,11 +271,31 @@ function setupDemo(root: HTMLElement) {
     }
   });
 
-  playButton.addEventListener('click', () => request(mode === 'playing' ? 'pause' : 'play'));
-  manualButton.addEventListener('click', () => request('manual'));
-  resetButton.addEventListener('click', () => { if (ready) beginLoading(null); });
-  expandButton.addEventListener('click', () => expanded ? closeExpanded() : openExpanded());
-  closeButton.addEventListener('click', closeExpanded);
+  function closeStepPanel(restoreFocus = false) {
+    progress.open = false;
+    if (restoreFocus) progressSummary.focus({ preventScroll: true });
+  }
+  function fitStepPanel() {
+    if (!progress.open) return;
+    const bounds = progressSummary.getBoundingClientRect();
+    const below = window.innerHeight - bounds.bottom - 24;
+    const above = bounds.top - parseFloat(getComputedStyle(toolbar).top) - 24;
+    const upwards = below < 260 && above > below;
+    progress.dataset.placement = upwards ? 'above' : 'below';
+    stepPanel.style.maxHeight = `${Math.max(100, upwards ? above : below)}px`;
+  }
+  progress.addEventListener('toggle', fitStepPanel);
+  progress.addEventListener('focusout', event => {
+    if (!(event.relatedTarget instanceof Node) || !progress.contains(event.relatedTarget)) closeStepPanel();
+  });
+  document.addEventListener('pointerdown', event => { if (!progress.contains(event.target as Node)) closeStepPanel(); });
+  window.addEventListener('resize', fitStepPanel);
+  window.addEventListener('scroll', fitStepPanel, { passive: true });
+  root.addEventListener('scroll', fitStepPanel, { passive: true });
+  playButton.addEventListener('click', () => { closeStepPanel(); request(mode === 'playing' ? 'pause' : 'play'); });
+  manualButton.addEventListener('click', () => { closeStepPanel(); request('manual'); });
+  resetButton.addEventListener('click', () => { if (ready) { closeStepPanel(); beginLoading(null); playButton.focus({ preventScroll: true }); } });
+  expandButton.addEventListener('click', () => { closeStepPanel(); expanded ? closeExpanded() : openExpanded(); });
   frame.addEventListener('error', () => showError('演示加载失败。请重试，或继续阅读图文步骤。'));
 
   function pauseWhenUnseen() {
@@ -282,6 +311,11 @@ function setupDemo(root: HTMLElement) {
   }).observe(root);
 
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && progress.open) {
+      event.preventDefault();
+      closeStepPanel(true);
+      return;
+    }
     if (!expanded || event.defaultPrevented) return;
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -302,6 +336,10 @@ function setupDemo(root: HTMLElement) {
   });
 
   new ResizeObserver(resize).observe(viewport);
+  new ResizeObserver(() => {
+    root.style.setProperty('--fbd-toolbar-height', `${toolbar.offsetHeight}px`);
+    fitStepPanel();
+  }).observe(toolbar);
   new MutationObserver(() => { if (ready) post('theme'); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   setFrameAvailable(false);
