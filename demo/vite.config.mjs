@@ -60,7 +60,8 @@ function desktopDemoAdapter() {
       // Both the entry and exported source resolve from one dependency tree, including explicit read-only reuse.
       if (importer && [demoRoot, desktopRoot].some(root => canonical(clean(importer)).startsWith(`${canonical(root)}/`))
         && !request.startsWith('.') && !request.startsWith('/') && !request.includes(':') && !request.startsWith('\0')) {
-        return this.resolve(id, path.join(dependencyRoot, '__docs_demo_entry__.tsx'), { skipSelf: true });
+        // Vite 5 falls back to root when its importer does not exist on disk.
+        return this.resolve(id, path.join(dependencyRoot, 'package.json'), { skipSelf: true });
       }
       return null;
     },
@@ -98,6 +99,9 @@ export default {
   plugins: [desktopDemoAdapter(), react(), tailwindcss()],
   resolve: {
     alias: [
+      // React's Vite plugin dedupes from demoRoot; these aliases keep its runtime in the pinned tree.
+      { find: 'react', replacement: path.join(dependencyRoot, 'node_modules/react') },
+      { find: 'react-dom', replacement: path.join(dependencyRoot, 'node_modules/react-dom') },
       { find: '@desktop', replacement: desktopRoot },
       { find: '@demo', replacement: demoRoot },
       { find: '@', replacement: desktopRoot },

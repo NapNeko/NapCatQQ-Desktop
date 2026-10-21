@@ -15,7 +15,9 @@
       "@/*": ["../.cache/desktop/src-ui/*"],
       "react": ["../.cache/desktop/node_modules/@types/react"],
       "react/*": ["../.cache/desktop/node_modules/@types/react/*"],
+      "react-dom": ["../.cache/desktop/node_modules/@types/react-dom"],
       "react-dom/*": ["../.cache/desktop/node_modules/@types/react-dom/*"],
+      "qrcode": ["../.cache/desktop/node_modules/@types/qrcode"],
       "*": ["../.cache/desktop/node_modules/*"]
     }
   },
