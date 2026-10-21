@@ -1,15 +1,24 @@
+import { closeReadingNav } from './docs-reading';
+
 type SearchEntry = { title: string; description: string; section: string; url: string; text: string };
 const root = document.documentElement;
 const themeButton = document.querySelector<HTMLButtonElement>('[data-theme-toggle]')!;
+const lightbox = document.querySelector<HTMLDialogElement>('[data-lightbox]')!;
+let activeShot: HTMLElement | null = null;
+function syncLightbox() {
+  if (!activeShot) return;
+  const screenshot = activeShot.querySelector<HTMLImageElement>(root.dataset.theme === 'dark' ? '.shot-dark' : '.shot-light')!;
+  const image = lightbox.querySelector('img')!;
+  image.src = screenshot.src;
+  image.alt = screenshot.alt;
+  lightbox.querySelector('p')!.textContent = `${screenshot.alt} · 演示数据`;
+}
 function syncTheme() {
   const dark = root.dataset.theme === 'dark';
   themeButton.setAttribute('aria-pressed', String(dark));
   themeButton.setAttribute('aria-label', dark ? '切换到浅色主题' : '切换到深色主题');
   themeButton.querySelector('[data-theme-icon]')!.textContent = dark ? '☀' : '☾';
-  document.querySelectorAll<HTMLElement>('[data-shot]').forEach(shot => {
-    const mode = shot.dataset.mode === 'auto' ? root.dataset.theme : shot.dataset.mode;
-    shot.querySelectorAll<HTMLButtonElement>('[data-shot-theme]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.shotTheme === mode)));
-  });
+  if (lightbox.open) syncLightbox();
 }
 syncTheme();
 themeButton.addEventListener('click', () => {
@@ -27,7 +36,7 @@ const sidebar = document.querySelector<HTMLElement>('#docs-sidebar')!;
 const sidebarToggle = document.querySelector<HTMLButtonElement>('[data-sidebar-toggle]')!;
 const backdrop = document.querySelector<HTMLButtonElement>('[data-sidebar-close]')!;
 function setSidebar(open: boolean) {
-  if (open) closeToc();
+  if (open) closeReadingNav();
   sidebar.classList.toggle('is-open', open);
   sidebarToggle.setAttribute('aria-expanded', String(open));
   backdrop.hidden = !open;
@@ -38,86 +47,14 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') setS
 const current = sidebar.querySelector<HTMLElement>('[aria-current=page]');
 if (current && current.offsetTop > sidebar.clientHeight - 100) sidebar.scrollTop = current.offsetTop - sidebar.clientHeight / 2;
 
-const toc = document.querySelector<HTMLDetailsElement>('[data-doc-toc]');
-const tocSummary = toc?.querySelector<HTMLElement>('summary');
-const tocCurrent = toc?.querySelector<HTMLElement>('[data-toc-current]');
-const outlineLinks = [...document.querySelectorAll<HTMLAnchorElement>('[data-toc-link]')];
-function anchorTarget(link: HTMLAnchorElement) {
-  let id = link.hash.slice(1);
-  try { id = decodeURIComponent(id); } catch { /* Keep literal IDs if decoding fails. */ }
-  return document.getElementById(id);
-}
-const outlineTargets = outlineLinks.flatMap(link => {
-  const target = anchorTarget(link);
-  return target ? [{ link, target }] : [];
-});
-function closeToc(restoreFocus = false) {
-  if (!toc?.open) return;
-  toc.open = false;
-  if (restoreFocus) tocSummary?.focus({ preventScroll: true });
-}
-function updateOutline() {
-  if (!tocCurrent) return;
-  const threshold = parseFloat(getComputedStyle(root).scrollPaddingTop) || 98;
-  let active: typeof outlineTargets[number] | undefined;
-  for (const item of outlineTargets) {
-    if (item.target.getBoundingClientRect().top > threshold + 2) break;
-    active = item;
-  }
-  if (window.scrollY > 0 && window.innerHeight + window.scrollY >= root.scrollHeight - 8) active = outlineTargets.at(-1);
-  for (const item of outlineTargets) {
-    if (item === active) item.link.setAttribute('aria-current', 'location');
-    else item.link.removeAttribute('aria-current');
-  }
-  tocCurrent.textContent = active?.link.textContent || '概览';
-  tocCurrent.title = tocCurrent.textContent;
-}
-let outlineFrame = 0;
-function scheduleOutlineUpdate() {
-  if (outlineFrame) return;
-  outlineFrame = requestAnimationFrame(() => { outlineFrame = 0; updateOutline(); });
-}
-if (toc) {
-  toc.addEventListener('click', event => {
-    const link = (event.target as Element).closest<HTMLAnchorElement>('a');
-    if (!link) return;
-    const target = anchorTarget(link);
-    closeToc();
-    if (target) {
-      const addedTabIndex = !target.hasAttribute('tabindex');
-      if (addedTabIndex) target.tabIndex = -1;
-      target.focus({ preventScroll: true });
-      if (addedTabIndex) target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
-    }
-  });
-  toc.addEventListener('focusout', event => {
-    if (!(event.relatedTarget instanceof Node) || !toc.contains(event.relatedTarget)) closeToc();
-  });
-  document.addEventListener('pointerdown', event => { if (!toc.contains(event.target as Node)) closeToc(); });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && toc.open) { event.preventDefault(); closeToc(true); }
-  });
-  window.addEventListener('scroll', scheduleOutlineUpdate, { passive: true });
-  window.addEventListener('resize', scheduleOutlineUpdate);
-  window.addEventListener('hashchange', scheduleOutlineUpdate);
-  window.addEventListener('load', scheduleOutlineUpdate);
-  const prose = document.querySelector('.doc-prose');
-  if (prose) new ResizeObserver(scheduleOutlineUpdate).observe(prose);
-  updateOutline();
-}
-
-const lightbox = document.querySelector<HTMLDialogElement>('[data-lightbox]')!;
 document.querySelectorAll<HTMLElement>('[data-shot]').forEach(shot => {
-  shot.querySelectorAll<HTMLButtonElement>('[data-shot-theme]').forEach(button => button.addEventListener('click', () => { shot.dataset.mode = button.dataset.shotTheme; syncTheme(); }));
   shot.querySelector('[data-shot-open]')!.addEventListener('click', () => {
-    const visible = [...shot.querySelectorAll<HTMLImageElement>('img')].find(img => getComputedStyle(img).display !== 'none')!;
-    const image = lightbox.querySelector('img')!;
-    image.src = visible.src;
-    image.alt = visible.alt;
-    lightbox.querySelector('p')!.textContent = `${visible.alt} · 演示数据`;
+    activeShot = shot;
+    syncLightbox();
     lightbox.showModal();
   });
 });
+lightbox.addEventListener('close', () => { activeShot = null; });
 lightbox.querySelector('[data-lightbox-close]')!.addEventListener('click', () => lightbox.close());
 lightbox.querySelector('img')!.addEventListener('click', () => lightbox.close());
 for (const dialog of document.querySelectorAll<HTMLDialogElement>('dialog')) {
@@ -128,20 +65,6 @@ for (const dialog of document.querySelectorAll<HTMLDialogElement>('dialog')) {
   });
 }
 
-document.querySelectorAll<HTMLPreElement>('.doc-prose pre').forEach(pre => {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'copy-code';
-  button.textContent = '复制';
-  button.setAttribute('aria-label', '复制代码');
-  button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(pre.querySelector('code')?.textContent || ''); button.textContent = '已复制'; }
-    catch { button.textContent = '请手动选择复制'; }
-    setTimeout(() => { button.textContent = '复制'; }, 2000);
-  });
-  pre.prepend(button);
-});
-
 const searchDialog = document.querySelector<HTMLDialogElement>('[data-search-dialog]')!;
 const searchInput = document.querySelector<HTMLInputElement>('#docs-search-input')!;
 const results = document.querySelector<HTMLElement>('.search-results')!;
@@ -151,7 +74,7 @@ let selected = -1;
 let dataPromise: Promise<SearchEntry[]> | undefined;
 async function openSearch() {
   setSidebar(false);
-  closeToc();
+  closeReadingNav();
   if (!searchDialog.open) searchDialog.showModal();
   searchInput.focus();
   if (searchData) return;

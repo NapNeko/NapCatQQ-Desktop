@@ -1,0 +1,24 @@
+---
+import { readingOutline, type ReadingHeading } from '../lib/reading-outline';
+
+interface Props { headings: ReadingHeading[] }
+const outline = readingOutline(Astro.props.headings);
+---
+{outline.length > 0 && <details id="reading-nav" class="doc-reading" data-reading-nav>
+  <summary aria-controls="reading-links">
+    <span class="reading-position" data-reading-position>阅读位置</span>
+    <strong class="reading-current" data-reading-current>开始阅读</strong>
+    <span class="reading-progress-label">阅读进度 <b data-reading-percent>0%</b></span>
+    <svg class="reading-chevron" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+    <span class="reading-track" aria-hidden="true"><span data-reading-fill></span></span>
+  </summary>
+  <nav id="reading-links" class="reading-links" aria-label="本页步骤与章节">
+    <p class="reading-menu-label">跳转到</p>
+    <ul>{outline.map(item => <li class:list={{ 'reading-sub': item.depth === 3 }}>
+      <a href={`#${item.slug}`} data-reading-link data-position={item.position} data-section={item.section} data-heading-title={item.title}>
+        <span class="reading-marker" aria-hidden="true">{item.marker}</span><span>{item.title}</span>
+      </a>
+    </li>)}</ul>
+    <a class="reading-top" href="#doc-content">回到顶部 <span aria-hidden="true">↑</span></a>
+  </nav>
+</details>}

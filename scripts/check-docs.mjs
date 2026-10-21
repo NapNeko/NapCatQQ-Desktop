@@ -17,6 +17,14 @@ const htmlFiles = (await files(output)).filter(file => file.endsWith('.html'));
 const cache = new Map(await Promise.all(htmlFiles.map(async file => [file, await readFile(file, 'utf8')])));
 let links = 0, images = 0;
 for (const [file, html] of cache) {
+  if (html.includes('class="doc-prose"')) {
+    const tables = (html.match(/<table\b/g) || []).length;
+    const wrappedTables = (html.match(/<div\b[^>]*class="doc-table"[^>]*>\s*<table\b/g) || []).length;
+    assert(tables === wrappedTables, `${path.relative(output, file)}: table scroll wrappers missing; run astro sync --force before rebuilding`);
+  }
+  if (html.includes('data-shot')) {
+    assert(!html.includes('data-shot-theme') && !html.includes('data-mode="auto"'), `${path.relative(output, file)}: stale screenshot controls; run astro sync --force before rebuilding`);
+  }
   for (const tag of html.matchAll(/<(?:a|img|script|link)\b[^>]*>/g)) {
     const match = tag[0].match(/\b(?:href|src)="([^"]+)"/);
     if (!match) continue;

@@ -1,0 +1,151 @@
+@layer components {
+  .doc-code-block {
+    --code-surface: color-mix(in srgb, var(--panel) 95%, #7186a0);
+    min-width: 0;
+    max-width: 100%;
+    margin: 25px 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--code-surface);
+    box-shadow: 0 2px 4px #18212b04;
+  }
+
+  :root[data-theme=dark] .doc-code-block {
+    --code-surface: color-mix(in srgb, var(--bg) 76%, #36475a);
+    box-shadow: none;
+  }
+
+  .doc-code-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 45px;
+    padding: 6px 11px 6px 17px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    font-size: 11px;
+    line-height: 1.5;
+    user-select: none;
+  }
+
+  .doc-code-language {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .doc-code-glyph {
+    display: inline-flex;
+    align-items: center;
+    color: var(--accent);
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -1px;
+  }
+
+  .doc-code-copy {
+    min-width: 56px;
+    min-height: 32px;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 5px 11px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+
+  .doc-code-copy:hover,
+  .doc-code-copy:focus-visible {
+    border-color: var(--line);
+    background: var(--soft);
+    color: var(--ink);
+  }
+
+  .doc-code-copy:focus-visible {
+    outline-offset: 1px;
+  }
+
+  .doc-code-copy:disabled {
+    opacity: .55;
+  }
+
+  .doc-code-block[data-copy-state=success] .doc-code-copy {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .doc-code-block pre,
+  .doc-prose .doc-code-block pre {
+    display: block;
+    max-width: 100%;
+    margin: 0;
+    padding: 18px 20px 20px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border: 0;
+    border-radius: 0;
+    background: var(--code-surface) !important;
+    font-size: 12.5px;
+    line-height: 1.85;
+    white-space: pre;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  .doc-prose .doc-code-block pre code {
+    display: block;
+    min-width: max-content;
+    font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  }
+
+  .doc-code-block .astro-code span,
+  :root[data-theme=dark] .doc-code-block .astro-code span {
+    background: transparent !important;
+  }
+
+  .doc-code-feedback {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    color: var(--muted);
+    background: var(--panel);
+    font-size: 11px;
+    line-height: 1.65;
+  }
+
+  .doc-code-block[data-copy-state=error] .doc-code-feedback {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    padding: 8px 17px;
+    border-top: 1px solid var(--line);
+  }
+
+  @media (max-width: 780px) {
+    .doc-code-toolbar { padding-left: 14px; }
+    .doc-code-copy { min-height: 36px; }
+    .doc-prose .doc-code-block pre { padding: 16px 14px 18px; font-size: 11.5px; }
+  }
+
+  @media print {
+    .doc-code-copy,
+    .doc-code-feedback { display: none !important; }
+    .doc-code-block { break-inside: avoid; box-shadow: none; }
+    .doc-prose .doc-code-block pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .doc-prose .doc-code-block pre code { min-width: 0; }
+  }
+}

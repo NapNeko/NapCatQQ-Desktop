@@ -2,8 +2,11 @@
 import type { CollectionEntry } from 'astro:content';
 import { baseline, docsPath, sections } from '../lib/docs';
 import TutorialDemo from './TutorialDemo.astro';
+import DocsReadingNav from './DocsReadingNav.astro';
 import { tutorialForDoc } from '../lib/tutorials';
 import '../styles/docs.css';
+import '../styles/docs-code.css';
+import '../styles/docs-reading.css';
 
 interface Props {
   entry: CollectionEntry<'docs'>;
@@ -14,7 +17,6 @@ const { entry, entries, headings } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const index = entries.findIndex(item => item.id === entry.id);
 const previous = entries[index - 1], next = entries[index + 1];
-const outline = headings.filter(item => item.depth === 2 || item.depth === 3);
 const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
 ---
 <!doctype html>
@@ -50,7 +52,7 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
         <nav aria-label="文档目录">
           {sections.map(section => {
             const group = entries.filter(item => item.data.section === section);
-            return group.length > 0 && <div class="sidebar-group"><h2>{section}</h2><ul>{group.map(item => <li><a href={docsPath(item.id)} aria-current={item.id === entry.id ? 'page' : undefined}>{item.data.title}</a></li>)}</ul></div>;
+            return group.length > 0 && <details class="sidebar-group" open><summary><span>{section}</span><small>{group.length}</small><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></summary><ul>{group.map(item => <li><a href={docsPath(item.id)} aria-current={item.id === entry.id ? 'page' : undefined}>{item.data.title}</a></li>)}</ul></details>;
           })}
         </nav>
         <div class="sidebar-meta"><span class="version-dot"></span> Desktop v{baseline.version}<small>Windows 客户端 · 本机与远端管理</small></div>
@@ -58,17 +60,14 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
       <main id="doc-content" class="doc-main">
         <div class="doc-context">
           <div class="doc-breadcrumb"><a href={docsPath('index')}>文档</a><span aria-hidden="true">/</span><span>{entry.data.section}</span></div>
-          {outline.length > 0 && <details class="doc-toc" data-doc-toc>
-            <summary aria-controls="doc-toc-links"><span>本页目录</span><span class="doc-toc-current" data-toc-current>概览</span><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></summary>
-            <nav id="doc-toc-links" class="doc-toc-links" aria-label="本页目录">
-              <ul>{outline.map(item => <li class:list={{ 'outline-sub': item.depth === 3 }}><a href={`#${item.slug}`} data-toc-link>{item.text}</a></li>)}</ul>
-              <a class="doc-toc-top" href="#doc-content" data-toc-top>回到顶部 <span aria-hidden="true">↑</span></a>
-            </nav>
-          </details>}
+          {headings.some(heading => heading.depth === 2 || heading.depth === 3) && <a class="doc-reading-jump" href="#reading-nav">本页步骤与章节 <span aria-hidden="true">↓</span></a>}
         </div>
-        <header class="doc-title"><span class="doc-eyebrow">NAPCATQQ DESKTOP / GUIDE</span><h1>{entry.data.title}</h1><p>{entry.data.description}</p></header>
+        <header class="doc-title"><h1>{entry.data.title}</h1><p>{entry.data.description}</p></header>
         {tutorialForDoc(entry.id) && <TutorialDemo tutorial={tutorialForDoc(entry.id)!} />}
-        <article class="doc-prose"><slot /></article>
+        <div class="doc-reader">
+          <DocsReadingNav headings={headings} />
+          <article class="doc-prose"><slot /></article>
+        </div>
         <footer class="doc-footer"><p>按 Desktop v{baseline.version} 核对 · <a href={`${repo}/tree/${baseline.sha}`}>main {baseline.sha.slice(0, 7)}</a></p><div><a href={`${repo}/edit/web/src/content/docs/${entry.id}.md`}>在 GitHub 编辑此页 ↗</a><a href={`${repo}/issues/new?title=${encodeURIComponent(`文档反馈：${entry.data.title}`)}`}>反馈文档问题 ↗</a></div></footer>
         <nav class="doc-pagination" aria-label="前后篇">{previous ? <a href={docsPath(previous.id)}><small>← 上一篇</small><strong>{previous.data.title}</strong></a> : <span></span>}{next && <a href={docsPath(next.id)}><small>下一篇 →</small><strong>{next.data.title}</strong></a>}</nav>
         <div class="docs-end"><span>NapCatQQ Desktop · GPL-3.0</span><a href={`${repo}/releases/latest`}>下载 Windows 版 ↗</a></div>
@@ -83,6 +82,7 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
     <dialog class="docs-lightbox" data-lightbox aria-label="查看教程截图"><div><p></p><button type="button" data-lightbox-close aria-label="关闭大图">关闭 <kbd>Esc</kbd></button></div><img alt="" /></dialog>
     <script>
       import '../scripts/docs';
+      import '../scripts/docs-code';
     </script>
   </body>
 </html>
