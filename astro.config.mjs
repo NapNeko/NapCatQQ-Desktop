@@ -4,6 +4,7 @@ import docsMarkup from './scripts/rehype-docs.mjs';
 
 export default defineConfig({
   output: 'static',
+  site: 'https://napneko.github.io',
   base: process.env.SITE_BASE || '/',
   devToolbar: { enabled: false },
   markdown: {

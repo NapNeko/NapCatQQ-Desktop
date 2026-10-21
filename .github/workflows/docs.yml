@@ -6,9 +6,15 @@ on:
     branches: [web]
   pull_request:
     branches: [web]
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     strategy:
       matrix:
         base: ['/', '/NapCatQQ-Desktop/']
@@ -27,3 +33,25 @@ jobs:
           SITE_BASE: ${{ matrix.base }}
       - run: node .cache/desktop/node_modules/typescript/bin/tsc -p demo/tsconfig.json --noEmit
       - run: pnpm test:demo
+      - name: Configure GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/web' && github.repository == 'NapNeko/NapCatQQ-Desktop' && matrix.base == '/NapCatQQ-Desktop/'
+        uses: actions/configure-pages@v5
+      - name: Upload website
+        if: github.event_name == 'push' && github.ref == 'refs/heads/web' && github.repository == 'NapNeko/NapCatQQ-Desktop' && matrix.base == '/NapCatQQ-Desktop/'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/web' && github.repository == 'NapNeko/NapCatQQ-Desktop'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4

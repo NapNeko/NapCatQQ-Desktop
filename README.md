@@ -19,7 +19,15 @@ pnpm.cmd dev
 
 首页与 `/docs/` 文档站一起构建。文档包含从安装、创建 Bot、连接应用端到远端部署、聊天、调试和维护的教程，提供全文搜索、明暗主题、浮动阅读导航和截图大图查看。截图与演示界面跟随文档主题。
 
-`SITE_BASE` 可设置构建时的站点前缀，以便后续部署到 GitHub Pages 项目路径。当前未配置线上部署。
+`SITE_BASE` 可设置构建时的站点前缀；GitHub Pages 使用 `/NapCatQQ-Desktop/`。
+
+## 线上发布
+
+站点地址为 <https://napneko.github.io/NapCatQQ-Desktop/>，教程位于站点下的 `docs/`。
+
+推送到 `web` 后，`.github/workflows/docs.yml` 先完成两种路径的构建、文档检查、演示类型检查和测试，再将项目路径构建的 `dist/` 上传并发布到 GitHub Pages。Pull Request 只检查，不发布。发布失败时，到 Actions 查看对应步骤，修复后重新推送或重跑失败任务。
+
+仓库的 Pages 发布来源应保持为 GitHub Actions，`github-pages` 环境需允许 `web` 分支。源码和发布流程均留在 `web`，无需将网站合并到 `main` 或另建产物分支。
 
 ## 检查文档
 
@@ -28,7 +36,7 @@ pnpm.cmd build
 pnpm.cmd check:docs
 ```
 
-`check:docs` 检查构建后的本地链接、锚点、图片、明暗配对和功能清单中的文档引用。CI 分别使用 `/` 和 `/NapCatQQ-Desktop/` 两种路径运行这些检查，不包含发布操作。
+`check:docs` 检查构建后的本地链接、锚点、图片、明暗配对和功能清单中的文档引用。CI 分别使用 `/` 和 `/NapCatQQ-Desktop/` 两种路径运行这些检查；仅 `web` 的推送在全部检查通过后发布。
 
 需要复测浏览器交互时，安装 Python 的 Playwright 包和 Chromium，先启动网站，再运行 `python scripts/smoke-docs.py --url http://127.0.0.1:4321`。可用 `--chromium` 指定浏览器路径，`--output` 指定报告目录；默认报告写到系统临时目录。它会检查所有教程在宽窄屏、明暗主题下的表格与演示工具栏，并检查浮动导航、播放控制、搜索、截图、复制和页面资源。
 
