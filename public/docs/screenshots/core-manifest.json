@@ -1,0 +1,156 @@
+{
+  "source_commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "data_source": "main bundled browser mock IPC; no real accounts or private hosts",
+  "theme_capture": "actual auto preference with prefers-color-scheme light/dark on the same screen",
+  "capture_script": "scripts/capture-core-screenshots.py",
+  "screenshots": [
+    {
+      "file": "overview-light.png",
+      "screen": "概览",
+      "theme": "light",
+      "sha256": "4c109a9cd5a19b116392155f8329ab5717390ed2c9bab3438de39cf12fd4df1f"
+    },
+    {
+      "file": "overview-dark.png",
+      "screen": "概览",
+      "theme": "dark",
+      "sha256": "ceab7132dca590637c1022a3f7fe9acc915ca7f29972c5b31f7375ab2ebe12ef"
+    },
+    {
+      "file": "bots-light.png",
+      "screen": "机器人",
+      "theme": "light",
+      "sha256": "6a66c26c1c8ffa1572f95db1a304dcdf873eb1989094a11a7e035c81c15aa348"
+    },
+    {
+      "file": "bots-dark.png",
+      "screen": "机器人",
+      "theme": "dark",
+      "sha256": "a0d6a3d0f022b025e997ab6649b21dc89b6cc905f69b41141b03031760842fdc"
+    },
+    {
+      "file": "remote-light.png",
+      "screen": "远端",
+      "theme": "light",
+      "sha256": "872d32ca1495f60c44c836de4fbbc0ed6ca75e4222a869c7ce61b0deb5115426"
+    },
+    {
+      "file": "remote-dark.png",
+      "screen": "远端",
+      "theme": "dark",
+      "sha256": "a3c56d628b7f579ed754f0d546a81a5a3524a69f379e9112e8cd117837111402"
+    },
+    {
+      "file": "debug-light.png",
+      "screen": "调试台",
+      "theme": "light",
+      "sha256": "9629761f520bcebcbe17f7f2f2baee3086e2850d80ed832261393daf8a353523"
+    },
+    {
+      "file": "debug-dark.png",
+      "screen": "调试台",
+      "theme": "dark",
+      "sha256": "4473a2b426bd3264c1aae0f01aba40bcdb05f5c34c588116bea49d8f7858e050"
+    },
+    {
+      "file": "tasks-light.png",
+      "screen": "任务队列",
+      "theme": "light",
+      "sha256": "ae85070c623eb95edbe9415860cc0130b16bdd6f70cf559a46607a57ecf692b8"
+    },
+    {
+      "file": "tasks-dark.png",
+      "screen": "任务队列",
+      "theme": "dark",
+      "sha256": "9e260698072c50e9773f63a94b7919d56fb2d1589db0e2baec4b5d40bed37dfe"
+    },
+    {
+      "file": "settings-appearance-light.png",
+      "screen": "设置 / 外观",
+      "theme": "light",
+      "sha256": "c41bd9d7cbe260dfdf18ee7d5a8d58ee94b3452f58efd88d309dbeaa43ef68cf"
+    },
+    {
+      "file": "settings-appearance-dark.png",
+      "screen": "设置 / 外观",
+      "theme": "dark",
+      "sha256": "f1f93c68fa7df2131a16ff95d43443d6d63fbcbc2ee27bdd03f11ca51ea73c0a"
+    },
+    {
+      "file": "settings-features-light.png",
+      "screen": "设置 / 功能",
+      "theme": "light",
+      "sha256": "a5a8f2ac3f55df14cc5dc64495ced6bad3392cb97e10bd1c2d4853be8f064086"
+    },
+    {
+      "file": "settings-features-dark.png",
+      "screen": "设置 / 功能",
+      "theme": "dark",
+      "sha256": "abc6a991c6c7ba72153a9af39daeeb806a213ecde37ad1c2ddf12f80e27d8334"
+    },
+    {
+      "file": "settings-network-light.png",
+      "screen": "设置 / 网络",
+      "theme": "light",
+      "sha256": "2c0d1dfeb3bac1fa41f41289dd65c059ef6e462c293f986049cdbebe9bd0ca93"
+    },
+    {
+      "file": "settings-network-dark.png",
+      "screen": "设置 / 网络",
+      "theme": "dark",
+      "sha256": "7a2fbd716b7f1aff804be38d5a7557c4e8227ed36fe8866435eaddf262c20924"
+    },
+    {
+      "file": "settings-data-light.png",
+      "screen": "设置 / 数据",
+      "theme": "light",
+      "sha256": "56db0873b0dd1ba8541f538d031f155ceb05ab6394c146328d1d7824ec562b66"
+    },
+    {
+      "file": "settings-data-dark.png",
+      "screen": "设置 / 数据",
+      "theme": "dark",
+      "sha256": "2ee875d8ee59b101892e1cc2fc9775727c54c58392e8e197c78522e3e25912ff"
+    },
+    {
+      "file": "settings-notifications-light.png",
+      "screen": "设置 / 通知",
+      "theme": "light",
+      "sha256": "5488318d4842148ed328735ab4a4b960523f4d3b6315d09e975770ae40ef9186"
+    },
+    {
+      "file": "settings-notifications-dark.png",
+      "screen": "设置 / 通知",
+      "theme": "dark",
+      "sha256": "74b7a9e9c221be67ac85a8101a01f120ca0ad58e6a1035768558850b8db55274"
+    },
+    {
+      "file": "settings-runtime-light.png",
+      "screen": "设置 / 运行",
+      "theme": "light",
+      "sha256": "7920960a5b4b5ebf4824997de67651cc55581957ed26ea82f10053aca2578358"
+    },
+    {
+      "file": "settings-runtime-dark.png",
+      "screen": "设置 / 运行",
+      "theme": "dark",
+      "sha256": "d3958a84e6874f24a9e0eb2ade129929847c06c7ae95d22f9775c8d05a061158"
+    },
+    {
+      "file": "settings-monitoring-light.png",
+      "screen": "设置 / 监控",
+      "theme": "light",
+      "sha256": "f5303b04aefcbbe2bb6c5a441493cd65c4d86d30495d2c8e66ddeaa1ed46e05b"
+    },
+    {
+      "file": "settings-monitoring-dark.png",
+      "screen": "设置 / 监控",
+      "theme": "dark",
+      "sha256": "58a5301e135802b2079317aa3ec649ee72629bf9924a538d494b7b0d250615c0"
+    }
+  ]
+}

@@ -1,21 +1,21 @@
 ---
 import '../styles/management.css';
-const docs='https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/';
+const docs=import.meta.env.BASE_URL + 'docs/';
 ---
 <section class="management-section section" id="management" aria-labelledby="management-title">
   <div class="container">
     <div class="section-heading"><div class="section-index">NapCat / SnowLuma</div><h2 id="management-title">管理本机与远端 Bot</h2><p>安装组件，管理 Bot 启停与登录，编辑连接并查看日志。</p></div>
-    <div class="management-workspace">
+    <div class="management-workspace" data-docs-base={docs}>
       <div class="host-selector" role="group" aria-label="查看运行位置"><button type="button" aria-pressed="true" data-placement="local"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8m-4-4v4" /></svg><span><strong>本机 Windows</strong><small>在自己的电脑上运行</small></span><span class="host-selected" aria-hidden="true">✓</span></button><button type="button" aria-pressed="false" data-placement="remote"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="3" width="18" height="7" rx="2" /><rect x="3" y="14" width="18" height="7" rx="2" /><path d="M7 6.5h.1m0 11h.1M11 6.5h6m-6 11h6" /></svg><span><strong>远端 Linux</strong><small>通过 SSH 管理服务器</small></span><span class="host-selected" aria-hidden="true">✓</span></button><p class="host-selector-note">运行位置示意</p></div>
-      <div class="management-detail" aria-live="polite"><div class="management-detail-top"><span class="host-connection"><span class="connection-dot"></span><span data-placement-label>本机 Windows</span></span><span class="protocols">NapCat <span>+</span> SnowLuma</span></div><div class="management-detail-content"><h3 data-placement-heading>在本机创建 Bot</h3><p data-placement-description>安装运行时、QQ 和协议端后创建 Bot。可单独安装 QQ 程序，也可使用系统 QQ。程序分开不代表登录数据完全隔离。</p><div class="component-flow"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 5v9l9 5 9-5V8m-9 5v9" /></svg>准备组件</span><i aria-hidden="true"></i><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="3" /><path d="M12 3v4M9 12h.1m5.9 0h.1M9 16h6" /></svg>创建 Bot</span><i aria-hidden="true"></i><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>启动登录</span></div><a class="text-link" data-placement-link href={`${docs}README.md`}>本机使用指南 <span aria-hidden="true">↗</span></a></div><div class="management-bottom"><span data-placement-note>查看组件安装进度与 Bot 运行日志。</span><span class="operation-points">启停 <span>／</span> 日志 <span>／</span> WebUI</span></div></div>
+      <div class="management-detail" aria-live="polite"><div class="management-detail-top"><span class="host-connection"><span class="connection-dot"></span><span data-placement-label>本机 Windows</span></span><span class="protocols">NapCat <span>+</span> SnowLuma</span></div><div class="management-detail-content"><h3 data-placement-heading>在本机创建 Bot</h3><p data-placement-description>安装运行时、QQ 和协议端后创建 Bot。可单独安装 QQ 程序，也可使用系统 QQ。程序分开不代表登录数据完全隔离。</p><div class="component-flow"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 5v9l9 5 9-5V8m-9 5v9" /></svg>准备组件</span><i aria-hidden="true"></i><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="3" /><path d="M12 3v4M9 12h.1m5.9 0h.1M9 16h6" /></svg>创建 Bot</span><i aria-hidden="true"></i><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>启动登录</span></div><a class="text-link" data-placement-link href={`${docs}first-bot/`}>本机使用指南 <span aria-hidden="true">↗</span></a></div><div class="management-bottom"><span data-placement-note>查看组件安装进度与 Bot 运行日志。</span><span class="operation-points">启停 <span>／</span> 日志 <span>／</span> WebUI</span></div></div>
     </div>
     <div class="start-path" id="getting-started"><div><h3>安装与开始使用</h3><p>首次运行需准备 QQ、运行时和协议端。</p></div><ol><li><span>1</span><div><strong>安装 Desktop</strong><small>下载 Windows 安装包</small></div></li><li><span>2</span><div><strong>准备组件</strong><small>选择主机与协议端</small></div></li><li><span>3</span><div><strong>启动并登录</strong><small>创建 Bot，完成扫码</small></div></li></ol></div>
   </div>
 </section>
 <script>
   const placements = {
-    local:{label:'本机 Windows',heading:'在本机创建 Bot',description:'安装运行时、QQ 和协议端后创建 Bot。可单独安装 QQ 程序，也可使用系统 QQ。程序分开不代表登录数据完全隔离。',note:'查看组件安装进度与 Bot 运行日志。',link:'README.md',linkText:'本机使用指南'},
-    remote:{label:'远端 Linux · SSH',heading:'通过 SSH 部署与管理',description:'添加 SSH 主机并准备运行环境后，可选择原生运行或 Docker 部署。在 Desktop 查看安装进度、登录入口与日志。',note:'Docker 部署仅面向远端 Linux。',link:'remote-linux.md',linkText:'远端使用指南'}
+    local:{label:'本机 Windows',heading:'在本机创建 Bot',description:'安装运行时、QQ 和协议端后创建 Bot。可单独安装 QQ 程序，也可使用系统 QQ。程序分开不代表登录数据完全隔离。',note:'查看组件安装进度与 Bot 运行日志。',link:'first-bot/',linkText:'本机使用指南'},
+    remote:{label:'远端 Linux · SSH',heading:'通过 SSH 部署与管理',description:'添加 SSH 主机并准备运行环境后，可选择原生运行或 Docker 部署。在 Desktop 查看安装进度、登录入口与日志。',note:'Docker 部署仅面向远端 Linux。',link:'remote-linux/',linkText:'远端使用指南'}
   };
   const workspace = document.querySelector<HTMLElement>('.management-workspace')!;
   workspace.querySelectorAll<HTMLButtonElement>('[data-placement]').forEach(button=>button.addEventListener('click',()=>{
@@ -23,7 +23,7 @@ const docs='https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/';
     const view=placements[button.dataset.placement as keyof typeof placements];
     for(const [key,value] of Object.entries({label:view.label,heading:view.heading,description:view.description,note:view.note})){ workspace.querySelector(`[data-placement-${key}]`)!.textContent=value; }
     const link=workspace.querySelector<HTMLAnchorElement>('[data-placement-link]')!;
-    link.href=`https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/${view.link}`;
+    link.href=`${workspace.dataset.docsBase}${view.link}`;
     link.replaceChildren(document.createTextNode(`${view.linkText} ↗`));
     if(!matchMedia('(prefers-reduced-motion: reduce)').matches)workspace.querySelector('.management-detail-content')!.animate([{opacity:.5,transform:'translateX(6px)'},{opacity:1,transform:'translateX(0)'}],{duration:230,easing:'ease-out'});
   }));

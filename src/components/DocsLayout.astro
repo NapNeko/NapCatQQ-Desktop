@@ -1,0 +1,78 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { baseline, docsPath, sections } from '../lib/docs';
+import '../styles/docs.css';
+
+interface Props {
+  entry: CollectionEntry<'docs'>;
+  entries: CollectionEntry<'docs'>[];
+  headings: { depth: number; slug: string; text: string }[];
+}
+const { entry, entries, headings } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const index = entries.findIndex(item => item.id === entry.id);
+const previous = entries[index - 1], next = entries[index + 1];
+const outline = headings.filter(item => item.depth === 2 || item.depth === 3);
+const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#faf9f7" />
+    <title>{entry.data.title} · NapCatQQ Desktop 文档</title>
+    <meta name="description" content={entry.data.description} />
+    <link rel="icon" type="image/png" href={`${base}media/logo.png`} />
+    <script is:inline>
+      try {
+        const saved = localStorage.getItem('ncd-docs-theme');
+        document.documentElement.dataset.theme = saved === 'light' || saved === 'dark' ? saved : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      } catch { document.documentElement.dataset.theme = 'light'; }
+    </script>
+  </head>
+  <body>
+    <a class="docs-skip" href="#doc-content">跳到正文</a>
+    <header class="docs-header">
+      <a class="docs-brand" href={base}><img src={`${base}media/logo.png`} width="32" height="32" alt="" /><span>NapCatQQ <b>Desktop</b></span></a>
+      <a class="docs-wordmark" href={docsPath('index')}>使用文档</a>
+      <button class="search-trigger" type="button" data-search-open aria-haspopup="dialog"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg><span>搜索文档</span><kbd>Ctrl K</kbd></button>
+      <nav class="docs-top-links" aria-label="主导航"><a href={base}>首页</a><a href={`${repo}/releases`}>更新日志 ↗</a><a href={repo}>GitHub ↗</a></nav>
+      <button type="button" class="theme-toggle" data-theme-toggle aria-label="切换到深色主题" aria-pressed="false"><span data-theme-icon aria-hidden="true">☾</span><span class="sr-only">切换主题</span></button>
+    </header>
+    <div class="docs-mobile-bar"><button type="button" data-sidebar-toggle aria-controls="docs-sidebar" aria-expanded="false"><span aria-hidden="true">☰</span> 章节目录</button><span>{entry.data.section}</span></div>
+    <button class="sidebar-backdrop" type="button" data-sidebar-close aria-label="关闭章节目录" hidden></button>
+    <div class="docs-shell">
+      <aside id="docs-sidebar" class="docs-sidebar" aria-label="文档章节">
+        <a class="sidebar-start" href={docsPath('first-bot')}><span>第一次使用？</span><strong>从第一个 Bot 开始 <span aria-hidden="true">→</span></strong></a>
+        <nav aria-label="文档目录">
+          {sections.map(section => {
+            const group = entries.filter(item => item.data.section === section);
+            return group.length > 0 && <div class="sidebar-group"><h2>{section}</h2><ul>{group.map(item => <li><a href={docsPath(item.id)} aria-current={item.id === entry.id ? 'page' : undefined}>{item.data.title}</a></li>)}</ul></div>;
+          })}
+        </nav>
+        <div class="sidebar-meta"><span class="version-dot"></span> Desktop v{baseline.version}<small>Windows 客户端 · 本机与远端管理</small></div>
+      </aside>
+      <main id="doc-content" class="doc-main">
+        <div class="doc-breadcrumb"><a href={docsPath('index')}>文档</a><span aria-hidden="true">/</span><span>{entry.data.section}</span></div>
+        <header class="doc-title"><span class="doc-eyebrow">NAPCATQQ DESKTOP / GUIDE</span><h1>{entry.data.title}</h1><p>{entry.data.description}</p></header>
+        {outline.length > 0 && <details class="mobile-outline"><summary>本页内容</summary><ul>{outline.filter(item => item.depth === 2).map(item => <li><a href={`#${item.slug}`}>{item.text}</a></li>)}</ul></details>}
+        <article class="doc-prose"><slot /></article>
+        <footer class="doc-footer"><p>按 Desktop v{baseline.version} 核对 · <a href={`${repo}/tree/${baseline.sha}`}>main {baseline.sha.slice(0, 7)}</a></p><div><a href={`${repo}/edit/web/src/content/docs/${entry.id}.md`}>在 GitHub 编辑此页 ↗</a><a href={`${repo}/issues/new?title=${encodeURIComponent(`文档反馈：${entry.data.title}`)}`}>反馈文档问题 ↗</a></div></footer>
+        <nav class="doc-pagination" aria-label="前后篇">{previous ? <a href={docsPath(previous.id)}><small>← 上一篇</small><strong>{previous.data.title}</strong></a> : <span></span>}{next && <a href={docsPath(next.id)}><small>下一篇 →</small><strong>{next.data.title}</strong></a>}</nav>
+        <div class="docs-end"><span>NapCatQQ Desktop · GPL-3.0</span><a href={`${repo}/releases/latest`}>下载 Windows 版 ↗</a></div>
+      </main>
+      <aside class="docs-outline" aria-label="本页内容"><div><h2>本页内容</h2><nav>{outline.map(item => <a class:list={{ 'outline-sub': item.depth === 3 }} href={`#${item.slug}`}>{item.text}</a>)}</nav><a class="outline-top" href="#doc-content">回到顶部 ↑</a></div></aside>
+    </div>
+    <dialog class="docs-search" data-search-dialog aria-label="搜索文档">
+      <div class="search-input-row"><label class="sr-only" for="docs-search-input">搜索关键词</label><input id="docs-search-input" type="search" placeholder="搜索功能、按钮或遇到的问题…" autocomplete="off" /><button type="button" data-search-close aria-label="关闭搜索">Esc</button></div>
+      <p class="search-status" role="status" aria-live="polite">输入关键词，搜索全部教程与功能说明。</p>
+      <div class="search-results" role="list" aria-label="搜索结果"></div>
+      <div class="search-help"><span>↑ ↓ 选择 · Enter 打开 · Esc 关闭</span><span>本地全文搜索</span></div>
+    </dialog>
+    <dialog class="docs-lightbox" data-lightbox aria-label="查看教程截图"><div><p></p><button type="button" data-lightbox-close aria-label="关闭大图">关闭 <kbd>Esc</kbd></button></div><img alt="" /></dialog>
+    <script>
+      import '../scripts/docs';
+    </script>
+  </body>
+</html>

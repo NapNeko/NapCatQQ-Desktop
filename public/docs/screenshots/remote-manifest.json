@@ -1,0 +1,46 @@
+{
+  "sourceCommit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "source": "Actual main browser UI at http://127.0.0.1:1422; bundled IPC mocks; no Tauri or real QQ/SSH session",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "screens": [
+    {
+      "file": "remote-create-light.png",
+      "theme": "light",
+      "action": "远端 → 添加服务器；填写教程演示名称、文档保留地址和用户名，密码留空",
+      "demoData": true,
+      "sha256": "59b5e569512cdc95bc1c8e89c78db36ed2020aab46ffa433e3a1d0d99dc6e9eb"
+    },
+    {
+      "file": "remote-create-dark.png",
+      "theme": "dark",
+      "action": "远端 → 添加服务器；填写教程演示名称、文档保留地址和用户名，密码留空",
+      "demoData": true,
+      "sha256": "a9171825a574f8655f7d592c4a48b2b99ea7b839a246c43bce8198586bcdeee0"
+    }
+  ],
+  "limitations": [
+    {
+      "screen": "bot-login",
+      "captured": false,
+      "reason": "Browser getConfig always rebuilds default NapCat config; config upsert does not persist a SnowLuma selection. SnowLuma qrLoginSnapshot invokes Tauri with no browser mock. No real QQ session or QR captured; document image reference removed.",
+      "source": [
+        "src-ui/core/ipc/mock/bot.mock.ts",
+        "src-ui/core/services/bot.service.ts",
+        "src-ui/core/services/desktop.service.ts"
+      ]
+    },
+    {
+      "screen": "docker",
+      "captured": false,
+      "reason": "Browser serverService.list returns [] and add throws not in Tauri. AppNext hides the container route until a remote host has available Docker, so even empty container page is not normally reachable. No fabricated host or forced route; document image reference removed.",
+      "source": [
+        "src-ui/core/services/server.service.ts",
+        "src-ui/app/AppNext.tsx",
+        "src-ui/modules/docker/DockerPage.next.tsx"
+      ]
+    }
+  ]
+}

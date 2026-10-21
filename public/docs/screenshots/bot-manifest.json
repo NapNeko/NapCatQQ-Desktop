@@ -1,0 +1,60 @@
+{
+  "source_commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "data_source": "main bundled browser mock IPC; unsaved example account 10003",
+  "theme_capture": "actual auto preference with prefers-color-scheme light/dark on the same screen",
+  "capture_script": "scripts/capture-bot-screenshots.py",
+  "screenshots": [
+    {
+      "file": "components-light.png",
+      "screen": "components",
+      "theme": "light",
+      "sha256": "88b1ce8008b643d932b0d3543b1315326462fc4a28e5a4a77a1b88698a352477"
+    },
+    {
+      "file": "components-dark.png",
+      "screen": "components",
+      "theme": "dark",
+      "sha256": "6d69a0e3b251e78182227fe6227889b60a0bdf59de7f053eb8b6e63edcc30463"
+    },
+    {
+      "file": "bot-create-light.png",
+      "screen": "bot-create",
+      "theme": "light",
+      "sha256": "22e52497700e3488a98b51dc5fcc6b90161097496de1bb2bb1fd4f0e4572482a"
+    },
+    {
+      "file": "bot-create-dark.png",
+      "screen": "bot-create",
+      "theme": "dark",
+      "sha256": "ae8ba1cf631da1389d6581af5705ae3288db02f8f7a6efc1db420a2b79aabf8c"
+    },
+    {
+      "file": "bot-connections-light.png",
+      "screen": "bot-connections",
+      "theme": "light",
+      "sha256": "22c7a0e1dcab0239e53cee82ccc29e777de89599d27cac22ad1cc5e87bdfd2ab"
+    },
+    {
+      "file": "bot-connections-dark.png",
+      "screen": "bot-connections",
+      "theme": "dark",
+      "sha256": "6a174d3fe8521f893526f14410b576957ccbda99122efae795de847f93226378"
+    },
+    {
+      "file": "bot-logs-light.png",
+      "screen": "bot-logs",
+      "theme": "light",
+      "sha256": "76c99fb6b0a75a1585fb63256541ad0b8b577aa6b294fd59969c9a25a6b5665b"
+    },
+    {
+      "file": "bot-logs-dark.png",
+      "screen": "bot-logs",
+      "theme": "dark",
+      "sha256": "8605f25b7049d7518caef0c0fdb9f5944891489df33d98d8316ec547e8b189ec"
+    }
+  ]
+}
