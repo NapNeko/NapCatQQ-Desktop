@@ -1,0 +1,60 @@
+{
+  "source_commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "data_source": "main bundled browser mock IPC; install and link are not submitted",
+  "theme_capture": "actual auto preference with prefers-color-scheme light/dark on the same screen",
+  "capture_script": "scripts/capture-app-screenshots.py",
+  "screenshots": [
+    {
+      "file": "app-install-light.png",
+      "screen": "app-install",
+      "theme": "light",
+      "sha256": "8a64482915a9eb07f76031d03c512389cb101db4a03ebb9a7fec958f113af5bd"
+    },
+    {
+      "file": "app-install-dark.png",
+      "screen": "app-install",
+      "theme": "dark",
+      "sha256": "f219c39c552cf99f297d74aaba2421264b51985ba96c789efda164bec77983db"
+    },
+    {
+      "file": "apps-light.png",
+      "screen": "apps",
+      "theme": "light",
+      "sha256": "61cca1cf2ad219a25e5fb0c5ca9b8837bdc79e68c8268be97672ac95abbdb25c"
+    },
+    {
+      "file": "apps-dark.png",
+      "screen": "apps",
+      "theme": "dark",
+      "sha256": "c1588c9b33cb59e573e53f86b034c9f010da59170dc7bf05fe5c86b76a9fdef3"
+    },
+    {
+      "file": "app-link-light.png",
+      "screen": "app-link",
+      "theme": "light",
+      "sha256": "8d2e142fc875058412afbdcd3eb522a303ded13217e72ab9c1e308c302834fec"
+    },
+    {
+      "file": "app-link-dark.png",
+      "screen": "app-link",
+      "theme": "dark",
+      "sha256": "65ad323d28568fb1e253e3f516016e1f7120f14cd668c34cd9b7db18ff86a841"
+    },
+    {
+      "file": "app-config-light.png",
+      "screen": "app-config",
+      "theme": "light",
+      "sha256": "a5b3da846eb5a3ec3be6910c588956d497a713a221a32c47b93420255a2a59b6"
+    },
+    {
+      "file": "app-config-dark.png",
+      "screen": "app-config",
+      "theme": "dark",
+      "sha256": "09f09dd01fcc082f4390af64be90186e6af5428d30927960f1d81c83c629c826"
+    }
+  ]
+}

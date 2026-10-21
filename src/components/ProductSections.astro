@@ -2,7 +2,7 @@
 import '../styles/product-sections.css';
 
 const media = import.meta.env.BASE_URL + 'media/';
-const guides = 'https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/';
+const guides = import.meta.env.BASE_URL + 'docs/';
 const frameworks = [
   {
     id: 'karin', name: 'Karin', title: '配置与插件管理',
@@ -69,7 +69,7 @@ const chatModes = [
         <h2 id="applications-heading">应用端管理</h2>
         <p>支持新建或导入实例，管理启停、日志、配置及 Bot 对接。</p>
       </div>
-      <a class="product-guide-link" href={guides + 'app-instances.md'}>
+      <a class="product-guide-link" href={guides + 'apps/'}>
         应用端使用指南
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10" /></svg>
       </a>
@@ -160,7 +160,7 @@ const chatModes = [
         <h2 id="chat-heading">聊天与截图</h2>
         <p>按 Bot 账号管理私聊和群聊，支持媒体消息、群文件与原生截图。</p>
       </div>
-      <a class="product-guide-link" href={guides + 'chat.md'}>
+      <a class="product-guide-link" href={guides + 'chat/'}>
         聊天与截图指南
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10" /></svg>
       </a>

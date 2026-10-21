@@ -1,0 +1,27 @@
+name: Website and documentation
+permissions:
+  contents: read
+on:
+  push:
+    branches: [web]
+  pull_request:
+    branches: [web]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        base: ['/', '/NapCatQQ-Desktop/']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build && pnpm check:docs
+        env:
+          SITE_BASE: ${{ matrix.base }}

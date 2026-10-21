@@ -1,0 +1,6 @@
+packages:
+  - '.'
+
+# Keep syntax highlighting on the established release used by the docs build.
+overrides:
+  '@shikijs/vscode-textmate': 10.0.2

@@ -1,0 +1,2199 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/NapNeko/NapCatQQ-Desktop",
+    "branch": "main",
+    "commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff"
+  },
+  "methodology": {
+    "unit": "One concrete user task or a closely related group of controls; framework-specific workflows are separate capabilities.",
+    "basis": [
+      "main/docs/user/*.md",
+      "main/src-ui/shared/components/next/Sidebar.tsx",
+      "main/src-ui/modules settings sections and framework navigation"
+    ],
+    "covered_definition": "Documentation explains the action, relevant prerequisites or limits, and enough concrete steps or UI labels for a user to attempt it. A navigation name alone is insufficient.",
+    "counting": "covered / all capabilities. partial and missing are excluded from the numerator. Entries are not weighted by clicks, individual fields or lines of code.",
+    "keyword_check": "All keywords must remain present in the combined named Markdown pages. This detects accidental deletion; human review determines status and factual accuracy.",
+    "execution_boundary": "This is documentation coverage, not tested production functionality. Browser screenshots use the project preview fixtures; no real QQ login, SSH host, native Windows capture or paid model execution is claimed."
+  },
+  "exclusions": [
+    {
+      "area": "Developer APIs and implementation internals",
+      "reason": "Rust command internals, schemas, adapters and every upstream OneBot endpoint are outside the Desktop user manual. The debug workflow is included."
+    },
+    {
+      "area": "Third-party plugin and model service field reference",
+      "reason": "Upstream plugin-specific configuration and model billing semantics vary independently. Desktop install/configure workflows and credentials/models are included."
+    },
+    {
+      "area": "Native Windows-only screenshot imagery",
+      "reason": "Screenshot selection overlay, native system tray and OS installation dialogs require Windows to capture honestly. Their user workflows remain in the capability denominator; missing imagery is tracked separately."
+    },
+    {
+      "area": "Real-account and remote-machine acceptance testing",
+      "reason": "No account, private host or service credentials were supplied. Tutorial validation describes checks for users to perform and does not imply those external operations were executed."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "入门与组件-01",
+      "group": "入门与组件",
+      "title": "安装 Desktop、核对平台要求与更新包",
+      "source": [
+        "docs/user/README.md"
+      ],
+      "docs": [
+        "installation"
+      ],
+      "keywords": [
+        "Windows",
+        "MSI",
+        "升级"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-02",
+      "group": "入门与组件",
+      "title": "认识协议端、应用端及主要导航",
+      "source": [
+        "docs/user/README.md",
+        "src-ui/shared/components/next/Sidebar.tsx"
+      ],
+      "docs": [
+        "index",
+        "installation"
+      ],
+      "keywords": [
+        "协议端",
+        "应用端",
+        "组件",
+        "任务"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-03",
+      "group": "入门与组件",
+      "title": "从概览查看待处置实例和近期事件",
+      "source": [
+        "src-ui/modules/bootstrap/BootstrapPanel.next.tsx"
+      ],
+      "docs": [
+        "overview"
+      ],
+      "keywords": [
+        "待处置",
+        "最近通知",
+        "6 项",
+        "8 条",
+        "CPU"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-04",
+      "group": "入门与组件",
+      "title": "按本机或远端选择组件主机",
+      "source": [
+        "src-ui/modules/components/HostSwitcher.tsx"
+      ],
+      "docs": [
+        "components"
+      ],
+      "keywords": [
+        "主机",
+        "远端"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-05",
+      "group": "入门与组件",
+      "title": "安装运行时、QQ 与协议端并查看进度",
+      "source": [
+        "src-ui/modules/components/MachineComponentRow.tsx"
+      ],
+      "docs": [
+        "components",
+        "first-bot"
+      ],
+      "keywords": [
+        "安装",
+        "QQ",
+        "NapCat",
+        "任务"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-06",
+      "group": "入门与组件",
+      "title": "区分 NCD 管理的 QQ 与系统 QQ",
+      "source": [
+        "src-ui/modules/components/MachineComponentRow.tsx",
+        "src-ui/modules/bot/dialogs/SystemQqWarningDialog.tsx"
+      ],
+      "docs": [
+        "components"
+      ],
+      "keywords": [
+        "系统 QQ",
+        "NCD"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-07",
+      "group": "入门与组件",
+      "title": "选择 SnowLuma Full 或 Lite 包",
+      "source": [
+        "src-ui/modules/components/SnowLumaPackageDialog.tsx"
+      ],
+      "docs": [
+        "components"
+      ],
+      "keywords": [
+        "Full",
+        "Lite"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-08",
+      "group": "入门与组件",
+      "title": "检查远端系统依赖及组件实际安装路径",
+      "source": [
+        "src-ui/modules/components/HostComponentsView.tsx"
+      ],
+      "docs": [
+        "components",
+        "remote-linux"
+      ],
+      "keywords": [
+        "依赖",
+        "路径",
+        "重新"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-09",
+      "group": "入门与组件",
+      "title": "升级、重新探测及卸载组件",
+      "source": [
+        "src-ui/modules/components/useComponentActions.ts"
+      ],
+      "docs": [
+        "components"
+      ],
+      "keywords": [
+        "更新",
+        "探测",
+        "卸载"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "入门与组件-10",
+      "group": "入门与组件",
+      "title": "选择适合的应用框架并安装独立实例",
+      "source": [
+        "src-ui/modules/components/AppFrameworkRow.tsx"
+      ],
+      "docs": [
+        "apps",
+        "frameworks"
+      ],
+      "keywords": [
+        "框架",
+        "实例",
+        "安装"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-01",
+      "group": "机器人管理",
+      "title": "新建本机 Bot 并扫码验证账号",
+      "source": [
+        "src-ui/modules/bot/config/next/IdentityTab.tsx"
+      ],
+      "docs": [
+        "first-bot"
+      ],
+      "keywords": [
+        "QQ 账号",
+        "扫码",
+        "已登录"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-02",
+      "group": "机器人管理",
+      "title": "区分运行、QQ 登录和 WebUI 状态",
+      "source": [
+        "src-ui/modules/bot/list/next/botCardPresentation.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "进程状态",
+        "登录状态",
+        "WebUI"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-03",
+      "group": "机器人管理",
+      "title": "启动、停止及打开 Bot 工具",
+      "source": [
+        "src-ui/modules/bot/list/next/BotManageCard.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "启动",
+        "停止 Bot",
+        "更多工具"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-04",
+      "group": "机器人管理",
+      "title": "修改身份、运行主机和部署方式",
+      "source": [
+        "src-ui/modules/bot/config/next/IdentityTab.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "身份",
+        "运行位置",
+        "Docker"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-05",
+      "group": "机器人管理",
+      "title": "配置掉线自愈和间隔或 Cron 定时重启",
+      "source": [
+        "src-ui/modules/bot/config/next/AutoRestartScheduleEditor.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "掉线自动重启",
+        "每周",
+        "cron",
+        "下次"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-06",
+      "group": "机器人管理",
+      "title": "选择 SnowLuma 冷启动或热启动",
+      "source": [
+        "src-ui/modules/bot/config/next/IdentityTab.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "冷启动",
+        "热启动",
+        "已登录"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-07",
+      "group": "机器人管理",
+      "title": "配置自动启动、掉线通知和协议端高级选项",
+      "source": [
+        "src-ui/modules/bot/config/next/AdvancedTab.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "随桌面端自动启动",
+        "掉线时发送通知",
+        "封包",
+        "#sl"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-08",
+      "group": "机器人管理",
+      "title": "比较和解决 Desktop 与运行时配置冲突",
+      "source": [
+        "src-ui/modules/bot/dialogs/ConfigDriftDialog.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "配置冲突解决",
+        "桌面端",
+        "运行时"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-09",
+      "group": "机器人管理",
+      "title": "启用和查看运行时指标、历史与时间范围",
+      "source": [
+        "src-ui/modules/bot/metrics/BotRuntimeMetricsPage.next.tsx"
+      ],
+      "docs": [
+        "bots",
+        "settings"
+      ],
+      "keywords": [
+        "运行时指标",
+        "历史趋势",
+        "时间范围"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-10",
+      "group": "机器人管理",
+      "title": "拖动排序、批量启停和删除 Bot",
+      "source": [
+        "src-ui/modules/bot/list/next/BatchBottomBar.tsx",
+        "src-ui/modules/bot/list/next/BatchDeleteConfirmDialog.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "拖动",
+        "批量管理",
+        "删除"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "机器人管理-11",
+      "group": "机器人管理",
+      "title": "发现和导入远端已有 Bot",
+      "source": [
+        "src-ui/modules/bot/dialogs/ImportRemoteBotsDialog.tsx"
+      ],
+      "docs": [
+        "bots"
+      ],
+      "keywords": [
+        "导入已有 Bot",
+        "重新发现",
+        "接管 WebUI 密码"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-01",
+      "group": "OneBot 连接",
+      "title": "按用途区分 HTTP、正向 WS、反向 WS 和事件接收",
+      "source": [
+        "src-ui/modules/bot/config/next/ConnectionEditor.tsx"
+      ],
+      "docs": [
+        "connections"
+      ],
+      "keywords": [
+        "HTTP",
+        "正向",
+        "反向",
+        "事件"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-02",
+      "group": "OneBot 连接",
+      "title": "添加 HTTP 服务器并执行一次只读查询",
+      "source": [
+        "src-ui/modules/bot/config/next/ConnectionsTab.tsx"
+      ],
+      "docs": [
+        "connections"
+      ],
+      "keywords": [
+        "HTTP 服务器",
+        "get_login_info",
+        "Authorization"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-03",
+      "group": "OneBot 连接",
+      "title": "配置正向 WebSocket 并核对监听与访问地址",
+      "source": [
+        "src-ui/modules/bot/config/next/ConnectionEditor.tsx"
+      ],
+      "docs": [
+        "connections"
+      ],
+      "keywords": [
+        "正向 WebSocket",
+        "监听",
+        "token"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-04",
+      "group": "OneBot 连接",
+      "title": "配置反向 WebSocket 并验证应用端接收",
+      "source": [
+        "src-ui/modules/bot/config/next/ConnectionEditor.tsx"
+      ],
+      "docs": [
+        "connections"
+      ],
+      "keywords": [
+        "反向 WebSocket",
+        "应用端",
+        "保存"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-05",
+      "group": "OneBot 连接",
+      "title": "配置 HTTP 客户端和消息格式等连接选项",
+      "source": [
+        "src-ui/modules/bot/config/next/ConnectionEditor.tsx"
+      ],
+      "docs": [
+        "connections"
+      ],
+      "keywords": [
+        "HTTP Webhook",
+        "消息上报格式",
+        "HTTP SSE"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-06",
+      "group": "OneBot 连接",
+      "title": "区分跨机、容器、监听地址、端口和 Token",
+      "source": [
+        "src-ui/modules/bot/config/next/ConnectionEditor.tsx",
+        "docs/user/remote-linux.md"
+      ],
+      "docs": [
+        "connections",
+        "docker"
+      ],
+      "keywords": [
+        "127.0.0.1",
+        "0.0.0.0",
+        "端口",
+        "Token"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 连接-07",
+      "group": "OneBot 连接",
+      "title": "从远端读取并合并 OneBot 连接差异",
+      "source": [
+        "src-ui/modules/bot/dialogs/RemoteNetworkPullDialog.tsx"
+      ],
+      "docs": [
+        "connections",
+        "bots"
+      ],
+      "keywords": [
+        "从远端读取",
+        "差异",
+        "保存"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-01",
+      "group": "应用实例通用操作",
+      "title": "新建实例并选择主机、端口、目录和版本",
+      "source": [
+        "src-ui/modules/apps/CreateInstanceDialog.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "监听端口",
+        "安装目录",
+        "版本"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-02",
+      "group": "应用实例通用操作",
+      "title": "保存配置、启停实例并打开 WebUI 和日志",
+      "source": [
+        "src-ui/modules/apps/detail/AppInstancePage.next.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "保存",
+        "启动",
+        "WebUI",
+        "日志"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-03",
+      "group": "应用实例通用操作",
+      "title": "一键对接、改绑及解除 Bot 连接",
+      "source": [
+        "src-ui/modules/apps/AppLinkDialog.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "对接计划",
+        "改绑",
+        "解除对接",
+        "Docker"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-04",
+      "group": "应用实例通用操作",
+      "title": "导入已有项目并检查识别结果",
+      "source": [
+        "src-ui/modules/apps/ImportInstanceDialog.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "原地接管",
+        "检查",
+        "项目目录"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-05",
+      "group": "应用实例通用操作",
+      "title": "编辑原始文件并处理保存冲突",
+      "source": [
+        "src-ui/modules/apps/detail/RawFilesTab.tsx",
+        "src-ui/modules/apps/detail/ConfigConflictDialog.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "原始文件",
+        "冲突",
+        "只读"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-06",
+      "group": "应用实例通用操作",
+      "title": "更新或重装实例并保护已有数据",
+      "source": [
+        "src-ui/modules/apps/detail/InstanceVersionTab.tsx",
+        "src-ui/modules/apps/detail/ReinstallDialog.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "更新",
+        "版本",
+        "备份"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用实例通用操作-07",
+      "group": "应用实例通用操作",
+      "title": "删除实例或释放接管并核对目录删除范围",
+      "source": [
+        "src-ui/modules/apps/DeleteInstanceDialog.tsx"
+      ],
+      "docs": [
+        "apps"
+      ],
+      "keywords": [
+        "释放接管",
+        "同时删除安装目录",
+        "快照"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-01",
+      "group": "应用框架差异",
+      "title": "Karin：配置主人权限与连接",
+      "source": [
+        "src-ui/modules/apps/detail/karin/KarinPermissionsTab.tsx",
+        "src-ui/modules/apps/detail/karin/KarinConnectionsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "Karin",
+        "主人",
+        "连接"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-02",
+      "group": "应用框架差异",
+      "title": "Karin：安装、启停与配置插件",
+      "source": [
+        "src-ui/modules/apps/detail/karin/KarinPluginsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "插件",
+        "禁用",
+        "卸载"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-03",
+      "group": "应用框架差异",
+      "title": "Karin：按群或私聊调整响应规则",
+      "source": [
+        "src-ui/modules/apps/detail/karin/KarinRulesTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "群 / 频道",
+        "私聊",
+        "默认规则"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-04",
+      "group": "应用框架差异",
+      "title": "Karin：配置运行器、日志、渲染器与 Redis",
+      "source": [
+        "src-ui/modules/apps/detail/karin/KarinBasicTab.tsx",
+        "src-ui/modules/apps/detail/karin/KarinRenderStorageTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "NODE_ENV",
+        "FFmpeg",
+        "渲染器",
+        "Redis"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-05",
+      "group": "应用框架差异",
+      "title": "NoneBot2：安装适配器和插件",
+      "source": [
+        "src-ui/modules/apps/detail/nonebot2/nonebot2FrameworkUi.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "适配器",
+        "插件",
+        "安装"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-06",
+      "group": "应用框架差异",
+      "title": "NoneBot2：连接、超级用户、命令前缀与自定义键",
+      "source": [
+        "src-ui/modules/apps/detail/nonebot2/NoneBot2ConnectionsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "SUPERUSERS",
+        "命令前缀",
+        "无前缀也响应",
+        "自定义键"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-07",
+      "group": "应用框架差异",
+      "title": "AstrBot：添加提供商并选择默认与备用模型",
+      "source": [
+        "src-ui/modules/apps/detail/astrbot/AstrBotModelsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "添加提供商",
+        "默认模型",
+        "备用模型"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-08",
+      "group": "应用框架差异",
+      "title": "AstrBot：创建人格、设置唤醒规则和上下文",
+      "source": [
+        "src-ui/modules/apps/detail/astrbot/AstrBotPersonaTab.tsx",
+        "src-ui/modules/apps/detail/astrbot/AstrBotTalkTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "新建人格",
+        "唤醒前缀",
+        "上下文与工具"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-09",
+      "group": "应用框架差异",
+      "title": "AstrBot：创建并挂接知识库",
+      "source": [
+        "src-ui/modules/apps/detail/astrbot/AstrBotKbTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "嵌入提供商",
+        "挂到对话",
+        "切片"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-10",
+      "group": "应用框架差异",
+      "title": "AstrBot：管理会话规则、配置档案和子代理",
+      "source": [
+        "src-ui/modules/apps/detail/astrbot/AstrBotRulesTab.tsx",
+        "src-ui/modules/apps/detail/astrbot/AstrBotSubagentTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "会话规则",
+        "档案",
+        "子代理"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-11",
+      "group": "应用框架差异",
+      "title": "MaiBot：配置提供商、模型和任务分配",
+      "source": [
+        "src-ui/modules/apps/detail/maibot/MaiBotModelsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "提供商",
+        "任务分配",
+        "嵌入"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-12",
+      "group": "应用框架差异",
+      "title": "MaiBot：配置群聊私聊名单、屏蔽用户与对接",
+      "source": [
+        "src-ui/modules/apps/detail/maibot/MaiBotChatTab.tsx",
+        "src-ui/modules/apps/detail/maibot/MaiBotConnectionTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "聊天名单",
+        "屏蔽用户",
+        "空白名单"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-13",
+      "group": "应用框架差异",
+      "title": "MaiBot：试聊、人格和提示词编辑",
+      "source": [
+        "src-ui/modules/apps/detail/maibot/MaiBotTryChatTab.tsx",
+        "src-ui/modules/apps/detail/maibot/MaiBotPromptsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "试聊",
+        "昵称",
+        "提示词",
+        "最多 8 张"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-14",
+      "group": "应用框架差异",
+      "title": "MaiBot：整理表情包、表达、黑话和人物",
+      "source": [
+        "src-ui/modules/apps/detail/maibot/MaiBotEmojisTab.tsx",
+        "src-ui/modules/apps/detail/maibot/MaiBotExpressionsTab.tsx",
+        "src-ui/modules/apps/detail/maibot/MaiBotJargonTab.tsx",
+        "src-ui/modules/apps/detail/maibot/MaiBotPersonsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "表情包",
+        "精选",
+        "黑话",
+        "人物"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-15",
+      "group": "应用框架差异",
+      "title": "MaiBot：导入和浏览知识、查看图谱与已学行为",
+      "source": [
+        "src-ui/modules/apps/detail/maibot/MaiBotKnowledgeTab.tsx",
+        "src-ui/modules/apps/detail/maibot/MaiBotBehaviorTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "长期记忆",
+        "导入 / 浏览 / 图谱",
+        "最近删除",
+        "行为"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-16",
+      "group": "应用框架差异",
+      "title": "MaiBot：单独调整表达学习、会话规则和 MCP",
+      "source": [
+        "src-ui/modules/apps/detail/maibot/maibotPages.ts",
+        "src-ui/core/domain/apps/maibotSchema/bot.json",
+        "src-ui/core/domain/apps/maibotConfig.ts",
+        "src-ui/modules/apps/detail/maibot/maibotProbes.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "调整一个群的表达学习策略",
+        "学习配置",
+        "使用精选表达",
+        "给一个会话追加提示词与时间规则",
+        "22:00-08:00",
+        "接入一个已有的 MCP 服务",
+        "远程 HTTP",
+        "试连",
+        "保存",
+        "已连上"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-17",
+      "group": "应用框架差异",
+      "title": "Koishi：配置服务器、对接和全局设置",
+      "source": [
+        "src-ui/modules/apps/detail/koishi/KoishiServerTab.tsx",
+        "src-ui/modules/apps/detail/koishi/KoishiGlobalTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "selfUrl",
+        "全局设置",
+        "重载"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-18",
+      "group": "应用框架差异",
+      "title": "Koishi：安装插件包并添加和整理插件树",
+      "source": [
+        "src-ui/modules/apps/detail/koishi/KoishiPluginsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "插件市场",
+        "添加插件",
+        "载入条件"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-19",
+      "group": "应用框架差异",
+      "title": "Koishi：使用沙盒并调整指令权限与限制",
+      "source": [
+        "src-ui/modules/apps/detail/koishi/KoishiSandboxTab.tsx",
+        "src-ui/modules/apps/detail/koishi/KoishiCommandsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "沙盒",
+        "权限等级",
+        "冷却"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-20",
+      "group": "应用框架差异",
+      "title": "Koishi：只读查数据库并管理实例文件",
+      "source": [
+        "src-ui/modules/apps/detail/koishi/KoishiDatabaseTab.tsx",
+        "src-ui/modules/apps/detail/koishi/KoishiFilesTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "数据库",
+        "只读",
+        "新建",
+        "二进制"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-21",
+      "group": "应用框架差异",
+      "title": "云崽：配置主人、黑白名单、Redis 和连接",
+      "source": [
+        "src-ui/modules/apps/detail/yunzai/YunzaiPermissionsTab.tsx",
+        "src-ui/modules/apps/detail/yunzai/YunzaiConnectionTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "Bot号:主人号",
+        "Redis",
+        "白名单"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-22",
+      "group": "应用框架差异",
+      "title": "云崽：配置群规则和分账号覆盖",
+      "source": [
+        "src-ui/modules/apps/detail/yunzai/YunzaiGroupsTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "Bot号:群号",
+        "冷却",
+        "单独设置"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-23",
+      "group": "应用框架差异",
+      "title": "云崽：选择图片渲染器并管理插件与定时操作",
+      "source": [
+        "src-ui/modules/apps/detail/yunzai/YunzaiRenderTab.tsx",
+        "src-ui/modules/apps/detail/yunzai/YunzaiBasicTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "shotium",
+        "puppeteer",
+        "自动重启",
+        "单 JS"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-24",
+      "group": "应用框架差异",
+      "title": "NeoBot：建立面板会话并检查版本与凭据",
+      "source": [
+        "src-ui/modules/apps/detail/neobot/NeoBotConsoleTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "面板密码",
+        "1.2.4a1",
+        "密钥库"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-25",
+      "group": "应用框架差异",
+      "title": "NeoBot：配置供应商、模型分配和本体部署",
+      "source": [
+        "src-ui/modules/apps/detail/neobot/NeoBotModelsTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotEnvTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotConfigTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotDeployTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "保存分配并重载",
+        "TOML",
+        "部署"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-26",
+      "group": "应用框架差异",
+      "title": "NeoBot：提示词预览、记忆压缩、对话流及分析",
+      "source": [
+        "src-ui/modules/apps/detail/neobot/NeoBotPromptsTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotMemoryTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotFlowsTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotAnalysisTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "预览渲染",
+        "压缩",
+        "对话流",
+        "提示词分析"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "应用框架差异-27",
+      "group": "应用框架差异",
+      "title": "NeoBot：插件、定时任务、统计计费和运行控制",
+      "source": [
+        "src-ui/modules/apps/detail/neobot/NeoBotPluginsTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotScheduledTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotStatisticsTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotBillingTab.tsx",
+        "src-ui/modules/apps/detail/neobot/NeoBotRuntimeTab.tsx"
+      ],
+      "docs": [
+        "frameworks"
+      ],
+      "keywords": [
+        "定时任务",
+        "计费",
+        "统计",
+        "待机",
+        "软重启"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-01",
+      "group": "聊天与截图",
+      "title": "选择账号和联系人并验证双向消息",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "用于聊天",
+        "联系人",
+        "对方回复"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-02",
+      "group": "聊天与截图",
+      "title": "回复、复制、@、撤回、转发和重试失败消息",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "右键菜单",
+        "撤回",
+        "转发",
+        "失败原因"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-03",
+      "group": "聊天与截图",
+      "title": "选择、拖放或粘贴图片文件附件",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "拖入",
+        "粘贴",
+        "最多添加 8 个"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-04",
+      "group": "聊天与截图",
+      "title": "查看图片、视频、Markdown、转发和语音媒体",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "Markdown",
+        "语音",
+        "倍速"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-05",
+      "group": "聊天与截图",
+      "title": "按会话或账号筛选搜索已保存记录并启用防撤回",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "发送者",
+        "日期",
+        "防撤回",
+        "容量上限"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-06",
+      "group": "聊天与截图",
+      "title": "浏览、搜索、上传下载与管理群文件",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "群文件",
+        "新建目录",
+        "重命名",
+        "取消"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-07",
+      "group": "聊天与截图",
+      "title": "框选、标注、复制保存截图并插入草稿",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "Ctrl+Alt+S",
+        "标注",
+        "草稿"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-08",
+      "group": "聊天与截图",
+      "title": "采集滚动长截图、暂停和撤销采集",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "滚动长截图",
+        "暂停采集",
+        "撤销上一段"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-09",
+      "group": "聊天与截图",
+      "title": "设置截图快捷键范围和隐藏窗口",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "全局响应",
+        "隐藏聊天窗口",
+        "召回"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "聊天与截图-10",
+      "group": "聊天与截图",
+      "title": "独立窗口、后台接收、免打扰和头像托盘",
+      "source": [
+        "docs/user/chat.md"
+      ],
+      "docs": [
+        "chat"
+      ],
+      "keywords": [
+        "独立窗口",
+        "后台接收",
+        "免打扰",
+        "头像托盘"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-01",
+      "group": "远端主机",
+      "title": "添加 SSH 主机、测试连接并确认指纹",
+      "source": [
+        "src-ui/modules/remote/AddServerDialog.tsx",
+        "src-ui/modules/remote/RemoteHostPanel.next.tsx"
+      ],
+      "docs": [
+        "remote-linux"
+      ],
+      "keywords": [
+        "主机指纹",
+        "测试连接",
+        "私钥"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-02",
+      "group": "远端主机",
+      "title": "导入 SSH 配置、编辑档案和刷新组件库存",
+      "source": [
+        "src-ui/modules/remote/ImportSshConfigDialog.tsx",
+        "src-ui/modules/remote/RemoteInventoryDialog.tsx"
+      ],
+      "docs": [
+        "remote-linux"
+      ],
+      "keywords": [
+        "从 SSH 配置导入",
+        "库存",
+        "密码框留空"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-03",
+      "group": "远端主机",
+      "title": "使用当前 SSH 密码配置免密登录",
+      "source": [
+        "src-ui/modules/remote/RemoteHostPanel.next.tsx"
+      ],
+      "docs": [
+        "remote-linux"
+      ],
+      "keywords": [
+        "配置免密登录",
+        "当前 SSH 密码",
+        "自动配置免密登录"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-04",
+      "group": "远端主机",
+      "title": "创建 Linux 原生 Bot 并检查登录环境",
+      "source": [
+        "docs/user/remote-linux.md"
+      ],
+      "docs": [
+        "remote-linux",
+        "remote-login"
+      ],
+      "keywords": [
+        "直接运行",
+        "Python 3",
+        "D-Bus"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-05",
+      "group": "远端主机",
+      "title": "准备 Windows OpenSSH、账户和主机指纹",
+      "source": [
+        "docs/user/windows-remote.md"
+      ],
+      "docs": [
+        "remote-windows"
+      ],
+      "keywords": [
+        "OpenSSH",
+        "SID",
+        "ssh-keygen"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-06",
+      "group": "远端主机",
+      "title": "安装 Windows 远程代理并绑定桌面会话",
+      "source": [
+        "src-ui/modules/remote/WindowsRemoteDialog.tsx"
+      ],
+      "docs": [
+        "remote-windows"
+      ],
+      "keywords": [
+        "启用托管",
+        "工作进程已就绪",
+        "桌面"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-07",
+      "group": "远端主机",
+      "title": "管理 Windows 远端实例、计划与代理升级",
+      "source": [
+        "docs/user/windows-remote.md"
+      ],
+      "docs": [
+        "remote-windows"
+      ],
+      "keywords": [
+        "PowerShell",
+        "本地时区",
+        "重新部署托管"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端主机-08",
+      "group": "远端主机",
+      "title": "SnowLuma 远端取码、刷新及 VNC 回退",
+      "source": [
+        "docs/user/snowluma-remote-qr-login.md"
+      ],
+      "docs": [
+        "remote-login"
+      ],
+      "keywords": [
+        "扫码登录",
+        "过期",
+        "VNC"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "Docker 容器-01",
+      "group": "Docker 容器",
+      "title": "安装 Docker、确认 SSH 用户权限并拉镜像",
+      "source": [
+        "docs/user/remote-linux.md",
+        "src-ui/modules/components/DockerRow.tsx"
+      ],
+      "docs": [
+        "docker"
+      ],
+      "keywords": [
+        "docker info",
+        "拉镜像",
+        "权限"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "Docker 容器-02",
+      "group": "Docker 容器",
+      "title": "创建容器 Bot 并区分宿主机与容器端口",
+      "source": [
+        "docs/user/remote-linux.md"
+      ],
+      "docs": [
+        "docker"
+      ],
+      "keywords": [
+        "启动方式",
+        "宿主机",
+        "6099",
+        "0.0.0.0"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "Docker 容器-03",
+      "group": "Docker 容器",
+      "title": "查看容器详情、资源、日志与启停暂停恢复",
+      "source": [
+        "src-ui/modules/docker/DockerPage.next.tsx",
+        "src-ui/modules/docker/ContainerCard.tsx"
+      ],
+      "docs": [
+        "docker"
+      ],
+      "keywords": [
+        "暂停",
+        "恢复",
+        "退出码",
+        "挂载"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "Docker 容器-04",
+      "group": "Docker 容器",
+      "title": "检查和删除镜像、网络及数据卷的范围",
+      "source": [
+        "src-ui/modules/docker/ImageRemoveDialog.tsx",
+        "src-ui/modules/docker/ResourceRemoveDialog.tsx"
+      ],
+      "docs": [
+        "docker"
+      ],
+      "keywords": [
+        "镜像",
+        "网络与数据卷",
+        "永久删除"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端值守-01",
+      "group": "远端值守",
+      "title": "配置 Webhook、邮件或同机 OneBot 发送方",
+      "source": [
+        "docs/user/ncd-watch.md"
+      ],
+      "docs": [
+        "watch"
+      ],
+      "keywords": [
+        "Webhook",
+        "SMTP",
+        "同一台远端主机"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端值守-02",
+      "group": "远端值守",
+      "title": "启用 Bot 通知并安装同步 watch",
+      "source": [
+        "docs/user/ncd-watch.md"
+      ],
+      "docs": [
+        "watch"
+      ],
+      "keywords": [
+        "掉线时发送通知",
+        "全部同步",
+        "90 秒"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端值守-03",
+      "group": "远端值守",
+      "title": "检查 Linux 用户服务、linger 与单轮探测",
+      "source": [
+        "docs/user/ncd-watch.md"
+      ],
+      "docs": [
+        "watch"
+      ],
+      "keywords": [
+        "systemctl --user",
+        "enable-linger",
+        "desktop_present_skip"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端值守-04",
+      "group": "远端值守",
+      "title": "配置互助重登二维码和管理员",
+      "source": [
+        "docs/user/ncd-watch.md"
+      ],
+      "docs": [
+        "watch"
+      ],
+      "keywords": [
+        "通用正向 WebSocket",
+        "管理员 QQ 号",
+        "二维码"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端值守-05",
+      "group": "远端值守",
+      "title": "使用刷新、状态及忽略重登指令",
+      "source": [
+        "docs/user/ncd-watch.md"
+      ],
+      "docs": [
+        "watch"
+      ],
+      "keywords": [
+        "/ncd 刷新",
+        "/ncd 状态",
+        "/ncd 忽略"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "远端值守-06",
+      "group": "远端值守",
+      "title": "诊断接管、同步与配置覆盖边界",
+      "source": [
+        "docs/user/ncd-watch.md"
+      ],
+      "docs": [
+        "watch"
+      ],
+      "keywords": [
+        "relogin-status",
+        "watch.json",
+        "notify.json",
+        "metrics.json"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 调试台-01",
+      "group": "OneBot 调试台",
+      "title": "搜索接口并发送第一次只读调用",
+      "source": [
+        "src-ui/modules/debug/DebugConsolePage.tsx"
+      ],
+      "docs": [
+        "debugging"
+      ],
+      "keywords": [
+        "get_login_info",
+        "Ctrl+K",
+        "Ctrl+Enter"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 调试台-02",
+      "group": "OneBot 调试台",
+      "title": "单独选择和测试调用通道与事件来源",
+      "source": [
+        "src-ui/modules/debug/ChannelSelect.tsx"
+      ],
+      "docs": [
+        "debugging"
+      ],
+      "keywords": [
+        "调用",
+        "事件",
+        "测试连通",
+        "HTTP"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 调试台-03",
+      "group": "OneBot 调试台",
+      "title": "查看过滤事件、暂停显示与停止接收",
+      "source": [
+        "src-ui/modules/debug/DebugConsolePage.tsx"
+      ],
+      "docs": [
+        "debugging"
+      ],
+      "keywords": [
+        "原始 JSON",
+        "暂停显示",
+        "停止接收"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 调试台-04",
+      "group": "OneBot 调试台",
+      "title": "使用表单和 JSON 编辑参数并处理错误",
+      "source": [
+        "src-ui/modules/debug/DebugConsolePage.tsx"
+      ],
+      "docs": [
+        "debugging"
+      ],
+      "keywords": [
+        "表单",
+        "出错行",
+        "retcode"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 调试台-05",
+      "group": "OneBot 调试台",
+      "title": "管理请求标签、历史、收藏、响应对比和分享",
+      "source": [
+        "src-ui/modules/debug/DebugConsolePage.tsx"
+      ],
+      "docs": [
+        "debugging"
+      ],
+      "keywords": [
+        "对比响应",
+        "文件夹",
+        "导出收藏",
+        "导入收藏"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "OneBot 调试台-06",
+      "group": "OneBot 调试台",
+      "title": "导出调用代码、保留工作区并弹出独立窗口",
+      "source": [
+        "src-ui/modules/debug/DebugConsolePage.tsx"
+      ],
+      "docs": [
+        "debugging"
+      ],
+      "keywords": [
+        "curl",
+        "Python",
+        "工作区",
+        "独立窗口"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "终端与文件-01",
+      "group": "终端与文件",
+      "title": "按目标打开终端并确认主机和目录",
+      "source": [
+        "src-ui/modules/terminal/"
+      ],
+      "docs": [
+        "terminal"
+      ],
+      "keywords": [
+        "Ctrl+反引号",
+        "Get-Location",
+        "pwd"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "终端与文件-02",
+      "group": "终端与文件",
+      "title": "多会话、重命名、分屏和输出提示",
+      "source": [
+        "src-ui/modules/terminal/"
+      ],
+      "docs": [
+        "terminal"
+      ],
+      "keywords": [
+        "左右分屏",
+        "双击标签",
+        "灰点",
+        "绿点"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "终端与文件-03",
+      "group": "终端与文件",
+      "title": "复制粘贴、查找输出与命令导航",
+      "source": [
+        "src-ui/modules/terminal/"
+      ],
+      "docs": [
+        "terminal"
+      ],
+      "keywords": [
+        "Ctrl+Shift+F",
+        "Ctrl+↑",
+        "Ctrl+C",
+        "多行"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "终端与文件-04",
+      "group": "终端与文件",
+      "title": "保存、搜索并填入常用与最近命令",
+      "source": [
+        "src-ui/modules/terminal/"
+      ],
+      "docs": [
+        "terminal"
+      ],
+      "keywords": [
+        "常用命令",
+        "不会立即执行",
+        "最近命令"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "终端与文件-05",
+      "group": "终端与文件",
+      "title": "通过文件栏传输、管理和编辑文本",
+      "source": [
+        "src-ui/modules/terminal/"
+      ],
+      "docs": [
+        "terminal"
+      ],
+      "keywords": [
+        "文件栏",
+        "跟随",
+        "重命名",
+        "2 MiB"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "终端与文件-06",
+      "group": "终端与文件",
+      "title": "使用 sudo 代填和终端即时偏好",
+      "source": [
+        "src-ui/modules/terminal/",
+        "src-ui/modules/settings/tabs/TerminalTab.tsx"
+      ],
+      "docs": [
+        "terminal"
+      ],
+      "keywords": [
+        "sudo 密码",
+        "显卡加速",
+        "默认本机 shell",
+        "恢复默认"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "任务与日志-01",
+      "group": "任务与日志",
+      "title": "查看任务阶段、日志、进度和失败原因",
+      "source": [
+        "src-ui/modules/task-queue/"
+      ],
+      "docs": [
+        "tasks-logs"
+      ],
+      "keywords": [
+        "任务",
+        "日志",
+        "失败"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "任务与日志-02",
+      "group": "任务与日志",
+      "title": "取消或强制停止任务并清理终态条目",
+      "source": [
+        "src-ui/modules/task-queue/"
+      ],
+      "docs": [
+        "tasks-logs"
+      ],
+      "keywords": [
+        "取消",
+        "强制停止",
+        "清理"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "任务与日志-03",
+      "group": "任务与日志",
+      "title": "检查 Bot、应用端和 Desktop 日志并提供复现信息",
+      "source": [
+        "src-ui/modules/bot/log/BotLogPage.next.tsx",
+        "src-ui/modules/apps/detail/InstanceLogTab.tsx",
+        "src-ui/modules/settings/tabs/DesktopLogTab.tsx"
+      ],
+      "docs": [
+        "tasks-logs"
+      ],
+      "keywords": [
+        "Desktop",
+        "Bot 日志",
+        "应用端日志",
+        "可复现"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-01",
+      "group": "全局设置与网络",
+      "title": "保存或撤销设置草稿并辨认即时操作",
+      "source": [
+        "src-ui/modules/settings/tabs/AppearanceTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "未保存",
+        "保存设置",
+        "撤销",
+        "即时操作"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-02",
+      "group": "全局设置与网络",
+      "title": "调整主题、圆角、侧栏、吉祥物和动画",
+      "source": [
+        "src-ui/modules/settings/tabs/AppearanceTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "圆角风格",
+        "侧栏形态",
+        "主页吉祥物",
+        "动画档位"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-03",
+      "group": "全局设置与网络",
+      "title": "开关功能模块并处理仍被使用的功能",
+      "source": [
+        "src-ui/modules/settings/tabs/FeaturesTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "功能",
+        "不可关闭",
+        "后台接收"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-04",
+      "group": "全局设置与网络",
+      "title": "配置关窗托盘、轻量模式和开机启动",
+      "source": [
+        "src-ui/modules/settings/tabs/WindowTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "最小化到托盘",
+        "释放界面内存",
+        "开机自启"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-05",
+      "group": "全局设置与网络",
+      "title": "设置登录检查、SnowLuma Node 和远端探活",
+      "source": [
+        "src-ui/modules/settings/tabs/RuntimeTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "登录检查间隔",
+        "Node.js",
+        "探活"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-06",
+      "group": "全局设置与网络",
+      "title": "设置主页监控、指标保留和任务自动清理",
+      "source": [
+        "src-ui/modules/settings/tabs/MonitoringTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "主页性能监控",
+        "历史保留",
+        "自动清理"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-07",
+      "group": "全局设置与网络",
+      "title": "启用桌面通知并测试 Webhook、邮件和 OneBot",
+      "source": [
+        "src-ui/modules/settings/tabs/NotificationsTab.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "Bot 掉线",
+        "SMTP",
+        "Webhook",
+        "OneBot"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-08",
+      "group": "全局设置与网络",
+      "title": "设置恢复提醒、防抖与查看投递记录",
+      "source": [
+        "src-ui/modules/settings/tabs/notifications/DeliveryBehaviorSection.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "恢复通知",
+        "防抖",
+        "投递记录",
+        "内存"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-09",
+      "group": "全局设置与网络",
+      "title": "设置应用内说明、成功和警告提示条自动关闭",
+      "source": [
+        "src-ui/modules/settings/tabs/notifications/InfoBarDismissSection.tsx"
+      ],
+      "docs": [
+        "settings"
+      ],
+      "keywords": [
+        "应用内提示条",
+        "错误",
+        "说明",
+        "成功",
+        "警告"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-10",
+      "group": "全局设置与网络",
+      "title": "配置代理认证、排除地址和请求作用范围",
+      "source": [
+        "src-ui/modules/settings/tabs/NetworkTab.tsx"
+      ],
+      "docs": [
+        "network"
+      ],
+      "keywords": [
+        "SOCKS5H",
+        "不使用代理的地址",
+        "认证",
+        "本机回环"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "全局设置与网络-11",
+      "group": "全局设置与网络",
+      "title": "选择下载线路、API 中转、PAT 并测试草稿",
+      "source": [
+        "src-ui/modules/settings/tabs/NetworkTab.tsx"
+      ],
+      "docs": [
+        "network"
+      ],
+      "keywords": [
+        "指定镜像",
+        "PAT",
+        "草稿",
+        "吞吐量"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "数据与更新-01",
+      "group": "数据与更新",
+      "title": "导出配置 ZIP 并识别敏感信息和排除项",
+      "source": [
+        "src-ui/modules/settings/tabs/DataTab.tsx",
+        "docs/user/README.md"
+      ],
+      "docs": [
+        "backup"
+      ],
+      "keywords": [
+        "导出 ZIP",
+        "SSH 私钥",
+        "数据库",
+        "API Key"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "数据与更新-02",
+      "group": "数据与更新",
+      "title": "导入配置并核对回滚与换机条件",
+      "source": [
+        "src-ui/modules/settings/tabs/DataTab.tsx",
+        "docs/user/README.md"
+      ],
+      "docs": [
+        "backup"
+      ],
+      "keywords": [
+        "导入向导",
+        "回滚",
+        "换机"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "数据与更新-03",
+      "group": "数据与更新",
+      "title": "重试待恢复框架配置和界面偏好",
+      "source": [
+        "src-ui/modules/settings/tabs/DataTab.tsx"
+      ],
+      "docs": [
+        "backup"
+      ],
+      "keywords": [
+        "框架配置待恢复",
+        "界面偏好待恢复",
+        "重试"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "数据与更新-04",
+      "group": "数据与更新",
+      "title": "迁移数据目录并清理下载缓存",
+      "source": [
+        "src-ui/modules/settings/tabs/DataTab.tsx"
+      ],
+      "docs": [
+        "backup"
+      ],
+      "keywords": [
+        "迁移",
+        "扫描与清理",
+        "24 小时",
+        "7 天"
+      ],
+      "status": "covered"
+    },
+    {
+      "id": "数据与更新-05",
+      "group": "数据与更新",
+      "title": "检查 Desktop 更新、版本许可和重开入门引导",
+      "source": [
+        "src-ui/modules/settings/tabs/AboutTab.tsx"
+      ],
+      "docs": [
+        "backup",
+        "settings"
+      ],
+      "keywords": [
+        "检查更新",
+        "许可",
+        "入门引导"
+      ],
+      "status": "covered"
+    }
+  ]
+}

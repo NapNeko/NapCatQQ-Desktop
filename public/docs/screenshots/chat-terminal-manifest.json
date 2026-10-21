@@ -1,0 +1,48 @@
+{
+  "source_commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "data_source": "main bundled browser mock IPC; no real QQ or terminal acceptance test",
+  "theme_capture": "actual auto preference with prefers-color-scheme light/dark on the same screen",
+  "capture_script": "scripts/capture-chat-terminal-screenshots.py",
+  "screenshots": [
+    {
+      "file": "terminal-light.png",
+      "screen": "机器人页打开本机终端；命令输出为项目自带的浏览器演示",
+      "theme": "light",
+      "sha256": "805f9c7aa3500bab377062d29e88a31bd1a0e008817972d5920c7d6c1c50c757"
+    },
+    {
+      "file": "terminal-dark.png",
+      "screen": "机器人页打开本机终端；命令输出为项目自带的浏览器演示",
+      "theme": "dark",
+      "sha256": "08d04f4c25efee7275babbd6113457a96da3dcf2396446327568425e6ea55b96"
+    },
+    {
+      "file": "chat-light.png",
+      "screen": "选择演示群会话，查看消息、媒体和输入区",
+      "theme": "light",
+      "sha256": "fd8838ae10b91d1eeaa1f9183b6c93ae31f5181e1bf897624d69f85bfbcc5ede"
+    },
+    {
+      "file": "chat-dark.png",
+      "screen": "选择演示群会话，查看消息、媒体和输入区",
+      "theme": "dark",
+      "sha256": "f67e39f619f8db8dd778814b83a03e8a58c5826a2046d0fb63b3e86787108e6e"
+    },
+    {
+      "file": "chat-group-files-light.png",
+      "screen": "群文件面板：目录、上传下载、搜索与容量",
+      "theme": "light",
+      "sha256": "c62c984be8f7afdc059dfcd5f92b58b482b0e2848cf7c70e2216868b1bf714be"
+    },
+    {
+      "file": "chat-group-files-dark.png",
+      "screen": "群文件面板：目录、上传下载、搜索与容量",
+      "theme": "dark",
+      "sha256": "d6892cb3b06476fb1b052c78e517bf38666a69a4560e063d37a765a91009b154"
+    }
+  ]
+}

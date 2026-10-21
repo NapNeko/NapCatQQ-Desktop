@@ -1,0 +1,112 @@
+{
+  "source_commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "device_scale_factor": 1,
+  "data_source": "main bundled browser mock IPC data",
+  "runtime": "production browser preview; no application source modifications",
+  "theme_capture": "actual auto preference; prefers-color-scheme light/dark on the same panel",
+  "capture_script": "scripts/capture-framework-screenshots.py",
+  "screenshots": [
+    {
+      "file": "framework-karin-light.png",
+      "framework": "karin",
+      "panel": "权限",
+      "theme": "light",
+      "sha256": "1c6ad153da8c41a9ffb1bbab5cbd9519853536a2bc0eb238a9e4900e981e128e"
+    },
+    {
+      "file": "framework-karin-dark.png",
+      "framework": "karin",
+      "panel": "权限",
+      "theme": "dark",
+      "sha256": "6236e22aee9328410891f84c1eb3d30a026a28473e9f73bcc5663de620dacf94"
+    },
+    {
+      "file": "framework-nonebot2-light.png",
+      "framework": "nonebot2",
+      "panel": "连接",
+      "theme": "light",
+      "sha256": "106b383fcb835472b186d65a0181004c738f2c727f7f25d865a0e732821cb703"
+    },
+    {
+      "file": "framework-nonebot2-dark.png",
+      "framework": "nonebot2",
+      "panel": "连接",
+      "theme": "dark",
+      "sha256": "6ad5bc65113d19b8ad290b336311686fbe107b0b6993f9b4f81773756d95ceed"
+    },
+    {
+      "file": "framework-astrbot-light.png",
+      "framework": "astrbot",
+      "panel": "模型",
+      "theme": "light",
+      "sha256": "648fdb81f5a24e367a927a1d74f9da1e96e8721d0f4657bcf2f1c024b2ac4ff9"
+    },
+    {
+      "file": "framework-astrbot-dark.png",
+      "framework": "astrbot",
+      "panel": "模型",
+      "theme": "dark",
+      "sha256": "0c726623f54b0675ee125e2838f4518e31d806710ddad7041239f115bbc8580d"
+    },
+    {
+      "file": "framework-maibot-light.png",
+      "framework": "maibot",
+      "panel": "模型",
+      "theme": "light",
+      "sha256": "d32481b3742b64dec2df08b1a8927e3561e414194e00bd3851a6e8fc701758af"
+    },
+    {
+      "file": "framework-maibot-dark.png",
+      "framework": "maibot",
+      "panel": "模型",
+      "theme": "dark",
+      "sha256": "fce6417f9c09f5445a10f0984391a3637e1339f0b9f7bb2011259629b588a47a"
+    },
+    {
+      "file": "framework-koishi-light.png",
+      "framework": "koishi",
+      "panel": "插件",
+      "theme": "light",
+      "sha256": "2a00b58c40366c2d9ffede8c9e8414af668fe47cbfb94f328451ccd4d3c4a61f"
+    },
+    {
+      "file": "framework-koishi-dark.png",
+      "framework": "koishi",
+      "panel": "插件",
+      "theme": "dark",
+      "sha256": "395efdc664f0880ab6f4629e1424305d354f6ec49fbe0080b038e5abb1a66192"
+    },
+    {
+      "file": "framework-yunzai-light.png",
+      "framework": "yunzai",
+      "panel": "主人与权限",
+      "theme": "light",
+      "sha256": "61f1dd77eca4bb1cc37d86a2ebd274dbbc4a3e256d005e4a01cde1c2b395cc7c"
+    },
+    {
+      "file": "framework-yunzai-dark.png",
+      "framework": "yunzai",
+      "panel": "主人与权限",
+      "theme": "dark",
+      "sha256": "360200d88c3e9f62a4780cc345f3707504ac83998ee0d7d75b786734c007f494"
+    },
+    {
+      "file": "framework-neobot-light.png",
+      "framework": "neobot",
+      "panel": "模型",
+      "theme": "light",
+      "sha256": "fcda8dcd20b30e0e40532a73c4929daab4dac30c004bf0dc00492b9e33811224"
+    },
+    {
+      "file": "framework-neobot-dark.png",
+      "framework": "neobot",
+      "panel": "模型",
+      "theme": "dark",
+      "sha256": "309a54cc56bd8c77a599c69be6e815a12b6d6540dd078a118af935dac4f36260"
+    }
+  ]
+}
