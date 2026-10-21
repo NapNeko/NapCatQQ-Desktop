@@ -1,0 +1,41 @@
+---
+import '../styles/home-opening.css';
+---
+<div class="home-opening" data-home-opening role="region" aria-label="NapCatQQ Desktop 开场动画" hidden>
+  <div class="opening-paper" aria-hidden="true"></div>
+  <div class="opening-grid" aria-hidden="true"></div>
+  <div class="opening-registration" aria-hidden="true"><span>NAPCATQQ / DESKTOP</span><span>LOCAL ↔ REMOTE</span></div>
+  <svg class="opening-orbit" viewBox="0 0 600 600" fill="none" aria-hidden="true"><circle cx="300" cy="300" r="260" pathLength="1" /><circle cx="300" cy="300" r="216" pathLength="1" /><path d="M0 300H165M435 300H600M300 0V165M300 435V600" pathLength="1" /><circle class="opening-orbit-point" cx="560" cy="300" r="5" /></svg>
+  <div class="opening-type" aria-hidden="true"><span>NapCatQQ</span><span>Desktop<span class="opening-period">.</span></span></div>
+  <div class="opening-window" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+  <div class="opening-logo" aria-hidden="true">
+    <svg class="opening-layer opening-layer-back" viewBox="0 0 400 400" fill="none"><path d="M58 54 145 104H255L342 54V271Q342 346 267 346H133Q58 346 58 271Z" /></svg>
+    <svg class="opening-layer opening-layer-middle" viewBox="0 0 400 400"><path d="M58 54 145 104H255L342 54V271Q342 346 267 346H133Q58 346 58 271Z" /></svg>
+    <svg viewBox="0 0 400 400" fill="none"><defs><linearGradient id="opening-material" x1="80" y1="50" x2="330" y2="350" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb899" /><stop offset=".48" stop-color="#f17c64" /><stop offset="1" stop-color="#cd533f" /></linearGradient></defs><path fill="url(#opening-material)" d="M58 54 145 104H255L342 54V271Q342 346 267 346H133Q58 346 58 271Z" /><path class="opening-prompt" d="m125 169 46 32-46 32m79 0h66" pathLength="1" /></svg>
+  </div>
+  <div class="opening-labels" aria-hidden="true"><span>01 / BOT</span><span>02 / CHAT</span><span>03 / APPS</span></div>
+  <span class="opening-edition" aria-hidden="true">你的 Bot，都在这里。</span>
+  <button class="opening-skip" type="button" data-skip-opening>跳过动画 <span aria-hidden="true">↗</span></button>
+</div>
+<script is:inline>
+  (() => {
+    const overlay = document.querySelector('[data-home-opening]');
+    const html = document.documentElement;
+    const finish = () => {
+      overlay.hidden = true;
+      html.dataset.homeIntro = 'ready';
+      document.dispatchEvent(new CustomEvent('home:intro-ready'));
+    };
+    let seen = false;
+    try { seen = sessionStorage.getItem('ncd-home-opening') === 'seen'; } catch {}
+    if (seen || location.hash || matchMedia('(prefers-reduced-motion: reduce)').matches) { finish(); return; }
+    try { sessionStorage.setItem('ncd-home-opening', 'seen'); } catch {}
+    html.dataset.homeIntro = 'pending';
+    overlay.hidden = false;
+    const pendingSkip = () => { if (html.dataset.homeIntro === 'pending') finish(); };
+    overlay.querySelector('[data-skip-opening]').addEventListener('click', pendingSkip);
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') pendingSkip(); });
+    // GSAP 尚未加载或执行失败时，开场也不能挡住网站。
+    setTimeout(() => { if (html.dataset.homeIntro === 'pending') finish(); }, 5000);
+  })();
+</script>

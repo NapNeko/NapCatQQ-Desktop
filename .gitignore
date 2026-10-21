@@ -3,6 +3,7 @@ dist/
 .astro/
 .cache/
 /public/demo/
+/public/optimized/
 .env
 .env.*
 !.env.example

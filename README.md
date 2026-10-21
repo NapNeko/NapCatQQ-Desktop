@@ -15,13 +15,19 @@ pnpm.cmd install
 pnpm.cmd dev
 ```
 
-`pnpm.cmd build` 先构建教程中的前端演示，再构建静态页面到 `dist/`，`pnpm.cmd preview` 预览构建结果。
+`pnpm.cmd build` 先构建教程中的前端演示，再生成图片派生文件并构建静态页面到 `dist/`，`pnpm.cmd preview` 预览构建结果。
 
 首页与 `/docs/` 文档站一起构建。文档包含从安装、创建 Bot、连接应用端到远端部署、聊天、调试和维护的教程，提供全文搜索、明暗主题、浮动阅读导航和截图大图查看。截图与演示界面跟随文档主题。
 
-首页使用本地打包的 GSAP / ScrollTrigger：首屏标题揭幕、产品截图视差、功能区滚动入场，以及桌面宽屏的三段横向叙事。动画入口为 `src/scripts/home-motion.ts`，视觉样式在 `src/styles/home.css` 与 `hero.css`，叙事内容在 `src/components/WorkflowStory.astro`。触屏、窄屏和矮屏采用自然排版；系统开启「减少动态效果」时保留静态内容，关闭 JavaScript 也能阅读功能介绍并进入文档或下载。
+首页使用本地打包的 GSAP / ScrollTrigger：首屏猫形终端分层展开、软件窗口随滚动推近，随后横向浏览上线、接入应用端与聊天三个场景。功能区使用标题遮罩、截图景深与路径绘制衔接。动画入口为 `src/scripts/home-motion.ts`，视觉样式在 `src/styles/home.css`、`hero.css` 与 `story.css`，叙事内容在 `src/components/WorkflowStory.astro`。宽度至少 1050px、高度至少 740px 且使用精细指针时启用固定场景；触屏、窄屏和矮屏使用纵向布局与较小的滚动位移。系统开启「减少动态效果」或关闭 JavaScript 时，页面保持完整静态排版。键盘聚焦产品或教程入口会同步将对应画面带入视口。
 
 `SITE_BASE` 可设置构建时的站点前缀；GitHub Pages 使用 `/NapCatQQ-Desktop/`。
+
+首页各功能区复用 `TutorialDemo.astro` 和文档中的真实前端。程序页面和教程脚本按当前场景加载，聊天、终端等模块仅在使用时下载。自动演示共享两个常驻名额，离屏先暂停，12 秒后回收；手动操作、主动暂停和展开中的演示保留状态。宽度不超过 760px 时先显示封面，点击后再加载。用户主动打开的演示优先于自动加载预算。
+
+「自己操作」在当前窗口接管，点击「放大」才进入 top layer；收起保留操作状态。放大画布同时适配可用宽高，窄屏在窗口内滚动。演示和截图跟随页面主题，切换主题不重载演示。
+
+首次进入会播放约 3.3 秒的开场：字标展开、猫标分层组装、窗口展开，再在同一浅色背景上衔接首屏。标记保存在会话存储中，同一会话返回或刷新不会重复播放；首屏底部可以重播。跳过、滚动、窗口尺寸变化和减少动态效果都会结束开场。动画不等待演示资源，加载失败也不阻塞阅读。开场入口为 `src/scripts/home-opening.ts`，首屏用 CSS sticky 配合 ScrollTrigger，避免 pin 重挂 iframe 引发演示重载。下半页的主机拓扑、应用端叠层、聊天气泡和值守波形由 `FeatureArt.astro`、`home-features.css` 与同一滚动动画入口维护。
 
 ## 线上发布
 
@@ -39,6 +45,8 @@ pnpm.cmd check:docs
 ```
 
 `check:docs` 检查构建后的本地链接、锚点、图片、明暗配对和功能清单中的文档引用。CI 分别使用 `/` 和 `/NapCatQQ-Desktop/` 两种路径运行这些检查；仅 `web` 的推送在全部检查通过后发布。
+
+`pnpm.cmd report:assets` 根据构建清单统计 JS/CSS 的原始字节与 gzip 字节，并合并入口、教程和页面的依赖，列出各场景首次可操作时所需的资源。gzip 数字用于比较产物体积，不代表浏览器实测传输、CPU 或内存占用。
 
 需要复测浏览器交互时，安装 Python 的 Playwright 包和 Chromium，先启动网站，再运行 `python scripts/smoke-docs.py --url http://127.0.0.1:4321`。可用 `--chromium` 指定浏览器路径，`--output` 指定报告目录；默认报告写到系统临时目录。它会检查所有教程在宽窄屏、明暗主题下的表格与演示工具栏，并检查浮动导航、播放控制、搜索、截图、复制和页面资源。
 
@@ -69,3 +77,5 @@ Remove-Item Env:SITE_BASE
 ## 素材
 
 `public/media/` 的素材来源与演示数据说明见该目录的 README。
+
+`pnpm.cmd images:plan` 查看图片处理计划，`pnpm.cmd images:prepare` 生成带内容 hash 的 WebP 和清单到被忽略的 `public/optimized/`。原始截图和来源记录保留；完整截图采用无损压缩，较小版本仅在体积更小时用于响应式加载。Logo 按展示尺寸生成。构建和开发服务会自动准备这些文件，手动修改源图后需重新生成。明暗截图共用一个图片节点，避免同时下载两套。

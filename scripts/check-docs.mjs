@@ -25,29 +25,49 @@ for (const [file, html] of cache) {
   if (html.includes('data-shot')) {
     assert(!html.includes('data-shot-theme') && !html.includes('data-mode="auto"'), `${path.relative(output, file)}: stale screenshot controls; run astro sync --force before rebuilding`);
   }
-  for (const tag of html.matchAll(/<(?:a|img|script|link)\b[^>]*>/g)) {
-    const match = tag[0].match(/\b(?:href|src)="([^"]+)"/);
-    if (!match) continue;
-    const url = decode(match[1]);
-    if (!url || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) continue;
-    if (url.startsWith('/')) assert(url.startsWith(base), `${path.relative(output, file)}: URL omits SITE_BASE: ${url}`);
-    const relativeFile = path.relative(output, file).split(path.sep).join('/');
-    const currentURL = `https://docs.invalid${base}${relativeFile}`;
-    const parsed = new URL(url, currentURL);
-    const pathname = decodeURIComponent(parsed.pathname);
-    const inside = pathname.startsWith(base) ? pathname.slice(base.length) : pathname.slice(1);
-    let target = path.join(output, inside);
-    if (pathname.endsWith('/')) target = path.join(target, 'index.html');
-    if (!(await exists(target)) && await exists(`${target}/index.html`)) target = `${target}/index.html`;
-    assert(await exists(target), `${path.relative(output, file)}: missing local resource ${url}`);
-    if (tag[0].startsWith('<img')) {
+  for (const tag of html.matchAll(/<(?:a|img|source|script|link)\b[^>]*>/g)) {
+    const markup = tag[0];
+    const urls = new Set();
+    const sourceSet = value => value.split(',').map(candidate => candidate.trim().split(/\s+/)[0]).filter(Boolean);
+    const resource = markup.match(/\s(?:href|src)="([^"]+)"/);
+    if (resource) urls.add(decode(resource[1]));
+    const responsive = markup.match(/\ssrcset="([^"]+)"/);
+    if (responsive) sourceSet(decode(responsive[1])).forEach(url => urls.add(url));
+    const themed = markup.match(/\sdata-theme-image="([^"]+)"/);
+    if (themed) {
+      try {
+        const variants = JSON.parse(decode(themed[1]));
+        for (const theme of ['light', 'dark']) {
+          assert(typeof variants[theme]?.src === 'string', `${path.relative(output, file)}: missing ${theme} theme image`);
+          if (typeof variants[theme]?.src === 'string') urls.add(variants[theme].src);
+          if (typeof variants[theme]?.srcset === 'string') sourceSet(variants[theme].srcset).forEach(url => urls.add(url));
+        }
+      } catch {
+        assert(false, `${path.relative(output, file)}: invalid theme image metadata`);
+      }
+    }
+    if (markup.startsWith('<img')) {
       images++;
-      assert(/\balt="[^"]*"/.test(tag[0]), `${path.relative(output, file)}: image has no alt: ${url}`);
-    } else links++;
-    if (parsed.hash && cache.has(target)) {
-      const id = decodeURIComponent(parsed.hash.slice(1));
-      const ids = [...cache.get(target).matchAll(/\bid="([^"]+)"/g)].map(match => decode(match[1]));
-      assert(ids.includes(id), `${path.relative(output, file)}: missing anchor ${url}`);
+      assert(/\balt="[^"]*"/.test(markup), `${path.relative(output, file)}: image has no alt`);
+    }
+    for (const url of urls) {
+      if (!url || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) continue;
+      if (url.startsWith('/')) assert(url.startsWith(base), `${path.relative(output, file)}: URL omits SITE_BASE: ${url}`);
+      const relativeFile = path.relative(output, file).split(path.sep).join('/');
+      const currentURL = `https://docs.invalid${base}${relativeFile}`;
+      const parsed = new URL(url, currentURL);
+      const pathname = decodeURIComponent(parsed.pathname);
+      const inside = pathname.startsWith(base) ? pathname.slice(base.length) : pathname.slice(1);
+      let target = path.join(output, inside);
+      if (pathname.endsWith('/')) target = path.join(target, 'index.html');
+      if (!(await exists(target)) && await exists(`${target}/index.html`)) target = `${target}/index.html`;
+      assert(await exists(target), `${path.relative(output, file)}: missing local resource ${url}`);
+      links++;
+      if (parsed.hash && cache.has(target)) {
+        const id = decodeURIComponent(parsed.hash.slice(1));
+        const ids = [...cache.get(target).matchAll(/\bid="([^"]+)"/g)].map(match => decode(match[1]));
+        assert(ids.includes(id), `${path.relative(output, file)}: missing anchor ${url}`);
+      }
     }
   }
 }

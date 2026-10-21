@@ -1,8 +1,11 @@
 ---
 import '../styles/product-sections.css';
+import TutorialDemo from './TutorialDemo.astro';
+import { tutorialForDoc } from '../lib/tutorials';
 
-const media = import.meta.env.BASE_URL + 'media/';
 const guides = import.meta.env.BASE_URL + 'docs/';
+const appsDemo = tutorialForDoc('apps')!;
+const chatDemo = tutorialForDoc('chat')!;
 const frameworks = [
   {
     id: 'karin', name: 'Karin', title: '配置与插件管理',
@@ -64,6 +67,7 @@ const chatModes = [
 
 <section id="applications" class="section product-apps" aria-labelledby="applications-heading">
   <div class="container">
+    <span class="chapter-ghost" aria-hidden="true">02</span>
     <header class="section-heading product-section-heading">
       <div>
         <h2 id="applications-heading" data-chapter="02 / APPLICATIONS">应用端管理</h2>
@@ -84,7 +88,7 @@ const chatModes = [
           aria-pressed={index === 0 ? 'true' : 'false'}
           aria-controls={'framework-panel-' + framework.id}
         >
-          <span class="framework-marker" aria-hidden="true"></span>
+          <span class="framework-marker" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
           {framework.name}
         </button>
       ))}
@@ -92,13 +96,13 @@ const chatModes = [
 
     <div class="apps-product-layout">
       <figure class="apps-product-figure">
-        <div class="product-window apps-product-window">
-          <img src={media + 'apps.png'} alt="NapCatQQ Desktop 应用端管理页演示，显示实例列表与管理入口" width="1440" height="900" loading="lazy" decoding="async" />
-        </div>
-        <figcaption>应用端管理 · 演示数据</figcaption>
+        <div class="product-frame-label" aria-hidden="true"><span>DESKTOP / APPLICATIONS</span><span>OneBot ↔ 应用端</span></div>
+        <TutorialDemo id="home-apps-demo" tutorial={appsDemo} showcase choices={[{ label: 'Karin 对接', tutorial: appsDemo }]} />
+        <figcaption>打开实例设置，配置一条 OneBot 连接。</figcaption>
       </figure>
 
       <div class="framework-details" aria-live="polite" aria-atomic="true">
+        <div class="framework-panels">
         {frameworks.map((framework, index) => (
           <article id={'framework-panel-' + framework.id} data-framework-panel={framework.id} hidden={index !== 0} aria-labelledby={'framework-title-' + framework.id}>
             <span class="framework-name">{framework.name}</span>
@@ -111,6 +115,7 @@ const chatModes = [
             </ul>
           </article>
         ))}
+        </div>
         <p class="framework-availability">部分操作需要实例运行并连接 WebUI。一键对接暂不支持 Docker Bot。</p>
       </div>
     </div>
@@ -155,6 +160,7 @@ const chatModes = [
 
 <section id="chat" class="section product-chat" aria-labelledby="chat-heading">
   <div class="container">
+    <span class="chapter-ghost" aria-hidden="true">03</span>
     <header class="section-heading product-section-heading">
       <div>
         <h2 id="chat-heading" data-chapter="03 / CONVERSATIONS">聊天与截图</h2>
@@ -188,12 +194,8 @@ const chatModes = [
     </div>
 
     <figure class="chat-product-figure" data-chat-focus="conversations">
-      <div class="chat-product-stage">
-        <div class="product-window chat-product-window">
-          <img src={media + 'chat.png'} alt="NapCatQQ Desktop 聊天页演示，包含联系人列表、会话与消息输入区" width="1440" height="900" loading="lazy" decoding="async" />
-        </div>
-      </div>
-      <figcaption>聊天工作区 · 演示数据</figcaption>
+      <TutorialDemo id="home-chat-demo" tutorial={chatDemo} showcase choices={[{ label: '回复与搜索', tutorial: chatDemo }]} />
+      <figcaption>引用一条消息，发送回复，再从搜索结果回到原文。</figcaption>
     </figure>
     <p class="chat-account-note">后台接收、头像托盘和消息提醒需按账号开启；群聊可单独设置免打扰。</p>
   </div>

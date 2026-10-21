@@ -1,0 +1,70 @@
+/* 首页复用教程播放器，只调整窗口外壳；放大后仍使用同一个实例。 */
+.tutorial-demo.tutorial-demo-showcase {
+  --panel: #fff;
+  --bg: #f7f8fc;
+  --ink: #202632;
+  --muted: #687183;
+  --accent: #b44c35;
+  --accent-soft: #f8e8e1;
+  --line: #dce1ec;
+  --soft: #edf1f8;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+  border: 1px solid #c8cfdf;
+  border-radius: 12px;
+  box-shadow: 0 50px 90px -45px #18243c70, 0 3px 10px #18243c18;
+}
+.hero-preview-wrap .tutorial-demo-slot { margin: 0; }
+.tutorial-demo.tutorial-demo-showcase .fbd-heading { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+.tutorial-demo.tutorial-demo-showcase .fbd-toolbar { position: relative; top: 0; order: 2; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 8px; min-height: 60px; padding: 10px; border-top: 1px solid var(--line); border-bottom: 0; border-radius: 0 0 12px 12px; background: #fff; backdrop-filter: none; }
+.tutorial-demo.tutorial-demo-showcase .fbd-toolbar::after { inset: -1px 0 auto; height: 2px; }
+.tutorial-demo.tutorial-demo-showcase .fbd-viewport { border-radius: 12px 12px 0 0; overscroll-behavior: auto; }
+.tutorial-demo.tutorial-demo-showcase:not([data-mode='manual']) .fbd-frame { pointer-events: none; }
+.tutorial-demo.tutorial-demo-showcase .fbd-workspaces { display: flex; gap: 2px; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--line); }
+.tutorial-demo.tutorial-demo-showcase .fbd-workspaces button { gap: 6px; border-radius: 5px; padding-inline: 10px; white-space: nowrap; }
+.tutorial-demo.tutorial-demo-showcase .fbd-workspaces button > span { color: #939aaa; font: 9px/1 Consolas, monospace; }
+.tutorial-demo.tutorial-demo-showcase .fbd-workspaces button[aria-selected='true'] { background: var(--ink); color: #fff; }
+.tutorial-demo.tutorial-demo-showcase .fbd-workspaces button[aria-selected='true'] > span { color: #b7bfd1; }
+.tutorial-demo.tutorial-demo-showcase .fbd-playback { gap: 2px; }
+.tutorial-demo.tutorial-demo-showcase .fbd-primary { background: transparent; border-color: var(--line); color: var(--ink); font-weight: 500; }
+.tutorial-demo.tutorial-demo-showcase .fbd-primary:hover:not(:disabled) { background: var(--soft); }
+.tutorial-demo.tutorial-demo-showcase .fbd-current { gap: 6px; }
+.tutorial-demo.tutorial-demo-showcase .fbd-step-panel[popover] { position: fixed; inset: auto; margin: 0; width: min(320px, calc(100vw - 32px)); }
+.tutorial-demo.tutorial-demo-showcase [data-fbd-title] { max-width: 110px; }
+.tutorial-demo.tutorial-demo-showcase .fbd-expand { padding-inline: 7px; }
+.tutorial-demo.tutorial-demo-showcase .fbd-expand > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.tutorial-demo.tutorial-demo-showcase .fbd-error, .tutorial-demo.tutorial-demo-showcase noscript { order: 3; }
+.tutorial-demo.tutorial-demo-showcase[data-expanded='true'] { z-index: 120; margin: 0; padding: 0; right: auto; bottom: auto; }
+.tutorial-demo.tutorial-demo-showcase[data-expanded='true'] .fbd-toolbar { order: -1; position: sticky; border-top: 0; border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; }
+.tutorial-demo.tutorial-demo-showcase[data-expanded='true'] .fbd-toolbar::after { inset: auto 0 -1px; }
+.tutorial-demo.tutorial-demo-showcase[data-expanded='true'] .fbd-viewport { flex: 0 0 auto; max-height: calc(100dvh - var(--fbd-toolbar-height) - 34px); border-radius: 0 0 12px 12px; }
+.tutorial-demo.tutorial-demo-showcase[data-expanded='true'] .fbd-expand > span { position: static; width: auto; height: auto; clip-path: none; }
+@container (max-width: 900px) {
+  .tutorial-demo.tutorial-demo-showcase .fbd-toolbar { grid-template-columns: 1fr auto auto; gap: 8px; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces { grid-column: 1 / -1; justify-content: center; padding: 0 0 8px; margin: 0; border: 0; border-bottom: 1px solid var(--line); }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces button { flex: 1; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-playback { grid-column: 1; grid-row: 2; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-progress { grid-column: 2; grid-row: 2; width: auto; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-expand { grid-column: 3; grid-row: 2; }
+}
+@media (max-width: 900px) {
+  .tutorial-demo.tutorial-demo-showcase .fbd-toolbar { grid-template-columns: 1fr auto auto; gap: 8px; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces { grid-column: 1 / -1; justify-content: center; padding: 0 0 8px; margin: 0; border: 0; border-bottom: 1px solid var(--line); }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces button { flex: 1; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-playback { grid-column: 1; grid-row: 2; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-progress { grid-column: 2; grid-row: 2; width: auto; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-expand { grid-column: 3; grid-row: 2; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-step-panel { left: auto; right: -38px; width: min(320px, calc(100vw - 64px)); }
+}
+@media (max-width: 540px) {
+  .tutorial-demo.tutorial-demo-showcase .fbd-toolbar { padding: 8px; gap: 4px; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces { padding-bottom: 6px; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces button { min-height: 38px; font-size: 11px; padding-inline: 5px; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-workspaces button > span { display: none; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-playback button { min-height: 38px; padding-inline: 7px; }
+  .tutorial-demo.tutorial-demo-showcase [data-fbd-title] { display: none; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-progress > summary { gap: 4px; padding-inline: 4px; }
+  .tutorial-demo.tutorial-demo-showcase .fbd-expand { min-height: 38px; padding-inline: 5px; }
+}

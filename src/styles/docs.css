@@ -175,9 +175,6 @@
   .doc-prose .doc-shot { display: block; margin: 28px 0 32px; }
   .shot-open { display: block; border: 1px solid var(--line); padding: 0; background: var(--soft); border-radius: 10px; overflow: hidden; cursor: zoom-in; width: 100%; box-shadow: 0 5px 18px #15213108; }
   .shot-open img { width: 100%; height: auto; display: block; }
-  .shot-open .shot-dark { display: none; }
-  :root[data-theme=dark] .doc-shot .shot-light { display: none; }
-  :root[data-theme=dark] .doc-shot .shot-dark { display: block; }
   .shot-caption { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--muted); font-size: 11px; line-height: 1.7; }
   .doc-prose .doc-shot button:focus-visible { outline-offset: 3px; }
   @media(max-width:780px) {
@@ -236,8 +233,6 @@
     .docs-shell { display: block; }
     .doc-main { padding: 0; }
     .doc-prose pre { white-space: pre-wrap; }
-    .doc-prose .shot-dark { display: none !important; }
-    .doc-prose .shot-light { display: block !important; }
     :root { color-scheme: light; --bg: #fff; --ink: #111; --panel: #fff; --muted: #555; --line: #ddd; }
     .doc-title { break-after: avoid; }
     .doc-shot { break-inside: avoid; }

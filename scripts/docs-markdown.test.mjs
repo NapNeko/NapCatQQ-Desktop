@@ -25,11 +25,16 @@ test('document emphasis renders through the configured Markdown processor', asyn
   }
 });
 
-test('paired screenshots follow the document theme without per-image overrides', async () => {
+test('screenshots expose one theme-controlled image with a no-script fallback', async () => {
   const { code } = await renderer.render('![组件页](/docs/screenshots/components-light.png)');
-  assert.match(code, /class="shot-light"/);
-  assert.match(code, /class="shot-dark"/);
-  assert.match(code, /components-dark\.png/);
+  assert.match(code, /data-theme-image=/);
+  assert.match(code, /components-light/);
+  assert.match(code, /components-dark/);
+  assert.match(code, /<noscript><img\b/);
+  const live = code.replace(/<noscript>[\s\S]*?<\/noscript>/g, '');
+  assert.equal((live.match(/<img\b/g) || []).length, 1);
+  assert.match(live, /src="data:image\/svg\+xml/);
+  assert.doesNotMatch(live, /\ssrcset=/);
   assert.doesNotMatch(code, /data-shot-theme|data-mode|shot-switch/);
 });
 

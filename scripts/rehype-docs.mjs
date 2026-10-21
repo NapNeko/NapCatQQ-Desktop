@@ -1,4 +1,6 @@
 // Keep authored URLs independent of SITE_BASE and enhance Markdown-only elements.
+import { emptyImage, themeImageSources } from './image-assets.mjs';
+
 export default function docsMarkup() {
   const prefix = (process.env.SITE_BASE || '/').replace(/^\/+|\/+$/g, '');
   const base = prefix ? `/${prefix}/` : '/';
@@ -20,11 +22,13 @@ export default function docsMarkup() {
           node.properties.loading = 'lazy';
           node.properties.decoding = 'async';
           if (typeof src === 'string' && src.includes('/docs/screenshots/') && src.endsWith('-light.png')) {
-            const light = local(src), dark = light.replace(/-light\.png$/, '-dark.png');
+            const poster = src.split('/').at(-1).replace(/-light\.png$/, '');
+            const sources = themeImageSources(poster, base);
+            const properties = { alt, width: 1440, height: 1000, loading: 'lazy', decoding: 'async', className: ['shot-image'], sizes: '(max-width: 760px) 100vw, (max-width: 1200px) 80vw, 1120px' };
             return el('span', { className: ['doc-shot'], 'data-shot': '' }, [
               el('button', { type: 'button', className: ['shot-open'], 'data-shot-open': '', 'aria-label': `放大：${alt}`, 'aria-haspopup': 'dialog' }, [
-                el('img', { src: light, alt, width: 1440, height: 1000, loading: 'lazy', decoding: 'async', className: ['shot-light'] }),
-                el('img', { src: dark, alt, width: 1440, height: 1000, loading: 'lazy', decoding: 'async', className: ['shot-dark'] }),
+                el('img', { ...properties, src: emptyImage, 'data-theme-image': JSON.stringify(sources) }),
+                el('noscript', {}, [el('img', { ...properties, src: sources.light.src, srcSet: sources.light.srcset })]),
               ]),
               el('span', { className: ['shot-caption'] }, [txt(`${alt} · 演示数据`)]),
             ]);

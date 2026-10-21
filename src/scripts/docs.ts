@@ -1,4 +1,5 @@
 import { closeReadingNav } from './docs-reading';
+import { getThemeImageSource } from './theme-images';
 
 type SearchEntry = { title: string; description: string; section: string; url: string; text: string };
 const root = document.documentElement;
@@ -7,9 +8,9 @@ const lightbox = document.querySelector<HTMLDialogElement>('[data-lightbox]')!;
 let activeShot: HTMLElement | null = null;
 function syncLightbox() {
   if (!activeShot) return;
-  const screenshot = activeShot.querySelector<HTMLImageElement>(root.dataset.theme === 'dark' ? '.shot-dark' : '.shot-light')!;
+  const screenshot = activeShot.querySelector<HTMLImageElement>('[data-theme-image]')!;
   const image = lightbox.querySelector('img')!;
-  image.src = screenshot.src;
+  image.src = getThemeImageSource(screenshot).src;
   image.alt = screenshot.alt;
   lightbox.querySelector('p')!.textContent = `${screenshot.alt} · 演示数据`;
 }

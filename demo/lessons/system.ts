@@ -234,6 +234,42 @@ const backupLesson: DemoLesson = {
   },
 };
 
+const themePicker = fieldControl('主题', 'button');
+const appearanceLesson: DemoLesson = {
+  id: 'appearance', route: 'settings',
+  steps: [
+    ['打开主题面板', '明暗主题与配色都在外观页选择。'],
+    ['选暗色与圆润风格', '先修改草稿，保存之后再应用到窗口。'],
+    ['应用暗色主题', '整个工作区一起切换，设置页也会同步。'],
+    ['换成悬浮侧栏', '侧栏可以在经典和悬浮两种形态间切换。'],
+    ['再试试浅色', '选择浅色主题，保留刚刚调整的侧栏和圆角。'],
+    ['保存外观', '现在可以接手操作，试试其他配色。'],
+  ],
+  reset() { resetSystemDemo('settings'); },
+  actions: [
+    async d => { await d.click(tab('外观')); await d.click(themePicker); await d.wait(700); },
+    async d => {
+      await d.click(d.by('button[title="暗色"]'));
+      await d.click(themePicker);
+      await d.click(radiusRound);
+    },
+    async d => { await d.click(savedButton); await d.until(isSaved); await d.wait(1700); },
+    async d => { await d.click(exact('button', '悬浮')); },
+    async d => {
+      await d.click(themePicker);
+      await d.click(d.by('button[title="浅色"]'));
+      await d.click(themePicker);
+    },
+    async d => { await d.click(savedButton); await d.until(isSaved); await d.wait(1700); },
+  ],
+  observe() {
+    if (systemDemoState.savedRevision > 1 && isSaved()) return 5;
+    if (isSaved()) return 3;
+    if (radiusRound()?.getAttribute('aria-pressed') === 'true') return 1;
+    return 0;
+  },
+};
+
 export const systemLessons: DemoLesson[] = [
-  componentsLesson, settingsLesson, networkLesson, backupLesson,
+  componentsLesson, settingsLesson, networkLesson, backupLesson, appearanceLesson,
 ];

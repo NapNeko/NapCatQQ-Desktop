@@ -4,6 +4,7 @@ import { baseline, docsPath, sections } from '../lib/docs';
 import TutorialDemo from './TutorialDemo.astro';
 import DocsReadingNav from './DocsReadingNav.astro';
 import { tutorialForDoc } from '../lib/tutorials';
+import { imageAsset } from '../../scripts/image-assets.mjs';
 import '../styles/docs.css';
 import '../styles/docs-code.css';
 import '../styles/docs-reading.css';
@@ -27,7 +28,8 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
     <meta name="theme-color" content="#faf9f7" />
     <title>{entry.data.title} · NapCatQQ Desktop 文档</title>
     <meta name="description" content={entry.data.description} />
-    <link rel="icon" type="image/png" href={`${base}media/logo.png`} />
+    <link rel="icon" type="image/png" href={imageAsset('media/favicon.png', base).src} />
+    <noscript><style is:inline>img[data-theme-image] { display: none !important; }</style></noscript>
     <script is:inline>
       try {
         const saved = localStorage.getItem('ncd-docs-theme');
@@ -38,7 +40,7 @@ const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
   <body>
     <a class="docs-skip" href="#doc-content">跳到正文</a>
     <header class="docs-header">
-      <a class="docs-brand" href={base}><img src={`${base}media/logo.png`} width="32" height="32" alt="" /><span>NapCatQQ <b>Desktop</b></span></a>
+      <a class="docs-brand" href={base}><img src={imageAsset('media/logo.png', base).src} width="32" height="32" alt="" /><span>NapCatQQ <b>Desktop</b></span></a>
       <a class="docs-wordmark" href={docsPath('index')}>使用文档</a>
       <button class="search-trigger" type="button" data-search-open aria-haspopup="dialog"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg><span>搜索文档</span><kbd>Ctrl K</kbd></button>
       <nav class="docs-top-links" aria-label="主导航"><a href={base}>首页</a><a href={`${repo}/releases`}>更新日志 ↗</a><a href={repo}>GitHub ↗</a></nav>

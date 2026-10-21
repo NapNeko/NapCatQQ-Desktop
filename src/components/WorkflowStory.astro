@@ -1,37 +1,46 @@
 ---
+import '../styles/story.css';
+import { imageAsset } from '../../scripts/image-assets.mjs';
 const base = import.meta.env.BASE_URL;
 const chapters = [
-  { number: '01', word: '连接', english: 'CONNECT', title: '先让一只 Bot 上线。', copy: '准备组件、创建实例、完成登录。从本机到远端，每一步都有文档可循。', href: 'first-bot/', link: '创建第一个 Bot', shape: 'orbit' },
-  { number: '02', word: '创造', english: 'CREATE', title: '再给想法一个舞台。', copy: '连接 Karin、NoneBot2、AstrBot 等应用端。插件、模型与配置，在同一个窗口管理。', href: 'apps/', link: '探索应用端', shape: 'bloom' },
-  { number: '03', word: '从容', english: 'ENJOY', title: '把日常，留在一个窗口。', copy: '聊天、截图、查看日志与调试接口。从灵感到日常，不必在工具之间来回切换。', href: 'overview/', link: '认识你的工作台', shape: 'steps' },
+  { id: 'connect', number: '01', word: '上线', title: '让第一只 Bot 上线。', copy: '准备组件、创建实例、扫码登录。本机和远端，都从这里开始。', href: 'first-bot/', link: '创建第一个 Bot', file: 'terminal.png', alt: 'Bot 实例与运行终端，使用演示数据', tags: ['准备组件', '扫码登录', '查看状态'] },
+  { id: 'create', number: '02', word: '接入', title: '给 Bot 添点本事。', copy: '装好应用端，再连上 Bot。Karin、NoneBot2、AstrBot 等七种框架，在同一处管理。', href: 'apps/', link: '安装与配置应用端', file: 'apps.png', alt: '七种框架的应用实例，使用演示数据', tags: ['安装框架', '配置插件', '对接 OneBot'] },
+  { id: 'chat', number: '03', word: '开聊', title: '发条消息，试试看。', copy: '直接收发私聊和群聊消息。图片、文件、截图，也在这个窗口里。', href: 'chat/', link: '聊天与截图教程', file: 'chat.png', alt: '多账号聊天界面，使用演示数据', tags: ['私聊与群聊', '媒体与文件', '原生截图'] },
 ];
 ---
 <section id="story" class="workflow-story" aria-labelledby="story-title">
   <div class="story-stage">
     <div class="container">
       <header class="story-heading">
-        <div><p class="editorial-label">THE WAY IT ALL CONNECTS</p><h2 id="story-title">一个窗口。<br /><span>许多种可能。</span></h2></div>
-        <div class="story-aside"><p>让工具各就其位，<br />让你专注想做的事。</p><span class="story-pagination" aria-hidden="true"><b data-story-current>01</b><span> / 03</span></span></div>
+        <h2 id="story-title">从启动，到开聊。</h2>
+        <nav class="story-nav" aria-label="使用流程">
+          {chapters.map((chapter, index) => <a href={'#story-' + chapter.id} data-story-jump={index} aria-current={index === 0 ? 'step' : undefined}><span>{chapter.number}</span>{chapter.word}</a>)}
+        </nav>
       </header>
       <div class="story-viewport">
         <div class="story-track">
           {chapters.map((chapter) => (
-            <article class={`story-card story-card-${chapter.shape}`}>
-              <div class="story-card-top"><span>{chapter.number} / {chapter.english}</span><span aria-hidden="true">↗</span></div>
-              <div class="story-card-art" aria-hidden="true">
-                <span class="story-word">{chapter.word}</span>
-                <svg class={`story-shape shape-${chapter.shape}`} viewBox="0 0 200 200" fill="none">
-                  {chapter.shape === 'orbit' && <><ellipse cx="100" cy="100" rx="84" ry="38" stroke="currentColor" stroke-width="15" transform="rotate(-40 100 100)" /><ellipse cx="100" cy="100" rx="84" ry="38" stroke="currentColor" stroke-width="15" transform="rotate(40 100 100)" /></>}
-                  {chapter.shape === 'bloom' && <g fill="currentColor">{[0, 45, 90, 135].map(angle => <rect x="83" y="8" width="34" height="184" rx="17" transform={`rotate(${angle} 100 100)`} />)}</g>}
-                  {chapter.shape === 'steps' && <g stroke="currentColor" stroke-width="18">{[0, 1, 2, 3].map(i => <path d={`M${20 + i * 38} 180V${142 - i * 38}h38`} />)}</g>}
-                </svg>
+            <article id={'story-' + chapter.id} class={'story-panel story-panel-' + chapter.id}>
+              <span class="story-watermark" aria-hidden="true">{chapter.word}</span>
+              <div class="story-copy">
+                <span class="story-step">第 {Number(chapter.number)} 步</span>
+                <h3>{chapter.title}</h3>
+                <p>{chapter.copy}</p>
+                <a href={base + 'docs/' + chapter.href}>{chapter.link}<span aria-hidden="true">↗</span></a>
               </div>
-              <div class="story-card-copy"><h3>{chapter.title}</h3><p>{chapter.copy}</p><a href={`${base}docs/${chapter.href}`}>{chapter.link}<span aria-hidden="true">↗</span></a></div>
+              <div class="story-visual">
+                <svg class="story-wire" viewBox="0 0 700 480" fill="none" aria-hidden="true"><path d="M0 420H115Q175 420 175 360V125Q175 65 235 65H640" pathLength="1" /><circle cx="640" cy="65" r="6" /></svg>
+                <figure>
+                  <img {...imageAsset('docs/screenshots/' + chapter.file.replace('.png', '-light.png'), base)} sizes="(max-width: 900px) 90vw, 60vw" width="1440" height="1000" alt={chapter.alt} loading="lazy" decoding="async" />
+                  <figcaption>软件界面 · 演示数据</figcaption>
+                </figure>
+                <ul class="story-tags">{chapter.tags.map(tag => <li>{tag}</li>)}</ul>
+              </div>
             </article>
           ))}
         </div>
       </div>
-      <div class="story-bottom"><span>从第一次启动，到每一天的得心应手。</span><div class="story-progress" aria-hidden="true"><span></span></div><a href="#management">继续了解功能 <span aria-hidden="true">↓</span></a></div>
+      <div class="story-bottom"><span>三步，开始使用。</span><div class="story-progress" aria-hidden="true"><span></span></div><a href="#management">往下看看，还有什么 <span aria-hidden="true">↓</span></a></div>
     </div>
   </div>
 </section>

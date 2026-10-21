@@ -32,6 +32,7 @@ const clean = id => id.split('?')[0];
 const mockTargets = new Map([
   [canonical(path.join(desktopRoot, 'core/ipc/mock/bot.mock')), path.join(demoRoot, 'bot.mock.ts')],
   [canonical(path.join(desktopRoot, 'core/ipc/mock/events.mock')), path.join(demoRoot, 'events.mock.ts')],
+  [canonical(path.join(desktopRoot, 'core/design/themeTransition')), path.join(demoRoot, 'theme-transition.ts')],
 ]);
 const avatarPath = canonical(path.join(desktopRoot, 'modules/bot/BotAvatar.tsx'));
 const preferencesPath = canonical(path.join(desktopRoot, 'core/domain/settings/preferencesStore.ts'));
@@ -89,10 +90,13 @@ function desktopDemoAdapter() {
     buildEnd(error) {
       if (error) return;
       const ids = [...this.getModuleIds()];
-      for (const file of ['bot.mock.ts', 'events.mock.ts']) {
+      for (const file of ['bot.mock.ts', 'events.mock.ts', 'theme-transition.ts']) {
         const target = canonical(path.join(demoRoot, file));
         const matches = ids.filter(id => !id.startsWith('\0') && canonical(clean(id)) === target);
         if (matches.length !== 1) this.error(`Expected one shared demo module for ${file}, received ${matches.length}.`);
+      }
+      if (ids.some(id => !id.startsWith('\0') && canonical(clean(id)) === canonical(path.join(desktopRoot, 'core/design/themeTransition.ts')))) {
+        this.error('Embedded demos must not use the desktop root View Transition.');
       }
     },
   };
@@ -124,5 +128,6 @@ export default {
     emptyOutDir: true,
     target: 'es2022',
     sourcemap: false,
+    manifest: true,
   },
 };

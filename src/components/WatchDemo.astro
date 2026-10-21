@@ -1,0 +1,33 @@
+---
+import { imageAsset } from '../../scripts/image-assets.mjs';
+const steps = ['连接管理', '退出窗口', '检测掉线', '发送通知'];
+---
+<section class="watch-demo" data-watch-demo data-watch-stage="0" aria-label="远端值守流程演示">
+  <header class="watch-demo-header"><span><i aria-hidden="true" /> ncd-watch</span><span>值守流程 · 模拟</span></header>
+  <div class="watch-scene" aria-hidden="true">
+    <div class="watch-grid"></div>
+    <div class="watch-desktop">
+      <div class="watch-monitor"><img src={imageAsset('media/logo.png', import.meta.env.BASE_URL).src} width="38" height="38" alt="" loading="lazy" decoding="async" /><span data-watch-desktop>已连接</span></div>
+      <span class="watch-monitor-stand"></span><strong>Desktop</strong>
+    </div>
+    <div class="watch-link"><span data-watch-link>SSH</span><div><i class="watch-packet" /></div></div>
+    <div class="watch-server">
+      <header><span class="watch-server-icon">▤</span><strong>远端 Linux</strong><span class="watch-online">在线</span></header>
+      <div class="watch-process"><span>NapCat Bot</span><strong data-watch-bot>运行中</strong></div>
+      <div class="watch-daemon"><span class="watch-radar"><i /></span><span>ncd-watch<small>独立值守</small></span><strong>运行中</strong></div>
+      <div class="watch-scan"><i /></div>
+    </div>
+    <div class="watch-notice-route"><i /></div>
+    <div class="watch-notice"><span class="watch-notice-symbol">↗</span><div><strong data-watch-notice-title>通知通道已就绪</strong><span data-watch-notice-copy>等待检查结果</span></div><span class="watch-notice-check">✓</span></div>
+  </div>
+  <div class="watch-demo-controls">
+    <button type="button" class="watch-play" data-watch-play aria-pressed="false"><span data-watch-play-icon aria-hidden="true">▶</span><span data-watch-play-label>演示流程</span></button>
+    <span class="watch-step-count" data-watch-count>01 / 04</span>
+    <div class="watch-meter" role="progressbar" aria-label="值守演示进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i /></div>
+    <div class="watch-step-buttons" role="group" aria-label="跳转值守步骤">{steps.map((step, index) => <button type="button" data-watch-step={index} aria-pressed={index === 0 ? 'true' : 'false'}><span aria-hidden="true">0{index + 1}</span>{step}</button>)}</div>
+    <p class="watch-explanation" aria-live="polite" aria-atomic="true"><strong data-watch-title>在 Desktop 中管理</strong><span data-watch-description>先在远端安装 ncd-watch，配置检查和通知策略。</span></p>
+  </div>
+</section>
+<script>
+  import '../scripts/watch-demo';
+</script>

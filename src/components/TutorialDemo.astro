@@ -4,20 +4,32 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Tutorial } from '../lib/tutorials';
+import { emptyImage, themeImageSources } from '../../scripts/image-assets.mjs';
 
-interface Props { tutorial: Tutorial }
-const { tutorial } = Astro.props;
+interface Props {
+  tutorial: Tutorial;
+  id?: string;
+  showcase?: boolean;
+  eager?: boolean;
+  choices?: Array<{ label: string; tutorial: Tutorial }>;
+}
+const { tutorial, id = 'tutorial-demo', showcase = false, eager = false, choices = [] } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const version = createHash('sha256').update(readFileSync(resolve('public/demo/index.html'))).digest('hex').slice(0, 12);
 const { steps } = tutorial;
 const demoWidth = 1280;
 const demoHeight = 720;
+const posterSources = themeImageSources(tutorial.poster, base);
+const posterSizes = '(max-width: 760px) 100vw, (max-width: 1200px) 90vw, 1280px';
 ---
 
 <div class="tutorial-demo-slot" data-tutorial-anchor>
-  <section id="tutorial-demo" class="tutorial-demo" style={`--fbd-native-width:${demoWidth}px;--fbd-native-height:${demoHeight}px;--fbd-aspect:${demoWidth} / ${demoHeight}`} data-tutorial-demo data-demo-lesson={tutorial.id} data-demo-src={`${base}demo/index.html?v=${version}&lesson=${tutorial.id}`} data-mode="idle" data-expanded="false" role="region" aria-labelledby="tutorial-demo-title" aria-describedby="tutorial-demo-environment">
+  <section id={id} class:list={['tutorial-demo', { 'tutorial-demo-showcase': showcase }]} style={`--fbd-native-width:${demoWidth}px;--fbd-native-height:${demoHeight}px;--fbd-aspect:${demoWidth} / ${demoHeight}`} data-tutorial-demo data-demo-showcase={showcase || undefined} data-demo-lesson={tutorial.id} data-demo-src={`${base}demo/index.html?v=${version}&lesson=${tutorial.id}`} data-mode="idle" data-expanded="false" role="region" aria-labelledby={id + '-title'} aria-describedby={id + '-environment'}>
     <header class="fbd-toolbar">
-      <h2 class="fbd-heading" id="tutorial-demo-title">{tutorial.title}</h2>
+      <h2 class="fbd-heading" id={id + '-title'}>{tutorial.title}</h2>
+      {choices.length > 0 && <div class="fbd-workspaces" role="tablist" aria-label="选择演示功能">
+        {choices.map((choice, index) => <button type="button" role="tab" id={id + '-tab-' + choice.tutorial.id} aria-controls={id + '-window'} aria-selected={index === 0 ? 'true' : 'false'} tabindex={index === 0 ? 0 : -1} data-fbd-choice={JSON.stringify({ ...choice.tutorial, posterSources: themeImageSources(choice.tutorial.poster, base) })}><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>{choice.label}</button>)}
+      </div>}
       <div class="fbd-playback" role="group" aria-label="演示控制">
         <button class="fbd-primary" type="button" data-fbd-play>
           <svg data-fbd-play-icon width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 3.5 16 10 6 16.5v-13Z" /></svg>
@@ -27,34 +39,34 @@ const demoHeight = 720;
         <button type="button" data-fbd-manual aria-pressed="false"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m5 2 10 9-5 .5-2.5 4.5L5 2Z" /></svg><span>自己操作</span></button>
       </div>
       <details class="fbd-progress" data-fbd-progress>
-        <summary aria-controls="tutorial-demo-details" aria-label="查看演示步骤与说明">
+        <summary aria-controls={id + '-details'} aria-label="查看演示步骤与说明">
           <span class="fbd-current" aria-live="polite" aria-atomic="true"><span data-fbd-position>0 / {steps.length}</span><span data-fbd-title>演示说明</span></span>
           <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
         </summary>
-        <div class="fbd-step-panel" id="tutorial-demo-details">
-          <p class="fbd-environment" id="tutorial-demo-environment">{tutorial.environment}</p>
+        <div class="fbd-step-panel" id={id + '-details'}>
+          <p class="fbd-environment" id={id + '-environment'}>{tutorial.environment}</p>
           <p class="fbd-detail" data-fbd-detail>{tutorial.summary}</p>
           <ol class="fbd-steps" aria-label="演示步骤">{steps.map((step, index) => <li data-fbd-step={index}><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span>{step}</span></li>)}</ol>
           <p class="fbd-pan-hint" data-fbd-pan hidden></p>
           <div class="fbd-panel-actions"><span class="fbd-mode" data-fbd-mode>未开始</span><button class="fbd-utility" type="button" data-fbd-reset disabled><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5v4h4M4 9a6 6 0 1 1 1.5 5.5" /></svg><span>重置演示</span></button></div>
         </div>
       </details>
-      <button class="fbd-expand" type="button" data-fbd-expand title="放大演示" aria-haspopup="dialog" aria-expanded="false" aria-controls="tutorial-demo"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8V3h5m4 0h5v5M3 12v5h5m4 0h5v-5" /></svg><span data-fbd-expand-label>放大</span></button>
+      <button class="fbd-expand" type="button" data-fbd-expand title="放大演示" aria-haspopup="dialog" aria-expanded="false" aria-controls={id}><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8V3h5m4 0h5v5M3 12v5h5m4 0h5v-5" /></svg><span data-fbd-expand-label>放大</span></button>
     </header>
 
-    <div class="fbd-viewport" data-fbd-viewport tabindex="0" role="region" aria-label="软件演示窗口">
+    <div id={id + '-window'} class="fbd-viewport" data-fbd-viewport tabindex="0" role={choices.length ? 'tabpanel' : 'region'} aria-labelledby={choices.length ? id + '-tab-' + tutorial.id : undefined} aria-label={choices.length ? undefined : '软件演示窗口'}>
       <div class="fbd-canvas" data-fbd-canvas>
         <iframe class="fbd-frame" data-fbd-frame title={`NapCatQQ Desktop：${tutorial.summary}`} width={demoWidth} height={demoHeight} sandbox="allow-scripts allow-same-origin allow-forms" loading="lazy" tabindex="-1" aria-hidden="true"></iframe>
         <div class="fbd-cover" data-fbd-cover>
-          <img class="fbd-poster-light" src={`${base}docs/screenshots/${tutorial.poster}-light.png`} alt={`${tutorial.title}界面预览`} width={demoWidth} height={demoHeight} loading="lazy" decoding="async" draggable="false" />
-          <img class="fbd-poster-dark" src={`${base}docs/screenshots/${tutorial.poster}-dark.png`} alt={`${tutorial.title}界面预览，深色主题`} width={demoWidth} height={demoHeight} loading="lazy" decoding="async" draggable="false" />
+          <img class="fbd-poster" data-theme-image={JSON.stringify(posterSources)} src={showcase ? posterSources.light.src : emptyImage} srcset={showcase ? posterSources.light.srcset : undefined} sizes={posterSizes} alt={`${tutorial.title}界面预览`} width={demoWidth} height={demoHeight} loading={eager ? 'eager' : 'lazy'} fetchpriority={eager ? 'high' : 'auto'} decoding="async" draggable="false" />
+          <noscript><img class="fbd-poster" src={posterSources.light.src} srcset={posterSources.light.srcset} sizes={posterSizes} alt={`${tutorial.title}界面预览`} width={demoWidth} height={demoHeight} loading={eager ? 'eager' : 'lazy'} decoding="async" draggable="false" /></noscript>
         </div>
       </div>
       <div class="fbd-loading" data-fbd-loading hidden><span class="fbd-loading-mark" aria-hidden="true"></span><p>正在加载演示…</p></div>
     </div>
     <p class="fbd-error" data-fbd-error role="alert" hidden></p>
 
-    <noscript><p class="fbd-noscript">交互演示需要启用 JavaScript。下方有完整图文步骤。</p></noscript>
+    <noscript><p class="fbd-noscript">{showcase ? '交互演示需要启用 JavaScript，使用文档中有完整操作步骤。' : '交互演示需要启用 JavaScript。下方有完整图文步骤。'}</p></noscript>
   </section>
 </div>
 

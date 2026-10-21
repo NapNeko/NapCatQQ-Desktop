@@ -6,7 +6,6 @@
 .operations-sections *, .operations-sections *::before, .operations-sections *::after { box-sizing: border-box; }
 
 .operations-sections [hidden] { display: none !important; }
-.operations-sections button { font: inherit; cursor: pointer; }
 .operations-sections button:focus-visible,
 .operations-sections a:focus-visible {
   outline: 3px solid var(--accent);

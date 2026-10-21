@@ -1,0 +1,65 @@
+---
+interface Props { kind: 'hosts' | 'apps' | 'chat' | 'tools' | 'watch' | 'settings' | 'download' }
+const { kind } = Astro.props;
+---
+<div class:list={['feature-art', `feature-art-${kind}`]} aria-hidden="true">
+  {kind === 'hosts' && <svg viewBox="0 0 800 260" fill="none">
+    <path class="art-route" data-draw pathLength="1" d="M204 136H350Q374 136 374 112V77H536M374 120V195H536" />
+    <path class="art-route-secondary" data-draw pathLength="1" d="M174 191V227H690V204" />
+    <g class="art-host-computer" data-art-piece>
+      <rect x="70" y="52" width="210" height="135" rx="12" fill="#f7f8fc" stroke="#8494b7" />
+      <rect x="79" y="61" width="192" height="108" rx="6" fill="#e8edf8" />
+      <path d="M158 188v22m-32 8h94" stroke="#8494b7" stroke-width="6" />
+      <path d="m140 89 23 14h27l23-14v50q0 17-18 17h-37q-18 0-18-17Z" fill="#ef8c73" />
+      <path d="m159 119 10 8-10 8m24 0h12" stroke="#fff" stroke-width="3" />
+    </g>
+    <g class="art-host-local" data-art-piece>
+      <rect x="500" y="37" width="218" height="77" rx="10" fill="#fff" stroke="#8494b7" />
+      <rect x="516" y="53" width="43" height="43" rx="8" fill="#f9e3da" />
+      <path d="M528 65h18v14h-18zm5 20h8m-4-6v6" stroke="#b75c40" stroke-width="1.5" />
+      <text x="575" y="67">WINDOWS</text><text class="art-small" x="575" y="88">LOCAL / 本机</text>
+      <circle cx="700" cy="51" r="3" fill="#5a927b" />
+    </g>
+    <g class="art-host-remote" data-art-piece>
+      <rect x="500" y="151" width="218" height="77" rx="10" fill="#fff" stroke="#8494b7" />
+      <rect x="516" y="167" width="43" height="43" rx="8" fill="#e4e9fa" />
+      <path d="M527 177h21v8h-21zm0 13h21v8h-21zm4-9h1m-1 13h1" stroke="#6074b5" stroke-width="1.5" />
+      <text x="575" y="182">LINUX</text><text class="art-small" x="575" y="203">SSH / DOCKER</text>
+      <circle cx="700" cy="165" r="3" fill="#5a927b" />
+    </g>
+    <circle cx="374" cy="136" r="26" fill="#202632" /><path d="m362 136 7-7m-7 7 7 7m17-7-7-7m7 7-7 7" stroke="#fff" stroke-width="1.5" />
+    <text class="art-small" x="81" y="245">NAPCATQQ DESKTOP</text><text class="art-small" x="386" y="34">ONE WORKSPACE / TWO PLACES</text>
+  </svg>}
+  {kind === 'apps' && <>
+    <span class="art-app-count">07</span>
+    <div class="art-app-tiles">
+      {['K', 'N', 'A', 'M', 'K', 'Y', 'N'].map((letter, index) => <span data-art-piece style={`--tile: ${index}`}>{letter}<i /></span>)}
+    </div>
+    <span class="art-caption">FRAMEWORKS / 应用端</span>
+  </>}
+  {kind === 'chat' && <>
+    <svg class="art-chat-route" viewBox="0 0 1000 220" fill="none"><path data-draw pathLength="1" d="M80 143C170 143 156 33 320 33H685Q754 33 754 105T920 176" /><circle cx="80" cy="143" r="5" /><circle cx="920" cy="176" r="5" /></svg>
+    <div class="art-chat-bubble art-chat-at" data-art-piece>@<span>你好，Bot。</span></div>
+    <div class="art-chat-bubble art-chat-wave" data-art-piece><i /><i /><i /><i /><i /><i /><i /><i /><i /><span>VOICE</span></div>
+    <div class="art-capture-corner" data-art-piece><span>Ctrl</span><span>Alt</span><span>S</span><i /></div>
+  </>}
+  {kind === 'tools' && <svg viewBox="0 0 540 250" fill="none">
+    <path class="art-code-bracket" data-draw pathLength="1" d="m185 41-95 83 95 83m170-166 95 83-95 83M300 15l-54 220" />
+    <circle cx="270" cy="125" r="115" /><ellipse cx="270" cy="125" rx="245" ry="60" />
+    <path class="art-code-line" data-draw pathLength="1" d="M0 124h90m360 0h90" />
+  </svg>}
+  {kind === 'watch' && <svg viewBox="0 0 600 180" fill="none">
+    <path class="art-watch-grid" d="M0 45h600M0 90h600M0 135h600M100 0v180M200 0v180M300 0v180M400 0v180M500 0v180" />
+    <path class="art-pulse" data-draw pathLength="1" d="M0 100h91l15-18 20 36 26-82 25 119 21-55h90l15-18 20 36 26-82 25 119 21-55h91l15-18 20 36 26-82 25 119 21-55h57" />
+    <text x="24" y="27">NCD-WATCH / REMOTE</text><circle cx="569" cy="23" r="4" fill="#5b8b76" />
+  </svg>}
+  {kind === 'settings' && <>
+    <div class="art-theme-disc" data-art-piece><span /><i /></div>
+    <div class="art-theme-swatches" data-art-piece><i /><i /><i /><i /></div>
+    <span class="art-caption">LIGHT ↔ DARK</span>
+  </>}
+  {kind === 'download' && <svg viewBox="0 0 400 400" fill="none">
+    <path data-draw pathLength="1" d="M58 54 145 104H255L342 54V271Q342 346 267 346H133Q58 346 58 271Z" />
+    <path data-draw pathLength="1" d="m125 169 46 32-46 32m79 0h66" />
+  </svg>}
+</div>

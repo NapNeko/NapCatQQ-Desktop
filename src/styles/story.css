@@ -1,0 +1,65 @@
+.workflow-story { position: relative; background: #202632; color: #f7f8fc; overflow: clip; scroll-margin-top: 0; }
+.story-stage { padding-block: 48px 26px; }
+.story-heading { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-bottom: 30px; }
+.story-heading h2 { font-size: clamp(30px, 3vw, 42px); line-height: 1.25; font-weight: 550; letter-spacing: -.055em; }
+.story-nav { display: flex; align-items: center; gap: 4px; }
+.story-nav a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px; min-height: 44px; border-radius: 30px; font-size: 12px; color: #aeb8cb; transition: background .25s, color .25s; }
+.story-nav a span { font-size: 10px; opacity: .7; }
+.story-nav a:hover, .story-nav a[aria-current] { color: #fff; background: #ffffff15; }
+.story-viewport { overflow: clip; border-radius: 12px; }
+.story-track { display: grid; gap: 20px; }
+.story-panel { position: relative; display: grid; grid-template-columns: .85fr 1.2fr; align-items: center; gap: 36px; min-width: 0; min-height: 480px; padding: clamp(30px, 4vw, 58px); overflow: clip; isolation: isolate; border-radius: 12px; scroll-margin-top: 20px; }
+.story-panel-connect { color: #3a241d; background: #f7a389; }
+.story-panel-create { color: #fff; background: #5366cf; }
+.story-panel-chat { color: #25323b; background: #cddfe1; }
+.story-watermark { position: absolute; left: 18px; bottom: -.12em; z-index: -1; font-size: clamp(180px, 22vw, 320px); line-height: 1; font-weight: 750; letter-spacing: -.09em; opacity: .065; white-space: nowrap; }
+.story-step { display: inline-block; font-size: 12px; margin-bottom: 24px; opacity: .75; }
+.story-copy h3 { max-width: 7em; font-size: clamp(32px, 3.4vw, 48px); line-height: 1.3; font-weight: 600; letter-spacing: -.065em; }
+.story-copy p { max-width: 27em; margin-top: 20px; font-size: 14px; line-height: 1.9; opacity: .85; }
+.story-copy > a { display: inline-flex; align-items: center; gap: 28px; min-height: 44px; margin-top: 22px; padding-block: 10px; border-bottom: 1px solid currentColor; font-size: 13px; }
+.story-copy > a > span { font-size: 20px; }
+.story-visual { position: relative; min-width: 0; perspective: 1100px; }
+.story-visual figure { position: relative; margin: 0; transform: rotate(-4deg) rotateY(-8deg); }
+.story-panel-create .story-visual figure { transform: rotate(4deg) rotateY(8deg); }
+.story-visual img { width: 100%; height: auto; border: 3px solid #353633; border-radius: 7px; box-shadow: 0 30px 45px -25px #15182480; }
+.story-visual figcaption { margin-top: 12px; text-align: right; font-size: 10px; opacity: .65; }
+.story-wire { position: absolute; width: 125%; height: 125%; left: -12%; top: -20%; z-index: -1; stroke: currentColor; stroke-width: 1px; opacity: .4; }
+.story-wire circle { fill: currentColor; }
+.story-tags { display: flex; gap: 10px; flex-wrap: wrap; list-style: none; padding: 0; margin: 30px 0 0; }
+.story-tags li { font-size: 10px; padding: 6px 10px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: 20px; }
+.story-bottom { display: flex; align-items: center; justify-content: space-between; gap: 30px; min-height: 60px; margin-top: 10px; color: #b0bbce; font-size: 11px; }
+.story-bottom > a { display: flex; align-items: center; gap: 20px; min-height: 44px; }
+.story-progress { display: none; width: min(200px, 25%); height: 2px; background: #ffffff21; }
+.story-progress > span { display: block; width: 100%; height: 100%; background: #f7a389; transform: scaleX(0); transform-origin: left; }
+.story-pinned .story-stage { height: calc(100svh - var(--header-height)); padding-top: 30px; padding-bottom: 14px; }
+.story-pinned .story-stage > .container { height: 100%; display: flex; flex-direction: column; }
+.story-pinned .story-viewport { flex: 1; min-height: 0; }
+.story-pinned .story-track { height: 100%; display: flex; gap: 0; }
+.story-pinned .story-panel { flex: 0 0 100%; min-height: 0; height: 100%; border-radius: 0; }
+.story-pinned .story-progress { display: block; }
+.story-pinned .story-heading { margin-bottom: 25px; }
+@media (max-width: 900px) {
+  .story-panel { gap: 26px; min-height: 400px; padding: 30px; }
+  .story-copy h3 { font-size: 33px; }
+  .story-copy p { font-size: 12px; }
+  .story-copy > a { font-size: 12px; }
+}
+@media (max-width: 700px) {
+  .story-stage { padding-block: 38px 18px; }
+  .story-heading { align-items: start; flex-direction: column; gap: 16px; margin-bottom: 23px; }
+  .story-heading h2 { font-size: 32px; }
+  .story-nav { gap: 6px; }
+  .story-nav a { padding: 8px 13px; }
+  .story-panel { grid-template-columns: 1fr; gap: 38px; min-height: 0; padding: 30px 25px; }
+  .story-step { margin-bottom: 16px; }
+  .story-copy h3 { max-width: 10em; font-size: clamp(28px, 7vw, 36px); }
+  .story-copy p { font-size: 13px; margin-top: 15px; }
+  .story-copy > a { margin-top: 12px; }
+  .story-watermark { font-size: 160px; }
+  .story-visual figure { transform: rotate(-2deg); }
+  .story-panel-create .story-visual figure { transform: rotate(2deg); }
+  .story-tags { gap: 6px; margin-top: 22px; }
+  .story-tags li { padding: 5px 8px; font-size: 9px; }
+  .story-bottom { gap: 12px; font-size: 10px; }
+  .story-bottom > a { gap: 8px; }
+}
