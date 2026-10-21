@@ -2,7 +2,6 @@ import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppProvidersNext } from '@desktop/app/AppProvidersNext';
-import { BotPageNext } from '@desktop/modules/bot/BotPage.next';
 import { Sidebar, type AppRoute } from '@desktop/shared/components/next/Sidebar';
 import { TooltipProvider } from '@desktop/shared/ui/Tooltip';
 import { InfoBarStack } from '@desktop/shared/ui/InfoBarStack';
@@ -23,9 +22,10 @@ import { useTaskQueue } from '@desktop/hooks/task-queue/useTaskQueue';
 import { usePreferences } from '@desktop/hooks/preferences/usePreferences';
 import { demoReadConfig, demoFlavors, demoTailLog, mockSnapshots, resetScenario } from './bot.mock';
 import { installPlayer } from './player';
-import { getLesson } from './lessons';
+import { getLessonEntry } from './lessons';
+import type { DemoLesson } from './lesson-types';
+import { loadTerminalDock, pageLoaders } from './page-loaders';
 import { installSystemDemo, resetSystemDemo } from './system.mock';
-import { installWorkspaceDemo } from './workspace.mock';
 import './demo.css';
 
 // Only this browser entry replaces services; the desktop source stays untouched.
@@ -35,13 +35,12 @@ Object.assign(botService, {
   listFlavors: async () => demoFlavors(),
   tailLog: async (id: string, lines?: number) => demoTailLog(id, lines),
 });
-const lesson = getLesson(new URLSearchParams(location.search).get('lesson'));
+const lessonEntry = getLessonEntry(new URLSearchParams(location.search).get('lesson'));
 installSystemDemo();
-installWorkspaceDemo();
 const resolveOriginalReadiness = componentService.resolveRuntimeReadiness;
 componentService.resolveRuntimeReadiness = async (componentId, hostId) => {
   const readiness = await resolveOriginalReadiness(componentId, hostId);
-  if (lesson.route === 'bots' && hostId === 'local' && componentId === 'napcat') {
+  if (lessonEntry.route === 'bots' && hostId === 'local' && componentId === 'napcat') {
     for (const node of [readiness.root, ...readiness.plan.nodes]) {
       node.status = { state: 'satisfied', source: '教程演示环境' };
     }
@@ -50,9 +49,9 @@ componentService.resolveRuntimeReadiness = async (componentId, hostId) => {
 };
 registerDesktopConsentHost(async (action) => { await action?.(); return true; });
 let parentTheme: 'light' | 'dark' = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light';
-function prepareLesson() {
+function prepareLesson(lesson: DemoLesson) {
   resetScenario();
-  featureTogglesStore.apply({ napcat: true, snowluma: false, chat: true, apps: true, apiDebug: true, terminal: false, dockerPage: false, ncdWatch: false });
+  featureTogglesStore.apply({ napcat: true, snowluma: false, chat: true, apps: true, apiDebug: true, terminal: lesson.id === 'terminal', dockerPage: false, ncdWatch: false });
   preferencesStore.applySnapshot({
     theme: parentTheme, sidebarStyle: 'classic', showMascot: false,
     radiusStyle: 'standard', closeAction: 'close', motionSpeed: MOTION_SPEED_DEFAULT,
@@ -62,18 +61,19 @@ function prepareLesson() {
   resetSystemDemo();
   lesson.reset();
 }
-prepareLesson();
 
 const taskHostLabels = { local: '本机' };
-const ComponentsPage = lazy(() => import('@desktop/modules/components/ComponentsPage.next').then(module => ({ default: module.ComponentsPageNext })));
-const SettingsPage = lazy(() => import('@desktop/modules/settings/SettingsPage.next').then(module => ({ default: module.SettingsPageNext })));
-const OverviewPage = lazy(() => import('@desktop/modules/bootstrap/BootstrapPanel.next').then(module => ({ default: module.BootstrapPanelNext })));
-const AppsPage = lazy(() => import('@desktop/modules/apps/AppsPage.next').then(module => ({ default: module.AppsPageNext })));
-const DebugPage = lazy(() => import('@desktop/modules/debug/DebugConsolePage').then(module => ({ default: module.DebugConsolePage })));
-const ChatPage = lazy(() => import('@desktop/modules/chat/ChatPage').then(module => ({ default: module.ChatPage })));
-const TasksPage = lazy(() => import('@desktop/modules/task-queue/TaskQueuePage.next').then(module => ({ default: module.TaskQueuePageNext })));
+const BotPage = lazy(pageLoaders.bots);
+const ComponentsPage = lazy(pageLoaders.components);
+const SettingsPage = lazy(pageLoaders.settings);
+const OverviewPage = lazy(pageLoaders.overview);
+const AppsPage = lazy(pageLoaders.apps);
+const DebugPage = lazy(pageLoaders.debug);
+const ChatPage = lazy(pageLoaders.chat);
+const TasksPage = lazy(pageLoaders.tasks);
+const TerminalDock = lazy(loadTerminalDock);
 
-function DemoShell() {
+function DemoShell({ lesson }: { lesson: DemoLesson }) {
   const [collapsed, setCollapsed] = useState(true);
   const [pageKey, setPageKey] = useState(0);
   const [route, setRoute] = useState<AppRoute>(lesson.route);
@@ -95,7 +95,7 @@ function DemoShell() {
 
   useEffect(() => installPlayer(lesson, {
     reset: () => {
-      prepareLesson();
+      prepareLesson(lesson);
       botLogStore._reset();
       globalInfoBarStore.clear();
       queryClient.clear();
@@ -104,7 +104,7 @@ function DemoShell() {
       setPageKey(key => key + 1);
     },
     theme: value => { parentTheme = value; preferencesStore.setTheme(value); },
-  }), [queryClient]);
+  }), [lesson, queryClient]);
 
   function navigate(route: AppRoute) {
     if (!hiddenRoutes.has(route)) { setRoute(route); return; }
@@ -121,7 +121,7 @@ function DemoShell() {
         sidebarStyle={sidebarStyle} onToggleCollapse={() => setCollapsed(value => !value)} hiddenRoutes={hiddenRoutes} taskQueueActiveCount={taskQueue.activeCount} />
       <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden px-5 pb-4 pt-4" data-demo-route={route}>
         <Suspense key={pageKey} fallback={<p className="p-6 text-sm text-text-secondary">正在打开页面…</p>}>
-          {route === 'bots' && <BotPageNext onNavigate={navigate} />}
+          {route === 'bots' && <BotPage onNavigate={navigate} />}
           {route === 'components' && <ComponentsPage />}
           {route === 'settings' && <SettingsPage />}
           {route === 'overview' && <OverviewPage onNavigate={navigate} />}
@@ -131,6 +131,7 @@ function DemoShell() {
           {route === 'tasks' && <TasksPage {...taskQueue} onNavigate={navigate} showDocker={false} />}
         </Suspense>
         <div id="ndf-float-layer" className="pointer-events-none absolute inset-0" />
+        {lesson.id === 'terminal' && <Suspense fallback={null}><TerminalDock /></Suspense>}
       </main>
     </div>
     <InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />
@@ -142,4 +143,22 @@ function DemoShell() {
   </TooltipProvider>;
 }
 
-createRoot(document.getElementById('root')!).render(<AppProvidersNext><DemoShell /></AppProvidersNext>);
+async function start() {
+  const pageLoader = pageLoaders[lessonEntry.route as keyof typeof pageLoaders];
+  const [lesson] = await Promise.all([
+    lessonEntry.load(), pageLoader(),
+    lessonEntry.id === 'terminal' ? loadTerminalDock() : undefined,
+  ]);
+  prepareLesson(lesson);
+  createRoot(document.getElementById('root')!).render(<AppProvidersNext><DemoShell lesson={lesson} /></AppProvidersNext>);
+}
+
+void start().catch(error => {
+  console.error('教程演示加载失败', error);
+  const message = '演示加载失败，请刷新后重试。';
+  document.getElementById('root')!.textContent = message;
+  window.parent.postMessage({
+    channel: `ncd-docs-demo:${lessonEntry.id}`, type: 'state', mode: 'error',
+    step: 0, title: '演示加载失败', detail: message, error: message,
+  }, location.origin);
+});

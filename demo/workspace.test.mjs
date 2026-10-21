@@ -25,6 +25,7 @@ const compiled = await build({
       export { linkApi } from '@desktop/core/ipc/mock/app-framework/link-api';
       export { instances } from '@desktop/core/ipc/mock/app-framework/state';
       export { peekKarinHttpAuthKey } from '@desktop/core/ipc/mock/app-config.mock';
+      export { chatDesktopService } from '@desktop/core/services/chat-desktop.service';
     `,
     resolveDir: demoRoot,
     loader: 'ts',
@@ -93,4 +94,30 @@ test('应用配置和原始文件保存后重置，回到种子配置并清除�
   assert.deepEqual(await api.instanceApi.readConfigText(api.workspaceAppId, 'env'), originalText);
   assert.equal(api.instances[0].link, undefined);
   assert.equal(api.instances[0].port, initial.config.data.env.http_port);
+});
+
+test('聊天适配延迟加载时使用最新一次重置的账号', async t => {
+  const api = fixture(t);
+  api.resetWorkspaceDemo('chat');
+  api.resetWorkspaceDemo('chat');
+  await Promise.all([api.installWorkspaceDemo(), api.installWorkspaceDemo()]);
+  const view = await api.chatDesktopService.loadView();
+  assert.equal(view.revision, 3);
+  assert.equal(view.selectedBot, 'docs-chat-3');
+});
+
+test('聊天重复打开保留操作，重置后拒绝旧视图的异步保存', async t => {
+  const api = fixture(t);
+  api.resetWorkspaceDemo('chat');
+  await api.installWorkspaceDemo();
+  const original = await api.chatDesktopService.loadView();
+  await api.chatDesktopService.saveView({ ...original, selectedBot: 'manual-selection' });
+  await api.installWorkspaceDemo();
+  assert.equal((await api.chatDesktopService.loadView()).selectedBot, 'manual-selection');
+
+  api.resetWorkspaceDemo('chat');
+  await api.chatDesktopService.saveView(original);
+  const reset = await api.chatDesktopService.loadView();
+  assert.equal(reset.revision, original.revision + 1);
+  assert.equal(reset.selectedBot, `docs-chat-${reset.revision}`);
 });

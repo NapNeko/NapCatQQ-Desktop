@@ -31,6 +31,7 @@ jobs:
       - run: pnpm build && pnpm check:docs
         env:
           SITE_BASE: ${{ matrix.base }}
+      - run: pnpm report:assets
       - run: node .cache/desktop/node_modules/typescript/bin/tsc -p demo/tsconfig.json --noEmit
       - run: pnpm test:demo
       - name: Configure GitHub Pages
