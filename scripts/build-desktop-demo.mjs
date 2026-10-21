@@ -3,7 +3,6 @@ import { createRequire } from 'node:module';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { pipeline } from 'node:stream/promises';
 
 const siteRoot = fileURLToPath(new URL('../', import.meta.url));
 const cacheRoot = path.join(siteRoot, '.cache', 'desktop');
@@ -92,14 +91,11 @@ async function prepareSource() {
   const cacheParent = path.dirname(cacheRoot);
   await fs.mkdir(cacheParent, { recursive: true });
   await fs.mkdir(cacheRoot);
-  // The archive contains only reviewed regular blobs, so extraction cannot follow source symlinks.
-  const archive = spawn('git', ['archive', '--format=tar', source.commit, ...expectedPaths], {
-    cwd: siteRoot, stdio: ['ignore', 'pipe', 'inherit'], windowsHide: true,
-  });
-  const extract = spawn('tar', ['-xf', '-', '-C', cacheRoot], {
-    cwd: siteRoot, stdio: ['pipe', 'inherit', 'inherit'], windowsHide: true,
-  });
-  await Promise.all([pipeline(archive.stdout, extract.stdin), waitFor(archive, 'git archive'), waitFor(extract, 'tar')]);
+  // GNU tar may close stdin at the archive footer before Node finishes piping its padding.
+  const archive = path.join(cacheRoot, '.desktop-source.tar');
+  await run('git', ['archive', '--format=tar', `--output=${archive}`, source.commit, ...expectedPaths]);
+  await run('tar', ['-xf', '.desktop-source.tar'], cacheRoot);
+  await fs.unlink(archive);
   for (const entry of entries) {
     if (!(await fs.lstat(path.join(cacheRoot, entry.name))).isFile()) {
       throw new Error(`Export is incomplete: ${entry.name}`);
