@@ -51,6 +51,6 @@ pnpm.cmd build:demo
 
 - `@desktop` 与 `@` 指向缓存中的原始 `src-ui`；`@demo` 指向本目录。
 - 仅将原始 `core/ipc/mock/bot.mock.ts`、`events.mock.ts` 的导入替换为本目录同名教学适配。页面、表单和事件 hook 来自固定软件版本。
-- 两处构建适配会断言原文恰好匹配一次：`BotAvatar.tsx` 使用原有 initials 回退，避免向 QQ 头像服务发送演示账号；`preferencesStore.ts` 改用 `ncd:docs-demo:preferences:v1`，隔离教学偏好。它们只改变编译输入，不改缓存源码或 `main` 文件。
+- 构建适配会断言原文恰好匹配一次：`BotAvatar.tsx` 使用原有 initials 回退，避免向 QQ 头像服务发送演示账号；`preferencesStore.ts` 改用 `ncd:docs-demo:preferences:v1`，隔离教学偏好；`ConnectionsTab.tsx` 等标题与表单就绪后再打开连接编辑弹窗，避免首次打开时缺少读屏标题。这些适配只改变编译输入，不改缓存源码或 `main` 文件。
 - `demo.css` 导入原始全局 CSS，并显式声明 Tailwind 扫描目录，避免 `.cache` 的忽略规则漏掉真实 UI 样式。
 - 教学场景模拟进程与日志，不连接 QQ、不执行安装或 SSH 操作。真实扫码、设备验证和外部 WebUI 仍按教程说明完成。

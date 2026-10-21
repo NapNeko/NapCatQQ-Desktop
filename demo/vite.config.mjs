@@ -35,6 +35,7 @@ const mockTargets = new Map([
 ]);
 const avatarPath = canonical(path.join(desktopRoot, 'modules/bot/BotAvatar.tsx'));
 const preferencesPath = canonical(path.join(desktopRoot, 'core/domain/settings/preferencesStore.ts'));
+const connectionsPath = canonical(path.join(desktopRoot, 'modules/bot/config/next/ConnectionsTab.tsx'));
 
 function replaceOnce(code, before, after, name) {
   const index = code.indexOf(before);
@@ -73,6 +74,13 @@ function desktopDemoAdapter() {
       if (target === preferencesPath) {
         return {
           code: replaceOnce(code, "const STORAGE_KEY = 'ncd:preferences:v1';", "const STORAGE_KEY = 'ncd:docs-demo:preferences:v1';", 'isolate demo preferences'),
+          map: null,
+        };
+      }
+      if (target === connectionsPath) {
+        // The pinned frontend mounts the dialog body one effect after its open state.
+        return {
+          code: replaceOnce(code, 'open={editing !== null}', 'open={editing !== null && editingMount !== null}', 'mount connection dialog title before opening'),
           map: null,
         };
       }
