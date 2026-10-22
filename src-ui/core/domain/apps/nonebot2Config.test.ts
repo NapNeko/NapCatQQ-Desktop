@@ -72,4 +72,15 @@ describe('NoneBot2 upstream configuration', () => {
         ]);
     });
 
+    it('keeps ambiguous negative day-clock input unchanged and requires an explicit unit format', () => {
+        const cfg = nonebot2DefaultConfig(8080);
+        cfg.env_prod.session_expire_timeout = '-1 day, 02:03:04.000005';
+        expect(validateNoneBot2Config(cfg).map((issue) => issue.path)).toContain('env_prod/session_expire_timeout');
+        expect(cfg.env_prod.session_expire_timeout).toBe('-1 day, 02:03:04.000005');
+        cfg.env_prod.session_expire_timeout = '-79015.999995';
+        expect(validateNoneBot2Config(cfg)).toEqual([]);
+        cfg.env_prod.session_expire_timeout = '-PT79015.999995S';
+        expect(validateNoneBot2Config(cfg)).toEqual([]);
+    });
+
 });

@@ -205,6 +205,20 @@ jobs:
                 flush=True)
           print("DOTENV_COMPARE passed " + str(checked) + " dialect comparisons", flush=True)
           PY
+      - name: Verify duration reference semantics
+        run: python scripts/verify-nonebot-duration-reference.py
+      - name: Typecheck integrated configuration forms
+        run: pnpm run typecheck
+      - name: Test changed configuration forms
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          changed = subprocess.check_output(["git", "diff", "--name-only", "ee54f93d75999c0d16e2703af91e2667be572116", "HEAD"]).decode().splitlines()
+          tests = [p for p in changed if p.startswith("src-ui/") and p.endswith((".test.ts", ".test.tsx")) and Path(p).is_file()]
+          if tests:
+              subprocess.run(["pnpm", "exec", "vitest", "run", "--config", "src-ui/vitest.config.ts", "--maxWorkers=2", "--minWorkers=1", *tests], check=True)
+          PY
       - name: Lint
         run: pnpm run lint
       - name: Check formatting

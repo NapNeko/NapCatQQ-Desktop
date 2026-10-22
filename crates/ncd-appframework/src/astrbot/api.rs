@@ -44,6 +44,13 @@ impl AstrBotSession {
 /// 变更类方法统一回读全量，省得前端自己拼乐观更新。
 #[async_trait]
 pub trait AstrBotRuntimeApi: Send + Sync {
+    async fn config_schema(
+        &self,
+        _session: &AstrBotSession,
+    ) -> Result<runtime::AstrBotConfigSchema, AppFrameworkError> {
+        Err(AppFrameworkError::ConfigUnsupported("AstrBot 配置元数据".into()))
+    }
+
     async fn dashboard_status(&self, session: &AstrBotSession) -> AstrBotDashboardStatus;
 
     async fn list_personas(
@@ -153,6 +160,13 @@ impl DashboardRuntime {
 
 #[async_trait]
 impl AstrBotRuntimeApi for DashboardRuntime {
+    async fn config_schema(
+        &self,
+        session: &AstrBotSession,
+    ) -> Result<runtime::AstrBotConfigSchema, AppFrameworkError> {
+        runtime::config_schema(&self.client(session).await?).await
+    }
+
     async fn dashboard_status(&self, session: &AstrBotSession) -> AstrBotDashboardStatus {
         runtime::probe_status(
             &self.sessions,

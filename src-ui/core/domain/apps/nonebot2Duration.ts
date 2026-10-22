@@ -1,4 +1,5 @@
-// 与 nonebot2/duration.rs 一致：写成 Pydantic v1/v2 都接受的 ISO 微秒时长。
+// 与 nonebot2/duration.rs 一致：ISO 保留原文；秒数与无歧义 clock 转成 ISO 微秒时长。
+// 负数 day/clock 的版本语义有歧义，保留原字段并拒绝保存，要求使用秒数或 -ISO。
 const MICROS = 1_000_000n;
 const MAX_MICROS = 999_999_999n * 86_400n * MICROS + 86_400n * MICROS - 1n;
 
@@ -67,7 +68,11 @@ export function normalizeNoneBot2Duration(raw: string): string | null {
     const value = raw.trim();
     const negative = value.startsWith('-');
     const unsigned = /^[+-]/.test(value) ? value.slice(1) : value;
-    const total = decimalMicros(unsigned, 1n, true) ?? clockMicros(unsigned) ?? isoMicros(unsigned);
+    if (unsigned.startsWith('P')) {
+        const total = isoMicros(unsigned);
+        return total != null && total <= MAX_MICROS ? value : null;
+    }
+    const total = decimalMicros(unsigned, 1n, false) ?? (negative ? null : clockMicros(unsigned));
     if (total == null || total > MAX_MICROS) return null;
     const days = total / (86_400n * MICROS);
     const second = total / MICROS % 86_400n;

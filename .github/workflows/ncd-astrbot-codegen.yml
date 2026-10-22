@@ -1,3 +1,4 @@
+# Refresh metadata against the integrated ownership rules.
 name: Temporary AstrBot metadata refresh
 on:
   push:

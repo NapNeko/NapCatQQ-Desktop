@@ -16,6 +16,7 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
         label: 'AI',
         items: [
             { value: 'models', label: '模型' },
+            { value: 'agent', label: 'Agent' },
             { value: 'persona', label: '人格' },
             { value: 'prompts', label: '提示词' },
             { value: 'memory', label: '记忆' },
@@ -99,6 +100,10 @@ const RULE_FIELDS = [
 ];
 
 export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
+    agent: { sections: [
+        { path: ['agent'], title: '外接 Agent' },
+        { path: ['capabilities'], title: '工具与子代理能力' },
+    ] },
     persona: {
         sections: [
             { path: ['bot'], title: '身份' },

@@ -195,7 +195,7 @@ describe('astrbotConfigWarnings', () => {
         expect(astrbotConfigWarnings(on).map((x) => x.key)).toEqual(['subagent-empty']);
         const half = {
             ...on,
-            subagent: { ...on.subagent, agents: [{ provider_id: 'ds/x', persona_id: '' }] },
+            subagent: { ...on.subagent, agents: [{ provider_id: 'ds/x', persona_id: '', extra_json: '{}' }] },
         };
         const w = astrbotConfigWarnings(half);
         expect(w.map((x) => [x.key, x.area])).toEqual([['subagent-incomplete', 'subagent']]);

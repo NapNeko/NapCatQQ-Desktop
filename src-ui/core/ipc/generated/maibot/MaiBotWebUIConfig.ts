@@ -18,7 +18,7 @@ port: number,
  */
 mode: "development" | "production", 
 /**
- * 界面风格编号；0 为旧风格，1 为未来复古风格。
+ * 界面风格编号；0 为旧风格，1 为未来复古风格，2 为千禧风格。
  */
 webui_style: number, 
 /**

@@ -1,7 +1,7 @@
 // AstrBot 详情页的各页装配。表单类改动统一走底部保存条；人格 / 知识库 / 规则的增删走 Dashboard 即时落库。
 // 桌面端只编辑默认配置档案：读路径没有 conf_id，写别的档案等于把默认档案的内容盖过去。
 
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { AppStoreTab } from '../AppStoreTab';
 import {
@@ -14,6 +14,8 @@ import { AstrBotOverviewTab } from './AstrBotOverviewTab';
 import { AstrBotConnectionsTab } from './AstrBotConnectionsTab';
 import { AstrBotModelsTab } from './AstrBotModelsTab';
 import { AstrBotTalkTab } from './AstrBotTalkTab';
+import { AstrBotAdvancedTab, type AdvancedDrafts } from './AstrBotAdvancedTab';
+import { advancedSections, advancedValueIssues, resolveAdvancedSchema } from '../../../../core/domain/apps/astrbotAdvanced';
 import { AstrBotPersonaTab } from './AstrBotPersonaTab';
 import { AstrBotKbTab } from './AstrBotKbTab';
 import { AstrBotSubagentTab } from './AstrBotSubagentTab';
@@ -25,6 +27,7 @@ import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useSyncNavBadges } from '../useSyncNavBadges';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
 import {
+    useAstrBotConfigSchema,
     useAstrBotDashboardStatus,
     useAstrBotPersonas,
 } from '../../../../hooks/apps/useAstrBotDashboard';
@@ -42,11 +45,13 @@ const TYPED_TABS = new Set([
     'kb',
     'subagent',
     'rules',
+    'advanced',
 ]);
 const FILL_PANE = new Set(['plugins']);
 
 /** 校验路径跳到能改它的那一页：默认模型在模型页、默认人格在人格页、知识库参数在知识库页 */
 function tabForIssue(path: string): string {
+    if (path.startsWith('advanced')) return 'advanced';
     if (path.startsWith('sources/') || path.startsWith('models/')) return 'models';
     if (path === 'ai/default_provider_id' || path.startsWith('ai/fallback_chat_models'))
         return 'models';
@@ -74,10 +79,37 @@ function AstrBotFrameworkDetail({
 }: FrameworkDetailProps) {
     const running = instance.state === 'running';
     const form = useAppConfigForm(ASTRBOT_CONFIG_FORM, instance.id, instance.display_name, running);
-    useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
     const dash = useAstrBotDashboardStatus(instance.id, true);
     const live = dashboardReady(dash.data);
+    const schemaQuery = useAstrBotConfigSchema(instance.id, live);
+    const schema = useMemo(() => resolveAdvancedSchema(schemaQuery.data), [schemaQuery.data]);
+    const [advancedDrafts, setAdvancedDrafts] = useState<AdvancedDrafts>({});
+    useEffect(() => setAdvancedDrafts({}), [instance.id]);
+    const onAdvancedDraft = useCallback((path: string, text: string | null) => {
+        setAdvancedDrafts((old) => {
+            const next = { ...old };
+            if (text === null) delete next[path];
+            else next[path] = text;
+            return next;
+        });
+    }, []);
+    const advancedIssues = useMemo(() => [
+        ...(form.form ? advancedValueIssues(form.form, advancedSections(form.form, schema)) : []),
+        ...Object.keys(advancedDrafts).map((path) => ({
+            path: 'advanced/' + path, message: 'JSON 格式有误，修正后才能保存',
+        })),
+    ], [form.form, schema, advancedDrafts]);
+    useSyncFrameworkSaveHandle(onSaveHandle, {
+        ...form,
+        dirty: form.dirty || Object.keys(advancedDrafts).length > 0,
+        clientIssues: [...form.clientIssues, ...advancedIssues],
+        save: async (overwrite) => advancedIssues.length
+            ? { kind: 'invalid', issues: advancedIssues }
+            : form.save(overwrite),
+        reset: () => { setAdvancedDrafts({}); form.reset(); },
+        reloadDiscard: async () => { setAdvancedDrafts({}); await form.reloadDiscard(); },
+    });
     const personas = useAstrBotPersonas(instance.id, live);
 
     // 侧栏圆点：下一步所在页亮品牌色，有配置冲突的页亮黄色；和概览状态卡同一套判定
@@ -153,6 +185,17 @@ function AstrBotFrameworkDetail({
                     disabled={form.saving}
                     running={running}
                     instanceId={instance.id}
+                />
+            ))}
+            {pane('advanced', (cfg) => (
+                <AstrBotAdvancedTab
+                    instanceId={instance.id}
+                    live={live}
+                    config={cfg}
+                    onChange={form.setForm}
+                    drafts={advancedDrafts}
+                    onDraft={onAdvancedDraft}
+                    disabled={form.saving}
                 />
             ))}
             {pane('talk', (cfg) => (

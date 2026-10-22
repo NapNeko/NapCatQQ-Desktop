@@ -104,14 +104,12 @@ describe('schemaIssues', () => {
     });
 
     it('select 值不在 options 里报 one_of，合法值不报', () => {
-        const experimental = nodeAt(BOT_SCHEMA, ['experimental'])!;
-        expect(schemaIssues(experimental, { emotion_trait: 'neutral' }, '/experimental')).toEqual(
-            [],
-        );
-        expect(schemaIssues(experimental, { emotion_trait: 'yandere' }, '/experimental')).toEqual([
+        const agent = nodeAt(BOT_SCHEMA, ['agent'])!;
+        expect(schemaIssues(agent, { connection: 'dsh' }, '/agent')).toEqual([]);
+        expect(schemaIssues(agent, { connection: 'unknown' }, '/agent')).toEqual([
             {
-                path: '/experimental/emotion_trait',
-                message: '只能是 rational_calm / neutral / sentimental 之一，现在是 "yandere"',
+                path: '/agent/connection',
+                message: '只能是 dsh / dsh_desktop / custom 之一，现在是 "unknown"',
             },
         ]);
     });
@@ -149,7 +147,7 @@ describe('newItemFor', () => {
     it('有默认值用默认值', () => {
         const item = newItemFor(nodeAt(BOT_SCHEMA, ['chat', 'reply_timing'])!);
         expect(item.talk_value).toBe(1);
-        expect(item.reply_trigger_mode).toBe('frequency');
+        expect(item.message_debounce_mode).toBe('natural');
     });
 
     it('嵌套小节与嵌套数组元素递归展开', () => {
@@ -181,5 +179,31 @@ describe('schema 快照可遍历性', () => {
             expect(f.name).toBeTruthy();
             expect(typeof f.type).toBe('string');
         }
+    });
+});
+
+
+describe('当前上游新增的配置结构和约束', () => {
+    it('对象映射按服务名下钻，开区间和任务列表长度参与校验', () => {
+        const issues = schemaIssues(MODEL_SCHEMA, {
+            web: { services: { search: { adapter: 'tavily', timeout: 0 } } },
+            model_task_config: { web_search: { model_list: ['first', 'second'] } },
+        }, 'models');
+        expect(issues).toContainEqual({ path: 'models/web/services/search/timeout', message: '要大于 0' });
+        expect(issues).toContainEqual({ path: 'models/model_task_config/web_search/model_list', message: '最多 1 项' });
+    });
+
+    it('对象映射默认留空，值的 schema 用于新增服务', () => {
+        const web = newItemFor(nodeAt(MODEL_SCHEMA, ['web'])!);
+        expect(web.services).toEqual({});
+        const service = newItemFor(nodeAt(MODEL_SCHEMA, ['web', 'services'])!);
+        expect(service.adapter).toBe('deepseek');
+        expect(service.timeout).toBe(60);
+    });
+
+    it('价格时段沿用上游 HH:MM 格式约束', () => {
+        const issues = schemaIssues(nodeAt(MODEL_SCHEMA, ['models', 'price_periods'])!,
+            { start_time: '25:00', end_time: '08:00' }, 'period');
+        expect(issues).toContainEqual({ path: 'period/start_time', message: '格式不正确' });
     });
 });

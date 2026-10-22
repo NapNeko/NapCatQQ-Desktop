@@ -66,7 +66,9 @@ export async function nbWriteConfig(
             issues,
         );
     }
-    next.env_prod.session_expire_timeout = normalizeNoneBot2Duration(next.env_prod.session_expire_timeout)!;
+    next.env_prod.session_expire_timeout = normalizeNoneBot2Duration(
+        next.env_prod.session_expire_timeout,
+    )!;
     const before = s.config;
     if (JSON.stringify(before.env_prod) !== JSON.stringify(next.env_prod)) {
         s.docRev.env_prod = (s.docRev.env_prod ?? 0) + 1;

@@ -15,10 +15,27 @@ pub use crate::config_doc::IssueSink;
 
 pub const DEFAULT_BOT_CONFIG: &str = include_str!("defaults/bot_config.toml");
 pub const DEFAULT_MODEL_CONFIG: &str = include_str!("defaults/model_config.toml");
+const LEGACY_MODEL_CONFIG: &str = include_str!("defaults/model_config-1.17.9.toml");
+
+/// 1.17.17 起模型类型为必填；更早的实例使用升级前的开箱文件，避免首次保存就注入新键。
+pub fn model_config_seed(version: Option<&str>) -> &'static str {
+    let modern = version.and_then(|version| version.split('.')
+        .map(|part| part.parse::<u32>()).collect::<Result<Vec<_>, _>>().ok())
+        .is_some_and(|version| version.as_slice() >= [1, 17, 17].as_slice());
+    if modern { DEFAULT_MODEL_CONFIG } else { LEGACY_MODEL_CONFIG }
+}
+
+pub fn read_model_config_file_for_version(
+    text: Option<&str>,
+    version: Option<&str>,
+) -> Result<MaiBotModelConfigFile, String> {
+    read_model_config_file(text.or_else(|| Some(model_config_seed(version))))
+}
 
 /// 读 `config/bot_config.toml`；没有文件按全默认。`[inner]` 版本号不进类型化配置
 pub fn read_bot_config_file(text: Option<&str>) -> Result<MaiBotBotConfigFile, String> {
-    let table = parse(text.unwrap_or(""), "bot_config.toml")?;
+    let mut table = parse(text.unwrap_or(""), "bot_config.toml")?;
+    project_bot_aliases(&mut table);
     typed(table, "bot_config.toml")
 }
 
@@ -27,6 +44,7 @@ pub fn read_bot_config_file(text: Option<&str>) -> Result<MaiBotBotConfigFile, S
 /// 上游首启另走 `create_default_model_config` 塞了一组 DeepSeek 默认，这里用 `defaults/` 里的文件对上
 pub fn read_model_config_file(text: Option<&str>) -> Result<MaiBotModelConfigFile, String> {
     let mut table = parse(text.unwrap_or(DEFAULT_MODEL_CONFIG), "model_config.toml")?;
+    project_legacy_model_types(&mut table);
     for model in models_mut(&mut table) {
         if let Some(v) = model.get_mut("extra_params")
             && let toml::Value::Table(t) = v
@@ -52,6 +70,95 @@ pub fn model_config_to_toml(cfg: &MaiBotModelConfigFile) -> Result<toml::Table, 
         }
     }
     Ok(table)
+}
+
+/// 上游解析前的字段迁移。这里只补类型化投影，不改原文或版本号；写盘时沿用文件里已有的路径。
+pub(super) const BOT_ALIASES: &[(&[&str], &[&str])] = &[
+    (&["a_memorix", "web", "import"], &["a_memorix", "web", "import_config"]),
+    (&["experimental", "replyer_retro_prompt"], &["debug", "replyer_retro_prompt"]),
+    (&["experimental", "tool_result_condense"], &["capabilities", "tool_result_condense"]),
+    (&["experimental", "tool_result_condense_threshold"], &["capabilities", "tool_result_condense_threshold"]),
+    (&["experimental", "planner_subagent"], &["capabilities", "planner_subagent"]),
+    (&["experimental", "advanced_sub_agent"], &["capabilities", "advanced_sub_agent"]),
+    (&["experimental", "planner_message_steering"], &["chat", "reply_timing", "planner_message_steering"]),
+];
+
+pub(super) fn value_at<'a>(root: &'a toml::Table, path: &[&str]) -> Option<&'a toml::Value> {
+    let (head, rest) = path.split_first()?;
+    let value = root.get(*head)?;
+    if rest.is_empty() {
+        Some(value)
+    } else {
+        value_at(value.as_table()?, rest)
+    }
+}
+
+pub(super) fn insert_at(root: &mut toml::Table, path: &[&str], value: toml::Value) {
+    let Some((head, rest)) = path.split_first() else { return; };
+    if rest.is_empty() {
+        root.insert((*head).to_string(), value);
+        return;
+    }
+    let child = root.entry((*head).to_string()).or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if let Some(table) = child.as_table_mut() {
+        insert_at(table, rest, value);
+    }
+}
+
+pub(super) fn remove_at(root: &mut toml::Table, path: &[&str]) -> Option<toml::Value> {
+    let (head, rest) = path.split_first()?;
+    if rest.is_empty() {
+        root.remove(*head)
+    } else {
+        remove_at(root.get_mut(*head)?.as_table_mut()?, rest)
+    }
+}
+
+fn project_bot_aliases(root: &mut toml::Table) {
+    for &(source, target) in BOT_ALIASES {
+        if value_at(root, target).is_none()
+            && let Some(value) = value_at(root, source).cloned()
+        {
+            insert_at(root, target, value);
+        }
+    }
+}
+
+/// 对齐上游 1.17.17 的缺字段升级规则；已有值（包括非法值）交给原本的类型/选项校验。
+fn project_legacy_model_types(root: &mut toml::Table) {
+    let task_models = |task: &str| -> std::collections::HashSet<String> {
+        value_at(root, &["model_task_config", task, "model_list"])
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_str)
+            .map(str::to_string)
+            .collect()
+    };
+    let text_models = task_models("embedding");
+    let image_models = task_models("image_embedding");
+    for model in models_mut(root) {
+        if model.contains_key("model_type") {
+            continue;
+        }
+        let name = model.get("name").and_then(toml::Value::as_str).unwrap_or_default();
+        let identifier = model.get("model_identifier").and_then(toml::Value::as_str).unwrap_or_default();
+        let identifiers = [name.to_lowercase(), identifier.to_lowercase()];
+        let embedding = text_models.contains(name) || image_models.contains(name)
+            || identifiers.iter().any(|value| value.contains("embed"));
+        let kind = if embedding {
+            if image_models.contains(name)
+                || identifiers.iter().any(|value| value.contains("vision") || value.contains("vl-embedding"))
+            {
+                "image_embedding"
+            } else {
+                "embedding"
+            }
+        } else {
+            "llm"
+        };
+        model.insert("model_type".to_string(), toml::Value::String(kind.to_string()));
+    }
 }
 
 fn to_table<T: serde::Serialize>(value: &T) -> Result<toml::Table, String> {
@@ -226,6 +333,26 @@ mod tests {
             "/../../src-ui/core/domain/apps/maibotDefaults.json"
         );
         std::fs::write(path, serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
+    }
+
+
+    #[test]
+    fn current_file_alias_and_moved_capabilities_are_read_without_changing_input() {
+        let text = "[a_memorix.web.import]\nmax_chunk_chars = 555\n[experimental]\ntool_result_condense = true\nplanner_message_steering = true\n[capabilities]\nplanner_subagent = true\n";
+        let bot = read_bot_config_file(Some(text)).unwrap();
+        assert_eq!(bot.a_memorix.web.import_config.max_chunk_chars, 555);
+        assert!(bot.capabilities.tool_result_condense);
+        assert!(bot.capabilities.planner_subagent);
+        assert!(bot.chat.reply_timing.planner_message_steering);
+    }
+
+    #[test]
+    fn legacy_model_type_is_projected_only_when_missing() {
+        let text = "[[models]]\nname = \"image\"\nmodel_identifier = \"v\"\napi_provider = \"p\"\n[[models]]\nname = \"text\"\nmodel_identifier = \"text-embedding\"\napi_provider = \"p\"\n[[models]]\nname = \"chat\"\nmodel_identifier = \"chat\"\napi_provider = \"p\"\nmodel_type = \"invalid\"\n[model_task_config.image_embedding]\nmodel_list = [\"image\"]\n";
+        let cfg = read_model_config_file(Some(text)).unwrap();
+        assert_eq!(cfg.models[0].model_type, "image_embedding");
+        assert_eq!(cfg.models[1].model_type, "embedding");
+        assert_eq!(cfg.models[2].model_type, "invalid");
     }
 
     #[test]

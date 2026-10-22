@@ -229,7 +229,11 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
         for write in NoneBot2Integration::env_writes(instance, &plan.access_token) {
             env.set_ci(&write.key, &write.value);
         }
-        config::write_onebot_env(&mut env, manifest::ENV_ONEBOT_ACCESS_TOKEN, &plan.access_token);
+        config::write_onebot_env(
+            &mut env,
+            manifest::ENV_ONEBOT_ACCESS_TOKEN,
+            &plan.access_token,
+        );
         let current = env.get_ci(ENV_DRIVER).unwrap_or_default();
         env.set_ci(ENV_DRIVER, &ensure_reverse_driver(&current));
         let out = env.render();

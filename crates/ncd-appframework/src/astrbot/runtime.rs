@@ -9,6 +9,31 @@ use ts_rs::TS;
 
 use super::dashboard_client::{DashboardClient, DashboardSessions};
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AstrBotConfigSchema {
+    pub defaults_json: String,
+    pub metadata_json: String,
+}
+
+/// 这两个旧路径在新旧 Dashboard 中都可用；系统元数据旧端没有时保留普通配置元数据。
+pub async fn config_schema(client: &DashboardClient) -> Result<AstrBotConfigSchema, AppFrameworkError> {
+    let profile: Value = client.get_json("/api/config/default").await?;
+    let defaults = profile.get("config").filter(|v| v.is_object()).cloned()
+        .ok_or_else(|| AppFrameworkError::Integration("Dashboard 未返回默认配置".into()))?;
+    let mut metadata = profile.get("metadata").filter(|v| v.is_object()).cloned()
+        .ok_or_else(|| AppFrameworkError::Integration("Dashboard 未返回配置元数据".into()))?;
+    if let Ok(system) = client.get_json::<Value>("/api/config/abconf?system_config=1").await
+        && let (Some(out), Some(extra)) = (metadata.as_object_mut(), system.get("metadata").and_then(Value::as_object))
+    {
+        out.extend(extra.clone());
+    }
+    Ok(AstrBotConfigSchema {
+        defaults_json: serde_json::to_string(&defaults).map_err(|e| AppFrameworkError::Integration(e.to_string()))?,
+        metadata_json: serde_json::to_string(&metadata).map_err(|e| AppFrameworkError::Integration(e.to_string()))?,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]

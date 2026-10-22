@@ -24,7 +24,7 @@ export const ASTRBOT_NAV: readonly FrameworkNavGroup[] = [
         ],
     },
     { id: 'extend', label: '扩展', items: [{ value: 'plugins', label: '插件' }] },
-    { id: 'instance', label: '实例', items: [{ value: 'connections', label: '连接与账号' }] },
+    { id: 'instance', label: '实例', items: [{ value: 'connections', label: '连接与账号' }, { value: 'advanced', label: '高级设置' }] },
 ];
 
 export const ASTRBOT_TAB_LABEL: Readonly<Record<string, string>> = Object.fromEntries(

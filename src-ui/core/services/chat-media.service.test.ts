@@ -812,15 +812,11 @@ describe('native chat media protocol', () => {
         ]);
     });
     it('recovers a removed self-send attachment without submitting the local token to get_image', async () => {
-        const call = vi
-            .fn()
-            .mockResolvedValue(
-                ok({
-                    message: [
-                        { type: 'image', data: { url: 'https://cdn.example/recovered.png' } },
-                    ],
-                }),
-            );
+        const call = vi.fn().mockResolvedValue(
+            ok({
+                message: [{ type: 'image', data: { url: 'https://cdn.example/recovered.png' } }],
+            }),
+        );
         const readLocal = vi.fn().mockRejectedValue(new Error('本机原文件已删除'));
         expect(
             await createChatMediaService(call, readLocal).image(

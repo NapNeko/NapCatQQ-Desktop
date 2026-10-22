@@ -201,8 +201,6 @@ function MaiBotFrameworkDetail({
                 <MaiBotBehaviorTab
                     instance={instance}
                     status={status}
-                    // 读不到配置时按上游默认（关着）说
-                    learningOn={form.form?.bot.experimental.enable_behavior_learning ?? false}
                     onGoTab={onGoTab}
                     onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
                     {...startProps}

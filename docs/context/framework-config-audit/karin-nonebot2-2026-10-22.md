@@ -34,7 +34,7 @@ OneBot v11 原先仅 ACCESS_TOKEN 有表单，补齐 SECRET、WS_URLS、API_ROOT
 
 OneBot v12 的 4 个独立命名空间键也提供按需预设：ONEBOT_V12_ACCESS_TOKEN、ONEBOT_V12_WS_URLS、ONEBOT_V12_API_ROOTS、ONEBOT_V12_USE_MSGPACK。它们不与 ncd 的 OneBot v11 对接配置合并。其他适配器/插件无限开放配置继续由 custom 与原始文档承接。
 
-默认值校正：配置缺失时 COMMAND_START 按官方 ["/"]，COMMAND_SEP 按官方 ["."]；已有显式配置不变。LOG_LEVEL 可填写官方支持的名称或数字等级。API_TIMEOUT 保留数值文本，SESSION_EXPIRE_TIMEOUT 接受十进制秒数、HH:MM:SS、days 前缀与 ISO 8601（含负数和微秒），按整数微秒规范化为 v1/v2 都接受的 ISO 时长。Pydantic v2 不接受数字秒数字符串，因此如输入120会写成PT120S；缺省为PT2M。
+默认值校正：配置缺失时 COMMAND_START 按官方 ["/"]，COMMAND_SEP 按官方 ["."]；已有显式配置不变。LOG_LEVEL 可填写官方支持的名称或数字等级。API_TIMEOUT 保留数值文本，SESSION_EXPIRE_TIMEOUT 接受十进制秒数、HH:MM:SS、days 前缀与 ISO 8601（含负数和微秒），其中数字秒数和无歧义 clock 按整数微秒转为兼容 ISO；已合法的 ISO 仅校验并保留原文（trim），保留实例自身 Pydantic 的 submicro 解释。Pydantic v2 不接受数字秒数字符串，因此如输入120会写成PT120S；缺省为PT2M。
 
 读写兼容：NoneBot2 dotenv 全部使用 Python 方言；overlay 按大小写不敏感规则覆盖 base；JSON 数组/字典可往返；自定义键与注释保留，重复键和系统键冲突可在保存前定位。
 
@@ -43,3 +43,5 @@ OneBot v12 的 4 个独立命名空间键也提供按需预设：ONEBOT_V12_ACCE
 Rust NoneBot2 局部测试覆盖核心与 OneBot 字段往返、别名优先与重新对接、未知插件键及注释保留、官方缺省值、大小写 overlay、错误 JSON/URL/非有限超时。前端局部测试覆盖默认值、路径校验、20 项可选预设、不覆盖既有设置及自定义键冲突。发布前需执行真实 typecheck / Rust 检查 / 绑定导出；环境尚不可用时不得声称已验证。
 
 追加审查：OneBot URL 使用 URL 真解析检查协议和主机，接受大写协议，拒绝空主机；自定义环境键拒绝首尾空白，避免保留键绕过。安装/对接写入使用大小写不敏感更新，保留已有客户端驱动并去重端口。
+
+负数时长边界：Pydantic v1 与 v2 对负数 day/clock 的解释不同（例如 `-1 day, 02:03:04`）。配置表单保留原字段并拒绝保存这种歧义写法，明确提示改用负数秒数或 `-P` 开头的 ISO 时长，避免静默改变既有设置含义；`-00:02:00` 同样拒绝。负数秒数与负数 ISO 保持支持。stdlib `timedelta(days=-1,hours=2,minutes=3,seconds=4,microseconds=5)` 等于 `-timedelta(seconds=79015,microseconds=999995)`，不是负26小时。

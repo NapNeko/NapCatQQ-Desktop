@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { MODEL_SCHEMA, newItemFor, nodeAt } from './maibotSchema';
 import {
     MAIBOT_PLACEHOLDER_API_KEY,
     MAIBOT_PROVIDER_PRESETS,
+    MAIBOT_TASK_KEYS,
     maibotChatDropsEverything,
     maibotChatScope,
     maibotDefaultChat,
@@ -172,5 +174,46 @@ describe('maibotDefaultConfig', () => {
         // 每次都是新副本，改了不会串到下一次
         cfg.bot.personality.personality = 'x';
         expect(maibotDefaultConfig(23001).bot.personality.personality).not.toBe('x');
+    });
+});
+
+
+describe('新增联网服务和分时价格配置', () => {
+    it('联网任务引用服务名，模型改名不会改掉同名服务引用', () => {
+        const cfg = maibotDefaultConfig(23001);
+        const name = cfg.models.models[0]!.name;
+        cfg.models.web.services[name] = {
+            ...newItemFor(nodeAt(MODEL_SCHEMA, ['web', 'services'])!), api_key: 'key',
+        } as NonNullable<typeof cfg.models.web.services[string]>;
+        cfg.models.model_task_config.web_search.model_list = [name];
+        expect(validateMaiBotConfig(cfg)).toEqual([]);
+        cfg.models.models[0]!.name = 'renamed';
+        const moved = renameMaiBotModel(cfg.models, name, 'renamed');
+        expect(moved.model_task_config.web_search.model_list).toEqual([name]);
+        expect(MAIBOT_TASK_KEYS).toContain('image_embedding');
+        delete cfg.models.web.services[name];
+        expect(validateMaiBotConfig(cfg).map((issue) => issue.path)).toContain('models/model_task_config/web_search/model_list/0');
+    });
+
+    it('活动联网服务需要凭据，服务地址拒绝内嵌认证和查询参数', () => {
+        const cfg = maibotDefaultConfig(23001);
+        cfg.models.web.services.search = {
+            ...newItemFor(nodeAt(MODEL_SCHEMA, ['web', 'services'])!), base_url: 'https://user:pass@example.com/?key=x',
+        } as NonNullable<typeof cfg.models.web.services[string]>;
+        cfg.models.model_task_config.web_search.model_list = ['search'];
+        const paths = validateMaiBotConfig(cfg).map((issue) => issue.path);
+        expect(paths).toContain('models/web/services/search/base_url');
+        expect(paths).toContain('models/web/services/search/api_key');
+    });
+
+    it('跨午夜的价格时段不允许重叠，相邻区间可以共用边界', () => {
+        const cfg = maibotDefaultConfig(23001);
+        cfg.models.models[0]!.price_periods = [
+            { start_time: '23:00', end_time: '01:00', price_in: 1, price_out: 2, cache_price_in: 0 },
+            { start_time: '00:30', end_time: '02:00', price_in: 1, price_out: 2, cache_price_in: 0 },
+        ];
+        expect(validateMaiBotConfig(cfg).some((issue) => issue.message.includes('重叠'))).toBe(true);
+        cfg.models.models[0]!.price_periods[1]!.start_time = '01:00';
+        expect(validateMaiBotConfig(cfg)).toEqual([]);
     });
 });

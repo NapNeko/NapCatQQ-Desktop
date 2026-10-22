@@ -253,6 +253,7 @@ export type { NoneBot2InstanceConfig } from './generated/domain/NoneBot2Instance
 export type { NoneBot2EnvProd } from './generated/domain/NoneBot2EnvProd';
 export type { NoneBot2EnvEntry } from './generated/domain/NoneBot2EnvEntry';
 export type { AstrBotInstanceConfig } from './generated/domain/AstrBotInstanceConfig';
+export type { AstrBotConfigSchema } from './generated/domain/AstrBotConfigSchema';
 export type { AstrBotOneBotRow } from './generated/domain/AstrBotOneBotRow';
 export type { AstrBotProviderSource } from './generated/domain/AstrBotProviderSource';
 export type { AstrBotProviderModel } from './generated/domain/AstrBotProviderModel';

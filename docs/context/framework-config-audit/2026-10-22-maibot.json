@@ -1,0 +1,642 @@
+{
+  "date": "2026-10-22",
+  "framework": "MaiBot",
+  "upstream": {
+    "repository": "https://github.com/Mai-with-u/MaiBot",
+    "revision": "c602a2780f4f4dda4a6be46d67abc1cfb1ad420c",
+    "projectVersion": "1.3.14",
+    "botConfigVersion": "8.15.37",
+    "modelConfigVersion": "1.17.22",
+    "configurationEntrypoints": [
+      "src/config/config.py",
+      "src/config/official_configs.py",
+      "src/config/model_configs.py",
+      "src/agent/config.py",
+      "src/web_search/config.py"
+    ],
+    "uiMetadata": "src/webui/config_schema.py",
+    "migrations": "src/config/config_upgrade_hooks.py"
+  },
+  "baseline": {
+    "repositoryRevision": "ee54f93d75999c0d16e2703af91e2667be572116",
+    "botConfigVersion": "8.14.40",
+    "modelConfigVersion": "1.17.9",
+    "generatedClasses": 76,
+    "generatedFields": 497
+  },
+  "refreshed": {
+    "generatedClasses": 83,
+    "generatedFields": 555,
+    "removedClasses": [],
+    "sourceManifest": "src-ui/core/domain/apps/maibotSchema/upstream.json"
+  },
+  "classFieldChanges": [
+    {
+      "class": "MaiBotAMemorixConfig",
+      "added": [
+        "image_memory"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotAMemorixImageMemoryConfig",
+      "added": [
+        "enabled",
+        "task_name",
+        "preprocess_version",
+        "probe_retry_seconds",
+        "max_bytes",
+        "max_pixels",
+        "candidate_limit",
+        "similarity_threshold",
+        "job_poll_interval_seconds",
+        "job_batch_size",
+        "job_enqueue_batch_size",
+        "job_lease_seconds",
+        "job_max_retries",
+        "min_train_threshold"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotAMemorixPersonProfileConfig",
+      "added": [],
+      "removed": [
+        "evidence_classification_temperature"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotAgentConfig",
+      "added": [
+        "enabled",
+        "connection",
+        "desktop_manifest",
+        "acp_command",
+        "acp_args",
+        "acp_cwd",
+        "acp_env",
+        "acp_model",
+        "acp_timeout",
+        "computer_tools",
+        "networking",
+        "memory_mb",
+        "startup_timeout",
+        "request_timeout",
+        "screenshot_max_edge"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotBotConfigFile",
+      "added": [
+        "agent",
+        "capabilities"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotCapabilitiesConfig",
+      "added": [
+        "tool_result_condense",
+        "tool_result_condense_threshold",
+        "planner_subagent",
+        "advanced_sub_agent"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotChatConfig",
+      "added": [
+        "enable_reply_at"
+      ],
+      "removed": [
+        "enable_context_optimization"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotChatReplyStyleConfig",
+      "added": [
+        "group_quote_frequency",
+        "private_quote_frequency"
+      ],
+      "removed": [
+        "enable_reply_quote"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotChatReplyTimingConfig",
+      "added": [
+        "message_debounce_mode",
+        "planner_message_steering"
+      ],
+      "removed": [
+        "reply_trigger_mode",
+        "planner_interrupt_max_consecutive_count"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotDebugConfig",
+      "added": [
+        "replyer_retro_prompt",
+        "save_maisaka_reasoning",
+        "force_plugin_compatibility"
+      ],
+      "removed": [
+        "enable_clear_context_command",
+        "enable_reply_effect_tracking"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotEmojiConfig",
+      "added": [
+        "use_new_send_logic"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotExperimentalConfig",
+      "added": [],
+      "removed": [
+        "enable_behavior_learning",
+        "enable_rich_reply",
+        "emotion_trait",
+        "behavior_learning_list",
+        "behavior_groups",
+        "focus_cool_time"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotExpressionConfig",
+      "added": [
+        "use_vector_expression"
+      ],
+      "removed": [
+        "expression_selection_mode"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotLogConfig",
+      "added": [
+        "memory_diagnostics_enabled",
+        "memory_diagnostics_deep_enabled",
+        "memory_diagnostics_interval_seconds",
+        "event_loop_watchdog_enabled",
+        "event_loop_watchdog_warn_seconds"
+      ],
+      "removed": [
+        "maisaka_reply_effect_limit"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotMaimMessageConfig",
+      "added": [
+        "enabled"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotModelConfigFile",
+      "added": [
+        "web"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotModelInfo",
+      "added": [
+        "model_type",
+        "price_periods"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotModelPricePeriod",
+      "added": [
+        "start_time",
+        "end_time",
+        "price_in",
+        "price_out",
+        "cache_price_in"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotModelTaskConfig",
+      "added": [
+        "web_search",
+        "fast_model",
+        "image_embedding"
+      ],
+      "removed": [
+        "expression_use"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotPluginConfig",
+      "added": [
+        "silent_permission_denied",
+        "disabled_commands"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotResponseSplitterConfig",
+      "added": [
+        "mode"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotTaskConfig",
+      "added": [],
+      "removed": [
+        "slow_threshold"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotVisualConfig",
+      "added": [],
+      "removed": [
+        "planner_mode",
+        "replyer_mode"
+      ],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotWebConfig",
+      "added": [
+        "preview_chars",
+        "services"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotWebSearchTaskConfig",
+      "added": [
+        "model_list"
+      ],
+      "removed": [],
+      "typeChanges": []
+    },
+    {
+      "class": "MaiBotWebServiceConfig",
+      "added": [
+        "adapter",
+        "base_url",
+        "api_key",
+        "server_ref",
+        "timeout",
+        "search_depth",
+        "extract_depth",
+        "category"
+      ],
+      "removed": [],
+      "typeChanges": []
+    }
+  ],
+  "changedExistingDefaults": [
+    {
+      "class": "MaiBotPersonalityConfig",
+      "field": "personality"
+    },
+    {
+      "class": "MaiBotPersonalityConfig",
+      "field": "behavior_style"
+    },
+    {
+      "class": "MaiBotChatReplyTimingConfig",
+      "field": "mentioned_bot_reply"
+    },
+    {
+      "class": "MaiBotChatReplyStyleConfig",
+      "field": "group_chat_prompt"
+    },
+    {
+      "class": "MaiBotVisualConfig",
+      "field": "max_image_num"
+    },
+    {
+      "class": "MaiBotVisualConfig",
+      "field": "wait_image_recognize_max_time"
+    },
+    {
+      "class": "MaiBotVisualConfig",
+      "field": "max_image_size_mb"
+    },
+    {
+      "class": "MaiBotExpressionConfig",
+      "field": "expression_checked_only"
+    },
+    {
+      "class": "MaiBotDebugConfig",
+      "field": "enable_console_input"
+    },
+    {
+      "class": "MaiBotDebugConfig",
+      "field": "show_maisaka_thinking"
+    },
+    {
+      "class": "MaiBotWebUIConfig",
+      "field": "webui_style"
+    },
+    {
+      "class": "MaiBotTaskConfig",
+      "field": "temperature"
+    },
+    {
+      "class": "MaiBotAPIProvider",
+      "field": "timeout"
+    },
+    {
+      "class": "MaiBotAPIProvider",
+      "field": "retry_interval"
+    }
+  ],
+  "uiMetadataChanges": {
+    "bot": {
+      "added": [
+        "agent",
+        "agent.enabled",
+        "agent.connection",
+        "agent.desktop_manifest",
+        "agent.acp_command",
+        "agent.acp_args",
+        "agent.acp_cwd",
+        "agent.acp_env",
+        "agent.acp_model",
+        "agent.acp_timeout",
+        "agent.computer_tools",
+        "agent.networking",
+        "agent.memory_mb",
+        "agent.startup_timeout",
+        "agent.request_timeout",
+        "agent.screenshot_max_edge",
+        "chat.enable_reply_at",
+        "chat.reply_timing.message_debounce_mode",
+        "chat.reply_timing.planner_message_steering",
+        "chat.reply_style.group_quote_frequency",
+        "chat.reply_style.private_quote_frequency",
+        "capabilities",
+        "capabilities.tool_result_condense",
+        "capabilities.tool_result_condense_threshold",
+        "capabilities.planner_subagent",
+        "capabilities.advanced_sub_agent",
+        "expression.use_vector_expression",
+        "a_memorix.image_memory",
+        "a_memorix.image_memory.enabled",
+        "a_memorix.image_memory.task_name",
+        "a_memorix.image_memory.preprocess_version",
+        "a_memorix.image_memory.probe_retry_seconds",
+        "a_memorix.image_memory.max_bytes",
+        "a_memorix.image_memory.max_pixels",
+        "a_memorix.image_memory.candidate_limit",
+        "a_memorix.image_memory.similarity_threshold",
+        "a_memorix.image_memory.job_poll_interval_seconds",
+        "a_memorix.image_memory.job_batch_size",
+        "a_memorix.image_memory.job_enqueue_batch_size",
+        "a_memorix.image_memory.job_lease_seconds",
+        "a_memorix.image_memory.job_max_retries",
+        "a_memorix.image_memory.min_train_threshold",
+        "emoji.use_new_send_logic",
+        "response_splitter.mode",
+        "log.memory_diagnostics_enabled",
+        "log.memory_diagnostics_deep_enabled",
+        "log.memory_diagnostics_interval_seconds",
+        "log.event_loop_watchdog_enabled",
+        "log.event_loop_watchdog_warn_seconds",
+        "debug.replyer_retro_prompt",
+        "debug.save_maisaka_reasoning",
+        "debug.force_plugin_compatibility",
+        "maim_message.enabled",
+        "plugin.silent_permission_denied",
+        "plugin.command_permissions.*.allow_users",
+        "plugin.command_permissions.*.allow_chats",
+        "plugin.disabled_commands"
+      ],
+      "removed": [
+        "chat.enable_context_optimization",
+        "chat.reply_timing.reply_trigger_mode",
+        "chat.reply_timing.planner_interrupt_max_consecutive_count",
+        "chat.reply_style.enable_reply_quote",
+        "experimental.enable_behavior_learning",
+        "experimental.enable_rich_reply",
+        "experimental.emotion_trait",
+        "experimental.behavior_learning_list",
+        "experimental.behavior_learning_list.[].platform",
+        "experimental.behavior_learning_list.[].item_id",
+        "experimental.behavior_learning_list.[].type",
+        "experimental.behavior_learning_list.[].use",
+        "experimental.behavior_learning_list.[].learn",
+        "experimental.behavior_groups",
+        "experimental.behavior_groups.[].targets",
+        "experimental.behavior_groups.[].targets.[].platform",
+        "experimental.behavior_groups.[].targets.[].item_id",
+        "experimental.behavior_groups.[].targets.[].rule_type",
+        "experimental.focus_cool_time",
+        "visual.planner_mode",
+        "visual.replyer_mode",
+        "expression.expression_selection_mode",
+        "log.maisaka_reply_effect_limit",
+        "debug.enable_clear_context_command",
+        "debug.enable_reply_effect_tracking"
+      ],
+      "constraintOrVisibilityChanges": [
+        {
+          "path": "a_memorix.memory.prune_threshold",
+          "keys": [
+            "exclusiveMinValue",
+            "exclusiveMaxValue"
+          ]
+        },
+        {
+          "path": "a_memorix.memory.revive_threshold",
+          "keys": [
+            "exclusiveMinValue"
+          ]
+        },
+        {
+          "path": "webui.webui_style",
+          "keys": [
+            "maxValue"
+          ]
+        },
+        {
+          "path": "mcp.servers.[].http_timeout_seconds",
+          "keys": [
+            "exclusiveMinValue"
+          ]
+        },
+        {
+          "path": "mcp.servers.[].read_timeout_seconds",
+          "keys": [
+            "exclusiveMinValue"
+          ]
+        },
+        {
+          "path": "plugin.command_permissions",
+          "keys": [
+            "mapValues"
+          ]
+        },
+        {
+          "path": "plugin_runtime.render.startup_timeout_sec",
+          "keys": [
+            "exclusiveMinValue"
+          ]
+        },
+        {
+          "path": "plugin_runtime.render.render_timeout_sec",
+          "keys": [
+            "exclusiveMinValue"
+          ]
+        },
+        {
+          "path": "plugin_runtime.render.download_connection_timeout_sec",
+          "keys": [
+            "exclusiveMinValue"
+          ]
+        }
+      ]
+    },
+    "model": {
+      "added": [
+        "web",
+        "web.preview_chars",
+        "web.services",
+        "web.services.*.adapter",
+        "web.services.*.base_url",
+        "web.services.*.api_key",
+        "web.services.*.server_ref",
+        "web.services.*.timeout",
+        "web.services.*.search_depth",
+        "web.services.*.extract_depth",
+        "web.services.*.category",
+        "models.[].model_type",
+        "models.[].price_periods",
+        "models.[].price_periods.[].start_time",
+        "models.[].price_periods.[].end_time",
+        "models.[].price_periods.[].price_in",
+        "models.[].price_periods.[].price_out",
+        "models.[].price_periods.[].cache_price_in",
+        "model_task_config.web_search",
+        "model_task_config.web_search.model_list",
+        "model_task_config.fast_model",
+        "model_task_config.fast_model.model_list",
+        "model_task_config.fast_model.max_tokens",
+        "model_task_config.fast_model.temperature",
+        "model_task_config.fast_model.selection_strategy",
+        "model_task_config.fast_model.hard_timeout",
+        "model_task_config.image_embedding",
+        "model_task_config.image_embedding.model_list",
+        "model_task_config.image_embedding.max_tokens",
+        "model_task_config.image_embedding.temperature",
+        "model_task_config.image_embedding.selection_strategy",
+        "model_task_config.image_embedding.hard_timeout"
+      ],
+      "removed": [
+        "model_task_config.replyer.slow_threshold",
+        "model_task_config.planner.slow_threshold",
+        "model_task_config.memory.slow_threshold",
+        "model_task_config.mid_memory.slow_threshold",
+        "model_task_config.utils.slow_threshold",
+        "model_task_config.learner.slow_threshold",
+        "model_task_config.expression_use",
+        "model_task_config.expression_use.model_list",
+        "model_task_config.expression_use.max_tokens",
+        "model_task_config.expression_use.temperature",
+        "model_task_config.expression_use.slow_threshold",
+        "model_task_config.expression_use.selection_strategy",
+        "model_task_config.expression_use.hard_timeout",
+        "model_task_config.emoji.slow_threshold",
+        "model_task_config.vlm.slow_threshold",
+        "model_task_config.voice.slow_threshold",
+        "model_task_config.embedding.slow_threshold"
+      ],
+      "constraintOrVisibilityChanges": [
+        {
+          "path": "api_providers.[].api_key",
+          "keys": [
+            "secret"
+          ]
+        }
+      ]
+    }
+  },
+  "implementedCoverage": [
+    "重新生成两份主配置全部公开类型、默认文件、范围/枚举校验、界面元数据和TS类型；保留精确上游commit及字段清单。",
+    "新增Agent连接与能力页、图片记忆、联网服务对象映射、联网任务服务选择、fast_model/image_embedding、model_type、分时价格，以及当前快照的其余新增设置。",
+    "手写提供商/模型/任务卡片之外的快照字段由schema表单自动承接；新增root小节/任务覆盖回归，后续更新生成器时遗漏页面会直接失败。",
+    "导出并检查上游gt/lt、长度与正则约束，逐服务递归检查对象映射；联网服务凭据/引用/地址和分时价格跨午夜重叠采用上游规则。",
+    "空字符串枚举以无冲突占位映射给Radix并原样保存；对象映射名称必须显式应用或按Enter。"
+  ],
+  "compatibility": [
+    "model_type仅在缺失时采用上游1.17.17升级推断；明确填写的非法值保持原样交校验，读取不会改盘。",
+    "a_memorix.web.import/import_config、experimental到capabilities/debug/reply_timing的迁移仅影响类型化投影；保存沿文件已存在路径差量写。",
+    "已存在两主配置保留inner.version、注释、旧版已移除字段与未知键；无改动不写盘，普通编辑不追加新默认项。",
+    "缺model_config文件时按实例版本选择种子：1.17.17前保留旧1.17.9开箱文件，较新版本使用本次默认；读取和保存使用同一种子。",
+    "缺bot_config文件时只写实例的CONFIG_VERSION和用户明确修改键，不注入agent/capabilities等新默认小节。"
+  ],
+  "rawDocumentCoverage": {
+    "bot": "config/bot_config.toml",
+    "models": "config/model_config.toml",
+    "adapter": "plugins/MaiBot-Napcat-Adapter/config.toml",
+    "purpose": "上游UI明确隐藏/排除的内部配置、旧版本字段、未知未来字段以及插件自有配置仍可在原始文件中编辑；typed保存不删除这些键。"
+  },
+  "adapterAudit": {
+    "repository": "https://github.com/Mai-with-u/MaiBot-Napcat-Adapter",
+    "manifestBlob": "5bea6d80310819dffb9655dbf403d71cdc27e00d",
+    "configBlob": "0bed87b3ebc30548e7975b347ca79974d5b3d6f6",
+    "version": "1.4.1",
+    "hostRange": "1.2.0–1.3.99",
+    "typedChatFields": [
+      "enable_chat_list_filter",
+      "group_list_type",
+      "group_list",
+      "private_list_type",
+      "private_list",
+      "ban_user_id"
+    ],
+    "rawSections": [
+      "plugin",
+      "napcat_server",
+      "chat",
+      "notice",
+      "filters"
+    ],
+    "note": "连接由NCD对接管理；适配器插件其余设置可通过已登记的原始配置文档编辑。本轮未自动替换适配器实现。"
+  },
+  "regressionFiles": [
+    "crates/ncd-appframework/src/maibot/schema/mod.rs",
+    "crates/ncd-appframework/src/maibot/config/files.rs",
+    "crates/ncd-appframework/src/maibot/config/mod.rs",
+    "src-ui/core/domain/apps/maibotConfig.test.ts",
+    "src-ui/core/domain/apps/maibotSchema/index.test.ts",
+    "src-ui/modules/apps/detail/maibot/maibotPages.test.ts",
+    "src-ui/modules/apps/detail/maibot/SchemaForm.test.tsx"
+  ],
+  "regeneration": "python scripts/maibot/codegen.py --src <checkout> --revision c602a2780f4f4dda4a6be46d67abc1cfb1ad420c",
+  "generatorBoundary": "AST白名单仅载入配置模型、Pydantic类型元数据与纯默认文件导出函数；不启动框架、执行数据库迁移或调用网络。"
+}

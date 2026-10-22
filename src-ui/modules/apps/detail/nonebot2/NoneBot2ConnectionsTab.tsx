@@ -137,7 +137,7 @@ export const NoneBot2ConnectionsTab: React.FC<NoneBot2TabProps> = ({
                         label="SESSION_EXPIRE_TIMEOUT"
                         value={env.session_expire_timeout}
                         error={errors['env_prod/session_expire_timeout']}
-                        hint="等待回复的超时；可填秒数、HH:MM:SS 或 ISO 8601 时长"
+                        hint="等待回复的超时；支持秒数、HH:MM:SS、ISO 时长，负数请用秒数或 -P 开头的 ISO"
                         disabled={disabled}
                         onValueChange={(session_expire_timeout) => set({ session_expire_timeout })}
                     />

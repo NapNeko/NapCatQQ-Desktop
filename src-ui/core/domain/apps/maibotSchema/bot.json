@@ -3,6 +3,12 @@
  "uiAdvanced": false,
  "fields": [
   {
+   "name": "agent",
+   "type": "object",
+   "label": "agent",
+   "description": "统一独立 Agent 配置"
+  },
+  {
    "name": "bot",
    "type": "object",
    "label": "bot",
@@ -19,6 +25,12 @@
    "type": "object",
    "label": "chat",
    "description": "聊天配置类"
+  },
+  {
+   "name": "capabilities",
+   "type": "object",
+   "label": "capabilities",
+   "description": "能力配置类"
   },
   {
    "name": "experimental",
@@ -148,6 +160,144 @@
   }
  ],
  "nested": {
+  "agent": {
+   "className": "AgentConfig",
+   "uiLabel": "Agent连接",
+   "uiAdvanced": false,
+   "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "label": "启用 Agent连接",
+     "description": "启用与普通聊天并行的外接 Agent 接口，通过 ACP 连接 dsh 等外部程序。",
+     "default": false
+    },
+    {
+     "name": "connection",
+     "type": "select",
+     "label": "连接方式",
+     "description": "dsh CLI 自动使用 --profile acp；dsh Desktop 连接正在运行的桌面应用，在界面中显示同一会话；自定义用于其他 ACP 程序。模型与凭据使用外部 Agent 自身配置。",
+     "default": "dsh",
+     "options": [
+      "dsh",
+      "dsh_desktop",
+      "custom"
+     ],
+     "x-widget": "select",
+     "x-option-labels": {
+      "dsh": "dsh CLI",
+      "dsh_desktop": "dsh Desktop",
+      "custom": "自定义 ACP"
+     }
+    },
+    {
+     "name": "desktop_manifest",
+     "type": "string",
+     "label": "Desktop 桥接文件",
+     "description": "dsh Desktop 模式使用，留空读取 ~/.dsh/maibot-desktop.json。先在 Desktop 安装 dsh-maibot-bridge 插件；不启动第二个 dsh 进程，不关闭 Desktop 应用。",
+     "default": "",
+     "advanced": true
+    },
+    {
+     "name": "acp_command",
+     "type": "string",
+     "label": "ACP 启动程序",
+     "description": "外部 Agent 可执行程序或绝对路径，不是整段 shell 命令；Windows 可填写 dsh.cmd。",
+     "default": "dsh"
+    },
+    {
+     "name": "acp_args",
+     "type": "array",
+     "label": "自定义启动参数",
+     "description": "仅自定义 ACP 使用，逐项填写参数；dsh 预设忽略此项并自动生成 --profile acp。",
+     "advanced": true,
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "acp_cwd",
+     "type": "string",
+     "label": "ACP 主机工作目录",
+     "description": "外部进程的主机工作目录，留空使用 data/agent/workspace；不是沙盒 C:\\MaiWorkspace。同一会话恢复时保持不变。",
+     "default": ""
+    },
+    {
+     "name": "acp_env",
+     "type": "object",
+     "label": "ACP 环境变量",
+     "description": "追加或覆盖外部进程环境变量，例如 DSH_HOME；模型凭据建议保存在 dsh 自身配置中。",
+     "advanced": true
+    },
+    {
+     "name": "acp_model",
+     "type": "string",
+     "label": "ACP 模型选项",
+     "description": "留空使用外部 Agent 自身模型配置；填写时必须是其 model 配置选项公布的值，不使用本体 planner 回退。",
+     "default": "",
+     "advanced": true
+    },
+    {
+     "name": "acp_timeout",
+     "type": "number",
+     "label": "ACP 连接与关停超时（秒）",
+     "description": "握手、会话恢复和取消确认的等待时间，不限制任务执行时长。",
+     "default": 60,
+     "advanced": true,
+     "exclusiveMinValue": 0
+    },
+    {
+     "name": "computer_tools",
+     "type": "boolean",
+     "label": "提供电脑工具",
+     "description": "是否向外接 Agent 提供沙盒桌面工具及 WebUI 接管界面；人工接管期间不执行 Agent 输入。",
+     "default": false
+    },
+    {
+     "name": "networking",
+     "type": "boolean",
+     "label": "允许沙盒联网",
+     "description": "允许沙盒联网；修改后在下一次启动沙盒时生效。",
+     "default": true
+    },
+    {
+     "name": "memory_mb",
+     "type": "integer",
+     "label": "沙盒内存（MB）",
+     "description": "沙盒内存 MB，下次启动沙盒时生效。",
+     "default": 4096,
+     "minValue": 2048,
+     "advanced": true
+    },
+    {
+     "name": "startup_timeout",
+     "type": "number",
+     "label": "启动超时（秒）",
+     "description": "等待沙盒启动的超时秒数。",
+     "default": 120,
+     "advanced": true,
+     "exclusiveMinValue": 0
+    },
+    {
+     "name": "request_timeout",
+     "type": "number",
+     "label": "操作等待超时（秒）",
+     "description": "等待代理回复的超时秒数；超时不重放操作，可继续领取原请求结果。",
+     "default": 60,
+     "advanced": true,
+     "exclusiveMinValue": 0
+    },
+    {
+     "name": "screenshot_max_edge",
+     "type": "integer",
+     "label": "截图最长边（像素）",
+     "description": "截图最长边，0 表示原始分辨率；鼠标坐标始终按返回截图换算。",
+     "default": 1600,
+     "minValue": 0,
+     "advanced": true
+    }
+   ]
+  },
   "bot": {
    "className": "BotConfig",
    "uiLabel": "基础",
@@ -214,7 +364,7 @@
      "type": "string",
      "label": "人格设定",
      "description": "麦麦的人格和身份设定，建议简短描述她是谁、是什么性格。",
-     "default": "是一个大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。",
+     "default": "是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。",
      "x-widget": "textarea",
      "x-textarea-rows": 1,
      "x-description-display": "icon"
@@ -224,7 +374,7 @@
      "type": "string",
      "label": "行为风格",
      "description": "Planner 使用的行动准则，例如何时参与聊天、如何观察局面以及何时保持安静。",
-     "default": "是大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。不会没话题硬找话题，",
+     "default": "是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。不会没话题硬找话题，具有足够的自主性，会自行搜集信息理解内容。",
      "x-widget": "textarea",
      "x-textarea-rows": 1,
      "x-description-display": "icon"
@@ -271,6 +421,14 @@
    "uiOrder": 20,
    "fields": [
     {
+     "name": "enable_reply_at",
+     "type": "boolean",
+     "label": "允许回复时 @ 用户",
+     "description": "允许麦麦在回复开头 @ 一个或多个用户，由模型根据聊天内容决定是否使用。",
+     "default": true,
+     "x-widget": "switch"
+    },
+    {
      "name": "max_context_size",
      "type": "integer",
      "label": "群聊上下文",
@@ -286,15 +444,6 @@
      "description": "私聊回复时参考的最近消息数量。",
      "default": 60,
      "x-widget": "input",
-     "x-row": "chat-context-controls"
-    },
-    {
-     "name": "enable_context_optimization",
-     "type": "boolean",
-     "label": "优化上下文",
-     "description": "压缩部分上下文，减少模型消耗；一般建议开启。",
-     "default": true,
-     "x-widget": "switch",
      "x-row": "chat-context-controls"
     },
     {
@@ -332,9 +481,43 @@
    "nested": {
     "reply_timing": {
      "className": "ChatReplyTimingConfig",
-     "uiLabel": "什么时候发言",
+     "uiLabel": "回复频率",
      "uiAdvanced": false,
      "fields": [
+      {
+       "name": "message_debounce_mode",
+       "type": "select",
+       "label": "消息防抖",
+       "description": "默认自然，只需选择关闭、快速、自然或沉稳，无需另开开关。\n一批指合并后一起送入判断的消息；新批次按上一条有效消息的间隔选择初始等待：超过 30 秒或没有历史为安静，否则为活跃。同人/换人均与紧邻的上一条消息比较，重新从新消息起计算等待，可提前或延后结束。\n快速为安静 1 秒、活跃 3 秒、同人 1 秒、换人 0.5 秒：更快，但更容易漏接分段补充。自然为 2/5/2/0.5 秒：默认折中。沉稳为 4/7/4/2 秒：减少更多判断、多留补充机会，也会让没有补充的消息多等，不能保证每个群、每次都更完整。\n三档共用：裸图开启新批次时至少等 4 秒，后续消息仍按续发规则重算；批次内纯表情包不能延长等待，但可以提前结束；整批从第一条实际收到起最多 8 秒，@或提及后最多 1 秒，连续提及取最早上限。上限优先于其他等待规则。\n更换等待档位从下一条有效消息起生效，不重置批次或提及上限，不延长已到期批次；选择关闭会结束正在进行的等待，之后新消息不再等待。这里的时间仅指防抖排队，不包含模型生成和发送耗时。",
+       "default": "natural",
+       "options": [
+        "off",
+        "fast",
+        "natural",
+        "steady"
+       ],
+       "x-widget": "discrete-slider",
+       "x-option-labels": {
+        "off": "关闭",
+        "fast": "快速",
+        "natural": "自然",
+        "steady": "沉稳"
+       },
+       "x-option-descriptions": {
+        "off": "关闭防抖，新消息不等待，直接进入判断。",
+        "fast": "安静 1 秒、活跃 3 秒，同人续发 1 秒、换人 0.5 秒。等待更少，但更容易漏接分段补充。",
+        "natural": "默认：安静 2 秒、活跃 5 秒，同人续发 2 秒、换人 0.5 秒。兼顾等待时间和补充消息。",
+        "steady": "安静 4 秒、活跃 7 秒，同人续发 4 秒、换人 2 秒。合并更多判断、多留补充时间，但没有补充时也更慢，并非每个群都能等得更齐。"
+       }
+      },
+      {
+       "name": "planner_message_steering",
+       "type": "boolean",
+       "label": "快速反应模式",
+       "description": "强制 Planner 使用流式请求；思考或输出期间收到新消息立即打断并带上新消息重新请求，wait 等待也可被新消息提前结束。",
+       "default": false,
+       "x-widget": "switch"
+      },
       {
        "name": "talk_value",
        "type": "number",
@@ -364,7 +547,7 @@
        "type": "boolean",
        "label": "提及必回复",
        "description": "开启后，只要消息提到麦麦名字就更容易回复。",
-       "default": false,
+       "default": true,
        "x-widget": "switch",
        "x-row": "reply-switches"
       },
@@ -376,36 +559,6 @@
        "default": true,
        "x-widget": "switch",
        "x-row": "reply-switches"
-      },
-      {
-       "name": "reply_trigger_mode",
-       "type": "select",
-       "label": "回复触发模式",
-       "description": "控制新消息何时进入 Planner。",
-       "default": "frequency",
-       "options": [
-        "frequency",
-        "reply_necessity"
-       ],
-       "x-widget": "select",
-       "x-option-labels": {
-        "frequency": "频率触发",
-        "reply_necessity": "必要性触发"
-       },
-       "x-option-descriptions": {
-        "frequency": "按照新消息数量决定思考",
-        "reply_necessity": "综合新消息数量、内容、过往发言决定思考"
-       }
-      },
-      {
-       "name": "planner_interrupt_max_consecutive_count",
-       "type": "integer",
-       "label": "规划器连续打断上限",
-       "description": "思考时来了新消息，最多重新思考多少次。",
-       "default": 0,
-       "minValue": 0,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "max_consecutive_wait_count",
@@ -539,20 +692,47 @@
      "uiAdvanced": false,
      "fields": [
       {
-       "name": "enable_reply_quote",
-       "type": "boolean",
-       "label": "启用引用回复",
-       "description": "回复时是否可以引用上一条或相关消息。",
-       "default": true,
-       "x-widget": "switch",
-       "advanced": true
+       "name": "group_quote_frequency",
+       "type": "select",
+       "label": "群聊引用频率",
+       "description": "全局群聊引用频率：不引用、偶尔引用、经常引用。按固定规律随机决定，经常引用的概率为偶尔引用的两倍；不影响私聊。",
+       "default": "occasionally",
+       "options": [
+        "never",
+        "occasionally",
+        "often"
+       ],
+       "x-widget": "discrete-slider",
+       "x-option-labels": {
+        "never": "不引用",
+        "occasionally": "偶尔引用",
+        "often": "经常引用"
+       }
+      },
+      {
+       "name": "private_quote_frequency",
+       "type": "select",
+       "label": "私聊引用频率",
+       "description": "全局私聊引用频率：不引用、偶尔引用、经常引用。结合用户连发条数、发言间隔和回复目标位置随机决定；经常引用的概率为偶尔引用的两倍。",
+       "default": "occasionally",
+       "options": [
+        "never",
+        "occasionally",
+        "often"
+       ],
+       "x-widget": "discrete-slider",
+       "x-option-labels": {
+        "never": "不引用",
+        "occasionally": "偶尔引用",
+        "often": "经常引用"
+       }
       },
       {
        "name": "group_chat_prompt",
        "type": "string",
        "label": "群聊提示词",
        "description": "群聊通用提示词，告诉麦麦群聊中该怎么说话。",
-       "default": "你正在qq群里聊天，下面是群里正在聊的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。请注意把握聊天内容。\n不要总是提及自己的身份背景，根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包，只要关注表情包表达的含义。你可以适当发送表情包表达情绪。控制回复的频率，不要每个人的消息都回复，优先回复你感兴趣的或者主动提及你的，适当回复其他话题。\n",
+       "default": "下面是聊天中的的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。\n根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包。你可以适当发送表情包表达情绪。如果有人不喜欢你或者不理你，就不要强行回复，回复前读空气。不要每个人的消息都回复，适当回复其他话题。可以适当回过头回复之前用户的消息。\n",
        "x-widget": "textarea"
       },
       {
@@ -625,6 +805,48 @@
     }
    }
   },
+  "capabilities": {
+   "className": "CapabilitiesConfig",
+   "uiLabel": "能力",
+   "uiAdvanced": false,
+   "uiOrder": 30,
+   "fields": [
+    {
+     "name": "tool_result_condense",
+     "type": "boolean",
+     "label": "超长工具结果整理",
+     "description": "工具返回的结果超过阈值字数时，先交给子代理按 Planner 当前意图整理成结论再写入上下文，减少后续每轮的上下文占用；会多一次模型请求。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
+     "name": "tool_result_condense_threshold",
+     "type": "integer",
+     "label": "工具结果整理阈值",
+     "description": "工具结果达到多少字时才触发整理，仅在开启“超长工具结果整理”时生效；调低会更频繁地整理，调高则更多原文留在上下文里。",
+     "default": 3000,
+     "minValue": 500,
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "planner_subagent",
+     "type": "boolean",
+     "label": "子代理任务派发",
+     "description": "给 Planner 提供 subagent 工具：把自包含的查询或整理任务交给子代理，子代理在独立上下文里多轮调用被授权的工具，只把结论交还给 Planner。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
+     "name": "advanced_sub_agent",
+     "type": "boolean",
+     "label": "高级子代理",
+     "description": "子代理改为在后台运行：派发后立刻返回任务 id，麦麦可以继续聊天，子代理结束时结论作为一条新消息送回并唤醒 Planner；同时提供查看和终止后台任务的工具。需要先开启“子代理任务派发”。",
+     "default": false,
+     "x-widget": "switch"
+    }
+   ]
+  },
   "experimental": {
    "className": "ExperimentalConfig",
    "uiLabel": "实验性功能",
@@ -632,75 +854,16 @@
    "uiOrder": 140,
    "fields": [
     {
-     "name": "enable_behavior_learning",
-     "type": "boolean",
-     "label": "启用行为学习",
-     "description": "让麦麦从聊天中学习什么时候该怎么回应的经验。",
-     "default": false,
-     "x-widget": "switch"
-    },
-    {
-     "name": "enable_rich_reply",
-     "type": "boolean",
-     "label": "丰富回复能力",
-     "description": "开启后，reply 动作可通过 attach_pic、attach_emoji、attach_at 参数附加图片、表情包或 at。",
-     "default": false,
-     "x-widget": "switch"
-    },
-    {
-     "name": "emotion_trait",
-     "type": "select",
-     "label": "情绪特点",
-     "description": "实验性人格情绪特点；理性冷静和多愁善感会追加人格后缀，中性不追加内容。",
-     "default": "neutral",
-     "options": [
-      "rational_calm",
-      "neutral",
-      "sentimental"
-     ],
-     "x-widget": "select",
-     "x-option-labels": {
-      "rational_calm": "理性冷静",
-      "neutral": "中性",
-      "sentimental": "多愁善感"
-     },
-     "x-option-descriptions": {
-      "rational_calm": "情绪表达更克制，优先保持客观、清晰和稳定。",
-      "neutral": "不追加额外情绪特点描述，完全使用原人格设定。",
-      "sentimental": "情绪表达更细腻敏感，更容易被聊天氛围触动。"
-     }
-    },
-    {
      "name": "attention_drift",
      "type": "object",
      "label": "attention_drift",
      "description": "注意力漂移实验模式；让麦麦在群聊/私聊中表现出更活跃的联想和轻微话题漂移。"
     },
     {
-     "name": "behavior_learning_list",
-     "type": "array",
-     "label": "行为学习配置",
-     "description": "配置哪些聊天会学习和使用行为经验；默认规则不够时再单独添加。",
-     "x-widget": "custom",
-     "items": {
-      "type": "object"
-     }
-    },
-    {
-     "name": "behavior_groups",
-     "type": "array",
-     "label": "行为共享组",
-     "description": "让多个群聊或私聊共享学到的行为经验。",
-     "x-widget": "custom",
-     "items": {
-      "type": "object"
-     }
-    },
-    {
      "name": "focus_mode",
      "type": "boolean",
      "label": "Focus 模式",
-     "description": "让麦麦同一时间只专注一个聊天流，适合直播或高强度聊天场景。",
+     "description": "让同组聊天共享一个持续思考的 Planner；全部消息共同进入上下文，工具通过 session_id 指定处理目标。",
      "default": false,
      "x-widget": "switch"
     },
@@ -726,21 +889,11 @@
      "name": "focus_groups",
      "type": "array",
      "label": "Focus 共享组",
-     "description": "把聊天流分组后，同组共享 Focus，不同组互不抢占。",
+     "description": "同组聊天共享 Planner 与完整上下文，不同组独立运行；未匹配的聊天各自形成独立组。",
      "x-widget": "custom",
      "items": {
       "type": "object"
      }
-    },
-    {
-     "name": "focus_cool_time",
-     "type": "integer",
-     "label": "Focus 冷却时间",
-     "description": "当前关注的聊天多久没继续处理后，允许被其他聊天唤醒。",
-     "default": 120,
-     "minValue": 1,
-     "x-widget": "input",
-     "x-row": "focus-cool-time"
     }
    ],
    "nested": {
@@ -769,7 +922,7 @@
         "scattered",
         "wild"
        ],
-       "x-widget": "select",
+       "x-widget": "discrete-slider",
        "x-option-labels": {
         "subtle": "轻微漂移",
         "active": "活跃联想",
@@ -795,7 +948,7 @@
         "balanced",
         "loose"
        ],
-       "x-widget": "select",
+       "x-widget": "discrete-slider",
        "x-option-labels": {
         "strict": "严格回钩",
         "balanced": "自然回钩",
@@ -819,7 +972,7 @@
         "natural",
         "lively"
        ],
-       "x-widget": "select",
+       "x-widget": "discrete-slider",
        "x-option-labels": {
         "reserved": "少量短反应",
         "natural": "自然短反应",
@@ -833,116 +986,6 @@
        "x-row": "attention-drift-reaction"
       }
      ]
-    },
-    "behavior_learning_list": {
-     "className": "LearningItem",
-     "uiAdvanced": false,
-     "fields": [
-      {
-       "name": "platform",
-       "type": "string",
-       "label": "平台",
-       "description": "平台，与ID一起留空表示全局",
-       "default": "",
-       "x-widget": "input"
-      },
-      {
-       "name": "item_id",
-       "type": "string",
-       "label": "聊天流 ID",
-       "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
-       "default": "",
-       "x-widget": "input"
-      },
-      {
-       "name": "type",
-       "type": "select",
-       "label": "聊天类型",
-       "description": "这条规则作用于群聊还是私聊。",
-       "default": "group",
-       "options": [
-        "group",
-        "private"
-       ],
-       "x-widget": "select",
-       "x-option-descriptions": {
-        "group": "群聊聊天流，item_id 填群号或群聊 ID",
-        "private": "私聊聊天流，item_id 填用户 ID"
-       }
-      },
-      {
-       "name": "use",
-       "type": "boolean",
-       "label": "使用",
-       "description": "是否在这个聊天里使用已学到的内容。",
-       "default": true,
-       "x-widget": "switch"
-      },
-      {
-       "name": "learn",
-       "type": "boolean",
-       "label": "学习",
-       "description": "是否从这个聊天里继续学习新内容。",
-       "default": true,
-       "x-widget": "switch"
-      }
-     ]
-    },
-    "behavior_groups": {
-     "className": "ChatStreamGroup",
-     "uiAdvanced": false,
-     "fields": [
-      {
-       "name": "targets",
-       "type": "array",
-       "label": "共享聊天流",
-       "description": "这个组里的聊天流会共享对应的学习内容。",
-       "x-widget": "custom",
-       "items": {
-        "type": "object"
-       }
-      }
-     ],
-     "nested": {
-      "targets": {
-       "className": "TargetItem",
-       "uiAdvanced": false,
-       "fields": [
-        {
-         "name": "platform",
-         "type": "string",
-         "label": "平台",
-         "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
-         "default": "",
-         "x-widget": "input"
-        },
-        {
-         "name": "item_id",
-         "type": "string",
-         "label": "聊天流 ID",
-         "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
-         "default": "",
-         "x-widget": "input"
-        },
-        {
-         "name": "rule_type",
-         "type": "select",
-         "label": "聊天类型",
-         "description": "聊天流类型，group（群聊）或private（私聊）",
-         "default": "group",
-         "options": [
-          "group",
-          "private"
-         ],
-         "x-widget": "select",
-         "x-option-descriptions": {
-          "group": "群聊聊天流，item_id 填群号或群聊 ID",
-          "private": "私聊聊天流，item_id 填用户 ID"
-         }
-        }
-       ]
-      }
-     }
     },
     "focus_chat_whitelist": {
      "className": "TargetItem",
@@ -1047,49 +1090,11 @@
    "uiOrder": 60,
    "fields": [
     {
-     "name": "planner_mode",
-     "type": "select",
-     "label": "规划阶段视觉模式",
-     "description": "控制规划阶段是否把图片内容直接发送给 planner 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。",
-     "default": "auto",
-     "options": [
-      "text",
-      "multimodal",
-      "auto"
-     ],
-     "x-widget": "select",
-     "x-option-descriptions": {
-      "auto": "根据模型信息自动选择文本或多模态模式",
-      "text": "纯文本模式，不向模型发送视觉输入",
-      "multimodal": "多模态模式，会向模型发送视觉输入"
-     },
-     "x-row": "visual-modes"
-    },
-    {
-     "name": "replyer_mode",
-     "type": "select",
-     "label": "回复生成视觉模式",
-     "description": "控制回复生成阶段是否把图片内容直接发送给 replyer 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。",
-     "default": "auto",
-     "options": [
-      "text",
-      "multimodal",
-      "auto"
-     ],
-     "x-widget": "select",
-     "x-option-descriptions": {
-      "auto": "根据模型信息自动选择文本或多模态模式",
-      "text": "纯文本模式，不向模型发送视觉输入",
-      "multimodal": "多模态模式，会向模型发送视觉输入"
-     },
-     "x-row": "visual-modes"
-    },
-    {
      "name": "max_image_num",
      "type": "integer",
      "label": "多模态最大图片数",
      "description": "一次多模态请求最多带多少张图，太大可能更慢更贵。",
-     "default": 128,
+     "default": 64,
      "minValue": 0,
      "x-widget": "input",
      "advanced": true
@@ -1099,7 +1104,7 @@
      "type": "number",
      "label": "识图最长等待时间",
      "description": "等图片识别完成的最长秒数；0 表示不等待。",
-     "default": 10,
+     "default": 32,
      "minValue": 0,
      "x-widget": "input"
     },
@@ -1117,7 +1122,7 @@
      "type": "number",
      "label": "最大图片大小(MB)",
      "description": "超过这个大小的图片会按过大图片处理方法处理；0 表示不限。",
-     "default": 30.0,
+     "default": 16.0,
      "minValue": 0,
      "x-widget": "input",
      "x-row": "visual-image-compression"
@@ -1199,9 +1204,9 @@
     {
      "name": "expression_checked_only",
      "type": "boolean",
-     "label": "使用精选表达",
+     "label": "仅使用精选表达",
      "description": "仅使用人工精选的表达。",
-     "default": true,
+     "default": false,
      "x-widget": "switch",
      "x-row": "expression-learning-switches"
     },
@@ -1215,25 +1220,14 @@
      "x-row": "expression-learning-switches"
     },
     {
-     "name": "expression_selection_mode",
-     "type": "select",
-     "label": "表达使用方式",
-     "description": "表达方式的使用策略：legacy 随手抽取候选，vector_intent 使用表达意图与嵌入召回。",
-     "default": "legacy",
-     "options": [
-      "legacy",
-      "vector_intent"
-     ],
-     "x-widget": "select",
-     "x-option-labels": {
-      "legacy": "随手",
-      "vector_intent": "超级精细"
-     },
-     "x-option-descriptions": {
-      "legacy": "使用 LLM 进行选择，效果一般",
-      "vector_intent": "使用特殊构建的回复方式加上嵌入模型进行选择，效果非常好（需要配置嵌入模型）"
-     },
-     "advanced": false
+     "name": "use_vector_expression",
+     "type": "boolean",
+     "label": "使用向量表达",
+     "description": "开启后使用表达意图与嵌入召回，需要配置嵌入模型；关闭时使用随手候选。",
+     "default": true,
+     "x-widget": "switch",
+     "advanced": false,
+     "x-row": "expression-learning-switches"
     },
     {
      "name": "expression_vector_index_path",
@@ -1557,6 +1551,12 @@
      "description": "控制麦麦在聊天中如何使用长期记忆"
     },
     {
+     "name": "image_memory",
+     "type": "object",
+     "label": "图片记忆",
+     "description": "图片资产留存、图片嵌入和相似内容召回配置"
+    },
+    {
      "name": "embedding",
      "type": "object",
      "label": "记忆向量化",
@@ -1867,6 +1867,135 @@
        "description": "是否在反馈纠错后将受影响 source 加入 episode 重建队列",
        "default": true,
        "x-widget": "switch",
+       "advanced": true
+      }
+     ]
+    },
+    "image_memory": {
+     "className": "AMemorixImageMemoryConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用图片记忆",
+       "description": "",
+       "default": true
+      },
+      {
+       "name": "task_name",
+       "type": "string",
+       "label": "图片嵌入任务",
+       "description": "",
+       "default": "image_embedding",
+       "advanced": true
+      },
+      {
+       "name": "preprocess_version",
+       "type": "string",
+       "label": "预处理版本",
+       "description": "",
+       "default": "identity_v1",
+       "advanced": true
+      },
+      {
+       "name": "probe_retry_seconds",
+       "type": "number",
+       "label": "模型探测重试间隔",
+       "description": "",
+       "default": 60.0,
+       "minValue": 0.0,
+       "advanced": true
+      },
+      {
+       "name": "max_bytes",
+       "type": "integer",
+       "label": "单图大小上限",
+       "description": "",
+       "default": 10485760,
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "max_pixels",
+       "type": "integer",
+       "label": "单图像素上限",
+       "description": "",
+       "default": 40000000,
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "candidate_limit",
+       "type": "integer",
+       "label": "相似候选数量",
+       "description": "",
+       "default": 8,
+       "minValue": 1,
+       "maxValue": 100
+      },
+      {
+       "name": "similarity_threshold",
+       "type": "number",
+       "label": "相似度阈值",
+       "description": "",
+       "default": 0.72,
+       "minValue": -1.0,
+       "maxValue": 1.0
+      },
+      {
+       "name": "job_poll_interval_seconds",
+       "type": "number",
+       "label": "任务轮询间隔",
+       "description": "",
+       "default": 2.0,
+       "minValue": 0.1,
+       "advanced": true
+      },
+      {
+       "name": "job_batch_size",
+       "type": "integer",
+       "label": "任务处理批量",
+       "description": "",
+       "default": 4,
+       "minValue": 1,
+       "maxValue": 100,
+       "advanced": true
+      },
+      {
+       "name": "job_enqueue_batch_size",
+       "type": "integer",
+       "label": "任务入队批量",
+       "description": "",
+       "default": 200,
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "job_lease_seconds",
+       "type": "number",
+       "label": "任务租约秒数",
+       "description": "",
+       "default": 120.0,
+       "minValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "job_max_retries",
+       "type": "integer",
+       "label": "任务最大重试",
+       "description": "",
+       "default": 5,
+       "minValue": 0,
+       "advanced": true
+      },
+      {
+       "name": "min_train_threshold",
+       "type": "integer",
+       "label": "索引训练最小样本",
+       "description": "",
+       "default": 40,
+       "minValue": 1,
        "advanced": true
       }
      ]
@@ -2679,7 +2808,9 @@
        "label": "裁剪阈值",
        "description": "裁剪阈值",
        "default": 0.1,
-       "advanced": true
+       "advanced": true,
+       "exclusiveMinValue": 0.0,
+       "exclusiveMaxValue": 1.0
       },
       {
        "name": "freeze_duration_hours",
@@ -2697,7 +2828,8 @@
        "description": "冻结关系恢复为活跃状态的保留强度阈值",
        "default": 0.15,
        "maxValue": 1.0,
-       "advanced": true
+       "advanced": true,
+       "exclusiveMinValue": 0.0
       },
       {
        "name": "access_reinforcement_alpha",
@@ -3015,6 +3147,14 @@
    "uiOrder": 80,
    "fields": [
     {
+     "name": "use_new_send_logic",
+     "type": "boolean",
+     "label": "采用新表情包发送逻辑",
+     "description": "开启后由思考模型直接查看并挑选表情包，在文字回复后发送，需要思考模型支持视觉；关闭时沿用独立选择并发送表情包的旧方式。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
      "name": "emoji_send_num",
      "type": "integer",
      "label": "单次发送候选数",
@@ -3230,7 +3370,6 @@
    "uiLabel": "后处理",
    "uiAdvanced": true,
    "uiOrder": 100,
-   "uiParent": "chat",
    "fields": [
     {
      "name": "enable_response_post_process",
@@ -3342,6 +3481,18 @@
    "uiAdvanced": false,
    "uiParent": "response_post_process",
    "fields": [
+    {
+     "name": "mode",
+     "type": "select",
+     "label": "断句模式",
+     "description": "规则断句或使用 LLM 按语义断句。",
+     "default": "rule",
+     "options": [
+      "rule",
+      "llm"
+     ],
+     "x-widget": "select"
+    },
     {
      "name": "enable",
      "type": "boolean",
@@ -3536,11 +3687,41 @@
      "x-widget": "input"
     },
     {
-     "name": "maisaka_reply_effect_limit",
-     "type": "integer",
-     "label": "回复效果记录数",
-     "description": "每个聊天最多保留多少条回复效果记录。",
-     "default": 256,
+     "name": "memory_diagnostics_enabled",
+     "type": "boolean",
+     "label": "memory_diagnostics_enabled",
+     "description": "启用独立内存诊断日志；最多四个 5 MiB 文件，修改后重启生效。",
+     "default": true
+    },
+    {
+     "name": "memory_diagnostics_deep_enabled",
+     "type": "boolean",
+     "label": "memory_diagnostics_deep_enabled",
+     "description": "启用 tracemalloc 分配位置对比（每十分钟）；有额外内存和 CPU 开销，排查时开启，重启生效。",
+     "default": false
+    },
+    {
+     "name": "memory_diagnostics_interval_seconds",
+     "type": "number",
+     "label": "memory_diagnostics_interval_seconds",
+     "description": "轻量内存诊断采集间隔（秒，至少 10 秒），修改后重启生效。",
+     "default": 60.0,
+     "minValue": 10.0
+    },
+    {
+     "name": "event_loop_watchdog_enabled",
+     "type": "boolean",
+     "label": "事件循环卡顿看门狗",
+     "description": "是否记录事件循环卡顿；主循环与 WebUI 循环各有一份，用于排查界面卡顿。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
+     "name": "event_loop_watchdog_warn_seconds",
+     "type": "number",
+     "label": "卡顿告警阈值（秒）",
+     "description": "事件循环唤醒延迟超过该秒数时记录一条警告日志。",
+     "default": 0.5,
      "x-widget": "input"
     },
     {
@@ -3571,35 +3752,35 @@
    "uiParent": "log",
    "fields": [
     {
+     "name": "replyer_retro_prompt",
+     "type": "boolean",
+     "label": "复古回复提示词",
+     "description": "按旧版（0.12.x）的方式组织 replyer 提示词：全部回复指令集中在一份完整模板里，用块占位符填充，群聊/私聊/简短回复各用一套模板，并整段作为一条 user 消息发送。模型名称或标识包含 mai_replier（兼容 mai-replier），或为 v2p1-contract、v2p1-raw 时自动开启且不可关闭，全部移走后自动关闭；其他模型可手动开启。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
      "name": "enable_console_input",
      "type": "boolean",
      "label": "启用终端输入",
      "description": "在交互式终端中启用本地消息和指令输入。",
-     "default": false,
+     "default": true,
      "x-widget": "switch"
     },
     {
      "name": "show_maisaka_thinking",
      "type": "boolean",
-     "label": "显示思考过程",
-     "description": "在日志或界面中显示麦麦的思考过程。",
+     "label": "显示终端思考大框",
+     "description": "在终端显示思考过程大框，不影响推理记录保存和 WebUI 查看。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
+     "name": "save_maisaka_reasoning",
+     "type": "boolean",
+     "label": "保存推理记录",
+     "description": "保存 Planner、工具调用及聊天回想的完整推理记录，供 WebUI 查看，与终端显示独立。",
      "default": true,
-     "x-widget": "switch"
-    },
-    {
-     "name": "enable_clear_context_command",
-     "type": "boolean",
-     "label": "启用 /clear 指令",
-     "description": "允许使用 /clear 清空当前聊天流的 Maisaka 短期历史上下文。",
-     "default": false,
-     "x-widget": "switch"
-    },
-    {
-     "name": "enable_reply_effect_tracking",
-     "type": "boolean",
-     "label": "记录回复效果",
-     "description": "记录回复效果评分，方便观察回复质量。",
-     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3625,6 +3806,14 @@
      "description": "记录模型 prompt cache 统计，用于性能调试。",
      "default": false,
      "x-widget": "switch"
+    },
+    {
+     "name": "force_plugin_compatibility",
+     "type": "boolean",
+     "label": "强制插件兼容",
+     "description": "跳过插件声明的 Host 和 SDK 版本范围校验，直接加载插件；开启后需重启生效。",
+     "default": false,
+     "x-widget": "switch"
     }
    ]
   },
@@ -3633,6 +3822,14 @@
    "uiAdvanced": false,
    "uiParent": "debug",
    "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "label": "启用 maim_message 服务",
+     "description": "消息服务总开关；关闭后不启动旧版 WS 和新版 API 服务，重启生效，不影响插件式适配器。",
+     "default": true,
+     "x-widget": "switch"
+    },
     {
      "name": "ws_server_host",
      "type": "string",
@@ -3771,10 +3968,10 @@
      "name": "webui_style",
      "type": "integer",
      "label": "界面风格",
-     "description": "界面风格编号；0 为旧风格，1 为未来复古风格。",
-     "default": 1,
+     "description": "界面风格编号；0 为旧风格，1 为未来复古风格，2 为千禧风格。",
+     "default": 2,
      "minValue": 0,
-     "maxValue": 1,
+     "maxValue": 2,
      "x-widget": "number"
     },
     {
@@ -4149,7 +4346,8 @@
        "label": "HTTP 请求超时",
        "description": "HTTP 请求多久没响应就算超时。",
        "default": 30.0,
-       "x-widget": "number"
+       "x-widget": "number",
+       "exclusiveMinValue": 0
       },
       {
        "name": "read_timeout_seconds",
@@ -4157,7 +4355,8 @@
        "label": "会话读取超时",
        "description": "连接建立后，等服务器消息的最长时间。",
        "default": 300.0,
-       "x-widget": "number"
+       "x-widget": "number",
+       "exclusiveMinValue": 0
       },
       {
        "name": "authorization",
@@ -4218,13 +4417,58 @@
      }
     },
     {
+     "name": "silent_permission_denied",
+     "type": "boolean",
+     "label": "不显示无权限提示",
+     "description": "开启后，用户执行无权限命令时不再发送提示消息，仅静默拦截并记录日志。",
+     "default": false,
+     "x-widget": "switch"
+    },
+    {
      "name": "command_permissions",
      "type": "object",
      "label": "command_permissions",
      "description": "受保护命令按用户和真实聊天流配置的额外放行规则。",
+     "hidden": true,
+     "mapValues": true
+    },
+    {
+     "name": "disabled_commands",
+     "type": "array",
+     "label": "disabled_commands",
+     "description": "在命令管理中停用的命令 ID 列表（格式为 plugin_id.command_name，内置命令为 core.clear）。",
+     "items": {
+      "type": "string"
+     },
      "hidden": true
     }
-   ]
+   ],
+   "nested": {
+    "command_permissions": {
+     "className": "CommandPermissionConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "allow_users",
+       "type": "array",
+       "label": "allow_users",
+       "description": "允许执行命令的用户，格式如 qq:123456789。",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "allow_chats",
+       "type": "array",
+       "label": "allow_chats",
+       "description": "允许执行命令的真实聊天流 ID。",
+       "items": {
+        "type": "string"
+       }
+      }
+     ]
+    }
+   }
   },
   "plugin_runtime": {
    "className": "PluginRuntimeConfig",
@@ -4357,7 +4601,8 @@
        "label": "启动超时秒数",
        "description": "浏览器启动或连接的最长等待时间。",
        "default": 20.0,
-       "x-widget": "number"
+       "x-widget": "number",
+       "exclusiveMinValue": 0
       },
       {
        "name": "render_timeout_sec",
@@ -4365,7 +4610,8 @@
        "label": "渲染超时秒数",
        "description": "单次渲染任务的最长等待时间。",
        "default": 15.0,
-       "x-widget": "number"
+       "x-widget": "number",
+       "exclusiveMinValue": 0
       },
       {
        "name": "auto_download_chromium",
@@ -4381,7 +4627,8 @@
        "label": "下载连接超时秒数",
        "description": "下载 Chromium 时的连接超时时间。",
        "default": 120.0,
-       "x-widget": "number"
+       "x-widget": "number",
+       "exclusiveMinValue": 0
       },
       {
        "name": "restart_after_render_count",

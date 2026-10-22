@@ -7,6 +7,14 @@ export type MaiBotPluginConfig = {
  */
 permission: Array<string>, 
 /**
+ * 开启后，用户执行无权限命令时不再发送提示消息，仅静默拦截并记录日志。
+ */
+silent_permission_denied: boolean, 
+/**
  * 受保护命令按用户和真实聊天流配置的额外放行规则。
  */
-command_permissions: { [key in string]: MaiBotCommandPermissionConfig }, };
+command_permissions: { [key in string]: MaiBotCommandPermissionConfig }, 
+/**
+ * 在命令管理中停用的命令 ID 列表（格式为 plugin_id.command_name，内置命令为 core.clear）。
+ */
+disabled_commands: Array<string>, };

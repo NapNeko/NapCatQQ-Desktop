@@ -6,7 +6,7 @@ use ncd_host::{Host, HostPath};
 use ncd_traits::AppFrameworkError;
 use serde_json::Value;
 
-use super::ai::{self, apply_ai_patch, restore_extras};
+use super::ai::{self, restore_extras};
 use super::config::{
     AstrBotInstanceConfig, apply_onebot_to_root, claimed_platform_row, read_astrbot_config,
 };
@@ -34,6 +34,7 @@ pub async fn write_live(
     cfg: &AstrBotInstanceConfig,
     target: &LiveTarget,
 ) -> Result<(AstrBotInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
+    let conf_id = require_default_profile(&target.conf_id)?;
     let issues = cfg.validate();
     if !issues.is_empty() {
         return Err(AppFrameworkError::ConfigInvalid(issues));
@@ -47,12 +48,34 @@ pub async fn write_live(
         )
         .await?;
 
-    let conf_id = if target.conf_id.trim().is_empty() {
-        "default"
-    } else {
-        target.conf_id.trim()
-    };
+    write_dashboard_config(&client, instance_id, listen_port, cfg, conf_id).await?;
 
+    // API 会写盘；再读文件拿新 revision
+    let path = cmd_config_path(install_dir);
+    let bytes = host
+        .read_file(&path)
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    let _ = parse_cmd_config(&String::from_utf8_lossy(&bytes))?;
+    read_astrbot_config(host, install_dir, instance_id, listen_port).await
+}
+
+/// 类型化读取路径只提供默认档案；拒绝把默认档案的草稿写进其它档案。
+fn require_default_profile(conf_id: &str) -> Result<&'static str, AppFrameworkError> {
+    if conf_id.trim().is_empty() || conf_id.trim() == "default" { return Ok("default"); }
+    Err(AppFrameworkError::ConfigUnsupported(
+        "Desktop 类型化配置目前只支持默认 AstrBot 档案；其它档案请在 AstrBot WebUI 编辑".into()
+    ))
+}
+
+async fn write_dashboard_config(
+    client: &DashboardClient,
+    instance_id: &str,
+    listen_port: u16,
+    cfg: &AstrBotInstanceConfig,
+    conf_id: &str,
+) -> Result<(), AppFrameworkError> {
+    let conf_id = require_default_profile(conf_id)?;
     let payload = client.get_config().await?;
     let mut live = payload
         .get("config")
@@ -63,12 +86,11 @@ pub async fn write_live(
     let mut sources = cfg.sources.clone();
     let mut models = cfg.models.clone();
     restore_extras(&live, &mut sources, &mut models);
-    apply_ai_patch(&mut live, &cfg.ai_patch(&sources, &models))
-        .map_err(AppFrameworkError::Integration)?;
+    super::config::apply_ai_projection(&mut live, cfg, &sources, &models)?;
 
     if conf_id == "default" {
-        sync_providers(&client, &payload, &sources, &models).await?;
-        sync_claimed_platform(&client, &payload, instance_id, listen_port, cfg, &live).await?;
+        sync_providers(client, &payload, &sources, &models).await?;
+        sync_claimed_platform(client, &payload, instance_id, listen_port, cfg, &live).await?;
     }
 
     // default 的 update 会丢掉 provider / platform；AI 组单独 POST 全量 merge 对象
@@ -76,18 +98,11 @@ pub async fn write_live(
     // subagent 那个接口只认默认配置：非 default 走它会把当前 profile 的编排写进 default
     if conf_id == "default" {
         if let Some(body) = live.get("subagent_orchestrator") {
-            super::runtime::write_subagent(&client, body).await?;
+            super::runtime::write_subagent(client, body).await?;
         }
     }
 
-    // API 会写盘；再读文件拿新 revision
-    let path = cmd_config_path(install_dir);
-    let bytes = host
-        .read_file(&path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
-    let _ = parse_cmd_config(&String::from_utf8_lossy(&bytes))?;
-    read_astrbot_config(host, install_dir, instance_id, listen_port).await
+    Ok(())
 }
 
 async fn sync_claimed_platform(
@@ -203,6 +218,20 @@ mod tests {
             .map(|r| r.url.path().to_string())
             .filter(|p| p != "/api/auth/login")
             .collect()
+    }
+
+    #[tokio::test]
+    async fn non_default_profile_is_rejected_before_reading_or_writing_the_default_root() {
+        let server = MockServer::start().await;
+        let client = logged_in(&server, "profile-guard").await;
+        let default_root = json!({"custom":{"origin":"default"}});
+        let target_root = json!({"custom":{"origin":"target","keep":true}});
+        let cfg = AstrBotInstanceConfig::from_root(&default_root, "a", 6199);
+        let error = write_dashboard_config(&client, "a", 6199, &cfg, "target").await.unwrap_err();
+        assert!(matches!(error, AppFrameworkError::ConfigUnsupported(_)));
+        assert!(write_paths(&server).await.is_empty());
+        // 没有 GET 默认档案后再 POST 目标的机会；两份不同的高级配置均无网络写入。
+        assert_ne!(default_root["custom"], target_root["custom"]);
     }
 
     #[tokio::test]

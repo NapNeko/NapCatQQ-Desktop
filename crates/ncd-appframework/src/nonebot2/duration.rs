@@ -1,5 +1,7 @@
-//! Pydantic 时长输入的公共子集与兼容扩展，统一写为微秒精度 ISO 8601。
+//! Pydantic 时长输入的校验：ISO 保留原文，秒数与无歧义 clock 转成微秒精度 ISO。
 //! 数字 dotenv 字符串在 Pydantic v2 中不是秒数，写盘前必须规范化。
+//! 数字秒数字符串按 v1 的微秒截断规则保存，避免改写已有 submicro 设置。
+//! 负数 day/clock 在 v1 按分量、v2 按整体符号解释，拒绝歧义输入，保留原字段供修正。
 
 use std::sync::OnceLock;
 
@@ -15,9 +17,12 @@ pub(super) fn normalize_duration(raw: &str) -> Option<String> {
     let raw = raw.trim();
     let negative = raw.starts_with('-');
     let value = raw.strip_prefix('+').or_else(|| raw.strip_prefix('-')).unwrap_or(raw);
-    let total = decimal_micros(value, 1, true)
-        .or_else(|| clock_micros(value))
-        .or_else(|| iso_micros(value))?;
+    // ISO 已由实例自己的 Pydantic 解释，保持原文以保留其 submicro 舍入语义。
+    if value.starts_with('P') {
+        return (iso_micros(value)? <= MAX_MICROS).then(|| raw.to_string());
+    }
+    let total = decimal_micros(value, 1, false)
+        .or_else(|| if negative { None } else { clock_micros(value) })?;
     if total > MAX_MICROS {
         return None;
     }
@@ -134,17 +139,21 @@ mod tests {
             ("120", "PT120S"),
             ("-0.000001", "-PT0.000001S"),
             ("+1.25", "PT1.25S"),
-            ("0.0000009", "PT0.000001S"),
-            ("PT0.0000009S", "PT0.000001S"),
+            ("0.0000009", "PT0S"),
+            ("PT0.0000009S", "PT0.0000009S"),
             ("00:00:00.0000009", "PT0S"),
             ("00:02:00", "PT120S"),
-            ("-1 day, 02:03:04.000005", "-P1DT7384.000005S"),
+            ("1 day, 02:03:04.000005", "P1DT7384.000005S"),
+            ("-79015.999995", "-PT79015.999995S"),
             ("1 02:03:04", "P1DT7384S"),
-            ("P1DT2H", "P1DT7200S"),
-            ("+PT0.000001S", "PT0.000001S"),
+            ("P1DT2H", "P1DT2H"),
+            ("+PT0.000001S", "+PT0.000001S"),
             ("-PT1.25S", "-PT1.25S"),
-            ("P1W", "P7DT0S"),
-            ("P1.5D", "P1DT43200S"),
+            ("P1W", "P1W"),
+            ("P1.5D", "P1.5D"),
+            ("PT1H", "PT1H"),
+            ("PT0.0000005S", "PT0.0000005S"),
+            ("-PT0.0000005S", "-PT0.0000005S"),
         ] {
             assert_eq!(normalize_duration(raw).as_deref(), Some(expected), "{raw}");
         }
@@ -153,7 +162,7 @@ mod tests {
     #[test]
     fn rejects_invalid_incomplete_repeated_and_out_of_range_durations() {
         for raw in ["", "abc", "NaN", "Infinity", "P", "PT", "P1DT", "P-1D", "P1D2D",
-            "PT1S2M", "PT1.5H30M", "00:60:00", "00:00:99", "120\n", "P1000000000D"] {
+            "PT1S2M", "PT1.5H30M", "00:60:00", "00:00:99", "120\n", "P1000000000D", "-1 day, 02:03:04.000005", "-00:02:00"] {
             assert_eq!(normalize_duration(raw), None, "{raw}");
         }
     }

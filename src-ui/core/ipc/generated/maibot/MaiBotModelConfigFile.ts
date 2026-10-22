@@ -2,8 +2,13 @@
 import type { MaiBotAPIProvider } from "./MaiBotAPIProvider";
 import type { MaiBotModelInfo } from "./MaiBotModelInfo";
 import type { MaiBotModelTaskConfig } from "./MaiBotModelTaskConfig";
+import type { MaiBotWebConfig } from "./MaiBotWebConfig";
 
 export type MaiBotModelConfigFile = { 
+/**
+ * 统一联网服务配置，与模型列表独立；默认关闭。
+ */
+web: MaiBotWebConfig, 
 /**
  * 模型配置列表
  */

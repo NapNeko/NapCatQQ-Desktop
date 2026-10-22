@@ -3,6 +3,12 @@
  "uiAdvanced": false,
  "fields": [
   {
+   "name": "web",
+   "type": "object",
+   "label": "web",
+   "description": "统一联网服务配置，与模型列表独立；默认关闭。"
+  },
+  {
    "name": "models",
    "type": "array",
    "label": "models",
@@ -28,10 +34,133 @@
   }
  ],
  "nested": {
+  "web": {
+   "className": "WebConfig",
+   "uiAdvanced": false,
+   "fields": [
+    {
+     "name": "preview_chars",
+     "type": "integer",
+     "label": "preview_chars",
+     "description": "单次返回的内容预览字数，完整内容通过 read_tool_result 读取。",
+     "default": 4000,
+     "minValue": 500,
+     "maxValue": 12000
+    },
+    {
+     "name": "services",
+     "type": "object",
+     "label": "services",
+     "description": "联网服务定义；仅添加服务不会启用工具，需要在功能分配中选择。",
+     "mapValues": true
+    }
+   ],
+   "nested": {
+    "services": {
+     "className": "WebServiceConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "adapter",
+       "type": "select",
+       "label": "adapter",
+       "description": "服务协议类型，不需要配置模型列表。",
+       "default": "deepseek",
+       "options": [
+        "deepseek",
+        "tavily",
+        "stepsearch_mcp"
+       ]
+      },
+      {
+       "name": "base_url",
+       "type": "string",
+       "label": "base_url",
+       "description": "HTTP API 根地址；留空使用适配器的官方地址。",
+       "default": ""
+      },
+      {
+       "name": "api_key",
+       "type": "string",
+       "label": "api_key",
+       "description": "HTTP API 密钥。MCP 服务的鉴权由已有 MCP 连接管理。",
+       "default": "",
+       "secret": true
+      },
+      {
+       "name": "server_ref",
+       "type": "string",
+       "label": "server_ref",
+       "description": "StepSearch 对应的 bot_config.toml 中 mcp.servers 的名称。",
+       "default": ""
+      },
+      {
+       "name": "timeout",
+       "type": "number",
+       "label": "timeout",
+       "description": "单次联网调用的总时限，单位秒。",
+       "default": 60.0,
+       "maxValue": 300,
+       "exclusiveMinValue": 0
+      },
+      {
+       "name": "search_depth",
+       "type": "select",
+       "label": "search_depth",
+       "description": "Tavily 搜索深度，仅对 tavily 生效。",
+       "default": "basic",
+       "options": [
+        "basic",
+        "advanced",
+        "fast",
+        "ultra-fast"
+       ]
+      },
+      {
+       "name": "extract_depth",
+       "type": "select",
+       "label": "extract_depth",
+       "description": "Tavily 网页提取深度，仅对 tavily 生效。",
+       "default": "basic",
+       "options": [
+        "basic",
+        "advanced"
+       ]
+      },
+      {
+       "name": "category",
+       "type": "select",
+       "label": "category",
+       "description": "StepSearch 搜索类别；留空不传递类别。",
+       "default": "",
+       "options": [
+        "",
+        "programming",
+        "research",
+        "gov",
+        "business"
+       ]
+      }
+     ]
+    }
+   }
+  },
   "models": {
    "className": "ModelInfo",
    "uiAdvanced": false,
    "fields": [
+    {
+     "name": "model_type",
+     "type": "select",
+     "label": "model_type",
+     "description": "模型类型：LLM、文本嵌入或图片嵌入；必填，旧配置由版本升级钩子一次性标注。",
+     "options": [
+      "llm",
+      "embedding",
+      "image_embedding"
+     ],
+     "x-widget": "select"
+    },
     {
      "name": "model_identifier",
      "type": "string",
@@ -70,15 +199,14 @@
      "name": "cache",
      "type": "boolean",
      "label": "cache",
-     "description": "是否启用模型输入缓存计费。开启后命中缓存的输入 token 使用 cache_price_in 计费。",
-     "default": false,
-     "x-widget": "switch"
+     "description": "遗留兼容字段，不参与任何逻辑：是否按缓存价计费由 cache_price_in 决定，统计页是否展示缓存用量由服务商是否在响应中返回缓存字段自动探测。",
+     "default": false
     },
     {
      "name": "cache_price_in",
      "type": "number",
      "label": "cache_price_in",
-     "description": "缓存命中输入价格 (用于API调用统计, 单位：元/ M token)。仅当 cache=true 时使用。",
+     "description": "缓存命中输入价格 (用于API调用统计, 单位：元/ M token)。0 表示缓存命中免费，未命中部分按 price_in 计费；WebUI 中留空按输入价格解析。",
      "default": 0.0,
      "minValue": 0,
      "step": 0.001,
@@ -93,6 +221,15 @@
      "minValue": 0,
      "step": 0.001,
      "x-widget": "input"
+    },
+    {
+     "name": "price_periods",
+     "type": "array",
+     "label": "price_periods",
+     "description": "分时价格组合，每天按服务器本地时间重复，以成功请求尝试的开始时间计价。\n每项包含 start_time、end_time（HH:MM）、price_in、price_out、cache_price_in，价格单位：元 / M token。\n时段包含开始、不包含结束，支持跨午夜，开始和结束不能相同，时段之间不能重叠。\n未匹配时段时使用模型默认价格；空列表表示全天使用默认价格。时段的缓存单价为 0 表示缓存命中免费。",
+     "items": {
+      "type": "object"
+     }
     },
     {
      "name": "temperature",
@@ -143,12 +280,62 @@
      "description": "额外参数 (用于API调用时的额外配置)。\nOpenAI 兼容客户端会将该字典拆分为请求附加项：headers 会作为请求头传入，query 会作为 URL 查询参数传入，body 会合并到请求体。\n未放入 headers/query/body 的普通键，也会作为请求体额外字段传入；例如 {enable_thinking = \"false\"} 会传为请求体字段 enable_thinking。\n该字段不会以 extra_params 这个键整体发送给模型服务商。\ntemperature 和 max_tokens 也可写在此处作为模型级默认值，但更推荐使用同名独立配置项。\nGemini 客户端会按自身支持的字段筛选并映射到 GenerateContentConfig、EmbedContentConfig 或音频请求配置中。",
      "x-widget": "custom"
     }
-   ]
+   ],
+   "nested": {
+    "price_periods": {
+     "className": "ModelPricePeriod",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "start_time",
+       "type": "string",
+       "label": "start_time",
+       "description": "开始时间，服务器本地时间 HH:MM，包含该时刻。",
+       "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      {
+       "name": "end_time",
+       "type": "string",
+       "label": "end_time",
+       "description": "结束时间，服务器本地时间 HH:MM，不包含该时刻；早于开始时间表示跨午夜。",
+       "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      {
+       "name": "price_in",
+       "type": "number",
+       "label": "price_in",
+       "description": "该时段的普通输入价格，单位：元 / M token。",
+       "minValue": 0
+      },
+      {
+       "name": "price_out",
+       "type": "number",
+       "label": "price_out",
+       "description": "该时段的输出价格，单位：元 / M token。",
+       "minValue": 0
+      },
+      {
+       "name": "cache_price_in",
+       "type": "number",
+       "label": "cache_price_in",
+       "description": "该时段的缓存命中输入价格，单位：元 / M token；0 表示缓存命中免费，未命中部分按 price_in 计费。",
+       "minValue": 0
+      }
+     ]
+    }
+   }
   },
   "model_task_config": {
    "className": "ModelTaskConfig",
    "uiAdvanced": false,
    "fields": [
+    {
+     "name": "web_search",
+     "type": "object",
+     "label": "联网搜索 (web_search)",
+     "description": "选择已定义的联网服务，用于搜索和网页读取；未分配时不开放统一联网工具。",
+     "x-widget": "custom"
+    },
     {
      "name": "replyer",
      "type": "object",
@@ -175,7 +362,7 @@
      "name": "mid_memory",
      "type": "object",
      "label": "mid_memory",
-     "description": "聊天回想模型配置；留空时自动继用 planner 模型",
+     "description": "聊天回想模型配置；留空时自动继用 fast_model 模型，fast_model 留空时使用 utils 模型",
      "x-widget": "custom",
      "advanced": true
     },
@@ -195,10 +382,10 @@
      "advanced": true
     },
     {
-     "name": "expression_use",
+     "name": "fast_model",
      "type": "object",
-     "label": "expression_use",
-     "description": "表达方式使用模型配置；留空时用 utils 模型",
+     "label": "fast_model",
+     "description": "快速模型配置，用于表达方式选择、回复断句等需要快速完成的小任务，建议选择响应快的模型；留空时用 utils 模型",
      "x-widget": "custom",
      "advanced": true
     },
@@ -229,11 +416,35 @@
      "name": "embedding",
      "type": "object",
      "label": "embedding",
-     "description": "嵌入模型，需要文本嵌入类型的模型，不可使用LLM",
+     "description": "嵌入模型；可选择文本或图片嵌入类型，不可使用 LLM，所选模型需支持文本向量化",
      "x-widget": "custom"
+    },
+    {
+     "name": "image_embedding",
+     "type": "object",
+     "label": "image_embedding",
+     "description": "图片嵌入模型；可选择文本或图片嵌入类型，不可使用 LLM，留空时不启用；所选模型必须实现图片输入到向量的协议",
+     "x-widget": "custom",
+     "advanced": true
     }
    ],
    "nested": {
+    "web_search": {
+     "className": "WebSearchTaskConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "model_list",
+       "type": "array",
+       "label": "model_list",
+       "description": "选择一个 web.services 中的联网服务名称；留空不开放统一联网工具。",
+       "items": {
+        "type": "string"
+       },
+       "maxLength": 1
+      }
+     ]
+    },
     "replyer": {
      "className": "TaskConfig",
      "uiAdvanced": false,
@@ -263,22 +474,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -335,22 +535,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -407,22 +596,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -479,22 +657,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -551,22 +718,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -623,22 +779,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -666,7 +811,7 @@
       }
      ]
     },
-    "expression_use": {
+    "fast_model": {
      "className": "TaskConfig",
      "uiAdvanced": false,
      "fields": [
@@ -695,22 +840,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -767,22 +901,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -839,22 +962,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -911,22 +1023,11 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
-      },
-      {
-       "name": "slow_threshold",
-       "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
-       "x-widget": "input",
-       "advanced": true
       },
       {
        "name": "selection_strategy",
@@ -983,22 +1084,72 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
-       "default": 0.3,
+       "default": 0.7,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
        "x-widget": "slider"
       },
       {
-       "name": "slow_threshold",
+       "name": "selection_strategy",
+       "type": "string",
+       "label": "selection_strategy",
+       "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
+       "options": [
+        "balance",
+        "random",
+        "sequential"
+       ],
+       "x-widget": "select"
+      },
+      {
+       "name": "hard_timeout",
        "type": "number",
-       "label": "slow_threshold",
-       "description": "超时警告时间（秒），超过此时间会输出警告日志",
-       "default": 15.0,
-       "minValue": 0,
-       "step": 0.1,
+       "label": "hard_timeout",
+       "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
+       "minValue": 1.0,
+       "step": 1.0,
        "x-widget": "input",
        "advanced": true
+      }
+     ]
+    },
+    "image_embedding": {
+     "className": "TaskConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "model_list",
+       "type": "array",
+       "label": "model_list",
+       "description": "使用的模型列表, 每个元素对应上面的模型名称(name)",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "max_tokens",
+       "type": "integer",
+       "label": "max_tokens",
+       "description": "任务最大输出token数",
+       "default": 4096,
+       "minValue": 1,
+       "step": 1,
+       "x-widget": "input"
+      },
+      {
+       "name": "temperature",
+       "type": "number",
+       "label": "temperature",
+       "description": "模型温度",
+       "default": 0.7,
+       "minValue": 0,
+       "maxValue": 2,
+       "step": 0.1,
+       "x-widget": "slider"
       },
       {
        "name": "selection_strategy",
@@ -1053,7 +1204,8 @@
      "type": "string",
      "label": "api_key",
      "description": "API密钥。对于不需要鉴权的兼容端点，可将 `auth_type` 设为 `none`。",
-     "x-widget": "input"
+     "x-widget": "input",
+     "secret": true
     },
     {
      "name": "client_type",
@@ -1153,7 +1305,7 @@
      "name": "max_retry",
      "type": "integer",
      "label": "max_retry",
-     "description": "最大重试次数 (单个模型API调用失败, 最多重试的次数)",
+     "description": "最大尝试次数 (单个模型API调用失败时, 含首次请求在内最多发送的请求总数, 设为 0 或 1 表示不重试)",
      "default": 3,
      "minValue": 0,
      "x-widget": "input"
@@ -1163,7 +1315,7 @@
      "type": "integer",
      "label": "timeout",
      "description": "API调用的超时时长 (超过这个时长, 本次请求将被视为\"请求超时\", 单位: 秒)",
-     "default": 60,
+     "default": 120,
      "minValue": 1,
      "step": 1,
      "x-widget": "input"
@@ -1173,7 +1325,7 @@
      "type": "integer",
      "label": "retry_interval",
      "description": "重试间隔 (如果API调用失败, 重试的间隔时间, 单位: 秒)",
-     "default": 5,
+     "default": 4,
      "minValue": 1,
      "step": 1,
      "x-widget": "input"

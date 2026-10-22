@@ -708,12 +708,18 @@ version = "2.4.6"
     }
     #[test]
     fn listen_env_preserves_lowercase_client_driver_and_updates_duplicate_ports() {
-        let mut env = EnvFile::parse_python("driver=~fastapi+~httpx\nPORT=1\nport=2\nhost=0.0.0.0\n");
+        let mut env =
+            EnvFile::parse_python("driver=~fastapi+~httpx\nPORT=1\nport=2\nhost=0.0.0.0\n");
         NoneBot2Component::apply_listen_env(&mut env, 8081);
         assert_eq!(env.get_ci(ENV_DRIVER).as_deref(), Some("~fastapi+~httpx"));
         assert_eq!(env.get_ci(ENV_PORT).as_deref(), Some("8081"));
         assert_eq!(env.get_ci(ENV_HOST).as_deref(), Some("127.0.0.1"));
-        assert_eq!(env.entries_ci().iter().filter(|entry| entry.key.eq_ignore_ascii_case(ENV_PORT)).count(), 1);
+        assert_eq!(
+            env.entries_ci()
+                .iter()
+                .filter(|entry| entry.key.eq_ignore_ascii_case(ENV_PORT))
+                .count(),
+            1
+        );
     }
-
 }

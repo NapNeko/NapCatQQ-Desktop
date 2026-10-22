@@ -2,6 +2,7 @@
 // 对象列表出成一条条卡片（每条按条目的 schema 渲染，可增删），嵌套小节递归成子分组。
 // 值始终是整份（整个 bot_config 或 model_config），改一处用 setIn 换出新的整份交回去。
 
+import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import {
     Button,
@@ -37,6 +38,7 @@ const LINE_LISTS = new Set([
     'keyword_reaction.regex_rules.keywords',
     'keyword_reaction.regex_rules.regex',
     'mcp.servers.args',
+    'agent.acp_args',
     'plugin_runtime.render.launch_args',
 ]);
 
@@ -216,18 +218,22 @@ const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: Ui
             const labels = field['x-option-labels'] ?? {};
             const descs = field['x-option-descriptions'] ?? {};
             const current = typeof value === 'string' ? value : '';
+            const options = field.options ?? [];
+            let emptyOption = '__ncd_empty_option__';
+            while (options.includes(emptyOption) || current === emptyOption) emptyOption += '_';
+            const choices = current && !options.includes(current) ? [...options, current] : options;
             return (
                 <Select
                     label={label}
                     hint={descs[current] ?? hint}
                     error={error}
-                    value={current}
-                    items={(field.options ?? []).map((o) => ({
-                        value: o,
-                        label: labels[o] ?? OPTION_LABELS[o] ?? o,
+                    value={current === '' ? (choices.includes('') ? emptyOption : undefined) : current}
+                    items={choices.map((o) => ({
+                        value: o === '' ? emptyOption : o,
+                        label: labels[o] ?? OPTION_LABELS[o] ?? (o === '' ? '默认' : o),
                     }))}
                     disabled={ctx.disabled}
-                    onValueChange={set}
+                    onValueChange={(next) => set(next === emptyOption ? '' : next)}
                 />
             );
         }
@@ -286,7 +292,7 @@ const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: Ui
                     hint={hint}
                     error={error}
                     value={text}
-                    type={widget === 'password' ? 'password' : 'text'}
+                    type={field.secret || widget === 'password' ? 'password' : 'text'}
                     placeholder={field.placeholder}
                     disabled={ctx.disabled}
                     onValueChange={set}
@@ -406,6 +412,92 @@ const ObjectListField: React.FC<{
     );
 };
 
+
+const ObjectMapItem: React.FC<{
+    ctx: SchemaCtx;
+    path: readonly string[];
+    name: string;
+    item: UiNode;
+    names: readonly string[];
+    onRename: (next: string) => void;
+    onRemove: () => void;
+}> = ({ ctx, path, name, item, names, onRename, onRemove }) => {
+    const [draft, setDraft] = useState(name);
+    const invalid = !draft.trim() || draft !== draft.trim()
+        ? '名称不能为空或包含首尾空格'
+        : draft !== name && names.includes(draft) ? '名称重复' : undefined;
+    return (
+        <div className="rounded-md border border-border-subtle bg-inset/30 p-3">
+            <div className="mb-3 flex items-start gap-2">
+                <TextField
+                    className="flex-1"
+                    label="名称"
+                    hint="修改后点击「应用名称」或按 Enter，再保存配置。"
+                    value={draft}
+                    error={invalid}
+                    disabled={ctx.disabled}
+                    onValueChange={setDraft}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            if (!invalid && draft !== name) onRename(draft);
+                        }
+                    }}
+                />
+                <Button size="sm" variant="secondary"
+                    disabled={ctx.disabled || !!invalid || draft === name}
+                    onClick={() => { if (!invalid && draft !== name) onRename(draft); }}>
+                    应用名称
+                </Button>
+                <Button size="sm" variant="ghost" disabled={ctx.disabled} onClick={onRemove} aria-label="删掉这一项">
+                    <Trash2 size={14} />
+                </Button>
+            </div>
+            <FieldGrid ctx={ctx} path={[...path, name]} node={item} />
+        </div>
+    );
+};
+
+/** Dict[str, ConfigBase]：键是用户起的名称，值按完整子配置 schema 编辑。 */
+const ObjectMapField: React.FC<{
+    ctx: SchemaCtx;
+    path: readonly string[];
+    field: UiField;
+    item: UiNode;
+}> = ({ ctx, path, field, item }) => {
+    const p = [...path, field.name];
+    const raw = getIn(ctx.value, p);
+    const values = raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? raw as Record<string, unknown> : {};
+    const names = Object.keys(values);
+    const set = (next: Record<string, unknown>) => ctx.onChange(setIn(ctx.value, p, next));
+    return (
+        <div className={cn('flex flex-col gap-3', WIDE)}>
+            <div className="flex items-start justify-between gap-2">
+                <div>
+                    <span className="text-xs font-medium text-text-secondary">{field.label ?? field.name}</span>
+                    {field.description && <p className="text-2xs text-text-tertiary">{field.description}</p>}
+                    {errorOf(ctx, p) && <p className="text-2xs text-danger">{errorOf(ctx, p)}</p>}
+                </div>
+                <Button size="sm" variant="secondary" disabled={ctx.disabled} onClick={() => {
+                    let name = 'service';
+                    for (let i = 2; Object.prototype.hasOwnProperty.call(values, name); i += 1) name = `service${i}`;
+                    set({ ...values, [name]: newItemFor(item) });
+                }}>
+                    <Plus size={13} />加一项
+                </Button>
+            </div>
+            {names.length === 0 && <p className="text-2xs text-text-tertiary">还没有</p>}
+            {names.map((name) => (
+                <ObjectMapItem key={name} ctx={ctx} path={p} name={name} item={item} names={names}
+                    onRename={(next) => set(Object.fromEntries(Object.entries(values).map(([key, value]) => [key === name ? next : key, value])))}
+                    onRemove={() => set(Object.fromEntries(Object.entries(values).filter(([key]) => key !== name)))}
+                />
+            ))}
+        </div>
+    );
+};
+
 /** 一节里的字段；嵌套的对象小节收在最后，按层级缩进出小标题 */
 export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node: UiNode }> = ({
     ctx,
@@ -431,6 +523,10 @@ export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node
         if (ctx.widgets?.[key]) {
             targetCells.push(
                 <SimpleField key={field.name} ctx={fieldCtx} path={path} field={field} />,
+            );
+        } else if (sub && field.mapValues) {
+            targetCells.push(
+                <ObjectMapField key={field.name} ctx={fieldCtx} path={path} field={field} item={sub} />,
             );
         } else if (sub && field.type === 'array') {
             targetCells.push(

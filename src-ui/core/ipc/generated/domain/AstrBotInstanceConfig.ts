@@ -18,4 +18,4 @@ other_platforms: Array<string>,
 /**
  * 文件里已经有可认领的 aiocqhttp
  */
-claimed: boolean, sources: Array<AstrBotProviderSource>, models: Array<AstrBotProviderModel>, ai: AstrBotAiSettings, stt: AstrBotSttSettings, tts: AstrBotTtsSettings, websearch: AstrBotWebSearchSettings, kb: AstrBotKbBind, gates: AstrBotPlatformGates, subagent: AstrBotSubagentConfig, };
+claimed: boolean, sources: Array<AstrBotProviderSource>, models: Array<AstrBotProviderModel>, ai: AstrBotAiSettings, stt: AstrBotSttSettings, tts: AstrBotTtsSettings, websearch: AstrBotWebSearchSettings, kb: AstrBotKbBind, gates: AstrBotPlatformGates, subagent: AstrBotSubagentConfig, advanced_json: string, advanced_base_json: string, };

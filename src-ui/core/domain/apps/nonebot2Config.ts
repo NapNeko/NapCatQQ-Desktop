@@ -101,7 +101,7 @@ export function validateNoneBot2Config(cfg: NoneBot2InstanceConfig): AppConfigIs
         out.push({ path: 'env_prod/api_timeout', message: 'API_TIMEOUT 须为有限秒数' });
     }
     if (normalizeNoneBot2Duration(env.session_expire_timeout) == null) {
-        out.push({ path: 'env_prod/session_expire_timeout', message: '请输入有效秒数、HH:MM:SS 或 ISO 8601 时长' });
+        out.push({ path: 'env_prod/session_expire_timeout', message: '请输入有效时长；负数请用秒数或 -P 开头的 ISO 时长' });
     }
     env.onebot_ws_urls.forEach((url, i) => {
         if (!validNoneBot2Url(url, ['ws:', 'wss:']) || /[\r\n]/.test(url)) {

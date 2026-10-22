@@ -251,7 +251,7 @@ impl NoneBot2InstanceConfig {
             sink.push("env_prod/api_timeout", "API_TIMEOUT 须为有限秒数");
         }
         if super::duration::normalize_duration(&self.env_prod.session_expire_timeout).is_none() {
-            sink.push("env_prod/session_expire_timeout", "请输入有效秒数、HH:MM:SS 或 ISO 8601 时长");
+            sink.push("env_prod/session_expire_timeout", "请输入有效时长；负数请用秒数或 -P 开头的 ISO 时长");
         }
         if !valid_env_value(&self.env_prod.onebot_secret) {
             sink.push("env_prod/onebot_secret", "值不能包含换行");
@@ -684,9 +684,7 @@ mod tests {
         let mut env = EnvFile::parse_python(text);
         parsed.apply_to(&mut env);
         let again = NoneBot2EnvProd::from_env_file(&EnvFile::parse_python(&env.render()));
-        let mut expected = parsed.clone();
-        expected.session_expire_timeout = "P1DT7200S".into();
-        assert_eq!(again, expected);
+        assert_eq!(again, parsed);
         assert_eq!(again.custom[0].comment, "plugin setting");
     }
 
@@ -774,6 +772,18 @@ mod tests {
         let mut out = env;
         parsed.apply_to(&mut out);
         assert_eq!(NoneBot2EnvProd::from_env_file(&EnvFile::parse_python(&out.render())).onebot_secret, "#secret");
+    }
+
+    #[test]
+    fn ambiguous_negative_clock_is_rejected_without_reinterpreting_the_value() {
+        let mut cfg = NoneBot2InstanceConfig { env_prod: NoneBot2EnvProd::default() };
+        cfg.env_prod.session_expire_timeout = "-1 day, 02:03:04.000005".into();
+        assert!(cfg.validate().iter().any(|issue| issue.path == "env_prod/session_expire_timeout"));
+        assert_eq!(cfg.env_prod.session_expire_timeout, "-1 day, 02:03:04.000005");
+        cfg.env_prod.session_expire_timeout = "-79015.999995".into();
+        assert!(cfg.validate().is_empty());
+        cfg.env_prod.session_expire_timeout = "-PT79015.999995S".into();
+        assert!(cfg.validate().is_empty());
     }
 
 }
