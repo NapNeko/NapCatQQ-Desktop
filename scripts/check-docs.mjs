@@ -15,6 +15,15 @@ const exists = async file => { try { return (await stat(file)).isFile(); } catch
 const decode = value => value.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'");
 const htmlFiles = (await files(output)).filter(file => file.endsWith('.html'));
 const cache = new Map(await Promise.all(htmlFiles.map(async file => [file, await readFile(file, 'utf8')])));
+const changelog = cache.get(path.join(output, 'changelog/index.html'));
+assert(!!changelog, 'changelog: page not built');
+if (changelog) {
+  const ids = [...changelog.matchAll(/\bid="([^"]+)"/g)].map(match => decode(match[1]));
+  assert(new Set(ids).size === ids.length, 'changelog: duplicate IDs across release notes');
+  const tags = [...changelog.matchAll(/\sdata-release-tag="([^"]+)"/g)].map(match => decode(match[1]));
+  assert(tags.length > 0 && new Set(tags).size === tags.length, 'changelog: release entries are missing or duplicated');
+  assert(tags.every(tag => ids.includes(tag)), 'changelog: a release has no shareable anchor');
+}
 let links = 0, images = 0;
 for (const [file, html] of cache) {
   if (html.includes('class="doc-prose"')) {

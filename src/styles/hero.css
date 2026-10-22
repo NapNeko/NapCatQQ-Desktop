@@ -24,6 +24,8 @@
 .hero-guide:hover { color: var(--accent-ink); }
 .hero-system { margin-top: 13px; font-size: 11px; color: var(--muted); }
 .hero-system span { margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); }
+.hero-release { display: inline-flex; align-items: center; gap: 5px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); color: var(--accent-ink); white-space: nowrap; }
+.hero-release:hover { text-decoration: underline; text-underline-offset: 4px; }
 .cat-art { position: absolute; width: min(42vw, 540px); aspect-ratio: 1; right: 24px; top: -95px; pointer-events: none; }
 .cat-orbit { position: absolute; inset: 0; width: 100%; height: 100%; stroke: #5369d855; stroke-width: .8px; }
 .cat-orbit .orbit-point { fill: #5369d8; stroke: none; }

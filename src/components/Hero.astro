@@ -4,8 +4,10 @@ import '../styles/home-demo.css';
 import HeroArtwork from './HeroArtwork.astro';
 import TutorialDemo from './TutorialDemo.astro';
 import { tutorialForDoc } from '../lib/tutorials';
+import { getChangelog } from '../lib/changelog';
 const base = import.meta.env.BASE_URL;
 const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
+const latestRelease = (await getChangelog()).find(release => release.product === 'desktop' && release.latest);
 const choices = [
   { label: '应用端', tutorial: { ...tutorialForDoc('apps')!, poster: 'apps' } },
   { label: '机器人', tutorial: tutorialForDoc('bots')! },
@@ -28,7 +30,7 @@ const choices = [
             <a class="button hero-download" href={repo + '/releases/latest'}><svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3.2 7 2.4v5H1zm7-1L15 1v6.4H8zM1 8.4h6v5l-6-.8zm7 0h7V15l-7-1.2z" /></svg> 下载 Windows 版 <span class="download-arrow" aria-hidden="true">↗</span></a>
             <a class="hero-guide" href={base + 'docs/first-bot/'}>跟着教程开始 <span aria-hidden="true">↗</span></a>
           </div>
-          <p class="hero-system">Windows 10 / 11 x64 <span>免费开源</span></p>
+          <p class="hero-system">Windows 10 / 11 x64 <span>免费开源</span>{latestRelease && <a class="hero-release" href={`${base}changelog/#${latestRelease.tag}`}>{latestRelease.tag} 更新日志 <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" /></svg></a>}</p>
         </div>
       </div>
       <HeroArtwork />

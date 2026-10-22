@@ -1,0 +1,30 @@
+---
+import type { ChangelogRelease } from '../lib/changelog';
+import { imageAsset } from '../../scripts/image-assets.mjs';
+interface Props { release: ChangelogRelease }
+const { release } = Astro.props;
+const date = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' }).format(new Date(release.date));
+const product = release.product === 'desktop' ? 'Desktop' : 'ncd-watch';
+const standaloneName = release.name && ![release.tag, release.version, `NapCatQQ Desktop ${release.tag}`, `NapCatQQ Desktop ${release.version}`, `ncd-watch ${release.tag}`, `ncd-watch v${release.version}`, `ncd-watch ${release.version}`].includes(release.name);
+const logo = imageAsset('media/logo.png', import.meta.env.BASE_URL).src;
+---
+<article class:list={['cl-release', { 'cl-release-latest': release.latest }]} id={release.tag} data-release data-product={release.product} data-prerelease={String(release.prerelease)} data-release-tag={release.tag} data-release-latest={String(release.latest)} aria-labelledby={`${release.tag}-title`}>
+  <span class="cl-release-node" aria-hidden="true"><span></span></span>
+  <div class="cl-release-dateline"><span>{product}</span><time datetime={release.date}>{date}</time>{release.prerelease && <span class="cl-preview-badge">预览版本</span>}{release.latest && <span class="cl-latest-badge"><i aria-hidden="true"></i>最新稳定版</span>}</div>
+  {release.latest ? <>
+    <header class="cl-release-heading"><h2 id={`${release.tag}-title`}><a href={`#${release.tag}`}><span class="cl-version-prefix">v</span>{release.version.replace(/^v/, '')}</a></h2><span class="cl-version-mark" aria-hidden="true"><span class="cl-version-sheet"></span><span class="cl-version-window"><span class="cl-version-windowbar"><i></i><i></i><i></i></span><img src={logo} width="34" height="34" alt="" /><span class="cl-version-command"><span></span><span></span><span></span></span></span></span></header>
+    {standaloneName && <p class="cl-release-name">{release.name}</p>}
+    <div class="cl-release-content"><div class="cl-release-prose" set:html={release.bodyHtml} />{release.appendixHtml && <details class="cl-release-appendix"><summary>提交与发布信息<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></summary><div class="cl-release-prose" set:html={release.appendixHtml} /></details>}</div>
+  </> : <details class="cl-history" data-release-details open>
+    <summary>
+      <div class="cl-history-heading"><h2 id={`${release.tag}-title`}>v{release.version.replace(/^v/, '')}</h2><span class="cl-history-toggle"><span class="cl-history-open-label">查看更新</span><span class="cl-history-close-label">收起</span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></span></div>
+      <p class="cl-release-excerpt">{release.summary}</p>
+    </summary>
+    <div class="cl-release-content">{standaloneName && <p class="cl-release-name">{release.name}</p>}<div class="cl-release-prose" set:html={release.bodyHtml} />{release.appendixHtml && <details class="cl-release-appendix"><summary>提交与发布信息<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></summary><div class="cl-release-prose" set:html={release.appendixHtml} /></details>}</div>
+  </details>}
+  <footer class="cl-release-actions">
+    {release.download && <a class:list={['cl-release-download', { 'cl-release-download-primary': release.latest }]} href={release.download.url}><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 2v11m-4-4 4 4 4-4M4 14v3h12v-3" /></svg>{release.download.label}</a>}
+    <a class="cl-release-source" href={release.url}>GitHub 原文<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10" /></svg></a>
+    <button class="cl-copy cl-js-only" type="button" data-copy-release={release.tag} aria-label={`复制 ${product} ${release.tag} 的链接`}><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m8 12 4-4m-5 6-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m0 8a3.5 3.5 0 0 0 5 0l4-4a3.5 3.5 0 0 0-5-5l-1 1" transform="translate(1 1) scale(.9)" /></svg><span data-copy-label>复制链接</span></button>
+  </footer>
+</article>

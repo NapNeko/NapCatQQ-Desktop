@@ -1,0 +1,42 @@
+---
+import ChangelogLayout from '../components/ChangelogLayout.astro';
+import ChangelogRelease from '../components/ChangelogRelease.astro';
+import { getChangelog } from '../lib/changelog';
+
+const releases = await getChangelog();
+const desktop = releases.filter(release => release.product === 'desktop');
+const watch = releases.filter(release => release.product === 'watch');
+const latest = desktop.find(release => release.latest);
+const ordered = [...desktop, ...watch];
+const hasPreview = releases.some(release => release.prerelease);
+const indexDate = (date: string) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Shanghai' }).format(new Date(date));
+---
+<ChangelogLayout downloadUrl={latest?.download?.url}>
+  <div class="cl-shell" data-changelog>
+    <header class="cl-intro">
+      <div class="cl-intro-title" data-changelog-intro><span class="cl-intro-rule" aria-hidden="true"></span><h1>更新日志<span class="cl-title-period" aria-hidden="true">.</span></h1><p>NapCatQQ Desktop 与 ncd-watch 的版本记录。</p></div>
+      <div class="cl-intro-art" aria-hidden="true"><span class="cl-art-axis"></span><span class="cl-art-tick cl-art-tick-one"></span><span class="cl-art-tick cl-art-tick-two"></span><span class="cl-art-tick cl-art-tick-three"></span><span class="cl-art-terminal">&gt;_</span></div>
+    </header>
+    <div class="cl-controls" data-changelog-controls data-changelog-intro>
+      <div class="cl-products cl-js-only" role="tablist" aria-label="选择产品">
+        <button type="button" role="tab" data-product="desktop" aria-selected="true" aria-controls="release-feed" id="changelog-desktop-tab"><span>Desktop</span><small>{desktop.filter(release => !release.prerelease).length}</small></button>
+        <button type="button" role="tab" data-product="watch" aria-selected="false" aria-controls="release-feed" tabindex="-1" id="changelog-watch-tab"><span>ncd-watch</span><small>{watch.filter(release => !release.prerelease).length}</small></button>
+      </div>
+      {hasPreview && <label class="cl-preview cl-js-only"><input type="checkbox" data-preview-toggle /><span>显示预览版本</span></label>}
+      <label class="cl-version-select cl-js-only"><span class="cl-sr-only">跳转到版本</span><select data-release-select aria-label="跳转到版本">{ordered.map(release => <option value={`#${release.tag}`} data-product={release.product} data-prerelease={String(release.prerelease)}>{release.product === 'watch' ? 'ncd-watch ' : ''}v{release.version.replace(/^v/, '')}{release.prerelease ? ' · 预览' : ''}</option>)}</select><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></label>
+    </div>
+    <div class="cl-reading-layout">
+      <aside class="cl-index" aria-label="版本索引">
+        <div class="cl-index-heading"><span>版本</span><span>发布日期</span></div>
+        <nav class="cl-index-list" data-changelog-index aria-label="跳转到版本">{ordered.map(release => <a class="cl-index-link" data-release-index data-product={release.product} data-prerelease={String(release.prerelease)} data-release-link href={`#${release.tag}`}><span class="cl-index-version">v{release.version.replace(/^v/, '')}{release.latest && <i class="cl-index-latest" aria-label="最新稳定版"></i>}</span><time datetime={release.date}>{indexDate(release.date)}</time></a>)}</nav>
+        <p class="cl-index-footnote">内容取自 GitHub Releases。</p>
+      </aside>
+      <section id="release-feed" class="cl-feed" data-release-timeline aria-label="版本更新记录" aria-labelledby="changelog-desktop-tab">
+        {ordered.map(release => <ChangelogRelease release={release} />)}
+        <div class="cl-empty" data-changelog-empty hidden><span aria-hidden="true">—</span><p>还没有符合筛选条件的版本。</p></div>
+        <div class="cl-history-end"><span aria-hidden="true"></span><p>已到最早版本</p></div>
+      </section>
+    </div>
+    <p class="cl-sr-only" role="status" aria-live="polite" data-changelog-status></p>
+  </div>
+</ChangelogLayout>

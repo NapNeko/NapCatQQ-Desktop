@@ -29,6 +29,10 @@ pnpm.cmd dev
 
 首次进入会播放约 3.3 秒的开场：字标展开、猫标分层组装、窗口展开，再在同一浅色背景上衔接首屏。标记保存在会话存储中，同一会话返回或刷新不会重复播放；首屏底部可以重播。跳过、滚动、窗口尺寸变化和减少动态效果都会结束开场。动画不等待演示资源，加载失败也不阻塞阅读。开场入口为 `src/scripts/home-opening.ts`，首屏用 CSS sticky 配合 ScrollTrigger，避免 pin 重挂 iframe 引发演示重载。下半页的主机拓扑、应用端叠层、聊天气泡和值守波形由 `FeatureArt.astro`、`home-features.css` 与同一滚动动画入口维护。
 
+`/changelog/` 在站内展示 Desktop 和 ncd-watch 的发版说明，支持版本索引、历史展开、预览版本筛选和版本链接复制。主题选择与文档共用；首页的版本入口直接定位到对应日志。
+
+发版内容来自公开 GitHub Releases，快照保存在 `src/data/releases.json`。运行 `pnpm.cmd releases:plan` 预览同步范围，再用 `pnpm.cmd releases:sync` 更新快照；本地已登录 GitHub CLI 时可追加 `--gh`。网站构建读取快照，不要求联网，不会修改软件分支。正文保留原始发版内容，下载与完整提交等附录单独折叠；日期来自发布时间，下载直达对应版本资源。
+
 ## 线上发布
 
 站点地址为 <https://napneko.github.io/NapCatQQ-Desktop/>，教程位于站点下的 `docs/`。

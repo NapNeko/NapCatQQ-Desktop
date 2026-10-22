@@ -1,0 +1,53 @@
+---
+import '../styles/global.css';
+import '../styles/changelog.css';
+import { imageAsset } from '../../scripts/image-assets.mjs';
+
+interface Props { downloadUrl?: string }
+const { downloadUrl } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const repo = 'https://github.com/NapNeko/NapCatQQ-Desktop';
+---
+<!doctype html>
+<html lang="zh-CN" class="changelog-document">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8fc" />
+    <title>更新日志 · NapCatQQ Desktop</title>
+    <meta name="description" content="查看 NapCatQQ Desktop 与 ncd-watch 的版本更新、修复说明和下载。" />
+    <link rel="icon" type="image/png" href={imageAsset('media/favicon.png', base).src} />
+    <meta property="og:title" content="更新日志 · NapCatQQ Desktop" />
+    <meta property="og:description" content="NapCatQQ Desktop 与 ncd-watch 的版本更新。" />
+    <script is:inline>
+      try {
+        const saved = localStorage.getItem('ncd-docs-theme');
+        document.documentElement.dataset.theme = saved === 'light' || saved === 'dark' ? saved : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      } catch { document.documentElement.dataset.theme = 'light'; }
+    </script>
+  </head>
+  <body class="changelog-page">
+    <a class="skip-link" href="#changelog-main">跳到更新日志</a>
+    <header class="cl-header">
+      <nav class="cl-header-inner" aria-label="主导航">
+        <a class="cl-brand" href={base} aria-label="NapCatQQ Desktop 首页"><img src={imageAsset('media/logo.png', base).src} width="32" height="32" alt="" /><span>NapCatQQ <span>Desktop</span></span></a>
+        <div class="cl-header-links">
+          <a href={base}>首页</a>
+          <a href={`${base}docs/`}>使用文档</a>
+          <a href={`${base}changelog/`} aria-current="page">更新日志</a>
+          <a class="cl-github" href={repo} aria-label="GitHub 源码"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.45-1.15-1.11-1.46-1.11-1.46-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03a9.57 9.57 0 0 1 5 0c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.85-2.34 4.69-4.58 4.94.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg></a>
+        </div>
+        <button class="cl-theme cl-js-only" type="button" data-changelog-theme aria-label="切换到深色主题" aria-pressed="false"><svg class="cl-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20.5 14.1A8.7 8.7 0 0 1 9.9 3.5 8.8 8.8 0 1 0 20.5 14.1Z" /></svg><svg class="cl-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></svg></button>
+        {downloadUrl && <a class="cl-nav-download" href={downloadUrl}>下载 Windows 版<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v10m-4-4 4 4 4-4M4 14v3h12v-3" /></svg></a>}
+      </nav>
+    </header>
+    <main id="changelog-main"><slot /></main>
+    <footer class="cl-footer">
+      <a class="cl-footer-brand" href={base}><img src={imageAsset('media/logo.png', base).src} width="25" height="25" alt="" />NapCatQQ Desktop</a>
+      <div><a href={`${base}docs/`}>使用文档</a><a href={`${repo}/issues`}>反馈问题</a><a href={`${repo}/blob/main/LICENSE`}>GPL-3.0</a></div>
+    </footer>
+    <script>
+      import '../scripts/changelog';
+    </script>
+  </body>
+</html>
