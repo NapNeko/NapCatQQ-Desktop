@@ -514,13 +514,16 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         let model_text = snapshot_text(&snaps, config::DOC_MODEL_CONFIG);
         // 尚未首启的旧实例仍按它自己的开箱配置展示和保存，避免注入新版本才认识的模型字段。
         let model_version = if model_text.is_none() {
-            let source = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
+            let source = read_text(host, &root.join(CONFIG_PY))
+                .await?
+                .unwrap_or_default();
             read_version_constant(&source, "MODEL_CONFIG_VERSION")
         } else {
             None
         };
-        let models = schema::read_model_config_file_for_version(model_text, model_version.as_deref())
-            .map_err(AppFrameworkError::Integration)?;
+        let models =
+            schema::read_model_config_file_for_version(model_text, model_version.as_deref())
+                .map_err(AppFrameworkError::Integration)?;
         let token_json = read_text(host, &root.join(WEBUI_JSON)).await?;
         let adapter = if host
             .exists(&root.join(ADAPTER_DIR))

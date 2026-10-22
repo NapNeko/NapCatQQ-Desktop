@@ -356,9 +356,15 @@ export function validateAstrBotConfig(cfg: AstrBotInstanceConfig): AppConfigIssu
         try {
             const value: unknown = JSON.parse(row.extra_json);
             if (!value || typeof value !== 'object' || Array.isArray(value))
-                out.push({ path: 'subagent/agents/' + i + '/extra_json', message: '子代理额外配置必须是 JSON 对象' });
+                out.push({
+                    path: 'subagent/agents/' + i + '/extra_json',
+                    message: '子代理额外配置必须是 JSON 对象',
+                });
         } catch {
-            out.push({ path: 'subagent/agents/' + i + '/extra_json', message: '子代理额外配置不是有效 JSON' });
+            out.push({
+                path: 'subagent/agents/' + i + '/extra_json',
+                message: '子代理额外配置不是有效 JSON',
+            });
         }
     });
     const seenSrc = new Set<string>();

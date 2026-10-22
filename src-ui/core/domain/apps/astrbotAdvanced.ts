@@ -3,7 +3,10 @@ import type { AstrBotInstanceConfig, AppConfigIssue } from '../../ipc/types';
 import type { AstrBotConfigSchema } from '../../ipc/generated/domain/AstrBotConfigSchema';
 
 export type JsonObject = Record<string, unknown>;
-export type AstrBotMetadata = Record<string, { name?: string; metadata?: Record<string, FieldMetadata> }>;
+export type AstrBotMetadata = Record<
+    string,
+    { name?: string; metadata?: Record<string, FieldMetadata> }
+>;
 export type FieldMetadata = {
     type?: string;
     description?: string;
@@ -64,7 +67,10 @@ function removePath(root: JsonObject, path: string): void {
     const parts = path.split('.');
     let node = root;
     for (const part of parts.slice(0, -1)) {
-        if (!isObject(node[part])) { delete node[part]; return; }
+        if (!isObject(node[part])) {
+            delete node[part];
+            return;
+        }
         node = node[part] as JsonObject;
     }
     delete node[parts[parts.length - 1]];
@@ -116,21 +122,27 @@ function translated(value: unknown, fallback: string): string {
 }
 export function optionLabels(metadata: FieldMetadata): string[] {
     if (Array.isArray(metadata.labels)) return metadata.labels;
-    const found = typeof metadata.labels === 'string'
-        ? readPath(snapshot.translations, metadata.labels)
-        : undefined;
+    const found =
+        typeof metadata.labels === 'string'
+            ? readPath(snapshot.translations, metadata.labels)
+            : undefined;
     return Array.isArray(found) ? found.filter((v): v is string => typeof v === 'string') : [];
 }
 function merge(base: JsonObject, patch: JsonObject): JsonObject {
     const out = structuredClone(base);
     for (const [key, value] of Object.entries(patch)) {
         if (BLOCKED_SEGMENTS.has(key)) continue;
-        out[key] = isObject(value) && isObject(out[key]) ? merge(out[key], value) : structuredClone(value);
+        const previous = out[key];
+        out[key] =
+            isObject(value) && isObject(previous) ? merge(previous, value) : structuredClone(value);
     }
     return out;
 }
 /** 为条件和默认值合成只读视图；专页拥有的值只参与显示，从不回写高级草稿。 */
-export function effectiveAdvancedRoot(config: AstrBotInstanceConfig, schema: AdvancedSchema): JsonObject {
+export function effectiveAdvancedRoot(
+    config: AstrBotInstanceConfig,
+    schema: AdvancedSchema,
+): JsonObject {
     const out = merge(schema.defaults, parseAdvanced(config.advanced_json));
     const ai = config.ai;
     const dedicated: [string, unknown][] = [
@@ -146,7 +158,10 @@ export function effectiveAdvancedRoot(config: AstrBotInstanceConfig, schema: Adv
         ['provider_tts_settings.provider_id', config.tts.provider_id],
         ['platform_settings.unique_session', config.gates.unique_session],
         ['platform_settings.enable_id_white_list', config.gates.enable_id_white_list],
-        ['platform_settings.friend_message_needs_wake_prefix', config.gates.friend_message_needs_wake_prefix],
+        [
+            'platform_settings.friend_message_needs_wake_prefix',
+            config.gates.friend_message_needs_wake_prefix,
+        ],
         ['agent_runner.config.compression.max_turns', ai.max_context_length],
         ['agent_runner.config.compression.overflow_strategy', ai.context_limit_reached_strategy],
         ['agent_runner.config.persona.safety_mode', ai.llm_safety_mode],
@@ -159,7 +174,8 @@ export function effectiveAdvancedRoot(config: AstrBotInstanceConfig, schema: Adv
 function leafPaths(value: unknown, path = ''): string[] {
     if (isObject(value) && Object.keys(value).length)
         return Object.entries(value).flatMap(([key, child]) =>
-            leafPaths(child, path ? path + '.' + key : key));
+            leafPaths(child, path ? path + '.' + key : key),
+        );
     return path ? [path] : [];
 }
 function inferMetadata(value: unknown): FieldMetadata {
@@ -170,26 +186,44 @@ function inferMetadata(value: unknown): FieldMetadata {
         return { type: 'list', items: { type: 'string' } };
     return { type: isObject(value) ? 'object' : 'json' };
 }
-export function advancedSections(config: AstrBotInstanceConfig, schema: AdvancedSchema): AdvancedSection[] {
+export function advancedSections(
+    config: AstrBotInstanceConfig,
+    schema: AdvancedSchema,
+): AdvancedSection[] {
     const sections: AdvancedSection[] = [];
     const covered: string[] = [];
     for (const [groupId, group] of Object.entries(schema.metadata)) {
         if (!isObject(group) || !isObject(group.metadata)) continue;
         for (const [sectionId, section] of Object.entries(group.metadata ?? {})) {
             const fields: AdvancedField[] = [];
-            const visit = (items: Record<string, FieldMetadata>, prefix = '', conditions: Record<string, unknown>[] = []) => {
+            const visit = (
+                items: Record<string, FieldMetadata>,
+                prefix = '',
+                conditions: Record<string, unknown>[] = [],
+            ) => {
                 for (const [key, metadata] of Object.entries(items)) {
                     if (!isObject(metadata) || key === 'type') continue;
                     const path = key.includes('.') || !prefix ? key : prefix + '.' + key;
                     if (isManagedPath(path)) continue;
-                    const inherited = metadata.condition ? [...conditions, metadata.condition] : conditions;
-                    if (metadata.type === 'object' && metadata.items && Object.values(metadata.items).every(isObject)) {
+                    const inherited = metadata.condition
+                        ? [...conditions, metadata.condition]
+                        : conditions;
+                    if (
+                        metadata.type === 'object' &&
+                        metadata.items &&
+                        Object.values(metadata.items).every(isObject)
+                    ) {
                         visit(metadata.items as Record<string, FieldMetadata>, path, inherited);
                     } else {
                         covered.push(path);
                         fields.push({
                             path,
-                            label: LABELS[path] ?? translated(metadata.description, path.split('.').slice(-1)[0] ?? path),
+                            label:
+                                LABELS[path] ??
+                                translated(
+                                    metadata.description,
+                                    path.split('.').slice(-1)[0] ?? path,
+                                ),
                             hint: translated(metadata.hint, ''),
                             metadata,
                             conditions: inherited,
@@ -197,43 +231,66 @@ export function advancedSections(config: AstrBotInstanceConfig, schema: Advanced
                     }
                 }
             };
-            visit((section.items ?? {}) as Record<string, FieldMetadata>, '', section.condition ? [section.condition] : []);
-            if (fields.length) sections.push({
-                id: groupId + '/' + sectionId,
-                title: translated(section.description, sectionId),
-                group: translated(group.name, groupId),
-                fields,
-            });
+            visit(
+                (section.items ?? {}) as Record<string, FieldMetadata>,
+                '',
+                section.condition ? [section.condition] : [],
+            );
+            if (fields.length)
+                sections.push({
+                    id: groupId + '/' + sectionId,
+                    title: translated(section.description, sectionId),
+                    group: translated(group.name, groupId),
+                    fields,
+                });
         }
     }
     const current = effectiveAdvancedRoot(config, schema);
     const extra = new Map<string, AdvancedField[]>();
     for (const path of leafPaths(current)) {
-        if (isManagedPath(path) || covered.some((p) => path === p || path.startsWith(p + '.'))) continue;
+        if (isManagedPath(path) || covered.some((p) => path === p || path.startsWith(p + '.')))
+            continue;
         const key = path.includes('.') ? path.split('.')[0] : 'general';
         const fields = extra.get(key) ?? [];
+        const defaultValue = readPath(schema.defaults, path);
         fields.push({
             path,
             label: LABELS[path] ?? path.split('.').slice(-1)[0] ?? path,
-            metadata: inferMetadata(readPath(current, path)),
+            metadata: inferMetadata(defaultValue === undefined ? readPath(current, path) : defaultValue),
             conditions: [],
         });
         extra.set(key, fields);
     }
-    for (const [key, fields] of extra) sections.push({
-        id: 'extra/' + key, title: key === 'general' ? '其他设置' : key, group: '更多配置', fields,
-    });
+    for (const [key, fields] of extra)
+        sections.push({
+            id: 'extra/' + key,
+            title: key === 'general' ? '其他设置' : key,
+            group: '更多配置',
+            fields,
+        });
     return sections;
 }
 export function fieldVisible(field: AdvancedField, root: JsonObject): boolean {
-    return field.conditions.every((condition) => Object.entries(condition).every(([path, expected]) => {
-        const actual = readPath(root, path);
-        return Array.isArray(expected) ? expected.includes(actual) : JSON.stringify(actual) === JSON.stringify(expected);
-    }));
+    return field.conditions.every((condition) =>
+        Object.entries(condition).every(([path, expected]) => {
+            const actual = readPath(root, path);
+            return Array.isArray(expected)
+                ? expected.includes(actual)
+                : JSON.stringify(actual) === JSON.stringify(expected);
+        }),
+    );
 }
-export function setAdvancedField(config: AstrBotInstanceConfig, field: AdvancedField, value: unknown): AstrBotInstanceConfig {
+export function setAdvancedField(
+    config: AstrBotInstanceConfig,
+    field: AdvancedField,
+    value: unknown,
+): AstrBotInstanceConfig {
     const next = parseAdvanced(config.advanced_json);
-    if (field.path === 'agent_runner.runner_type' && typeof value === 'string' && field.metadata.runner_defaults?.[value]) {
+    if (
+        field.path === 'agent_runner.runner_type' &&
+        typeof value === 'string' &&
+        field.metadata.runner_defaults?.[value]
+    ) {
         writePath(next, 'agent_runner', {
             runner_type: value,
             config: structuredClone(field.metadata.runner_defaults[value]),
@@ -247,7 +304,10 @@ export function setAdvancedField(config: AstrBotInstanceConfig, field: AdvancedF
         advanced_json: JSON.stringify(projectAdvanced(next), null, 2),
     };
 }
-export function advancedValueIssues(config: AstrBotInstanceConfig, sections: AdvancedSection[]): AppConfigIssue[] {
+export function advancedValueIssues(
+    config: AstrBotInstanceConfig,
+    sections: AdvancedSection[],
+): AppConfigIssue[] {
     const root = parseAdvanced(config.advanced_json);
     const issues: AppConfigIssue[] = [];
     for (const field of sections.flatMap((section) => section.fields)) {
@@ -255,12 +315,19 @@ export function advancedValueIssues(config: AstrBotInstanceConfig, sections: Adv
         if (value === undefined) continue;
         const type = field.metadata.type;
         let message = '';
-        if ((type === 'int' || type === 'float') && (typeof value !== 'number' || !Number.isFinite(value)))
+        if (
+            (type === 'int' || type === 'float') &&
+            (typeof value !== 'number' || !Number.isFinite(value))
+        )
             message = '请输入有效数字';
         else if (type === 'int' && !Number.isInteger(value)) message = '请输入整数';
         else if (type === 'bool' && typeof value !== 'boolean') message = '需要布尔值';
-        else if ((type === 'string' || type === 'text') && typeof value !== 'string') message = '需要文本';
-        else if ((type === 'list' || type === 'template_list' || type === 'file') && !Array.isArray(value))
+        else if ((type === 'string' || type === 'text') && typeof value !== 'string')
+            message = '需要文本';
+        else if (
+            (type === 'list' || type === 'template_list' || type === 'file') &&
+            !Array.isArray(value)
+        )
             message = '需要列表';
         else if (type === 'object' && !isObject(value)) message = '需要 JSON 对象';
         if (!message && typeof value === 'number') {

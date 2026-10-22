@@ -19,10 +19,20 @@ const LEGACY_MODEL_CONFIG: &str = include_str!("defaults/model_config-1.17.9.tom
 
 /// 1.17.17 起模型类型为必填；更早的实例使用升级前的开箱文件，避免首次保存就注入新键。
 pub fn model_config_seed(version: Option<&str>) -> &'static str {
-    let modern = version.and_then(|version| version.split('.')
-        .map(|part| part.parse::<u32>()).collect::<Result<Vec<_>, _>>().ok())
+    let modern = version
+        .and_then(|version| {
+            version
+                .split('.')
+                .map(|part| part.parse::<u32>())
+                .collect::<Result<Vec<_>, _>>()
+                .ok()
+        })
         .is_some_and(|version| version.as_slice() >= [1, 17, 17].as_slice());
-    if modern { DEFAULT_MODEL_CONFIG } else { LEGACY_MODEL_CONFIG }
+    if modern {
+        DEFAULT_MODEL_CONFIG
+    } else {
+        LEGACY_MODEL_CONFIG
+    }
 }
 
 pub fn read_model_config_file_for_version(
@@ -74,13 +84,34 @@ pub fn model_config_to_toml(cfg: &MaiBotModelConfigFile) -> Result<toml::Table, 
 
 /// 上游解析前的字段迁移。这里只补类型化投影，不改原文或版本号；写盘时沿用文件里已有的路径。
 pub(super) const BOT_ALIASES: &[(&[&str], &[&str])] = &[
-    (&["a_memorix", "web", "import"], &["a_memorix", "web", "import_config"]),
-    (&["experimental", "replyer_retro_prompt"], &["debug", "replyer_retro_prompt"]),
-    (&["experimental", "tool_result_condense"], &["capabilities", "tool_result_condense"]),
-    (&["experimental", "tool_result_condense_threshold"], &["capabilities", "tool_result_condense_threshold"]),
-    (&["experimental", "planner_subagent"], &["capabilities", "planner_subagent"]),
-    (&["experimental", "advanced_sub_agent"], &["capabilities", "advanced_sub_agent"]),
-    (&["experimental", "planner_message_steering"], &["chat", "reply_timing", "planner_message_steering"]),
+    (
+        &["a_memorix", "web", "import"],
+        &["a_memorix", "web", "import_config"],
+    ),
+    (
+        &["experimental", "replyer_retro_prompt"],
+        &["debug", "replyer_retro_prompt"],
+    ),
+    (
+        &["experimental", "tool_result_condense"],
+        &["capabilities", "tool_result_condense"],
+    ),
+    (
+        &["experimental", "tool_result_condense_threshold"],
+        &["capabilities", "tool_result_condense_threshold"],
+    ),
+    (
+        &["experimental", "planner_subagent"],
+        &["capabilities", "planner_subagent"],
+    ),
+    (
+        &["experimental", "advanced_sub_agent"],
+        &["capabilities", "advanced_sub_agent"],
+    ),
+    (
+        &["experimental", "planner_message_steering"],
+        &["chat", "reply_timing", "planner_message_steering"],
+    ),
 ];
 
 pub(super) fn value_at<'a>(root: &'a toml::Table, path: &[&str]) -> Option<&'a toml::Value> {
@@ -94,12 +125,16 @@ pub(super) fn value_at<'a>(root: &'a toml::Table, path: &[&str]) -> Option<&'a t
 }
 
 pub(super) fn insert_at(root: &mut toml::Table, path: &[&str], value: toml::Value) {
-    let Some((head, rest)) = path.split_first() else { return; };
+    let Some((head, rest)) = path.split_first() else {
+        return;
+    };
     if rest.is_empty() {
         root.insert((*head).to_string(), value);
         return;
     }
-    let child = root.entry((*head).to_string()).or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    let child = root
+        .entry((*head).to_string())
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
     if let Some(table) = child.as_table_mut() {
         insert_at(table, rest, value);
     }
@@ -141,14 +176,23 @@ fn project_legacy_model_types(root: &mut toml::Table) {
         if model.contains_key("model_type") {
             continue;
         }
-        let name = model.get("name").and_then(toml::Value::as_str).unwrap_or_default();
-        let identifier = model.get("model_identifier").and_then(toml::Value::as_str).unwrap_or_default();
+        let name = model
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default();
+        let identifier = model
+            .get("model_identifier")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default();
         let identifiers = [name.to_lowercase(), identifier.to_lowercase()];
-        let embedding = text_models.contains(name) || image_models.contains(name)
+        let embedding = text_models.contains(name)
+            || image_models.contains(name)
             || identifiers.iter().any(|value| value.contains("embed"));
         let kind = if embedding {
             if image_models.contains(name)
-                || identifiers.iter().any(|value| value.contains("vision") || value.contains("vl-embedding"))
+                || identifiers
+                    .iter()
+                    .any(|value| value.contains("vision") || value.contains("vl-embedding"))
             {
                 "image_embedding"
             } else {
@@ -157,7 +201,10 @@ fn project_legacy_model_types(root: &mut toml::Table) {
         } else {
             "llm"
         };
-        model.insert("model_type".to_string(), toml::Value::String(kind.to_string()));
+        model.insert(
+            "model_type".to_string(),
+            toml::Value::String(kind.to_string()),
+        );
     }
 }
 
@@ -334,7 +381,6 @@ mod tests {
         );
         std::fs::write(path, serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
     }
-
 
     #[test]
     fn current_file_alias_and_moved_capabilities_are_read_without_changing_input() {

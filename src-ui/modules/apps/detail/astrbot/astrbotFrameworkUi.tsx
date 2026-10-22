@@ -15,7 +15,11 @@ import { AstrBotConnectionsTab } from './AstrBotConnectionsTab';
 import { AstrBotModelsTab } from './AstrBotModelsTab';
 import { AstrBotTalkTab } from './AstrBotTalkTab';
 import { AstrBotAdvancedTab, type AdvancedDrafts } from './AstrBotAdvancedTab';
-import { advancedSections, advancedValueIssues, resolveAdvancedSchema } from '../../../../core/domain/apps/astrbotAdvanced';
+import {
+    advancedSections,
+    advancedValueIssues,
+    resolveAdvancedSchema,
+} from '../../../../core/domain/apps/astrbotAdvanced';
 import { AstrBotPersonaTab } from './AstrBotPersonaTab';
 import { AstrBotKbTab } from './AstrBotKbTab';
 import { AstrBotSubagentTab } from './AstrBotSubagentTab';
@@ -94,21 +98,34 @@ function AstrBotFrameworkDetail({
             return next;
         });
     }, []);
-    const advancedIssues = useMemo(() => [
-        ...(form.form ? advancedValueIssues(form.form, advancedSections(form.form, schema)) : []),
-        ...Object.keys(advancedDrafts).map((path) => ({
-            path: 'advanced/' + path, message: 'JSON 格式有误，修正后才能保存',
-        })),
-    ], [form.form, schema, advancedDrafts]);
+    const advancedIssues = useMemo(
+        () => [
+            ...(form.form
+                ? advancedValueIssues(form.form, advancedSections(form.form, schema))
+                : []),
+            ...Object.keys(advancedDrafts).map((path) => ({
+                path: 'advanced/' + path,
+                message: 'JSON 格式有误，修正后才能保存',
+            })),
+        ],
+        [form.form, schema, advancedDrafts],
+    );
     useSyncFrameworkSaveHandle(onSaveHandle, {
         ...form,
         dirty: form.dirty || Object.keys(advancedDrafts).length > 0,
         clientIssues: [...form.clientIssues, ...advancedIssues],
-        save: async (overwrite) => advancedIssues.length
-            ? { kind: 'invalid', issues: advancedIssues }
-            : form.save(overwrite),
-        reset: () => { setAdvancedDrafts({}); form.reset(); },
-        reloadDiscard: async () => { setAdvancedDrafts({}); await form.reloadDiscard(); },
+        save: async (overwrite) =>
+            advancedIssues.length
+                ? { kind: 'invalid', issues: advancedIssues }
+                : form.save(overwrite),
+        reset: () => {
+            setAdvancedDrafts({});
+            form.reset();
+        },
+        reloadDiscard: async () => {
+            setAdvancedDrafts({});
+            await form.reloadDiscard();
+        },
     });
     const personas = useAstrBotPersonas(instance.id, live);
 

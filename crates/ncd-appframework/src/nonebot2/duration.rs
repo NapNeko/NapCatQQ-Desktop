@@ -16,7 +16,10 @@ pub(super) fn normalize_duration(raw: &str) -> Option<String> {
     }
     let raw = raw.trim();
     let negative = raw.starts_with('-');
-    let value = raw.strip_prefix('+').or_else(|| raw.strip_prefix('-')).unwrap_or(raw);
+    let value = raw
+        .strip_prefix('+')
+        .or_else(|| raw.strip_prefix('-'))
+        .unwrap_or(raw);
     // ISO 已由实例自己的 Pydantic 解释，保持原文以保留其 submicro 舍入语义。
     if value.starts_with('P') {
         return (iso_micros(value)? <= MAX_MICROS).then(|| raw.to_string());
@@ -30,29 +33,44 @@ pub(super) fn normalize_duration(raw: &str) -> Option<String> {
     let second = total / MICROS % 86_400;
     let microsecond = total % MICROS;
     let sign = if negative && total != 0 { "-" } else { "" };
-    let day_part = if days == 0 { String::new() } else { format!("{days}D") };
+    let day_part = if days == 0 {
+        String::new()
+    } else {
+        format!("{days}D")
+    };
     let fraction = if microsecond == 0 {
         String::new()
     } else {
-        format!(".{:06}", microsecond).trim_end_matches('0').to_string()
+        format!(".{:06}", microsecond)
+            .trim_end_matches('0')
+            .to_string()
     };
     Some(format!("{sign}P{day_part}T{second}{fraction}S"))
 }
 
 fn decimal_micros(value: &str, seconds: u128, round: bool) -> Option<u128> {
     let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
-    if whole.is_empty() || !whole.bytes().all(|b| b.is_ascii_digit())
+    if whole.is_empty()
+        || !whole.bytes().all(|b| b.is_ascii_digit())
         || !fraction.bytes().all(|b| b.is_ascii_digit())
         || (value.contains('.') && fraction.is_empty())
     {
         return None;
     }
-    let total = whole.parse::<u128>().ok()?.checked_mul(seconds)?.checked_mul(MICROS)?;
+    let total = whole
+        .parse::<u128>()
+        .ok()?
+        .checked_mul(seconds)?
+        .checked_mul(MICROS)?;
     let fraction = &fraction[..fraction.len().min(18)];
     let fractional = if fraction.is_empty() {
         0
     } else {
-        let numerator = fraction.parse::<u128>().ok()?.checked_mul(seconds)?.checked_mul(MICROS)?;
+        let numerator = fraction
+            .parse::<u128>()
+            .ok()?
+            .checked_mul(seconds)?
+            .checked_mul(MICROS)?;
         let denominator = 10_u128.pow(fraction.len() as u32);
         numerator.checked_add(if round { denominator / 2 } else { 0 })? / denominator
     };
@@ -103,7 +121,9 @@ fn iso_micros(value: &str) -> Option<u128> {
             return None;
         }
         let start = position;
-        while position < bytes.len() && (bytes[position].is_ascii_digit() || bytes[position] == b'.') {
+        while position < bytes.len()
+            && (bytes[position].is_ascii_digit() || bytes[position] == b'.')
+        {
             position += 1;
         }
         let number = &value[start..position];
@@ -161,8 +181,25 @@ mod tests {
 
     #[test]
     fn rejects_invalid_incomplete_repeated_and_out_of_range_durations() {
-        for raw in ["", "abc", "NaN", "Infinity", "P", "PT", "P1DT", "P-1D", "P1D2D",
-            "PT1S2M", "PT1.5H30M", "00:60:00", "00:00:99", "120\n", "P1000000000D", "-1 day, 02:03:04.000005", "-00:02:00"] {
+        for raw in [
+            "",
+            "abc",
+            "NaN",
+            "Infinity",
+            "P",
+            "PT",
+            "P1DT",
+            "P-1D",
+            "P1D2D",
+            "PT1S2M",
+            "PT1.5H30M",
+            "00:60:00",
+            "00:00:99",
+            "120\n",
+            "P1000000000D",
+            "-1 day, 02:03:04.000005",
+            "-00:02:00",
+        ] {
             assert_eq!(normalize_duration(raw), None, "{raw}");
         }
     }

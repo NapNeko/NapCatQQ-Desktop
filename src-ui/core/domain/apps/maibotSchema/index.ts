@@ -118,10 +118,14 @@ export function schemaIssues(
             const here = `${path}/${f.name}`;
             const val = bag[f.name];
             const sub = n.nested?.[f.name];
-            const length = typeof val === 'string' ? [...val].length
-                : Array.isArray(val) ? val.length
-                : f.mapValues && val && typeof val === 'object' ? Object.keys(val).length
-                : undefined;
+            const length =
+                typeof val === 'string'
+                    ? [...val].length
+                    : Array.isArray(val)
+                      ? val.length
+                      : f.mapValues && val && typeof val === 'object'
+                        ? Object.keys(val).length
+                        : undefined;
             if (length !== undefined) {
                 if (f.minLength !== undefined && length < f.minLength)
                     out.push({ path: here, message: `至少 ${f.minLength} 项` });
@@ -132,7 +136,9 @@ export function schemaIssues(
                 try {
                     if (!new RegExp(f.pattern).test(val))
                         out.push({ path: here, message: '格式不正确' });
-                } catch { /* 上游 Python 专用表达式交给后端检查 */ }
+                } catch {
+                    /* 上游 Python 专用表达式交给后端检查 */
+                }
             }
             if (sub && f.mapValues && val && typeof val === 'object' && !Array.isArray(val)) {
                 Object.entries(val).forEach(([key, item]) => walk(sub, item, `${here}/${key}`));

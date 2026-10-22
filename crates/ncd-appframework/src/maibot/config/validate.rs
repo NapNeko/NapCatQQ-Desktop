@@ -284,31 +284,55 @@ fn model_rules(models: &MaiBotModelConfigFile, sink: &mut IssueSink) {
         for (j, period) in m.price_periods.iter().enumerate() {
             let minute = |text: &str| -> Option<u16> {
                 let (hour, minute) = text.split_once(':')?;
-                if hour.len() != 2 || minute.len() != 2
-                    || !hour.bytes().chain(minute.bytes()).all(|b| b.is_ascii_digit())
+                if hour.len() != 2
+                    || minute.len() != 2
+                    || !hour
+                        .bytes()
+                        .chain(minute.bytes())
+                        .all(|b| b.is_ascii_digit())
                 {
                     return None;
                 }
                 let (hour, minute) = (hour.parse::<u16>().ok()?, minute.parse::<u16>().ok()?);
                 (hour < 24 && minute < 60).then_some(hour * 60 + minute)
             };
-            let (Some(start), Some(end)) = (minute(&period.start_time), minute(&period.end_time)) else { continue; };
+            let (Some(start), Some(end)) = (minute(&period.start_time), minute(&period.end_time))
+            else {
+                continue;
+            };
             if start == end {
-                sink.push(format!("{path}/price_periods/{j}/start_time"), "价格时段的开始时间和结束时间不能相同");
+                sink.push(
+                    format!("{path}/price_periods/{j}/start_time"),
+                    "价格时段的开始时间和结束时间不能相同",
+                );
             } else if start < end {
                 intervals.push((start, end, j));
             } else {
                 intervals.push((start, 1440, j));
-                if end > 0 { intervals.push((0, end, j)); }
+                if end > 0 {
+                    intervals.push((0, end, j));
+                }
             }
-            for (name, price) in [("price_in", period.price_in), ("price_out", period.price_out), ("cache_price_in", period.cache_price_in)] {
-                if !price.is_finite() { sink.push(format!("{path}/price_periods/{j}/{name}"), "价格必须是有限数字"); }
+            for (name, price) in [
+                ("price_in", period.price_in),
+                ("price_out", period.price_out),
+                ("cache_price_in", period.cache_price_in),
+            ] {
+                if !price.is_finite() {
+                    sink.push(
+                        format!("{path}/price_periods/{j}/{name}"),
+                        "价格必须是有限数字",
+                    );
+                }
             }
         }
         intervals.sort_unstable();
         for pair in intervals.windows(2) {
             if pair[1].0 < pair[0].1 {
-                sink.push(format!("{path}/price_periods/{}/start_time", pair[1].2), format!("价格时段 {} 与 {} 重叠", pair[0].2 + 1, pair[1].2 + 1));
+                sink.push(
+                    format!("{path}/price_periods/{}/start_time", pair[1].2),
+                    format!("价格时段 {} 与 {} 重叠", pair[0].2 + 1, pair[1].2 + 1),
+                );
             }
         }
         if let Err(e) = super::super::schema::any_table::to_value(&m.extra_params) {
@@ -343,7 +367,6 @@ fn model_rules(models: &MaiBotModelConfigFile, sink: &mut IssueSink) {
     }
 }
 
-
 fn web_rules(models: &MaiBotModelConfigFile, sink: &mut IssueSink) {
     for (name, service) in &models.web.services {
         let path = format!("models/web/services/{name}");
@@ -353,24 +376,56 @@ fn web_rules(models: &MaiBotModelConfigFile, sink: &mut IssueSink) {
         if !service.base_url.is_empty() {
             let valid = reqwest::Url::parse(&service.base_url).is_ok_and(|url| {
                 matches!(url.scheme(), "http" | "https")
-                    && url.host_str().is_some() && url.username().is_empty()
-                    && url.password().is_none() && url.query().is_none() && url.fragment().is_none()
+                    && url.host_str().is_some()
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && url.query().is_none()
+                    && url.fragment().is_none()
             });
             if !valid {
-                sink.push(format!("{path}/base_url"), "联网服务地址要是无用户名、密码、查询参数和片段的 HTTP(S) 地址");
+                sink.push(
+                    format!("{path}/base_url"),
+                    "联网服务地址要是无用户名、密码、查询参数和片段的 HTTP(S) 地址",
+                );
             }
         }
-        if service.adapter == "stepsearch_mcp" && (!service.api_key.is_empty() || !service.base_url.is_empty()) {
-            sink.push(format!("{path}/base_url"), "StepSearch MCP 的地址和密钥在 MCP 连接中配置");
+        if service.adapter == "stepsearch_mcp"
+            && (!service.api_key.is_empty() || !service.base_url.is_empty())
+        {
+            sink.push(
+                format!("{path}/base_url"),
+                "StepSearch MCP 的地址和密钥在 MCP 连接中配置",
+            );
         }
     }
-    for (i, name) in models.model_task_config.web_search.model_list.iter().enumerate() {
+    for (i, name) in models
+        .model_task_config
+        .web_search
+        .model_list
+        .iter()
+        .enumerate()
+    {
         match models.web.services.get(name) {
-            None => sink.push(format!("models/model_task_config/web_search/model_list/{i}"), format!("没有叫 {name:?} 的联网服务")),
-            Some(service) if service.adapter == "stepsearch_mcp" && service.server_ref.trim().is_empty() =>
-                sink.push(format!("models/web/services/{name}/server_ref"), "要填写 MCP 服务名称"),
-            Some(service) if service.adapter != "stepsearch_mcp" && service.api_key.trim().is_empty() =>
-                sink.push(format!("models/web/services/{name}/api_key"), "要填 API Key"),
+            None => sink.push(
+                format!("models/model_task_config/web_search/model_list/{i}"),
+                format!("没有叫 {name:?} 的联网服务"),
+            ),
+            Some(service)
+                if service.adapter == "stepsearch_mcp" && service.server_ref.trim().is_empty() =>
+            {
+                sink.push(
+                    format!("models/web/services/{name}/server_ref"),
+                    "要填写 MCP 服务名称",
+                )
+            }
+            Some(service)
+                if service.adapter != "stepsearch_mcp" && service.api_key.trim().is_empty() =>
+            {
+                sink.push(
+                    format!("models/web/services/{name}/api_key"),
+                    "要填 API Key",
+                )
+            }
             _ => {}
         }
     }

@@ -56,15 +56,30 @@ export const MODEL_ADVANCED_FIELDS: readonly string[] = [
 ];
 export const TASK_ADVANCED_FIELDS: readonly string[] = ['hard_timeout'];
 
-
 const MODEL_FIELDS = [
-    'name', 'model_type', 'model_identifier', 'api_provider', 'visual', 'temperature', 'max_tokens',
-    'price_in', 'price_out', 'cache', 'cache_price_in', 'send_temperature', 'force_stream_mode', 'extra_params',
+    'name',
+    'model_type',
+    'model_identifier',
+    'api_provider',
+    'visual',
+    'temperature',
+    'max_tokens',
+    'price_in',
+    'price_out',
+    'cache',
+    'cache_price_in',
+    'send_temperature',
+    'force_stream_mode',
+    'extra_params',
 ];
-const PROVIDER_FIELDS = [
-    'name', 'client_type', 'base_url', 'api_key', ...PROVIDER_ADVANCED_FIELDS,
+const PROVIDER_FIELDS = ['name', 'client_type', 'base_url', 'api_key', ...PROVIDER_ADVANCED_FIELDS];
+const TASK_FIELDS = [
+    'model_list',
+    'max_tokens',
+    'temperature',
+    'selection_strategy',
+    'hard_timeout',
 ];
-const TASK_FIELDS = ['model_list', 'max_tokens', 'temperature', 'selection_strategy', 'hard_timeout'];
 
 /** 新增的上游字段自动承接为 schema 表单，避免手写卡片悄悄漏掉快照里的配置。 */
 const SchemaRemainder: React.FC<{
@@ -77,13 +92,23 @@ const SchemaRemainder: React.FC<{
 }> = ({ kind, value, onChange, path, errors, disabled }) => {
     const node = nodeAt(MODEL_SCHEMA, kind === 'task' ? ['model_task_config', 'replyer'] : [kind]);
     if (!node) return null;
-    const handled = kind === 'models' ? MODEL_FIELDS : kind === 'api_providers' ? PROVIDER_FIELDS : TASK_FIELDS;
+    const handled =
+        kind === 'models' ? MODEL_FIELDS : kind === 'api_providers' ? PROVIDER_FIELDS : TASK_FIELDS;
     const fields = node.fields.filter((field) => !handled.includes(field.name));
     if (!fields.length) return null;
     return (
-        <FieldGrid path={[]} node={{ ...node, fields }} ctx={{
-            value, onChange, errors, prefix: path, disabled, showAdvanced: true,
-        }} />
+        <FieldGrid
+            path={[]}
+            node={{ ...node, fields }}
+            ctx={{
+                value,
+                onChange,
+                errors,
+                prefix: path,
+                disabled,
+                showAdvanced: true,
+            }}
+        />
     );
 };
 
@@ -389,9 +414,14 @@ export const ProviderCard: React.FC<{
                 </div>
             </ExpandPresence>
             <ExpandPresence visible={showAdvanced} keepMounted>
-                <SchemaRemainder kind="api_providers" value={p}
+                <SchemaRemainder
+                    kind="api_providers"
+                    value={p}
                     onChange={(value) => onChange(value as MaiBotAPIProvider)}
-                    path={path} errors={errors} disabled={disabled} />
+                    path={path}
+                    errors={errors}
+                    disabled={disabled}
+                />
             </ExpandPresence>
             {footer}
         </Card>
@@ -450,7 +480,9 @@ export const ModelCard: React.FC<{
                     value={m.model_type}
                     error={err('model_type')}
                     disabled={disabled}
-                    onValueChange={(value) => set({ model_type: value as MaiBotModelInfo['model_type'] })}
+                    onValueChange={(value) =>
+                        set({ model_type: value as MaiBotModelInfo['model_type'] })
+                    }
                 />
                 <NameField
                     label="名称"
@@ -577,9 +609,14 @@ export const ModelCard: React.FC<{
                         onValueChange={(extra_params) => set({ extra_params })}
                     />
                 </div>
-                <SchemaRemainder kind="models" value={m}
+                <SchemaRemainder
+                    kind="models"
+                    value={m}
                     onChange={(value) => onChange(value as MaiBotModelInfo)}
-                    path={path} errors={errors} disabled={disabled} />
+                    path={path}
+                    errors={errors}
+                    disabled={disabled}
+                />
             </ExpandPresence>
         </Card>
     );
@@ -740,9 +777,14 @@ export const TaskCard: React.FC<{
                 </ExpandPresence>
             </div>
             <ExpandPresence visible={showAdvanced} keepMounted>
-                <SchemaRemainder kind="task" value={t}
+                <SchemaRemainder
+                    kind="task"
+                    value={t}
                     onChange={(value) => onChange(value as MaiBotTaskConfig)}
-                    path={path} errors={errors} disabled={disabled} />
+                    path={path}
+                    errors={errors}
+                    disabled={disabled}
+                />
             </ExpandPresence>
         </Card>
     );

@@ -48,7 +48,9 @@ pub trait AstrBotRuntimeApi: Send + Sync {
         &self,
         _session: &AstrBotSession,
     ) -> Result<runtime::AstrBotConfigSchema, AppFrameworkError> {
-        Err(AppFrameworkError::ConfigUnsupported("AstrBot 配置元数据".into()))
+        Err(AppFrameworkError::ConfigUnsupported(
+            "AstrBot 配置元数据".into(),
+        ))
     }
 
     async fn dashboard_status(&self, session: &AstrBotSession) -> AstrBotDashboardStatus;

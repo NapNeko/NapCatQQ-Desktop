@@ -227,7 +227,9 @@ const SimpleField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field: Ui
                     label={label}
                     hint={descs[current] ?? hint}
                     error={error}
-                    value={current === '' ? (choices.includes('') ? emptyOption : undefined) : current}
+                    value={
+                        current === '' ? (choices.includes('') ? emptyOption : undefined) : current
+                    }
                     items={choices.map((o) => ({
                         value: o === '' ? emptyOption : o,
                         label: labels[o] ?? OPTION_LABELS[o] ?? (o === '' ? '默认' : o),
@@ -412,7 +414,6 @@ const ObjectListField: React.FC<{
     );
 };
 
-
 const ObjectMapItem: React.FC<{
     ctx: SchemaCtx;
     path: readonly string[];
@@ -423,9 +424,12 @@ const ObjectMapItem: React.FC<{
     onRemove: () => void;
 }> = ({ ctx, path, name, item, names, onRename, onRemove }) => {
     const [draft, setDraft] = useState(name);
-    const invalid = !draft.trim() || draft !== draft.trim()
-        ? '名称不能为空或包含首尾空格'
-        : draft !== name && names.includes(draft) ? '名称重复' : undefined;
+    const invalid =
+        !draft.trim() || draft !== draft.trim()
+            ? '名称不能为空或包含首尾空格'
+            : draft !== name && names.includes(draft)
+              ? '名称重复'
+              : undefined;
     return (
         <div className="rounded-md border border-border-subtle bg-inset/30 p-3">
             <div className="mb-3 flex items-start gap-2">
@@ -444,12 +448,23 @@ const ObjectMapItem: React.FC<{
                         }
                     }}
                 />
-                <Button size="sm" variant="secondary"
+                <Button
+                    size="sm"
+                    variant="secondary"
                     disabled={ctx.disabled || !!invalid || draft === name}
-                    onClick={() => { if (!invalid && draft !== name) onRename(draft); }}>
+                    onClick={() => {
+                        if (!invalid && draft !== name) onRename(draft);
+                    }}
+                >
                     应用名称
                 </Button>
-                <Button size="sm" variant="ghost" disabled={ctx.disabled} onClick={onRemove} aria-label="删掉这一项">
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={ctx.disabled}
+                    onClick={onRemove}
+                    aria-label="删掉这一项"
+                >
                     <Trash2 size={14} />
                 </Button>
             </div>
@@ -467,31 +482,65 @@ const ObjectMapField: React.FC<{
 }> = ({ ctx, path, field, item }) => {
     const p = [...path, field.name];
     const raw = getIn(ctx.value, p);
-    const values = raw && typeof raw === 'object' && !Array.isArray(raw)
-        ? raw as Record<string, unknown> : {};
+    const values =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+            ? (raw as Record<string, unknown>)
+            : {};
     const names = Object.keys(values);
     const set = (next: Record<string, unknown>) => ctx.onChange(setIn(ctx.value, p, next));
     return (
         <div className={cn('flex flex-col gap-3', WIDE)}>
             <div className="flex items-start justify-between gap-2">
                 <div>
-                    <span className="text-xs font-medium text-text-secondary">{field.label ?? field.name}</span>
-                    {field.description && <p className="text-2xs text-text-tertiary">{field.description}</p>}
+                    <span className="text-xs font-medium text-text-secondary">
+                        {field.label ?? field.name}
+                    </span>
+                    {field.description && (
+                        <p className="text-2xs text-text-tertiary">{field.description}</p>
+                    )}
                     {errorOf(ctx, p) && <p className="text-2xs text-danger">{errorOf(ctx, p)}</p>}
                 </div>
-                <Button size="sm" variant="secondary" disabled={ctx.disabled} onClick={() => {
-                    let name = 'service';
-                    for (let i = 2; Object.prototype.hasOwnProperty.call(values, name); i += 1) name = `service${i}`;
-                    set({ ...values, [name]: newItemFor(item) });
-                }}>
-                    <Plus size={13} />加一项
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={ctx.disabled}
+                    onClick={() => {
+                        let name = 'service';
+                        for (let i = 2; Object.prototype.hasOwnProperty.call(values, name); i += 1)
+                            name = `service${i}`;
+                        set({ ...values, [name]: newItemFor(item) });
+                    }}
+                >
+                    <Plus size={13} />
+                    加一项
                 </Button>
             </div>
             {names.length === 0 && <p className="text-2xs text-text-tertiary">还没有</p>}
             {names.map((name) => (
-                <ObjectMapItem key={name} ctx={ctx} path={p} name={name} item={item} names={names}
-                    onRename={(next) => set(Object.fromEntries(Object.entries(values).map(([key, value]) => [key === name ? next : key, value])))}
-                    onRemove={() => set(Object.fromEntries(Object.entries(values).filter(([key]) => key !== name)))}
+                <ObjectMapItem
+                    key={name}
+                    ctx={ctx}
+                    path={p}
+                    name={name}
+                    item={item}
+                    names={names}
+                    onRename={(next) =>
+                        set(
+                            Object.fromEntries(
+                                Object.entries(values).map(([key, value]) => [
+                                    key === name ? next : key,
+                                    value,
+                                ]),
+                            ),
+                        )
+                    }
+                    onRemove={() =>
+                        set(
+                            Object.fromEntries(
+                                Object.entries(values).filter(([key]) => key !== name),
+                            ),
+                        )
+                    }
                 />
             ))}
         </div>
@@ -526,7 +575,13 @@ export const FieldGrid: React.FC<{ ctx: SchemaCtx; path: readonly string[]; node
             );
         } else if (sub && field.mapValues) {
             targetCells.push(
-                <ObjectMapField key={field.name} ctx={fieldCtx} path={path} field={field} item={sub} />,
+                <ObjectMapField
+                    key={field.name}
+                    ctx={fieldCtx}
+                    path={path}
+                    field={field}
+                    item={sub}
+                />,
             );
         } else if (sub && field.type === 'array') {
             targetCells.push(

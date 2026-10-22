@@ -62,9 +62,11 @@ pub async fn write_live(
 
 /// 类型化读取路径只提供默认档案；拒绝把默认档案的草稿写进其它档案。
 fn require_default_profile(conf_id: &str) -> Result<&'static str, AppFrameworkError> {
-    if conf_id.trim().is_empty() || conf_id.trim() == "default" { return Ok("default"); }
+    if conf_id.trim().is_empty() || conf_id.trim() == "default" {
+        return Ok("default");
+    }
     Err(AppFrameworkError::ConfigUnsupported(
-        "Desktop 类型化配置目前只支持默认 AstrBot 档案；其它档案请在 AstrBot WebUI 编辑".into()
+        "Desktop 类型化配置目前只支持默认 AstrBot 档案；其它档案请在 AstrBot WebUI 编辑".into(),
     ))
 }
 
@@ -227,7 +229,9 @@ mod tests {
         let default_root = json!({"custom":{"origin":"default"}});
         let target_root = json!({"custom":{"origin":"target","keep":true}});
         let cfg = AstrBotInstanceConfig::from_root(&default_root, "a", 6199);
-        let error = write_dashboard_config(&client, "a", 6199, &cfg, "target").await.unwrap_err();
+        let error = write_dashboard_config(&client, "a", 6199, &cfg, "target")
+            .await
+            .unwrap_err();
         assert!(matches!(error, AppFrameworkError::ConfigUnsupported(_)));
         assert!(write_paths(&server).await.is_empty());
         // 没有 GET 默认档案后再 POST 目标的机会；两份不同的高级配置均无网络写入。

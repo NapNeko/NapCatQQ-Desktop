@@ -182,8 +182,8 @@ export const MaiBotBehaviorTab: React.FC<{
                             : learningOn === undefined
                               ? '还没有可查看的行为经验。'
                               : learningOn
-                              ? '麦麦还没学到行为经验。它会在聊天里看什么情况下怎么回应效果好，攒够了才有。'
-                              : '还没有学到的行为经验。打开行为学习后，麦麦会在聊天里慢慢攒。'
+                                ? '麦麦还没学到行为经验。它会在聊天里看什么情况下怎么回应效果好，攒够了才有。'
+                                : '还没有学到的行为经验。打开行为学习后，麦麦会在聊天里慢慢攒。'
                     }
                     action={
                         !narrowed && learningOn === false ? (

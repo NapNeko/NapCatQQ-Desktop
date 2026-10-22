@@ -1,3 +1,4 @@
+# Validate the integrated release forms and production bundle.
 name: Temporary framework config checks
 on:
   push:
@@ -219,6 +220,8 @@ jobs:
           if tests:
               subprocess.run(["pnpm", "exec", "vitest", "run", "--config", "src-ui/vitest.config.ts", "--maxWorkers=2", "--minWorkers=1", *tests], check=True)
           PY
+      - name: Build frontend for release
+        run: pnpm run build
       - name: Lint
         run: pnpm run lint
       - name: Check formatting

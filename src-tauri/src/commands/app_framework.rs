@@ -367,9 +367,12 @@ pub async fn get_app_instance_webui(
 pub async fn astrbot_config_schema(
     instance_id: String,
     state: State<'_, AppState>,
-) -> Result<ncd_appframework::astrbot::AstrBotConfigSchema, AppConfigError> {
-    state.app_manager.astrbot_config_schema(&AppInstanceId::new(instance_id))
-        .await.map_err(AppFrameworkError::into_config_error)
+) -> Result<ncd_runtime::app_framework::AstrBotConfigSchema, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_config_schema(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]

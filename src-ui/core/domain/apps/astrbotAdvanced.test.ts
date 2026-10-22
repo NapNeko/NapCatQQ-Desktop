@@ -45,9 +45,13 @@ describe('AstrBot advanced config coverage', () => {
                 future_group: {
                     name: '新能力',
                     metadata: {
-                        future: { description: '新配置', type: 'object', items: {
-                            'future.enabled': { type: 'bool', description: '启用新能力' },
-                        } },
+                        future: {
+                            description: '新配置',
+                            type: 'object',
+                            items: {
+                                'future.enabled': { type: 'bool', description: '启用新能力' },
+                            },
+                        },
                     },
                 },
             }),
@@ -80,10 +84,14 @@ describe('AstrBot advanced config coverage', () => {
 
     it('switches runners using the selected upstream defaults and keeps dedicated fields out of the draft', () => {
         const cfg = astrbotDefaultConfig(6199);
-        cfg.advanced_json = JSON.stringify({ agent_runner: {
-            runner_type: 'local', config: { model: { request_max_retries: 7 }, misc: { future: true } },
-        } });
-        const field = advancedSections(cfg, resolveAdvancedSchema()).flatMap((section) => section.fields)
+        cfg.advanced_json = JSON.stringify({
+            agent_runner: {
+                runner_type: 'local',
+                config: { model: { request_max_retries: 7 }, misc: { future: true } },
+            },
+        });
+        const field = advancedSections(cfg, resolveAdvancedSchema())
+            .flatMap((section) => section.fields)
             .find((item) => item.path === 'agent_runner.runner_type');
         expect(field).toBeDefined();
         const changed = setAdvancedField(cfg, field!, 'dify');
@@ -98,10 +106,22 @@ describe('AstrBot advanced config coverage', () => {
         const cfg = astrbotDefaultConfig(6199);
         cfg.advanced_json = JSON.stringify({
             provider_tts_settings: { use_file_service: 'invalid' },
-            agent_runner: { runner_type: 'local', config: { compression: { keep_recent_ratio: 0.9 } } },
+            agent_runner: {
+                runner_type: 'local',
+                config: { compression: { keep_recent_ratio: 0.9 } },
+            },
         });
         const issues = advancedValueIssues(cfg, advancedSections(cfg, resolveAdvancedSchema()));
-        expect(issues.some((issue) => issue.path === 'advanced/provider_tts_settings.use_file_service')).toBe(true);
-        expect(issues.some((issue) => issue.path === 'advanced/agent_runner.config.compression.keep_recent_ratio')).toBe(true);
+        expect(
+            issues.some(
+                (issue) => issue.path === 'advanced/provider_tts_settings.use_file_service',
+            ),
+        ).toBe(true);
+        expect(
+            issues.some(
+                (issue) =>
+                    issue.path === 'advanced/agent_runner.config.compression.keep_recent_ratio',
+            ),
+        ).toBe(true);
     });
 });

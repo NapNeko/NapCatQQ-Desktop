@@ -215,7 +215,10 @@ export const MaiBotModelsTab: React.FC<{
     let noWebService = '__ncd_no_service__';
     while (webServices.includes(noWebService)) noWebService += '_';
     const selectedWeb = models.model_task_config.web_search.model_list[0];
-    const webChoices = selectedWeb && !webServices.includes(selectedWeb) ? [...webServices, selectedWeb] : webServices;
+    const webChoices =
+        selectedWeb && !webServices.includes(selectedWeb)
+            ? [...webServices, selectedWeb]
+            : webServices;
 
     return (
         <ConfigForm>
@@ -389,11 +392,22 @@ export const MaiBotModelsTab: React.FC<{
                 ))}
             </FormSection>
             {webNode && (
-                <FormSection title="联网服务" description="添加服务后，选择要交给麦麦使用的服务；留空关闭联网工具。">
-                    <FieldGrid path={['web']} node={webNode} ctx={{
-                        value: models, onChange: (value) => setModels(value as MaiBotModelConfigFile),
-                        prefix: 'models', errors, disabled, showAdvanced: true,
-                    }} />
+                <FormSection
+                    title="联网服务"
+                    description="添加服务后，选择要交给麦麦使用的服务；留空关闭联网工具。"
+                >
+                    <FieldGrid
+                        path={['web']}
+                        node={webNode}
+                        ctx={{
+                            value: models,
+                            onChange: (value) => setModels(value as MaiBotModelConfigFile),
+                            prefix: 'models',
+                            errors,
+                            disabled,
+                            showAdvanced: true,
+                        }}
+                    />
                     <Select
                         label="联网工具使用的服务"
                         items={[
@@ -402,14 +416,19 @@ export const MaiBotModelsTab: React.FC<{
                         ]}
                         value={selectedWeb ?? noWebService}
                         disabled={disabled}
-                        error={errors['models/model_task_config/web_search/model_list']
-                            ?? errors['models/model_task_config/web_search/model_list/0']}
-                        onValueChange={(name) => setModels({
-                            ...models, model_task_config: {
-                                ...models.model_task_config,
-                                web_search: { model_list: name === noWebService ? [] : [name] },
-                            },
-                        })}
+                        error={
+                            errors['models/model_task_config/web_search/model_list'] ??
+                            errors['models/model_task_config/web_search/model_list/0']
+                        }
+                        onValueChange={(name) =>
+                            setModels({
+                                ...models,
+                                model_task_config: {
+                                    ...models.model_task_config,
+                                    web_search: { model_list: name === noWebService ? [] : [name] },
+                                },
+                            })
+                        }
                     />
                 </FormSection>
             )}

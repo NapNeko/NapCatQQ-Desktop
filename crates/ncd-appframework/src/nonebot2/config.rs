@@ -197,8 +197,11 @@ impl NoneBot2EnvProd {
         env.set_ci(ENV_COMMAND_START, &render_list(&self.command_start));
         env.set_ci(ENV_COMMAND_SEP, &render_list(&self.command_sep));
 
-        let keep: std::collections::BTreeSet<String> =
-            self.custom.iter().map(|e| e.key.to_ascii_lowercase()).collect();
+        let keep: std::collections::BTreeSet<String> = self
+            .custom
+            .iter()
+            .map(|e| e.key.to_ascii_lowercase())
+            .collect();
         for entry in env.entries() {
             if !is_system_env_key(&entry.key)
                 && !entry.key.eq_ignore_ascii_case("ENVIRONMENT")
@@ -214,7 +217,9 @@ impl NoneBot2EnvProd {
             {
                 continue;
             }
-            let actual_key = env.entries_ci().into_iter()
+            let actual_key = env
+                .entries_ci()
+                .into_iter()
                 .find(|entry| entry.key.eq_ignore_ascii_case(&c.key))
                 .map(|entry| entry.key)
                 .unwrap_or_else(|| c.key.clone());
@@ -245,27 +250,41 @@ impl NoneBot2InstanceConfig {
         if !valid_env_value(&self.env_prod.onebot_access_token) {
             sink.push("env_prod/onebot_access_token", "值不能包含换行");
         }
-        if !self.env_prod.api_timeout.trim().parse::<f64>().is_ok_and(f64::is_finite)
+        if !self
+            .env_prod
+            .api_timeout
+            .trim()
+            .parse::<f64>()
+            .is_ok_and(f64::is_finite)
             || !valid_env_value(&self.env_prod.api_timeout)
         {
             sink.push("env_prod/api_timeout", "API_TIMEOUT 须为有限秒数");
         }
         if super::duration::normalize_duration(&self.env_prod.session_expire_timeout).is_none() {
-            sink.push("env_prod/session_expire_timeout", "请输入有效时长；负数请用秒数或 -P 开头的 ISO 时长");
+            sink.push(
+                "env_prod/session_expire_timeout",
+                "请输入有效时长；负数请用秒数或 -P 开头的 ISO 时长",
+            );
         }
         if !valid_env_value(&self.env_prod.onebot_secret) {
             sink.push("env_prod/onebot_secret", "值不能包含换行");
         }
         for (i, url) in self.env_prod.onebot_ws_urls.iter().enumerate() {
             if !valid_env_value(url) || !valid_url(url, &["ws", "wss"]) {
-                sink.push(format!("env_prod/onebot_ws_urls/{i}"), "须以 ws:// 或 wss:// 开头");
+                sink.push(
+                    format!("env_prod/onebot_ws_urls/{i}"),
+                    "须以 ws:// 或 wss:// 开头",
+                );
             }
         }
         match serde_json::from_str::<std::collections::BTreeMap<String, String>>(
             &self.env_prod.onebot_api_roots,
         ) {
             Ok(roots) if roots.values().all(|url| valid_url(url, &["http", "https"])) => {}
-            _ => sink.push("env_prod/onebot_api_roots", "须为 self_id 到 HTTP / HTTPS 地址的 JSON 对象"),
+            _ => sink.push(
+                "env_prod/onebot_api_roots",
+                "须为 self_id 到 HTTP / HTTPS 地址的 JSON 对象",
+            ),
         }
         let mut seen = std::collections::BTreeSet::new();
         for (i, c) in self.env_prod.custom.iter().enumerate() {
@@ -276,9 +295,15 @@ impl NoneBot2InstanceConfig {
                 );
             }
             if is_system_env_key(&c.key) || c.key.eq_ignore_ascii_case("ENVIRONMENT") {
-                sink.push(format!("env_prod/custom/{i}/key"), "请在对应系统字段中修改此键");
+                sink.push(
+                    format!("env_prod/custom/{i}/key"),
+                    "请在对应系统字段中修改此键",
+                );
             } else if !seen.insert(c.key.to_ascii_lowercase()) {
-                sink.push(format!("env_prod/custom/{i}/key"), "键名重复（不区分大小写）");
+                sink.push(
+                    format!("env_prod/custom/{i}/key"),
+                    "键名重复（不区分大小写）",
+                );
             }
             if !valid_env_value(&c.value) {
                 sink.push(format!("env_prod/custom/{i}/value"), "值不能包含换行");
@@ -352,7 +377,9 @@ pub fn merge_env_texts(base: Option<&str>, overlay: Option<&str>) -> EnvFile {
 
 fn is_system_env_key(key: &str) -> bool {
     SYSTEM_KEYS.iter().any(|k| key.eq_ignore_ascii_case(k))
-        || ONEBOT_V11_ALIASES.iter().any(|(_, alias)| key.eq_ignore_ascii_case(alias))
+        || ONEBOT_V11_ALIASES
+            .iter()
+            .any(|(_, alias)| key.eq_ignore_ascii_case(alias))
 }
 
 fn read_onebot_env(env: &EnvFile, key: &str) -> Option<String> {
@@ -405,8 +432,7 @@ pub fn read_listen_port(base: Option<&str>, overlay: Option<&str>) -> Option<u16
 
 pub fn read_access_token_from_texts(base: Option<&str>, overlay: Option<&str>) -> Option<String> {
     let merged = merge_env_texts(base, overlay);
-    read_onebot_env(&merged, ENV_ONEBOT_ACCESS_TOKEN)
-        .filter(|v| !v.trim().is_empty())
+    read_onebot_env(&merged, ENV_ONEBOT_ACCESS_TOKEN).filter(|v| !v.trim().is_empty())
 }
 
 pub fn read_outbound_ws_urls_from_texts(base: Option<&str>, overlay: Option<&str>) -> Vec<String> {
@@ -704,11 +730,23 @@ mod tests {
         assert_eq!(parsed.custom[0].key, "ONEBOT_V12_ACCESS_TOKEN");
         parsed.onebot_access_token = "changed".into();
         parsed.apply_to(&mut env);
-        assert_eq!(env.get_ci("ONEBOT_V11_ACCESS_TOKEN").as_deref(), Some("changed"));
+        assert_eq!(
+            env.get_ci("ONEBOT_V11_ACCESS_TOKEN").as_deref(),
+            Some("changed")
+        );
         write_onebot_env(&mut env, ENV_ONEBOT_ACCESS_TOKEN, "relinked");
-        assert_eq!(read_onebot_env(&env, ENV_ONEBOT_ACCESS_TOKEN).as_deref(), Some("relinked"));
-        assert_eq!(read_access_token_from_texts(Some(&env.render()), None).as_deref(), Some("relinked"));
-        assert_eq!(read_outbound_ws_urls_from_texts(Some(&env.render()), None), vec!["wss://v11"]);
+        assert_eq!(
+            read_onebot_env(&env, ENV_ONEBOT_ACCESS_TOKEN).as_deref(),
+            Some("relinked")
+        );
+        assert_eq!(
+            read_access_token_from_texts(Some(&env.render()), None).as_deref(),
+            Some("relinked")
+        );
+        assert_eq!(
+            read_outbound_ws_urls_from_texts(Some(&env.render()), None),
+            vec!["wss://v11"]
+        );
     }
 
     #[test]
@@ -718,7 +756,10 @@ mod tests {
         assert_eq!(parsed.command_sep, vec!["."]);
         assert_eq!(parsed.api_timeout, "30.0");
         assert_eq!(parsed.session_expire_timeout, "PT2M");
-        let merged = merge_env_texts(Some("CUSTOM_KEY=base\nPORT=1\n"), Some("custom_key=overlay\nport=2\n"));
+        let merged = merge_env_texts(
+            Some("CUSTOM_KEY=base\nPORT=1\n"),
+            Some("custom_key=overlay\nport=2\n"),
+        );
         let parsed = NoneBot2EnvProd::from_env_file(&merged);
         assert_eq!(parsed.port, 2);
         assert_eq!(parsed.custom.len(), 1);
@@ -727,11 +768,17 @@ mod tests {
 
     #[test]
     fn rejects_invalid_new_fields_and_system_keys_in_custom() {
-        let mut cfg = NoneBot2InstanceConfig { env_prod: NoneBot2EnvProd::default() };
+        let mut cfg = NoneBot2InstanceConfig {
+            env_prod: NoneBot2EnvProd::default(),
+        };
         cfg.env_prod.api_timeout = "NaN".into();
         cfg.env_prod.onebot_ws_urls = vec!["https://example.com".into()];
         cfg.env_prod.onebot_api_roots = r#"{"10001": 42}"#.into();
-        cfg.env_prod.custom.push(NoneBot2EnvEntry { key: "ONEBOT_V11_SECRET".into(), value: "x".into(), comment: String::new() });
+        cfg.env_prod.custom.push(NoneBot2EnvEntry {
+            key: "ONEBOT_V11_SECRET".into(),
+            value: "x".into(),
+            comment: String::new(),
+        });
         let issues = cfg.validate();
         assert!(issues.iter().any(|i| i.path == "env_prod/api_timeout"));
         assert!(issues.iter().any(|i| i.path == "env_prod/onebot_ws_urls/0"));
@@ -752,15 +799,25 @@ mod tests {
 
     #[test]
     fn rejects_empty_url_hosts_and_accepts_case_insensitive_schemes() {
-        let mut cfg = NoneBot2InstanceConfig { env_prod: NoneBot2EnvProd::default() };
+        let mut cfg = NoneBot2InstanceConfig {
+            env_prod: NoneBot2EnvProd::default(),
+        };
         cfg.env_prod.onebot_ws_urls = vec!["ws://".into()];
         cfg.env_prod.onebot_api_roots = r#"{"1":"https://"}"#.into();
         assert_eq!(cfg.validate().len(), 2);
         cfg.env_prod.onebot_ws_urls = vec!["WSS://example.com/ws".into()];
         cfg.env_prod.onebot_api_roots = r#"{"1":"HTTPS://example.com/api"}"#.into();
         assert!(cfg.validate().is_empty());
-        cfg.env_prod.custom.push(NoneBot2EnvEntry { key: " PORT ".into(), value: "9000".into(), comment: String::new() });
-        assert!(cfg.validate().iter().any(|i| i.path == "env_prod/custom/0/key"));
+        cfg.env_prod.custom.push(NoneBot2EnvEntry {
+            key: " PORT ".into(),
+            value: "9000".into(),
+            comment: String::new(),
+        });
+        assert!(
+            cfg.validate()
+                .iter()
+                .any(|i| i.path == "env_prod/custom/0/key")
+        );
     }
 
     #[test]
@@ -771,19 +828,30 @@ mod tests {
         assert_eq!(parsed.custom[0].value, "#abc");
         let mut out = env;
         parsed.apply_to(&mut out);
-        assert_eq!(NoneBot2EnvProd::from_env_file(&EnvFile::parse_python(&out.render())).onebot_secret, "#secret");
+        assert_eq!(
+            NoneBot2EnvProd::from_env_file(&EnvFile::parse_python(&out.render())).onebot_secret,
+            "#secret"
+        );
     }
 
     #[test]
     fn ambiguous_negative_clock_is_rejected_without_reinterpreting_the_value() {
-        let mut cfg = NoneBot2InstanceConfig { env_prod: NoneBot2EnvProd::default() };
+        let mut cfg = NoneBot2InstanceConfig {
+            env_prod: NoneBot2EnvProd::default(),
+        };
         cfg.env_prod.session_expire_timeout = "-1 day, 02:03:04.000005".into();
-        assert!(cfg.validate().iter().any(|issue| issue.path == "env_prod/session_expire_timeout"));
-        assert_eq!(cfg.env_prod.session_expire_timeout, "-1 day, 02:03:04.000005");
+        assert!(
+            cfg.validate()
+                .iter()
+                .any(|issue| issue.path == "env_prod/session_expire_timeout")
+        );
+        assert_eq!(
+            cfg.env_prod.session_expire_timeout,
+            "-1 day, 02:03:04.000005"
+        );
         cfg.env_prod.session_expire_timeout = "-79015.999995".into();
         assert!(cfg.validate().is_empty());
         cfg.env_prod.session_expire_timeout = "-PT79015.999995S".into();
         assert!(cfg.validate().is_empty());
     }
-
 }

@@ -100,10 +100,12 @@ const RULE_FIELDS = [
 ];
 
 export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
-    agent: { sections: [
-        { path: ['agent'], title: '外接 Agent' },
-        { path: ['capabilities'], title: '工具与子代理能力' },
-    ] },
+    agent: {
+        sections: [
+            { path: ['agent'], title: '外接 Agent' },
+            { path: ['capabilities'], title: '工具与子代理能力' },
+        ],
+    },
     persona: {
         sections: [
             { path: ['bot'], title: '身份' },

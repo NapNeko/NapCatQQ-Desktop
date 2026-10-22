@@ -13,20 +13,42 @@ export const NONEBOT2_LOG_LEVELS = [
     'CRITICAL',
 ] as const;
 
-
 export const NONEBOT2_SYSTEM_ENV_KEYS = new Set([
-    'ENVIRONMENT', 'HOST', 'PORT', 'DRIVER', 'LOG_LEVEL', 'API_TIMEOUT',
-    'SESSION_EXPIRE_TIMEOUT', 'SUPERUSERS', 'NICKNAME', 'COMMAND_START', 'COMMAND_SEP',
-    'ONEBOT_ACCESS_TOKEN', 'ONEBOT_SECRET', 'ONEBOT_WS_URLS', 'ONEBOT_API_ROOTS',
-    'ONEBOT_V11_ACCESS_TOKEN', 'ONEBOT_V11_SECRET', 'ONEBOT_V11_WS_URLS', 'ONEBOT_V11_API_ROOTS',
+    'ENVIRONMENT',
+    'HOST',
+    'PORT',
+    'DRIVER',
+    'LOG_LEVEL',
+    'API_TIMEOUT',
+    'SESSION_EXPIRE_TIMEOUT',
+    'SUPERUSERS',
+    'NICKNAME',
+    'COMMAND_START',
+    'COMMAND_SEP',
+    'ONEBOT_ACCESS_TOKEN',
+    'ONEBOT_SECRET',
+    'ONEBOT_WS_URLS',
+    'ONEBOT_API_ROOTS',
+    'ONEBOT_V11_ACCESS_TOKEN',
+    'ONEBOT_V11_SECRET',
+    'ONEBOT_V11_WS_URLS',
+    'ONEBOT_V11_API_ROOTS',
 ]);
 
 /** 内置驱动与 OneBot v12 独立命名空间；按需加入，避免为未使用的驱动写入配置。 */
 export const NONEBOT2_ENV_PRESETS = [
-    { key: 'FASTAPI_OPENAPI_URL', value: '/openapi.json', comment: 'FastAPI OpenAPI 地址（缺省关闭）' },
+    {
+        key: 'FASTAPI_OPENAPI_URL',
+        value: '/openapi.json',
+        comment: 'FastAPI OpenAPI 地址（缺省关闭）',
+    },
     { key: 'FASTAPI_DOCS_URL', value: '/docs', comment: 'FastAPI Swagger 地址（缺省关闭）' },
     { key: 'FASTAPI_REDOC_URL', value: '/redoc', comment: 'FastAPI ReDoc 地址（缺省关闭）' },
-    { key: 'FASTAPI_INCLUDE_ADAPTER_SCHEMA', value: 'true', comment: '在 OpenAPI 中包含适配器路由' },
+    {
+        key: 'FASTAPI_INCLUDE_ADAPTER_SCHEMA',
+        value: 'true',
+        comment: '在 OpenAPI 中包含适配器路由',
+    },
     { key: 'FASTAPI_RELOAD', value: 'false', comment: 'FastAPI 冷重载' },
     { key: 'FASTAPI_RELOAD_DIRS', value: '[]', comment: 'FastAPI 重载监控目录（JSON 数组）' },
     { key: 'FASTAPI_RELOAD_DELAY', value: '0.25', comment: 'FastAPI 重载延迟（秒）' },
@@ -42,7 +64,11 @@ export const NONEBOT2_ENV_PRESETS = [
     { key: 'ONEBOT_V12_ACCESS_TOKEN', value: '', comment: 'OneBot v12 授权令牌' },
     { key: 'ONEBOT_V12_WS_URLS', value: '[]', comment: 'OneBot v12 正向 WS 地址（JSON 数组）' },
     { key: 'ONEBOT_V12_API_ROOTS', value: '{}', comment: 'OneBot v12 HTTP API 地址（JSON 对象）' },
-    { key: 'ONEBOT_V12_USE_MSGPACK', value: 'false', comment: 'OneBot v12 msgpack，可填布尔值或 self_id 到布尔值的 JSON 对象' },
+    {
+        key: 'ONEBOT_V12_USE_MSGPACK',
+        value: 'false',
+        comment: 'OneBot v12 msgpack，可填布尔值或 self_id 到布尔值的 JSON 对象',
+    },
 ] as const;
 
 export function appendNoneBot2EnvPreset(
@@ -87,35 +113,65 @@ function validNoneBot2Url(value: string, schemes: string[]): boolean {
 
 export function validateNoneBot2Config(cfg: NoneBot2InstanceConfig): AppConfigIssue[] {
     const out: AppConfigIssue[] = [];
-    if (!Number.isInteger(cfg.env_prod.port) || cfg.env_prod.port < 1 || cfg.env_prod.port > 65535) {
+    if (
+        !Number.isInteger(cfg.env_prod.port) ||
+        cfg.env_prod.port < 1 ||
+        cfg.env_prod.port > 65535
+    ) {
         out.push({ path: 'env_prod/port', message: '端口需在 1–65535' });
     }
     if (!cfg.env_prod.host.trim()) {
         out.push({ path: 'env_prod/host', message: 'HOST 不能为空' });
     }
     const env = cfg.env_prod;
-    for (const key of ['host', 'driver', 'log_level', 'onebot_access_token', 'onebot_secret'] as const) {
-        if (/[\r\n]/.test(env[key])) out.push({ path: `env_prod/${key}`, message: '值不能包含换行' });
+    for (const key of [
+        'host',
+        'driver',
+        'log_level',
+        'onebot_access_token',
+        'onebot_secret',
+    ] as const) {
+        if (/[\r\n]/.test(env[key]))
+            out.push({ path: `env_prod/${key}`, message: '值不能包含换行' });
     }
-    if (!env.api_timeout.trim() || !Number.isFinite(Number(env.api_timeout)) || /[\r\n]/.test(env.api_timeout)) {
+    if (
+        !env.api_timeout.trim() ||
+        !Number.isFinite(Number(env.api_timeout)) ||
+        /[\r\n]/.test(env.api_timeout)
+    ) {
         out.push({ path: 'env_prod/api_timeout', message: 'API_TIMEOUT 须为有限秒数' });
     }
     if (normalizeNoneBot2Duration(env.session_expire_timeout) == null) {
-        out.push({ path: 'env_prod/session_expire_timeout', message: '请输入有效时长；负数请用秒数或 -P 开头的 ISO 时长' });
+        out.push({
+            path: 'env_prod/session_expire_timeout',
+            message: '请输入有效时长；负数请用秒数或 -P 开头的 ISO 时长',
+        });
     }
     env.onebot_ws_urls.forEach((url, i) => {
         if (!validNoneBot2Url(url, ['ws:', 'wss:']) || /[\r\n]/.test(url)) {
-            out.push({ path: `env_prod/onebot_ws_urls/${i}`, message: '须以 ws:// 或 wss:// 开头' });
+            out.push({
+                path: `env_prod/onebot_ws_urls/${i}`,
+                message: '须以 ws:// 或 wss:// 开头',
+            });
         }
     });
     try {
         const roots: unknown = JSON.parse(env.onebot_api_roots);
-        if (!roots || Array.isArray(roots) || typeof roots !== 'object'
-            || Object.values(roots).some((url) => typeof url !== 'string' || !validNoneBot2Url(url, ['http:', 'https:']))) {
+        if (
+            !roots ||
+            Array.isArray(roots) ||
+            typeof roots !== 'object' ||
+            Object.values(roots).some(
+                (url) => typeof url !== 'string' || !validNoneBot2Url(url, ['http:', 'https:']),
+            )
+        ) {
             throw new Error('invalid roots');
         }
     } catch {
-        out.push({ path: 'env_prod/onebot_api_roots', message: '须为 self_id 到 HTTP / HTTPS 地址的 JSON 对象' });
+        out.push({
+            path: 'env_prod/onebot_api_roots',
+            message: '须为 self_id 到 HTTP / HTTPS 地址的 JSON 对象',
+        });
     }
     const seen = new Set<string>();
     cfg.env_prod.custom.forEach((c, i) => {

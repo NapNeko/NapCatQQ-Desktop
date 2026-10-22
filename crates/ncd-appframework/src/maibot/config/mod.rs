@@ -358,7 +358,6 @@ mod tests {
         assert!(paths.contains(&"models/model_task_config/utils/model_list/0".to_string()));
     }
 
-
     #[test]
     fn web_search_uses_services_and_checks_active_credentials() {
         let mut c = cfg();
@@ -379,15 +378,26 @@ mod tests {
     fn price_periods_check_format_and_cross_midnight_overlap() {
         let mut c = cfg();
         let period = |start: &str, end: &str| super::super::schema::MaiBotModelPricePeriod {
-            start_time: start.into(), end_time: end.into(),
-            price_in: 1.0, price_out: 2.0, cache_price_in: 0.0,
+            start_time: start.into(),
+            end_time: end.into(),
+            price_in: 1.0,
+            price_out: 2.0,
+            cache_price_in: 0.0,
         };
         c.models.models[0].price_periods = vec![period("23:00", "01:00"), period("00:30", "02:00")];
-        assert!(validate(&c).iter().any(|issue| issue.message.contains("重叠")));
+        assert!(
+            validate(&c)
+                .iter()
+                .any(|issue| issue.message.contains("重叠"))
+        );
         c.models.models[0].price_periods[1].start_time = "01:00".into();
         assert!(validate(&c).is_empty());
         c.models.models[0].price_periods[1].start_time = "25:00".into();
-        assert!(validate(&c).iter().any(|issue| issue.path == "models/models/0/price_periods/1/start_time"));
+        assert!(
+            validate(&c)
+                .iter()
+                .any(|issue| issue.path == "models/models/0/price_periods/1/start_time")
+        );
     }
 
     #[test]

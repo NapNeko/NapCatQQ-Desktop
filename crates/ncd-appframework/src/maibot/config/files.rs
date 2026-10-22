@@ -4,8 +4,8 @@
 use toml_edit::DocumentMut;
 
 use super::super::schema::{
-    MaiBotBotConfigFile, MaiBotModelConfigFile, bot_config_to_toml,
-    model_config_to_toml, model_config_seed,
+    MaiBotBotConfigFile, MaiBotModelConfigFile, bot_config_to_toml, model_config_seed,
+    model_config_to_toml,
 };
 use crate::toml_patch;
 
@@ -58,12 +58,7 @@ pub fn patch_bot_config(
             }
         }
     }
-    let changed = toml_patch::apply(
-        &mut doc,
-        &before_table,
-        &after_table,
-        &bot_identity,
-    );
+    let changed = toml_patch::apply(&mut doc, &before_table, &after_table, &bot_identity);
     Ok((!changed.is_empty()).then(|| doc.to_string()))
 }
 
@@ -78,7 +73,10 @@ pub fn patch_model_config(
     let mut doc = match current {
         Some(text) => parse(text, "model_config.toml")?,
         None => {
-            let mut doc = parse(model_config_seed(model_config_version), "内置默认 model_config.toml")?;
+            let mut doc = parse(
+                model_config_seed(model_config_version),
+                "内置默认 model_config.toml",
+            )?;
             if let Some(version) = model_config_version
                 && let Some(inner) = doc
                     .get_mut("inner")
@@ -156,15 +154,19 @@ mod tests {
         assert_eq!(read_model_config_file(Some(&out)).unwrap(), after);
     }
 
-
     #[test]
     fn legacy_config_preserves_version_removed_and_unknown_fields() {
         let text = "[inner]\nversion = \"8.14.40\"\n[chat.reply_timing]\nreply_trigger_mode = \"reply_necessity\"\nfuture_option = 99\n[experimental]\ntool_result_condense = true\n[a_memorix.web.import]\nmax_chunk_chars = 555\n";
         let before = read_bot_config_file(Some(text)).unwrap();
-        assert_eq!(patch_bot_config(Some(text), "8.15.37", &before, &before).unwrap(), None);
+        assert_eq!(
+            patch_bot_config(Some(text), "8.15.37", &before, &before).unwrap(),
+            None
+        );
         let mut after = before.clone();
         after.bot.nickname = "小麦".into();
-        let out = patch_bot_config(Some(text), "8.15.37", &before, &after).unwrap().unwrap();
+        let out = patch_bot_config(Some(text), "8.15.37", &before, &after)
+            .unwrap()
+            .unwrap();
         assert!(out.starts_with(text), "{out}");
         assert!(!out.contains("[capabilities]"), "{out}");
         assert!(!out.contains("[agent]"), "{out}");
@@ -172,7 +174,9 @@ mod tests {
         let mut changed = before.clone();
         changed.capabilities.tool_result_condense = false;
         changed.a_memorix.web.import_config.max_chunk_chars = 777;
-        let out = patch_bot_config(Some(text), "8.15.37", &before, &changed).unwrap().unwrap();
+        let out = patch_bot_config(Some(text), "8.15.37", &before, &changed)
+            .unwrap()
+            .unwrap();
         assert!(out.contains("version = \"8.14.40\""));
         assert!(out.contains("tool_result_condense = false"));
         assert!(out.contains("max_chunk_chars = 777"));
@@ -186,7 +190,9 @@ mod tests {
         let before = read_model_config_file(Some(text)).unwrap();
         let mut after = before.clone();
         after.models[0].price_in = 0.25;
-        let out = patch_model_config(Some(text), Some("1.17.22"), &before, &after).unwrap().unwrap();
+        let out = patch_model_config(Some(text), Some("1.17.22"), &before, &after)
+            .unwrap()
+            .unwrap();
         assert!(out.contains("version = \"1.17.9\""));
         assert!(out.contains("future_model_option = true"));
         assert!(out.contains("[model_task_config.expression_use]"));
@@ -195,17 +201,29 @@ mod tests {
         assert_eq!(read_model_config_file(Some(&out)).unwrap(), after);
     }
 
-
     #[test]
     fn older_instance_without_config_starts_from_legacy_seed() {
-        let before = super::super::super::schema::read_model_config_file_for_version(None, Some("1.17.9")).unwrap();
+        let before =
+            super::super::super::schema::read_model_config_file_for_version(None, Some("1.17.9"))
+                .unwrap();
         let mut after = before.clone();
         after.api_providers[0].api_key = "legacy-key".into();
-        let out = patch_model_config(None, Some("1.17.9"), &before, &after).unwrap().unwrap();
+        let out = patch_model_config(None, Some("1.17.9"), &before, &after)
+            .unwrap()
+            .unwrap();
         assert!(out.contains("version = \"1.17.9\""));
         assert!(out.contains("[model_task_config.expression_use]"));
-        for unsupported in ["model_type =", "[web]", "price_periods =", "[model_task_config.web_search]", "[model_task_config.image_embedding]"] {
-            assert!(!out.contains(unsupported), "不为旧实例注入新字段 {unsupported}: {out}");
+        for unsupported in [
+            "model_type =",
+            "[web]",
+            "price_periods =",
+            "[model_task_config.web_search]",
+            "[model_task_config.image_embedding]",
+        ] {
+            assert!(
+                !out.contains(unsupported),
+                "不为旧实例注入新字段 {unsupported}: {out}"
+            );
         }
         assert_eq!(read_model_config_file(Some(&out)).unwrap(), after);
     }
@@ -215,7 +233,9 @@ mod tests {
         let before = read_bot_config_file(None).unwrap();
         let mut after = before.clone();
         after.bot.nickname = "小麦".into();
-        let out = patch_bot_config(None, "8.14.40", &before, &after).unwrap().unwrap();
+        let out = patch_bot_config(None, "8.14.40", &before, &after)
+            .unwrap()
+            .unwrap();
         let root: toml::Table = toml::from_str(&out).unwrap();
         assert_eq!(root["inner"]["version"].as_str(), Some("8.14.40"));
         assert_eq!(root.len(), 2, "只有inner和明确修改的bot小节: {out}");

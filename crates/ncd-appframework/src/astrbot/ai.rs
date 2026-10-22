@@ -283,7 +283,11 @@ pub struct AstrBotSubagentRow {
 
 impl Default for AstrBotSubagentRow {
     fn default() -> Self {
-        Self { provider_id: String::new(), persona_id: String::new(), extra_json: "{}".into() }
+        Self {
+            provider_id: String::new(),
+            persona_id: String::new(),
+            extra_json: "{}".into(),
+        }
     }
 }
 
@@ -714,9 +718,16 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
         .agents
         .iter()
         .map(|a| {
-            let value: Value = serde_json::from_str(if a.extra_json.trim().is_empty() { "{}" } else { &a.extra_json })
-                .map_err(|e| format!("子代理额外配置不是有效 JSON: {e}"))?;
-            let mut m = value.as_object().cloned().ok_or_else(|| "子代理额外配置必须是对象".to_string())?;
+            let value: Value = serde_json::from_str(if a.extra_json.trim().is_empty() {
+                "{}"
+            } else {
+                &a.extra_json
+            })
+            .map_err(|e| format!("子代理额外配置不是有效 JSON: {e}"))?;
+            let mut m = value
+                .as_object()
+                .cloned()
+                .ok_or_else(|| "子代理额外配置必须是对象".to_string())?;
             m.insert("provider_id".into(), Value::String(a.provider_id.clone()));
             m.insert("persona_id".into(), Value::String(a.persona_id.clone()));
             Ok(Value::Object(m))
@@ -1163,14 +1174,20 @@ mod tests {
         assert_eq!(read_ai.max_context_length, ai.max_context_length);
         assert_eq!(read_ai.streaming_response, ai.streaming_response);
         // tool_schema_mode 现归高级页，旧兼容投影无写权限。
-        assert_eq!(read_ai.tool_schema_mode, AstrBotAiSettings::default().tool_schema_mode);
+        assert_eq!(
+            read_ai.tool_schema_mode,
+            AstrBotAiSettings::default().tool_schema_mode
+        );
         assert_eq!(stt_from_root(&root), stt);
         let read_tts = tts_from_root(&root);
         assert_eq!(read_tts.enable, tts.enable);
         assert_eq!(read_tts.provider_id, tts.provider_id);
         assert!(!read_tts.dual_output);
         assert_eq!(websearch_from_root(&root).enable, websearch.enable);
-        assert!(root.pointer("/provider_settings/websearch_tavily_key").is_none());
+        assert!(
+            root.pointer("/provider_settings/websearch_tavily_key")
+                .is_none()
+        );
         assert_eq!(kb_from_root(&root), kb);
         assert_eq!(gates_from_root(&root), gates);
         assert_eq!(subagent_from_root(&root), subagent);
@@ -1186,10 +1203,26 @@ mod tests {
         cfg.subagent.agents.reverse();
         cfg.subagent.agents[0].persona_id = "changed".into();
         apply_ai_patch(&mut root, &cfg.ai_patch(&[], &[])).unwrap();
-        assert_eq!(root.pointer("/subagent_orchestrator/agents/0/provider_id").unwrap(), "two");
-        assert_eq!(root.pointer("/subagent_orchestrator/agents/0/persona_id").unwrap(), "changed");
-        assert_eq!(root.pointer("/subagent_orchestrator/agents/0/future/tag").unwrap(), 2);
-        assert_eq!(root.pointer("/subagent_orchestrator/agents/1/future/tag").unwrap(), 1);
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/0/provider_id")
+                .unwrap(),
+            "two"
+        );
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/0/persona_id")
+                .unwrap(),
+            "changed"
+        );
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/0/future/tag")
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/1/future/tag")
+                .unwrap(),
+            1
+        );
     }
 
     #[test]

@@ -26,8 +26,23 @@ describe('Pydantic session duration', () => {
     });
 
     it.each([
-        '', 'abc', 'NaN', 'Infinity', 'P', 'PT', 'P1DT', 'P-1D', 'P1D2D',
-        'PT1S2M', 'PT1.5H30M', '00:60:00', '00:00:99', '120\n', 'P1000000000D', '-1 day, 02:03:04.000005', '-00:02:00',
+        '',
+        'abc',
+        'NaN',
+        'Infinity',
+        'P',
+        'PT',
+        'P1DT',
+        'P-1D',
+        'P1D2D',
+        'PT1S2M',
+        'PT1.5H30M',
+        '00:60:00',
+        '00:00:99',
+        '120\n',
+        'P1000000000D',
+        '-1 day, 02:03:04.000005',
+        '-00:02:00',
     ])('rejects invalid, incomplete or overflowing duration %s', (raw) => {
         expect(normalizeNoneBot2Duration(raw)).toBeNull();
     });
