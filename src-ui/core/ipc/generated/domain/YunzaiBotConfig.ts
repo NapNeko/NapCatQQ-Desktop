@@ -3,7 +3,7 @@
 /**
  * bot.yaml
  */
-export type YunzaiBotConfig = { log_level: string, log_length: number, log_object: boolean, 
+export type YunzaiBotConfig = { log_level: string, log_length: number, log_object: boolean, log_align: string, 
 /**
  * 单个插件加载超过多少秒算超时
  */
@@ -28,6 +28,10 @@ online_msg_exp: number,
  * 发出去的文件链接保留多少分钟
  */
 file_to_url_time: number, 
+/**
+ * 文件最多访问次数；None 不限制，0 禁止访问
+ */
+file_to_url_times?: number, msg_type_count: boolean, 
 /**
  * `/` 开头的消息当作 `#`（上游键名 `/→#`）
  */

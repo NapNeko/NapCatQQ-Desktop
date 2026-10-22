@@ -37,6 +37,8 @@ export interface NeoBotField {
     hidden: boolean;
     sensitive: boolean;
     fields: NeoBotField[];
+    catalog: NeoBotField[];
+    scope: { providers: string[]; modelTypes: string[] };
     min?: number;
     max?: number;
 }
@@ -58,10 +60,57 @@ export function parseFields(raw: unknown): NeoBotField[] {
             hidden: f.hidden === true,
             sensitive: f.sensitive === true,
             fields: parseFields(f.fields),
+            catalog: parseFields(f.catalog).map((item) => ({
+                ...item,
+                strict: item.options.length > 0,
+            })),
+            scope: {
+                providers: strings(record(f.scope).providers),
+                modelTypes: strings(record(f.scope).model_types),
+            },
             min: typeof f.min === 'number' ? f.min : undefined,
             max: typeof f.max === 'number' ? f.max : undefined,
         }))
         .filter((f) => f.name && !f.hidden);
+}
+
+/** entry_schema 描述的是默认值；已有模型的参数值应以 settings 草稿为准。 */
+export function modelParamsValue(field: NeoBotField, settings: PanelObject): PanelObject {
+    const draft = asRecord(settings[field.name]);
+    if (draft) return draft;
+    const fallback = record(field.value);
+    const values = { ...record(fallback.values) };
+    for (const item of field.catalog) {
+        if (Object.prototype.hasOwnProperty.call(settings, item.name)) {
+            values[item.name] = settings[item.name];
+        }
+    }
+    return {
+        ...fallback,
+        enabled_params: Array.isArray(settings.enabled_params)
+            ? [...settings.enabled_params]
+            : strings(fallback.enabled_params),
+        extra_body: { ...record(settings.extra_body ?? fallback.extra_body) },
+        values,
+    };
+}
+
+function normalizeProvider(value: unknown): string {
+    const provider = text(value).trim().toLowerCase().replace(/-/g, '_');
+    if (provider === 'anthropic') return 'anthropic';
+    if (['deepseek', 'deepseek_offical', 'deepseek_official'].includes(provider)) return 'deepseek';
+    return 'openai';
+}
+
+export function modelParamApplies(field: NeoBotField, context: PanelObject): boolean {
+    const provider = normalizeProvider(context.provider);
+    const modelType = text(context.model_type).trim().toLowerCase() || 'chat';
+    return (
+        (!field.scope.providers.length ||
+            field.scope.providers.some((item) => normalizeProvider(item) === provider)) &&
+        (!field.scope.modelTypes.length ||
+            field.scope.modelTypes.some((item) => item.trim().toLowerCase() === modelType))
+    );
 }
 
 export function defaultsFor(fields: NeoBotField[]): PanelObject {

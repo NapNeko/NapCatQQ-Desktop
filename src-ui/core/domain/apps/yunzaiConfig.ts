@@ -52,6 +52,7 @@ export function yunzaiDefaultConfig(port: number): YunzaiInstanceConfig {
             log_level: 'info',
             log_length: 10000,
             log_object: true,
+            log_align: '  TRSSYz  ',
             plugin_load_timeout: 60,
             file_watch: true,
             update_time: 1440,
@@ -63,6 +64,7 @@ export function yunzaiDefaultConfig(port: number): YunzaiInstanceConfig {
             cache_group_member: true,
             online_msg_exp: 1440,
             file_to_url_time: 1,
+            msg_type_count: false,
             slash_to_hash: true,
             chromium_path: '',
             puppeteer_ws: '',
@@ -104,6 +106,7 @@ export function yunzaiDefaultConfig(port: number): YunzaiInstanceConfig {
             redirect: 'https://git.trss.me/Yunzai',
             access_token: '',
             extra_auth_headers: [],
+            https: { url: '', key: '', cert: '' },
         },
         redis: {
             path: 'redis-server',
@@ -114,6 +117,28 @@ export function yunzaiDefaultConfig(port: number): YunzaiInstanceConfig {
             db: 0,
         },
         renderer: { name: '' },
+        db: { dialect: 'sqlite', storage: 'data/db/data.db', logging: false },
+        milky: {
+            enable: false,
+            host: '127.0.0.1',
+            port: 3000,
+            prefix: '',
+            access_token: '',
+            connection: 'ws',
+            webhook_path: '/milky',
+            ws_heartbeat: 30,
+            ws_reconnect_interval: 10,
+            http_timeout: 15,
+        },
+        satori: {
+            enable: false,
+            http_endpoint: 'http://127.0.0.1:5140/satori/v1',
+            ws_endpoint: 'ws://127.0.0.1:5140/satori/v1/events',
+            token: '',
+            platform: 'satori',
+            timeout: 60000,
+            heartbeat_interval: 10000,
+        },
     };
 }
 
@@ -173,6 +198,51 @@ export function validateYunzaiConfig(cfg: YunzaiInstanceConfig): AppConfigIssue[
     if (cfg.group.default.add_limit > 2) {
         out.push({ path: 'group/default/add_limit', message: '只能是 0、1、2' });
     }
+    if (
+        cfg.bot.file_to_url_times !== undefined &&
+        (!Number.isInteger(cfg.bot.file_to_url_times) || cfg.bot.file_to_url_times < 0)
+    ) {
+        out.push({ path: 'bot/file_to_url_times', message: '填写大于等于 0 的整数，或留空' });
+    }
+    if (
+        cfg.server.https.port !== undefined &&
+        (!Number.isInteger(cfg.server.https.port) || cfg.server.https.port < 1 || cfg.server.https.port > 65535)
+    ) {
+        out.push({ path: 'server/https/port', message: '端口要在 1 到 65535 之间' });
+    } else if (
+        cfg.server.https.key &&
+        cfg.server.https.cert &&
+        cfg.server.https.port === cfg.server.port
+    ) {
+        out.push({ path: 'server/https/port', message: '不能和 HTTP 端口相同' });
+    }
+    if (cfg.milky.enable) {
+        if (!Number.isInteger(cfg.milky.port) || cfg.milky.port < 1 || cfg.milky.port > 65535) {
+            out.push({ path: 'milky/port', message: '端口要在 1 到 65535 之间' });
+        }
+        if (!cfg.milky.host.trim()) out.push({ path: 'milky/host', message: '不能留空' });
+        if (!['ws', 'webhook'].includes(cfg.milky.connection)) {
+            out.push({ path: 'milky/connection', message: '只能是 ws 或 webhook' });
+        }
+        if (cfg.milky.connection === 'webhook' && !cfg.milky.webhook_path.startsWith('/')) {
+            out.push({ path: 'milky/webhook_path', message: '路径要以 / 开头' });
+        }
+    }
+    if (cfg.satori.enable) {
+        for (const [key, schemes] of [
+            ['http_endpoint', ['http://', 'https://']],
+            ['ws_endpoint', ['ws://', 'wss://']],
+        ] as const) {
+            if (cfg.satori[key].trim() && !schemes.some((scheme) => cfg.satori[key].startsWith(scheme))) {
+                out.push({ path: `satori/${key}`, message: '填写对应协议的完整地址' });
+            }
+        }
+        for (const key of ['timeout', 'heartbeat_interval'] as const) {
+            if (!Number.isInteger(cfg.satori[key]) || cfg.satori[key] < 0) {
+                out.push({ path: `satori/${key}`, message: '要大于等于 0' });
+            }
+        }
+    }
     const seen = new Set<string>();
     cfg.group.overrides.forEach((o, i) => {
         const key = o.key.trim();
@@ -191,7 +261,7 @@ export const YUNZAI_CONFIG_FORM: ConfigFormSpec<'yunzai'> = {
     framework: 'yunzai',
     validate: validateYunzaiConfig,
     saveHint: (r, running) => {
-        if (r.restart_required) return '端口、Redis、定时任务这些改动重启后生效';
+        if (r.restart_required) return '服务、存储、协议和定时任务等改动重启后生效';
         return running ? '云崽几秒内会自己读到新配置' : null;
     },
 };
@@ -208,7 +278,12 @@ export function yunzaiRestartInputsChanged(
     const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
     return (
         a.server.port !== b.server.port ||
+        !same(a.server.https, b.server.https) ||
         !same(a.redis, b.redis) ||
+        !same(a.db, b.db) ||
+        !same(a.milky, b.milky) ||
+        !same(a.satori, b.satori) ||
+        a.bot.log_align !== b.bot.log_align ||
         a.bot.file_watch !== b.bot.file_watch ||
         a.bot.update_time !== b.bot.update_time ||
         a.bot.restart_time !== b.bot.restart_time ||

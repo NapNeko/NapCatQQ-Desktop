@@ -27,6 +27,7 @@ import { YunzaiGroupsTab } from './YunzaiGroupsTab';
 import { YunzaiOverviewTab } from './YunzaiOverviewTab';
 import { YunzaiPermissionsTab } from './YunzaiPermissionsTab';
 import { YunzaiRenderTab } from './YunzaiRenderTab';
+import { YunzaiProtocolsTab } from './YunzaiProtocolsTab';
 
 const NAV: readonly FrameworkNavGroup[] = [
     { id: 'home', items: [{ value: 'overview', label: '概览' }] },
@@ -38,13 +39,14 @@ const NAV: readonly FrameworkNavGroup[] = [
             { value: 'permissions', label: '主人与权限' },
             { value: 'groups', label: '群聊' },
             { value: 'render', label: '渲染' },
+            { value: 'protocols', label: '协议与存储' },
         ],
     },
     { id: 'extend', label: '扩展', items: [{ value: 'plugins', label: '插件' }] },
     { id: 'instance', label: '实例', items: [{ value: 'connection', label: '连接' }] },
 ];
 
-const TYPED_TABS = new Set(['overview', 'basic', 'permissions', 'groups', 'render', 'connection']);
+const TYPED_TABS = new Set(['overview', 'basic', 'permissions', 'groups', 'render', 'connection', 'protocols']);
 // 插件商店自己落盘，不是表单：铺满内容区、不挂保存条
 const FILL_PANE = new Set(['plugins']);
 
@@ -63,6 +65,10 @@ function tabForIssue(path: string): string {
             return 'connection';
         case 'renderer':
             return 'render';
+        case 'db':
+        case 'milky':
+        case 'satori':
+            return 'protocols';
         default:
             return 'basic';
     }
@@ -141,6 +147,9 @@ function YunzaiFrameworkDetail({
             ))}
             {pane('render', (cfg) => (
                 <YunzaiRenderTab config={cfg} {...common} />
+            ))}
+            {pane('protocols', (cfg) => (
+                <YunzaiProtocolsTab config={cfg} {...common} />
             ))}
             {pane('connection', (cfg) => (
                 <YunzaiConnectionTab instance={instance} config={cfg} {...common} />

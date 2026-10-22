@@ -264,6 +264,11 @@ fn unquote(raw: &str, dialect: EnvDialect) -> String {
                 continue;
             }
             if ch == quote {
+                // dotenv 的裸值分支允许内部未转义引号；只接受后接注释或行尾的闭引号。
+                let suffix = raw[idx + ch.len_utf8()..].trim_start();
+                if dialect == EnvDialect::Node && !suffix.is_empty() && !suffix.starts_with('#') {
+                    continue;
+                }
                 let value = &raw[1..idx];
                 return match dialect {
                     EnvDialect::Python => decode_python_escapes(value, quote),
@@ -278,7 +283,6 @@ fn unquote(raw: &str, dialect: EnvDialect) -> String {
     let end = raw.char_indices().find_map(|(idx, ch)| {
         (ch == '#'
             && (dialect == EnvDialect::Node
-                || idx == 0
                 || raw[..idx].ends_with(char::is_whitespace)))
         .then_some(idx)
     });
@@ -550,5 +554,27 @@ B='path: C:\new dir\test.exe'
         assert_eq!(entries[0].value, "three");
         assert_eq!(entries[0].comment, "last");
         assert_eq!(env.entries().len(), 2);
+    }
+
+    #[test]
+    fn python_bare_hash_is_a_value_until_a_whitespace_comment() {
+        let text = "SECRET=#secret\nCUSTOM=prefix#value # trailing note\n";
+        let mut env = EnvFile::parse_python(text);
+        assert_eq!(env.get("SECRET").as_deref(), Some("#secret"));
+        assert_eq!(env.get("CUSTOM").as_deref(), Some("prefix#value"));
+        env.set("SECRET", "#secret");
+        assert_eq!(env.render(), text);
+        let node = EnvFile::parse(text);
+        assert_eq!(node.get("SECRET").as_deref(), Some(""));
+        assert_eq!(node.get("CUSTOM").as_deref(), Some("prefix"));
+    }
+
+    #[test]
+    fn node_accepts_karin_json_with_unescaped_inner_quotes() {
+        let env = EnvFile::parse(
+            "CUSTOM=\"{\"key\":\"value\"}\" # comment\nPARTIAL=\"abc\"def\n",
+        );
+        assert_eq!(env.get("CUSTOM").as_deref(), Some(r#"{"key":"value"}"#));
+        assert_eq!(env.get("PARTIAL").as_deref(), Some(r#""abc"def"#));
     }
 }

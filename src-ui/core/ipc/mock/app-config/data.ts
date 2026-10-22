@@ -90,7 +90,7 @@ export const NEOBOT_DOCS: AppConfigDocument[] = [
         label: '网页面板（app/data/plugins_data/dashboard/config.toml）',
         rel_path: 'app/data/plugins_data/dashboard/config.toml',
         format: 'toml',
-        hot_reload: true,
+        hot_reload: false,
     },
 ];
 
@@ -136,7 +136,7 @@ export const KOISHI_DOCS: AppConfigDocument[] = [
     },
 ];
 
-/** 和后端 yunzai_config_documents 一致：config/config 下九份，server / redis / db 只在启动时读 */
+/** 和后端 yunzai_config_documents 一致：config/config 下九份，server / redis / db / milky / satori 只在启动时读 */
 export const YUNZAI_DOCS: AppConfigDocument[] = [
     'bot',
     'other',
@@ -152,7 +152,7 @@ export const YUNZAI_DOCS: AppConfigDocument[] = [
     label: `${name}.yaml`,
     rel_path: `config/config/${name}.yaml`,
     format: 'yaml',
-    hot_reload: !['server', 'redis', 'db'].includes(name),
+    hot_reload: !['server', 'redis', 'db', 'milky', 'satori'].includes(name),
 }));
 
 export function docsOf(frameworkId: string): AppConfigDocument[] {

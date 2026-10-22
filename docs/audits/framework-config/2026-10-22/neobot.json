@@ -1,0 +1,113 @@
+{
+  "framework": "NeoBot",
+  "scannedAt": "2026-10-22",
+  "upstream": {
+    "repository": "https://github.com/SuperQuail/NeoBot",
+    "commit": "3f3b048d881190e69376777223718cec02b36edb",
+    "commitDate": "2026-10-22T14:55:59Z",
+    "packageVersion": "2.0.2-a1",
+    "configVersion": "0.8.0",
+    "sources": [
+      {
+        "path": "app/src/neobot_app/config/schemas/bot.py",
+        "blob": "c316506a39228b9705f06a513a817c7de62be5a4"
+      },
+      {
+        "path": "app/src/neobot_app/config/model_params.py",
+        "blob": "59a8c291b108d16b1062498b88c2d64c3be47acf"
+      },
+      {
+        "path": "app/src/neobot_app/builtin_plugins/dashboard/config_manager.py",
+        "blob": "6c72e2af1dc058d05c5b83da4f7587f417fd7ea2"
+      },
+      {
+        "path": "app/src/neobot_app/builtin_plugins/dashboard/hot_reload.py",
+        "blob": "c35e94cef2cb5cd3f6a152de1d56fbce72f16e44"
+      }
+    ]
+  },
+  "baseline": {
+    "repository": "NapNeko/NapCatQQ-Desktop",
+    "commit": "ee54f93d75999c0d16e2703af91e2667be572116"
+  },
+  "configurationCoverage": {
+    "mainConfig": "app/data/config.toml",
+    "dynamicSections": [
+      "version",
+      "bot",
+      "chat",
+      "models",
+      "agent_model",
+      "willing",
+      "tts",
+      "plugins",
+      "message",
+      "file_server",
+      "adapter",
+      "debug",
+      "standby",
+      "scheduled_task",
+      "agent",
+      "web_search",
+      "billing",
+      "avatars",
+      "bilibili",
+      "asr"
+    ],
+    "mainConfigManagement": "Live /api/config schema drives the form without a static section or field allowlist; all current fields remain available through the form or TOML editor.",
+    "pluginConfigManagement": "Live /api/plugins/<name>/config schema and source editor; files remain available in the raw document editor.",
+    "typedConnectionKeys": [
+      "adapter.mode",
+      "adapter.reverse_ws_host",
+      "adapter.reverse_ws_port",
+      "adapter.reverse_ws_access_token",
+      "dashboard.host",
+      "dashboard.port"
+    ],
+    "connectionFilePolicy": "Patch only managed connection keys; retain unrelated tables, unknown keys, comments and order."
+  },
+  "gaps": [
+    {
+      "kind": "modelParameterCatalog",
+      "path": "models.registry[].settings",
+      "fields": [
+        "enabled_params",
+        "extra_body",
+        "frequency_penalty",
+        "presence_penalty",
+        "image_api",
+        "image_reference_param",
+        "deepseek_thinking_mode",
+        "deepseek_reasoning_effort",
+        "deepseek_random_thinking_probability"
+      ],
+      "before": "The model_params pseudo-field was shown only as raw JSON and existing model settings fell back to the default entry_schema values.",
+      "after": "Render the upstream parameter catalog with enable switches, typed values and custom request JSON; derive values from the current settings draft, retain unknown enabled names and unrelated settings, and filter additions using upstream provider/model-type scope."
+    },
+    {
+      "kind": "reloadSemantics",
+      "fields": [
+        "dashboard.host",
+        "dashboard.port"
+      ],
+      "before": "The raw dashboard document claimed hot_reload=true and host changes were not included in restart_inputs_changed.",
+      "after": "Mark dashboard listener settings as requiring a process restart and include dashboard.host in restart detection."
+    }
+  ],
+  "preservation": [
+    "Existing settings values override entry_schema defaults.",
+    "Removing a parameter only removes its enabled name; stored parameter values remain in the draft.",
+    "Unknown enabled parameter names and custom request body keys are retained.",
+    "Unrelated/future settings remain in the parent object when a params draft is edited."
+  ],
+  "validation": {
+    "status": "prepared_not_run",
+    "reason": "Managed execution environment is still starting; local exec is unavailable.",
+    "required": [
+      "pnpm run test:related src-ui/core/domain/apps/neobotWorkspace.ts src-ui/modules/apps/detail/neobot/NeoBotSchemaFields.tsx src-ui/modules/apps/detail/neobot/NeoBotConfigTab.test.tsx",
+      "cargo test -p ncd-appframework neobot::config::tests",
+      "pnpm run typecheck",
+      "pnpm run fmt:check"
+    ]
+  }
+}
