@@ -1,3 +1,4 @@
+# Validate visible Select labels and all changed configuration forms.
 # Validate the integrated release forms and production bundle.
 name: Temporary framework config checks
 on:

@@ -256,7 +256,9 @@ export function advancedSections(
         fields.push({
             path,
             label: LABELS[path] ?? path.split('.').slice(-1)[0] ?? path,
-            metadata: inferMetadata(defaultValue === undefined ? readPath(current, path) : defaultValue),
+            metadata: inferMetadata(
+                defaultValue === undefined ? readPath(current, path) : defaultValue,
+            ),
             conditions: [],
         });
         extra.set(key, fields);

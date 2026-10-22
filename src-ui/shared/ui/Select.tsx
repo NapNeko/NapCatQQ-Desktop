@@ -5,7 +5,7 @@
 
 import * as RadixSelect from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, useId, type ReactNode } from 'react';
 import gsap from 'gsap';
 import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -25,6 +25,7 @@ export interface SelectItem<V extends string = string> {
 
 export interface SelectProps<V extends string = string> {
     label?: ReactNode;
+    'aria-label'?: string;
     hint?: ReactNode;
     error?: ReactNode;
     required?: boolean;
@@ -41,6 +42,7 @@ export interface SelectProps<V extends string = string> {
 function SelectInner<V extends string>(
     {
         label,
+        'aria-label': ariaLabel,
         hint,
         error,
         required,
@@ -55,8 +57,10 @@ function SelectInner<V extends string>(
     }: SelectProps<V>,
     ref: React.Ref<HTMLButtonElement>,
 ) {
+    const generatedId = useId();
     const invalid = !!error;
-    const fieldId = id ?? name;
+    const fieldId = id ?? name ?? generatedId;
+    const labelId = label ? `${fieldId}-label` : undefined;
     const describedById = fieldId ? `${fieldId}-desc` : undefined;
     const m = useMotion();
     // Radix Select：空字符串会抛错，统一当未选。
@@ -70,7 +74,11 @@ function SelectInner<V extends string>(
         // min-w-0：放进 grid/flex 时不让单行 label 撑宽轨道，省略号才生效
         <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
             {label && (
-                <label htmlFor={fieldId} className="text-xs font-medium text-text-secondary">
+                <label
+                    id={labelId}
+                    htmlFor={fieldId}
+                    className="text-xs font-medium text-text-secondary"
+                >
                     {label}
                     {required && <span className="ml-0.5 text-danger">*</span>}
                 </label>
@@ -84,6 +92,8 @@ function SelectInner<V extends string>(
                 <RadixSelect.Trigger
                     ref={ref}
                     id={fieldId}
+                    aria-label={ariaLabel}
+                    aria-labelledby={labelId}
                     aria-invalid={invalid || undefined}
                     aria-describedby={describedById}
                     title={selectedTitle}
