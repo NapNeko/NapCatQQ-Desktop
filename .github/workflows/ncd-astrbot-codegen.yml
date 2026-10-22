@@ -1,0 +1,67 @@
+name: Temporary AstrBot metadata refresh
+on:
+  push:
+    branches: [codex/framework-config-20261022]
+    paths:
+      - .github/workflows/ncd-astrbot-codegen.yml
+      - scripts/astrbot/codegen.py
+permissions:
+  contents: read
+concurrency:
+  group: ncd-astrbot-codegen
+  cancel-in-progress: true
+jobs:
+  codegen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: AstrBotDevs/AstrBot
+          ref: 0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e
+          path: .ncd-astrbot-upstream
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate from audited metadata
+        run: |
+          python -m py_compile scripts/astrbot/codegen.py
+          python scripts/astrbot/codegen.py --src .ncd-astrbot-upstream --commit 0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e --version 4.29.1
+      - name: Emit metadata snapshots with checksums
+        if: always()
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, shutil
+          from pathlib import Path
+          output = Path("/tmp/ncd-astrbot-codegen")
+          output.mkdir()
+          manifest = []
+          for name in [
+              "src-ui/core/domain/apps/astrbotSchema/snapshot.json",
+              "crates/ncd-appframework/src/astrbot/schema/coverage.json",
+          ]:
+              path = Path(name)
+              if not path.is_file():
+                  continue
+              data = path.read_bytes()
+              digest = hashlib.sha256(data).hexdigest()
+              destination = output / name
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copyfile(path, destination)
+              manifest.append({"path": name, "sha256": digest, "size": len(data)})
+              encoded = base64.b64encode(data).decode("ascii")
+              chunks = [encoded[i:i+6000] for i in range(0, len(encoded), 6000)] or [""]
+              for i, chunk in enumerate(chunks):
+                  print("NCD_ASTRBOT " + json.dumps({"path": name, "sha256": digest, "parts": len(chunks), "index": i, "data": chunk}), flush=True)
+          (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          print("NCD_ASTRBOT_MANIFEST " + json.dumps(manifest), flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ncd-astrbot-codegen
+          path: /tmp/ncd-astrbot-codegen

@@ -40,6 +40,7 @@ jobs:
           import subprocess
           changed = subprocess.check_output(["git", "diff", "--name-only", "ee54f93d75999c0d16e2703af91e2667be572116", "HEAD"]).decode().splitlines()
           files = [p for p in changed if p.startswith("src-ui/") and p.endswith((".ts", ".tsx", ".css")) and "/ipc/generated/" not in p]
+          files = sorted(set(files) | {"src-ui/core/services/chat-media.service.test.ts"})
           if files:
               subprocess.run(["pnpm", "exec", "prettier", "--write", *files], check=True)
           PY
@@ -47,6 +48,163 @@ jobs:
         run: |
           rustc --edition=2024 --test crates/ncd-appframework/src/env_file.rs -o /tmp/ncd-env-tests
           /tmp/ncd-env-tests --test-threads=2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Python dotenv parser
+        run: python -m pip install --disable-pip-version-check python-dotenv==1.2.1
+      - name: Compare dotenv dialects with installed upstream parsers
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+          import io
+          import json
+          import shutil
+          import subprocess
+          from pathlib import Path
+          from dotenv import dotenv_values
+          from dotenv.parser import parse_stream
+
+          shutil.copyfile("crates/ncd-appframework/src/env_file.rs", "/tmp/ncd-env-source.rs")
+          cli = r"""
+          #[path = "/tmp/ncd-env-source.rs"]
+          mod env_file;
+
+          use std::io::{self, Read};
+
+          fn main() {
+              let dialect = std::env::args().nth(1).expect("dotenv dialect");
+              let mut input = String::new();
+              io::stdin().read_to_string(&mut input).expect("read sample");
+              let env = match dialect.as_str() {
+                  "python" => env_file::EnvFile::parse_python(&input),
+                  "node" => env_file::EnvFile::parse(&input),
+                  _ => panic!("unknown dotenv dialect"),
+              };
+              match env.get("CUSTOM") {
+                  Some(value) => {
+                      let encoded: String = value.as_bytes().iter()
+                          .map(|byte| format!("{byte:02x}")).collect();
+                      println!("some:{encoded}");
+                  }
+                  None => println!("none"),
+              }
+          }
+          """
+          Path("/tmp/ncd-env-cli.rs").write_text(cli)
+          subprocess.run(["rustc", "--edition=2024", "-Awarnings", "/tmp/ncd-env-cli.rs",
+                          "-o", "/tmp/ncd-env-cli"], check=True)
+
+          node_cli = r"""
+          import fs from 'node:fs';
+          import os from 'node:os';
+          import path from 'node:path';
+          import { createRequire } from 'node:module';
+          import { pathToFileURL } from 'node:url';
+
+          const fromRoot = createRequire(path.join(process.cwd(), 'package.json'));
+          const viteManifest = fromRoot.resolve('vite/package.json');
+          const fromVite = createRequire(viteManifest);
+          const input = fs.readFileSync(0, 'utf8');
+          let dotenvPath;
+          try {
+            dotenvPath = fromVite.resolve('dotenv');
+          } catch (error) {
+            if (error.code !== 'MODULE_NOT_FOUND') throw error;
+          }
+          let version;
+          let value;
+          if (dotenvPath) {
+            const dotenv = fromVite('dotenv');
+            const parsed = dotenv.parse(input);
+            version = 'dotenv@' + fromVite('dotenv/package.json').version;
+            value = parsed.CUSTOM;
+          } else {
+            // Vite 5 bundles dotenv rather than declaring it as an installed dependency.
+            // These fixtures contain no interpolation, so loadEnv exercises that real parser
+            // without changing the parsed value through dotenv-expand.
+            const { loadEnv } = await import(pathToFileURL(
+              path.join(path.dirname(viteManifest), 'dist/node/index.js')).href);
+            const key = 'NCD_DOTENV_COMPARE_VALUE';
+            if (Object.prototype.hasOwnProperty.call(process.env, key)) {
+              throw new Error('Synthetic dotenv comparison key already exists');
+            }
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ncd-dotenv-upstream-'));
+            try {
+              fs.writeFileSync(path.join(directory, '.env'), input.replace(/^CUSTOM=/m, key + '='));
+              value = loadEnv('ncd-compare', directory, key)[key];
+            } finally {
+              fs.rmSync(directory, { recursive: true, force: true });
+            }
+            version = 'vite@' + JSON.parse(fs.readFileSync(viteManifest, 'utf8')).version
+              + ' bundled dotenv parser via loadEnv';
+          }
+          process.stdout.write(JSON.stringify({ version, value: value ?? null }));
+          """
+          Path("/tmp/ncd-dotenv-node.mjs").write_text(node_cli)
+
+          def rust_value(dialect, text):
+              result = subprocess.run(["/tmp/ncd-env-cli", dialect], input=text,
+                                      text=True, capture_output=True, check=True).stdout.strip()
+              if result == "none":
+                  return None
+              assert result.startswith("some:"), result
+              return bytes.fromhex(result[5:]).decode("utf-8")
+
+          def node_value(text):
+              result = subprocess.run(["node", "/tmp/ncd-dotenv-node.mjs"], input=text,
+                                      text=True, capture_output=True, check=True)
+              return json.loads(result.stdout)
+
+          # Samples are fixed synthetic values, never loaded from user configuration or secrets.
+          escaped_json = r'{"headers":{"Example":"value # text"},"path":"C:\\new dir\\test.exe"}'
+          shared = [
+              ("literal_hash", "CUSTOM=#secret\n"),
+              ("unquoted_hash_and_comment", "CUSTOM=prefix#value # note\n"),
+              ("escaped_json", "CUSTOM=" + json.dumps(escaped_json) + "\n"),
+              ("windows_unquoted", r'CUSTOM=C:\new dir\test.exe' + "\n"),
+              ("windows_double_quoted", r'CUSTOM="C:\new dir\test.exe"' + "\n"),
+              ("quoted_hash_and_comment", 'CUSTOM="x # y" # note\n'),
+              ("single_quoted_hash_and_comment", "CUSTOM='x # y' # note\n"),
+              ("escaped_quotes", r'CUSTOM="quote: \"x\", path: C:\\temp"' + "\n"),
+              ("empty", "CUSTOM=\n"),
+          ]
+          checked = 0
+          node_version = None
+          for name, text in shared:
+              expected_python = dotenv_values(stream=io.StringIO(text), interpolate=False).get("CUSTOM")
+              actual_python = rust_value("python", text)
+              assert actual_python == expected_python, (
+                  name, "python", actual_python, expected_python)
+              expected_node = node_value(text)
+              node_version = expected_node["version"]
+              actual_node = rust_value("node", text)
+              assert actual_node == expected_node["value"], (
+                  name, "node", actual_node, expected_node["value"])
+              checked += 2
+              print("DOTENV_COMPARE PASS " + name + " [Python + Node]", flush=True)
+
+          # Node dotenv accepts these through its unquoted fallback. Python treats them as
+          # invalid bindings, so do not compare parse_python with Node's accepted value.
+          node_only = [
+              ("karin_unescaped_json", 'CUSTOM="{"key":"value"}"\n'),
+              ("quoted_prefix_with_bare_suffix", 'CUSTOM="abc"def\n'),
+          ]
+          for name, text in node_only:
+              assert any(binding.error for binding in parse_stream(io.StringIO(text))), name
+              expected_node = node_value(text)
+              actual_node = rust_value("node", text)
+              assert actual_node == expected_node["value"], (
+                  name, "node", actual_node, expected_node["value"])
+              checked += 1
+              print("DOTENV_COMPARE PASS " + name
+                    + " [Node only; Python invalid syntax, comparison skipped]", flush=True)
+
+          print("DOTENV_COMPARE versions: python-dotenv="
+                + importlib.metadata.version("python-dotenv") + ", pnpm/Vite dotenv=" + node_version,
+                flush=True)
+          print("DOTENV_COMPARE passed " + str(checked) + " dialect comparisons", flush=True)
+          PY
       - name: Lint
         run: pnpm run lint
       - name: Check formatting
@@ -60,6 +218,7 @@ jobs:
           output = Path("/tmp/ncd-framework-format")
           output.mkdir()
           allowed = set(subprocess.check_output(["git", "diff", "--name-only", "ee54f93d75999c0d16e2703af91e2667be572116", "HEAD"]).decode().splitlines())
+          allowed.add("src-ui/core/services/chat-media.service.test.ts")
           changed = subprocess.check_output(["git", "diff", "--name-only"]).decode().splitlines()
           manifest = []
           for name in sorted(set(changed) & allowed):

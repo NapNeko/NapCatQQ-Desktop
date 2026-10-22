@@ -109,6 +109,8 @@ class Gen:
         return isinstance(t, type) and issubclass(t, self.ConfigBase)
 
     def collect(self, cls, override_repr: bool):
+        # 安全导出没有框架首次初始化；在类所在模块已完整载入后显式解析前向引用。
+        cls.model_rebuild(force=True)
         seen = self.classes.get(cls.__name__)
         if seen is not None:
             # 按类名去重：两个不同的类撞名会生成成同一个结构体，得先改名规则
