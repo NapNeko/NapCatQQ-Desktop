@@ -206,7 +206,9 @@ export function validateYunzaiConfig(cfg: YunzaiInstanceConfig): AppConfigIssue[
     }
     if (
         cfg.server.https.port !== undefined &&
-        (!Number.isInteger(cfg.server.https.port) || cfg.server.https.port < 1 || cfg.server.https.port > 65535)
+        (!Number.isInteger(cfg.server.https.port) ||
+            cfg.server.https.port < 1 ||
+            cfg.server.https.port > 65535)
     ) {
         out.push({ path: 'server/https/port', message: '端口要在 1 到 65535 之间' });
     } else if (
@@ -233,7 +235,10 @@ export function validateYunzaiConfig(cfg: YunzaiInstanceConfig): AppConfigIssue[
             ['http_endpoint', ['http://', 'https://']],
             ['ws_endpoint', ['ws://', 'wss://']],
         ] as const) {
-            if (cfg.satori[key].trim() && !schemes.some((scheme) => cfg.satori[key].startsWith(scheme))) {
+            if (
+                cfg.satori[key].trim() &&
+                !schemes.some((scheme) => cfg.satori[key].startsWith(scheme))
+            ) {
                 out.push({ path: `satori/${key}`, message: '填写对应协议的完整地址' });
             }
         }

@@ -250,9 +250,11 @@ fn split_kv(line: &str) -> Option<(&str, &str)> {
 
 fn unquote(raw: &str, dialect: EnvDialect) -> String {
     let raw = raw.trim();
-    if let Some(quote) = raw.chars().next().filter(|c| {
-        matches!(*c, '"' | '\'') || (*c == '\u{60}' && dialect == EnvDialect::Node)
-    }) {
+    if let Some(quote) = raw
+        .chars()
+        .next()
+        .filter(|c| matches!(*c, '"' | '\'') || (*c == '\u{60}' && dialect == EnvDialect::Node))
+    {
         let mut escaped = false;
         for (idx, ch) in raw.char_indices().skip(1) {
             if escaped {
@@ -281,10 +283,8 @@ fn unquote(raw: &str, dialect: EnvDialect) -> String {
         }
     }
     let end = raw.char_indices().find_map(|(idx, ch)| {
-        (ch == '#'
-            && (dialect == EnvDialect::Node
-                || raw[..idx].ends_with(char::is_whitespace)))
-        .then_some(idx)
+        (ch == '#' && (dialect == EnvDialect::Node || raw[..idx].ends_with(char::is_whitespace)))
+            .then_some(idx)
     });
     raw[..end.unwrap_or(raw.len())].trim_end().to_string()
 }
@@ -541,7 +541,10 @@ B='path: C:\new dir\test.exe'
             let mut env = EnvFile::parse("");
             env.set("CUSTOM", value);
             assert!(env.render().starts_with(&format!("CUSTOM={value}")));
-            assert_eq!(EnvFile::parse(&env.render()).get("CUSTOM").as_deref(), Some(value));
+            assert_eq!(
+                EnvFile::parse(&env.render()).get("CUSTOM").as_deref(),
+                Some(value)
+            );
         }
     }
 
@@ -571,9 +574,7 @@ B='path: C:\new dir\test.exe'
 
     #[test]
     fn node_accepts_karin_json_with_unescaped_inner_quotes() {
-        let env = EnvFile::parse(
-            "CUSTOM=\"{\"key\":\"value\"}\" # comment\nPARTIAL=\"abc\"def\n",
-        );
+        let env = EnvFile::parse("CUSTOM=\"{\"key\":\"value\"}\" # comment\nPARTIAL=\"abc\"def\n");
         assert_eq!(env.get("CUSTOM").as_deref(), Some(r#"{"key":"value"}"#));
         assert_eq!(env.get("PARTIAL").as_deref(), Some(r#""abc"def"#));
     }

@@ -157,7 +157,9 @@ export const YunzaiBasicTab: React.FC<YunzaiTabProps> = ({
                         min={0}
                         error={errors['bot/file_to_url_times']}
                         disabled={disabled}
-                        onValueChange={(file_to_url_times) => set({ file_to_url_times: file_to_url_times ?? undefined })}
+                        onValueChange={(file_to_url_times) =>
+                            set({ file_to_url_times: file_to_url_times ?? undefined })
+                        }
                     />
                 </div>
             </FormSection>

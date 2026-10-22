@@ -54,15 +54,12 @@ function mount() {
     clients.push(client);
     client.setQueryData(appConfigKey('one'), envelope(8080, 'a'));
     client.setQueryData(appConfigKey('two'), envelope(8181, 'other'));
-    const hook = renderHook(
-        ({ instanceId }) => useAppConfigForm(spec, instanceId, instanceId),
-        {
-            initialProps: { instanceId: 'one' },
-            wrapper: ({ children }: { children: ReactNode }) => (
-                <QueryClientProvider client={client}>{children}</QueryClientProvider>
-            ),
-        },
-    );
+    const hook = renderHook(({ instanceId }) => useAppConfigForm(spec, instanceId, instanceId), {
+        initialProps: { instanceId: 'one' },
+        wrapper: ({ children }: { children: ReactNode }) => (
+            <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+    });
     return { ...hook, client };
 }
 
@@ -122,7 +119,9 @@ describe('useAppConfigForm', () => {
         expect(writeConfig).toHaveBeenCalledWith(
             'one',
             expect.objectContaining({
-                data: expect.objectContaining({ env_prod: expect.objectContaining({ port: 8082 }) }),
+                data: expect.objectContaining({
+                    env_prod: expect.objectContaining({ port: 8082 }),
+                }),
             }),
             'b',
             undefined,

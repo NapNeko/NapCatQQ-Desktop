@@ -12,7 +12,7 @@ describe('NoneBot2 upstream configuration', () => {
         expect(cfg.env_prod.command_start).toEqual(['/']);
         expect(cfg.env_prod.command_sep).toEqual(['.']);
         expect(cfg.env_prod.api_timeout).toBe('30.0');
-        expect(cfg.env_prod.session_expire_timeout).toBe('120');
+        expect(cfg.env_prod.session_expire_timeout).toBe('PT2M');
         expect(validateNoneBot2Config(cfg)).toEqual([]);
     });
 
@@ -28,8 +28,8 @@ describe('NoneBot2 upstream configuration', () => {
         ]);
         cfg.env_prod.api_timeout = '0.125';
         cfg.env_prod.session_expire_timeout = 'P1DT2H';
-        cfg.env_prod.onebot_ws_urls = ['wss://example.com/ws'];
-        cfg.env_prod.onebot_api_roots = '{"10001":"https://example.com/api"}';
+        cfg.env_prod.onebot_ws_urls = ['WSS://example.com/ws'];
+        cfg.env_prod.onebot_api_roots = '{"10001":"HTTPS://example.com/api"}';
         expect(validateNoneBot2Config(cfg)).toEqual([]);
     });
 
@@ -58,4 +58,18 @@ describe('NoneBot2 upstream configuration', () => {
             'env_prod/custom/2/key',
         ]);
     });
+    it('rejects empty URL hosts, invalid durations and padded reserved keys', () => {
+        const cfg = nonebot2DefaultConfig(8080);
+        cfg.env_prod.onebot_ws_urls = ['ws://'];
+        cfg.env_prod.onebot_api_roots = '{"1":"https://"}';
+        cfg.env_prod.session_expire_timeout = 'abc';
+        cfg.env_prod.custom = [{ key: ' PORT ', value: '9000', comment: '' }];
+        expect(validateNoneBot2Config(cfg).map((issue) => issue.path)).toEqual([
+            'env_prod/session_expire_timeout',
+            'env_prod/onebot_ws_urls/0',
+            'env_prod/onebot_api_roots',
+            'env_prod/custom/0/key',
+        ]);
+    });
+
 });

@@ -91,7 +91,17 @@ export async function yzWriteConfig(
     }
     const before = s.config;
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
-    for (const key of ['bot', 'other', 'group', 'server', 'redis', 'renderer', 'db', 'milky', 'satori'] as const) {
+    for (const key of [
+        'bot',
+        'other',
+        'group',
+        'server',
+        'redis',
+        'renderer',
+        'db',
+        'milky',
+        'satori',
+    ] as const) {
         if (changed(before[key], next[key])) s.docRev[key] = (s.docRev[key] ?? 0) + 1;
     }
     // auth 里别的头是读出来给提示的，不从表单写回

@@ -656,7 +656,9 @@ fn group_from(m: &Mapping, d: &YunzaiGroupConfig) -> YunzaiGroupConfig {
 
 fn server_from(m: &Mapping, d: &YunzaiServerConfig) -> YunzaiServerConfig {
     let empty = Mapping::new();
-    let https = get(m, "https").and_then(Value::as_mapping).unwrap_or(&empty);
+    let https = get(m, "https")
+        .and_then(Value::as_mapping)
+        .unwrap_or(&empty);
     let (mut token, mut extra) = (String::new(), Vec::new());
     if let Some(Value::Mapping(auth)) = get(m, "auth") {
         for (k, v) in auth {
@@ -719,7 +721,9 @@ fn db_from(m: &Mapping, d: &YunzaiDbConfig) -> YunzaiDbConfig {
 
 fn milky_from(m: &Mapping, d: &YunzaiMilkyConfig) -> YunzaiMilkyConfig {
     let empty = Mapping::new();
-    let webhook = get(m, "webhook").and_then(Value::as_mapping).unwrap_or(&empty);
+    let webhook = get(m, "webhook")
+        .and_then(Value::as_mapping)
+        .unwrap_or(&empty);
     let ws = get(m, "ws").and_then(Value::as_mapping).unwrap_or(&empty);
     YunzaiMilkyConfig {
         enable: as_bool(get(m, "enable")).unwrap_or(d.enable),
@@ -730,7 +734,8 @@ fn milky_from(m: &Mapping, d: &YunzaiMilkyConfig) -> YunzaiMilkyConfig {
         connection: as_string(get(m, "connection")).unwrap_or_else(|| d.connection.clone()),
         webhook_path: as_string(get(webhook, "path")).unwrap_or_else(|| d.webhook_path.clone()),
         ws_heartbeat: as_u32(get(ws, "heartbeat")).unwrap_or(d.ws_heartbeat),
-        ws_reconnect_interval: as_u32(get(ws, "reconnect_interval")).unwrap_or(d.ws_reconnect_interval),
+        ws_reconnect_interval: as_u32(get(ws, "reconnect_interval"))
+            .unwrap_or(d.ws_reconnect_interval),
         http_timeout: as_u32(get(m, "http_timeout")).unwrap_or(d.http_timeout),
     }
 }
@@ -738,7 +743,8 @@ fn milky_from(m: &Mapping, d: &YunzaiMilkyConfig) -> YunzaiMilkyConfig {
 fn satori_from(m: &Mapping, d: &YunzaiSatoriConfig) -> YunzaiSatoriConfig {
     YunzaiSatoriConfig {
         enable: as_bool(get(m, "enable")).unwrap_or(d.enable),
-        http_endpoint: as_string(get(m, "http_endpoint")).unwrap_or_else(|| d.http_endpoint.clone()),
+        http_endpoint: as_string(get(m, "http_endpoint"))
+            .unwrap_or_else(|| d.http_endpoint.clone()),
         ws_endpoint: as_string(get(m, "ws_endpoint")).unwrap_or_else(|| d.ws_endpoint.clone()),
         token: as_string(get(m, "token")).unwrap_or_default(),
         platform: as_string(get(m, "platform")).unwrap_or_else(|| d.platform.clone()),
@@ -903,15 +909,27 @@ pub fn validate(cfg: &YunzaiInstanceConfig) -> Vec<ncd_domain::AppConfigIssue> {
         if cfg.milky.host.trim().is_empty() {
             sink.push("milky/host", "不能留空");
         }
-        sink.one_of("milky/connection", &cfg.milky.connection, &["ws", "webhook"]);
+        sink.one_of(
+            "milky/connection",
+            &cfg.milky.connection,
+            &["ws", "webhook"],
+        );
         if cfg.milky.connection == "webhook" && !cfg.milky.webhook_path.starts_with('/') {
             sink.push("milky/webhook_path", "路径要以 / 开头");
         }
     }
     if cfg.satori.enable {
         for (path, text, schemes) in [
-            ("satori/http_endpoint", cfg.satori.http_endpoint.as_str(), &["http://", "https://"][..]),
-            ("satori/ws_endpoint", cfg.satori.ws_endpoint.as_str(), &["ws://", "wss://"][..]),
+            (
+                "satori/http_endpoint",
+                cfg.satori.http_endpoint.as_str(),
+                &["http://", "https://"][..],
+            ),
+            (
+                "satori/ws_endpoint",
+                cfg.satori.ws_endpoint.as_str(),
+                &["ws://", "wss://"][..],
+            ),
         ] {
             if !text.trim().is_empty() && !schemes.iter().any(|scheme| text.starts_with(*scheme)) {
                 sink.push(path, "填写对应协议的完整地址");
@@ -1024,9 +1042,22 @@ fn bot_patches(old: &YunzaiBotConfig, new: &YunzaiBotConfig, out: &mut Vec<Patch
     diff_field!(out, "bot", "log_length", old.log_length, new.log_length, n);
     diff_field!(out, "bot", "log_object", old.log_object, new.log_object, b);
     diff_field!(out, "bot", "log_align", old.log_align, new.log_align, s);
-    diff_field!(out, "bot", "msg_type_count", old.msg_type_count, new.msg_type_count, b);
-    diff_field!(out, "bot", "file_to_url_times", old.file_to_url_times, new.file_to_url_times,
-        |v: &Option<u32>| v.map(|x| num(u64::from(x))).unwrap_or(Value::Null));
+    diff_field!(
+        out,
+        "bot",
+        "msg_type_count",
+        old.msg_type_count,
+        new.msg_type_count,
+        b
+    );
+    diff_field!(
+        out,
+        "bot",
+        "file_to_url_times",
+        old.file_to_url_times,
+        new.file_to_url_times,
+        |v: &Option<u32>| v.map(|x| num(u64::from(x))).unwrap_or(Value::Null)
+    );
     diff_field!(
         out,
         "bot",
@@ -1380,8 +1411,14 @@ fn server_patches(
         }
     }
     if old.https.port != new.https.port {
-        out.push(set("server", &["https", "port"], new.https.port
-            .map(|v| num(u64::from(v))).unwrap_or(Value::Null)));
+        out.push(set(
+            "server",
+            &["https", "port"],
+            new.https
+                .port
+                .map(|v| num(u64::from(v)))
+                .unwrap_or(Value::Null),
+        ));
     }
 }
 
@@ -1403,40 +1440,117 @@ fn db_patches(old: &YunzaiDbConfig, new: &YunzaiDbConfig, out: &mut Vec<Patch>) 
     let s = |v: &String| text_or_null(v);
     diff_field!(out, "db", "dialect", old.dialect, new.dialect, s);
     diff_field!(out, "db", "storage", old.storage, new.storage, s);
-    diff_field!(out, "db", "logging", old.logging, new.logging, |v: &bool| Value::Bool(*v));
+    diff_field!(
+        out,
+        "db",
+        "logging",
+        old.logging,
+        new.logging,
+        |v: &bool| Value::Bool(*v)
+    );
 }
 
 fn milky_patches(old: &YunzaiMilkyConfig, new: &YunzaiMilkyConfig, out: &mut Vec<Patch>) {
     let s = |v: &String| Value::String(v.clone());
     let n = |v: &u32| num(u64::from(*v));
-    diff_field!(out, "milky", "enable", old.enable, new.enable, |v: &bool| Value::Bool(*v));
+    diff_field!(
+        out,
+        "milky",
+        "enable",
+        old.enable,
+        new.enable,
+        |v: &bool| Value::Bool(*v)
+    );
     diff_field!(out, "milky", "host", old.host, new.host, s);
-    diff_field!(out, "milky", "port", old.port, new.port, |v: &u16| num(u64::from(*v)));
+    diff_field!(out, "milky", "port", old.port, new.port, |v: &u16| num(
+        u64::from(*v)
+    ));
     diff_field!(out, "milky", "prefix", old.prefix, new.prefix, s);
-    diff_field!(out, "milky", "access_token", old.access_token, new.access_token, s);
-    diff_field!(out, "milky", "connection", old.connection, new.connection, s);
-    diff_field!(out, "milky", "http_timeout", old.http_timeout, new.http_timeout, n);
+    diff_field!(
+        out,
+        "milky",
+        "access_token",
+        old.access_token,
+        new.access_token,
+        s
+    );
+    diff_field!(
+        out,
+        "milky",
+        "connection",
+        old.connection,
+        new.connection,
+        s
+    );
+    diff_field!(
+        out,
+        "milky",
+        "http_timeout",
+        old.http_timeout,
+        new.http_timeout,
+        n
+    );
     if old.webhook_path != new.webhook_path {
-        out.push(set("milky", &["webhook", "path"], Value::String(new.webhook_path.clone())));
+        out.push(set(
+            "milky",
+            &["webhook", "path"],
+            Value::String(new.webhook_path.clone()),
+        ));
     }
     if old.ws_heartbeat != new.ws_heartbeat {
-        out.push(set("milky", &["ws", "heartbeat"], num(u64::from(new.ws_heartbeat))));
+        out.push(set(
+            "milky",
+            &["ws", "heartbeat"],
+            num(u64::from(new.ws_heartbeat)),
+        ));
     }
     if old.ws_reconnect_interval != new.ws_reconnect_interval {
-        out.push(set("milky", &["ws", "reconnect_interval"], num(u64::from(new.ws_reconnect_interval))));
+        out.push(set(
+            "milky",
+            &["ws", "reconnect_interval"],
+            num(u64::from(new.ws_reconnect_interval)),
+        ));
     }
 }
 
 fn satori_patches(old: &YunzaiSatoriConfig, new: &YunzaiSatoriConfig, out: &mut Vec<Patch>) {
     let s = |v: &String| Value::String(v.clone());
     let n = |v: &u32| num(u64::from(*v));
-    diff_field!(out, "satori", "enable", old.enable, new.enable, |v: &bool| Value::Bool(*v));
-    diff_field!(out, "satori", "http_endpoint", old.http_endpoint, new.http_endpoint, s);
-    diff_field!(out, "satori", "ws_endpoint", old.ws_endpoint, new.ws_endpoint, s);
+    diff_field!(
+        out,
+        "satori",
+        "enable",
+        old.enable,
+        new.enable,
+        |v: &bool| Value::Bool(*v)
+    );
+    diff_field!(
+        out,
+        "satori",
+        "http_endpoint",
+        old.http_endpoint,
+        new.http_endpoint,
+        s
+    );
+    diff_field!(
+        out,
+        "satori",
+        "ws_endpoint",
+        old.ws_endpoint,
+        new.ws_endpoint,
+        s
+    );
     diff_field!(out, "satori", "token", old.token, new.token, s);
     diff_field!(out, "satori", "platform", old.platform, new.platform, s);
     diff_field!(out, "satori", "timeout", old.timeout, new.timeout, n);
-    diff_field!(out, "satori", "heartbeat_interval", old.heartbeat_interval, new.heartbeat_interval, n);
+    diff_field!(
+        out,
+        "satori",
+        "heartbeat_interval",
+        old.heartbeat_interval,
+        new.heartbeat_interval,
+        n
+    );
 }
 
 /// 盘上现状 → 目标配置，要重写的文件及其新内容（没变的文件不在里面）
@@ -1755,7 +1869,11 @@ mod tests {
         assert_eq!(current.server.https.port, Some(2537));
         assert_eq!(current.db.dialect, "postgres");
         assert_eq!(current.milky.webhook_path, "/old");
-        assert!(render_changes(&sources, &current, &current).unwrap().is_empty());
+        assert!(
+            render_changes(&sources, &current, &current)
+                .unwrap()
+                .is_empty()
+        );
         let mut next = current.clone();
         next.bot.file_to_url_times = None;
         next.server.https.cert = "new.crt".into();
@@ -1786,9 +1904,16 @@ mod tests {
         next.server.https.key = "config/localhost.key".into();
         next.server.https.cert = "config/localhost.crt".into();
         let changes = render_changes(&sources, &current, &next).unwrap();
-        let text = &changes.iter().find(|(name, _)| *name == "server").unwrap().1;
+        let text = &changes
+            .iter()
+            .find(|(name, _)| *name == "server")
+            .unwrap()
+            .1;
         let parsed = ConfigSource::parse("server", Some(text.clone()), None).unwrap();
-        assert_eq!(config_from_sources(&[parsed]).server.https, next.server.https);
+        assert_eq!(
+            config_from_sources(&[parsed]).server.https,
+            next.server.https
+        );
         assert!(text.contains("# cert: config/localhost.crt"));
     }
 
@@ -1805,7 +1930,10 @@ mod tests {
         cfg.satori.ws_endpoint.clear();
         cfg.satori.timeout = 0;
         cfg.satori.heartbeat_interval = 0;
-        assert!(validate(&cfg).is_empty(), "empty endpoints and zero timings use upstream defaults");
+        assert!(
+            validate(&cfg).is_empty(),
+            "empty endpoints and zero timings use upstream defaults"
+        );
         cfg.milky.enable = true;
         cfg.milky.connection = "unsupported".into();
         cfg.satori.enable = true;

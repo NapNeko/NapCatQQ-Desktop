@@ -463,6 +463,7 @@ def prepare_schema_sources(src: Path, work: Path) -> None:
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         module = rel.removesuffix(".py").replace("/", ".")
         selected = []
+        class_names = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
         for node in tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 names = import_module(node, module)
@@ -484,7 +485,14 @@ def prepare_schema_sources(src: Path, work: Path) -> None:
                 # TYPE_CHECKING 分支等不参与运行时配置元数据。
                 continue
             if isinstance(node, ast.Expr) and not isinstance(node.value, ast.Constant):
-                raise SystemExit(f"{rel}: 不允许配置导出时运行顶层表达式")
+                call = node.value
+                schema_rebuild = (
+                    isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "model_rebuild" and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id in class_names and not call.args and not call.keywords
+                )
+                if not schema_rebuild:
+                    raise SystemExit(f"{rel}:{node.lineno}: 不允许配置导出时运行顶层表达式 {ast.dump(node.value)}")
             selected.append(node)
         target = work / rel
         target.parent.mkdir(parents=True, exist_ok=True)

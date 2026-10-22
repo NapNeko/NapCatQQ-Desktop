@@ -165,5 +165,4 @@ describe('koishiSchema', () => {
         expect(missingRequired(node, { protocol: 'ws', endpoint: 'ws://localhost' })).toEqual([]);
         expect(missingRequired(node, { protocol: 'reverse' })).toEqual([]);
     });
-
 });

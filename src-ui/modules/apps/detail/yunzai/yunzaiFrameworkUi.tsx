@@ -46,7 +46,15 @@ const NAV: readonly FrameworkNavGroup[] = [
     { id: 'instance', label: '实例', items: [{ value: 'connection', label: '连接' }] },
 ];
 
-const TYPED_TABS = new Set(['overview', 'basic', 'permissions', 'groups', 'render', 'connection', 'protocols']);
+const TYPED_TABS = new Set([
+    'overview',
+    'basic',
+    'permissions',
+    'groups',
+    'render',
+    'connection',
+    'protocols',
+]);
 // 插件商店自己落盘，不是表单：铺满内容区、不挂保存条
 const FILL_PANE = new Set(['plugins']);
 

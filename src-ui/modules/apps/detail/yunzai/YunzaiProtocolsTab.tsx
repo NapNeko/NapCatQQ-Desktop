@@ -21,8 +21,7 @@ export const YunzaiProtocolsTab: React.FC<YunzaiTabProps> = ({
         onChange({ ...config, milky: { ...milky, ...patch } });
     const setSatori = (patch: Partial<typeof satori>) =>
         onChange({ ...config, satori: { ...satori, ...patch } });
-    const setDb = (patch: Partial<typeof db>) =>
-        onChange({ ...config, db: { ...db, ...patch } });
+    const setDb = (patch: Partial<typeof db>) => onChange({ ...config, db: { ...db, ...patch } });
 
     return (
         <ConfigForm>
@@ -80,7 +79,9 @@ export const YunzaiProtocolsTab: React.FC<YunzaiTabProps> = ({
                         value={milky.http_timeout}
                         min={0}
                         disabled={disabled}
-                        onValueChange={(http_timeout) => setMilky({ http_timeout: http_timeout ?? 15 })}
+                        onValueChange={(http_timeout) =>
+                            setMilky({ http_timeout: http_timeout ?? 15 })
+                        }
                     />
                     {milky.connection === 'webhook' ? (
                         <TextField
@@ -98,7 +99,9 @@ export const YunzaiProtocolsTab: React.FC<YunzaiTabProps> = ({
                                 value={milky.ws_heartbeat}
                                 min={0}
                                 disabled={disabled}
-                                onValueChange={(ws_heartbeat) => setMilky({ ws_heartbeat: ws_heartbeat ?? 30 })}
+                                onValueChange={(ws_heartbeat) =>
+                                    setMilky({ ws_heartbeat: ws_heartbeat ?? 30 })
+                                }
                             />
                             <NumberField
                                 label="断线重连间隔（秒）"
@@ -106,7 +109,9 @@ export const YunzaiProtocolsTab: React.FC<YunzaiTabProps> = ({
                                 value={milky.ws_reconnect_interval}
                                 min={0}
                                 disabled={disabled}
-                                onValueChange={(ws_reconnect_interval) => setMilky({ ws_reconnect_interval: ws_reconnect_interval ?? 10 })}
+                                onValueChange={(ws_reconnect_interval) =>
+                                    setMilky({ ws_reconnect_interval: ws_reconnect_interval ?? 10 })
+                                }
                             />
                         </>
                     )}
@@ -165,7 +170,9 @@ export const YunzaiProtocolsTab: React.FC<YunzaiTabProps> = ({
                         min={0}
                         error={errors['satori/heartbeat_interval']}
                         disabled={disabled}
-                        onValueChange={(heartbeat_interval) => setSatori({ heartbeat_interval: heartbeat_interval ?? 10000 })}
+                        onValueChange={(heartbeat_interval) =>
+                            setSatori({ heartbeat_interval: heartbeat_interval ?? 10000 })
+                        }
                     />
                 </div>
             </FormSection>

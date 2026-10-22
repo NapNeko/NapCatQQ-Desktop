@@ -1,5 +1,6 @@
 // NoneBot2 核心 / OneBot v11 配置的前端校验 / 默认值。规则与后端 `NoneBot2InstanceConfig::validate` 对齐。
 
+import { normalizeNoneBot2Duration } from './nonebot2Duration';
 import type { ConfigFormSpec } from './appConfigForm';
 import type { AppConfigIssue, NoneBot2InstanceConfig } from '../../ipc/types';
 
@@ -65,7 +66,7 @@ export function nonebot2DefaultConfig(port: number): NoneBot2InstanceConfig {
             onebot_ws_urls: [],
             onebot_api_roots: '{}',
             api_timeout: '30.0',
-            session_expire_timeout: '120',
+            session_expire_timeout: 'PT2M',
             superusers: [],
             nickname: [],
             command_start: ['/'],
@@ -73,6 +74,15 @@ export function nonebot2DefaultConfig(port: number): NoneBot2InstanceConfig {
             custom: [],
         },
     };
+}
+
+function validNoneBot2Url(value: string, schemes: string[]): boolean {
+    try {
+        const url = new URL(value);
+        return schemes.includes(url.protocol) && !!url.hostname;
+    } catch {
+        return false;
+    }
 }
 
 export function validateNoneBot2Config(cfg: NoneBot2InstanceConfig): AppConfigIssue[] {
@@ -90,18 +100,18 @@ export function validateNoneBot2Config(cfg: NoneBot2InstanceConfig): AppConfigIs
     if (!env.api_timeout.trim() || !Number.isFinite(Number(env.api_timeout)) || /[\r\n]/.test(env.api_timeout)) {
         out.push({ path: 'env_prod/api_timeout', message: 'API_TIMEOUT 须为有限秒数' });
     }
-    if (!env.session_expire_timeout.trim() || /[\r\n]/.test(env.session_expire_timeout)) {
-        out.push({ path: 'env_prod/session_expire_timeout', message: '请输入秒数或时长，且不能包含换行' });
+    if (normalizeNoneBot2Duration(env.session_expire_timeout) == null) {
+        out.push({ path: 'env_prod/session_expire_timeout', message: '请输入有效秒数、HH:MM:SS 或 ISO 8601 时长' });
     }
     env.onebot_ws_urls.forEach((url, i) => {
-        if (!/^wss?:\/\//.test(url) || /[\r\n]/.test(url)) {
+        if (!validNoneBot2Url(url, ['ws:', 'wss:']) || /[\r\n]/.test(url)) {
             out.push({ path: `env_prod/onebot_ws_urls/${i}`, message: '须以 ws:// 或 wss:// 开头' });
         }
     });
     try {
         const roots: unknown = JSON.parse(env.onebot_api_roots);
         if (!roots || Array.isArray(roots) || typeof roots !== 'object'
-            || Object.values(roots).some((url) => typeof url !== 'string' || !/^https?:\/\//.test(url))) {
+            || Object.values(roots).some((url) => typeof url !== 'string' || !validNoneBot2Url(url, ['http:', 'https:']))) {
             throw new Error('invalid roots');
         }
     } catch {
@@ -109,7 +119,7 @@ export function validateNoneBot2Config(cfg: NoneBot2InstanceConfig): AppConfigIs
     }
     const seen = new Set<string>();
     cfg.env_prod.custom.forEach((c, i) => {
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(c.key.trim())) {
+        if (c.key !== c.key.trim() || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(c.key)) {
             out.push({ path: `env_prod/custom/${i}/key`, message: '键名只能是字母数字下划线' });
         }
         const key = c.key.toUpperCase();

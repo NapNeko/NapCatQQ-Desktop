@@ -106,7 +106,7 @@ impl Default for NoneBot2EnvProd {
             onebot_ws_urls: Vec::new(),
             onebot_api_roots: "{}".into(),
             api_timeout: "30.0".into(),
-            session_expire_timeout: "120".into(),
+            session_expire_timeout: "PT2M".into(),
             superusers: Vec::new(),
             nickname: Vec::new(),
             command_start: vec!["/".into()],
@@ -189,7 +189,9 @@ impl NoneBot2EnvProd {
             .unwrap_or_else(|_| self.onebot_api_roots.clone());
         write_onebot_env(env, ENV_ONEBOT_API_ROOTS, &roots);
         env.set_ci(ENV_API_TIMEOUT, &self.api_timeout);
-        env.set_ci(ENV_SESSION_EXPIRE_TIMEOUT, &self.session_expire_timeout);
+        if let Some(duration) = super::duration::normalize_duration(&self.session_expire_timeout) {
+            env.set_ci(ENV_SESSION_EXPIRE_TIMEOUT, &duration);
+        }
         env.set_ci(ENV_SUPERUSERS, &render_list(&self.superusers));
         env.set_ci(ENV_NICKNAME, &render_list(&self.nickname));
         env.set_ci(ENV_COMMAND_START, &render_list(&self.command_start));
@@ -248,23 +250,21 @@ impl NoneBot2InstanceConfig {
         {
             sink.push("env_prod/api_timeout", "API_TIMEOUT 须为有限秒数");
         }
-        if self.env_prod.session_expire_timeout.trim().is_empty()
-            || !valid_env_value(&self.env_prod.session_expire_timeout)
-        {
-            sink.push("env_prod/session_expire_timeout", "请输入秒数或时长，且不能包含换行");
+        if super::duration::normalize_duration(&self.env_prod.session_expire_timeout).is_none() {
+            sink.push("env_prod/session_expire_timeout", "请输入有效秒数、HH:MM:SS 或 ISO 8601 时长");
         }
         if !valid_env_value(&self.env_prod.onebot_secret) {
             sink.push("env_prod/onebot_secret", "值不能包含换行");
         }
         for (i, url) in self.env_prod.onebot_ws_urls.iter().enumerate() {
-            if !valid_env_value(url) || !(url.starts_with("ws://") || url.starts_with("wss://")) {
+            if !valid_env_value(url) || !valid_url(url, &["ws", "wss"]) {
                 sink.push(format!("env_prod/onebot_ws_urls/{i}"), "须以 ws:// 或 wss:// 开头");
             }
         }
         match serde_json::from_str::<std::collections::BTreeMap<String, String>>(
             &self.env_prod.onebot_api_roots,
         ) {
-            Ok(roots) if roots.values().all(|url| url.starts_with("http://") || url.starts_with("https://")) => {}
+            Ok(roots) if roots.values().all(|url| valid_url(url, &["http", "https"])) => {}
             _ => sink.push("env_prod/onebot_api_roots", "须为 self_id 到 HTTP / HTTPS 地址的 JSON 对象"),
         }
         let mut seen = std::collections::BTreeSet::new();
@@ -505,14 +505,22 @@ async fn read_optional_text(
 }
 
 fn valid_env_key(key: &str) -> bool {
-    let k = key.trim();
-    let mut chars = k.chars();
+    if key != key.trim() {
+        return false;
+    }
+    let mut chars = key.chars();
     match chars.next() {
         Some(c) if c.is_ascii_alphabetic() || c == '_' => {
             chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
         }
         _ => false,
     }
+}
+
+fn valid_url(value: &str, schemes: &[&str]) -> bool {
+    reqwest::Url::parse(value).is_ok_and(|url| {
+        schemes.contains(&url.scheme()) && url.host_str().is_some_and(|host| !host.is_empty())
+    })
 }
 
 fn valid_env_value(value: &str) -> bool {
@@ -676,7 +684,9 @@ mod tests {
         let mut env = EnvFile::parse_python(text);
         parsed.apply_to(&mut env);
         let again = NoneBot2EnvProd::from_env_file(&EnvFile::parse_python(&env.render()));
-        assert_eq!(again, parsed);
+        let mut expected = parsed.clone();
+        expected.session_expire_timeout = "P1DT7200S".into();
+        assert_eq!(again, expected);
         assert_eq!(again.custom[0].comment, "plugin setting");
     }
 
@@ -709,7 +719,7 @@ mod tests {
         assert_eq!(parsed.command_start, vec!["/"]);
         assert_eq!(parsed.command_sep, vec!["."]);
         assert_eq!(parsed.api_timeout, "30.0");
-        assert_eq!(parsed.session_expire_timeout, "120");
+        assert_eq!(parsed.session_expire_timeout, "PT2M");
         let merged = merge_env_texts(Some("CUSTOM_KEY=base\nPORT=1\n"), Some("custom_key=overlay\nport=2\n"));
         let parsed = NoneBot2EnvProd::from_env_file(&merged);
         assert_eq!(parsed.port, 2);
@@ -740,6 +750,30 @@ mod tests {
             read_access_token_from_texts(Some(base), Some(&overlay.render())).as_deref(),
             Some("new-token")
         );
+    }
+
+    #[test]
+    fn rejects_empty_url_hosts_and_accepts_case_insensitive_schemes() {
+        let mut cfg = NoneBot2InstanceConfig { env_prod: NoneBot2EnvProd::default() };
+        cfg.env_prod.onebot_ws_urls = vec!["ws://".into()];
+        cfg.env_prod.onebot_api_roots = r#"{"1":"https://"}"#.into();
+        assert_eq!(cfg.validate().len(), 2);
+        cfg.env_prod.onebot_ws_urls = vec!["WSS://example.com/ws".into()];
+        cfg.env_prod.onebot_api_roots = r#"{"1":"HTTPS://example.com/api"}"#.into();
+        assert!(cfg.validate().is_empty());
+        cfg.env_prod.custom.push(NoneBot2EnvEntry { key: " PORT ".into(), value: "9000".into(), comment: String::new() });
+        assert!(cfg.validate().iter().any(|i| i.path == "env_prod/custom/0/key"));
+    }
+
+    #[test]
+    fn hash_prefixed_secrets_are_literal_python_dotenv_values() {
+        let env = EnvFile::parse_python("ONEBOT_SECRET=#secret\nCUSTOM=#abc\n");
+        let parsed = NoneBot2EnvProd::from_env_file(&env);
+        assert_eq!(parsed.onebot_secret, "#secret");
+        assert_eq!(parsed.custom[0].value, "#abc");
+        let mut out = env;
+        parsed.apply_to(&mut out);
+        assert_eq!(NoneBot2EnvProd::from_env_file(&EnvFile::parse_python(&out.render())).onebot_secret, "#secret");
     }
 
 }

@@ -9,7 +9,11 @@ import {
     StringListField,
 } from '../../../../shared/ui';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
-import { NONEBOT2_ENV_PRESETS, NONEBOT2_LOG_LEVELS, appendNoneBot2EnvPreset } from '../../../../core/domain/apps/nonebot2Config';
+import {
+    NONEBOT2_ENV_PRESETS,
+    NONEBOT2_LOG_LEVELS,
+    appendNoneBot2EnvPreset,
+} from '../../../../core/domain/apps/nonebot2Config';
 import type { NoneBot2EnvProd, NoneBot2InstanceConfig } from '../../../../core/ipc/types';
 
 export interface NoneBot2TabProps {
@@ -82,7 +86,11 @@ export const NoneBot2ConnectionsTab: React.FC<NoneBot2TabProps> = ({
                 <StringListField
                     label="ONEBOT_WS_URLS"
                     value={env.onebot_ws_urls}
-                    error={Object.entries(errors).find(([key]) => key.startsWith('env_prod/onebot_ws_urls/'))?.[1]}
+                    error={
+                        Object.entries(errors).find(([key]) =>
+                            key.startsWith('env_prod/onebot_ws_urls/'),
+                        )?.[1]
+                    }
                     hint="正向 WebSocket 地址；需使用支持客户端连接的驱动"
                     placeholder="ws://127.0.0.1:3001"
                     disabled={disabled}
@@ -175,9 +183,14 @@ export const NoneBot2ConnectionsTab: React.FC<NoneBot2TabProps> = ({
                     label="添加上游配置项"
                     placeholder="选择驱动或 OneBot v12 配置"
                     value=""
-                    items={NONEBOT2_ENV_PRESETS.filter((preset) => !env.custom.some((entry) => entry.key.toUpperCase() === preset.key)).map((preset) => ({ value: preset.key, label: preset.key }))}
+                    items={NONEBOT2_ENV_PRESETS.filter(
+                        (preset) =>
+                            !env.custom.some((entry) => entry.key.toUpperCase() === preset.key),
+                    ).map((preset) => ({ value: preset.key, label: preset.key }))}
                     disabled={disabled}
-                    onValueChange={(key) => set({ custom: appendNoneBot2EnvPreset(env.custom, key) })}
+                    onValueChange={(key) =>
+                        set({ custom: appendNoneBot2EnvPreset(env.custom, key) })
+                    }
                 />
                 <KeyValueListEditor
                     value={env.custom}

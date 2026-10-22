@@ -86,9 +86,9 @@ describe('yunzaiConfig', () => {
         b.satori.enable = true;
         b.satori.ws_endpoint = 'http://wrong';
         const paths = validateYunzaiConfig(b).map((i) => i.path);
-        expect(paths).toEqual(expect.arrayContaining([
-            'server/https/port', 'milky/connection', 'satori/ws_endpoint',
-        ]));
+        expect(paths).toEqual(
+            expect.arrayContaining(['server/https/port', 'milky/connection', 'satori/ws_endpoint']),
+        );
         expect(yunzaiRestartInputsChanged(a, b)).toBe(true);
         expect(yunzaiLinkInputsChanged(a, b)).toBe(false);
         const c = structuredClone(a);
@@ -108,7 +108,11 @@ describe('yunzaiConfig', () => {
     it('Satori 的空地址和零时间沿用上游默认值', () => {
         const cfg = yunzaiDefaultConfig(24100);
         Object.assign(cfg.satori, {
-            enable: true, http_endpoint: '', ws_endpoint: '', timeout: 0, heartbeat_interval: 0,
+            enable: true,
+            http_endpoint: '',
+            ws_endpoint: '',
+            timeout: 0,
+            heartbeat_interval: 0,
         });
         expect(validateYunzaiConfig(cfg)).toEqual([]);
     });
