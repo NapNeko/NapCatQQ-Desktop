@@ -224,13 +224,14 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
     ) -> Result<(), AppFrameworkError> {
         let path = Self::write_target(host, instance).await?;
         let text = Self::read_text(host, &path).await?.unwrap_or_default();
-        let mut env = EnvFile::parse(&text);
+        let mut env = EnvFile::parse_python(&text);
         env.apply(&NoneBot2Integration::env_writes(
             instance,
             &plan.access_token,
         ));
-        let current = env.get(ENV_DRIVER).unwrap_or_default();
-        env.set(ENV_DRIVER, &ensure_reverse_driver(&current));
+        config::write_onebot_env(&mut env, manifest::ENV_ONEBOT_ACCESS_TOKEN, &plan.access_token);
+        let current = env.get_ci(ENV_DRIVER).unwrap_or_default();
+        env.set_ci(ENV_DRIVER, &ensure_reverse_driver(&current));
         let out = env.render();
         apply_with_backup_ex(
             host,

@@ -433,7 +433,7 @@ if __name__ == "__main__":
             .await
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .map_err(|e| ActionError::install_step("write-env", e.to_string()))?;
-        let mut env = EnvFile::parse(&text);
+        let mut env = EnvFile::parse_python(&text);
         Self::apply_listen_env(&mut env, self.port);
         host.write_file(&path, env.render().as_bytes()).await?;
         Ok(())
@@ -697,12 +697,12 @@ version = "2.4.6"
 
     #[test]
     fn listen_env_keeps_existing_driver() {
-        let mut env = EnvFile::parse("DRIVER=~fastapi+~httpx\nPORT=1\n");
+        let mut env = EnvFile::parse_python("DRIVER=~fastapi+~httpx\nPORT=1\n");
         NoneBot2Component::apply_listen_env(&mut env, 8081);
         assert_eq!(env.get("DRIVER").as_deref(), Some("~fastapi+~httpx"));
         assert_eq!(env.get("PORT").as_deref(), Some("8081"));
         assert_eq!(env.get("HOST").as_deref(), Some("127.0.0.1"));
-        let mut empty = EnvFile::parse("");
+        let mut empty = EnvFile::parse_python("");
         NoneBot2Component::apply_listen_env(&mut empty, 9);
         assert_eq!(empty.get("DRIVER").as_deref(), Some("~fastapi"));
     }
