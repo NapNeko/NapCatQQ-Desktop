@@ -132,7 +132,7 @@ describe('native message search', () => {
         expect(screen.queryByRole('combobox')).toBeNull();
         expect(screen.getByRole('status')).toHaveTextContent('1 条记录');
     });
-    it('renders QQ faces inline and omits duplicate image labels unless the preview fails', () => {
+    it('renders QQ faces inline without duplicate image labels and offers retry on preview failure', () => {
         const item = {
             ...messages()[1],
             segments: [
@@ -147,7 +147,12 @@ describe('native message search', () => {
         expect(option).toHaveTextContent('你好');
         expect(option).not.toHaveTextContent('[图片]');
         fireEvent.error(within(option).getByAltText('图片'));
-        expect(option).toHaveTextContent('[图片加载失败]');
+        expect(within(option).getByLabelText('图片暂未就绪')).toBeInTheDocument();
+        fireEvent.click(within(option).getByRole('button', { name: '重试图片' }));
+        expect(within(option).getByAltText('图片')).toHaveAttribute(
+            'src',
+            'https://cdn.example/sticker.gif',
+        );
     });
     it('uses the same display-only markerless face projection in archived search results', async () => {
         vi.spyOn(qqFaceAssetService, 'acquire').mockImplementation(async (url) => ({
