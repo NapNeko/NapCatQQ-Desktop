@@ -170,7 +170,8 @@ it('模型参数目录显示已有值，新增参数随表单保存并保留未�
         data: { ok: false },
     });
     mount(configDoc);
-    expect(screen.getByRole('combobox', { name: '思考强度' })).toHaveTextContent('max');
+    // settings 默认展开会先跑入场动效，等到真实可访问后再编辑参数。
+    expect(await screen.findByRole('combobox', { name: '思考强度' })).toHaveTextContent('max');
     expect(screen.getByLabelText('自定义请求参数')).toHaveValue(
         JSON.stringify({ custom_vendor: true }, null, 2),
     );

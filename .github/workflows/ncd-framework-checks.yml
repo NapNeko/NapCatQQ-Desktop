@@ -261,3 +261,5 @@ jobs:
         with:
           name: ncd-framework-format
           path: /tmp/ncd-framework-format
+
+# Verify animated controls after they become accessible.

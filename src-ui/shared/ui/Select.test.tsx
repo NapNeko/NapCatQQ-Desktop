@@ -116,12 +116,7 @@ describe('Select 标签关联', () => {
 
     it('无可见标签时保留显式 aria-label，且不生成无效标签引用', () => {
         const { rerender } = render(
-            <Select
-                aria-label="重启频率"
-                items={ITEMS}
-                value="a"
-                onValueChange={() => {}}
-            />,
+            <Select aria-label="重启频率" items={ITEMS} value="a" onValueChange={() => {}} />,
         );
         const trigger = screen.getByRole('combobox', { name: '重启频率' });
         expect(trigger).not.toHaveAttribute('aria-labelledby');
