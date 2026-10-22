@@ -14,7 +14,7 @@
 [![License](https://img.shields.io/github/license/NapNeko/NapCatQQ-Desktop?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/NapNeko/NapCatQQ-Desktop?style=flat-square)](https://github.com/NapNeko/NapCatQQ-Desktop/stargazers)
 
-**[下载 Windows 安装包](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest)** · **[使用指南](docs/user/README.md)** · **[更新日志](https://github.com/NapNeko/NapCatQQ-Desktop/releases)** · **[加入 QQ 群](https://qm.qq.com/q/8UK5ecfDyw)**
+**[项目官网](https://napneko.github.io/NapCatQQ-Desktop/)** · **[下载 Windows 安装包](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest)** · **[使用文档](https://napneko.github.io/NapCatQQ-Desktop/docs/)** · **[更新日志](https://napneko.github.io/NapCatQQ-Desktop/changelog/)** · **[加入 QQ 群](https://qm.qq.com/q/8UK5ecfDyw)**
 
 [界面预览](#界面预览) · [主要功能](#主要功能) · [安装与开始使用](#安装与开始使用) · [文档](#文档) · [参与开发](#参与开发)
 
@@ -47,7 +47,7 @@
 - **双协议端**：管理 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 和 [SnowLuma](https://github.com/SnowLuma/SnowLuma)，查看运行状态、登录状态与日志，编辑 OneBot 连接。
 - **本机与远端**：本机 Windows 原生运行；通过 SSH 管理远端 Linux，支持原生运行和 Docker 部署。
 - **组件安装**：在界面里安装、更新运行时与框架，查看依赖和任务进度；QQ 可单独安装一份，减少对日常使用的系统 QQ 的影响。
-- **运行监控**：查看主机 CPU、内存、磁盘及 Bot 指标，配置自动重启、掉线通知；远端可安装 [ncd-watch](docs/user/ncd-watch.md)，在 Desktop 退出后继续值守。
+- **运行监控**：查看主机 CPU、内存、磁盘及 Bot 指标，配置自动重启、掉线通知；远端可安装 [ncd-watch](https://napneko.github.io/NapCatQQ-Desktop/docs/watch/)，在 Desktop 退出后继续值守。
 
 | 运行位置            | NapCatQQ | SnowLuma |
 | :------------------ | :------: | :------: |
@@ -71,7 +71,7 @@ Desktop 客户端目前面向 Windows x64；Docker 部署面向远端 Linux 主�
 | TRSS-Yunzai（云崽） | 实例、配置与 OneBot 对接                 |
 | NeoBot              | 模型、提示词、记忆、插件、运行与用量面板 |
 
-配置和运行面板按各框架能力提供，部分操作需要实例运行并能连接其 WebUI。**应用端一键对接目前不支持 Docker Bot**，其他对接方式以界面给出的可用选项为准。见 [应用端使用指南](docs/user/app-instances.md)。
+配置和运行面板按各框架能力提供，部分操作需要实例运行并能连接其 WebUI。**应用端一键对接目前不支持 Docker Bot**，其他对接方式以界面给出的可用选项为准。见 [应用端使用指南](https://napneko.github.io/NapCatQQ-Desktop/docs/apps/)。
 
 ### 聊天、媒体与截图
 
@@ -81,7 +81,7 @@ Desktop 客户端目前面向 Windows x64；Docker 部署面向远端 Linux 主�
 - **原生截图**：默认 `Ctrl+Alt+S`，支持框选、标注、撤销重做、复制、保存和双向滚动长截图。截图可加入聊天草稿，也可设置成只复制，完成后不拉起聊天窗口。
 - **账号托盘**：按账号开启后台接收、头像托盘和消息提醒；群聊可单独设免打扰。
 
-聊天与截图可以在「设置 → 功能」统一关闭。后台接收和账号托盘需按账号启用。见 [聊天与截图指南](docs/user/chat.md)。
+聊天与截图可以在「设置 → 功能」统一关闭。后台接收和账号托盘需按账号启用。见 [聊天与截图指南](https://napneko.github.io/NapCatQQ-Desktop/docs/chat/)。
 
 ### 调试与运维工具
 
@@ -115,23 +115,25 @@ Desktop 客户端目前面向 Windows x64；Docker 部署面向远端 Linux 主�
 4. **启动并登录**：启动 Bot，按协议端提供的 WebUI 或 QQ 登录入口完成登录，查看卡片状态和日志。
 5. **按需扩展**：进入「聊天」，或在「应用端」创建实例并对接；接口问题可从 Bot 卡片进入调试台。
 
-完整步骤与常见问题见 [用户指南](docs/user/README.md)。
+完整步骤与常见问题见 [使用文档](https://napneko.github.io/NapCatQQ-Desktop/docs/)。
 
 ### 升级与备份
 
 可以直接安装新版 MSI 覆盖升级，也可从应用内检查更新。升级前建议在「设置 → 数据」导出一份配置 ZIP。
 
-配置包不包含组件程序、插件程序、数据库和聊天消息记录，也不包含系统密钥库中的凭据；配置文件中已有的 token、API Key 等会随原文件保存。迁移到另一台机器时，仍需安装运行环境并核对路径。见 [备份与恢复](docs/user/README.md#备份与恢复配置)。
+配置包不包含组件程序、插件程序、数据库和聊天消息记录，也不包含系统密钥库中的凭据；配置文件中已有的 token、API Key 等会随原文件保存。迁移到另一台机器时，仍需安装运行环境并核对路径。见 [备份与恢复](https://napneko.github.io/NapCatQQ-Desktop/docs/backup/)。
 
 ## 文档
 
 | 要做什么                   | 从这里开始                                                        |
 | :------------------------- | :---------------------------------------------------------------- |
-| 安装、创建 Bot、备份与排错 | [用户指南](docs/user/README.md)                                   |
-| 管理应用端与 OneBot 对接   | [应用端实例](docs/user/app-instances.md)                          |
-| 聊天、群文件、截图与托盘   | [聊天与截图](docs/user/chat.md)                                   |
-| 部署远端 Linux             | [远端管理](docs/user/remote-linux.md)                             |
-| Desktop 关闭后继续远端值守 | [ncd-watch](docs/user/ncd-watch.md)                               |
+| 了解功能、体验交互演示     | [项目官网](https://napneko.github.io/NapCatQQ-Desktop/)             |
+| 安装、创建 Bot、备份与排错 | [使用文档](https://napneko.github.io/NapCatQQ-Desktop/docs/)         |
+| 管理应用端与 OneBot 对接   | [应用端实例](https://napneko.github.io/NapCatQQ-Desktop/docs/apps/)  |
+| 聊天、群文件、截图与托盘   | [聊天与截图](https://napneko.github.io/NapCatQQ-Desktop/docs/chat/)  |
+| 部署远端 Linux             | [远端管理](https://napneko.github.io/NapCatQQ-Desktop/docs/remote-linux/) |
+| Desktop 关闭后继续远端值守 | [ncd-watch](https://napneko.github.io/NapCatQQ-Desktop/docs/watch/)   |
+| 查看版本更新               | [更新日志](https://napneko.github.io/NapCatQQ-Desktop/changelog/)    |
 | 阅读或修改代码             | [贡献指南](CONTRIBUTING.md) · [代码地图](docs/context/codemap.md) |
 | 查找其他文档               | [文档索引](docs/README.md)                                        |
 
