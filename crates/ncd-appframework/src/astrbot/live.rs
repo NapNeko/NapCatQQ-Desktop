@@ -100,11 +100,15 @@ async fn sync_claimed_platform(
 ) -> Result<(), AppFrameworkError> {
     let before = payload.get("config").unwrap_or(payload);
     let before_row = claimed_platform_row(before, instance_id, listen_port);
-    let after_row = claimed_platform_row(live, instance_id, listen_port)
+    let mut after_row = claimed_platform_row(live, instance_id, listen_port)
         .cloned()
         .ok_or_else(|| AppFrameworkError::Integration("认领的 OneBot 行不存在".into()))?;
     match before_row.and_then(row_id) {
-        Some(id) => client.platform_update(id, &after_row).await,
+        Some(id) => {
+            // 认领会生成 NCD id，但上游禁止热更新时重命名已有平台。
+            after_row["id"] = Value::String(id.to_owned());
+            client.platform_update(id, &after_row).await
+        }
         None => client.platform_new(&after_row).await,
     }
 }
@@ -156,7 +160,7 @@ async fn sync_providers(
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -199,6 +203,68 @@ mod tests {
             .map(|r| r.url.path().to_string())
             .filter(|p| p != "/api/auth/login")
             .collect()
+    }
+
+    #[tokio::test]
+    async fn updating_claimed_platform_preserves_existing_id() {
+        for id in ["default", "ncd-app:a1"] {
+            let server = MockServer::start().await;
+            let client = logged_in(&server, "live-platform-update").await;
+            let root = json!({ "platform": [{
+                "id": id, "type": "aiocqhttp", "enable": true,
+                "ws_reverse_host": "0.0.0.0", "ws_reverse_port": 6199,
+                "ws_reverse_token": "old", "upstream_extra": true
+            }] });
+            let mut cfg = AstrBotInstanceConfig::from_root(&root, "a1", 6199);
+            cfg.onebot.ws_reverse_port = 6201;
+            cfg.onebot.ws_reverse_token = "new".into();
+            let mut live = root.clone();
+            apply_onebot_to_root(&mut live, "a1", &cfg).unwrap();
+
+            Mock::given(method("POST"))
+                .and(path("/api/config/platform/update"))
+                .and(body_json(json!({ "id": id, "config": {
+                    "id": id, "type": "aiocqhttp", "enable": true,
+                    "ws_reverse_host": "0.0.0.0", "ws_reverse_port": 6201,
+                    "ws_reverse_token": "new", "upstream_extra": true
+                } })))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "status": "ok" })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            sync_claimed_platform(&client, &json!({ "config": root }), "a1", 6199, &cfg, &live)
+                .await
+                .unwrap();
+            assert_eq!(write_paths(&server).await, ["/api/config/platform/update"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn new_platform_keeps_generated_ncd_id() {
+        let server = MockServer::start().await;
+        let client = logged_in(&server, "live-platform-new").await;
+        let root = json!({ "platform": [] });
+        let cfg = AstrBotInstanceConfig::from_root(&root, "a1", 6199);
+        let mut live = root.clone();
+        apply_onebot_to_root(&mut live, "a1", &cfg).unwrap();
+
+        Mock::given(method("POST"))
+            .and(path("/api/config/platform/new"))
+            .and(body_json(json!({
+                "id": "ncd-app:a1", "type": "aiocqhttp", "enable": true,
+                "ws_reverse_host": "0.0.0.0", "ws_reverse_port": 6199,
+                "ws_reverse_token": ""
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "status": "ok" })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        sync_claimed_platform(&client, &json!({ "config": root }), "a1", 6199, &cfg, &live)
+            .await
+            .unwrap();
+        assert_eq!(write_paths(&server).await, ["/api/config/platform/new"]);
     }
 
     #[tokio::test]
