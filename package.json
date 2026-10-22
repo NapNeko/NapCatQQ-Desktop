@@ -19,7 +19,8 @@
     "demo:plan": "node scripts/build-desktop-demo.mjs --dry-run",
     "demo:prepare": "node scripts/build-desktop-demo.mjs --prepare",
     "build:demo": "node scripts/build-desktop-demo.mjs",
-    "test:demo": "node --test demo/*.test.mjs"
+    "test:demo": "node --test demo/*.test.mjs",
+    "test:motion": "node --test scripts/layout-refresh.test.mjs scripts/scroll-activity.test.mjs scripts/watch-demo.test.mjs"
   },
   "dependencies": { "astro": "7.4.1", "@astrojs/markdown-satteri": "0.4.4", "gsap": "3.15.0" },
   "pnpm": {

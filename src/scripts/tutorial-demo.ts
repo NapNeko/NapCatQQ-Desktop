@@ -1,6 +1,7 @@
 import type { Tutorial } from '../lib/tutorials';
 import { DemoResidency } from './demo-residency';
 import { setThemeImage, type ThemeImageSources } from './theme-images';
+import { isScrollActive, subscribeScrollActivity } from './scroll-activity';
 
 let budgetNotification = 0;
 let expandedDemo: HTMLElement | null = null;
@@ -92,6 +93,7 @@ function setupDemo(root: HTMLElement) {
   let autoStarted = false;
   let retainedByUser = false;
   let explicitlyStarted = false;
+  let automaticScroll = showcase;
   const lease = residency.register(recycle);
 
   function syncResidency() {
@@ -120,6 +122,7 @@ function setupDemo(root: HTMLElement) {
     pendingIntent = null;
     autoPaused = autoStarted = false;
     explicitlyStarted = false;
+    automaticScroll = showcase;
     mode = 'idle';
     // A new browsing context rejects queued messages from the retired document.
     replaceFrame();
@@ -406,6 +409,7 @@ function setupDemo(root: HTMLElement) {
   function interact() {
     autoStarted = true;
     autoPaused = false;
+    automaticScroll = false;
     closeStepPanel();
     if (showcase && !expanded) root.dispatchEvent(new CustomEvent('tutorial:interact', { bubbles: true }));
   }
@@ -431,7 +435,12 @@ function setupDemo(root: HTMLElement) {
       playButton.focus({ preventScroll: true });
     }
   });
-  expandButton.addEventListener('click', () => { interact(); expanded ? closeExpanded() : openExpanded(); });
+  expandButton.addEventListener('click', () => {
+    const resume = automaticScroll && isScrollActive() && autoPaused && (mode === 'paused' || pendingIntent === 'pause');
+    interact();
+    expanded ? closeExpanded() : openExpanded();
+    if (resume && expanded) request('play');
+  });
 
   function selectLesson(button: HTMLButtonElement) {
     if (button.getAttribute('aria-selected') === 'true') return;
@@ -488,7 +497,7 @@ function setupDemo(root: HTMLElement) {
 
   function pauseWhenUnseen() {
     syncResidency();
-    if (document.hidden || !isVisible()) {
+    if (document.hidden || !isVisible() || (automaticScroll && isScrollActive())) {
       if (mode === 'playing') { autoPaused = showcase; request('pause'); }
       else if (pendingIntent === 'play') { autoPaused = showcase; pendingIntent = 'pause'; }
     } else if (showcase && !reducedMotion.matches && (!compactScreen.matches || explicitlyStarted)
@@ -507,6 +516,9 @@ function setupDemo(root: HTMLElement) {
     pauseWhenUnseen();
   }, { threshold: showcase ? [0, .15, .35] : 0 }).observe(root);
   if (showcase) {
+    const unsubscribeScroll = subscribeScrollActivity(pauseWhenUnseen);
+    window.addEventListener('pagehide', event => { if (!event.persisted) unsubscribeScroll(); });
+    if (import.meta.hot) import.meta.hot.dispose(unsubscribeScroll);
     document.addEventListener('demo:budget-available', pauseWhenUnseen);
     document.addEventListener('home:intro-ready', pauseWhenUnseen);
     document.addEventListener('home:intro-start', () => {

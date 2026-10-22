@@ -12,7 +12,7 @@ html.home-document {
   scroll-padding-top: calc(var(--header-height) + 20px);
 }
 .home-page .container { max-width: 1480px; padding-inline: clamp(24px, 5.5vw, 82px); }
-.home-page .site-header { background: #f7f8fce8; border-color: #dce1ec99; }
+.home-page .site-header { background: var(--paper); border-color: #dce1ec99; backdrop-filter: none; }
 .home-page .nav-inner { min-height: var(--header-height); }
 .home-page .brand { font-size: 14px; }
 .home-page .button { background: var(--ink); color: #fff; border-radius: 8px; box-shadow: none; }

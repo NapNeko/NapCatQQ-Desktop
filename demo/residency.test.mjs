@@ -124,8 +124,9 @@ const fixtureHtml = `
   <div data-fbd-error hidden></div><div data-fbd-pan></div>
 </section></div>`;
 
-function controller(t, { compact = false, reduced = false, count = 1 } = {}) {
-  const dom = new JSDOM(`<!doctype html>${fixtureHtml.repeat(count)}`, {
+function controller(t, { compact = false, reduced = false, count = 1, showcase = true } = {}) {
+  const fixture = showcase ? fixtureHtml : fixtureHtml.replace(' data-demo-showcase', '');
+  const dom = new JSDOM(`<!doctype html>${fixture.repeat(count)}`, {
     url: 'https://docs.example.test/', runScripts: 'outside-only', pretendToBeVisual: true,
   });
   const { window } = dom;
@@ -166,6 +167,7 @@ function controller(t, { compact = false, reduced = false, count = 1 } = {}) {
   return {
     root, window, frame, connect, report, clock, commands,
     click(name) { root.querySelector(`[data-fbd-${name}]`).click(); },
+    scroll() { window.dispatchEvent(new window.Event('scroll')); },
     visible(ratio, index = 0) { intersections[index]([{ intersectionRatio: ratio, isIntersecting: ratio > 0 }]); },
     hidden(value) {
       Object.defineProperty(window.document, 'hidden', { configurable: true, value });
@@ -294,4 +296,102 @@ test('展开窗口遮住的自动演示暂停并可回收，收起后才重新�
   assert.equal(demo.root.dataset.mode, 'playing');
   demo.click('expand');
   assert.equal(secondRoot.dataset.mode, 'loading');
+});
+
+test('滚动时经过演示区不启动真实前端，停稳后才按可见状态加载', t => {
+  const demo = controller(t);
+  demo.scroll();
+  demo.visible(.8);
+  assert.equal(demo.frame().hasAttribute('src'), false);
+  demo.clock.advance(150);
+  demo.scroll();
+  demo.clock.advance(159);
+  assert.equal(demo.frame().hasAttribute('src'), false);
+  demo.clock.advance(1);
+  assert.match(demo.frame().src, /lesson=chat/);
+  demo.connect();
+  demo.report('ready');
+  assert.equal(demo.root.dataset.mode, 'playing');
+});
+
+test('自动演示滚动时暂停，停稳后在原会话继续；已经离屏则保持暂停', t => {
+  const demo = controller(t);
+  demo.visible(.8);
+  demo.connect();
+  demo.report('ready');
+  const originalFrame = demo.frame();
+  demo.scroll();
+  assert.equal(demo.root.dataset.mode, 'paused');
+  const pauses = demo.commands.filter(command => command === 'pause').length;
+  demo.scroll();
+  demo.clock.advance(159);
+  assert.equal(demo.root.dataset.mode, 'paused');
+  assert.equal(demo.commands.filter(command => command === 'pause').length, pauses);
+  demo.clock.advance(1);
+  assert.equal(demo.root.dataset.mode, 'playing');
+  assert.equal(demo.frame(), originalFrame);
+  demo.scroll();
+  demo.visible(0);
+  demo.clock.advance(160);
+  assert.equal(demo.root.dataset.mode, 'paused');
+  demo.visible(.8);
+  assert.equal(demo.root.dataset.mode, 'playing');
+});
+
+test('加载中的自动演示遇到滚动，ready 后等到停稳才开始播放', t => {
+  const demo = controller(t);
+  demo.visible(.8);
+  demo.scroll();
+  demo.connect();
+  demo.report('ready');
+  assert.equal(demo.root.dataset.mode, 'paused');
+  assert.equal(demo.commands.includes('play'), false);
+  demo.clock.advance(160);
+  assert.equal(demo.root.dataset.mode, 'playing');
+});
+
+test('显式播放和自己操作绕过滚动调度，继续滚动也不打断', t => {
+  const demo = controller(t);
+  demo.scroll();
+  demo.visible(.8);
+  demo.click('play');
+  assert.match(demo.frame().src, /lesson=chat/);
+  demo.connect();
+  demo.report('ready');
+  assert.equal(demo.root.dataset.mode, 'playing');
+  demo.scroll();
+  assert.equal(demo.root.dataset.mode, 'playing');
+  demo.click('manual');
+  assert.equal(demo.root.dataset.mode, 'manual');
+  const manualFrame = demo.frame();
+  demo.scroll();
+  demo.clock.advance(160);
+  assert.equal(demo.root.dataset.mode, 'manual');
+  assert.equal(demo.frame(), manualFrame);
+});
+
+test('自动演示因滚动暂停后放大，立即继续并不再受滚动调度打断', t => {
+  const demo = controller(t);
+  demo.visible(.8);
+  demo.connect();
+  demo.report('ready');
+  demo.scroll();
+  assert.equal(demo.root.dataset.mode, 'paused');
+  demo.click('expand');
+  assert.equal(demo.root.dataset.expanded, 'true');
+  assert.equal(demo.root.dataset.mode, 'playing');
+  demo.scroll();
+  assert.equal(demo.root.dataset.mode, 'playing');
+});
+
+test('文档中的教程播放不采用首页滚动调度', t => {
+  const demo = controller(t, { showcase: false });
+  demo.visible(.8);
+  demo.click('play');
+  demo.connect();
+  demo.report('ready');
+  assert.equal(demo.root.dataset.mode, 'playing');
+  demo.scroll();
+  demo.clock.advance(160);
+  assert.equal(demo.root.dataset.mode, 'playing');
 });

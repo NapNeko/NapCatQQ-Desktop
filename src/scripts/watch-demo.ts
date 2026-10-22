@@ -13,6 +13,13 @@ document.querySelectorAll<HTMLElement>('[data-watch-demo]').forEach(root => {
   const play = get<HTMLButtonElement>('[data-watch-play]');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const meter = get('.watch-meter');
+  const packet = get('.watch-packet');
+  const noticePacket = get('.watch-notice-route > i');
+  const packetPath = packet.parentElement!;
+  const noticePath = noticePacket.parentElement!;
+  let packetDistance = packetPath.clientWidth;
+  let noticeDistance = noticePath.clientHeight;
+  let lastProgress = Number(meter.getAttribute('aria-valuenow'));
   let visible = false;
   let started = false;
   let requested = false;
@@ -36,22 +43,48 @@ document.querySelectorAll<HTMLElement>('[data-watch-demo]').forEach(root => {
     get('[data-watch-play-icon]').textContent = requested ? 'Ⅱ' : '▶';
   }
 
-  const timeline = gsap.timeline({ paused: true, onUpdate: () => {
-    meter.setAttribute('aria-valuenow', String(Math.round(timeline.progress() * 100)));
-  }, onComplete: () => { requested = false; sync(); } });
+  function updateProgress() {
+    const progress = Math.round(timeline.progress() * 100);
+    if (progress === lastProgress) return;
+    lastProgress = progress;
+    meter.setAttribute('aria-valuenow', String(progress));
+  }
+
+  const timeline = gsap.timeline({ paused: true, onUpdate: updateProgress, onComplete: () => { requested = false; sync(); } });
   timeline.fromTo(get('.watch-meter > i'), { scaleX: 0 }, { scaleX: 1, duration: 16, ease: 'none' }, 0);
   stages.forEach((_, index) => timeline.call(() => paint(index), [], index * 4));
-  timeline.fromTo(get('.watch-packet'), { left: '0%' }, { left: '100%', duration: 1.6, repeat: 1, ease: 'none' }, 0);
+  gsap.set(packet, { left: 0 });
+  gsap.set(noticePacket, { top: 0 });
+  const packetMotion = gsap.fromTo(packet, { x: 0 }, { x: () => packetDistance, duration: 1.6, repeat: 1, ease: 'none' });
+  timeline.add(packetMotion, 0);
   timeline.fromTo(get('.watch-scan > i'), { scaleX: .05 }, { scaleX: 1, duration: 3.6, repeat: 3, ease: 'none' }, 0);
   timeline.fromTo(get('.watch-radar > i'), { scale: .35, opacity: .8 }, { scale: 1.8, opacity: 0, duration: 1.8, repeat: 7, ease: 'power1.out' }, 0);
-  timeline.fromTo(get('.watch-notice-route > i'), { top: '0%' }, { top: '100%', duration: 1, ease: 'power1.inOut' }, 10.8);
+  const noticeMotion = gsap.fromTo(noticePacket, { y: 0 }, { y: () => noticeDistance, duration: 1, ease: 'power1.inOut' });
+  timeline.add(noticeMotion, 10.8);
   timeline.fromTo(get('.watch-notice'), { y: 0 }, { y: -5, duration: .4, repeat: 1, yoyo: true, ease: 'power2.out' }, 12);
   paint(0);
+
+  const resizeObserver = new ResizeObserver(() => {
+    const width = packetPath.clientWidth;
+    const height = noticePath.clientHeight;
+    if (width !== packetDistance) {
+      const time = packetMotion.totalTime();
+      packetDistance = width;
+      packetMotion.invalidate().totalTime(time, true);
+    }
+    if (height !== noticeDistance) {
+      const time = noticeMotion.totalTime();
+      noticeDistance = height;
+      noticeMotion.invalidate().totalTime(time, true);
+    }
+  });
+  resizeObserver.observe(packetPath);
+  resizeObserver.observe(noticePath);
 
   function sync() {
     const playing = visible && !document.hidden && requested;
     root.dataset.playing = String(playing);
-    meter.setAttribute('aria-valuenow', String(Math.round(timeline.progress() * 100)));
+    updateProgress();
     if (playing) timeline.play(); else timeline.pause();
     label();
   }
@@ -79,7 +112,7 @@ document.querySelectorAll<HTMLElement>('[data-watch-demo]').forEach(root => {
   const changeMotion = () => { if (reduced.matches) requested = false; sync(); };
   reduced.addEventListener('change', changeMotion);
   label();
-  const dispose = () => { timeline.kill(); observer.disconnect(); document.removeEventListener('visibilitychange', sync); reduced.removeEventListener('change', changeMotion); };
+  const dispose = () => { timeline.kill(); observer.disconnect(); resizeObserver.disconnect(); document.removeEventListener('visibilitychange', sync); reduced.removeEventListener('change', changeMotion); };
   window.addEventListener('pagehide', event => { if (!event.persisted) dispose(); });
   if (import.meta.hot) import.meta.hot.dispose(dispose);
 });

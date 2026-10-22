@@ -1,6 +1,7 @@
 /* 首屏的场景层与产品窗口分别运动，避免透视影响操作命中区域。 */
 .hero { position: relative; background: var(--paper); }
-.hero-scene { position: relative; overflow: clip; isolation: isolate; padding-top: 46px; background: var(--paper); perspective: 1400px; }
+.hero-scene { position: relative; overflow: clip; isolation: isolate; padding-top: 46px; background: var(--paper); }
+.hero-tint { position: absolute; inset: 0; z-index: -4; background: #e9edf7; opacity: 0; pointer-events: none; }
 .hero-grid { position: absolute; inset: 0; z-index: -3; opacity: .48; background-image: linear-gradient(#afb9d01c 1px, transparent 1px), linear-gradient(90deg, #afb9d01c 1px, transparent 1px); background-size: 72px 72px; mask-image: linear-gradient(120deg, transparent 12%, #000 90%); }
 .hero-circuit { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; pointer-events: none; }
 .hero-circuit path { stroke: #5369d8; stroke-width: 1; opacity: .23; }

@@ -1,6 +1,7 @@
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { mountHomeOpening } from './home-opening';
+import { observeLayoutRefresh } from './layout-refresh';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -58,11 +59,12 @@ function mountHomeMotion() {
     const visuals = '.management-detail, .apps-product-figure, .chat-product-figure, .home-tool-demo, .watch-demo, .home-settings-demo';
     gsap.utils.toArray<HTMLElement>(visuals, root).forEach(visual => {
       if (visual.closest('[hidden]')) return;
+      const live = Boolean(visual.querySelector('iframe'));
       const tween = gsap.fromTo(visual, {
-        y: desktop ? 65 : 24, scale: desktop ? .94 : .98, rotationX: desktop ? 8 : 0,
-        transformPerspective: 1200,
+        y: desktop ? 65 : 24, scale: desktop ? .94 : .98,
+        ...(live ? {} : { rotationX: desktop ? 8 : 0, transformPerspective: 1200 }),
       }, {
-        y: 0, scale: 1, rotationX: 0, ease: 'none',
+        y: 0, scale: 1, ...(live ? {} : { rotationX: 0 }), ease: 'none',
         scrollTrigger: { trigger: visual, start: 'top 95%', end: 'top 42%', scrub: .65 },
       });
       reveals.set(visual, tween);
@@ -120,7 +122,7 @@ function mountHomeMotion() {
       });
       heroTimeline.fromTo(preview, {
         x: () => Math.min(innerWidth * .18, 280), y: () => Math.min(innerHeight * .13, 120),
-        yPercent: -50, scale: .64, rotationX: 8, rotationY: -13, rotationZ: 5,
+        yPercent: -50, scale: .64, rotationZ: 5,
       }, { x: 0, y: 0, yPercent: -50, scale: 1, rotationX: 0, rotationY: 0, rotationZ: 0, duration: 1 }, .08)
         .to(select('.hero-signature'), { y: -55, x: -30, autoAlpha: 0, duration: .4, ease: 'power1.in' }, 0)
         .to(art, { x: 180, y: -140, rotation: 24, scale: 1.2, autoAlpha: 0, duration: .72 }, .05)
@@ -128,7 +130,7 @@ function mountHomeMotion() {
         .to(select('.cat-layer-middle'), { x: 75, y: -60, rotation: 14, duration: .65 }, 0)
         .fromTo(select('.hero-preview-controls'), { opacity: .65 }, { opacity: 1, duration: .4 }, .48)
         .to(select('.hero-grid'), { opacity: .16, duration: .8 }, 0)
-        .to(scene, { backgroundColor: '#e9edf7', duration: .6 }, .2)
+        .to(select('.hero-tint'), { opacity: 1, duration: .6 }, .2)
         .to(select('.hero-scroll-track i'), { scaleX: 1, duration: 1.08, ease: 'none' }, 0);
 
       // Tab 进入产品窗口时完成镜头推进，焦点始终留在可读画面内。
@@ -185,6 +187,7 @@ function mountHomeMotion() {
       const progress = story.querySelector<HTMLElement>('.story-progress > span')!;
       story.classList.add('story-pinned');
       const distance = () => Math.max(0, track.scrollWidth - viewport.clientWidth);
+      let activePanel = -1;
       const timeline = gsap.timeline({
         scrollTrigger: {
           trigger: story, start: () => 'top ' + getComputedStyle(root).getPropertyValue('--header-height').trim(),
@@ -192,6 +195,8 @@ function mountHomeMotion() {
           anticipatePin: 1, invalidateOnRefresh: true,
           onUpdate(self) {
             const index = Math.round(self.progress * (panels.length - 1));
+            if (index === activePanel) return;
+            activePanel = index;
             links.forEach((link, i) => {
               if (i === index) link.setAttribute('aria-current', 'step');
               else link.removeAttribute('aria-current');
@@ -262,25 +267,14 @@ function mountHomeMotion() {
 
   const stopOpening = mountHomeOpening(root);
 
-  let refreshFrame = 0;
-  let disposed = false;
-  const refresh = () => {
-    if (disposed) return;
-    cancelAnimationFrame(refreshFrame);
-    refreshFrame = requestAnimationFrame(() => ScrollTrigger.refresh());
-  };
-  const observer = new ResizeObserver(refresh);
-  const main = root.querySelector('main');
-  if (main) observer.observe(main);
-  void document.fonts.ready.then(refresh);
-  window.addEventListener('load', refresh, { once: true });
-  refresh();
+  const layout = observeLayoutRefresh(root.querySelector('main'), () => ScrollTrigger.refresh(true));
+  void document.fonts.ready.then(layout.request);
+  window.addEventListener('load', layout.request, { once: true });
+  layout.request();
 
   return () => {
-    disposed = true;
-    observer.disconnect();
-    cancelAnimationFrame(refreshFrame);
-    window.removeEventListener('load', refresh);
+    layout.dispose();
+    window.removeEventListener('load', layout.request);
     stopOpening();
     media.revert();
   };
