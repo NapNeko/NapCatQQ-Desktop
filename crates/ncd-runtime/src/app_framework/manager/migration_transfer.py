@@ -66,10 +66,24 @@ def no_writers(root):
             cwd = (process / "cwd").resolve(strict=True)
             if cwd == resolved or resolved in cwd.parents:
                 raise ValueError("项目还有进程在运行，未生成快照 (PID " + process.name + ")")
-        except (FileNotFoundError, ProcessLookupError):
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            pass
+        try:
+            descriptors = list((process / "fd").iterdir())
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
             continue
-        except PermissionError:
-            continue
+        for descriptor in descriptors:
+            try:
+                target = descriptor.resolve(strict=True)
+                if target != resolved and resolved not in target.parents:
+                    continue
+                # 服务可以从项目外启动；只看 cwd 会漏掉仍打开的数据库或日志。
+                fields = (process / "fdinfo" / descriptor.name).read_text().splitlines()
+                flags = next(line.split()[1] for line in fields if line.startswith("flags:"))
+                if int(flags, 8) & os.O_ACCMODE in (os.O_WRONLY, os.O_RDWR):
+                    raise ValueError("项目文件仍被进程以写入方式打开，未生成快照 (PID " + process.name + ")")
+            except (FileNotFoundError, ProcessLookupError, PermissionError):
+                continue
 
 
 def check_target(root, needed):
@@ -190,8 +204,10 @@ def restore(root, archive, expected, old_root, managed_root):
                 content = path.read_text(encoding="utf-8")
             except UnicodeError:
                 continue
-            rewritten = re.sub(re.escape(old_root.rstrip("/")) + r"(?=/|[\"'\s]|$)",
-                               lambda _: str(root).rstrip("/"), content)
+            pattern = (r"(?<![\w./~\\-])(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*:/{2,3})?"
+                       + re.escape(old_root.rstrip("/")) + r"(?=/|[\"'\s]|$)")
+            rewritten = re.sub(pattern,
+                               lambda match: (match.group("scheme") or "") + str(root).rstrip("/"), content)
             if rewritten != content:
                 path.write_text(rewritten, encoding="utf-8")
     return {"bytes": archive.stat().st_size, "files": len(rows), "sha256": expected, "free": 0}
