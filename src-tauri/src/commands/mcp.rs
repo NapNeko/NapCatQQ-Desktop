@@ -44,3 +44,28 @@ pub(crate) async fn apply_mcp_settings(
 pub async fn mcp_status(state: State<'_, AppState>) -> Result<McpServerStatus, String> {
     Ok(state.mcp.status())
 }
+
+#[tauri::command]
+pub async fn mcp_connection_config(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    require_main_window(&window)?;
+    state.mcp.connection_config()
+}
+
+#[tauri::command]
+pub async fn mcp_rotate_token(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    require_main_window(&window)?;
+    state.mcp.rotate_token().await
+}
+
+fn require_main_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("MCP 凭据只能在主窗口的设置页管理".to_owned());
+    }
+    Ok(())
+}

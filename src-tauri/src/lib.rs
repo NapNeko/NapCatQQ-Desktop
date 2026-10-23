@@ -383,18 +383,6 @@ pub fn run() {
     // 功能开关按落盘值起停（M7）：关着就不该有接收器起来；设置保存时 set_app_settings 按新值热生效
     tauri::async_runtime::block_on(onebot_debug.set_enabled(app_settings.features.api_debug));
     tauri::async_runtime::block_on(chat.set_enabled(app_settings.features.chat));
-    // 调试台的 MCP 服务也一样：默认关，按 `mcp.enabled` 起；随机端口首次回填进设置
-    let mcp = Arc::new(ncd_mcp::McpServer::new(
-        Arc::clone(&onebot_debug),
-        Arc::clone(&secrets),
-    ));
-    let mcp_settings = app_settings.mcp.clone();
-    tauri::async_runtime::block_on(commands::mcp::apply_mcp_settings(
-        &mcp,
-        &data_root,
-        &app_settings_shared,
-        &mcp_settings,
-    ));
     // BotManager 就绪后再挂 OneBot messenger 解析
     tauri::async_runtime::block_on(onebot_resolver.set(Arc::new(
         onebot_endpoint_resolver::BotManagerOneBotEndpointResolver::new(Arc::clone(&bot_manager)),
@@ -440,6 +428,25 @@ pub fn run() {
     };
     let app_manager_reconcile = Arc::clone(&app_manager);
     let app_manager_host_recovery = Arc::clone(&app_manager);
+
+    let mcp = Arc::new(
+        ncd_mcp::McpServer::new(
+            Arc::clone(&onebot_debug),
+            Arc::new(ncd_runtime::SystemSecretStore),
+        )
+        .with_inspection(Arc::new(ncd_mcp::McpInspection::new(
+            Arc::clone(&bot_manager),
+            Arc::clone(&app_manager),
+            Arc::clone(&server_manager),
+            Arc::clone(&components),
+        ))),
+    );
+    tauri::async_runtime::block_on(commands::mcp::apply_mcp_settings(
+        &mcp,
+        &data_root,
+        &app_settings_shared,
+        &app_settings.mcp,
+    ));
 
     let terminals = Arc::new(ncd_runtime::terminal::TerminalManager::new(Arc::new(
         ncd_runtime::terminal::DesktopTerminalPlanner::new(
@@ -890,6 +897,8 @@ pub fn run() {
             commands::app_settings::list_onebot_messenger_candidates,
             commands::app_settings::ensure_onebot_messenger_http,
             commands::mcp::mcp_status,
+            commands::mcp::mcp_connection_config,
+            commands::mcp::mcp_rotate_token,
             commands::system_metrics::get_system_resource_snapshot,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,
