@@ -15,8 +15,14 @@ const FAILED_RETRY: Duration = Duration::from_secs(60);
 const MAX_SLOTS: usize = 64;
 
 enum Slot {
-    Loading(Instant),
-    Ready(Rc<Image>),
+    Loading {
+        at: Instant,
+        image: Option<Rc<Image>>,
+    },
+    Ready {
+        image: Rc<Image>,
+        refresh_at: Instant,
+    },
     Failed(Instant),
 }
 
@@ -31,27 +37,32 @@ pub type Deliver = fn(AvatarKey, Option<Arc<AvatarPixels>>);
 impl AvatarSlots {
     pub fn image(&self, key: &AvatarKey) -> Option<Rc<Image>> {
         match self.slots.get(key) {
-            Some(Slot::Ready(image)) => Some(Rc::clone(image)),
+            Some(Slot::Ready { image, .. })
+            | Some(Slot::Loading {
+                image: Some(image), ..
+            }) => Some(Rc::clone(image)),
             _ => None,
         }
     }
 
-    /// 挑出还要加载的 key 并标成在途；已有图、在途未超时、刚失败的都跳过。
+    /// 刷新期间继续画旧图，避免缓存到期时头像闪成占位。
     pub fn claim(&mut self, keys: impl IntoIterator<Item = AvatarKey>) -> Vec<AvatarKey> {
         let now = Instant::now();
         let mut out = Vec::new();
         for key in keys {
             let wanted = match self.slots.get(&key) {
                 None => true,
-                Some(Slot::Ready(_)) => false,
-                Some(Slot::Loading(at)) => now.duration_since(*at) > LOADING_STALE,
+                Some(Slot::Ready { refresh_at, .. }) => now >= *refresh_at,
+                Some(Slot::Loading { at, .. }) => now.duration_since(*at) > LOADING_STALE,
                 Some(Slot::Failed(at)) => now.duration_since(*at) > FAILED_RETRY,
             };
             if wanted {
-                if self.slots.len() >= MAX_SLOTS {
+                let image = self.image(&key);
+                if self.slots.len() >= MAX_SLOTS && !self.slots.contains_key(&key) {
                     self.slots.clear();
                 }
-                self.slots.insert(key.clone(), Slot::Loading(now));
+                self.slots
+                    .insert(key.clone(), Slot::Loading { at: now, image });
                 out.push(key);
             }
         }
@@ -59,13 +70,23 @@ impl AvatarSlots {
     }
 
     pub fn fill(&mut self, key: AvatarKey, pixels: Option<Arc<AvatarPixels>>) {
+        let previous = self.image(&key);
         let slot = match pixels {
-            Some(px) => Slot::Ready(Rc::new(Image {
-                width: px.size,
-                height: px.size,
-                rgba: px.rgba.clone(),
-            })),
-            None => Slot::Failed(Instant::now()),
+            Some(px) => Slot::Ready {
+                image: Rc::new(Image {
+                    width: px.size,
+                    height: px.size,
+                    rgba: px.rgba.clone(),
+                }),
+                refresh_at: Instant::now() + avatar_cache::refresh_after(&key),
+            },
+            None => match previous {
+                Some(image) => Slot::Ready {
+                    image,
+                    refresh_at: Instant::now() + avatar_cache::FAILURE_TTL,
+                },
+                None => Slot::Failed(Instant::now()),
+            },
         };
         self.slots.insert(key, slot);
     }
@@ -112,5 +133,59 @@ mod tests {
         assert!(slots.claim([b.clone()]).is_empty(), "just failed");
         slots.retain(&HashSet::from([a.clone()]));
         assert_eq!(slots.claim([b]).len(), 1, "dropped slot is requested again");
+    }
+
+    #[test]
+    fn expired_ready_slot_refreshes_without_hiding_the_previous_image() {
+        let mut slots = AvatarSlots::default();
+        let key = AvatarKey::user("940001").unwrap();
+        slots.fill(
+            key.clone(),
+            Some(Arc::new(AvatarPixels {
+                size: 2,
+                rgba: vec![50; 16],
+            })),
+        );
+        if let Some(Slot::Ready { refresh_at, .. }) = slots.slots.get_mut(&key) {
+            *refresh_at = Instant::now() - Duration::from_secs(1);
+        }
+        let previous = slots.image(&key).unwrap();
+        assert_eq!(slots.claim([key.clone()]), vec![key.clone()]);
+        assert!(Rc::ptr_eq(&previous, &slots.image(&key).unwrap()));
+        assert!(
+            slots.claim([key.clone()]).is_empty(),
+            "refresh stays single flight"
+        );
+        slots.fill(key.clone(), None);
+        assert!(Rc::ptr_eq(&previous, &slots.image(&key).unwrap()));
+        assert!(
+            slots.claim([key.clone()]).is_empty(),
+            "failed refresh must cool down"
+        );
+        if let Some(Slot::Ready { refresh_at, .. }) = slots.slots.get_mut(&key) {
+            *refresh_at = Instant::now() - Duration::from_secs(1);
+        }
+        assert_eq!(slots.claim([key.clone()]), vec![key]);
+    }
+
+    #[test]
+    fn refreshing_an_existing_avatar_at_capacity_preserves_other_slots() {
+        let mut slots = AvatarSlots::default();
+        for id in 940100..940100 + MAX_SLOTS {
+            slots.fill(
+                AvatarKey::user(&id.to_string()).unwrap(),
+                Some(Arc::new(AvatarPixels {
+                    size: 2,
+                    rgba: vec![50; 16],
+                })),
+            );
+        }
+        let key = AvatarKey::user("940100").unwrap();
+        if let Some(Slot::Ready { refresh_at, .. }) = slots.slots.get_mut(&key) {
+            *refresh_at = Instant::now() - Duration::from_secs(1);
+        }
+        assert_eq!(slots.claim([key.clone()]), vec![key]);
+        assert_eq!(slots.slots.len(), MAX_SLOTS);
+        assert!(slots.image(&AvatarKey::user("940101").unwrap()).is_some());
     }
 }

@@ -13,6 +13,7 @@ import {
 import { cn } from '../utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/Tooltip';
 import { avatarUrl, initialOf } from '../../core/domain/debug/chatFormat';
+import { useAvatarUrl } from '../../hooks/ui/useAvatarUrl';
 import { CACHE_MAX, ExpiringSet, FAILURE_TTL_MS } from './boundedCache';
 
 // ---------------------------------------------------------------------------
@@ -102,8 +103,8 @@ export function Avatar({
     mine?: boolean;
     className?: string;
 }) {
-    const url = avatarUrl(id);
-    const [failed, setFailed] = useState(() => url === null || failedAvatars.has(String(id)));
+    const url = useAvatarUrl(avatarUrl(id));
+    const [failed, setFailed] = useState<string | null>(null);
     return (
         <span
             aria-hidden
@@ -115,7 +116,7 @@ export function Avatar({
         >
             {/* 首字一直垫在底下：图没到、图裂了都有东西看，而且尺寸固定，行高不会跳 */}
             {initialOf(name)}
-            {!failed && url && (
+            {url && failed !== url && !failedAvatars.has(url) && (
                 <img
                     src={url}
                     alt=""
@@ -125,8 +126,8 @@ export function Avatar({
                     draggable={false}
                     className="absolute inset-0 h-full w-full object-cover"
                     onError={() => {
-                        failedAvatars.add(String(id));
-                        setFailed(true);
+                        failedAvatars.add(url);
+                        setFailed(url);
                     }}
                 />
             )}

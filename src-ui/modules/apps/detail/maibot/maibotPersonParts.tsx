@@ -8,6 +8,7 @@ import type { MaiBotPerson } from '../../../../core/ipc/types';
 import { FormDialog } from '../entityParts';
 import { RowCheck } from '../resourceParts';
 import { relativeTime } from './maibotPromptParts';
+import { useAvatarUrl } from '../../../../hooks/ui/useAvatarUrl';
 
 const QQ_LIKE = new Set(['qq', 'qqguild', 'napcat']);
 const PALETTES = [
@@ -38,8 +39,11 @@ export const PersonAvatar: React.FC<{ person: MaiBotPerson; size?: 'sm' | 'lg' }
     person,
     size = 'sm',
 }) => {
-    const [failed, setFailed] = useState(false);
+    const [failed, setFailed] = useState<string | null>(null);
     const qq = QQ_LIKE.has(person.platform.toLowerCase()) && /^[1-9]\d{4,11}$/.test(person.user_id);
+    const url = useAvatarUrl(
+        qq ? `https://q.qlogo.cn/headimg_dl?dst_uin=${person.user_id}&spec=100` : null,
+    );
     const initial = (personLabel(person).trim().charAt(0) || '?').toUpperCase();
     return (
         <span
@@ -49,15 +53,15 @@ export const PersonAvatar: React.FC<{ person: MaiBotPerson; size?: 'sm' | 'lg' }
                 paletteFor(person.user_id || person.person_id),
             )}
         >
-            {qq && !failed ? (
+            {url && failed !== url ? (
                 <img
-                    src={`https://q.qlogo.cn/headimg_dl?dst_uin=${person.user_id}&spec=100`}
+                    src={url}
                     alt=""
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"
                     draggable={false}
                     loading="lazy"
-                    onError={() => setFailed(true)}
+                    onError={() => setFailed(url)}
                 />
             ) : (
                 <span className="font-display font-semibold text-white/95">{initial}</span>

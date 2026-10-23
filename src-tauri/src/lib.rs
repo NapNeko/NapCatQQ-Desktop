@@ -13,7 +13,6 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub mod autostart;
-#[cfg(windows)]
 pub mod avatar_cache;
 pub mod bootstrap;
 pub mod bot_host_resolver;

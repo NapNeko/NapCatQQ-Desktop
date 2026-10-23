@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Bot, Paperclip, User } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
+import { useAvatarUrl } from '../../../../hooks/ui/useAvatarUrl';
 import {
     chatTimeLabel,
     type MaiBotChatMessage,
@@ -16,8 +17,12 @@ export const ChatAvatar: React.FC<{ bot: boolean; qq?: string; className?: strin
     qq,
     className,
 }) => {
-    const [failed, setFailed] = useState(false);
-    const useQq = bot && !!qq && /^[1-9]\d{4,11}$/.test(qq) && !failed;
+    const [failed, setFailed] = useState<string | null>(null);
+    const url = useAvatarUrl(
+        bot && qq && /^[1-9]\d{4,11}$/.test(qq)
+            ? `https://q.qlogo.cn/headimg_dl?dst_uin=${qq}&spec=100`
+            : null,
+    );
     return (
         <span
             className={cn(
@@ -26,14 +31,14 @@ export const ChatAvatar: React.FC<{ bot: boolean; qq?: string; className?: strin
                 className,
             )}
         >
-            {useQq ? (
+            {url && failed !== url ? (
                 <img
-                    src={`https://q.qlogo.cn/headimg_dl?dst_uin=${qq}&spec=100`}
+                    src={url}
                     alt=""
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"
                     draggable={false}
-                    onError={() => setFailed(true)}
+                    onError={() => setFailed(url)}
                 />
             ) : bot ? (
                 <Bot size={15} />

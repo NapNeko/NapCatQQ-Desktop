@@ -1,17 +1,19 @@
 //! QQ / 群头像的内存 + 磁盘缓存，原生托盘面板用；磁盘文件和账号托盘图标共用 state/chat/avatars。
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::io::Cursor;
-use std::sync::{Arc, LazyLock, Mutex};
-use std::time::{Duration, Instant};
+use std::path::Path;
+use std::sync::{Arc, LazyLock, Mutex, Weak};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Manager};
 
 const SIZE: u32 = 128;
 const MAX_BYTES: usize = 512 * 1024;
 const MAX_ENTRIES: usize = 128;
-// 和前端 ChatAvatar 的失败缓存一致：拉不到的号 5 分钟内不再打网络
-const FAILURE_TTL: Duration = Duration::from_secs(5 * 60);
+pub const CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+pub const FAILURE_TTL: Duration = Duration::from_secs(60);
 const TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -44,11 +46,15 @@ impl AvatarKey {
         valid_id(id).then(|| Self(Kind::Group(id.to_owned())))
     }
 
-    fn url(&self) -> String {
-        match &self.0 {
+    fn url(&self, now: SystemTime) -> String {
+        let base = match &self.0 {
             Kind::User(qq) => format!("https://q1.qlogo.cn/g?b=qq&nk={qq}&s=640"),
             Kind::Group(gid) => format!("https://p.qlogo.cn/gh/{gid}/{gid}/640"),
-        }
+        };
+        let separator = if base.contains('?') { '&' } else { '?' };
+        let version =
+            now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() / CACHE_TTL.as_secs();
+        format!("{base}{separator}_ncdAvatar={version}")
     }
 
     fn file_name(&self) -> String {
@@ -66,59 +72,135 @@ pub struct AvatarPixels {
     pub rgba: Vec<u8>,
 }
 
-static CACHE: LazyLock<Mutex<HashMap<AvatarKey, Arc<AvatarPixels>>>> =
+#[derive(Clone)]
+struct CachedAvatar {
+    pixels: Arc<AvatarPixels>,
+    expires_at: Instant,
+}
+
+static CACHE: LazyLock<Mutex<HashMap<AvatarKey, CachedAvatar>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static FAILED: LazyLock<Mutex<HashMap<AvatarKey, Instant>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static DOWNLOADS: LazyLock<tokio::sync::Semaphore> =
     LazyLock::new(|| tokio::sync::Semaphore::new(4));
+static LOADS: LazyLock<Mutex<HashMap<AvatarKey, Weak<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// 取头像：内存缓存 → 失败冷却期 → 磁盘缓存 → 下载。拿不到返回 None，调用方画占位。
+fn load_lock(key: &AvatarKey) -> Arc<tokio::sync::Mutex<()>> {
+    let mut loads = lock(&LOADS);
+    loads.retain(|_, load| load.strong_count() > 0);
+    if let Some(load) = loads.get(key).and_then(Weak::upgrade) {
+        return load;
+    }
+    let load = Arc::new(tokio::sync::Mutex::new(()));
+    loads.insert(key.clone(), Arc::downgrade(&load));
+    load
+}
+
+fn disk_remaining(modified: Option<SystemTime>, now: SystemTime) -> Duration {
+    modified
+        .and_then(|at| now.duration_since(at).ok())
+        .and_then(|age| CACHE_TTL.checked_sub(age))
+        .unwrap_or_default()
+}
+
+fn remember(key: &AvatarKey, pixels: Arc<AvatarPixels>, remaining: Duration) {
+    let mut cache = lock(&CACHE);
+    if cache.len() >= MAX_ENTRIES && !cache.contains_key(key) {
+        cache.clear();
+    }
+    cache.insert(
+        key.clone(),
+        CachedAvatar {
+            pixels,
+            expires_at: Instant::now() + remaining,
+        },
+    );
+}
+
+pub fn refresh_after(key: &AvatarKey) -> Duration {
+    let now = Instant::now();
+    let retry = lock(&FAILED)
+        .get(key)
+        .copied()
+        .and_then(|at| FAILURE_TTL.checked_sub(now.saturating_duration_since(at)));
+    retry
+        .unwrap_or_else(|| {
+            lock(&CACHE)
+                .get(key)
+                .map(|entry| entry.expires_at.saturating_duration_since(now))
+                .unwrap_or(FAILURE_TTL)
+        })
+        .max(Duration::from_secs(1))
+}
+
+/// 过期后重新下载；暂时断网时保留上次成功的头像。
 pub async fn load(app: &AppHandle, key: &AvatarKey) -> Option<Arc<AvatarPixels>> {
-    if let Some(hit) = lock(&CACHE).get(key).cloned() {
-        return Some(hit);
+    let root = app
+        .try_state::<crate::AppState>()?
+        .data_root
+        .join("state/chat/avatars");
+    let url = key.url(SystemTime::now());
+    load_cached(&root, key, download(&url)).await
+}
+
+async fn load_cached(
+    root: &Path,
+    key: &AvatarKey,
+    fetch: impl Future<Output = Option<Vec<u8>>>,
+) -> Option<Arc<AvatarPixels>> {
+    let loading = load_lock(key);
+    let _loading = loading.lock().await;
+    let cached = lock(&CACHE).get(key).cloned();
+    if let Some(hit) = cached
+        .as_ref()
+        .filter(|hit| hit.expires_at > Instant::now())
+    {
+        return Some(Arc::clone(&hit.pixels));
+    }
+    let path = root.join(key.file_name());
+    let mut previous = cached.map(|hit| hit.pixels);
+    if previous.is_none() {
+        let modified = tokio::fs::metadata(&path)
+            .await
+            .ok()
+            .and_then(|metadata| metadata.modified().ok());
+        let bytes = tokio::fs::read(&path)
+            .await
+            .ok()
+            .filter(|bytes| !bytes.is_empty() && bytes.len() <= MAX_BYTES);
+        if let Some((pixels, _)) = decode_async(bytes).await {
+            let pixels = Arc::new(pixels);
+            let remaining = disk_remaining(modified, SystemTime::now());
+            remember(key, Arc::clone(&pixels), remaining);
+            if !remaining.is_zero() {
+                return Some(pixels);
+            }
+            previous = Some(pixels);
+        }
     }
     if lock(&FAILED)
         .get(key)
         .is_some_and(|at| at.elapsed() < FAILURE_TTL)
     {
-        return None;
+        return previous;
     }
-    let root = app
-        .try_state::<crate::AppState>()?
-        .data_root
-        .join("state/chat/avatars");
-    let path = root.join(key.file_name());
-    let cached = tokio::fs::read(&path)
-        .await
-        .ok()
-        .filter(|b| !b.is_empty() && b.len() <= MAX_BYTES);
-    let from_disk = cached.is_some();
-    let bytes = match cached {
-        Some(bytes) => Some(bytes),
-        None => download(&key.url()).await,
-    };
-    let decoded = match bytes {
-        Some(bytes) => tokio::task::spawn_blocking(move || decode(bytes))
-            .await
-            .ok()
-            .flatten(),
-        None => None,
-    };
-    let Some((pixels, png)) = decoded else {
+    let bytes = fetch.await;
+    let Some((pixels, png)) = decode_async(bytes).await else {
         let mut failed = lock(&FAILED);
         if failed.len() >= MAX_ENTRIES {
             failed.clear();
         }
         failed.insert(key.clone(), Instant::now());
-        return None;
+        return previous;
     };
-    if !from_disk && tokio::fs::create_dir_all(&root).await.is_ok() {
-        // 先写临时文件再改名：托盘图标那边同时在读同一个文件时不会读到半截
+    if tokio::fs::create_dir_all(&root).await.is_ok() {
+        // 只有下载成功才替换文件；读旧图不能延长它的磁盘有效期。
         let tmp = root.join(format!("{}.tmp", key.file_name()));
         if tokio::fs::write(&tmp, png).await.is_ok()
             && tokio::fs::rename(&tmp, &path).await.is_err()
@@ -127,12 +209,17 @@ pub async fn load(app: &AppHandle, key: &AvatarKey) -> Option<Arc<AvatarPixels>>
         }
     }
     let pixels = Arc::new(pixels);
-    let mut cache = lock(&CACHE);
-    if cache.len() >= MAX_ENTRIES {
-        cache.clear();
-    }
-    cache.insert(key.clone(), Arc::clone(&pixels));
+    lock(&FAILED).remove(key);
+    remember(key, Arc::clone(&pixels), CACHE_TTL);
     Some(pixels)
+}
+
+async fn decode_async(bytes: Option<Vec<u8>>) -> Option<(AvatarPixels, Vec<u8>)> {
+    let bytes = bytes?;
+    tokio::task::spawn_blocking(move || decode(bytes))
+        .await
+        .ok()
+        .flatten()
 }
 
 async fn download(url: &str) -> Option<Vec<u8>> {
@@ -141,6 +228,7 @@ async fn download(url: &str) -> Option<Vec<u8>> {
     let fetch = async {
         let mut response = ncd_network::shared_client()
             .get(url)
+            .header("Cache-Control", "no-cache")
             .timeout(TIMEOUT)
             .send()
             .await
@@ -201,7 +289,148 @@ mod tests {
         assert!(AvatarKey::user("").is_none());
         let key = AvatarKey::group("20001").unwrap();
         assert_eq!(key.file_name(), "group-20001-128.png");
-        assert_eq!(key.url(), "https://p.qlogo.cn/gh/20001/20001/640");
+        assert_eq!(
+            key.url(UNIX_EPOCH),
+            "https://p.qlogo.cn/gh/20001/20001/640?_ncdAvatar=0"
+        );
+    }
+
+    fn png(color: u8) -> Vec<u8> {
+        let mut png = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            2,
+            image::Rgba([color, 20, 30, 255]),
+        ))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+        png.into_inner()
+    }
+
+    #[test]
+    fn urls_use_the_same_five_minute_version_for_users_and_groups() {
+        for key in [
+            AvatarKey::user("100001").unwrap(),
+            AvatarKey::group("100001").unwrap(),
+        ] {
+            assert_eq!(
+                key.url(UNIX_EPOCH),
+                key.url(UNIX_EPOCH + CACHE_TTL - Duration::from_secs(1))
+            );
+            assert_ne!(key.url(UNIX_EPOCH), key.url(UNIX_EPOCH + CACHE_TTL));
+            assert!(key.url(UNIX_EPOCH + CACHE_TTL).ends_with("_ncdAvatar=1"));
+        }
+    }
+
+    #[test]
+    fn disk_expiry_keeps_original_age_and_rejects_future_timestamps() {
+        let now = UNIX_EPOCH + Duration::from_secs(1000);
+        assert_eq!(
+            disk_remaining(Some(now - Duration::from_secs(120)), now),
+            Duration::from_secs(180)
+        );
+        assert_eq!(disk_remaining(Some(now - CACHE_TTL), now), Duration::ZERO);
+        assert_eq!(
+            disk_remaining(Some(now + Duration::from_secs(1)), now),
+            Duration::ZERO
+        );
+        assert_eq!(disk_remaining(None, now), Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn disk_and_memory_hits_do_not_renew_the_original_expiry() {
+        let root = tempfile::tempdir().unwrap();
+        let key = AvatarKey::user("930001").unwrap();
+        let path = root.path().join(key.file_name());
+        std::fs::write(&path, png(10)).unwrap();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(SystemTime::now() - Duration::from_secs(120)),
+            )
+            .unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let first = load_cached(root.path(), &key, async {
+            panic!("fresh disk must not download")
+        })
+        .await
+        .unwrap();
+        let expires_at = lock(&CACHE).get(&key).unwrap().expires_at;
+        assert!(expires_at <= Instant::now() + Duration::from_secs(181));
+        let second = load_cached(root.path(), &key, async {
+            panic!("fresh memory must not download")
+        })
+        .await
+        .unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(lock(&CACHE).get(&key).unwrap().expires_at, expires_at);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            modified
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_refresh_keeps_old_disk_image_then_retries_after_cooldown() {
+        let root = tempfile::tempdir().unwrap();
+        let key = AvatarKey::user("930002").unwrap();
+        let path = root.path().join(key.file_name());
+        std::fs::write(&path, png(10)).unwrap();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(SystemTime::now() - CACHE_TTL - Duration::from_secs(1)),
+            )
+            .unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let previous = load_cached(root.path(), &key, async { None })
+            .await
+            .unwrap();
+        assert_eq!(previous.rgba[0], 10);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            modified
+        );
+        assert!(refresh_after(&key) <= FAILURE_TTL);
+        let cooled = load_cached(root.path(), &key, async {
+            panic!("failure cooldown must suppress download")
+        })
+        .await
+        .unwrap();
+        assert!(Arc::ptr_eq(&previous, &cooled));
+        lock(&FAILED).insert(
+            key.clone(),
+            Instant::now() - FAILURE_TTL - Duration::from_secs(1),
+        );
+        let refreshed = load_cached(root.path(), &key, async { Some(png(80)) })
+            .await
+            .unwrap();
+        assert_eq!(refreshed.rgba[0], 80);
+        assert!(!lock(&FAILED).contains_key(&key));
+    }
+
+    #[tokio::test]
+    async fn simultaneous_requests_only_download_once() {
+        let root = tempfile::tempdir().unwrap();
+        let key = AvatarKey::user("930003").unwrap();
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let fetch = || async {
+            calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            tokio::task::yield_now().await;
+            Some(png(60))
+        };
+        let (first, second) = tokio::join!(
+            load_cached(root.path(), &key, fetch()),
+            load_cached(root.path(), &key, fetch()),
+        );
+        assert!(Arc::ptr_eq(&first.unwrap(), &second.unwrap()));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 
     #[test]

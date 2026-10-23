@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Users } from 'lucide-react';
 import type { Contact } from '../../core/domain/chat/model';
 import { avatarUrl, initialOf } from '../../core/domain/debug/chatFormat';
+import { useAvatarUrl } from '../../hooks/ui/useAvatarUrl';
 import { cn } from '../utils/cn';
 
 export function ChatAvatar({
@@ -15,11 +16,13 @@ export function ChatAvatar({
     inline?: boolean;
 }) {
     const validId = /^[1-9]\d*$/.test(contact.id ?? '');
-    const url = !validId
-        ? null
-        : contact.type === 'private'
-          ? avatarUrl(Number(contact.id))
-          : `https://p.qlogo.cn/gh/${contact.id}/${contact.id}/640`;
+    const url = useAvatarUrl(
+        !validId
+            ? null
+            : contact.type === 'private'
+              ? avatarUrl(Number(contact.id))
+              : `https://p.qlogo.cn/gh/${contact.id}/${contact.id}/640`,
+    );
     const [failed, setFailed] = useState<string | null>(null);
     return (
         <span
@@ -38,7 +41,6 @@ export function ChatAvatar({
             )}
             {url && failed !== url && (
                 <img
-                    key={url}
                     src={url}
                     alt=""
                     loading="lazy"

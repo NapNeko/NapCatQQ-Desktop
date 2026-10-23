@@ -3,9 +3,8 @@ use ncd_domain::chat_desktop::{ChatAccountStatus, ChatTrayNotification};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
-    io::Cursor,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{
     AppHandle, Manager,
@@ -15,6 +14,7 @@ use tauri::{
 
 const PULSE_LEVELS: [f64; 2] = [1.0, 0.22];
 struct Avatar {
+    revision: [u8; 32],
     window: Image<'static>,
     online: Image<'static>,
     offline: Image<'static>,
@@ -44,6 +44,7 @@ impl Avatar {
             .map(|level| flash_frame(&offline, *level))
             .collect();
         Self {
+            revision: Sha256::digest(window.rgba()).into(),
             offline,
             badge: decorated(&online, true, false),
             offline_badge: decorated(&online, true, true),
@@ -77,18 +78,23 @@ struct Appearance {
     offline: bool,
     background: bool,
     ready: bool,
+    avatar_revision: [u8; 32],
     mode: ChatTrayNotification,
     tooltip: String,
     qq: String,
 }
+#[derive(Clone)]
+struct CachedAvatar {
+    image: Option<Arc<Avatar>>,
+    refresh_at: Instant,
+}
 pub struct ChatTrayState {
     ids: Mutex<HashSet<String>>,
-    avatars: Mutex<HashMap<String, Arc<Avatar>>>,
+    avatars: Mutex<HashMap<String, CachedAvatar>>,
     fallback: Mutex<Option<Arc<Avatar>>>,
     displayed: Mutex<HashMap<String, Appearance>>,
-    window_displayed: Mutex<Option<(String, bool, String)>>,
+    window_displayed: Mutex<Option<(String, bool, [u8; 32], String)>>,
     loading: Mutex<HashSet<String>>,
-    downloads: Arc<tokio::sync::Semaphore>,
     phase: Mutex<usize>,
 }
 impl Default for ChatTrayState {
@@ -100,7 +106,6 @@ impl Default for ChatTrayState {
             displayed: Mutex::new(HashMap::new()),
             window_displayed: Mutex::new(None),
             loading: Mutex::new(HashSet::new()),
-            downloads: Arc::new(tokio::sync::Semaphore::new(4)),
             phase: Mutex::new(0),
         }
     }
@@ -125,107 +130,60 @@ fn fallback(app: &AppHandle) -> Arc<Avatar> {
     }))
 }
 
-async fn avatar(app: &AppHandle, qq: &str) -> Arc<Avatar> {
-    let registry = app.state::<ChatTrayState>();
-    if let Some(icon) = lock(&registry.avatars).get(qq).cloned() {
-        return icon;
+async fn avatar(app: &AppHandle, qq: &str) -> Option<Arc<Avatar>> {
+    let key = crate::avatar_cache::AvatarKey::user(qq)?;
+    let pixels = crate::avatar_cache::load(app, &key).await?;
+    let previous = lock(&app.state::<ChatTrayState>().avatars)
+        .get(qq)
+        .and_then(|entry| entry.image.clone());
+    let revision: [u8; 32] = Sha256::digest(&pixels.rgba).into();
+    if let Some(previous) = previous.filter(|image| image.revision == revision) {
+        return Some(previous);
     }
-    let root = app
-        .state::<crate::AppState>()
-        .data_root
-        .join("state/chat/avatars");
-    let path = root.join(format!("{qq}-128.png"));
-    let cached = tokio::fs::read(&path)
-        .await
-        .ok()
-        .filter(|b| b.len() <= 512 * 1024);
-    let bytes = match cached {
-        Some(bytes) => Some(bytes),
-        None => {
-            let download = async {
-                let mut response = ncd_network::shared_client()
-                    .get(format!("https://q1.qlogo.cn/g?b=qq&nk={qq}&s=640"))
-                    .timeout(Duration::from_secs(8))
-                    .send()
-                    .await
-                    .ok()?
-                    .error_for_status()
-                    .ok()?;
-                let mut bytes = Vec::new();
-                while let Some(chunk) = response.chunk().await.ok()? {
-                    if bytes.len() + chunk.len() > 512 * 1024 {
-                        return None;
-                    }
-                    bytes.extend_from_slice(&chunk);
-                }
-                Some(bytes)
-            };
-            tokio::time::timeout(Duration::from_secs(8), download)
-                .await
-                .ok()
-                .flatten()
-        }
-    };
-    let processed = tokio::task::spawn_blocking(move || {
-        let bytes = bytes?;
-        let mut reader = image::ImageReader::new(Cursor::new(bytes))
-            .with_guessed_format()
-            .ok()?;
-        let mut limits = image::Limits::default();
-        limits.max_image_width = Some(2048);
-        limits.max_image_height = Some(2048);
-        limits.max_alloc = Some(16 * 1024 * 1024);
-        reader.limits(limits);
-        let rgba = reader
-            .decode()
-            .ok()?
-            .resize_exact(128, 128, image::imageops::FilterType::Lanczos3)
-            .into_rgba8();
-        let mut png = Cursor::new(Vec::new());
-        image::DynamicImage::ImageRgba8(rgba.clone())
-            .write_to(&mut png, image::ImageFormat::Png)
-            .ok()?;
-        Some((
-            Arc::new(Avatar::new(Image::new_owned(rgba.into_raw(), 128, 128))),
-            png.into_inner(),
-        ))
-    })
-    .await
-    .ok()
-    .flatten();
-    let icon = if let Some((icon, bytes)) = processed {
-        if tokio::fs::create_dir_all(&root).await.is_ok() {
-            let _ = tokio::fs::write(path, bytes).await;
-        }
-        icon
-    } else {
-        fallback(app)
-    };
-    let mut avatars = lock(&registry.avatars);
-    if avatars.len() < 64 {
-        avatars.insert(qq.into(), Arc::clone(&icon));
-    }
-    icon
+    Some(Arc::new(Avatar::new(Image::new_owned(
+        pixels.rgba.clone(),
+        pixels.size,
+        pixels.size,
+    ))))
 }
 fn current_avatar(app: &AppHandle, qq: &str) -> (Arc<Avatar>, bool) {
     let registry = app.state::<ChatTrayState>();
-    if let Some(icon) = lock(&registry.avatars).get(qq).cloned() {
-        return (icon, true);
+    let cached = lock(&registry.avatars).get(qq).cloned();
+    let previous = cached.as_ref().and_then(|entry| entry.image.clone());
+    if cached.is_some_and(|entry| entry.refresh_at > Instant::now()) {
+        let ready = previous.is_some();
+        return (previous.unwrap_or_else(|| fallback(app)), ready);
     }
     let mut loading = lock(&registry.loading);
     if loading.len() < 64 && loading.insert(qq.into()) {
         let app = app.clone();
         let qq = qq.to_owned();
-        let downloads = Arc::clone(&registry.downloads);
         tauri::async_runtime::spawn(async move {
-            if let Ok(_permit) = downloads.acquire_owned().await {
-                avatar(&app, &qq).await;
+            let image = avatar(&app, &qq).await;
+            let retry = crate::avatar_cache::AvatarKey::user(&qq)
+                .map(|key| crate::avatar_cache::refresh_after(&key))
+                .unwrap_or(crate::avatar_cache::FAILURE_TTL);
+            let registry = app.state::<ChatTrayState>();
+            {
+                let mut avatars = lock(&registry.avatars);
+                let image =
+                    image.or_else(|| avatars.get(&qq).and_then(|entry| entry.image.clone()));
+                if avatars.len() < 64 || avatars.contains_key(&qq) {
+                    avatars.insert(
+                        qq.clone(),
+                        CachedAvatar {
+                            image,
+                            refresh_at: Instant::now() + retry,
+                        },
+                    );
+                }
             }
-            lock(&app.state::<ChatTrayState>().loading).remove(&qq);
+            lock(&registry.loading).remove(&qq);
             app.state::<crate::AppState>().chat.notify_changed();
         });
     }
-    (fallback(app), false)
+    let ready = previous.is_some();
+    (previous.unwrap_or_else(|| fallback(app)), ready)
 }
 fn decorated(icon: &Image<'_>, unread: bool, offline: bool) -> Image<'static> {
     notification_frame(icon, unread, offline, 1.0)
@@ -400,7 +358,7 @@ fn update_window(app: &AppHandle, row: Option<&ChatAccountStatus>) -> Result<(),
     let (avatar, ready) = current_avatar(app, &row.preference.self_id);
     let title = format!("{} ({}) · 聊天", row.target.name, row.preference.self_id);
     let identity = tray_id(&row.target.bot_id, &row.preference.self_id);
-    let appearance = (identity.clone(), ready, title.clone());
+    let appearance = (identity.clone(), ready, avatar.revision, title.clone());
     if lock(&registry.window_displayed).as_ref() == Some(&appearance) {
         return Ok(());
     }
@@ -479,6 +437,7 @@ async fn refresh(app: &AppHandle) -> Result<(), String> {
             offline,
             background: row.preference.background,
             ready,
+            avatar_revision: avatar.revision,
             mode: row.preference.tray_notification,
             tooltip: tooltip.clone(),
             qq: row.preference.self_id.clone(),
@@ -526,7 +485,7 @@ fn pulse(app: &AppHandle) {
     for (id, qq, offline) in rows {
         let avatar = lock(&registry.avatars)
             .get(&qq)
-            .cloned()
+            .and_then(|entry| entry.image.clone())
             .unwrap_or_else(|| fallback(app));
         if let Some(tray) = app.tray_by_id(&id) {
             if let Err(e) = tray.set_icon(Some(avatar.pulse_frame(offline, phase))) {
@@ -543,6 +502,11 @@ pub fn spawn(app: AppHandle) {
         let mut pulse_timer =
             tokio::time::interval_at(tokio::time::Instant::now() + period, period);
         pulse_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut avatar_timer = tokio::time::interval_at(
+            tokio::time::Instant::now() + Duration::from_secs(30),
+            Duration::from_secs(30),
+        );
+        avatar_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             if let Err(e) = refresh(&app).await {
                 tracing::warn!("chat tray: {e}");
@@ -553,6 +517,11 @@ pub fn spawn(app: AppHandle) {
                 tokio::select! {
                     _ = state.chat.changed() => {
                         tokio::time::sleep(Duration::from_millis(200)).await; break;
+                    }
+                    _ = avatar_timer.tick() => {
+                        #[cfg(windows)]
+                        crate::tray_panel_native::refresh_if_visible(&app);
+                        break;
                     }
                     _ = pulse_timer.tick(), if has_flashing(&app) => pulse(&app),
                 }
@@ -605,6 +574,34 @@ mod tests {
         ] {
             assert_eq!((icon.width(), icon.height()), (32, 32));
         }
+    }
+    #[test]
+    fn changed_avatar_pixels_invalidate_tray_and_window_appearances() {
+        let first = Avatar::new(Image::new_owned(
+            [10, 20, 30, 255].repeat(128 * 128),
+            128,
+            128,
+        ));
+        let changed = Avatar::new(Image::new_owned(
+            [80, 20, 30, 255].repeat(128 * 128),
+            128,
+            128,
+        ));
+        let appearance = |avatar: &Avatar| Appearance {
+            unread: false,
+            offline: false,
+            background: true,
+            ready: true,
+            avatar_revision: avatar.revision,
+            mode: ChatTrayNotification::Badge,
+            tooltip: "account".into(),
+            qq: "950001".into(),
+        };
+        assert!(appearance(&first) != appearance(&changed));
+        assert_ne!(
+            ("account", true, first.revision, "title"),
+            ("account", true, changed.revision, "title"),
+        );
     }
     #[test]
     fn flash_changes_avatar_opacity_without_losing_its_identity() {

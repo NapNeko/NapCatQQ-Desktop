@@ -1,8 +1,9 @@
 // Bot 头像：按 QQ 号拉取头像，失败或未填时回退首字母渐变块，右下角带底座色点。
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Bot } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
+import { useAvatarUrl } from '../../hooks/ui/useAvatarUrl';
 
 const PALETTES = [
     'from-pink-300 to-rose-400',
@@ -30,15 +31,14 @@ export function BotAvatar({
     flavorTone: 'brand' | 'info';
     size?: 'sm' | 'md';
 }) {
-    const [failed, setFailed] = useState(false);
+    const [failed, setFailed] = useState<string | null>(null);
     const trimmedQq = qqid.trim();
     const numericQQ = /^[1-9]\d{4,11}$/.test(trimmedQq) ? trimmedQq : null;
 
-    useEffect(() => {
-        setFailed(false);
-    }, [numericQQ]);
-
-    const showImg = numericQQ && !failed;
+    const url = useAvatarUrl(
+        numericQQ ? `https://q.qlogo.cn/headimg_dl?dst_uin=${numericQQ}&spec=640` : null,
+    );
+    const showImg = url && failed !== url;
     const trimmedName = displayName.trim();
     const initials = trimmedName ? trimmedName.charAt(0).toUpperCase() : null;
     const palette = pickAvatarPalette(trimmedQq || trimmedName || 'bot');
@@ -57,12 +57,12 @@ export function BotAvatar({
             >
                 {showImg && (
                     <img
-                        src={`https://q.qlogo.cn/headimg_dl?dst_uin=${numericQQ}&spec=640`}
+                        src={url}
                         alt=""
                         className="h-full w-full object-cover"
                         referrerPolicy="no-referrer"
                         draggable={false}
-                        onError={() => setFailed(true)}
+                        onError={() => setFailed(url)}
                     />
                 )}
                 {!showImg && (
