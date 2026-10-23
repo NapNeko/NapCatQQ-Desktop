@@ -10,13 +10,17 @@
 
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
 
 // 进度数据类型已下沉到 ncd-domain，re-export 保持向后兼容
 pub use ncd_domain::progress::{ProgressEvent, ProgressKind, ProgressLogLevel};
 
 type LoggerFn = Arc<dyn Fn(&str) + Send + Sync>;
+
+#[path = "context_progress.rs"]
+mod progress;
+use progress::StepProgressScope;
 
 /// ActionCtx:Action 执行期间的辅助上下文
 ///
@@ -30,6 +34,7 @@ pub struct ActionCtx {
     /// 日志回调(可选,默认走 tracing)
     pub(crate) logger: Option<LoggerFn>,
     download_dir: Option<std::path::PathBuf>,
+    progress_scope: Option<Arc<Mutex<StepProgressScope>>>,
 }
 
 impl ActionCtx {
@@ -46,6 +51,7 @@ impl ActionCtx {
             cancel: CancellationToken::new(),
             logger: None,
             download_dir: None,
+            progress_scope: None,
         };
         (ctx, rx)
     }
@@ -57,6 +63,25 @@ impl ActionCtx {
             cancel: self.cancel.child_token(),
             logger: self.logger.clone(),
             download_dir: self.download_dir.clone(),
+            progress_scope: self.progress_scope.clone(),
+        }
+    }
+
+    /// 把组件的内部步骤聚合到部署步骤，任务生命周期由编排层结束。
+    pub fn scoped_step(&self, step: u32) -> Self {
+        let mut child = self.child();
+        child.progress_scope = Some(Arc::new(Mutex::new(StepProgressScope::new(step))));
+        child
+    }
+
+    /// 组件返回后补齐未结束的子步骤，并阻止残留 clone 继续发进度。
+    pub async fn finish_step_progress(&self, ok: bool) {
+        let Some(scope) = &self.progress_scope else {
+            return;
+        };
+        let mut scope = scope.lock().await;
+        for event in scope.finish(ok) {
+            let _ = self.progress.send(ProgressEvent::new(event)).await;
         }
     }
 
@@ -99,7 +124,15 @@ impl ActionCtx {
 
     /// 上报进度,channel 满时异步等待,保证 UI 不丢消息
     pub async fn emit(&self, kind: ProgressKind) {
-        let _ = self.progress.send(ProgressEvent::new(kind)).await;
+        if let Some(scope) = &self.progress_scope {
+            let mut scope = scope.lock().await;
+            // 持锁直到发送完成，关闭操作不会越过已在发送的子进度。
+            for event in scope.map(kind) {
+                let _ = self.progress.send(ProgressEvent::new(event)).await;
+            }
+        } else {
+            let _ = self.progress.send(ProgressEvent::new(kind)).await;
+        }
     }
 
     /// 便捷 helper:发 Log 事件

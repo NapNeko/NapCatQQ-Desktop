@@ -36,7 +36,7 @@ impl DeployPlan {
         ctx.emit(ProgressKind::Started { total_steps }).await;
 
         let mut outcomes: Vec<StepOutcome> = Vec::with_capacity(self.steps.len());
-        let mut completed_for_rollback: Vec<&DeployStep> = Vec::new();
+        let mut completed_for_rollback: Vec<(u32, &DeployStep)> = Vec::new();
 
         for (idx, step) in self.steps.iter().enumerate() {
             let step_idx = (idx + 1) as u32;
@@ -58,19 +58,35 @@ impl DeployPlan {
             .await;
 
             let step_start = Instant::now();
-            let mut child_ctx = ctx.child();
+            let mut child_ctx = ctx.scoped_step(step_idx);
             let result = run_single_step(step, host, &mut child_ctx).await;
+            let result = if child_ctx.is_cancelled() {
+                Err(ncd_component::ActionError::Cancelled)
+            } else {
+                result
+            };
+            child_ctx.finish_step_progress(result.is_ok()).await;
             let dur = elapsed_ms(step_start);
 
             match result {
                 Ok(skipped) => {
                     outcomes.push(StepOutcome::ok(&step.name, step.kind, dur, skipped));
-                    completed_for_rollback.push(step);
+                    completed_for_rollback.push((step_idx, step));
                     ctx.emit(ProgressKind::StepEnd {
                         step: step_idx,
                         ok: true,
                     })
                     .await;
+                }
+                Err(ncd_component::ActionError::Cancelled) => {
+                    outcomes.push(StepOutcome::cancelled(&step.name, step.kind, dur));
+                    ctx.emit(ProgressKind::StepEnd {
+                        step: step_idx,
+                        ok: false,
+                    })
+                    .await;
+                    ctx.emit(ProgressKind::Finished { ok: false }).await;
+                    return Ok(DeployOutcome::new(outcomes, elapsed_ms(total_start)));
                 }
                 Err(e) => {
                     let err_str = format!("{e}");
@@ -119,13 +135,15 @@ impl DeployPlan {
             }
         }
 
-        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        let outcome = DeployOutcome::new(outcomes, elapsed_ms(total_start));
+        ctx.emit(ProgressKind::Finished { ok: outcome.ok }).await;
         info!(
             target: "ncd_deploy::runner",
-            elapsed_ms = elapsed_ms(total_start),
-            "deploy plan run finished ok"
+            elapsed_ms = outcome.total_duration_ms,
+            ok = outcome.ok,
+            "deploy plan run finished"
         );
-        Ok(DeployOutcome::new(outcomes, elapsed_ms(total_start)))
+        Ok(outcome)
     }
 }
 
@@ -179,19 +197,22 @@ async fn run_single_step(
 async fn rollback(
     host: &dyn Host,
     ctx: &mut ActionCtx,
-    completed: &[&DeployStep],
+    completed: &[(u32, &DeployStep)],
 ) -> Result<(), DeployError> {
     warn!(
         target: "ncd_deploy::runner",
         steps = completed.len(),
         "部署失败，开始回滚已完成的步骤"
     );
-    for step in completed.iter().rev() {
+    for (step_idx, step) in completed.iter().rev() {
         if !step.rollback_on_failure {
             continue;
         }
         ctx.info(format!("rollback step '{}'", step.name)).await;
-        if let Err(e) = step.component.uninstall(host, ctx).await {
+        let mut rollback_ctx = ctx.scoped_step(*step_idx);
+        let result = step.component.uninstall(host, &mut rollback_ctx).await;
+        rollback_ctx.finish_step_progress(result.is_ok()).await;
+        if let Err(e) = result {
             ctx.warn(format!("rollback uninstall '{}' failed: {e}", step.name))
                 .await;
             return Err(DeployError::Action(e));
@@ -289,6 +310,8 @@ mod tests {
         install_should_fail: bool,
         install_calls: Arc<AtomicU32>,
         uninstall_calls: Arc<AtomicU32>,
+        progress_events: Vec<ProgressKind>,
+        cancel_during_install: bool,
     }
 
     #[async_trait]
@@ -309,8 +332,15 @@ mod tests {
                 Ok(None)
             }
         }
-        async fn install(&self, _: &dyn Host, _: &mut ActionCtx) -> Result<(), ActionError> {
+        async fn install(&self, _: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
             self.install_calls.fetch_add(1, Ordering::SeqCst);
+            for event in &self.progress_events {
+                ctx.emit(event.clone()).await;
+            }
+            if self.cancel_during_install {
+                ctx.cancel();
+                return Err(ActionError::Cancelled);
+            }
             if self.install_should_fail {
                 Err(ActionError::other("simulated install failure"))
             } else {
@@ -342,8 +372,231 @@ mod tests {
             install_should_fail: install_fails,
             install_calls: install_calls.clone(),
             uninstall_calls: uninstall_calls.clone(),
+            progress_events: Vec::new(),
+            cancel_during_install: false,
         });
         (c, install_calls, uninstall_calls)
+    }
+
+    fn qq_progress(fails: bool) -> Vec<ProgressKind> {
+        let mut events = vec![ProgressKind::Started { total_steps: 4 }];
+        for (idx, message) in [
+            "check system dependencies",
+            "detect package format",
+            "download QQ package",
+            "extract QQ",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let step = idx as u32 + 1;
+            events.push(ProgressKind::StepBegin {
+                step,
+                message: message.into(),
+            });
+            if step == 4 && fails {
+                break;
+            }
+            events.push(ProgressKind::StepEnd { step, ok: true });
+        }
+        if !fails {
+            events.push(ProgressKind::Finished { ok: true });
+        }
+        events
+    }
+
+    fn progress_component(
+        id: ComponentId,
+        fails: bool,
+        cancel_during_install: bool,
+    ) -> Arc<dyn Component> {
+        Arc::new(CountedComponent {
+            id_value: id,
+            already_installed: false,
+            install_should_fail: fails,
+            install_calls: Arc::new(AtomicU32::new(0)),
+            uninstall_calls: Arc::new(AtomicU32::new(0)),
+            progress_events: qq_progress(fails),
+            cancel_during_install,
+        })
+    }
+
+    async fn run_with_progress(plan: &DeployPlan) -> (DeployOutcome, Vec<ProgressKind>) {
+        let (mut ctx, mut rx) = ActionCtx::with_capacity(256);
+        let outcome = plan.run(&StubHost, &mut ctx).await.unwrap();
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event.kind);
+        }
+        (outcome, events)
+    }
+
+    fn lifecycle(events: &[ProgressKind]) -> Vec<ProgressKind> {
+        events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    event,
+                    ProgressKind::Started { .. }
+                        | ProgressKind::StepBegin { .. }
+                        | ProgressKind::StepEnd { .. }
+                        | ProgressKind::Finished { .. }
+                )
+            })
+            .cloned()
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn qq_extract_failure_keeps_parent_step_identity_and_closes_extract_once() {
+        let plan = DeployPlan::builder()
+            .step(
+                "single",
+                StepKind::Update,
+                progress_component(ComponentId::Qq, true, false),
+            )
+            .build();
+        let (outcome, events) = run_with_progress(&plan).await;
+        assert!(!outcome.ok);
+        assert_eq!(
+            lifecycle(&events),
+            [
+                ProgressKind::Started { total_steps: 1 },
+                ProgressKind::StepBegin {
+                    step: 1,
+                    message: "single (update)".into()
+                },
+                ProgressKind::StepEnd { step: 1, ok: false },
+                ProgressKind::Finished { ok: false },
+            ]
+        );
+        let failures: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message,
+                } if message.starts_with("失败：") => Some(message.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(failures, ["失败：extract QQ"]);
+        assert!(events.iter().any(|event| matches!(event,
+            ProgressKind::StepProgress { step: 1, percent: 75, message, .. }
+                if message == "extract QQ"
+        )));
+    }
+
+    #[tokio::test]
+    async fn qq_success_has_only_one_plan_started_and_finished() {
+        let plan = DeployPlan::builder()
+            .step(
+                "single",
+                StepKind::Update,
+                progress_component(ComponentId::Qq, false, false),
+            )
+            .build();
+        let (outcome, events) = run_with_progress(&plan).await;
+        assert!(outcome.ok);
+        assert_eq!(
+            lifecycle(&events),
+            [
+                ProgressKind::Started { total_steps: 1 },
+                ProgressKind::StepBegin {
+                    step: 1,
+                    message: "single (update)".into()
+                },
+                ProgressKind::StepEnd { step: 1, ok: true },
+                ProgressKind::Finished { ok: true },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn child_finished_does_not_end_plan_before_the_next_outer_step() {
+        let plan = DeployPlan::builder()
+            .force_install(
+                "first",
+                progress_component(ComponentId::NodeJs, false, false),
+            )
+            .force_install("second", progress_component(ComponentId::Qq, false, false))
+            .build();
+        let (outcome, events) = run_with_progress(&plan).await;
+        assert!(outcome.ok);
+        assert_eq!(
+            lifecycle(&events),
+            [
+                ProgressKind::Started { total_steps: 2 },
+                ProgressKind::StepBegin {
+                    step: 1,
+                    message: "first (force_install)".into()
+                },
+                ProgressKind::StepEnd { step: 1, ok: true },
+                ProgressKind::StepBegin {
+                    step: 2,
+                    message: "second (force_install)".into()
+                },
+                ProgressKind::StepEnd { step: 2, ok: true },
+                ProgressKind::Finished { ok: true },
+            ]
+        );
+        assert!(events.iter().any(|event| matches!(event,
+            ProgressKind::StepProgress { step: 2, percent: 75, message, .. }
+                if message == "extract QQ"
+        )));
+    }
+
+    #[tokio::test]
+    async fn optional_failure_cannot_emit_a_successful_plan_finished() {
+        let plan = DeployPlan::builder()
+            .force_install(
+                "optional",
+                progress_component(ComponentId::NodeJs, true, false),
+            )
+            .last_fail_fast(false)
+            .force_install(
+                "required",
+                progress_component(ComponentId::Qq, false, false),
+            )
+            .build();
+        let (outcome, events) = run_with_progress(&plan).await;
+        assert!(!outcome.ok);
+        assert_eq!(events.last(), Some(&ProgressKind::Finished { ok: false }));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, ProgressKind::Finished { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_after_child_finished_cannot_report_plan_success() {
+        let plan = DeployPlan::builder()
+            .force_install(
+                "cancelled",
+                progress_component(ComponentId::NodeJs, false, true),
+            )
+            .force_install(
+                "unreached",
+                progress_component(ComponentId::Qq, false, false),
+            )
+            .build();
+        let (outcome, events) = run_with_progress(&plan).await;
+        assert_eq!(outcome.steps.len(), 1);
+        assert_eq!(
+            outcome.steps[0].status,
+            crate::result::StepStatus::Cancelled
+        );
+        assert_eq!(events.last(), Some(&ProgressKind::Finished { ok: false }));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, ProgressKind::Finished { .. }))
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
