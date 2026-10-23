@@ -28,7 +28,7 @@ use ncd_domain::{
 use ncd_host::HostPath;
 #[cfg(windows)]
 use ncd_host::local::LocalWindowsHost;
-use ncd_host::{Host, Locality, Os};
+use ncd_host::{Host, HostCommand, Locality, Os};
 use ncd_server::ServerManager;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::JoinHandle;
@@ -157,6 +157,115 @@ pub struct ComponentActionRequest {
     pub task_id: Option<String>,
     pub host: Arc<dyn Host>,
     pub inputs: ComponentBuildInputs,
+}
+
+// 密码只随本次动作的 runner 闭包传递，不进入任务记录或共享连接。
+#[derive(Clone)]
+struct ComponentTaskSudo {
+    password: String,
+    remember: bool,
+}
+
+fn component_task_sudo(
+    component_id: ComponentId,
+    host_id: &str,
+    kind: StepKind,
+    os: Os,
+    locality: Locality,
+    password: Option<String>,
+    remember: bool,
+) -> Result<Option<ComponentTaskSudo>, String> {
+    if password.is_none() && !remember {
+        return Ok(None);
+    }
+    let remote_linux_qq_action = component_id == ComponentId::Qq
+        && os == Os::Linux
+        && locality == Locality::Remote
+        && server_id_of_host(host_id).is_some_and(|id| !id.is_empty())
+        && matches!(
+            kind,
+            StepKind::EnsureInstalled
+                | StepKind::ForceInstall
+                | StepKind::Update
+                | StepKind::EnsureDependencies
+        );
+    if !remote_linux_qq_action {
+        return Err("sudo 密码仅可用于远端 Linux QQ 安装、更新或依赖安装".to_string());
+    }
+    let password = password
+        .filter(|password| !password.is_empty())
+        .ok_or_else(|| "请输入 sudo 密码".to_string())?;
+    Ok(Some(ComponentTaskSudo { password, remember }))
+}
+
+async fn validate_component_task_sudo(
+    host: &dyn Host,
+    sudo: Option<ComponentTaskSudo>,
+    server_manager: &ServerManager,
+    server_id: &str,
+) -> Result<(), String> {
+    let Some(sudo) = sudo else {
+        return Ok(());
+    };
+    let root = host
+        .run_to_string(HostCommand::new("id").arg("-u"))
+        .await
+        .map_err(|error| format!("sudo 验证执行失败: {error}"))?;
+    if root.success() && root.stdout.trim() == "0" {
+        return Ok(());
+    }
+    // -k 与命令同用时忽略已有 timestamp，不能把上一次认证误认成这次密码正确。
+    let passwordless = host
+        .run_to_string(HostCommand::new("sudo").args(["-k", "-n", "true"]))
+        .await
+        .map_err(|error| format!("sudo 验证执行失败: {error}"))?;
+    if passwordless.success() {
+        return Ok(());
+    }
+    let mut password_input = sudo.password.as_bytes().to_vec();
+    if !password_input.ends_with(b"\n") {
+        password_input.push(b'\n');
+    }
+    let result = host
+        .run_to_string(
+            HostCommand::new("sudo")
+                .args(["-k", "-S", "-p", "", "true"])
+                .stdin(password_input),
+        )
+        .await
+        .map_err(|error| format!("sudo 验证执行失败: {error}"))?;
+    if !result.success() {
+        return Err("elevation_required: sudo 密码验证失败，请重新输入".to_string());
+    }
+    if sudo.remember {
+        server_manager.remember_sudo_password(server_id, &sudo.password)?;
+    }
+    Ok(())
+}
+
+async fn inject_component_task_sudo(host: &dyn Host, sudo: Option<ComponentTaskSudo>) {
+    if let Some(sudo) = sudo {
+        host.set_elevation_password(Some(sudo.password)).await;
+    }
+}
+
+async fn preflight_qq_dependency_elevation(host: &dyn Host) -> Result<(), String> {
+    let root = host
+        .run_to_string(HostCommand::new("id").arg("-u"))
+        .await
+        .map_err(|error| format!("QQ 系统依赖提权检查失败: {error}"))?;
+    if root.success() && root.stdout.trim() == "0" {
+        return Ok(());
+    }
+    let result = host
+        .run_to_string(HostCommand::new("true").elevated())
+        .await
+        .map_err(|error| format!("QQ 系统依赖提权检查失败: {error}"))?;
+    if result.success() {
+        Ok(())
+    } else {
+        Err("elevation_required: 安装 QQ 系统依赖需要有效的 sudo 密码".to_string())
+    }
 }
 
 /// ComponentExecutor 的构造参数;启动时凑齐一次
@@ -411,6 +520,15 @@ impl ComponentExecutor {
 
     /// 提交 root 动作及其未满足的前置;返回 root 的 task id
     pub async fn submit(&self, req: ComponentActionRequest) -> Result<String, String> {
+        self.submit_with_sudo(req, None, false).await
+    }
+
+    pub async fn submit_with_sudo(
+        &self,
+        req: ComponentActionRequest,
+        sudo_password: Option<String>,
+        remember_sudo: bool,
+    ) -> Result<String, String> {
         let ComponentActionRequest {
             component_id,
             host_id,
@@ -419,6 +537,15 @@ impl ComponentExecutor {
             host,
             inputs,
         } = req;
+        let sudo = component_task_sudo(
+            component_id,
+            &host_id,
+            kind,
+            host.os(),
+            host.locality(),
+            sudo_password,
+            remember_sudo,
+        )?;
 
         let dedupe =
             component_dedupe_key(&host_id, component_id, kind, inputs.scope_for(component_id));
@@ -430,6 +557,28 @@ impl ComponentExecutor {
             return Ok(existing);
         }
 
+        if sudo.is_some() {
+            let server_id = server_id_of_host(&host_id)
+                .ok_or_else(|| "无法解析 sudo 验证目标主机".to_string())?
+                .to_string();
+            let validation_id = server_id.clone();
+            let validation_sudo = sudo.clone();
+            let server_manager = Arc::clone(&self.server_manager);
+            self.server_manager
+                .with_isolated_connection(&server_id, move |isolated_host| {
+                    Box::pin(async move {
+                        validate_component_task_sudo(
+                            isolated_host.as_ref(),
+                            validation_sudo,
+                            server_manager.as_ref(),
+                            &validation_id,
+                        )
+                        .await
+                    })
+                })
+                .await?;
+        }
+
         let root = inputs.build(component_id, host.as_ref())?;
         let mut submitted: HashMap<DependencyTarget, String> = HashMap::new();
 
@@ -437,6 +586,33 @@ impl ComponentExecutor {
             let plan = inputs
                 .resolve(component_id, host.as_ref(), RequirementPhase::Install)
                 .await?;
+
+            if component_id == ComponentId::Qq
+                && host.os() == Os::Linux
+                && host.locality() == Locality::Remote
+                && plan.nodes.iter().any(|node| {
+                    node.status.needs_action()
+                        && matches!(
+                            node.target,
+                            DependencyTarget::HostPackages {
+                                group: ncd_component::HostPackageGroup::QqDependencies
+                            }
+                        )
+                })
+            {
+                let server_id = server_id_of_host(&host_id)
+                    .ok_or_else(|| "无法解析 QQ 系统依赖目标主机".to_string())?;
+                let preflight_sudo = sudo.clone();
+                self.server_manager
+                    .with_isolated_connection(server_id, move |isolated_host| {
+                        Box::pin(async move {
+                            inject_component_task_sudo(isolated_host.as_ref(), preflight_sudo)
+                                .await;
+                            preflight_qq_dependency_elevation(isolated_host.as_ref()).await
+                        })
+                    })
+                    .await?;
+            }
 
             for node in &plan.nodes {
                 if !node.status.needs_action() {
@@ -468,6 +644,7 @@ impl ComponentExecutor {
                             depends_on,
                             Arc::clone(&host),
                             &inputs,
+                            sudo.clone(),
                         )
                         .await?
                     }
@@ -476,6 +653,7 @@ impl ComponentExecutor {
                             node.target.clone(),
                             &host_id,
                             Arc::clone(&host),
+                            sudo.clone(),
                         )
                         .await
                     }
@@ -510,6 +688,7 @@ impl ComponentExecutor {
                 depends_on,
                 host,
                 &inputs,
+                sudo,
             )
             .await?;
 
@@ -634,6 +813,7 @@ impl ComponentExecutor {
         target: DependencyTarget,
         host_id: &str,
         host: Arc<dyn Host>,
+        sudo: Option<ComponentTaskSudo>,
     ) -> String {
         let group = system_package_group(&target).unwrap_or_else(|| target.label());
         let title = system_package_title(&target);
@@ -658,6 +838,7 @@ impl ComponentExecutor {
                             server_manager
                                 .with_isolated_connection(&id, move |iso_host| {
                                     Box::pin(async move {
+                                        inject_component_task_sudo(iso_host.as_ref(), sudo).await;
                                         Ok(run_system_package_task(
                                             target,
                                             iso_host.as_ref(),
@@ -687,6 +868,7 @@ impl ComponentExecutor {
         depends_on: Vec<String>,
         host: Arc<dyn Host>,
         inputs: &ComponentBuildInputs,
+        sudo: Option<ComponentTaskSudo>,
     ) -> Result<String, String> {
         let scope = inputs.scope_for(component_id);
         let dedupe_key = component_dedupe_key(host_id, component_id, kind, scope);
@@ -739,6 +921,7 @@ impl ComponentExecutor {
             host,
             server_id,
             remote_long_install,
+            sudo,
             snowluma_linux_package: inputs.snowluma_linux_package,
             inventory: Arc::clone(&self.inventory),
             event_bus: self.event_bus.clone(),
@@ -779,6 +962,7 @@ struct ComponentTaskRunner {
     server_id: Option<String>,
     /// 远端长安装走独立 SSH 连接,不占共享会话
     remote_long_install: bool,
+    sudo: Option<ComponentTaskSudo>,
     snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     inventory: Arc<RemoteInventoryService>,
     event_bus: BroadcastEventBus,
@@ -835,11 +1019,13 @@ impl ComponentTaskRunner {
         // plan 进 'static 闭包要 owned;取出来换个空的占位
         let plan = std::mem::replace(&mut self.plan, DeployPlan::builder().build());
         let isolated_server = self.server_id.clone().filter(|_| self.remote_long_install);
+        let sudo = self.sudo.take();
         let outcome: Result<DeployOutcome, String> = match isolated_server {
             Some(id) => {
                 self.server_manager
                     .with_isolated_connection(&id, move |iso_host| {
                         Box::pin(async move {
+                            inject_component_task_sudo(iso_host.as_ref(), sudo).await;
                             plan.run(iso_host.as_ref(), &mut ctx)
                                 .await
                                 .map_err(|e| format!("{e}"))
@@ -1005,6 +1191,382 @@ fn queue_note(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use bytes::Bytes;
+    use ncd_host::shell::BashShell;
+    use ncd_host::{
+        Arch, ArchiveKind, CommandOutput, DirEntry, HostError, HostPath, HostProcess, HostShell,
+    };
+
+    struct SudoHost {
+        password: tokio::sync::Mutex<Option<String>>,
+        commands: tokio::sync::Mutex<Vec<HostCommand>>,
+        requires_password: bool,
+        timestamp_cached: bool,
+        transport_fails: bool,
+    }
+
+    impl SudoHost {
+        fn new(requires_password: bool) -> Self {
+            Self {
+                password: tokio::sync::Mutex::new(None),
+                commands: tokio::sync::Mutex::new(Vec::new()),
+                requires_password,
+                timestamp_cached: false,
+                transport_fails: false,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Host for SudoHost {
+        fn os(&self) -> Os {
+            Os::Linux
+        }
+        fn arch(&self) -> Arch {
+            Arch::X86_64
+        }
+        fn locality(&self) -> Locality {
+            Locality::Remote
+        }
+        fn id(&self) -> &str {
+            "remote:test"
+        }
+        fn shell(&self) -> &dyn HostShell {
+            &BashShell
+        }
+        async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
+            unreachable!()
+        }
+        async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {
+            unreachable!()
+        }
+        async fn create_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn remove_file(&self, _: &HostPath) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn remove_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn exists(&self, _: &HostPath) -> Result<bool, HostError> {
+            unreachable!()
+        }
+        async fn upload(&self, _: &Path, _: &HostPath) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn download(&self, _: &HostPath, _: &Path) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn extract_archive(
+            &self,
+            _: &HostPath,
+            _: &HostPath,
+            _: ArchiveKind,
+        ) -> Result<(), HostError> {
+            unreachable!()
+        }
+        async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+            unreachable!()
+        }
+        async fn run_to_string(&self, command: HostCommand) -> Result<CommandOutput, HostError> {
+            if self.transport_fails {
+                return Err(HostError::Unsupported { operation: "test" });
+            }
+            self.commands.lock().await.push(command.clone());
+            let ok = match command.program.as_str() {
+                "id" => true,
+                "sudo" => {
+                    let ignores_cache = command.args.iter().any(|arg| arg == "-k");
+                    !self.requires_password
+                        || self.timestamp_cached && !ignores_cache
+                        || command.args.iter().any(|arg| arg == "-S")
+                            && command.stdin.as_deref() == Some(b"accepted\n".as_slice())
+                }
+                "true" => {
+                    assert!(command.elevated);
+                    !self.requires_password
+                        || self.timestamp_cached
+                        || self.password.lock().await.as_deref() == Some("accepted")
+                }
+                _ => panic!("unexpected sudo validation command"),
+            };
+            Ok(CommandOutput {
+                exit_code: Some(if ok { 0 } else { 1 }),
+                stdout: if command.program == "id" {
+                    "1000".to_string()
+                } else {
+                    String::new()
+                },
+                stderr: if ok {
+                    String::new()
+                } else {
+                    "rejected-private-value".to_string()
+                },
+            })
+        }
+        async fn set_elevation_password(&self, password: Option<String>) {
+            *self.password.lock().await = password;
+        }
+    }
+
+    #[test]
+    fn component_sudo_rejects_unrelated_targets_and_actions() {
+        for (component, host_id, kind, os, locality) in [
+            (
+                ComponentId::NapCat,
+                "remote:s1",
+                StepKind::Update,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            (
+                ComponentId::Qq,
+                "local",
+                StepKind::Update,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            (
+                ComponentId::Qq,
+                "remote:",
+                StepKind::Update,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            (
+                ComponentId::Qq,
+                "remote:s1",
+                StepKind::Update,
+                Os::Windows,
+                Locality::Remote,
+            ),
+            (
+                ComponentId::Qq,
+                "remote:s1",
+                StepKind::Update,
+                Os::Linux,
+                Locality::Local,
+            ),
+            (
+                ComponentId::Qq,
+                "remote:s1",
+                StepKind::Uninstall,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            (
+                ComponentId::Qq,
+                "remote:s1",
+                StepKind::Verify,
+                Os::Linux,
+                Locality::Remote,
+            ),
+        ] {
+            assert!(
+                component_task_sudo(
+                    component,
+                    host_id,
+                    kind,
+                    os,
+                    locality,
+                    Some("secret".into()),
+                    false,
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            component_task_sudo(
+                ComponentId::Qq,
+                "remote:s1",
+                StepKind::Update,
+                Os::Linux,
+                Locality::Remote,
+                None,
+                true,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn component_sudo_accepts_qq_mutations_without_changing_the_password() {
+        for kind in [
+            StepKind::EnsureInstalled,
+            StepKind::ForceInstall,
+            StepKind::Update,
+            StepKind::EnsureDependencies,
+        ] {
+            let sudo = component_task_sudo(
+                ComponentId::Qq,
+                "remote:s1",
+                kind,
+                Os::Linux,
+                Locality::Remote,
+                Some(" value with spaces ".into()),
+                false,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(sudo.password, " value with spaces ");
+            assert!(!sudo.remember);
+        }
+        assert!(
+            component_task_sudo(
+                ComponentId::NapCat,
+                "local",
+                StepKind::Verify,
+                Os::Windows,
+                Locality::Local,
+                None,
+                false,
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn component_sudo_keeps_one_time_password_off_shared_host_and_store() {
+        let temp = tempfile::tempdir().unwrap();
+        let executor = test_executor(temp.path());
+        let shared_host = SudoHost::new(true);
+        let validation_host = SudoHost::new(true);
+        let task_host = SudoHost::new(true);
+        let sudo = ComponentTaskSudo {
+            password: "accepted".into(),
+            remember: false,
+        };
+
+        validate_component_task_sudo(
+            &validation_host,
+            Some(sudo.clone()),
+            executor.server_manager.as_ref(),
+            "s1",
+        )
+        .await
+        .unwrap();
+        inject_component_task_sudo(&task_host, Some(sudo)).await;
+
+        assert!(validation_host.password.lock().await.is_none());
+        assert_eq!(task_host.password.lock().await.as_deref(), Some("accepted"));
+        assert!(shared_host.password.lock().await.is_none());
+        assert!(executor.server_manager.sudo_password("s1").is_none());
+    }
+
+    #[tokio::test]
+    async fn component_sudo_saves_only_verified_password_and_can_retry() {
+        let temp = tempfile::tempdir().unwrap();
+        let executor = test_executor(temp.path());
+        executor
+            .server_manager
+            .remember_sudo_password("s1", "previous")
+            .unwrap();
+        let mut validation_host = SudoHost::new(true);
+        validation_host.timestamp_cached = true;
+
+        let error = validate_component_task_sudo(
+            &validation_host,
+            Some(ComponentTaskSudo {
+                password: "rejected-private-value".into(),
+                remember: true,
+            }),
+            executor.server_manager.as_ref(),
+            "s1",
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("elevation_required"));
+        assert!(!error.contains("rejected-private-value"));
+        assert_eq!(
+            executor.server_manager.sudo_password("s1").as_deref(),
+            Some("previous")
+        );
+
+        validate_component_task_sudo(
+            &validation_host,
+            Some(ComponentTaskSudo {
+                password: "accepted".into(),
+                remember: true,
+            }),
+            executor.server_manager.as_ref(),
+            "s1",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            executor.server_manager.sudo_password("s1").as_deref(),
+            Some("accepted")
+        );
+    }
+
+    #[tokio::test]
+    async fn component_sudo_does_not_save_an_unneeded_or_unverified_password() {
+        let temp = tempfile::tempdir().unwrap();
+        let executor = test_executor(temp.path());
+        let passwordless_host = SudoHost::new(false);
+        validate_component_task_sudo(
+            &passwordless_host,
+            Some(ComponentTaskSudo {
+                password: "unused".into(),
+                remember: true,
+            }),
+            executor.server_manager.as_ref(),
+            "s1",
+        )
+        .await
+        .unwrap();
+        assert!(executor.server_manager.sudo_password("s1").is_none());
+
+        let mut disconnected_host = SudoHost::new(true);
+        disconnected_host.transport_fails = true;
+        let error = validate_component_task_sudo(
+            &disconnected_host,
+            Some(ComponentTaskSudo {
+                password: "accepted".into(),
+                remember: true,
+            }),
+            executor.server_manager.as_ref(),
+            "s1",
+        )
+        .await
+        .unwrap_err();
+        assert!(!error.contains("elevation_required"));
+        assert!(executor.server_manager.sudo_password("s1").is_none());
+    }
+
+    #[tokio::test]
+    async fn qq_dependency_preflight_requests_password_before_any_package_change() {
+        let isolated_host = SudoHost::new(true);
+        let error = preflight_qq_dependency_elevation(&isolated_host)
+            .await
+            .unwrap_err();
+        assert!(error.contains("elevation_required"));
+        let commands = isolated_host.commands.lock().await;
+        assert_eq!(commands.len(), 2);
+        assert_eq!(commands[0].program, "id");
+        assert_eq!(commands[1].program, "true");
+        assert!(commands[1].elevated);
+        assert!(commands.iter().all(|command| command.stdin.is_none()));
+        assert!(isolated_host.password.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn qq_dependency_preflight_accepts_the_isolated_hosts_saved_password() {
+        let isolated_host = SudoHost::new(true);
+        isolated_host
+            .set_elevation_password(Some("accepted".into()))
+            .await;
+        preflight_qq_dependency_elevation(&isolated_host)
+            .await
+            .unwrap();
+        assert_eq!(isolated_host.commands.lock().await.len(), 2);
+    }
 
     #[test]
     fn queue_note_prefers_prerequisites_over_package_manager() {

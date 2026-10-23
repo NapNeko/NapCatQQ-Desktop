@@ -79,6 +79,8 @@ pub async fn run_component_action(
     kind: StepKind,
     task_id: Option<String>,
     snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+    sudo_password: Option<String>,
+    remember_sudo: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     ensure_host_idle_for_component_mutation(&host_id, kind, &state).await?;
@@ -91,14 +93,18 @@ pub async fn run_component_action(
 
     state
         .components
-        .submit(ComponentActionRequest {
-            component_id,
-            host_id,
-            kind,
-            task_id: task_id.filter(|s| !s.trim().is_empty()),
-            host,
-            inputs,
-        })
+        .submit_with_sudo(
+            ComponentActionRequest {
+                component_id,
+                host_id,
+                kind,
+                task_id: task_id.filter(|s| !s.trim().is_empty()),
+                host,
+                inputs,
+            },
+            sudo_password,
+            remember_sudo.unwrap_or(false),
+        )
         .await
 }
 
