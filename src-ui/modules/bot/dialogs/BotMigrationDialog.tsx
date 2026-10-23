@@ -384,20 +384,23 @@ export function BotMigrationDialog({
                                                     label="目标端产生的新数据不会自动回拷；我确认回退"
                                                 />
                                             ) : null}
-                                            <Button
-                                                size="sm"
-                                                disabled={
-                                                    busy || (job.target_started && !acceptDataLoss)
-                                                }
-                                                onClick={() =>
-                                                    rollbackMutation.mutate(acceptDataLoss)
-                                                }
-                                            >
-                                                {rollbackMutation.isPending ? (
-                                                    <Spinner size="sm" />
-                                                ) : null}
-                                                确认回退
-                                            </Button>
+                                            <div>
+                                                <Button
+                                                    size="sm"
+                                                    disabled={
+                                                        busy ||
+                                                        (job.target_started && !acceptDataLoss)
+                                                    }
+                                                    onClick={() =>
+                                                        rollbackMutation.mutate(acceptDataLoss)
+                                                    }
+                                                >
+                                                    {rollbackMutation.isPending ? (
+                                                        <Spinner size="sm" />
+                                                    ) : null}
+                                                    确认回退
+                                                </Button>
+                                            </div>
                                         </div>
                                     </ExpandPresence>
                                 </div>
