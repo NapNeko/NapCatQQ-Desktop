@@ -12,7 +12,12 @@ export function isBotMigrationRunning(phase: BotMigrationPhase): boolean {
     return !['completed', 'failed', 'rolled_back', 'recovery_required'].includes(phase);
 }
 
-export function useBotMigration(botId: string, targetServerId: string, open: boolean) {
+export function useBotMigration(
+    botId: string,
+    targetServerId: string,
+    open: boolean,
+    planningAgain = false,
+) {
     const queryClient = useQueryClient();
     const [tracking, setTracking] = useState(false);
     const observedPhase = useRef('');
@@ -41,13 +46,16 @@ export function useBotMigration(botId: string, targetServerId: string, open: boo
             open &&
             !!targetServerId &&
             jobQuery.isSuccess &&
+            (!job || planningAgain) &&
             !running &&
             !jobQuery.isFetching,
         retry: false,
         staleTime: 0,
     });
 
-    const storeJob = (updated: BotMigrationJob) => {
+    const storeJob = async (updated: BotMigrationJob) => {
+        // 后台旧快照不能覆盖刚返回的启动/回退状态，否则可能提前停止轮询。
+        await queryClient.cancelQueries({ queryKey: jobKey, exact: true });
         queryClient.setQueryData(jobKey, updated);
         setTracking(isBotMigrationRunning(updated.phase));
     };

@@ -19,6 +19,7 @@ import {
     Spinner,
 } from '../../../shared/ui';
 import { cn } from '../../../shared/utils/cn';
+import { ExpandChevron, ExpandPresence } from '../../../shared/ui/motion';
 
 const phaseLabels: Record<BotMigrationPhase, string> = {
     preparing: '准备目标环境',
@@ -27,21 +28,17 @@ const phaseLabels: Record<BotMigrationPhase, string> = {
     rebuilding: '重建应用依赖',
     switching: '切换运行位置',
     starting: '启动目标端',
-    awaiting_login: '等待 QQ 登录',
+    awaiting_login: '核实目标状态',
     completed: '迁移完成',
     failed: '迁移失败',
     rolling_back: '正在回退',
     rolled_back: '已回到源服务器',
     recovery_required: '需要恢复处理',
 };
-const forwardPhases: BotMigrationPhase[] = [
-    'preparing',
-    'stopping',
-    'copying',
-    'rebuilding',
-    'switching',
-    'starting',
-    'awaiting_login',
+const forwardStages: { label: string; phases: BotMigrationPhase[] }[] = [
+    { label: '准备环境', phases: ['preparing'] },
+    { label: '迁移数据', phases: ['stopping', 'copying', 'rebuilding'] },
+    { label: '确认就绪', phases: ['switching', 'starting', 'awaiting_login'] },
 ];
 
 function errorText(error: unknown): string | null {
@@ -90,9 +87,10 @@ export function BotMigrationDialog({
     const [acknowledged, setAcknowledged] = useState(false);
     const [acceptDataLoss, setAcceptDataLoss] = useState(false);
     const [planningAgain, setPlanningAgain] = useState(false);
+    const [rollbackExpanded, setRollbackExpanded] = useState(false);
     const serversQuery = useServerProfiles(open);
     const servers = serversQuery.data ?? [];
-    const migration = useBotMigration(botId, targetServerId, open);
+    const migration = useBotMigration(botId, targetServerId, open, planningAgain);
     const { job, running, jobQuery, previewQuery, startMutation, rollbackMutation } = migration;
     const plan = previewQuery.data;
     const canPlanAgain =
@@ -117,7 +115,11 @@ export function BotMigrationDialog({
     const operationError = errorText(startMutation.error ?? rollbackMutation.error);
 
     useEffect(() => {
-        if (open) setAcknowledged(false);
+        if (open) {
+            setAcknowledged(false);
+            setAcceptDataLoss(false);
+            setRollbackExpanded(false);
+        }
     }, [open, plan?.fingerprint]);
     useEffect(() => {
         setAcceptDataLoss(false);
@@ -138,8 +140,9 @@ export function BotMigrationDialog({
     };
     const currentStep =
         job?.phase === 'completed'
-            ? forwardPhases.length
-            : forwardPhases.indexOf(job?.phase ?? 'failed');
+            ? forwardStages.length
+            : forwardStages.findIndex((stage) => stage.phases.includes(job?.phase ?? 'failed'));
+    const rollbackVisible = rollbackExpanded;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -302,17 +305,23 @@ export function BotMigrationDialog({
                                 </p>
                             </div>
                             {currentStep >= 0 ? (
-                                <ol className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                                    {forwardPhases.map((phase, index) => (
+                                <ol
+                                    aria-label="迁移进度"
+                                    className="grid grid-cols-3 gap-3 text-xs"
+                                >
+                                    {forwardStages.map((stage, index) => (
                                         <li
-                                            key={phase}
+                                            key={stage.label}
+                                            aria-current={
+                                                index === currentStep ? 'step' : undefined
+                                            }
                                             className={cn(
-                                                'flex items-center gap-2',
+                                                'flex items-center gap-1.5 border-t-2 pt-2',
                                                 index === currentStep
-                                                    ? 'font-medium text-brand'
+                                                    ? 'border-brand font-medium text-brand'
                                                     : index < currentStep
-                                                      ? 'text-text-secondary'
-                                                      : 'text-text-disabled',
+                                                      ? 'border-brand/35 text-text-secondary'
+                                                      : 'border-border-subtle text-text-tertiary',
                                             )}
                                         >
                                             {index < currentStep ? (
@@ -322,28 +331,17 @@ export function BotMigrationDialog({
                                                     {index + 1}
                                                 </span>
                                             )}
-                                            {phaseLabels[phase]}
+                                            {stage.label}
                                         </li>
                                     ))}
                                 </ol>
                             ) : null}
                             {job.phase === 'awaiting_login' ? (
                                 <div className="space-y-2 rounded-sm bg-brand/5 px-3 py-2 text-sm text-text-secondary">
-                                    <p>目标端已启动，检测到 QQ 在线和应用就绪后会自动完成。</p>
-                                    {onOpenLogin ? (
-                                        <Button
-                                            size="sm"
-                                            variant="primary"
-                                            onClick={() => {
-                                                onOpenChange(false);
-                                                onOpenLogin();
-                                            }}
-                                        >
-                                            登录 QQ
-                                        </Button>
-                                    ) : (
+                                    <p>正在核实 QQ 和应用状态，恢复原先的启停状态后会自动完成。</p>
+                                    {!onOpenLogin ? (
                                         <p>需要扫码时，可从 Bot 卡片打开登录窗口。</p>
-                                    )}
+                                    ) : null}
                                 </div>
                             ) : null}
                             <MigrationContents botId={botId} apps={job.apps} />
@@ -357,27 +355,51 @@ export function BotMigrationDialog({
                             ) : null}
                             {job.rollback_available &&
                             (!running || job.phase === 'awaiting_login') ? (
-                                <div className="space-y-3 border-t border-border-subtle pt-3 text-sm text-text-secondary">
-                                    <p>
-                                        回退会停止当前端，恢复源端配置和原先的启停状态。两边目录保留。
-                                    </p>
-                                    {job.target_started ? (
-                                        <Checkbox
-                                            id={`bot-migration-rollback-${botId}`}
-                                            checked={acceptDataLoss}
-                                            onCheckedChange={setAcceptDataLoss}
-                                            disabled={busy}
-                                            label="目标端产生的新数据不会自动回拷；我确认回退"
-                                        />
-                                    ) : null}
-                                    <Button
-                                        variant="secondary"
-                                        disabled={busy || (job.target_started && !acceptDataLoss)}
-                                        onClick={() => rollbackMutation.mutate(acceptDataLoss)}
+                                <div className="border-t border-border-subtle pt-3 text-sm text-text-secondary">
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-2 rounded-xs py-1 text-xs text-text-secondary hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                        aria-expanded={rollbackVisible}
+                                        aria-controls={`bot-migration-rollback-panel-${botId}`}
+                                        disabled={busy}
+                                        onClick={() => setRollbackExpanded((value) => !value)}
                                     >
-                                        {rollbackMutation.isPending ? <Spinner size="sm" /> : null}{' '}
-                                        回到源服务器
-                                    </Button>
+                                        <ExpandChevron open={rollbackVisible} />
+                                        回退到源服务器
+                                    </button>
+                                    <ExpandPresence visible={rollbackVisible}>
+                                        <div
+                                            id={`bot-migration-rollback-panel-${botId}`}
+                                            className="space-y-3 pt-3"
+                                        >
+                                            <p>
+                                                停止当前端，恢复源端配置和原先的启停状态。两边目录保留。
+                                            </p>
+                                            {job.target_started ? (
+                                                <Checkbox
+                                                    id={`bot-migration-rollback-${botId}`}
+                                                    checked={acceptDataLoss}
+                                                    onCheckedChange={setAcceptDataLoss}
+                                                    disabled={busy}
+                                                    label="目标端产生的新数据不会自动回拷；我确认回退"
+                                                />
+                                            ) : null}
+                                            <Button
+                                                size="sm"
+                                                disabled={
+                                                    busy || (job.target_started && !acceptDataLoss)
+                                                }
+                                                onClick={() =>
+                                                    rollbackMutation.mutate(acceptDataLoss)
+                                                }
+                                            >
+                                                {rollbackMutation.isPending ? (
+                                                    <Spinner size="sm" />
+                                                ) : null}
+                                                确认回退
+                                            </Button>
+                                        </div>
+                                    </ExpandPresence>
                                 </div>
                             ) : null}
                             {running ? (
@@ -410,9 +432,20 @@ export function BotMigrationDialog({
                     ) : null}
                 </div>
                 <DialogFooter className="gap-2">
-                    <Button onClick={() => onOpenChange(false)}>
+                    <Button variant="ghost" onClick={() => onOpenChange(false)}>
                         {running ? '后台继续' : '关闭'}
                     </Button>
+                    {job?.phase === 'awaiting_login' && onOpenLogin ? (
+                        <Button
+                            variant="primary"
+                            onClick={() => {
+                                onOpenChange(false);
+                                onOpenLogin();
+                            }}
+                        >
+                            登录 QQ
+                        </Button>
+                    ) : null}
                     {!showPlan && canPlanAgain ? (
                         <Button
                             onClick={() => {

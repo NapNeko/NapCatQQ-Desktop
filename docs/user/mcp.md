@@ -4,7 +4,7 @@ NCD 提供本机 HTTP MCP 服务，让支持远程 HTTP MCP 的客户端查询�
 
 ## 接入
 
-1. 在 NCD 的「设置 → 运行环境 → MCP」开启服务并保存设置。端口留为 `0` 时会自动分配并保存，后续启动继续使用这个端口。
+1. 在 NCD 的「设置 → 运行 → MCP」开启服务并保存设置。端口留为 `0` 时会自动分配并保存，后续启动继续使用这个端口。
 2. 等状态显示正在监听，再点「复制连接配置」。配置包含访问令牌，请只粘贴到可信客户端的 MCP 配置中。
 3. 客户端选择 HTTP MCP（也称 Streamable HTTP），使用复制配置中的 URL 和 `Authorization` 请求头。不要选 stdio 或旧式 HTTP+SSE。
 4. 连接后先调用 `server_status` 和 `get_security_policy`，确认服务状态和当前权限。
