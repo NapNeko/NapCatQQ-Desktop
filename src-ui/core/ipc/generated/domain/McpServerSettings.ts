@@ -14,6 +14,10 @@ enabled: boolean,
  */
 port: number, 
 /**
+ * 只读模式拒绝所有写操作；只能从桌面设置解除。
+ */
+readOnly: boolean, 
+/**
  * 危险级工具默认拒绝；打开后降级成和有副作用同级（要确认令牌才执行）
  */
 allowDangerous: boolean, };

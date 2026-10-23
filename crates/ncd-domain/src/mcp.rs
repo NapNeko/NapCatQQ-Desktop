@@ -14,6 +14,8 @@ pub struct McpServerSettings {
     pub enabled: bool,
     /// 0 = 随机空闲端口。首次起服务时系统分配的端口会回填到这里，之后固定
     pub port: u16,
+    /// 只读模式拒绝所有写操作；只能从桌面设置解除。
+    pub read_only: bool,
     /// 危险级工具默认拒绝；打开后降级成和有副作用同级（要确认令牌才执行）
     pub allow_dangerous: bool,
 }
@@ -23,6 +25,7 @@ impl Default for McpServerSettings {
         Self {
             enabled: false,
             port: 0,
+            read_only: true,
             allow_dangerous: false,
         }
     }
@@ -52,11 +55,13 @@ mod tests {
         let parsed: McpServerSettings = serde_json::from_str("{}").expect("空对象应有默认值");
         assert!(!parsed.enabled);
         assert_eq!(parsed.port, 0);
+        assert!(parsed.read_only);
         assert!(!parsed.allow_dangerous);
 
         let on = McpServerSettings {
             enabled: true,
             port: 3210,
+            read_only: false,
             allow_dangerous: true,
         };
         let json = serde_json::to_string(&on).unwrap();
