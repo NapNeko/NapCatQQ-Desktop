@@ -23,7 +23,7 @@ pnpm.cmd dev
 
 `SITE_BASE` 可设置构建时的站点前缀；GitHub Pages 使用 `/NapCatQQ-Desktop/`。
 
-首页各功能区复用 `TutorialDemo.astro` 和文档中的真实前端。程序页面和教程脚本按当前场景加载，聊天、终端等模块仅在使用时下载。自动演示共享两个常驻名额，离屏先暂停，12 秒后回收；手动操作、主动暂停和展开中的演示保留状态。宽度不超过 760px 时先显示封面，点击后再加载。用户主动打开的演示优先于自动加载预算。
+首页各功能区复用 `TutorialDemo.astro` 和文档中的真实前端。程序页面和教程脚本按当前场景加载，聊天、终端等模块仅在使用时下载。自动演示共享两个常驻名额，但同一时刻只播放一个，避免下拉菜单因不同窗口争抢焦点而关闭。切到后台或在页面输入时暂停，恢复后继续当前步骤。离屏先暂停，12 秒后回收；手动操作、主动暂停和展开中的演示保留状态。宽度不超过 760px 时先显示封面，点击后再加载。用户主动打开的演示优先于自动加载预算。
 
 「自己操作」在当前窗口接管，点击「放大」才进入 top layer；收起保留操作状态。放大画布同时适配可用宽高，窄屏在窗口内滚动。演示和截图跟随页面主题，切换主题不重载演示。
 
@@ -65,11 +65,12 @@ Remove-Item Env:SITE_BASE
 
 ## 维护教程
 
-- 正文位于 `src/content/docs/*.md`。Frontmatter 的 `title`、`description`、`section`、`order` 决定标题、搜索描述、目录分组及阅读顺序。
+- 正文位于 `src/content/docs/*.md`。Frontmatter 的 `title`、`description`、`section`、`order` 决定标题、搜索描述、目录分组及阅读顺序。未发版功能标记 `development: true`，页面使用开发版提示，避免沿用全站已发版基线。
 - 正文链接写成 `/docs/first-bot/`；构建时自动补上 `SITE_BASE`。页内链接使用实际生成的标题锚点。
 - 教程中的截图写成 `![说明](/docs/screenshots/名称-light.png)`，并同时放入同名的 `-dark.png`。页面根据文档主题显示对应截图，点击可看大图。素材记录与重拍流程见 `public/docs/screenshots/README.md`。
 - 技术事实以软件 `main` 的公开用户指南和界面实现为准。本次核对基线为 `85cd7f40739d38a36c40d9d48ff5b390a2056cff`（Desktop 3.5.2）；版本提示在 `src/lib/docs.ts`，功能清单在 `scripts/docs-coverage.json`。
 - 更新功能时同步操作步骤、成功状态、限制和失败处理，再复核功能清单。清单是人工审阅记录；关键词检查仅用于发现正文被删或引用失效，不能替代真实运行验证。
+- MCP 文档位于 `mcp.md`、`mcp-tools.md` 和 `mcp-security.md`，对照 `main` 的新版 MCP 开发实现单独维护。它们不沿用 3.5.2 的已发版声明；改动工具名、输入 Schema、权限、输出脱敏或请求限制时同步更新，安装版本的 `tools/list` 与 `get_security_policy` 是实际能力依据。
 - 只读并整理明确公开的用户文档与相关实现，不导入 `docs/dev/`、配置、凭据或开发笔记。
 
 构建依赖将 `@shikijs/vscode-textmate` 固定为已发布较久的 `10.0.2`，避免原锁文件中刚发布的传递依赖触发安装环境的最短发布时间限制。`package.json` 和 `pnpm-workspace.yaml` 保留相同覆盖项，分别兼容 pnpm 9 与新版本。

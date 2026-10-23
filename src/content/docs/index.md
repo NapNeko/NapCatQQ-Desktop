@@ -40,6 +40,9 @@ NapCatQQ Desktop 是一个管 QQ 机器人的 Windows 程序：帮你装 QQ 和�
 | 管理应用端插件、模型与框架配置 | [框架功能](/docs/frameworks/) |
 | 私聊、群聊、群文件、聊天截图 | [聊天与截图](/docs/chat/) |
 | 调用 OneBot 接口、查看事件和保存请求 | [API 调试台](/docs/debugging/) |
+| 让本机 AI 客户端检查 Bot、通道与调用记录 | [接入 NCD MCP](/docs/mcp/) |
+| 编写 MCP 客户端或确认工具参数 | [MCP 工具参考](/docs/mcp-tools/) |
+| 限制 AI 可访问的内容和可执行的操作 | [MCP 安全与权限](/docs/mcp-security/) |
 | 使用本机与 SSH 终端 | [终端](/docs/terminal/) |
 | 找安装失败原因、查看 Bot 与应用日志 | [任务与日志](/docs/tasks-logs/) |
 | 添加 SSH 主机、准备服务器 | [远端 Linux](/docs/remote-linux/) · [远端 Windows](/docs/remote-windows/) |

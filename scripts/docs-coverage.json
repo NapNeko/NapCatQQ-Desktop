@@ -3,7 +3,8 @@
   "source": {
     "repository": "https://github.com/NapNeko/NapCatQQ-Desktop",
     "branch": "main",
-    "commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff"
+    "commit": "85cd7f40739d38a36c40d9d48ff5b390a2056cff",
+    "supplement": "MCP pages document the current main development changes in crates/ncd-mcp and the MCP settings UI, not the 3.5.2 release baseline. Runtime tools/list and get_security_policy are authoritative for the installed build."
   },
   "methodology": {
     "unit": "One concrete user task or a closely related group of controls; framework-specific workflows are separate capabilities.",
@@ -20,7 +21,7 @@
   "exclusions": [
     {
       "area": "Developer APIs and implementation internals",
-      "reason": "Rust command internals, schemas, adapters and every upstream OneBot endpoint are outside the Desktop user manual. The debug workflow is included."
+      "reason": "Rust command internals, adapters and every upstream OneBot endpoint are outside the Desktop user manual. NCD MCP tool parameters, security boundaries and the debug workflow are included."
     },
     {
       "area": "Third-party plugin and model service field reference",
@@ -36,6 +37,78 @@
     }
   ],
   "capabilities": [
+    {
+      "id": "MCP 与自动化-01",
+      "group": "MCP 与自动化",
+      "title": "启用本机 MCP 并配置客户端鉴权",
+      "source": ["src-ui/modules/settings/tabs/RuntimeTab.tsx", "crates/ncd-mcp/src/server.rs"],
+      "docs": ["mcp"],
+      "keywords": ["启用 MCP 服务", "复制连接配置", "Bearer", "只读模式"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-02",
+      "group": "MCP 与自动化",
+      "title": "发现工具、搜索接口并诊断 Bot",
+      "source": ["crates/ncd-mcp/src/tools.rs"],
+      "docs": ["mcp", "mcp-tools"],
+      "keywords": ["tools/list", "search_actions", "diagnose_bot", "describe_action"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-03",
+      "group": "MCP 与自动化",
+      "title": "读取 Bot 运行状态和有限日志",
+      "source": ["crates/ncd-mcp/src/inspection.rs"],
+      "docs": ["mcp-tools"],
+      "keywords": ["get_bot_runtime", "tail_bot_logs", "脱敏"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-04",
+      "group": "MCP 与自动化",
+      "title": "读取应用、主机和组件任务摘要",
+      "source": ["crates/ncd-mcp/src/inspection.rs"],
+      "docs": ["mcp-tools"],
+      "keywords": ["list_app_instances", "get_app_runtime", "list_servers", "list_component_tasks"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-05",
+      "group": "MCP 与自动化",
+      "title": "调用 OneBot 并辨认分层错误与确认限制",
+      "source": ["crates/ncd-mcp/src/tools.rs", "crates/ncd-mcp/src/gate.rs"],
+      "docs": ["mcp-tools", "mcp-security"],
+      "keywords": ["call_action", "confirm_token", "不是人工批准", "retcode"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-06",
+      "group": "MCP 与自动化",
+      "title": "订阅事件、按游标读取并结束订阅",
+      "source": ["crates/ncd-mcp/src/tools.rs"],
+      "docs": ["mcp", "mcp-tools"],
+      "keywords": ["subscribe_events", "since_seq", "unsubscribe_events", "私人消息"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-07",
+      "group": "MCP 与自动化",
+      "title": "按需读取历史、工作区与收藏",
+      "source": ["crates/ncd-mcp/src/tools.rs"],
+      "docs": ["mcp-tools"],
+      "keywords": ["query_history", "get_history_entry", "save_workspace", "save_collections", "整份覆盖"],
+      "status": "covered"
+    },
+    {
+      "id": "MCP 与自动化-08",
+      "group": "MCP 与自动化",
+      "title": "限制权限、轮换令牌并处理不可信内容",
+      "source": ["crates/ncd-mcp/src/gate.rs", "crates/ncd-mcp/src/http.rs", "crates/ncd-mcp/src/security.rs"],
+      "docs": ["mcp-security"],
+      "keywords": ["get_security_policy", "重置访问令牌", "120 秒", "不可信", "脱敏"],
+      "status": "covered"
+    },
     {
       "id": "入门与组件-01",
       "group": "入门与组件",
