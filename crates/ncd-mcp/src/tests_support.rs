@@ -4,12 +4,26 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 
+use ncd_domain::RuntimeTarget;
 use ncd_domain::ids::BotId;
-use ncd_runtime::DebugBotPort;
 use ncd_runtime::onebot_debug::{DebugBotView, DebugManager};
+use ncd_runtime::{DebugBotPort, HostResolveError, HostResolver};
 
 pub(crate) struct FakeBots {
     pub bots: StdMutex<Vec<DebugBotView>>,
+}
+
+/// MCP 单元测试不接触真实主机，也不依赖 Windows 本机实现。
+pub(crate) struct NoHostResolver;
+
+#[async_trait::async_trait]
+impl HostResolver for NoHostResolver {
+    async fn resolve(
+        &self,
+        _target: &RuntimeTarget,
+    ) -> Result<Arc<dyn ncd_host::Host>, HostResolveError> {
+        Err(HostResolveError::message("测试不提供真实主机"))
+    }
 }
 
 #[async_trait::async_trait]
@@ -37,12 +51,11 @@ impl DebugBotPort for FakeBots {
 }
 
 pub(crate) fn test_debug_manager(root: PathBuf) -> Arc<DebugManager> {
-    let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
     Arc::new(DebugManager::new(
         Arc::new(FakeBots {
             bots: StdMutex::new(Vec::new()),
         }),
-        Arc::new(ncd_runtime::LocalOnlyHostResolver::new(local_host)),
+        Arc::new(NoHostResolver),
         root,
     ))
 }

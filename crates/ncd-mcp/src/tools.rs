@@ -818,7 +818,7 @@ fn validate_action_params(action: &str, params: &Value) -> Result<(), ToolError>
     }
     if crate::security::contains_local_file(&Value::Object(params.clone())) {
         return Err(ToolError::plain(
-            "MCP 不接受文件路径、文件协议、CQ 码或复杂消息段",
+            "MCP 不接受文件字段、文件协议、CQ 码或复杂消息段",
         ));
     }
     Ok(())
@@ -1530,6 +1530,49 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn audited_text_fields_accept_commands_and_path_like_text() {
+        for message in [
+            json!("/help"),
+            json!("A: 请稍后重试"),
+            json!("C:\\example\\notes.txt"),
+            json!([{"type":"text", "data":{"text":"/help"}}]),
+        ] {
+            assert!(
+                validate_action_params("send_group_msg", &json!({"group_id":1,"message":message}))
+                    .is_ok(),
+                "{message}"
+            );
+        }
+        assert!(
+            validate_action_params(
+                "set_group_name",
+                &json!({"group_id":1,"group_name":"A: 讨论组"})
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_action_params(
+                "set_group_card",
+                &json!({"group_id":1,"user_id":2,"card":"/help"})
+            )
+            .is_ok()
+        );
+        // 文件能力仍按字段、协议和消息段结构拒绝，纯文本不会解释成文件读取。
+        for message in [
+            json!("file:///etc/passwd"),
+            json!("ncd-local-file://C:/private.txt"),
+            json!("[CQ:image,file=/etc/passwd]"),
+            json!([{"type":"image", "data":{"file":"/etc/passwd"}}]),
+        ] {
+            assert!(
+                validate_action_params("send_group_msg", &json!({"group_id":1,"message":message}))
+                    .is_err(),
+                "{message}"
+            );
+        }
     }
 
     #[test]
