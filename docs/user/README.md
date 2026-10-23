@@ -43,6 +43,8 @@ NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 桌面控制台。可以管�
 | 安装应用端或导入已有项目   | [应用端实例](app-instances.md)                            |
 | 私聊、群聊、群文件与截图   | [聊天与截图](chat.md)                                     |
 | 调用 OneBot 接口、查看事件 | 「调试台」或 Bot 卡片「调试」                             |
+| 整套迁移 Bot 到其他服务器 | Bot 卡片菜单；见 [服务器间 Bot 迁移](bot-migration.md)     |
+| 使用 AI 客户端查询与调试   | 「设置 → 运行环境 → MCP」；见 [MCP 接入](mcp.md)         |
 | 打开终端                   | 标题栏终端按钮、卡片入口，或 `Ctrl+反引号`                |
 | 查看安装 / 部署进度        | 「任务」                                                  |
 | 配置掉线通知               | 「设置 → 通知」；远端独立值守见 [ncd-watch](ncd-watch.md) |
