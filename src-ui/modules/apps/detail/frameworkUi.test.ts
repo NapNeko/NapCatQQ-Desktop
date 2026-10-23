@@ -150,9 +150,9 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('models/models/0/model_type')).toBe('models');
         expect(ui?.tabForIssue('models/models/0/price_periods/0/start_time')).toBe('models');
         expect(ui?.tabForIssue('models/model_task_config/fast_model/model_list/0')).toBe('models');
-        expect(
-            ui?.tabForIssue('models/model_task_config/image_embedding/model_list/0'),
-        ).toBe('models');
+        expect(ui?.tabForIssue('models/model_task_config/image_embedding/model_list/0')).toBe(
+            'models',
+        );
         expect(ui?.tabForIssue('models/model_task_config/web_search/model_list/0')).toBe('models');
         expect(ui?.tabForIssue('models/web/services/search/category')).toBe('models');
         expect(ui?.tabForIssue('bot/agent/acp_timeout')).toBe('agent');
