@@ -508,6 +508,10 @@ pub struct BotConfig {
     pub bot: BotBasicConfig,
     pub connect: ConnectConfig,
     pub advanced: AdvancedConfig,
+    /// Docker 容器设置；缺省时仅向宿主机回环发布监听端口，使用 unless-stopped 重启策略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub docker: Option<crate::docker::BotDockerConfig>,
     /// SnowLuma onebot_<uin>.json 的 statusCommand;NapCat 不序列化
     #[serde(
         default,
@@ -522,6 +526,9 @@ impl BotConfig {
     pub fn validate(&self) -> Result<(), BotConfigError> {
         if self.bot.qq_id == 0 {
             return Err(BotConfigError::InvalidQqId(self.bot.qq_id));
+        }
+        if self.bot.deployment_type == DeploymentType::Docker {
+            self.validate_docker().map_err(BotConfigError::Docker)?;
         }
 
         let mut seen_names = HashMap::new();
@@ -570,6 +577,8 @@ impl BotConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BotConfigError {
+    #[error("Docker 容器配置无效: {0}")]
+    Docker(String),
     #[error("invalid QQID: {0}")]
     InvalidQqId(u64),
     #[error("unsupported runtime matrix: {0}")]
@@ -856,6 +865,7 @@ mod runtime_matrix_tests {
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }

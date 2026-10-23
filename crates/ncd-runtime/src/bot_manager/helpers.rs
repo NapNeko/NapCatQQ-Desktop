@@ -5,6 +5,33 @@ use std::path::Path;
 
 use ncd_traits::runtime_backend::BotBackendError;
 
+/// Docker 的发布端口、资源和环境由容器创建参数决定，不能靠协议 WebUI 热更新。
+/// 只处理同一部署目标；切换主机 / backend 的生命周期由调用方分别处理。
+pub(super) fn docker_container_config_changed(
+    previous: &ncd_domain::BotConfig,
+    current: &ncd_domain::BotConfig,
+) -> bool {
+    use ncd_domain::DeploymentType;
+
+    if previous.bot.deployment_type != DeploymentType::Docker
+        || current.bot.deployment_type != DeploymentType::Docker
+        || previous.bot.backend_type != current.bot.backend_type
+        || previous.bot.runtime_target != current.bot.runtime_target
+    {
+        return false;
+    }
+    let mut previous_spec = ncd_deploy::DockerDeployment::build_spec(previous);
+    let mut current_spec = ncd_deploy::DockerDeployment::build_spec(current);
+    previous_spec.ports.sort_by_key(|p| (p.container, p.host));
+    current_spec.ports.sort_by_key(|p| (p.container, p.host));
+    let mut previous_settings = previous.docker.clone().unwrap_or_default();
+    let mut current_settings = current.docker.clone().unwrap_or_default();
+    // 比较最终映射，显式填写自动默认值或调整行顺序无需中断容器。
+    previous_settings.port_mappings.clear();
+    current_settings.port_mappings.clear();
+    previous_spec != current_spec || previous_settings != current_settings
+}
+
 /// NapCat 启动期 Bypass 与 WebUI「系统配置」读的是共享 `napcat.json`，
 /// 不随单个 Bot 切 backend / 删除清掉。
 pub(crate) fn is_shared_napcat_json(path: &Path) -> bool {

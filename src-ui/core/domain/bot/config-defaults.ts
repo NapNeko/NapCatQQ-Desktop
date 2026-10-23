@@ -3,6 +3,7 @@
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { StatusCommandConfig } from '../../ipc/generated/domain/StatusCommandConfig';
 import { RUNTIME_TARGET_REMOTE_PLACEHOLDER } from './runtime-target';
+import { validateBotDockerConfig } from './docker-config';
 
 export const defaultStatusCommandConfig = (): StatusCommandConfig => ({
     enabled: true,
@@ -88,6 +89,8 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
             reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。',
         };
     }
+    const dockerError = validateBotDockerConfig(config);
+    if (dockerError) return { ok: false, reason: dockerError };
     // cron 语法由后端解析并回报错误；这里只挡空表达式
     const sched = config.bot.autoRestartSchedule;
     if (sched.enable && sched.mode === 'cron' && !sched.cron.trim()) {

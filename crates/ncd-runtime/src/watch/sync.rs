@@ -76,13 +76,14 @@ fn is_loopback_or_any(host: &str) -> bool {
     is_any_addr(host)
         || host == "127.0.0.1"
         || host == "::1"
+        || host == "[::1]"
         || host.eq_ignore_ascii_case("localhost")
 }
 
 /// 从 Bot connect.httpServers 投影出 watch 在同一台主机上能连到的 OneBot HTTP 发送方
 ///
 /// 直接运行:第一个监听在回环或通配地址上的服务 → `http://127.0.0.1:port`。
-/// Docker:只认监听在通配地址上的服务,容器里绑 127.0.0.1 的即使映射了端口也连不进去。
+/// Docker:派生配置会把回环监听改成通配地址，可通过宿主机发布口访问。
 /// 优先挑按部署规则映射到宿主机的那个;规则里没有就把 base_url 留空,带上容器名和
 /// 容器内端口,由 watch 发送前用 docker inspect 查实际映射(导入的容器常不按规则映射)。
 /// 其它 host 视为本机连不到,跳过。
@@ -106,7 +107,7 @@ pub fn watch_onebot_messenger_from_bot(config: &BotConfig) -> Option<WatchOneBot
             })
         }
         DeploymentType::Docker => {
-            let candidates: Vec<_> = enabled.filter(|s| is_any_addr(&s.host)).collect();
+            let candidates: Vec<_> = enabled.filter(|s| is_loopback_or_any(&s.host)).collect();
             let spec = DockerDeployment::build_spec(config);
             let (server, host_port) = candidates
                 .iter()
@@ -186,11 +187,7 @@ pub fn watch_event_endpoint(
     let server = config.connect.websocket_servers.iter().find(|s| {
         s.base.enable
             && s.port > 0
-            && (if docker {
-                is_any_addr(&s.host)
-            } else {
-                is_loopback_or_any(&s.host)
-            })
+            && is_loopback_or_any(&s.host)
             && matches!(s.role, ncd_domain::WsRole::Universal)
     })?;
     Some(ncd_watch::relogin_config::WatchEventEndpoint {
@@ -726,6 +723,7 @@ mod tests {
                 plugins: vec![],
             },
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }
@@ -795,6 +793,8 @@ mod tests {
         assert!(watch_event_endpoint(&bot).is_none());
         bot.connect.websocket_servers[0].role = ncd_domain::WsRole::Universal;
         bot.connect.websocket_servers[0].host = "127.0.0.1".into();
+        assert_eq!(watch_event_endpoint(&bot).unwrap().port, 3001);
+        bot.connect.websocket_servers[0].host = "10.0.0.5".into();
         assert!(watch_event_endpoint(&bot).is_none());
     }
 
@@ -1144,11 +1144,10 @@ mod tests {
     }
 
     #[test]
-    fn docker_messenger_unpublished_port_leaves_url_to_watch() {
-        // #137 的现场:容器内 HTTP 在 3010,compose 只映射了 3000/3001
+    fn docker_messenger_custom_port_uses_automatic_mapping() {
         let cfg = with_http(sample_remote("s1", 1277629216), 3010);
         let m = watch_onebot_messenger_from_bot(&cfg).unwrap();
-        assert_eq!(m.base_url, "");
+        assert_eq!(m.base_url, "http://127.0.0.1:3226");
         assert_eq!(m.container_name.as_deref(), Some("ncbot-1277629216"));
         assert_eq!(m.container_port, Some(3010));
         assert_eq!(m.access_token, "t");
@@ -1159,7 +1158,7 @@ mod tests {
         let mut cfg = with_http(sample_remote("s1", 10002), 3010);
         cfg.connect.http_servers[0].path = " botB/ ".into();
         let docker = watch_onebot_messenger_from_bot(&cfg).unwrap();
-        assert!(docker.base_url.is_empty());
+        assert_eq!(docker.base_url, "http://127.0.0.1:3012");
         assert_eq!(docker.path, "/botB/");
         assert_eq!(docker.container_port, Some(3010));
         cfg.bot.deployment_type = DeploymentType::Native;
@@ -1195,17 +1194,22 @@ mod tests {
     }
 
     #[test]
-    fn docker_messenger_prefers_published_server() {
+    fn docker_messenger_uses_first_enabled_automatically_published_server() {
         let cfg = with_http(with_http(sample_remote("s1", 1277629216), 3010), 3001);
         let m = watch_onebot_messenger_from_bot(&cfg).unwrap();
-        assert_eq!(m.base_url, "http://127.0.0.1:3217");
-        assert_eq!(m.container_port, Some(3001));
+        assert_eq!(m.base_url, "http://127.0.0.1:3226");
+        assert_eq!(m.container_port, Some(3010));
     }
 
     #[test]
-    fn docker_messenger_ignores_container_loopback() {
-        let cfg = with_http_host(sample_remote("s1", 10002), "127.0.0.1", 3000);
-        assert!(watch_onebot_messenger_from_bot(&cfg).is_none());
+    fn docker_messenger_uses_normalized_container_loopback() {
+        for host in ["127.0.0.1", "localhost", "::1", "[::1]"] {
+            let cfg = with_http_host(sample_remote("s1", 10002), host, 3000);
+            assert_eq!(
+                watch_onebot_messenger_from_bot(&cfg).unwrap().base_url,
+                "http://127.0.0.1:3002"
+            );
+        }
     }
 
     #[test]

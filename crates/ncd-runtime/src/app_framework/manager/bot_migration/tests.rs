@@ -91,6 +91,7 @@ fn config() -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     };
     config.advanced.auto_start = true;

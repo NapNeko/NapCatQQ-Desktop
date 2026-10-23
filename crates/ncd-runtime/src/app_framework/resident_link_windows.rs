@@ -158,6 +158,12 @@ fn command(
         ResidentForward::ReachBot { bot_port } => {
             format!("127.0.0.1:{listen}:127.0.0.1:{bot_port}")
         }
+        ResidentForward::BridgeLoopback {
+            listen_host,
+            target_port,
+        } => {
+            format!("{listen_host}:{listen}:127.0.0.1:{target_port}")
+        }
     };
     let mut args: Vec<String> = vec!["-i".into(), dir.join(LINK_KEY_NAME).render_for(Os::Windows)];
     for option in [
@@ -182,7 +188,7 @@ fn command(
         "-N".into(),
         match forward {
             ResidentForward::ExposeApp { .. } => "-R",
-            ResidentForward::ReachBot { .. } => "-L",
+            ResidentForward::ReachBot { .. } | ResidentForward::BridgeLoopback { .. } => "-L",
         }
         .into(),
         tunnel,
@@ -280,6 +286,11 @@ pub(super) async fn ensure(
     bot_host: &dyn Host,
     spec: &ResidentLinkSpec<'_>,
 ) -> Result<u16, AppFrameworkError> {
+    if matches!(spec.forward, ResidentForward::BridgeLoopback { .. }) {
+        return Err(AppFrameworkError::Validation(
+            "Docker 网桥仅支持 Linux 宿主机".into(),
+        ));
+    }
     if matches!(
         spec.forward,
         ResidentForward::ExposeApp { app_port: 0 } | ResidentForward::ReachBot { bot_port: 0 }
@@ -311,7 +322,7 @@ pub(super) async fn ensure(
     let known = trusted_known_hosts(bot_host, &dial)?;
     let listen_host = match spec.forward {
         ResidentForward::ExposeApp { .. } => bot_host,
-        ResidentForward::ReachBot { .. } => app_host,
+        ResidentForward::ReachBot { .. } | ResidentForward::BridgeLoopback { .. } => app_host,
     };
     let port = allocate_forward_port(
         listen_host,

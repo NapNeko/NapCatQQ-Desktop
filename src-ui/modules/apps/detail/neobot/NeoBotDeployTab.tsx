@@ -6,7 +6,15 @@ import { cn } from '../../../../shared/utils/cn';
 import { useBotSnapshots } from '../../../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../../../hooks/bot/useBotConfigsMap';
 import { useAppLinkPlan, useApplyAppLink } from '../../../../hooks/apps/useAppLink';
-import { isDockerBot } from '../../../../core/domain/apps/appLinkTopology';
+import {
+    appLinkTransportDescription,
+    classifyAppLink,
+    isDockerBot,
+} from '../../../../core/domain/apps/appLinkTopology';
+import {
+    isRuntimeTargetLocal,
+    remoteHostIdFromRuntimeTarget,
+} from '../../../../core/domain/bot/runtime-target';
 import { AppLinkDialog } from '../../AppLinkDialog';
 import type { AppInstance } from '../../../../core/ipc/types';
 import type { AppRoute } from '../../../../shared/components/next/Sidebar';
@@ -68,12 +76,26 @@ export const NeoBotDeployTab: React.FC<{
         if (qqUnset) return null;
         const hit = snapshots.find((s) => s.bot_id === deployQq);
         if (!hit) return null;
-        // Docker 部署的 Bot 连不上宿主机的回环地址，链接流程本身也会拒绝，这里先排除
-        return isDockerBot(configs[hit.bot_id]?.bot.deploymentType) ? null : hit.bot_id;
-    }, [deployQq, qqUnset, snapshots, configs]);
+        return hit.bot_id;
+    }, [deployQq, qqUnset, snapshots]);
 
-    const { plan, previewing } = useAppLinkPlan(instanceId, matchedBotId ?? '', !!matchedBotId);
+    const { plan, previewing, previewError, retryPreview } = useAppLinkPlan(
+        instanceId,
+        matchedBotId ?? '',
+        !!matchedBotId,
+    );
     const applyLink = useApplyAppLink();
+    const botConfig = matchedBotId ? configs[matchedBotId] : null;
+    const botHost = botConfig
+        ? isRuntimeTargetLocal(botConfig.bot.runtime_target)
+            ? 'local'
+            : remoteHostIdFromRuntimeTarget(botConfig.bot.runtime_target)
+        : null;
+    const transport = appLinkTransportDescription(
+        classifyAppLink(botHost, instance.host_id),
+        plan?.mode ?? 'reverse_ws',
+        isDockerBot(botConfig?.bot.deploymentType),
+    );
 
     const link = () => {
         if (!plan || !matchedBotId) return;
@@ -268,14 +290,30 @@ export const NeoBotDeployTab: React.FC<{
                                             </p>
                                         )}
                                         {plan && !previewing && (
-                                            <p className="break-all font-mono text-2xs text-text-tertiary">
-                                                将写入协议 Bot 的连接地址：
-                                                {plan.connection.kind === 'ws_client'
-                                                    ? plan.connection.url
-                                                    : plan.connection.host +
-                                                      ':' +
-                                                      plan.connection.port}
-                                            </p>
+                                            <div className="space-y-1 text-2xs text-text-tertiary">
+                                                <p className="break-all font-mono">
+                                                    将写入协议 Bot 的连接地址：
+                                                    {plan.connection.kind === 'ws_client'
+                                                        ? plan.connection.url
+                                                        : plan.connection.host +
+                                                          ':' +
+                                                          plan.connection.port}
+                                                </p>
+                                                <p>{transport.route}</p>
+                                                <p>{transport.availability}</p>
+                                            </div>
+                                        )}
+                                        {previewError && (
+                                            <div role="alert" className="text-xs text-danger">
+                                                <p>{previewError}</p>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => void retryPreview()}
+                                                >
+                                                    重新生成计划
+                                                </Button>
+                                            </div>
                                         )}
                                         <div className="flex items-center gap-2">
                                             <Button

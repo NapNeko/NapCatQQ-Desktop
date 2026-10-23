@@ -564,6 +564,7 @@ mod snowluma_plan_tests {
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }

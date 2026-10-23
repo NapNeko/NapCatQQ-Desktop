@@ -53,6 +53,7 @@ interface ConnectionsTabProps {
     data: ConnectConfig;
     onChange: (patch: Partial<ConnectConfig>) => void;
     backendType: BackendType;
+    dockerDeployment?: boolean;
     /** 已保存 Bot 的 QQ 号；新建（尚未保存）时为 null，「对接应用端」入口不可用。 */
     botId?: string | null;
     /** 已保存的远端 Bot 才给；不给就不显示「从远端读取」 */
@@ -83,6 +84,7 @@ export function ConnectionsTab({
     data,
     onChange,
     backendType,
+    dockerDeployment = false,
     botId = null,
     onPullRemote,
     pullingRemote = false,
@@ -156,6 +158,12 @@ export function ConnectionsTab({
 
     return (
         <TooltipProvider delayDuration={200}>
+            {dockerDeployment && (
+                <p className="mb-4 rounded-md border border-border-subtle bg-field/35 px-4 py-3 text-xs leading-relaxed text-text-secondary">
+                    新增或修改监听端口后，保存会自动更新 Docker 映射；可在「容器」中调整宿主机端口。
+                    容器内监听请使用 0.0.0.0，回环地址会自动转换。运行中的容器可能短暂重建。
+                </p>
+            )}
             {total === 0 ? (
                 <div className="flex min-h-[52vh] flex-1 items-center justify-center">
                     <div className="flex w-full max-w-xs flex-col items-center rounded-md border border-dashed border-border-subtle bg-field/30 px-5 py-7 text-center">
@@ -252,6 +260,7 @@ export function ConnectionsTab({
                                         : collectAllNames(data)
                                 }
                                 backendType={backendType}
+                                dockerDeployment={dockerDeployment}
                                 onSave={saveEdit}
                                 onCancel={cancelEdit}
                             />
@@ -497,6 +506,7 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
+                                aria-label={`编辑连接 ${item.name}`}
                                 onClick={onStartEdit}
                             >
                                 <ActionMotionIcon icon={Pencil} size={13} strokeWidth={2.2} />
@@ -510,6 +520,7 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 text-danger hover:text-danger"
+                                aria-label={`删除连接 ${item.name}`}
                                 onClick={onDelete}
                             >
                                 <ActionMotionIcon icon={Trash2} size={13} strokeWidth={2.2} />

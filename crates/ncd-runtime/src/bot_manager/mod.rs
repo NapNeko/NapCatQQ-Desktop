@@ -53,7 +53,10 @@ mod refresh;
 mod remote_network;
 pub mod runtime_gate;
 mod watch_relogin;
-use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
+use helpers::{
+    docker_container_config_changed, is_remote_transport_error, is_shared_napcat_json,
+    set_value_at_dot_path,
+};
 pub(crate) use migration::migration_protocol_scope;
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 
@@ -1307,6 +1310,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
+        config.validate()?;
         // cron 解析依赖在 runtime，domain validate 不覆盖；坏表达式在这里挡住不落盘
         auto_restart::validate_schedule(&config.bot.auto_restart_schedule)?;
 
@@ -1317,6 +1321,32 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         } else {
             self.repo.get(config.bot.qq_id).await.ok().flatten()
         };
+        let recreate_docker = previous_config
+            .as_ref()
+            .is_some_and(|previous| docker_container_config_changed(previous, &config));
+        if recreate_docker
+            && self.get_snapshot(&bot_id).await.is_ok_and(|snapshot| {
+                matches!(
+                    snapshot.state,
+                    BotActorState::Running | BotActorState::Starting
+                )
+            })
+        {
+            // 导入的同名容器可能有自定义挂载，不能按 Desktop 模板替换。
+            // 在持久化与停止之前确认归属，拒绝时原配置和容器都保持原样。
+            let resolver = self.host_resolver.as_ref().ok_or_else(|| {
+                BotManagerError::RemoteRead("无法检查 Docker 容器归属：远端主机解析器未就绪".into())
+            })?;
+            let host = resolver
+                .resolve(&config.bot.runtime_target)
+                .await
+                .map_err(|error| {
+                    BotManagerError::RemoteRead(format!("无法检查 Docker 容器归属：{error}"))
+                })?;
+            ncd_deploy::ensure_managed_bot_container(host.as_ref(), &config)
+                .await
+                .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+        }
 
         // 1. 先持久化 bot.json(source of truth)
         self.repo.upsert(config.clone()).await?;
@@ -1335,6 +1365,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await?;
 
         if !is_new
+            && !recreate_docker
             && previous_config.as_ref().is_some_and(|previous| {
                 previous.bot.backend_type == config.bot.backend_type
                     && previous.bot.runtime_target == config.bot.runtime_target
@@ -1344,10 +1375,24 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .await
                 .is_ok_and(|snapshot| snapshot.state.is_active())
         {
-            self.backend_for_config(&config)
-                .await?
-                .sync_bot_config(&config)
-                .await?;
+            let sync_result = async {
+                self.backend_for_config(&config)
+                    .await?
+                    .sync_bot_config(&config)
+                    .await?;
+                Ok::<(), BotManagerError>(())
+            }
+            .await;
+            if let Err(error) = sync_result {
+                if config.bot.deployment_type == ncd_domain::DeploymentType::Docker {
+                    let snapshot = self.get_actor(&bot_id).await?.snapshot();
+                    self.publish_state_change(&snapshot, "config_saved_docker_apply_failed");
+                    return Err(BotManagerError::RemoteRead(format!(
+                        "DOCKER_CONFIG_APPLY_FAILED: 配置已保存，但同步 Docker 协议配置失败：{error}。请检查容器状态后重试保存"
+                    )));
+                }
+                return Err(error);
+            }
         }
 
         // 2b. 指标节点映射热更新：连接配置可热改，探针按 mtime 重读 nodes.json
@@ -1412,6 +1457,31 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let handle = self.get_actor(&bot_id).await?;
             let current = handle.snapshot();
             if current.state == BotActorState::Running || current.state == BotActorState::Starting {
+                if recreate_docker {
+                    // 复用完整重启流程，释放旧日志流、poller 与 SSH 隧道，再以新映射重建。
+                    // 期望配置已经持久化；应用失败必须明确告知，用户重试启动即可恢复。
+                    return match self.restart_bot(&bot_id).await {
+                        Ok(snapshot) => {
+                            let reason = if snapshot.state == BotActorState::Running {
+                                "config_docker_recreated"
+                            } else {
+                                "config_saved_pending_reload"
+                            };
+                            self.publish_state_change(&snapshot, reason);
+                            Ok(snapshot)
+                        }
+                        Err(error) => {
+                            let snapshot = handle.snapshot();
+                            self.publish_state_change(
+                                &snapshot,
+                                "config_saved_docker_apply_failed",
+                            );
+                            Err(BotManagerError::RemoteRead(format!(
+                                "DOCKER_CONFIG_APPLY_FAILED: 配置已保存，但应用 Docker 容器配置失败：{error}。请检查容器状态后重试启动"
+                            )))
+                        }
+                    };
+                }
                 if let Some(prev_config) = previous_config
                     .as_ref()
                     .filter(|prev| prev.bot.backend_type != target_backend)
@@ -1427,11 +1497,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     // NapCat: POST /api/OB11Config/SetConfig (需 port + token,端点表已含远端隧道口)
                     // SnowLuma: POST /api/config/:uin (本机 daemon 共享 client;远端走 SSH 隧道 client)
                     // 热推送失败不阻塞保存流程,只给前端一个 warning;下次重启生效
+                    let hot_config = crate::native_deployment_adapter::docker_helpers::config_with_docker_listener_hosts(&config);
                     if target_backend == BackendType::SnowLuma {
                         let uin = config.bot.qq_id.to_string();
                         let payload = self
                             .renderer
-                            .render(&bot_id, &config)
+                            .render(&bot_id, &hot_config)
                             .ok()
                             .and_then(|txn| txn.writes.into_iter().next())
                             .map(|w| w.payload);
@@ -1451,8 +1522,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         // onebot11_{bot}.json 的内容——NapCat WebUI
                         // /api/OB11Config/SetConfig 期望的 schema 与该文件一致
                         let endpoint = self.napcat_endpoints.snapshot(&bot_id).await;
-                        let onebot_payload =
-                            self.renderer.render(&bot_id, &config).ok().and_then(|txn| {
+                        let onebot_payload = self
+                            .renderer
+                            .render(&bot_id, &hot_config)
+                            .ok()
+                            .and_then(|txn| {
                                 txn.writes
                                     .into_iter()
                                     .find(|w| {

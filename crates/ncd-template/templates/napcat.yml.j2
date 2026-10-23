@@ -2,7 +2,7 @@ services:
   napcat:
     image: {{ image }}
     container_name: {{ name }}
-    restart: always
+    restart: unless-stopped
     environment:
       NAPCAT_UID: "{{ uid }}"
       NAPCAT_GID: "{{ gid }}"

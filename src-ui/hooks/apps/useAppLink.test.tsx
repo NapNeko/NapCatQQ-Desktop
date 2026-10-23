@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { OneBotLinkPlan } from '../../core/ipc/types';
 
@@ -53,7 +53,7 @@ describe('useAppLinkPlan', () => {
     it('没打开或没选齐时不去要计划', () => {
         const { result, rerender } = mount({ instanceId: 'i1', botId: '', enabled: true });
         rerender({ instanceId: 'i1', botId: '10001', enabled: false });
-        expect(result.current).toEqual({ plan: null, previewing: false });
+        expect(result.current).toMatchObject({ plan: null, previewing: false, previewError: null });
         expect(previewLink).not.toHaveBeenCalled();
     });
 
@@ -65,7 +65,7 @@ describe('useAppLinkPlan', () => {
         const next = deferred<OneBotLinkPlan>();
         previewLink.mockReturnValueOnce(next.promise);
         rerender({ instanceId: 'i1', botId: '10002', enabled: true });
-        expect(result.current).toEqual({ plan: null, previewing: true });
+        expect(result.current).toMatchObject({ plan: null, previewing: true, previewError: null });
 
         next.resolve(planFor('10002'));
         await waitFor(() => expect(result.current.plan?.bot_id).toBe('10002'));
@@ -77,6 +77,7 @@ describe('useAppLinkPlan', () => {
         const { result } = mount({ instanceId: 'i1', botId: '10001', enabled: true });
         await waitFor(() => expect(result.current.previewing).toBe(false));
         expect(result.current.plan).toBeNull();
+        expect(result.current.previewError).toBe('Bot 不在线');
         expect(previewLink).toHaveBeenCalledTimes(1);
         expect(pushErrorBar).toHaveBeenCalledTimes(1);
     });
@@ -88,11 +89,26 @@ describe('useAppLinkPlan', () => {
         await waitFor(() => expect(previewLink).toHaveBeenCalledTimes(1));
 
         rerender({ instanceId: 'i1', botId: '10001', enabled: false });
-        expect(result.current).toEqual({ plan: null, previewing: false });
+        expect(result.current).toMatchObject({ plan: null, previewing: false, previewError: null });
 
         pending.reject('Bot 不在线');
         await new Promise((r) => setTimeout(r, 0));
         expect(pushErrorBar).not.toHaveBeenCalled();
         expect(previewLink).toHaveBeenCalledTimes(1);
+    });
+
+    it('显示后端计划失败原因，手动重试成功后清理错误', async () => {
+        previewLink.mockRejectedValueOnce('目标主机没有可用的 Docker 网桥地址');
+        const { result } = mount({ instanceId: 'i1', botId: '10001', enabled: true });
+        await waitFor(() => expect(result.current.previewError).toContain('Docker 网桥地址'));
+
+        previewLink.mockResolvedValueOnce(planFor('10001'));
+        await act(async () => {
+            await result.current.retryPreview();
+        });
+
+        await waitFor(() => expect(result.current.plan?.bot_id).toBe('10001'));
+        expect(result.current.previewError).toBeNull();
+        expect(previewLink).toHaveBeenCalledTimes(2);
     });
 });

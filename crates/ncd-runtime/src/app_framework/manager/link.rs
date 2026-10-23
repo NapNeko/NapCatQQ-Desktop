@@ -103,6 +103,7 @@ impl AppManager {
         bot_id: &BotId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let (instance, mut bot, adapter, host) = self.link_context(instance_id, bot_id).await?;
+        let previous_bot = bot.clone();
         let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id)
             .ok_or_else(|| unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id))?;
         // 先把计划算完再动旧隧道，免得算不出来还拆掉现有对接
@@ -111,6 +112,13 @@ impl AppManager {
             .await?;
         let mode = plan.connection.mode();
         if let Some(old) = instance.link.as_ref() {
+            if old.bot_id != *bot_id || old.mode != mode {
+                self.drop_instance_tunnel(instance_id).await;
+            }
+            if old.bot_id != *bot_id || old.mode != mode {
+                self.teardown_docker_bridge_best_effort(&instance, &old.bot_id)
+                    .await;
+            }
             if old.resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, &old.bot_id)
                     .await;
@@ -121,42 +129,78 @@ impl AppManager {
         }
 
         let mut resident_forward_port = None;
-        if let OneBotLinkEndpoint::WsClient(client) = &mut plan.connection {
-            if topology == AppLinkTopology::RemoteBotRemoteApp {
-                let fwd = self.ensure_resident_link(&instance, &bot, bot_id).await?;
-                client.url = rewrite_ws_loopback_port(&client.url, fwd)
-                    .map_err(AppFrameworkError::Validation)?;
-                resident_forward_port = Some(fwd);
-            } else if needs_desktop_ssh_tunnel(topology) {
-                let loopback = self.ensure_link_tunnel(&instance, &bot).await?;
-                client.url = rewrite_ws_loopback_port(&client.url, loopback)
-                    .map_err(AppFrameworkError::Validation)?;
-            }
-        }
-        // 正向：Bot 照旧在自己机上听 P，应用端要连的是自己机回环上的隧道口 Q
-        let mut app_plan = plan.clone();
-        if let OneBotLinkEndpoint::WsServer(server) = &plan.connection
-            && topology != AppLinkTopology::SameHost
-        {
-            let q = if topology == AppLinkTopology::RemoteBotRemoteApp {
-                let q = self
-                    .ensure_resident_forward_link(&instance, &bot, bot_id, server.port)
+        let setup = async {
+            if let OneBotLinkEndpoint::WsClient(client) = &mut plan.connection {
+                let host_port = if topology == AppLinkTopology::RemoteBotRemoteApp {
+                    let fwd = self.ensure_resident_link(&instance, &bot, bot_id).await?;
+                    resident_forward_port = Some(fwd);
+                    fwd
+                } else {
+                    self.ensure_link_tunnel(&instance, &bot).await?
+                };
+                client.url = self
+                    .reverse_link_url(&instance, &bot, &client.url, host_port)
                     .await?;
-                resident_forward_port = Some(q);
-                q
-            } else {
-                let preferred = adapter_link_port(adapter.as_ref(), host.as_ref(), &instance).await;
-                self.ensure_forward_tunnel(&instance, &bot, topology, server.port, preferred)
-                    .await?
-            };
-            if let OneBotLinkEndpoint::WsServer(app_side) = &mut app_plan.connection {
-                app_side.host = "127.0.0.1".to_string();
-                app_side.port = q;
             }
-        }
+            // 正向：Bot 照旧在自己机上听 P，应用端要连的是自己机回环上的隧道口 Q
+            let mut app_plan = plan.clone();
+            if let OneBotLinkEndpoint::WsServer(server) = &plan.connection {
+                // Bot 配置保存容器听口 P，应用端和跨机隧道连接宿主机发布口 H。
+                let mut prospective = bot.clone();
+                upsert_link_endpoint(&mut prospective, plan.connection.clone());
+                if bot.bot.deployment_type == DeploymentType::Docker {
+                    prospective
+                        .validate_docker()
+                        .map_err(AppFrameworkError::Validation)?;
+                }
+                let bot_port = super::tunnel::forward_host_port(&prospective, server.port)
+                    .ok_or_else(|| {
+                        AppFrameworkError::Validation("Docker WS 端口尚未映射".into())
+                    })?;
+                let q = if topology == AppLinkTopology::SameHost {
+                    bot_port
+                } else if topology == AppLinkTopology::RemoteBotRemoteApp {
+                    let q = self
+                        .ensure_resident_forward_link(&instance, &bot, bot_id, bot_port)
+                        .await?;
+                    resident_forward_port = Some(q);
+                    q
+                } else {
+                    let preferred =
+                        adapter_link_port(adapter.as_ref(), host.as_ref(), &instance).await;
+                    self.ensure_forward_tunnel(&instance, &bot, topology, bot_port, preferred)
+                        .await?
+                };
+                if let OneBotLinkEndpoint::WsServer(app_side) = &mut app_plan.connection {
+                    app_side.host = "127.0.0.1".to_string();
+                    app_side.port = q;
+                }
+            }
 
+            Ok::<_, AppFrameworkError>(app_plan)
+        }
+        .await;
+        let app_plan = match setup {
+            Ok(plan) => plan,
+            Err(error) => {
+                self.teardown_docker_bridge_best_effort(&instance, bot_id)
+                    .await;
+                if resident_forward_port.is_some() {
+                    self.teardown_resident_best_effort(&instance, bot_id).await;
+                }
+                if needs_desktop_ssh_tunnel(topology) {
+                    self.drop_instance_tunnel(instance_id).await;
+                }
+                return Err(self
+                    .restore_previous_link_after_failure(&instance, error)
+                    .await);
+            }
+        };
+
+        let mut adapter_touched = false;
         let applied = match self.prime_live_port(adapter.as_ref(), &instance).await {
             Ok(()) => {
+                adapter_touched = true;
                 adapter
                     .apply_link(host.as_ref(), &instance, &app_plan)
                     .await
@@ -164,17 +208,46 @@ impl AppManager {
             Err(e) => Err(e),
         };
         if let Err(e) = applied {
+            let mut failure = e;
+            if adapter_touched {
+                if let Err(rollback) = adapter.rollback_link(host.as_ref(), &instance).await {
+                    tracing::error!(instance = instance_id.as_str(), %rollback, "rollback failed app-side link");
+                    failure = AppFrameworkError::Integration(format!(
+                        "{failure}；还原应用端配置失败：{rollback}，请检查对接状态"
+                    ));
+                }
+            }
+            self.teardown_docker_bridge_best_effort(&instance, bot_id)
+                .await;
             if resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, bot_id).await;
             }
             if needs_desktop_ssh_tunnel(topology) {
                 self.drop_instance_tunnel(instance_id).await;
             }
-            return Err(e);
+            return Err(self
+                .restore_previous_link_after_failure(&instance, failure)
+                .await);
         }
 
         upsert_link_endpoint(&mut bot, plan.connection.clone());
         if let Err(e) = self.bot_manager.upsert_bot_config(bot).await {
+            let persisted = self.bot_manager.bot_config(bot_id).await.ok().flatten();
+            let restore_error = if e.contains("DOCKER_CONFIG_APPLY_FAILED:")
+                || persisted
+                    .as_ref()
+                    .is_some_and(|saved| saved != &previous_bot)
+            {
+                self.bot_manager.upsert_bot_config(previous_bot).await.err()
+            } else {
+                None
+            };
+            let mut rollback_errors: Vec<String> = restore_error
+                .into_iter()
+                .map(|error| format!("Bot：{error}"))
+                .collect();
+            self.teardown_docker_bridge_best_effort(&instance, bot_id)
+                .await;
             if instance.origin.is_imported() {
                 if let Ok(Some(snap)) = self.adopt_store.load(&instance.id).await {
                     let root = HostPath::from_posix(&instance.install_dir);
@@ -191,11 +264,13 @@ impl AppManager {
                             error = %rb,
                             "restore import snapshot after failed bot upsert"
                         );
+                        rollback_errors.push(format!("导入配置：{rb}"));
                     }
                 }
             }
             if let Err(rb) = adapter.rollback_link(host.as_ref(), &instance).await {
                 tracing::error!(instance = instance_id.as_str(), error = %rb, "rollback app-side link");
+                rollback_errors.push(format!("应用端：{rb}"));
             }
             if resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, bot_id).await;
@@ -203,9 +278,20 @@ impl AppManager {
             if needs_desktop_ssh_tunnel(topology) {
                 self.drop_instance_tunnel(instance_id).await;
             }
-            return Err(AppFrameworkError::Integration(format!(
-                "写入协议 Bot 连接失败，应用端配置已还原：{e}"
-            )));
+            let detail = if rollback_errors.is_empty() {
+                format!("写入协议 Bot 连接失败，已还原配置：{e}")
+            } else {
+                format!(
+                    "写入协议 Bot 连接失败：{e}；还原未完成（{}），请检查对接状态",
+                    rollback_errors.join("；")
+                )
+            };
+            return Err(self
+                .restore_previous_link_after_failure(
+                    &instance,
+                    AppFrameworkError::Integration(detail),
+                )
+                .await);
         }
 
         // 换 Bot、导入认领的旧连接名和 ncd-app:<id> 不同、或换了对接方向：把旧条目摘掉，避免双连
@@ -275,6 +361,8 @@ impl AppManager {
             self.teardown_resident_best_effort(&instance, &link.bot_id)
                 .await;
         }
+        self.teardown_docker_bridge_best_effort(&instance, &link.bot_id)
+            .await;
         self.drop_instance_tunnel(instance_id).await;
         self.forget_webui_endpoint(instance_id);
         let updated = self
@@ -320,12 +408,15 @@ impl AppManager {
             .ok_or_else(|| {
                 AppFrameworkError::Validation(format!("协议 Bot {} 不存在", bot_id.as_str()))
             })?;
-        // 容器走 bridge 网络加固定端口映射：Bot 在容器里开的服务、连的 127.0.0.1 都是容器自己的，
-        // 宿主机上的应用端和隧道口它碰不到，哪个方向都连不上
         if bot.bot.deployment_type == DeploymentType::Docker {
-            return Err(AppFrameworkError::LinkModeUnsupported(
-                "Docker 部署的协议 Bot 还不能对接应用端：Bot 在容器里，容器里的 127.0.0.1 不是宿主机，两边连不上".into(),
-            ));
+            ncd_domain::RuntimeScenario::from_config(&bot)
+                .map_err(|error| AppFrameworkError::LinkModeUnsupported(error.to_string()))?;
+            let host = self
+                .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+                .await?;
+            ncd_deploy::ensure_managed_bot_container(host.as_ref(), &bot)
+                .await
+                .map_err(|error| AppFrameworkError::Integration(error.to_string()))?;
         }
         if classify_app_link(&bot.bot.runtime_target, &instance.host_id).is_none() {
             return Err(unsupported_link_topology(
@@ -392,6 +483,16 @@ impl AppManager {
         }
         if let OneBotLinkEndpoint::WsServer(server) = &mut plan.connection {
             server.port = self.pick_forward_port(instance, bot).await?;
+            if bot.bot.deployment_type == DeploymentType::Docker {
+                server.host = "0.0.0.0".into();
+            }
+        }
+        if bot.bot.deployment_type == DeploymentType::Docker {
+            let mut prospective = bot.clone();
+            upsert_link_endpoint(&mut prospective, plan.connection.clone());
+            prospective
+                .validate_docker()
+                .map_err(AppFrameworkError::Validation)?;
         }
         Ok(plan)
     }
@@ -433,11 +534,23 @@ impl AppManager {
             .filter(|b| runtime_target_matches_host(&b.bot.runtime_target, &bot_host_id))
         {
             taken.extend(bot_listen_ports(b));
+            if b.bot.deployment_type == DeploymentType::Docker {
+                taken.extend(b.effective_docker_ports().into_iter().map(|p| p.host));
+            }
         }
         let local = bot_host_id == LOCAL_HOST_ID;
         if !local {
             let host = self.resolve_host(&bot_host_id).await?;
             taken.extend(remote_listening_ports(host.as_ref()).await);
+        }
+        if bot.bot.deployment_type == DeploymentType::Docker {
+            let offset = ncd_domain::DockerDeploySpec::host_port_offset_for_qq(bot.bot.qq_id);
+            // 分配 P 时也排除会让 H=P+offset 撞上宿主机现有监听的候选。
+            let shifted: Vec<_> = taken
+                .iter()
+                .filter_map(|port| port.checked_sub(offset))
+                .collect();
+            taken.extend(shifted);
         }
         let seed = format!("{}:{}", instance.id.as_str(), bot.bot.qq_id);
         allocate_stable_port(&seed, &taken, local).map_err(AppFrameworkError::Validation)

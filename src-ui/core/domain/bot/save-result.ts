@@ -8,6 +8,8 @@
 //   - config_saved_pending_reload 网络/鉴权/其它推送失败，等下次重启生效
 //   - config_updated              非运行中的兜底文案
 //   - config_hot_reload           backend 切换走的重启路径
+//   - config_docker_recreated     容器设置更新并重建成功
+//   - config_saved_docker_apply_failed 配置已保存，容器应用失败
 //
 // 这里把 reason 翻成 InfoBar 用的 tone + title + content 三元组，让所有
 // 调用方都用同一份文案。
@@ -24,6 +26,18 @@ export interface SaveDescriptor {
 /// `botId` 用于 content 中拼接，便于多 bot 时一眼看出是哪个。
 export function describeSaveResult(reason: string | null, botId: string): SaveDescriptor {
     switch (reason) {
+        case 'config_docker_recreated':
+            return {
+                tone: 'success',
+                title: '配置已保存',
+                content: `Bot ${botId} 的 Docker 容器已重建，端口和容器配置已生效`,
+            };
+        case 'config_saved_docker_apply_failed':
+            return {
+                tone: 'warning',
+                title: '配置已保存，容器应用失败',
+                content: `Bot ${botId} 的配置已保留，请检查容器状态后重试启动。详情见日志`,
+            };
         case 'config_hot_reloaded':
             return {
                 tone: 'success',

@@ -258,6 +258,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }
@@ -1233,7 +1234,10 @@ async fn delete_active_bot_without_config_preserves_actor_and_never_stops_local_
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (store, repo, backend, manager) = make_manager(temp.path());
     let bot_id = BotId::new("10122");
-    manager.upsert_bot_config(bot_config(10122, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10122, "bot"))
+        .await
+        .unwrap();
     manager.start_bot(&bot_id).await.unwrap();
     let rendered = store.config_dir().join("napcat_10122.json");
     let original = std::fs::read(&rendered).unwrap();
@@ -1241,13 +1245,19 @@ async fn delete_active_bot_without_config_preserves_actor_and_never_stops_local_
     // 模拟运行中配置被另一条路径移除；真实 repo 此时返回 Ok(None)。
     repo.delete(10122).await.unwrap();
     assert!(repo.get(10122).await.unwrap().is_none());
-    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    assert_eq!(
+        manager.get_snapshot(&bot_id).await.unwrap().state,
+        BotActorState::Running
+    );
     let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
 
     assert!(matches!(err, BotManagerError::BotNotFound(ref id) if id == &bot_id));
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
     assert_eq!(manager.bot_count().await, 1);
-    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    assert_eq!(
+        manager.get_snapshot(&bot_id).await.unwrap().state,
+        BotActorState::Running
+    );
     assert_eq!(std::fs::read(rendered).unwrap(), original);
 }
 
@@ -1256,7 +1266,10 @@ async fn delete_active_bot_with_unreadable_config_has_no_delete_side_effects() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (store, repo, backend, manager) = make_manager(temp.path());
     let bot_id = BotId::new("10123");
-    manager.upsert_bot_config(bot_config(10123, "bot")).await.unwrap();
+    manager
+        .upsert_bot_config(bot_config(10123, "bot"))
+        .await
+        .unwrap();
     manager.start_bot(&bot_id).await.unwrap();
     let rendered = store.config_dir().join("napcat_10123.json");
     let original = std::fs::read(&rendered).unwrap();
@@ -1270,9 +1283,15 @@ async fn delete_active_bot_with_unreadable_config_has_no_delete_side_effects() {
     assert!(matches!(err, BotManagerError::Config(_)));
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
     assert_eq!(manager.bot_count().await, 1);
-    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    assert_eq!(
+        manager.get_snapshot(&bot_id).await.unwrap().state,
+        BotActorState::Running
+    );
     assert_eq!(std::fs::read(rendered).unwrap(), original);
-    assert_eq!(std::fs::read(store.bot_config_path()).unwrap(), broken_config);
+    assert_eq!(
+        std::fs::read(store.bot_config_path()).unwrap(),
+        broken_config
+    );
 }
 
 #[tokio::test]
@@ -1387,7 +1406,10 @@ async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
     assert!(repo.get(10121).await.unwrap().is_some());
     assert_eq!(manager.bot_count().await, 1);
-    assert_eq!(manager.get_snapshot(&bot_id).await.unwrap().state, BotActorState::Running);
+    assert_eq!(
+        manager.get_snapshot(&bot_id).await.unwrap().state,
+        BotActorState::Running
+    );
 }
 
 #[tokio::test]
@@ -1602,6 +1624,28 @@ fn bot_config_remote_native_server(qq_id: u64, name: &str) -> BotConfig {
     config.bot.runtime_target = ncd_runtime::RuntimeTarget::server("srv-1");
     config.bot.deployment_type = DeploymentType::Native;
     config
+}
+
+#[tokio::test]
+async fn docker_recreation_preflight_failure_keeps_saved_configuration_and_actor_unchanged() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, _, manager) = make_manager(temp.path());
+    let original = bot_config_remote_docker_server(10001, "docker");
+    manager.upsert_bot_config(original.clone()).await.unwrap();
+    let bot_id = BotId::new("10001");
+    manager.test_confirm_actor_running(&bot_id).await.unwrap();
+    let mut raw = serde_json::to_value(&original).unwrap();
+    raw["connect"]["httpServers"] = serde_json::json!([
+        {"name":"new-http", "host":"127.0.0.1", "port":4000}
+    ]);
+    let changed: BotConfig = serde_json::from_value(raw).unwrap();
+    let error = manager.upsert_bot_config(changed).await.unwrap_err();
+    assert!(error.to_string().contains("无法检查 Docker 容器归属"));
+    assert_eq!(repo.get(10001).await.unwrap(), Some(original));
+    assert_eq!(
+        manager.get_snapshot(&bot_id).await.unwrap().state,
+        BotActorState::Running
+    );
 }
 
 #[tokio::test]

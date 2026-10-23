@@ -16,6 +16,7 @@ ncd-template = { path = "../ncd-template" }
 async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time", "fs", "io-util", "process"] }
 tokio-util = { version = "0.7", features = ["rt"] }
@@ -29,7 +30,6 @@ encoding_rs = "0.8"
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
 async-trait = "0.1"
 bytes = "1"
-serde_yaml = "0.9"
 ncd-test-support = { path = "../ncd-test-support" }
 
 [lints]

@@ -1,5 +1,6 @@
-// 对接拓扑：按 Bot runtime_target 与实例 host_id，不看 NapCat / SnowLuma。
-// 正向（应用端连 Bot，如 MaiBot）听口在 Bot 侧，隧道方向和反向相反，但哪几种组合能连、要不要桌面端在线是一样的。
+// 对接拓扑：宿主决定隧道的生命周期，Docker 决定容器与宿主间的连接方式。
+
+import type { OneBotLinkMode } from '../../ipc/generated/domain/OneBotLinkMode';
 
 export type AppLinkTopology =
     'same_host' | 'local_bot_remote_app' | 'remote_bot_local_app' | 'remote_bot_remote_app';
@@ -22,17 +23,22 @@ export function classifyAppLink(
     return null;
 }
 
-export function appLinkPairNote(botHostId: string | null, appHostId: string): string {
+export function appLinkPairNote(
+    botHostId: string | null,
+    appHostId: string,
+    deploymentType?: string | null,
+): string {
     if (!botHostId) return '';
     const topology = classifyAppLink(botHostId, appHostId);
+    const docker = isDockerBot(deploymentType);
     switch (topology) {
         case 'same_host':
-            return '';
+            return docker ? '（Docker 桥接）' : '';
         case 'local_bot_remote_app':
         case 'remote_bot_local_app':
-            return '（经 SSH 隧道）';
+            return docker ? '（Docker 桥接 · SSH 隧道）' : '（经 SSH 隧道）';
         case 'remote_bot_remote_app':
-            return '（主机常驻隧道）';
+            return docker ? '（Docker 桥接 · 常驻 SSH 隧道）' : '（主机常驻隧道）';
         default:
             return '';
     }
@@ -43,12 +49,9 @@ export function appLinkPairEnabled(botHostId: string | null, appHostId: string):
     return classifyAppLink(botHostId, appHostId) !== null;
 }
 
-// Docker 部署的 Bot 在容器里：它开的服务、连的 127.0.0.1 都是容器自己的，宿主机上的应用端和隧道口碰不到
 export function isDockerBot(deploymentType: string | null | undefined): boolean {
     return deploymentType === 'docker';
 }
-
-export const DOCKER_BOT_NOTE = '（Docker 部署暂不支持）';
 
 export function isDesktopSshLink(topology: AppLinkTopology | null): boolean {
     return topology === 'local_bot_remote_app' || topology === 'remote_bot_local_app';
@@ -56,4 +59,32 @@ export function isDesktopSshLink(topology: AppLinkTopology | null): boolean {
 
 export function isResidentLink(topology: AppLinkTopology | null): boolean {
     return topology === 'remote_bot_remote_app';
+}
+
+export function appLinkTransportDescription(
+    topology: AppLinkTopology | null,
+    mode: OneBotLinkMode,
+    docker: boolean,
+): { route: string; availability: string } {
+    let route = docker
+        ? mode === 'forward_ws'
+            ? '应用端通过宿主机发布端口连接容器中的 WS 服务，端口映射自动配置。'
+            : 'Bot 通过仅绑定 Docker 网桥地址的专用 SSH 桥接连接应用端。'
+        : '同一主机直接连接。';
+
+    if (topology && topology !== 'same_host') {
+        route = docker
+            ? `${route} 跨主机部分自动建立 SSH 隧道。`
+            : '跨主机自动建立 SSH 隧道，无需公开应用端监听端口。';
+    }
+
+    const availability = isDesktopSshLink(topology)
+        ? '此连接经过本机桌面端，需保持桌面端在线；退出后隧道断开。'
+        : isResidentLink(topology) || (docker && topology === 'same_host' && mode === 'reverse_ws')
+          ? '隧道常驻远端主机，桌面端退出后仍保留。主机重启后需重新连接桌面端恢复隧道。'
+          : topology === 'same_host'
+            ? '两端运行时可直接通信，连接不依赖桌面端隧道。'
+            : '';
+
+    return { route, availability };
 }

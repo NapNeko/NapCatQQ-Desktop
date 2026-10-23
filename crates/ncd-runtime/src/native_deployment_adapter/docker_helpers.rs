@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use ncd_deploy::{DockerCli, DockerCliError, DockerDeployment};
 use ncd_domain::ids::BotId;
-use ncd_domain::{BackendType, BotConfig, ImportedNetworkConfig};
+use ncd_domain::{BackendType, BotConfig, DeploymentType, ImportedNetworkConfig};
 use ncd_host::{Host, HostError, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 use serde_json::Value;
@@ -34,11 +34,41 @@ fn docker_config_file_names(bot_id: &BotId) -> [String; 3] {
     ]
 }
 
+/// 容器内回环无法接收宿主机 DNAT。只改派生配置，保留 bot.json 的用户输入。
+pub(crate) fn config_with_docker_listener_hosts(config: &BotConfig) -> BotConfig {
+    let mut config = config.clone();
+    if config.bot.deployment_type != DeploymentType::Docker {
+        return config;
+    }
+    fn normalize(enabled: bool, host: &mut String) {
+        let value = host.trim();
+        if enabled
+            && (value.is_empty()
+                || value.eq_ignore_ascii_case("localhost")
+                || matches!(value, "127.0.0.1" | "::1" | "[::1]"))
+        {
+            *host = "0.0.0.0".into();
+        }
+    }
+    for server in &mut config.connect.http_servers {
+        normalize(server.base.enable, &mut server.host);
+    }
+    for server in &mut config.connect.http_sse_servers {
+        normalize(server.base.enable, &mut server.host);
+    }
+    for server in &mut config.connect.websocket_servers {
+        normalize(server.base.enable, &mut server.host);
+    }
+    config
+}
+
 pub(crate) async fn render_docker_config_on_host(
     host: &dyn Host,
     bot_id: &BotId,
     config: &BotConfig,
 ) -> Result<(), BotBackendError> {
+    let config = config_with_docker_listener_hosts(config);
+    let config = &config;
     let name = docker_container_name(config);
     let project_dir = docker_project_dir(host, &name).await?;
     match config.bot.backend_type {
@@ -80,6 +110,88 @@ pub(crate) async fn render_docker_config_on_host(
                 })?;
             }
         }
+    }
+    Ok(())
+}
+
+/// SnowLuma 的运行数据在 named volume，宿主机暂存文件需显式拷入容器。
+/// 只替换当前账号的 OneBot 文件，不覆盖 WebUI 凭据或其它账号配置。
+pub(crate) async fn sync_snowluma_docker_config(
+    host: &dyn Host,
+    cli: &DockerCli<'_>,
+    config: &BotConfig,
+    container: &str,
+) -> Result<(), BotBackendError> {
+    let project_dir = docker_project_dir(host, &docker_container_name(config)).await?;
+    let file = format!("onebot_{}.json", config.bot.qq_id);
+    let source = format!("{project_dir}/snowluma-data/config/{file}");
+    let target_dir = "/app/snowluma-data/config";
+    let target = format!("{target_dir}/{file}");
+    let mkdir = host
+        .run_to_string(
+            cli.command()
+                .arg("exec")
+                .arg("--user")
+                .arg("0")
+                .arg(container)
+                .arg("mkdir")
+                .arg("-p")
+                .arg(target_dir),
+        )
+        .await
+        .map_err(|error| BotBackendError::Io(error.to_string()))?;
+    if !mkdir.success() {
+        return Err(BotBackendError::Io(format!(
+            "创建 SnowLuma 容器配置目录失败：{}",
+            mkdir.stderr.trim()
+        )));
+    }
+    cli.copy_to_container(container, &source, &target)
+        .await
+        .map_err(|error| BotBackendError::Io(error.to_string()))?;
+    // docker cp 默认归 root；与 compose 的运行用户保持一致，允许 WebUI 后续保存。
+    let (uid, gid) = DockerDeployment::container_uid_gid(host);
+    let chown = host
+        .run_to_string(
+            cli.command()
+                .arg("exec")
+                .arg("--user")
+                .arg("0")
+                .arg(container)
+                .arg("chown")
+                .arg(format!("{uid}:{gid}"))
+                .arg("--")
+                .arg(target_dir)
+                .arg(&target),
+        )
+        .await
+        .map_err(|error| BotBackendError::Io(error.to_string()))?;
+    if !chown.success() {
+        return Err(BotBackendError::Io(format!(
+            "设置 SnowLuma 容器配置属主失败：{}",
+            chown.stderr.trim()
+        )));
+    }
+    // 宿主机 SFTP 文件可能使用 0600，显式保证协议进程可读。
+    let chmod = host
+        .run_to_string(
+            cli.command()
+                .arg("exec")
+                .arg("--user")
+                .arg("0")
+                .arg(container)
+                .arg("chmod")
+                .arg("644")
+                .arg("--")
+                .arg(&target),
+        )
+        .await
+        .map_err(|error| BotBackendError::Io(error.to_string()))?;
+    if !chmod.success() {
+        return Err(BotBackendError::Io(format!(
+            "设置 SnowLuma 容器配置权限失败：{}",
+            chmod.stderr.trim()
+        )));
     }
     Ok(())
 }

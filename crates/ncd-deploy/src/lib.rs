@@ -23,21 +23,19 @@ pub mod result;
 pub mod runner;
 
 pub use deployment::{
-    Deployment, DeploymentError, DeploymentHandle, DeploymentState,
-    NativeLaunchCommand, NativeLaunchTranslator, NullProgressSink,
+    Deployment, DeploymentError, DeploymentHandle, DeploymentState, NativeLaunchCommand,
+    NativeLaunchTranslator, NullProgressSink,
 };
 pub use deployments::{
     DockerDeployment, EventBusSink, NativeDeployment, NativeRuntimeEventSink,
-    bot_docker_container_candidates, bot_docker_container_name,
-    docker_project_dir, parse_napcat_webui_line, resolve_bot_container_name, strip_ansi_escapes,
+    bot_docker_container_candidates, bot_docker_container_name, docker_project_dir,
+    ensure_managed_bot_container, parse_napcat_webui_line, resolve_bot_container_name,
+    strip_ansi_escapes,
 };
-pub use docker::{
-    DOCKER_NAPCAT_MJS_URI,
-    DockerCli, DockerCliError, DockerMetricsOverlay,
-};
+pub use docker::{DOCKER_NAPCAT_MJS_URI, DockerCli, DockerCliError, DockerMetricsOverlay};
 pub use napcat_log_sanitize::{
     NapcatLogNoiseFilter, filter_napcat_console_lines, sanitize_napcat_console_line,
 };
 pub use plan::{DeployPlan, StepKind};
-pub use qq_console_noise::{QqConsoleNoiseFilter};
-pub use result::{DeployOutcome};
+pub use qq_console_noise::QqConsoleNoiseFilter;
+pub use result::DeployOutcome;

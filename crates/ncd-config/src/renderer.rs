@@ -94,6 +94,7 @@ mod tests {
             connect: make_connect_with_http_server(),
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         }
     }
 
@@ -341,6 +342,7 @@ mod tests {
             connect: ConnectConfig::default(),
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -372,6 +374,7 @@ mod tests {
             connect: ConnectConfig::default(),
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -437,6 +440,7 @@ mod tests {
                 connect,
                 advanced: make_advanced_config(),
                 status_command: None,
+                docker: None,
             };
 
             let txn = renderer.render(&bot_id, &config).unwrap();
@@ -495,6 +499,7 @@ mod tests {
             },
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -541,6 +546,7 @@ mod tests {
             },
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         };
 
         let txn = renderer.render(&bot_id, &config).unwrap();
@@ -599,6 +605,7 @@ mod tests {
             },
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         };
 
         let txn = renderer.render(&bot_id, &with_timeout).unwrap();
@@ -638,6 +645,7 @@ mod tests {
             },
             advanced: make_advanced_config(),
             status_command: None,
+            docker: None,
         };
 
         let txn = renderer.render(&bot_id, &without_timeout).unwrap();

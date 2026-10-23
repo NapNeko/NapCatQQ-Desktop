@@ -6,7 +6,7 @@
 //! 反向拓扑按主机分、不看 BackendType：同机走实例口；本机 Bot→远端应用 SSH `-L`；远端 Bot→本机应用 SSH `-R`；
 //! 两台远端走应用机常驻 `ssh -R`（Desktop 只编排）。正向的听口 P 在 Bot 侧，隧道方向全反：远端 Bot→本机应用
 //! 桌面端 `-L`，本机 Bot→远端应用桌面端对应用机 `-R`，两台远端应用机常驻 `ssh -L`；Bot 写 P，应用端连隧道口 Q。
-//! Docker 部署的 Bot 不给对接：容器里的 127.0.0.1 不是宿主机。
+//! Docker 反向通过宿主机网桥上的受限转发访问应用，正向使用实际发布的宿主机端口。
 //!
 //! 安装交给组件执行器排任务（依赖闭包、去重、进度都在那边，不另写一套），这里只备实例级输入、
 //! 置 Installing、盯任务结束后用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
@@ -72,7 +72,9 @@ use super::listen_port::{
 use super::native_runtime::{self, AppLaunchSpec, NativeAppRuntime};
 use super::resident_link::{self, ResidentForward, ResidentLinkSpec};
 // 子模块里的 `super::supervisor::…` 这类路径经由这几条落到 app_framework 下的同名模块
-use super::{download, existing_link, log_tail, plugin_market, plugin_task, supervisor};
+use super::{
+    docker_link, download, existing_link, log_tail, plugin_market, plugin_task, supervisor,
+};
 use crate::bot_manager::BotManager;
 use crate::components::{
     AppComponentHint, ComponentActionRequest, ComponentExecutor, data_root_to_host_path,
@@ -85,6 +87,8 @@ mod astrbot;
 mod bot_migration;
 mod config;
 mod config_backup;
+#[cfg(test)]
+mod docker_link_tests;
 mod install_dir;
 mod koishi;
 mod lifecycle;

@@ -22,7 +22,7 @@ export function useAppLinkPlan(instanceId: string, botId: string, enabled: boole
             try {
                 return await appFrameworkService.previewLink(instanceId, botId);
             } catch (err) {
-                // 途中换了实例 / Bot、关了对话框或认出是 Docker Bot，这份计划没人要了，失败也不报
+                // 途中换了实例 / Bot 或关了对话框，这份计划没人要了，失败也不报。
                 if (!signal.aborted) {
                     pushErrorBar({
                         key: `app-link-preview:${instanceId}:${botId}`,
@@ -42,6 +42,8 @@ export function useAppLinkPlan(instanceId: string, botId: string, enabled: boole
         // 重新生成的途中、生成失败时都不给旧计划，免得用户对着过期的那份点「应用」
         plan: on && query.isSuccess && !query.isFetching ? query.data : null,
         previewing: on && query.isFetching,
+        previewError: on && query.isError && !query.isFetching ? errorText(query.error) : null,
+        retryPreview: query.refetch,
     };
 }
 
@@ -60,7 +62,7 @@ export function useApplyAppLink() {
                 key: `app-link:${next.id}`,
                 tone: 'success',
                 title: '对接完成',
-                content: `Bot ${botId} 已加入连接 ${connectionName}，运行中的 Bot 会热更新。`,
+                content: `Bot ${botId} 已加入连接 ${connectionName}，两端配置和所需隧道已更新。`,
                 autoDismissMs: 4000,
             });
         },

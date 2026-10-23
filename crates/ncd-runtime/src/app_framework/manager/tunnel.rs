@@ -8,6 +8,46 @@ pub(super) struct AppInstanceTunnel {
     handle: TunnelHandle,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn tunnel_reuse_rejects_a_closed_handle_even_when_ports_match() {
+        let handle = TunnelHandle::detached(41000, 0);
+        let mut map = HashMap::new();
+        map.insert(
+            "app".into(),
+            AppInstanceTunnel {
+                app_port: 3000,
+                topology: AppLinkTopology::LocalBotRemoteApp,
+                handle,
+            },
+        );
+        assert_eq!(
+            live_tunnel_port(
+                &map,
+                "app",
+                3000,
+                AppLinkTopology::LocalBotRemoteApp,
+                TunnelHandle::local_port
+            ),
+            Some(41000)
+        );
+        map["app"].handle.close();
+        assert_eq!(
+            live_tunnel_port(
+                &map,
+                "app",
+                3000,
+                AppLinkTopology::LocalBotRemoteApp,
+                TunnelHandle::local_port
+            ),
+            None
+        );
+    }
+}
+
 /// 键上登记着同一个口、同一种拓扑、`reach` 那一侧也分到了口的隧道
 fn live_tunnel_port(
     map: &HashMap<String, AppInstanceTunnel>,
@@ -17,7 +57,7 @@ fn live_tunnel_port(
     reach: fn(&TunnelHandle) -> u16,
 ) -> Option<u16> {
     map.get(key)
-        .filter(|t| t.app_port == app_port && t.topology == topology)
+        .filter(|t| t.app_port == app_port && t.topology == topology && !t.handle.is_closed())
         .map(|t| reach(&t.handle))
         .filter(|port| *port != 0)
 }
@@ -28,10 +68,143 @@ fn forward_listen_port(bot: &BotConfig, connection_name: &str) -> Option<u16> {
         .websocket_servers
         .iter()
         .find(|s| s.base.name == connection_name && s.port > 0)
-        .map(|s| s.port)
+        .and_then(|s| forward_host_port(bot, s.port))
+}
+
+pub(super) fn forward_host_port(bot: &BotConfig, container_port: u16) -> Option<u16> {
+    if bot.bot.deployment_type == DeploymentType::Docker {
+        bot.effective_docker_ports()
+            .into_iter()
+            .find(|p| p.container == container_port)
+            .map(|p| p.host)
+    } else {
+        Some(container_port)
+    }
 }
 
 impl AppManager {
+    pub(super) async fn restore_previous_link_after_failure(
+        &self,
+        instance: &AppInstance,
+        error: AppFrameworkError,
+    ) -> AppFrameworkError {
+        let Some(link) = &instance.link else {
+            return error;
+        };
+        let restored = if link.resident_forward_port.is_some() {
+            self.reconcile_resident_link(instance).await
+        } else {
+            self.reconcile_link_tunnel(instance).await
+        };
+        match restored {
+            Ok(()) => error,
+            Err(restore) => {
+                let message = format!("{error}；恢复原对接转发失败：{restore}，请重新对接原 Bot");
+                if let Ok(updated) = self
+                    .store
+                    .update(&instance.id, |item| {
+                        item.last_error = Some(message.clone());
+                    })
+                    .await
+                {
+                    self.publish(&updated, "link_restore_failed");
+                }
+                AppFrameworkError::Integration(message)
+            }
+        }
+    }
+
+    /// 容器访问宿主机回环上的应用或 SSH 隧道，经过只绑定 Docker 网桥的独立转发。
+    pub(super) async fn reverse_link_url(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+        url: &str,
+        host_port: u16,
+    ) -> Result<String, AppFrameworkError> {
+        if bot.bot.deployment_type != DeploymentType::Docker {
+            return rewrite_ws_loopback_port(url, host_port).map_err(AppFrameworkError::Validation);
+        }
+        let parsed = parse_ws_url(url)
+            .ok_or_else(|| AppFrameworkError::Validation("对接地址不是 WebSocket URL".into()))?;
+        let host = self
+            .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+            .await?;
+        let preferred = docker_link::DockerBridgeEndpoint {
+            host: parsed.host.clone(),
+            port: parsed.port,
+        };
+        let endpoint = docker_link::ensure_docker_loopback_bridge(
+            host.as_ref(),
+            instance,
+            host_port,
+            Some(&preferred),
+        )
+        .await?;
+        let scheme = if url.trim().starts_with("wss://") {
+            "wss"
+        } else {
+            "ws"
+        };
+        Ok(format!(
+            "{scheme}://{}:{}{}",
+            endpoint.host, endpoint.port, parsed.path
+        ))
+    }
+
+    pub(super) async fn teardown_docker_bridge_best_effort(
+        &self,
+        instance: &AppInstance,
+        bot_id: &BotId,
+    ) {
+        let Ok(Some(bot)) = self.bot_manager.bot_config(bot_id).await else {
+            return;
+        };
+        if bot.bot.deployment_type != DeploymentType::Docker {
+            return;
+        }
+        let result = async {
+            let host = self
+                .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+                .await?;
+            docker_link::teardown_docker_loopback_bridge(host.as_ref(), instance).await
+        }
+        .await;
+        if let Err(error) = result {
+            tracing::warn!(instance = instance.id.as_str(), %error, "Docker 对接转发清理失败");
+        }
+    }
+
+    async fn sync_reverse_link_url(
+        &self,
+        instance: &AppInstance,
+        mut bot: BotConfig,
+        host_port: u16,
+    ) -> Result<(), AppFrameworkError> {
+        let Some(link) = &instance.link else {
+            return Ok(());
+        };
+        let Some(index) = bot
+            .connect
+            .websocket_clients
+            .iter()
+            .position(|c| c.base.name == link.connection_name)
+        else {
+            return Ok(());
+        };
+        let current = bot.connect.websocket_clients[index].url.clone();
+        let next = self
+            .reverse_link_url(instance, &bot, &current, host_port)
+            .await?;
+        if current != next {
+            bot.connect.websocket_clients[index].url = next;
+            self.bot_manager
+                .upsert_bot_config(bot)
+                .await
+                .map_err(AppFrameworkError::Integration)?;
+        }
+        Ok(())
+    }
     pub(super) async fn ensure_link_tunnel(
         &self,
         instance: &AppInstance,
@@ -439,7 +612,13 @@ impl AppManager {
             forward,
             fwd,
         )
-        .await
+        .await?;
+        if bot.bot.deployment_type == DeploymentType::Docker
+            && link.mode == OneBotLinkMode::ReverseWs
+        {
+            self.sync_reverse_link_url(instance, bot, fwd).await?;
+        }
+        Ok(())
     }
 
     /// 已对接的跨机实例：重开 Desktop 隧道；分配口变了就再热推 Bot URL。
@@ -450,7 +629,7 @@ impl AppManager {
         let Some(link) = instance.link.as_ref() else {
             return Ok(());
         };
-        let Some(mut bot) = self
+        let Some(bot) = self
             .bot_manager
             .bot_config(&link.bot_id)
             .await
@@ -461,7 +640,10 @@ impl AppManager {
         let Some(topology) = classify_app_link(&bot.bot.runtime_target, &instance.host_id) else {
             return Ok(());
         };
-        if !needs_desktop_ssh_tunnel(topology) {
+        if !needs_desktop_ssh_tunnel(topology)
+            && !(bot.bot.deployment_type == DeploymentType::Docker
+                && topology == AppLinkTopology::SameHost)
+        {
             return Ok(());
         }
         if link.mode == OneBotLinkMode::ForwardWs {
@@ -470,25 +652,7 @@ impl AppManager {
                 .await;
         }
         let local_port = self.ensure_link_tunnel(instance, &bot).await?;
-        let Some(conn) = bot
-            .connect
-            .websocket_clients
-            .iter_mut()
-            .find(|c| c.base.name == link.connection_name)
-        else {
-            return Ok(());
-        };
-        let next = rewrite_ws_loopback_port(&conn.url, local_port)
-            .map_err(AppFrameworkError::Validation)?;
-        if next == conn.url {
-            return Ok(());
-        }
-        conn.url = next;
-        self.bot_manager
-            .upsert_bot_config(bot)
-            .await
-            .map_err(AppFrameworkError::Integration)?;
-        Ok(())
+        self.sync_reverse_link_url(instance, bot, local_port).await
     }
 
     /// 正向跨机的桌面端隧道跟着桌面端退出就没了：重开时先用应用端配置里的口，
@@ -508,9 +672,12 @@ impl AppManager {
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         let current = adapter_link_port(adapter.as_ref(), host.as_ref(), instance).await;
-        let q = self
-            .ensure_forward_tunnel(instance, bot, topology, bot_port, current)
-            .await?;
+        let q = if topology == AppLinkTopology::SameHost {
+            bot_port
+        } else {
+            self.ensure_forward_tunnel(instance, bot, topology, bot_port, current)
+                .await?
+        };
         if current == Some(q) {
             return Ok(());
         }

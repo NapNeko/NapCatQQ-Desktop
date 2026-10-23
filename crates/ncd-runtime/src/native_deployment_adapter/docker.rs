@@ -22,7 +22,7 @@ use tracing::warn;
 use crate::metrics::{BotRuntimeMetricsPrefs, prepare_docker_metrics_overlay, probe_remote_home};
 
 use super::config::{bot_config_for_start, status_for_deployment_state};
-use super::docker_helpers::render_docker_config_on_host;
+use super::docker_helpers::{render_docker_config_on_host, sync_snowluma_docker_config};
 
 /// 过渡壳:让 DockerDeployment 穿上 BotBackend trait 外套
 pub struct DockerDeploymentBackend {
@@ -158,6 +158,23 @@ impl BotBackend for DockerDeploymentBackend {
         self.flavor
     }
 
+    async fn sync_bot_config(&self, config: &ncd_domain::BotConfig) -> Result<(), BotBackendError> {
+        let bot_id = BotId::new(config.bot.qq_id.to_string());
+        render_docker_config_on_host(self.host.as_ref(), &bot_id, config).await?;
+        if self.flavor == BotFlavor::SnowLuma {
+            let cli = DockerCli::new(self.host.as_ref());
+            cli.ensure_daemon_ready()
+                .await
+                .map_err(|error| BotBackendError::Io(error.to_string()))?;
+            let container = resolve_bot_container_name(self.host.as_ref(), &bot_id)
+                .await
+                .map_err(|error| BotBackendError::Io(error.to_string()))?
+                .unwrap_or_else(|| DockerDeployment::container_name(config));
+            sync_snowluma_docker_config(self.host.as_ref(), &cli, config, &container).await?;
+        }
+        Ok(())
+    }
+
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let _qr_guard = self.qr_login_lock.lock().await;
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
@@ -263,6 +280,32 @@ impl BotBackend for DockerDeploymentBackend {
                 return Err(BotBackendError::Io(err.to_string()));
             }
         };
+
+        if self.flavor == BotFlavor::SnowLuma {
+            let container = DockerDeployment::container_name(&bot_config);
+            let applied = async {
+                sync_snowluma_docker_config(self.host.as_ref(), &cli, &bot_config, &container)
+                    .await?;
+                // 首次创建时 named volume 到 compose up 后才存在；写入后重启，让协议端
+                // 在账号加载之前读取最新配置。运行会话与隧道此时尚未建立。
+                cli.lifecycle("restart", &container)
+                    .await
+                    .map_err(|error| BotBackendError::Io(error.to_string()))
+            }
+            .await;
+            if let Err(error) = applied {
+                // 不让失败后留下的 Running 容器在下次 start 时走接管早返，跳过重试。
+                if let Err(stop_error) = cli.lifecycle("stop", &container).await {
+                    warn!(target: "ncd_runtime::docker_bot", %stop_error, "同步配置失败后停止容器失败");
+                }
+                let _ = ncd_backend_snowluma::docker_login::DockerLoginSession::close(
+                    self.host.as_ref(),
+                    &ctx.config.bot_id,
+                )
+                .await;
+                return Err(error);
+            }
+        }
 
         match handle {
             DeploymentHandle::Docker { started_at, .. } => {

@@ -27,6 +27,7 @@ fn bot(qq: u64) -> ncd_domain::BotConfig {
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
         status_command: None,
+        docker: None,
     }
 }
 

@@ -16,6 +16,7 @@ import {
     type ConnectionKind,
     type ConnectionConfig,
     validateConnection,
+    allowsExternalAccess,
 } from '../../../../core/domain/bot/connections';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { HttpServerConfig } from '../../../../core/ipc/generated/domain/HttpServerConfig';
@@ -27,6 +28,7 @@ import type { MessagePostFormat } from '../../../../core/ipc/generated/domain/Me
 import type { WsRole } from '../../../../core/ipc/generated/domain/WsRole';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { ExpandPresence } from '../../../../shared/ui/motion/ExpandPresence';
+import { ExternalAccessDialog } from './ExternalAccessDialog';
 
 const MSG_FORMAT_ITEMS = [
     { value: 'array' as MessagePostFormat, label: 'Array（结构化数组）' },
@@ -45,6 +47,7 @@ interface ConnectionEditorProps {
     /** 不含自己。重名校验用。 */
     existingNames: string[];
     backendType: BackendType;
+    dockerDeployment?: boolean;
     onSave: (data: ConnectionConfig) => void;
     onCancel: () => void;
 }
@@ -54,16 +57,27 @@ export function ConnectionEditor({
     initialData,
     existingNames,
     backendType,
+    dockerDeployment = false,
     onSave,
     onCancel,
 }: ConnectionEditorProps) {
     const [data, setData] = useState<ConnectionConfig>(initialData);
     const [error, setError] = useState<string | null>(null);
+    const [accessConfirmed, setAccessConfirmed] = useState(
+        initialData.enable && 'host' in initialData && allowsExternalAccess(initialData.host),
+    );
+    const [accessConfirmation, setAccessConfirmation] = useState<
+        { kind: 'toggle' } | { kind: 'save'; data: ConnectionConfig } | null
+    >(null);
 
     // 切换不同行编辑时同步 reset。
     useEffect(() => {
         setData(initialData);
         setError(null);
+        setAccessConfirmation(null);
+        setAccessConfirmed(
+            initialData.enable && 'host' in initialData && allowsExternalAccess(initialData.host),
+        );
     }, [initialData]);
 
     // 类型安全的局部 patch：保持 data 的具体类型不被 widen。
@@ -82,6 +96,7 @@ export function ConnectionEditor({
                 finalData as HttpClientConfig | WebsocketClientConfig
             ).url.trim();
         }
+        if ('host' in finalData) finalData.host = finalData.host.trim();
 
         const result = validateConnection(kind, finalData, existingNames);
         if (!result.ok) {
@@ -93,6 +108,16 @@ export function ConnectionEditor({
                 content: result.reason,
                 autoDismissMs: 4000,
             });
+            return;
+        }
+        if (
+            !dockerDeployment &&
+            finalData.enable &&
+            'host' in finalData &&
+            allowsExternalAccess(finalData.host) &&
+            !accessConfirmed
+        ) {
+            setAccessConfirmation({ kind: 'save', data: finalData });
             return;
         }
         onSave(finalData);
@@ -119,6 +144,31 @@ export function ConnectionEditor({
                     onValueChange={(v) => patch('messagePostFormat', v)}
                 />
             </div>
+
+            {'host' in data &&
+                (dockerDeployment ? (
+                    <p className="text-xs leading-relaxed text-text-tertiary">
+                        Docker 内部监听与宿主机发布地址分别设置。空地址和回环地址会在容器内转为
+                        0.0.0.0； 是否允许主机外部访问，请在「容器」中调整。
+                    </p>
+                ) : (
+                    <div className="rounded-md border border-border-subtle bg-field/35 p-3">
+                        <Switch
+                            label="允许主机外部访问"
+                            hint="关闭时仅监听 127.0.0.1；开启后监听 0.0.0.0。也可在下方填写高级监听地址。"
+                            checked={allowsExternalAccess(data.host)}
+                            onCheckedChange={(open) => {
+                                if (open) setAccessConfirmation({ kind: 'toggle' });
+                                else {
+                                    setData((prev) =>
+                                        'host' in prev ? { ...prev, host: '127.0.0.1' } : prev,
+                                    );
+                                    setAccessConfirmed(false);
+                                }
+                            }}
+                        />
+                    </div>
+                ))}
 
             <KindSpecificFields
                 kind={kind}
@@ -159,6 +209,19 @@ export function ConnectionEditor({
                     </Button>
                 </div>
             </div>
+            <ExternalAccessDialog
+                open={accessConfirmation !== null}
+                onOpenChange={(open) => !open && setAccessConfirmation(null)}
+                onConfirm={() => {
+                    setAccessConfirmed(true);
+                    if (accessConfirmation?.kind === 'toggle') {
+                        setData((prev) => ('host' in prev ? { ...prev, host: '0.0.0.0' } : prev));
+                    } else if (accessConfirmation?.kind === 'save') {
+                        onSave(accessConfirmation.data);
+                    }
+                    setAccessConfirmation(null);
+                }}
+            />
         </div>
     );
 }

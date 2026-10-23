@@ -21,6 +21,20 @@ export type ConnectionConfig =
     | WebsocketServerConfig
     | WebsocketClientConfig;
 
+/** 空地址通常由协议端解释为通配监听；关闭外部访问时显式使用回环地址。 */
+export function allowsExternalAccess(host: string): boolean {
+    const value = host.trim().toLowerCase();
+    return !(
+        value === 'localhost' ||
+        value.endsWith('.localhost') ||
+        value === '::1' ||
+        value === '[::1]' ||
+        value === '0:0:0:0:0:0:0:1' ||
+        /^127(?:\.\d{1,3}){3}$/.test(value) ||
+        /^::ffff:127(?:\.\d{1,3}){3}$/.test(value)
+    );
+}
+
 /// kind → ConnectConfig 数组字段名。
 export const CONNECTION_GROUP_KEY: Record<ConnectionKind, keyof ConnectConfig> = {
     httpServer: 'httpServers',
@@ -118,7 +132,7 @@ export function createDefaultConnection(kind: ConnectionKind): ConnectionConfig 
         case 'httpServer':
             return {
                 ...baseFields,
-                host: '0.0.0.0',
+                host: '127.0.0.1',
                 port: 3000,
                 enableCors: true,
                 enableWebsocket: false,
@@ -127,7 +141,7 @@ export function createDefaultConnection(kind: ConnectionKind): ConnectionConfig 
         case 'httpSseServer':
             return {
                 ...baseFields,
-                host: '0.0.0.0',
+                host: '127.0.0.1',
                 port: 3001,
                 enableCors: true,
                 enableWebsocket: false,
@@ -142,7 +156,7 @@ export function createDefaultConnection(kind: ConnectionKind): ConnectionConfig 
         case 'websocketServer':
             return {
                 ...baseFields,
-                host: '0.0.0.0',
+                host: '127.0.0.1',
                 port: 3001,
                 reportSelfMessage: false,
                 enableForcePushEvent: true,

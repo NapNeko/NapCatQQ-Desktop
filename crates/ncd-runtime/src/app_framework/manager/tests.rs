@@ -26,6 +26,7 @@ fn bot_with(qq_id: u64, backend: BackendType, target: RuntimeTarget) -> BotConfi
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }
@@ -638,11 +639,17 @@ mod write_config {
         }
         async fn run_to_string(
             &self,
-            _: HostCommand,
+            command: HostCommand,
         ) -> Result<ncd_host::CommandOutput, ncd_host::HostError> {
             Ok(ncd_host::CommandOutput {
                 exit_code: Some(0),
-                stdout: String::new(),
+                stdout: if command.program == "docker"
+                    && command.args.first().map(String::as_str) == Some("version")
+                {
+                    "27.3.1\n".into()
+                } else {
+                    String::new()
+                },
                 stderr: String::new(),
             })
         }
@@ -777,6 +784,111 @@ mod write_config {
         );
     }
 
+    #[tokio::test]
+    async fn docker_forward_link_uses_published_port_on_same_host_for_nc_and_sl() {
+        for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+            let (f, vps, _) = tunnel_fixture("m-docker-same", "remote:vps").await;
+            let bot_id = BotId::new("30003");
+            let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            bot.bot.backend_type = backend;
+            bot.bot.deployment_type = DeploymentType::Docker;
+            f.bots.upsert_bot_config(bot).await.unwrap();
+            let plan = f.manager.preview_link(&f.id, &bot_id).await.unwrap();
+            let p = plan.connection.as_ws_server().unwrap().port;
+            assert_eq!(plan.connection.as_ws_server().unwrap().host, "0.0.0.0");
+            f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+            let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            let published = bot
+                .effective_docker_ports()
+                .into_iter()
+                .find(|port| port.container == p)
+                .unwrap()
+                .host;
+            assert_eq!(adapter_cfg(&f).napcat_port, published);
+            assert_eq!(bot.connect.websocket_servers[0].port, p);
+            assert!(vps.specs().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn docker_forward_link_and_server_recovery_keep_custom_host_mapping() {
+        let (f, vps, _) = tunnel_fixture("m-docker-remote", LOCAL_HOST_ID).await;
+        let bot_id = BotId::new("30003");
+        let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+        bot.bot.deployment_type = DeploymentType::Docker;
+        f.bots.upsert_bot_config(bot.clone()).await.unwrap();
+        let p = f
+            .manager
+            .preview_link(&f.id, &bot_id)
+            .await
+            .unwrap()
+            .connection
+            .as_ws_server()
+            .unwrap()
+            .port;
+        bot.docker = Some(ncd_domain::docker::BotDockerConfig {
+            port_mappings: vec![ncd_domain::PortMapping::new(55555, p)],
+            ..Default::default()
+        });
+        f.bots.upsert_bot_config(bot).await.unwrap();
+        f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+        assert_eq!(vps.specs()[0].remote_port, 55555);
+        assert_eq!(adapter_cfg(&f).napcat_port, AUTO_LOCAL);
+        let saved = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+        assert_eq!(saved.connect.websocket_servers[0].port, p);
+        f.manager.reconcile_for_server("vps").await;
+        assert_eq!(vps.specs().len(), 2, "Bot 服务器重连也应恢复本机应用的隧道");
+        assert_eq!(vps.specs()[1].remote_port, 55555);
+    }
+
+    #[tokio::test]
+    async fn docker_mapping_events_and_rapid_host_recoveries_refresh_linked_apps() {
+        let (f, _, _) = tunnel_fixture("m-docker-events", "remote:vps").await;
+        let bot_id = BotId::new("30003");
+        let mut config = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+        config.bot.deployment_type = DeploymentType::Docker;
+        f.bots.upsert_bot_config(config).await.unwrap();
+        f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+        let p = f
+            .bots
+            .bot_config(&bot_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .connect
+            .websocket_servers[0]
+            .port;
+        let manager = f.manager.clone();
+        let listener = tokio::spawn(manager.run_host_connection_recovered_listener());
+        tokio::task::yield_now().await;
+        for (index, host_port) in [55001, 55002, 55003].into_iter().enumerate() {
+            let mut config = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            config.docker = Some(ncd_domain::docker::BotDockerConfig {
+                port_mappings: vec![ncd_domain::PortMapping::new(host_port, p)],
+                ..Default::default()
+            });
+            f.bots.upsert_bot_config(config).await.unwrap();
+            let event = if index == 0 {
+                let actor = crate::bot_actor::BotActorHandle::spawn(bot_id.clone());
+                DomainEvent::bot_state_changed(actor.snapshot(), "config_docker_recreated")
+            } else {
+                DomainEvent::HostConnectionRecovered {
+                    server_id: "vps".into(),
+                    latency_ms: 1,
+                }
+            };
+            f.manager.event_bus.publish(event);
+            tokio::time::timeout(Duration::from_secs(3), async {
+                while adapter_cfg(&f).napcat_port != host_port {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+        }
+        listener.abort();
+    }
+
     /// 本机 Bot + 远端麦麦：桌面端对麦麦那台机开 `-R`，在那台机的回环上听 Q、接回本机的 P
     #[tokio::test]
     async fn maibot_on_a_remote_host_reaches_a_local_bot_through_a_desktop_r_tunnel() {
@@ -817,9 +929,9 @@ mod write_config {
         assert_eq!(*f.bots.upserts.lock().unwrap(), 0);
     }
 
-    /// Docker 部署的 Bot 在容器里：它开的服务、连的 127.0.0.1 都是容器自己的，同机也连不上
+    /// 本机 Docker 仍不支持，不能因远端 Docker 对接开放而误接管本机容器。
     #[tokio::test]
-    async fn docker_bot_is_refused_before_touching_anything() {
+    async fn local_docker_bot_is_refused_before_touching_anything() {
         let f = maibot_fixture("m-docker").await;
         let bot_id = BotId::new("10001");
         let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();

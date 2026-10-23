@@ -94,6 +94,7 @@ mod local {
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
             status_command: None,
+            docker: None,
         };
         let inst = instance("/x", AppInstanceState::Installed);
         KoishiIntegration::new()

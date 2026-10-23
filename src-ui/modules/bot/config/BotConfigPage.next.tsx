@@ -22,6 +22,7 @@ import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
 import { IdentityTab } from './next/IdentityTab';
 import { ConnectionsTab } from './next/ConnectionsTab';
 import { AdvancedTab } from './next/AdvancedTab';
+import { DockerTab } from './next/DockerTab';
 import { BotConfigHeader } from './next/BotConfigHeader';
 import { ConnectionCountBadge, SaveActions } from './next/BotConfigSaveActions';
 import { ConfigLoadingView, ConfigLoadErrorView } from './next/BotConfigLoadError';
@@ -45,7 +46,7 @@ interface BotConfigPageNextProps {
     tourForceTab?: TabValue | null;
 }
 
-type TabValue = 'identity' | 'connections' | 'advanced';
+type TabValue = 'identity' | 'connections' | 'advanced' | 'docker';
 
 export function BotConfigPageNext({
     botId,
@@ -109,7 +110,7 @@ export function BotConfigPageNext({
                 tone: desc.tone,
                 title: desc.title,
                 content: desc.content,
-                autoDismissMs: 3000,
+                autoDismissMs: reason === 'config_saved_docker_apply_failed' ? undefined : 3000,
             });
             onSavedStay?.(savedBotId);
             setPristine(formData);
@@ -285,22 +286,27 @@ export function BotConfigPageNext({
                         }}
                         className="flex flex-1 flex-col"
                     >
-                        <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
-                            <TabsList className="border-b-0">
+                        <div className="sticky top-0 z-[5] flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
+                            <TabsList className="shrink-0 border-b-0">
                                 <TabsTrigger value="identity">身份</TabsTrigger>
                                 <TabsTrigger value="connections" data-tour-id="bot-connections-tab">
                                     连接
                                     <ConnectionCountBadge config={formData} />
                                 </TabsTrigger>
                                 <TabsTrigger value="advanced">高级</TabsTrigger>
+                                {formData.bot.deploymentType === 'docker' && (
+                                    <TabsTrigger value="docker">容器</TabsTrigger>
+                                )}
                             </TabsList>
-                            <SaveActions
-                                dirty={dirty}
-                                saving={isSaving}
-                                onSave={handleSave}
-                                onCancel={handleCancel}
-                                tourDemoMode={tourDemoMode}
-                            />
+                            <div className="ml-auto">
+                                <SaveActions
+                                    dirty={dirty}
+                                    saving={isSaving}
+                                    onSave={handleSave}
+                                    onCancel={handleCancel}
+                                    tourDemoMode={tourDemoMode}
+                                />
+                            </div>
                         </div>
 
                         <TabsContent value="identity" className="w-full pb-8 pt-4">
@@ -321,6 +327,7 @@ export function BotConfigPageNext({
                                     data={formData.connect}
                                     onChange={updateConnect}
                                     backendType={formData.bot.backend_type}
+                                    dockerDeployment={formData.bot.deploymentType === 'docker'}
                                     botId={tourDemoMode ? null : botId}
                                     onPullRemote={canPullRemote ? handlePullRemote : undefined}
                                     pullingRemote={pullingRemote}
@@ -349,6 +356,16 @@ export function BotConfigPageNext({
                                 snowlumaAppLoading={snowlumaAppLoading}
                             />
                         </TabsContent>
+                        {formData.bot.deploymentType === 'docker' && (
+                            <TabsContent value="docker" className="w-full pb-8 pt-4">
+                                <DockerTab
+                                    config={formData}
+                                    onChange={(docker) =>
+                                        setFormData((prev) => ({ ...prev, docker }))
+                                    }
+                                />
+                            </TabsContent>
+                        )}
                     </Tabs>
                 </div>
             </div>

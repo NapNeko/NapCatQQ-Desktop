@@ -33,6 +33,7 @@ pub(crate) fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }

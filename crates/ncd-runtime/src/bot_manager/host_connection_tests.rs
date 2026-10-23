@@ -118,7 +118,11 @@ async fn local_native_snowluma_routes_to_injected_backend() {
     let mut manager = local_routing_manager(root.path(), config.clone());
     let snowluma: Arc<dyn BotBackend> = Arc::new(UnusedBackend(BotId::new("local-snowluma")));
     manager.snowluma_backend = Some(snowluma.clone());
-    let routed = manager.runtime_router().backend_for_config(&config).await.unwrap();
+    let routed = manager
+        .runtime_router()
+        .backend_for_config(&config)
+        .await
+        .unwrap();
     assert!(Arc::ptr_eq(&routed, &snowluma));
     assert!(!Arc::ptr_eq(&routed, &manager.backend));
 }
@@ -130,7 +134,11 @@ async fn local_native_napcat_routes_to_default_backend_without_snowluma() {
         .backend_type(BackendType::NapCat)
         .build();
     let manager = local_routing_manager(root.path(), config.clone());
-    let routed = manager.runtime_router().backend_for_config(&config).await.unwrap();
+    let routed = manager
+        .runtime_router()
+        .backend_for_config(&config)
+        .await
+        .unwrap();
     assert!(Arc::ptr_eq(&routed, &manager.backend));
 }
 

@@ -3,6 +3,7 @@
 //! 框架差异（Karin / NoneBot2 …）在 `ncd-appframework`；这里只认 `AppFrameworkAdapter`。
 
 mod adopt;
+mod docker_link;
 mod download;
 mod existing_link;
 mod instances;
