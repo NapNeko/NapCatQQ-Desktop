@@ -242,6 +242,7 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         !featuresEqual(draft.features, baseline.features) ||
         draft.mcp.enabled !== baseline.mcp.enabled ||
         draft.mcp.port !== baseline.mcp.port ||
+        draft.mcp.readOnly !== baseline.mcp.readOnly ||
         draft.mcp.allowDangerous !== baseline.mcp.allowDangerous ||
         draft.infoBarDismissInfoEnabled !== baseline.infoBarDismissInfoEnabled ||
         draft.infoBarDismissInfoMs !== baseline.infoBarDismissInfoMs ||

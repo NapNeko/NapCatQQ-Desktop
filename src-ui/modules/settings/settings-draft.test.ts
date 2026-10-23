@@ -3,6 +3,20 @@ import { mockBackendSettings } from '../../core/ipc/mock/settings.mock';
 import { backendSlice, draftFromBackendAndPrefs, isSettingsDirty } from './settings-draft';
 import { defaultNetworkSettings, type NetworkSettings } from '../../core/domain/settings/network';
 
+describe('MCP permissions draft', () => {
+    it('keeps read-only enabled by default and persists an explicit permission change', () => {
+        const baseline = mockBackendSettings;
+        const draft = draftFromBackendAndPrefs(baseline);
+        expect(draft.mcp.readOnly).toBe(true);
+        draft.mcp.readOnly = false;
+        expect(baseline.mcp.readOnly).toBe(true);
+        expect(isSettingsDirty(draft, baseline)).toBe(true);
+        expect(backendSlice(draft).mcp.readOnly).toBe(false);
+        draft.mcp.readOnly = true;
+        expect(isSettingsDirty(draft, baseline)).toBe(false);
+    });
+});
+
 describe('GitHub API settings draft', () => {
     it('marks a mode-only change as dirty and clears it when reverted', () => {
         const backend = { ...mockBackendSettings, githubApiMode: 'proxy' as const };

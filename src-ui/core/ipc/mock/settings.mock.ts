@@ -37,7 +37,7 @@ export const mockBackendSettings: BackendSettings = {
     notifyOnLoginKicked: true,
     uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
     features: { ...DEFAULT_FEATURES },
-    mcp: { enabled: false, port: 0, allowDangerous: false },
+    mcp: { enabled: false, port: 0, readOnly: true, allowDangerous: false },
     remoteHostHealthProbeEnabled: true,
     remoteHostHealthProbeIntervalMs: 30_000,
     webHookChannels: [],

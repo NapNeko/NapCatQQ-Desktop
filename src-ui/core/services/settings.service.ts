@@ -85,7 +85,7 @@ export interface BackendSettings {
     uiPreferences: AppUiPreferences;
     /** 可选功能模块开关（设置 · 功能） */
     features: FeatureToggles;
-    /** OneBot 调试台的 MCP 服务（只整段透传，设置页暂无对应控件） */
+    /** 本机 MCP 服务与权限 */
     mcp: McpServerSettings;
     /** 后台远端主机健康探测 */
     remoteHostHealthProbeEnabled: boolean;
