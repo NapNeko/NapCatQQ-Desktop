@@ -5,10 +5,16 @@ import type { AstrBotConfigSchema } from '../../ipc/generated/domain/AstrBotConf
 export type JsonObject = Record<string, unknown>;
 export type AstrBotMetadata = Record<
     string,
-    { name?: string; metadata?: Record<string, FieldMetadata> }
+    {
+        name?: string;
+        invisible?: boolean;
+        condition?: Record<string, unknown>;
+        metadata?: Record<string, FieldMetadata>;
+    }
 >;
 export type FieldMetadata = {
     type?: string;
+    _special?: string;
     description?: string;
     hint?: string;
     secret?: boolean;
@@ -35,6 +41,21 @@ export type AdvancedSchema = { defaults: JsonObject; metadata: AstrBotMetadata; 
 
 const BLOCKED_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 const MANAGED = snapshot.managed_paths;
+const WEBUI_ACTIONS = new Set(['t2i_template', 'dashboard_totp_manager']);
+const STRING_LIST_SPECIALS = new Set([
+    'select_plugin_set',
+    'select_providers',
+    'select_knowledgebase',
+]);
+const SPECIAL_TYPES: Record<string, string> = {
+    agent_runner_type: 'string',
+    select_provider: 'string',
+    select_provider_stt: 'string',
+    select_provider_tts: 'string',
+    select_persona: 'string',
+    check_shipyard_connection: 'string',
+    local_permission_matrix: 'object',
+};
 const LABELS: Record<string, string> = {
     'provider_tts_settings.use_file_service': '通过文件服务发送语音',
     'provider_tts_settings.dual_output': '同时发送文字与语音',
@@ -178,13 +199,49 @@ function leafPaths(value: unknown, path = ''): string[] {
         );
     return path ? [path] : [];
 }
-function inferMetadata(value: unknown): FieldMetadata {
+function inferMetadata(value: unknown, path: string): FieldMetadata {
+    const sensitive =
+        /password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential|recovery[_-]?code/i.test(
+            path,
+        );
+    const secret = sensitive ? { secret: true } : {};
     if (typeof value === 'boolean') return { type: 'bool' };
     if (typeof value === 'number') return { type: Number.isInteger(value) ? 'int' : 'float' };
-    if (typeof value === 'string') return { type: 'string' };
-    if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string'))
-        return { type: 'list', items: { type: 'string' } };
+    if (typeof value === 'string') return { type: 'string', ...secret };
+    if (
+        Array.isArray(value) &&
+        (value.length > 0 || sensitive) &&
+        value.every((v) => typeof v === 'string')
+    )
+        return { type: 'list', items: { type: 'string' }, ...secret };
     return { type: isObject(value) ? 'object' : 'json' };
+}
+function normalizeMetadata(metadata: FieldMetadata): FieldMetadata {
+    const special = metadata._special;
+    if (special && WEBUI_ACTIONS.has(special)) return { ...metadata, invisible: true };
+    if (special && STRING_LIST_SPECIALS.has(special))
+        return {
+            ...metadata,
+            type: 'list',
+            items: { type: 'string' },
+            options: undefined,
+            labels: undefined,
+        };
+    if (special && !Object.prototype.hasOwnProperty.call(SPECIAL_TYPES, special))
+        // 未知特殊控件的 type 可能只是 WebUI 占位，不能据此改写或拒绝已有值。
+        return {
+            ...metadata,
+            type: 'json',
+            items: undefined,
+            options: undefined,
+            labels: undefined,
+            min: undefined,
+            max: undefined,
+            step: undefined,
+            slider: undefined,
+        };
+    const type = special ? SPECIAL_TYPES[special] : metadata.type;
+    return { ...metadata, type: type === 'dict' ? 'object' : type };
 }
 export function advancedSections(
     config: AstrBotInstanceConfig,
@@ -195,27 +252,38 @@ export function advancedSections(
     for (const [groupId, group] of Object.entries(schema.metadata)) {
         if (!isObject(group) || !isObject(group.metadata)) continue;
         for (const [sectionId, section] of Object.entries(group.metadata ?? {})) {
+            if (!isObject(section)) continue;
             const fields: AdvancedField[] = [];
             const visit = (
                 items: Record<string, FieldMetadata>,
                 prefix = '',
                 conditions: Record<string, unknown>[] = [],
+                hidden = false,
             ) => {
-                for (const [key, metadata] of Object.entries(items)) {
-                    if (!isObject(metadata) || key === 'type') continue;
+                for (const [key, rawMetadata] of Object.entries(items)) {
+                    if (!isObject(rawMetadata) || key === 'type') continue;
                     const path = key.includes('.') || !prefix ? key : prefix + '.' + key;
                     if (isManagedPath(path)) continue;
+                    const metadata = normalizeMetadata(rawMetadata);
+                    const invisible = hidden || metadata.invisible === true;
+                    if (invisible) covered.push(path);
                     const inherited = metadata.condition
                         ? [...conditions, metadata.condition]
                         : conditions;
                     if (
                         metadata.type === 'object' &&
-                        metadata.items &&
+                        isObject(metadata.items) &&
                         Object.values(metadata.items).every(isObject)
                     ) {
-                        visit(metadata.items as Record<string, FieldMetadata>, path, inherited);
+                        visit(
+                            metadata.items as Record<string, FieldMetadata>,
+                            path,
+                            inherited,
+                            invisible,
+                        );
                     } else {
                         covered.push(path);
+                        if (invisible) continue;
                         fields.push({
                             path,
                             label:
@@ -232,9 +300,12 @@ export function advancedSections(
                 }
             };
             visit(
-                (section.items ?? {}) as Record<string, FieldMetadata>,
+                (isObject(section.items) ? section.items : {}) as Record<string, FieldMetadata>,
                 '',
-                section.condition ? [section.condition] : [],
+                [group.condition, section.condition].filter(
+                    (condition): condition is Record<string, unknown> => !!condition,
+                ),
+                group.invisible === true || section.invisible === true,
             );
             if (fields.length)
                 sections.push({
@@ -258,6 +329,7 @@ export function advancedSections(
             label: LABELS[path] ?? path.split('.').slice(-1)[0] ?? path,
             metadata: inferMetadata(
                 defaultValue === undefined ? readPath(current, path) : defaultValue,
+                path,
             ),
             conditions: [],
         });
@@ -273,6 +345,7 @@ export function advancedSections(
     return sections;
 }
 export function fieldVisible(field: AdvancedField, root: JsonObject): boolean {
+    if (field.metadata.invisible) return false;
     return field.conditions.every((condition) =>
         Object.entries(condition).every(([path, expected]) => {
             const actual = readPath(root, path);
@@ -313,6 +386,7 @@ export function advancedValueIssues(
     const root = parseAdvanced(config.advanced_json);
     const issues: AppConfigIssue[] = [];
     for (const field of sections.flatMap((section) => section.fields)) {
+        if (field.metadata.invisible) continue;
         const value = readPath(root, field.path);
         if (value === undefined) continue;
         const type = field.metadata.type;
@@ -331,6 +405,13 @@ export function advancedValueIssues(
             !Array.isArray(value)
         )
             message = '需要列表';
+        else if (
+            type === 'list' &&
+            field.metadata.items?.type === 'string' &&
+            Array.isArray(value) &&
+            value.some((item) => typeof item !== 'string')
+        )
+            message = '列表项需要文本';
         else if (type === 'object' && !isObject(value)) message = '需要 JSON 对象';
         if (!message && typeof value === 'number') {
             const min = field.metadata.min ?? field.metadata.slider?.min;

@@ -4343,6 +4343,7 @@
     "dashboard.password_storage_upgraded",
     "dashboard.password_change_required",
     "dashboard.jwt_secret",
+    "dashboard.totp",
     "wake_prefix",
     "admins_id",
     "kb_names",

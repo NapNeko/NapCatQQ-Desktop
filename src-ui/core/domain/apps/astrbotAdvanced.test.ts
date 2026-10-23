@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { astrbotDefaultConfig, astrbotSetup } from './astrbotConfig';
+import snapshot from './astrbotSchema/snapshot.json';
 import {
     advancedSections,
     advancedValueIssues,
     effectiveAdvancedRoot,
+    fallbackAstrBotSchema,
     isManagedPath,
+    parseAdvanced,
     projectAdvanced,
     readPath,
     resolveAdvancedSchema,
@@ -12,6 +15,230 @@ import {
 } from './astrbotAdvanced';
 
 describe('AstrBot advanced config coverage', () => {
+    it.each(['fallback', 'live'] as const)(
+        'accepts the full upstream defaults through the %s metadata path',
+        (source) => {
+            const cfg = astrbotDefaultConfig(6199);
+            cfg.advanced_json = JSON.stringify(projectAdvanced(snapshot.defaults));
+            const schema = resolveAdvancedSchema(
+                source === 'live' ? fallbackAstrBotSchema() : undefined,
+            );
+            const sections = advancedSections(cfg, schema);
+            expect(schema.live).toBe(source === 'live');
+            expect(advancedValueIssues(cfg, sections)).toEqual([]);
+            expect(readPath(effectiveAdvancedRoot(cfg, schema), 'plugin_set')).toEqual(['*']);
+            const plugin = sections
+                .flatMap((section) => section.fields)
+                .find((field) => field.path === 'plugin_set');
+            expect(plugin?.metadata).toMatchObject({ type: 'list', items: { type: 'string' } });
+        },
+    );
+
+    it.each([
+        { name: 'all', selection: ['*'] },
+        { name: 'none', selection: [] },
+        { name: 'custom', selection: ['enabled_plugin', 'disabled_plugin', 'unknown_plugin'] },
+    ])('round-trips $name plugins without losing hidden or unknown values', ({ selection }) => {
+        const cfg = astrbotDefaultConfig(6199);
+        cfg.advanced_json = JSON.stringify({
+            ...projectAdvanced(snapshot.defaults),
+            t2i_active_template: 'upstream-hidden-template',
+            future_settings: { upstream_only: { preserve: true } },
+        });
+        const schema = resolveAdvancedSchema();
+        const field = advancedSections(cfg, schema)
+            .flatMap((section) => section.fields)
+            .find((item) => item.path === 'plugin_set');
+        expect(field).toBeDefined();
+        const changed = setAdvancedField(cfg, field!, selection);
+        const reread = { ...cfg, advanced_json: changed.advanced_json };
+        const root = effectiveAdvancedRoot(reread, schema);
+        expect(readPath(parseAdvanced(changed.advanced_json), 'plugin_set')).toEqual(selection);
+        expect(readPath(root, 'plugin_set')).toEqual(selection);
+        expect(readPath(root, 't2i_active_template')).toBe('upstream-hidden-template');
+        expect(readPath(root, 'future_settings.upstream_only')).toEqual({ preserve: true });
+        expect(advancedValueIssues(reread, advancedSections(reread, schema))).toEqual([]);
+    });
+
+    it.each([
+        { name: 'true', value: true },
+        { name: 'false', value: false },
+        { name: 'string', value: 'one_plugin' },
+        { name: 'number member', value: ['one_plugin', 1] },
+        { name: 'null member', value: ['one_plugin', null] },
+        { name: 'object member', value: ['one_plugin', { name: 'other' }] },
+    ])('rejects an invalid plugin selection: $name', ({ value }) => {
+        const cfg = astrbotDefaultConfig(6199);
+        cfg.advanced_json = JSON.stringify({ plugin_set: value });
+        const issues = advancedValueIssues(cfg, advancedSections(cfg, resolveAdvancedSchema()));
+        expect(issues.some((issue) => issue.path === 'advanced/plugin_set')).toBe(true);
+    });
+
+    it.each([
+        { name: 'number', value: 37, invalid: true },
+        { name: 'array', value: ['value'], invalid: true },
+        { name: 'null', value: null, invalid: true },
+        { name: 'dictionary', value: { upstream_variable: 'value' }, invalid: false },
+    ])('validates an upstream dict as an object: $name', ({ value, invalid }) => {
+        const cfg = astrbotDefaultConfig(6199);
+        cfg.ai.agent_runner_type = 'dify';
+        cfg.advanced_json = JSON.stringify({
+            agent_runner: { runner_type: 'dify', config: { variables: value } },
+        });
+        const sections = advancedSections(cfg, resolveAdvancedSchema());
+        const field = sections
+            .flatMap((section) => section.fields)
+            .find((item) => item.path === 'agent_runner.config.variables');
+        expect(field?.metadata.type).toBe('object');
+        expect(
+            advancedValueIssues(cfg, sections).some(
+                (issue) => issue.path === 'advanced/agent_runner.config.variables',
+            ),
+        ).toBe(invalid);
+    });
+
+    it('does not rediscover invisible fields or children of hidden parents and sections', () => {
+        const values = {
+            visible: false,
+            hidden_leaf: true,
+            hidden_parent: { child: true },
+            parent: { hidden_child: { flag: true } },
+            hidden_section: { flag: true },
+        };
+        const cfg = astrbotDefaultConfig(6199);
+        cfg.advanced_json = JSON.stringify(values);
+        const schema = resolveAdvancedSchema({
+            defaults_json: JSON.stringify(values),
+            metadata_json: JSON.stringify({
+                future_group: {
+                    metadata: {
+                        general: {
+                            type: 'object',
+                            items: {
+                                visible: { type: 'bool' },
+                                hidden_leaf: { type: 'bool', invisible: true },
+                                hidden_parent: {
+                                    type: 'object',
+                                    invisible: true,
+                                    items: { child: { type: 'bool' } },
+                                },
+                                parent: {
+                                    type: 'object',
+                                    items: {
+                                        hidden_child: {
+                                            type: 'object',
+                                            invisible: true,
+                                            items: { flag: { type: 'bool' } },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        hidden: {
+                            type: 'object',
+                            invisible: true,
+                            items: { 'hidden_section.flag': { type: 'bool' } },
+                        },
+                    },
+                },
+            }),
+        });
+        const fields = advancedSections(cfg, schema).flatMap((section) => section.fields);
+        const hiddenPaths = [
+            'hidden_leaf',
+            'hidden_parent',
+            'parent.hidden_child',
+            'hidden_section',
+        ];
+        expect(
+            fields.some((field) =>
+                hiddenPaths.some(
+                    (path) => field.path === path || field.path.startsWith(path + '.'),
+                ),
+            ),
+        ).toBe(false);
+        const visible = fields.find((field) => field.path === 'visible');
+        expect(visible).toBeDefined();
+        const changed = setAdvancedField(cfg, visible!, true);
+        expect(parseAdvanced(changed.advanced_json)).toEqual({ ...values, visible: true });
+    });
+
+    it('keeps unknown special controls editable as JSON without boolean validation', () => {
+        const cfg = astrbotDefaultConfig(6199);
+        cfg.advanced_json = JSON.stringify({ future: { selection: ['hidden_plugin'] } });
+        const schema = resolveAdvancedSchema({
+            defaults_json: JSON.stringify({ future: { selection: ['default_plugin'] } }),
+            metadata_json: JSON.stringify({
+                future_group: {
+                    metadata: {
+                        future: {
+                            type: 'object',
+                            items: {
+                                'future.selection': {
+                                    type: 'bool',
+                                    _special: 'future_plugin_selector',
+                                    options: [true, false],
+                                    items: { type: 'bool' },
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+        });
+        const sections = advancedSections(cfg, schema);
+        const field = sections.flatMap((section) => section.fields)[0];
+        expect(field?.path).toBe('future.selection');
+        expect(field?.metadata.type).toBe('json');
+        expect(field?.metadata.options).toBeUndefined();
+        expect(field?.metadata.items).toBeUndefined();
+        expect(advancedValueIssues(cfg, sections)).toEqual([]);
+        const changed = setAdvancedField(cfg, field!, ['hidden_plugin', 'unknown_plugin']);
+        expect(readPath(parseAdvanced(changed.advanced_json), 'future.selection')).toEqual([
+            'hidden_plugin',
+            'unknown_plugin',
+        ]);
+        expect(advancedValueIssues(changed, advancedSections(changed, schema))).toEqual([]);
+    });
+
+    it('excludes action controls and TOTP secrets while preserving plugins during another edit', () => {
+        const root = {
+            plugin_set: ['disabled_plugin', 'unknown_plugin'],
+            t2i_template: true,
+            t2i_active_template: 'hidden-template',
+            dashboard: {
+                totp: {
+                    enable: true,
+                    secret: 'synthetic-test-secret',
+                    recovery_code_hash: 'synthetic-test-recovery-hash',
+                },
+                ssl: { enable: true },
+            },
+            provider_tts_settings: { use_file_service: false },
+        };
+        const projected = projectAdvanced(root);
+        expect(readPath(projected, 'dashboard.totp')).toBeUndefined();
+        expect(readPath(projected, 'dashboard.ssl.enable')).toBe(true);
+        const raw = JSON.stringify(projected);
+        expect(raw).not.toContain('synthetic-test-secret');
+        expect(raw).not.toContain('synthetic-test-recovery-hash');
+        const cfg = astrbotDefaultConfig(6199);
+        cfg.advanced_json = JSON.stringify(root);
+        const schema = resolveAdvancedSchema();
+        const fields = advancedSections(cfg, schema).flatMap((section) => section.fields);
+        expect(fields.some((field) => field.path === 't2i_template')).toBe(false);
+        expect(fields.some((field) => field.path === 't2i_active_template')).toBe(false);
+        expect(fields.some((field) => field.path.startsWith('dashboard.totp'))).toBe(false);
+        const field = fields.find((item) => item.path === 'provider_tts_settings.use_file_service');
+        expect(field).toBeDefined();
+        const changed = setAdvancedField(cfg, field!, true);
+        const reread = parseAdvanced(changed.advanced_json);
+        expect(readPath(reread, 'plugin_set')).toEqual(root.plugin_set);
+        expect(readPath(reread, 'dashboard.totp')).toBeUndefined();
+        expect(readPath(reread, 't2i_active_template')).toBe('hidden-template');
+        expect(advancedValueIssues(changed, advancedSections(changed, schema))).toEqual([]);
+    });
+
     it('discovers current metadata and default-only settings without duplicating dedicated controls', () => {
         const cfg = astrbotDefaultConfig(6199);
         const schema = resolveAdvancedSchema();

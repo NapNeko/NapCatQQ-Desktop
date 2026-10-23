@@ -301,15 +301,15 @@
     },
     {
       "path": "dashboard.totp.enable",
-      "surface": "advanced"
+      "surface": "dedicated"
     },
     {
       "path": "dashboard.totp.recovery_code_hash",
-      "surface": "advanced"
+      "surface": "dedicated"
     },
     {
       "path": "dashboard.totp.secret",
-      "surface": "advanced"
+      "surface": "dedicated"
     },
     {
       "path": "dashboard.trust_proxy_headers",

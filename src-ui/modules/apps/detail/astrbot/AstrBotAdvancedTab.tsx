@@ -26,6 +26,7 @@ import {
 } from '../../../../core/domain/apps/astrbotAdvanced';
 import { useAstrBotConfigSchema } from '../../../../hooks/apps/useAstrBotDashboard';
 import type { AstrBotInstanceConfig } from '../../../../core/ipc/types';
+import { AstrBotPluginSetField } from './AstrBotPluginSetField';
 
 export type AdvancedDrafts = Readonly<Record<string, string>>;
 
@@ -144,6 +145,17 @@ export function AstrBotAdvancedTab({
                                 const metadata = field.metadata;
                                 const hint = [field.hint, field.path].filter(Boolean).join(' · ');
                                 const labels = optionLabels(metadata);
+                                if (metadata._special === 'select_plugin_set')
+                                    return (
+                                        <AstrBotPluginSetField
+                                            key={field.path}
+                                            label={field.label}
+                                            hint={hint}
+                                            value={value}
+                                            disabled={disabled}
+                                            onChange={(next) => update(field, next)}
+                                        />
+                                    );
                                 if (metadata.options?.length) {
                                     const options = metadata.options;
                                     const index = options.findIndex(
@@ -295,7 +307,11 @@ export function AstrBotAdvancedTab({
                                             value={
                                                 draft ??
                                                 JSON.stringify(
-                                                    value ?? (metadata.type === 'object' ? {} : []),
+                                                    value === undefined
+                                                        ? metadata.type === 'object'
+                                                            ? {}
+                                                            : []
+                                                        : value,
                                                     null,
                                                     2,
                                                 )
@@ -341,7 +357,11 @@ export function AstrBotAdvancedTab({
                         ariaLabel="完整高级配置 JSON"
                         value={
                             drafts.$raw ??
-                            JSON.stringify(parseAdvanced(config.advanced_json), null, 2)
+                            JSON.stringify(
+                                projectAdvanced(parseAdvanced(config.advanced_json)),
+                                null,
+                                2,
+                            )
                         }
                         readOnly={disabled}
                         onChange={(text) => {

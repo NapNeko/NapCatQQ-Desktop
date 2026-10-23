@@ -3,7 +3,7 @@
 use ncd_traits::AppFrameworkError;
 use serde_json::{Map, Value};
 
-/// 这些值由已有页面和连接协调器负责；高级表单不能抢写。
+/// 这些值由专页、连接协调器或上游认证流程负责；高级表单不能抢写。
 pub const MANAGED_PATHS: &[&str] = &[
     "config_version",
     "provider_sources",
@@ -16,6 +16,7 @@ pub const MANAGED_PATHS: &[&str] = &[
     "dashboard.password_storage_upgraded",
     "dashboard.password_change_required",
     "dashboard.jwt_secret",
+    "dashboard.totp",
     "wake_prefix",
     "admins_id",
     "kb_names",
@@ -263,6 +264,59 @@ mod tests {
         assert_eq!(current["platform"], original["platform"]);
         assert_eq!(current["dashboard"]["port"], 6185);
         assert_eq!(current["dashboard"]["password"], "private");
+    }
+
+    #[test]
+    fn projection_omits_dashboard_totp_state() {
+        let root = json!({"dashboard":{
+            "totp":{"enable":true,"secret":"fixture-secret","recovery_code_hash":"fixture-hash"},
+            "ssl":{"enable":false}
+        }});
+        let expected = json!({"dashboard":{"ssl":{"enable":false}}});
+
+        assert_eq!(project(&root), expected);
+        assert_eq!(parse(&encode(&root)).unwrap(), expected);
+    }
+
+    #[test]
+    fn advanced_edits_cannot_change_or_remove_current_dashboard_totp() {
+        let original = json!({"dashboard":{
+            "totp":{"enable":false,"secret":"old-secret","recovery_code_hash":"old-hash"},
+            "ssl":{"enable":false}
+        }});
+        let base = original.to_string();
+        let mut current = original;
+        current["dashboard"]["totp"] = json!({
+            "enable":true,"secret":"current-secret","recovery_code_hash":"current-hash"
+        });
+
+        for edited in [
+            json!({"dashboard":{"totp":{"enable":false,"secret":"edited-secret"}}}),
+            json!({"dashboard":{}}),
+            json!({"dashboard":null}),
+            json!({"dashboard":[]}),
+            json!({}),
+        ] {
+            let mut root = current.clone();
+            apply(&mut root, &base, &edited.to_string()).unwrap();
+            assert_eq!(root["dashboard"]["totp"], current["dashboard"]["totp"]);
+        }
+    }
+
+    #[test]
+    fn advanced_ssl_edits_preserve_current_dashboard_totp() {
+        let mut root = json!({"dashboard":{
+            "totp":{"enable":true,"secret":"fixture-secret","recovery_code_hash":"fixture-hash"},
+            "ssl":{"enable":false,"cert_file":"old.pem"}
+        }});
+        let base = encode(&root);
+        let expected_totp = root["dashboard"]["totp"].clone();
+        let edited = json!({"dashboard":{"ssl":{"enable":true,"cert_file":"new.pem"}}});
+
+        apply(&mut root, &base, &edited.to_string()).unwrap();
+
+        assert_eq!(root["dashboard"]["ssl"], edited["dashboard"]["ssl"]);
+        assert_eq!(root["dashboard"]["totp"], expected_totp);
     }
 
     #[test]
