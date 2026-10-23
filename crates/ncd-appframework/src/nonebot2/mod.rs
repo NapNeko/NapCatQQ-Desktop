@@ -3,6 +3,7 @@
 mod component;
 pub mod config;
 mod driver;
+mod duration;
 pub mod env_layout;
 mod integration;
 pub mod manifest;
@@ -224,13 +225,17 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
     ) -> Result<(), AppFrameworkError> {
         let path = Self::write_target(host, instance).await?;
         let text = Self::read_text(host, &path).await?.unwrap_or_default();
-        let mut env = EnvFile::parse(&text);
-        env.apply(&NoneBot2Integration::env_writes(
-            instance,
+        let mut env = EnvFile::parse_python(&text);
+        for write in NoneBot2Integration::env_writes(instance, &plan.access_token) {
+            env.set_ci(&write.key, &write.value);
+        }
+        config::write_onebot_env(
+            &mut env,
+            manifest::ENV_ONEBOT_ACCESS_TOKEN,
             &plan.access_token,
-        ));
-        let current = env.get(ENV_DRIVER).unwrap_or_default();
-        env.set(ENV_DRIVER, &ensure_reverse_driver(&current));
+        );
+        let current = env.get_ci(ENV_DRIVER).unwrap_or_default();
+        env.set_ci(ENV_DRIVER, &ensure_reverse_driver(&current));
         let out = env.render();
         apply_with_backup_ex(
             host,

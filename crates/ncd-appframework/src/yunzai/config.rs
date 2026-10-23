@@ -1,4 +1,5 @@
-//! 云崽类型化配置：`config/config/` 下六份（bot / other / group / server / redis / renderer）。
+//! 云崽类型化配置：覆盖 `config/config/` 下九份默认配置。
+//! 对照 TimeRainStarSky/Yunzai @ 29bf29ff2f162bb7968f2cee237b148777521f6e（3.1.3）。
 //!
 //! 读：和上游 `getAllCfg` 一样，`default_config` 与 `config/config` 按顶层键浅合并；两份都没有的键
 //! 用上游默认值兜底（导入的项目可能从没跑过，`config/config` 还不存在）。
@@ -36,6 +37,7 @@ pub struct YunzaiBotConfig {
     pub log_level: String,
     pub log_length: u32,
     pub log_object: bool,
+    pub log_align: String,
     /// 单个插件加载超过多少秒算超时
     pub plugin_load_timeout: u32,
     /// 监听文件变化（改配置 / 单文件插件热加载都靠它）
@@ -53,6 +55,11 @@ pub struct YunzaiBotConfig {
     pub online_msg_exp: u32,
     /// 发出去的文件链接保留多少分钟
     pub file_to_url_time: u32,
+    /// 文件最多访问次数；None 不限制，0 禁止访问
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub file_to_url_times: Option<u32>,
+    pub msg_type_count: bool,
     /// `/` 开头的消息当作 `#`（上游键名 `/→#`）
     pub slash_to_hash: bool,
     pub chromium_path: String,
@@ -172,6 +179,57 @@ pub struct YunzaiServerConfig {
     pub access_token: String,
     /// auth 里除 Authorization 之外的头（只读展示：它们也要全对上，NapCat 带不了）
     pub extra_auth_headers: Vec<String>,
+    pub https: YunzaiHttpsConfig,
+}
+
+/// server.yaml 的 https：key 与 cert 同时非空时上游才启用
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct YunzaiHttpsConfig {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub port: Option<u16>,
+    pub key: String,
+    pub cert: String,
+}
+
+/// db.yaml；其它方言的连接参数通过原始文件保留
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct YunzaiDbConfig {
+    pub dialect: String,
+    pub storage: String,
+    pub logging: bool,
+}
+
+/// milky.yaml；嵌套的 webhook / ws 字段在表单模型中展平
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct YunzaiMilkyConfig {
+    pub enable: bool,
+    pub host: String,
+    pub port: u16,
+    pub prefix: String,
+    pub access_token: String,
+    pub connection: String,
+    pub webhook_path: String,
+    pub ws_heartbeat: u32,
+    pub ws_reconnect_interval: u32,
+    pub http_timeout: u32,
+}
+
+/// satori.yaml
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct YunzaiSatoriConfig {
+    pub enable: bool,
+    pub http_endpoint: String,
+    pub ws_endpoint: String,
+    pub token: String,
+    pub platform: String,
+    pub timeout: u32,
+    pub heartbeat_interval: u32,
 }
 
 /// redis.yaml
@@ -203,6 +261,9 @@ pub struct YunzaiInstanceConfig {
     pub server: YunzaiServerConfig,
     pub redis: YunzaiRedisConfig,
     pub renderer: YunzaiRendererConfig,
+    pub db: YunzaiDbConfig,
+    pub milky: YunzaiMilkyConfig,
+    pub satori: YunzaiSatoriConfig,
 }
 
 impl YunzaiInstanceConfig {
@@ -213,6 +274,7 @@ impl YunzaiInstanceConfig {
                 log_level: "info".into(),
                 log_length: 10000,
                 log_object: true,
+                log_align: "  TRSSYz  ".into(),
                 plugin_load_timeout: 60,
                 file_watch: true,
                 update_time: 1440,
@@ -224,6 +286,8 @@ impl YunzaiInstanceConfig {
                 cache_group_member: true,
                 online_msg_exp: 1440,
                 file_to_url_time: 1,
+                file_to_url_times: None,
+                msg_type_count: false,
                 slash_to_hash: true,
                 chromium_path: String::new(),
                 puppeteer_ws: String::new(),
@@ -266,6 +330,12 @@ impl YunzaiInstanceConfig {
                 redirect: "https://git.trss.me/Yunzai".into(),
                 access_token: String::new(),
                 extra_auth_headers: Vec::new(),
+                https: YunzaiHttpsConfig {
+                    url: String::new(),
+                    port: None,
+                    key: String::new(),
+                    cert: String::new(),
+                },
             },
             redis: YunzaiRedisConfig {
                 path: "redis-server".into(),
@@ -277,6 +347,32 @@ impl YunzaiInstanceConfig {
             },
             renderer: YunzaiRendererConfig {
                 name: String::new(),
+            },
+            db: YunzaiDbConfig {
+                dialect: "sqlite".into(),
+                storage: "data/db/data.db".into(),
+                logging: false,
+            },
+            milky: YunzaiMilkyConfig {
+                enable: false,
+                host: "127.0.0.1".into(),
+                port: 3000,
+                prefix: String::new(),
+                access_token: String::new(),
+                connection: "ws".into(),
+                webhook_path: "/milky".into(),
+                ws_heartbeat: 30,
+                ws_reconnect_interval: 10,
+                http_timeout: 15,
+            },
+            satori: YunzaiSatoriConfig {
+                enable: false,
+                http_endpoint: "http://127.0.0.1:5140/satori/v1".into(),
+                ws_endpoint: "ws://127.0.0.1:5140/satori/v1/events".into(),
+                token: String::new(),
+                platform: "satori".into(),
+                timeout: 60000,
+                heartbeat_interval: 10000,
             },
         }
     }
@@ -294,7 +390,7 @@ pub fn default_config_rel(name: &str) -> String {
     format!("{YUNZAI_DEFAULT_CONFIG_DIR}/{name}.yaml")
 }
 
-/// 「原始文件」Tab 列的九份。server / redis / db 只在启动时读，改了要重启
+/// 「原始文件」Tab 列的九份。服务、存储和适配器只在启动时读，改了要重启
 pub fn yunzai_config_documents() -> Vec<AppConfigDocument> {
     YUNZAI_CONFIG_NAMES
         .iter()
@@ -303,7 +399,7 @@ pub fn yunzai_config_documents() -> Vec<AppConfigDocument> {
             label: format!("{name}.yaml"),
             rel_path: config_rel(name),
             format: AppConfigFormat::Yaml,
-            hot_reload: !matches!(*name, "server" | "redis" | "db"),
+            hot_reload: !matches!(*name, "server" | "redis" | "db" | "milky" | "satori"),
         })
         .collect()
 }
@@ -453,6 +549,7 @@ fn bot_from(m: &Mapping, d: &YunzaiBotConfig) -> YunzaiBotConfig {
             .unwrap_or_else(|| d.log_level.clone()),
         log_length: as_u32(get(m, "log_length")).unwrap_or(d.log_length),
         log_object: as_bool(get(m, "log_object")).unwrap_or(d.log_object),
+        log_align: as_string(get(m, "log_align")).unwrap_or_else(|| d.log_align.clone()),
         plugin_load_timeout: as_u32(get(m, "plugin_load_timeout")).unwrap_or(d.plugin_load_timeout),
         file_watch: as_bool(get(m, "file_watch")).unwrap_or(d.file_watch),
         // 上游 `if (cfg.bot.update_time)`：null 和 0 一样是关
@@ -465,6 +562,8 @@ fn bot_from(m: &Mapping, d: &YunzaiBotConfig) -> YunzaiBotConfig {
         cache_group_member: as_bool(get(m, "cache_group_member")).unwrap_or(d.cache_group_member),
         online_msg_exp: as_u32(get(m, "online_msg_exp")).unwrap_or(d.online_msg_exp),
         file_to_url_time: as_u32(get(m, "file_to_url_time")).unwrap_or(d.file_to_url_time),
+        file_to_url_times: as_u32(get(m, "file_to_url_times")),
+        msg_type_count: as_bool(get(m, "msg_type_count")).unwrap_or(d.msg_type_count),
         slash_to_hash: as_bool(get(m, "/→#")).unwrap_or(d.slash_to_hash),
         chromium_path: as_string(get(m, "chromium_path")).unwrap_or_default(),
         puppeteer_ws: as_string(get(m, "puppeteer_ws")).unwrap_or_default(),
@@ -556,6 +655,10 @@ fn group_from(m: &Mapping, d: &YunzaiGroupConfig) -> YunzaiGroupConfig {
 }
 
 fn server_from(m: &Mapping, d: &YunzaiServerConfig) -> YunzaiServerConfig {
+    let empty = Mapping::new();
+    let https = get(m, "https")
+        .and_then(Value::as_mapping)
+        .unwrap_or(&empty);
     let (mut token, mut extra) = (String::new(), Vec::new());
     if let Some(Value::Mapping(auth)) = get(m, "auth") {
         for (k, v) in auth {
@@ -578,6 +681,12 @@ fn server_from(m: &Mapping, d: &YunzaiServerConfig) -> YunzaiServerConfig {
         redirect: as_string(get(m, "redirect")).unwrap_or_default(),
         access_token: token,
         extra_auth_headers: extra,
+        https: YunzaiHttpsConfig {
+            url: as_string(get(https, "url")).unwrap_or_default(),
+            port: as_u16(get(https, "port")),
+            key: as_string(get(https, "key")).unwrap_or_default(),
+            cert: as_string(get(https, "cert")).unwrap_or_default(),
+        },
     }
 }
 
@@ -602,7 +711,49 @@ fn renderer_from(m: &Mapping) -> YunzaiRendererConfig {
     }
 }
 
-/// 六份来源拼成类型化配置
+fn db_from(m: &Mapping, d: &YunzaiDbConfig) -> YunzaiDbConfig {
+    YunzaiDbConfig {
+        dialect: as_string(get(m, "dialect")).unwrap_or_else(|| d.dialect.clone()),
+        storage: as_string(get(m, "storage")).unwrap_or_else(|| d.storage.clone()),
+        logging: as_bool(get(m, "logging")).unwrap_or(d.logging),
+    }
+}
+
+fn milky_from(m: &Mapping, d: &YunzaiMilkyConfig) -> YunzaiMilkyConfig {
+    let empty = Mapping::new();
+    let webhook = get(m, "webhook")
+        .and_then(Value::as_mapping)
+        .unwrap_or(&empty);
+    let ws = get(m, "ws").and_then(Value::as_mapping).unwrap_or(&empty);
+    YunzaiMilkyConfig {
+        enable: as_bool(get(m, "enable")).unwrap_or(d.enable),
+        host: as_string(get(m, "host")).unwrap_or_else(|| d.host.clone()),
+        port: as_u16(get(m, "port")).unwrap_or(d.port),
+        prefix: as_string(get(m, "prefix")).unwrap_or_default(),
+        access_token: as_string(get(m, "access_token")).unwrap_or_default(),
+        connection: as_string(get(m, "connection")).unwrap_or_else(|| d.connection.clone()),
+        webhook_path: as_string(get(webhook, "path")).unwrap_or_else(|| d.webhook_path.clone()),
+        ws_heartbeat: as_u32(get(ws, "heartbeat")).unwrap_or(d.ws_heartbeat),
+        ws_reconnect_interval: as_u32(get(ws, "reconnect_interval"))
+            .unwrap_or(d.ws_reconnect_interval),
+        http_timeout: as_u32(get(m, "http_timeout")).unwrap_or(d.http_timeout),
+    }
+}
+
+fn satori_from(m: &Mapping, d: &YunzaiSatoriConfig) -> YunzaiSatoriConfig {
+    YunzaiSatoriConfig {
+        enable: as_bool(get(m, "enable")).unwrap_or(d.enable),
+        http_endpoint: as_string(get(m, "http_endpoint"))
+            .unwrap_or_else(|| d.http_endpoint.clone()),
+        ws_endpoint: as_string(get(m, "ws_endpoint")).unwrap_or_else(|| d.ws_endpoint.clone()),
+        token: as_string(get(m, "token")).unwrap_or_default(),
+        platform: as_string(get(m, "platform")).unwrap_or_else(|| d.platform.clone()),
+        timeout: as_u32(get(m, "timeout")).unwrap_or(d.timeout),
+        heartbeat_interval: as_u32(get(m, "heartbeat_interval")).unwrap_or(d.heartbeat_interval),
+    }
+}
+
+/// 九份来源拼成类型化配置
 pub fn config_from_sources(sources: &[ConfigSource]) -> YunzaiInstanceConfig {
     let d = YunzaiInstanceConfig::upstream_default();
     let empty = Mapping::new();
@@ -620,11 +771,16 @@ pub fn config_from_sources(sources: &[ConfigSource]) -> YunzaiInstanceConfig {
         server: server_from(map("server"), &d.server),
         redis: redis_from(map("redis"), &d.redis),
         renderer: renderer_from(map("renderer")),
+        db: db_from(map("db"), &d.db),
+        milky: milky_from(map("milky"), &d.milky),
+        satori: satori_from(map("satori"), &d.satori),
     }
 }
 
-/// 类型化配置用到的六份（不含 db / milky / satori）
-pub const TYPED_NAMES: [&str; 6] = ["bot", "other", "group", "server", "redis", "renderer"];
+/// 上游默认配置的九份文档均可通过表单编辑
+pub const TYPED_NAMES: [&str; 9] = [
+    "bot", "other", "group", "server", "redis", "renderer", "db", "milky", "satori",
+];
 
 async fn read_optional(
     host: &dyn Host,
@@ -737,6 +893,49 @@ pub fn validate(cfg: &YunzaiInstanceConfig) -> Vec<ncd_domain::AppConfigIssue> {
     if d.add_limit > 2 {
         sink.push("group/default/add_limit", "只能是 0、1、2");
     }
+    if cfg.server.https.port == Some(0) {
+        sink.push("server/https/port", "端口不能为 0");
+    }
+    if !cfg.server.https.key.is_empty()
+        && !cfg.server.https.cert.is_empty()
+        && cfg.server.https.port == Some(cfg.server.port)
+    {
+        sink.push("server/https/port", "不能和 HTTP 端口相同");
+    }
+    if cfg.milky.enable {
+        if cfg.milky.port == 0 {
+            sink.push("milky/port", "端口不能为 0");
+        }
+        if cfg.milky.host.trim().is_empty() {
+            sink.push("milky/host", "不能留空");
+        }
+        sink.one_of(
+            "milky/connection",
+            &cfg.milky.connection,
+            &["ws", "webhook"],
+        );
+        if cfg.milky.connection == "webhook" && !cfg.milky.webhook_path.starts_with('/') {
+            sink.push("milky/webhook_path", "路径要以 / 开头");
+        }
+    }
+    if cfg.satori.enable {
+        for (path, text, schemes) in [
+            (
+                "satori/http_endpoint",
+                cfg.satori.http_endpoint.as_str(),
+                &["http://", "https://"][..],
+            ),
+            (
+                "satori/ws_endpoint",
+                cfg.satori.ws_endpoint.as_str(),
+                &["ws://", "wss://"][..],
+            ),
+        ] {
+            if !text.trim().is_empty() && !schemes.iter().any(|scheme| text.starts_with(*scheme)) {
+                sink.push(path, "填写对应协议的完整地址");
+            }
+        }
+    }
     let mut seen = std::collections::HashSet::new();
     for (i, o) in cfg.group.overrides.iter().enumerate() {
         let key = o.key.trim();
@@ -842,6 +1041,23 @@ fn bot_patches(old: &YunzaiBotConfig, new: &YunzaiBotConfig, out: &mut Vec<Patch
     diff_field!(out, "bot", "log_level", old.log_level, new.log_level, s);
     diff_field!(out, "bot", "log_length", old.log_length, new.log_length, n);
     diff_field!(out, "bot", "log_object", old.log_object, new.log_object, b);
+    diff_field!(out, "bot", "log_align", old.log_align, new.log_align, s);
+    diff_field!(
+        out,
+        "bot",
+        "msg_type_count",
+        old.msg_type_count,
+        new.msg_type_count,
+        b
+    );
+    diff_field!(
+        out,
+        "bot",
+        "file_to_url_times",
+        old.file_to_url_times,
+        new.file_to_url_times,
+        |v: &Option<u32>| v.map(|x| num(u64::from(x))).unwrap_or(Value::Null)
+    );
     diff_field!(
         out,
         "bot",
@@ -1185,6 +1401,25 @@ fn server_patches(
             auth_value(current, &new.access_token, true),
         ));
     }
+    for (key, before, after) in [
+        ("url", &old.https.url, &new.https.url),
+        ("key", &old.https.key, &new.https.key),
+        ("cert", &old.https.cert, &new.https.cert),
+    ] {
+        if before != after {
+            out.push(set("server", &["https", key], text_or_null(after)));
+        }
+    }
+    if old.https.port != new.https.port {
+        out.push(set(
+            "server",
+            &["https", "port"],
+            new.https
+                .port
+                .map(|v| num(u64::from(v)))
+                .unwrap_or(Value::Null),
+        ));
+    }
 }
 
 fn redis_patches(old: &YunzaiRedisConfig, new: &YunzaiRedisConfig, out: &mut Vec<Patch>) {
@@ -1201,6 +1436,123 @@ fn redis_patches(old: &YunzaiRedisConfig, new: &YunzaiRedisConfig, out: &mut Vec
     ));
 }
 
+fn db_patches(old: &YunzaiDbConfig, new: &YunzaiDbConfig, out: &mut Vec<Patch>) {
+    let s = |v: &String| text_or_null(v);
+    diff_field!(out, "db", "dialect", old.dialect, new.dialect, s);
+    diff_field!(out, "db", "storage", old.storage, new.storage, s);
+    diff_field!(
+        out,
+        "db",
+        "logging",
+        old.logging,
+        new.logging,
+        |v: &bool| Value::Bool(*v)
+    );
+}
+
+fn milky_patches(old: &YunzaiMilkyConfig, new: &YunzaiMilkyConfig, out: &mut Vec<Patch>) {
+    let s = |v: &String| Value::String(v.clone());
+    let n = |v: &u32| num(u64::from(*v));
+    diff_field!(
+        out,
+        "milky",
+        "enable",
+        old.enable,
+        new.enable,
+        |v: &bool| Value::Bool(*v)
+    );
+    diff_field!(out, "milky", "host", old.host, new.host, s);
+    diff_field!(out, "milky", "port", old.port, new.port, |v: &u16| num(
+        u64::from(*v)
+    ));
+    diff_field!(out, "milky", "prefix", old.prefix, new.prefix, s);
+    diff_field!(
+        out,
+        "milky",
+        "access_token",
+        old.access_token,
+        new.access_token,
+        s
+    );
+    diff_field!(
+        out,
+        "milky",
+        "connection",
+        old.connection,
+        new.connection,
+        s
+    );
+    diff_field!(
+        out,
+        "milky",
+        "http_timeout",
+        old.http_timeout,
+        new.http_timeout,
+        n
+    );
+    if old.webhook_path != new.webhook_path {
+        out.push(set(
+            "milky",
+            &["webhook", "path"],
+            Value::String(new.webhook_path.clone()),
+        ));
+    }
+    if old.ws_heartbeat != new.ws_heartbeat {
+        out.push(set(
+            "milky",
+            &["ws", "heartbeat"],
+            num(u64::from(new.ws_heartbeat)),
+        ));
+    }
+    if old.ws_reconnect_interval != new.ws_reconnect_interval {
+        out.push(set(
+            "milky",
+            &["ws", "reconnect_interval"],
+            num(u64::from(new.ws_reconnect_interval)),
+        ));
+    }
+}
+
+fn satori_patches(old: &YunzaiSatoriConfig, new: &YunzaiSatoriConfig, out: &mut Vec<Patch>) {
+    let s = |v: &String| Value::String(v.clone());
+    let n = |v: &u32| num(u64::from(*v));
+    diff_field!(
+        out,
+        "satori",
+        "enable",
+        old.enable,
+        new.enable,
+        |v: &bool| Value::Bool(*v)
+    );
+    diff_field!(
+        out,
+        "satori",
+        "http_endpoint",
+        old.http_endpoint,
+        new.http_endpoint,
+        s
+    );
+    diff_field!(
+        out,
+        "satori",
+        "ws_endpoint",
+        old.ws_endpoint,
+        new.ws_endpoint,
+        s
+    );
+    diff_field!(out, "satori", "token", old.token, new.token, s);
+    diff_field!(out, "satori", "platform", old.platform, new.platform, s);
+    diff_field!(out, "satori", "timeout", old.timeout, new.timeout, n);
+    diff_field!(
+        out,
+        "satori",
+        "heartbeat_interval",
+        old.heartbeat_interval,
+        new.heartbeat_interval,
+        n
+    );
+}
+
 /// 盘上现状 → 目标配置，要重写的文件及其新内容（没变的文件不在里面）
 pub fn render_changes(
     sources: &[ConfigSource],
@@ -1214,6 +1566,9 @@ pub fn render_changes(
     group_patches(&current.group, &next.group, &mut patches);
     server_patches(&current.server, &next.server, src("server"), &mut patches);
     redis_patches(&current.redis, &next.redis, &mut patches);
+    db_patches(&current.db, &next.db, &mut patches);
+    milky_patches(&current.milky, &next.milky, &mut patches);
+    satori_patches(&current.satori, &next.satori, &mut patches);
     if current.renderer.name != next.renderer.name {
         patches.push(set(
             "renderer",
@@ -1291,7 +1646,12 @@ pub fn link_inputs_changed(before: &YunzaiInstanceConfig, after: &YunzaiInstance
 pub fn restart_inputs_changed(before: &YunzaiInstanceConfig, after: &YunzaiInstanceConfig) -> bool {
     let (b, a) = (&before.bot, &after.bot);
     before.server.port != after.server.port
+        || before.server.https != after.server.https
         || before.redis != after.redis
+        || before.db != after.db
+        || before.milky != after.milky
+        || before.satori != after.satori
+        || b.log_align != a.log_align
         || b.file_watch != a.file_watch
         || b.update_time != a.update_time
         || b.restart_time != a.restart_time
@@ -1492,6 +1852,95 @@ mod tests {
         assert_eq!(back, o);
         let cfg = serde_json::to_value(YunzaiInstanceConfig::upstream_default()).unwrap();
         assert!(cfg["bot"].get("puppeteer_timeout").is_none());
+    }
+
+    #[test]
+    fn new_default_documents_and_optional_values_round_trip_without_rewriting_extras() {
+        let mut sources = vec![
+            ConfigSource::parse("bot", Some("# keep\nlog_align: X\nfile_to_url_times: 0\nmsg_type_count: true\nfuture_key: keep\n".into()), None).unwrap(),
+            ConfigSource::parse("server", Some("port: 2536\nhttps:\n  port: 2537\n  key: old.key\n  cert: old.crt\n  future_tls: keep\n".into()), None).unwrap(),
+            ConfigSource::parse("db", Some("# database\ndialect: postgres\nstorage: custom.db\nlogging: false\nusername: keep\n".into()), None).unwrap(),
+            ConfigSource::parse("milky", Some("enable: false\nssl: true\nwebhook:\n  path: /old\n  future_hook: keep\nws:\n  heartbeat: 30\n  reconnect_interval: 10\n".into()), None).unwrap(),
+            ConfigSource::parse("satori", Some("enable: false\nplatform: custom\nfuture_satori: keep\n".into()), None).unwrap(),
+        ];
+        let current = config_from_sources(&sources);
+        assert_eq!(current.bot.file_to_url_times, Some(0));
+        assert!(current.bot.msg_type_count);
+        assert_eq!(current.server.https.port, Some(2537));
+        assert_eq!(current.db.dialect, "postgres");
+        assert_eq!(current.milky.webhook_path, "/old");
+        assert!(
+            render_changes(&sources, &current, &current)
+                .unwrap()
+                .is_empty()
+        );
+        let mut next = current.clone();
+        next.bot.file_to_url_times = None;
+        next.server.https.cert = "new.crt".into();
+        next.db.logging = true;
+        next.milky.webhook_path = "/new".into();
+        next.satori.heartbeat_interval = 20000;
+        let changes = render_changes(&sources, &current, &next).unwrap();
+        assert_eq!(changes.len(), 5);
+        for (name, text) in &changes {
+            assert!(text.contains("keep"), "unknown keys lost in {name}: {text}");
+            if *name == "milky" {
+                assert!(text.contains("ssl: true"));
+            }
+            let idx = sources.iter().position(|s| s.name == *name).unwrap();
+            sources[idx] = ConfigSource::parse(name, Some(text.clone()), None).unwrap();
+        }
+        assert_eq!(config_from_sources(&sources), next);
+        assert!(restart_inputs_changed(&current, &next));
+        assert!(!link_inputs_changed(&current, &next));
+    }
+
+    #[test]
+    fn https_can_be_added_below_an_empty_upstream_section() {
+        let sources = fresh_sources();
+        let current = config_from_sources(&sources);
+        let mut next = current.clone();
+        next.server.https.port = Some(2537);
+        next.server.https.key = "config/localhost.key".into();
+        next.server.https.cert = "config/localhost.crt".into();
+        let changes = render_changes(&sources, &current, &next).unwrap();
+        let text = &changes
+            .iter()
+            .find(|(name, _)| *name == "server")
+            .unwrap()
+            .1;
+        let parsed = ConfigSource::parse("server", Some(text.clone()), None).unwrap();
+        assert_eq!(
+            config_from_sources(&[parsed]).server.https,
+            next.server.https
+        );
+        assert!(text.contains("# cert: config/localhost.crt"));
+    }
+
+    #[test]
+    fn typed_documents_cover_the_upstream_default_directory() {
+        let mut typed = TYPED_NAMES.to_vec();
+        let mut listed = YUNZAI_CONFIG_NAMES.to_vec();
+        typed.sort_unstable();
+        listed.sort_unstable();
+        assert_eq!(typed, listed);
+        let mut cfg = YunzaiInstanceConfig::upstream_default();
+        cfg.satori.enable = true;
+        cfg.satori.http_endpoint.clear();
+        cfg.satori.ws_endpoint.clear();
+        cfg.satori.timeout = 0;
+        cfg.satori.heartbeat_interval = 0;
+        assert!(
+            validate(&cfg).is_empty(),
+            "empty endpoints and zero timings use upstream defaults"
+        );
+        cfg.milky.enable = true;
+        cfg.milky.connection = "unsupported".into();
+        cfg.satori.enable = true;
+        cfg.satori.ws_endpoint = "http://wrong-protocol".into();
+        let paths: Vec<_> = validate(&cfg).into_iter().map(|i| i.path).collect();
+        assert!(paths.contains(&"milky/connection".to_string()));
+        assert!(paths.contains(&"satori/ws_endpoint".to_string()));
     }
 
     #[test]

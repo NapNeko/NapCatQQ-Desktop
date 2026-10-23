@@ -3,14 +3,6 @@ import type { MaiBotImageCacheCleanupConfig } from "./MaiBotImageCacheCleanupCon
 
 export type MaiBotVisualConfig = { 
 /**
- * 控制规划阶段是否把图片内容直接发送给 planner 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。
- */
-planner_mode: "text" | "multimodal" | "auto", 
-/**
- * 控制回复生成阶段是否把图片内容直接发送给 replyer 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。
- */
-replyer_mode: "text" | "multimodal" | "auto", 
-/**
  * 一次多模态请求最多带多少张图，太大可能更慢更贵。
  */
 max_image_num: number, 

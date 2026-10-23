@@ -1,5 +1,22 @@
 [inner]
-version = "8.14.40"
+version = "8.15.37"
+
+[agent]
+enabled = false # 启用与普通聊天并行的外接 Agent 接口，通过 ACP 连接 dsh 等外部程序。
+connection = "dsh" # dsh CLI 自动使用 --profile acp；dsh Desktop 连接正在运行的桌面应用，在界面中显示同一会话；自定义用于其他 ACP 程序。模型与凭据使用外部 Agent 自身配置。
+desktop_manifest = "" # dsh Desktop 模式使用，留空读取 ~/.dsh/maibot-desktop.json。先在 Desktop 安装 dsh-maibot-bridge 插件；不启动第二个 dsh 进程，不关闭 Desktop 应用。
+acp_command = "dsh" # 外部 Agent 可执行程序或绝对路径，不是整段 shell 命令；Windows 可填写 dsh.cmd。
+acp_args = [] # 仅自定义 ACP 使用，逐项填写参数；dsh 预设忽略此项并自动生成 --profile acp。
+acp_cwd = "" # 外部进程的主机工作目录，留空使用 data/agent/workspace；不是沙盒 C:\MaiWorkspace。同一会话恢复时保持不变。
+acp_env = {} # 追加或覆盖外部进程环境变量，例如 DSH_HOME；模型凭据建议保存在 dsh 自身配置中。
+acp_model = "" # 留空使用外部 Agent 自身模型配置；填写时必须是其 model 配置选项公布的值，不使用本体 planner 回退。
+acp_timeout = 60 # 握手、会话恢复和取消确认的等待时间，不限制任务执行时长。
+computer_tools = false # 是否向外接 Agent 提供沙盒桌面工具及 WebUI 接管界面；人工接管期间不执行 Agent 输入。
+networking = true # 允许沙盒联网；修改后在下一次启动沙盒时生效。
+memory_mb = 4096 # 沙盒内存 MB，下次启动沙盒时生效。
+startup_timeout = 120 # 等待沙盒启动的超时秒数。
+request_timeout = 60 # 等待代理回复的超时秒数；超时不重放操作，可继续领取原请求结果。
+screenshot_max_edge = 1600 # 截图最长边，0 表示原始分辨率；鼠标坐标始终按返回截图换算。
 
 [bot]
 platform = "" # 适配器没有上报身份时使用的备用主平台，例如 qq。
@@ -9,26 +26,32 @@ nickname = "麦麦" # 麦麦显示和自称时使用的名字。
 alias_names = [] # 别人可能用来称呼麦麦的名字，用于辅助识别提及。
 
 [personality]
-personality = "是一个大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。" # 麦麦的人格和身份设定，建议简短描述她是谁、是什么性格。
-behavior_style = "是大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。不会没话题硬找话题，" # Planner 使用的行动准则，例如何时参与聊天、如何观察局面以及何时保持安静。
+personality = "是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。" # 麦麦的人格和身份设定，建议简短描述她是谁、是什么性格。
+behavior_style = "是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。不会没话题硬找话题，具有足够的自主性，会自行搜集信息理解内容。" # Planner 使用的行动准则，例如何时参与聊天、如何观察局面以及何时保持安静。
 reply_style = "你的风格平淡简短，可以参考贴吧的回复风格。不滥用比喻或者生硬句子。视情况省略主语或者进行倒装，风格较为随意。" # 麦麦平时说话的风格，例如简短、温和、吐槽或正式。
 multiple_reply_style = ["你的风格平淡但不失讽刺，很简短,很白话。可以参考贴吧，微博的回复风格。", "用1-2个字进行回复", "用1-2个符号进行回复", "言辭凝練古雅，穿插《論語》經句卻不晦澀，以文言短句為基，輔以淺白語意，持長者溫和風範，全用繁體字表達，具先秦儒者談吐韻致。", "带点翻译腔，但不要太长"] # 备用说话风格；触发后只影响本次回复。
 multiple_probability = 0 # 随机启用备用风格的概率；0 表示不随机切换。
 
 [chat]
+enable_reply_at = true # 允许麦麦在回复开头 @ 一个或多个用户，由模型根据聊天内容决定是否使用。
 max_context_size = 40 # 群聊回复时参考的最近消息数量；越大越懂上下文，也更耗模型。
 max_private_context_size = 60 # 私聊回复时参考的最近消息数量。
-enable_context_optimization = true # 压缩部分上下文，减少模型消耗；一般建议开启。
 mid_term_memory = true # 打开后会主动召回最近聊天发生的事情。
 mid_term_memory_lenth = 10 # 最多保留多少条聊天回想；设为 0 表示不保留。
 
 [chat.reply_timing] # 什么时候回复、回复频率与等待退避配置。
+message_debounce_mode = "natural"
+# 默认自然，只需选择关闭、快速、自然或沉稳，无需另开开关。
+# 一批指合并后一起送入判断的消息；新批次按上一条有效消息的间隔选择初始等待：超过 30 秒或没有历史为安静，否则为活跃。同人/换人均与紧邻的上一条消息比较，重新从新消息起计算等待，可提前或延后结束。
+# 快速为安静 1 秒、活跃 3 秒、同人 1 秒、换人 0.5 秒：更快，但更容易漏接分段补充。自然为 2/5/2/0.5 秒：默认折中。沉稳为 4/7/4/2 秒：减少更多判断、多留补充机会，也会让没有补充的消息多等，不能保证每个群、每次都更完整。
+# 三档共用：裸图开启新批次时至少等 4 秒，后续消息仍按续发规则重算；批次内纯表情包不能延长等待，但可以提前结束；整批从第一条实际收到起最多 8 秒，@或提及后最多 1 秒，连续提及取最早上限。上限优先于其他等待规则。
+# 更换等待档位从下一条有效消息起生效，不重置批次或提及上限，不延长已到期批次；选择关闭会结束正在进行的等待，之后新消息不再等待。这里的时间仅指防抖排队，不包含模型生成和发送耗时。
+
+planner_message_steering = false # 强制 Planner 使用流式请求；思考或输出期间收到新消息立即打断并带上新消息重新请求，wait 等待也可被新消息提前结束。
 talk_value = 1 # 群聊里麦麦主动说话的频率；越小越安静。
 private_talk_value = 1 # 私聊里麦麦主动说话的频率；越小越安静。
-mentioned_bot_reply = false # 开启后，只要消息提到麦麦名字就更容易回复。
+mentioned_bot_reply = true # 开启后，只要消息提到麦麦名字就更容易回复。
 inevitable_at_reply = true # 开启后，被 @ 时会尽量回复。
-reply_trigger_mode = "frequency" # 控制新消息何时进入 Planner。
-planner_interrupt_max_consecutive_count = 0 # 思考时来了新消息，最多重新思考多少次。
 max_consecutive_wait_count = 3 # Planner 最多连续调用 wait 多少次；达到上限后 wait 工具会拒绝继续进入等待。
 no_action_backoff_base_seconds = 15 # 连续决定不回复后，下一次检查前先等多久。
 no_action_backoff_cap_seconds = 300 # 不回复退避等待的最长时间。
@@ -39,8 +62,9 @@ talk_value_rules = [{platform = "", item_id = "", rule_type = "group", time = "0
 # 动态发言频率规则；可让麦麦在某些群、私聊或时段更活跃或更安静。
 
 [chat.reply_style] # 如何回复、引用回复与聊天 Prompt 配置。
-enable_reply_quote = true # 回复时是否可以引用上一条或相关消息。
-group_chat_prompt = "你正在qq群里聊天，下面是群里正在聊的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。请注意把握聊天内容。\n不要总是提及自己的身份背景，根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包，只要关注表情包表达的含义。你可以适当发送表情包表达情绪。控制回复的频率，不要每个人的消息都回复，优先回复你感兴趣的或者主动提及你的，适当回复其他话题。\n"
+group_quote_frequency = "occasionally" # 全局群聊引用频率：不引用、偶尔引用、经常引用。按固定规律随机决定，经常引用的概率为偶尔引用的两倍；不影响私聊。
+private_quote_frequency = "occasionally" # 全局私聊引用频率：不引用、偶尔引用、经常引用。结合用户连发条数、发言间隔和回复目标位置随机决定；经常引用的概率为偶尔引用的两倍。
+group_chat_prompt = "下面是聊天中的的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。\n根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包。你可以适当发送表情包表达情绪。如果有人不喜欢你或者不理你，就不要强行回复，回复前读空气。不要每个人的消息都回复，适当回复其他话题。可以适当回过头回复之前用户的消息。\n"
 # 群聊通用提示词，告诉麦麦群聊中该怎么说话。
 
 private_chat_prompts = "你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n"
@@ -48,36 +72,32 @@ private_chat_prompts = "你正在聊天，下面是正在聊的内容，其中�
 
 chat_prompts = [] # 给指定群聊或私聊额外补充聊天要求；有特殊群规或语气要求时再加。
 
+[capabilities]
+tool_result_condense = false # 工具返回的结果超过阈值字数时，先交给子代理按 Planner 当前意图整理成结论再写入上下文，减少后续每轮的上下文占用；会多一次模型请求。
+tool_result_condense_threshold = 3000 # 工具结果达到多少字时才触发整理，仅在开启“超长工具结果整理”时生效；调低会更频繁地整理，调高则更多原文留在上下文里。
+planner_subagent = false # 给 Planner 提供 subagent 工具：把自包含的查询或整理任务交给子代理，子代理在独立上下文里多轮调用被授权的工具，只把结论交还给 Planner。
+advanced_sub_agent = false # 子代理改为在后台运行：派发后立刻返回任务 id，麦麦可以继续聊天，子代理结束时结论作为一条新消息送回并唤醒 Planner；同时提供查看和终止后台任务的工具。需要先开启“子代理任务派发”。
+
 [experimental]
-enable_behavior_learning = false # 让麦麦从聊天中学习什么时候该怎么回应的经验。
-enable_rich_reply = false # 开启后，reply 动作可通过 attach_pic、attach_emoji、attach_at 参数附加图片、表情包或 at。
-emotion_trait = "neutral" # 实验性人格情绪特点；理性冷静和多愁善感会追加人格后缀，中性不追加内容。
-behavior_learning_list = [{platform = "", item_id = "", type = "group", use = true, learn = true}] # 配置哪些聊天会学习和使用行为经验；默认规则不够时再单独添加。
-behavior_groups = []
-focus_mode = false # 让麦麦同一时间只专注一个聊天流，适合直播或高强度聊天场景。
+focus_mode = false # 让同组聊天共享一个持续思考的 Planner；全部消息共同进入上下文，工具通过 session_id 指定处理目标。
 focus_on_private = false # Focus 模式是否也作用于私聊。
 focus_chat_whitelist = []
 focus_groups = []
-focus_cool_time = 120 # 当前关注的聊天多久没继续处理后，允许被其他聊天唤醒。
 
 [experimental.attention_drift] # 注意力漂移实验模式；让麦麦在群聊/私聊中表现出更活跃的联想和轻微话题漂移。
 enabled = false # 开启后，麦麦会更容易被有趣的新话题、梗或反差点吸引，但仍需保持上下文可理解。
 drift_level = "scattered" # 控制注意力漂移的整体表现档位，而不是用数值概率描述。
 anchor_policy = "balanced" # 控制话题漂移后需要多强地回到当前聊天上下文。
 reaction_style = "lively" # 控制短句、吐槽、语气词等短反应在漂移风格中的使用方式。
-# 让多个群聊或私聊共享学到的行为经验。
-
 # Focus 白名单。配置后只有命中的群聊或私聊会进入 Focus；留空表示所有符合聊天类型开关的聊天都可进入 Focus。
 
-# 把聊天流分组后，同组共享 Focus，不同组互不抢占。
+# 同组聊天共享 Planner 与完整上下文，不同组独立运行；未匹配的聊天各自形成独立组。
 
 [visual]
-planner_mode = "auto" # 控制规划阶段是否把图片内容直接发送给 planner 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。
-replyer_mode = "auto" # 控制回复生成阶段是否把图片内容直接发送给 replyer 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。
-max_image_num = 128 # 一次多模态请求最多带多少张图，太大可能更慢更贵。
-wait_image_recognize_max_time = 10 # 等图片识别完成的最长秒数；0 表示不等待。
+max_image_num = 64 # 一次多模态请求最多带多少张图，太大可能更慢更贵。
+wait_image_recognize_max_time = 32 # 等图片识别完成的最长秒数；0 表示不等待。
 handle_oversized_images = true # 收到太大的图片时，是否自动压缩或丢弃。
-max_image_size_mb = 30.0 # 超过这个大小的图片会按过大图片处理方法处理；0 表示不限。
+max_image_size_mb = 16.0 # 超过这个大小的图片会按过大图片处理方法处理；0 表示不限。
 oversized_image_handle_method = "compress" # 大图的处理方式：压缩后继续用，或直接丢弃。
 
 [visual.image_cache_cleanup] # 定期清理旧图片缓存，减少磁盘占用。
@@ -87,9 +107,9 @@ image_file_retention_days = 14 # 图片文件多久没被使用后可以删除�
 no_file_result_retention_days = 30 # 图片文件删掉后，识别文字还能保留多久。
 
 [expression]
-expression_checked_only = true # 仅使用人工精选的表达。
+expression_checked_only = false # 仅使用人工精选的表达。
 expression_self_reflect = true # 写入表达方式前先让 AI 检查，减少学到奇怪内容。
-expression_selection_mode = "legacy" # 表达方式的使用策略：legacy 随手抽取候选，vector_intent 使用表达意图与嵌入召回。
+use_vector_expression = true # 开启后使用表达意图与嵌入召回，需要配置嵌入模型；关闭时使用随手候选。
 expression_vector_index_path = "data/expression_selection/expression_vector_index.json" # 向量召回使用的表达索引 JSON；相对路径按项目根目录解析。
 expression_vector_candidate_pool_size = 50 # 向量召回后最多交给表达方式 LLM 选择的候选数；硬上限为 50。
 max_expression_learner = 3 # 同时运行的表达学习任务数量；太高可能占用更多资源。
@@ -155,6 +175,22 @@ feedback_correction_reconcile_batch_size = 20 # 反馈纠错二阶段一致性�
 
 [a_memorix.storage] # 存储位置
 data_dir = "data/a-memorix" # 数据目录
+
+[a_memorix.image_memory] # 图片资产留存、图片嵌入和相似内容召回配置
+enabled = true
+task_name = "image_embedding"
+preprocess_version = "identity_v1"
+probe_retry_seconds = 60.0
+max_bytes = 10485760
+max_pixels = 40000000
+candidate_limit = 8
+similarity_threshold = 0.72
+job_poll_interval_seconds = 2.0
+job_batch_size = 4
+job_enqueue_batch_size = 200
+job_lease_seconds = 120.0
+job_max_retries = 5
+min_train_threshold = 40
 
 [a_memorix.embedding] # 把记忆内容转换为向量时使用的基础设置
 model_name = "auto" # 用于把记忆内容转换成向量的模型，auto 表示自动选择
@@ -282,7 +318,6 @@ refresh_retry_backoff_seconds = 300 # 画像刷新失败后再次重试前等待
 max_retry = 3 # 画像刷新队列最大重试次数
 top_k_evidence = 12 # 证据条数
 evidence_classification_max_tokens = 1200 # 人物画像证据分类最大输出 token 数
-evidence_classification_temperature = 0.1 # 人物画像证据分类模型温度
 
 [a_memorix.memory] # 记忆演化配置
 enabled = true # 是否启用记忆演化
@@ -340,6 +375,7 @@ ban_msgs_regex = [] # 用正则过滤消息；适合更复杂的过滤规则。
 enable_asr = false # 开启后麦麦可以把语音消息识别成文字再处理。
 
 [emoji]
+use_new_send_logic = false # 开启后由思考模型直接查看并挑选表情包，在文字回复后发送，需要思考模型支持视觉；关闭时沿用独立选择并发送表情包的旧方式。
 emoji_send_num = 25 # 每次从多少个候选表情里挑一个发送；不是一次发送这么多。
 max_reg_num = 64 # 最多保存多少个可用表情。
 do_replace = true # 表情满了以后是否用新表情替换旧表情。
@@ -372,6 +408,7 @@ tone_error_rate = 0.1 # 按相近声调制造错字的概率。
 word_replace_rate = 0.006 # 整词被替换成错词的概率。
 
 [response_splitter]
+mode = "rule" # 规则断句或使用 LLM 按语义断句。
 enable = true # 把过长回复拆成多条发送。
 max_length = 512 # 单条回复允许的最大长度。
 max_sentence_num = 8 # 单条回复最多包含多少个句子。
@@ -394,20 +431,26 @@ max_log_files = 30 # 最多保留多少个主日志文件。
 log_cleanup_days = 30 # 主日志文件超过多少天后清理。
 llm_request_snapshot_limit = 128 # 失败模型请求快照最多保留多少份。
 maisaka_prompt_preview_limit = 256 # 每个聊天最多保留多少组 Prompt 预览。
-maisaka_reply_effect_limit = 256 # 每个聊天最多保留多少条回复效果记录。
+memory_diagnostics_enabled = true # 启用独立内存诊断日志；最多四个 5 MiB 文件，修改后重启生效。
+memory_diagnostics_deep_enabled = false # 启用 tracemalloc 分配位置对比（每十分钟）；有额外内存和 CPU 开销，排查时开启，重启生效。
+memory_diagnostics_interval_seconds = 60.0 # 轻量内存诊断采集间隔（秒，至少 10 秒），修改后重启生效。
+event_loop_watchdog_enabled = false # 是否记录事件循环卡顿；主循环与 WebUI 循环各有一份，用于排查界面卡顿。
+event_loop_watchdog_warn_seconds = 0.5 # 事件循环唤醒延迟超过该秒数时记录一条警告日志。
 suppress_libraries = ["faiss", "httpx", "urllib3", "asyncio", "websockets", "httpcore", "requests", "sqlalchemy", "openai", "uvicorn", "jieba"] # 完全不显示日志的第三方库名称列表。
 library_log_levels = {aiohttp = "WARNING", PIL = "WARNING"} # 单独设置某些第三方库的日志等级。
 
 [debug]
-enable_console_input = false # 在交互式终端中启用本地消息和指令输入。
-show_maisaka_thinking = true # 在日志或界面中显示麦麦的思考过程。
-enable_clear_context_command = false # 允许使用 /clear 清空当前聊天流的 Maisaka 短期历史上下文。
-enable_reply_effect_tracking = false # 记录回复效果评分，方便观察回复质量。
+replyer_retro_prompt = false # 按旧版（0.12.x）的方式组织 replyer 提示词：全部回复指令集中在一份完整模板里，用块占位符填充，群聊/私聊/简短回复各用一套模板，并整段作为一条 user 消息发送。模型名称或标识包含 mai_replier（兼容 mai-replier），或为 v2p1-contract、v2p1-raw 时自动开启且不可关闭，全部移走后自动关闭；其他模型可手动开启。
+enable_console_input = true # 在交互式终端中启用本地消息和指令输入。
+show_maisaka_thinking = false # 在终端显示思考过程大框，不影响推理记录保存和 WebUI 查看。
+save_maisaka_reasoning = true # 保存 Planner、工具调用及聊天回想的完整推理记录，供 WebUI 查看，与终端显示独立。
 keep_prompt_preview_json_base64 = false # Prompt 预览里保留图片 base64，便于复现但会占空间。
 record_tool_structured_content = false # 保存工具返回的结构化内容，便于调试但会增加数据库体积。
 enable_llm_cache_stats = false # 记录模型 prompt cache 统计，用于性能调试。
+force_plugin_compatibility = false # 跳过插件声明的 Host 和 SDK 版本范围校验，直接加载插件；开启后需重启生效。
 
 [maim_message]
+enabled = true # 消息服务总开关；关闭后不启动旧版 WS 和新版 API 服务，重启生效，不影响插件式适配器。
 ws_server_host = "127.0.0.1" # 旧版 WebSocket 服务监听地址；不清楚就保持默认。
 ws_server_port = 8000 # 旧版 WebSocket 服务端口。
 auth_token = [] # 旧版 API 的认证令牌；为空表示不验证。
@@ -424,7 +467,7 @@ enabled = true # 是否启动 WebUI 管理界面。
 host = ["127.0.0.1", "::1"] # WebUI 监听地址列表；可同时绑定 IPv4 和 IPv6，例如 ["0.0.0.0", "::"]。
 port = 8001 # WebUI 访问端口。
 mode = "production" # WebUI 运行模式；普通使用保持 production。
-webui_style = 1 # 界面风格编号；0 为旧风格，1 为未来复古风格。
+webui_style = 2 # 界面风格编号；0 为旧风格，1 为未来复古风格，2 为千禧风格。
 anti_crawler_mode = "basic" # 防爬虫策略；basic 只记录，strict/loose 会拦截更多请求。
 allowed_ips = "127.0.0.1" # 允许访问 WebUI 的 IP，多个用逗号分隔。
 trusted_proxies = "" # 可信反向代理 IP；只有这些代理传来的真实 IP 会被信任。
@@ -462,7 +505,9 @@ allow_url = false # 是否允许 MCP 服务器请求打开 URL。
 
 [plugin]
 permission = [] # 允许用聊天命令管理插件的用户，格式如 qq:123456789。
+silent_permission_denied = false # 开启后，用户执行无权限命令时不再发送提示消息，仅静默拦截并记录日志。
 command_permissions = {} # 受保护命令按用户和真实聊天流配置的额外放行规则。
+disabled_commands = [] # 在命令管理中停用的命令 ID 列表（格式为 plugin_id.command_name，内置命令为 core.clear）。
 
 [plugin_runtime]
 enabled = true # 是否启用新版插件运行时。

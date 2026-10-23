@@ -359,6 +359,48 @@ mod tests {
     }
 
     #[test]
+    fn web_search_uses_services_and_checks_active_credentials() {
+        let mut c = cfg();
+        let mut service = super::super::schema::MaiBotWebServiceConfig::default();
+        service.timeout = 0.0;
+        service.base_url = "https://user:pass@example.com/?key=x".into();
+        c.models.web.services.insert("search".into(), service);
+        c.models.model_task_config.web_search.model_list = vec!["search".into(), "missing".into()];
+        let paths: Vec<String> = validate(&c).into_iter().map(|issue| issue.path).collect();
+        assert!(paths.contains(&"models/web/services/search/timeout".to_string()));
+        assert!(paths.contains(&"models/web/services/search/base_url".to_string()));
+        assert!(paths.contains(&"models/web/services/search/api_key".to_string()));
+        assert!(paths.contains(&"models/model_task_config/web_search/model_list".to_string()));
+        assert!(paths.contains(&"models/model_task_config/web_search/model_list/1".to_string()));
+    }
+
+    #[test]
+    fn price_periods_check_format_and_cross_midnight_overlap() {
+        let mut c = cfg();
+        let period = |start: &str, end: &str| super::super::schema::MaiBotModelPricePeriod {
+            start_time: start.into(),
+            end_time: end.into(),
+            price_in: 1.0,
+            price_out: 2.0,
+            cache_price_in: 0.0,
+        };
+        c.models.models[0].price_periods = vec![period("23:00", "01:00"), period("00:30", "02:00")];
+        assert!(
+            validate(&c)
+                .iter()
+                .any(|issue| issue.message.contains("重叠"))
+        );
+        c.models.models[0].price_periods[1].start_time = "01:00".into();
+        assert!(validate(&c).is_empty());
+        c.models.models[0].price_periods[1].start_time = "25:00".into();
+        assert!(
+            validate(&c)
+                .iter()
+                .any(|issue| issue.path == "models/models/0/price_periods/1/start_time")
+        );
+    }
+
+    #[test]
     fn restart_needed_only_for_startup_bound_fields() {
         let before = cfg();
         let mut after = before.clone();

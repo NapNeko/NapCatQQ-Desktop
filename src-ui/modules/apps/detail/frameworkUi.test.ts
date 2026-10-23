@@ -51,6 +51,7 @@ describe('resolveFrameworkUi', () => {
             'rules',
             'plugins',
             'connections',
+            'advanced',
         ]);
         // 概览、人格、知识库也能就地改配置，保存条要在；只有插件页不是
         for (const t of [
@@ -62,11 +63,13 @@ describe('resolveFrameworkUi', () => {
             'kb',
             'subagent',
             'rules',
+            'advanced',
         ]) {
             expect(ui?.typedTabs.has(t)).toBe(true);
         }
         expect(ui?.typedTabs.has('plugins')).toBe(false);
         expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
+        expect(ui?.fillPaneTabs.has('advanced')).toBe(false);
         expect(ui?.tabForIssue('onebot/ws_reverse_port')).toBe('connections');
         expect(ui?.tabForIssue('sources/0/id')).toBe('models');
         expect(ui?.tabForIssue('ai/default_provider_id')).toBe('models');
@@ -76,6 +79,13 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('ai/max_agent_step')).toBe('talk');
         expect(ui?.tabForIssue('gates/id_whitelist')).toBe('talk');
         expect(ui?.tabForIssue('subagent/main_enable')).toBe('subagent');
+        expect(ui?.tabForIssue('advanced/provider_settings.websearch_brave_key')).toBe('advanced');
+        expect(ui?.tabForIssue('advanced/$raw')).toBe('advanced');
+        expect(
+            buildDetailNav(ui)
+                .at(-1)
+                ?.items.map((t) => t.value),
+        ).toEqual(['connections', 'advanced', 'raw', 'log']);
     });
 
     it('maibot nav groups and issue routing', () => {
@@ -95,6 +105,7 @@ describe('resolveFrameworkUi', () => {
             'overview',
             'trychat',
             'models',
+            'agent',
             'persona',
             'prompts',
             'memory',
@@ -136,17 +147,30 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('bot/maim_message/ws_server_port')).toBe('connection');
         expect(ui?.tabForIssue('bot/maim_message/api_server_port')).toBe('advanced');
         expect(ui?.tabForIssue('models/api_providers/0/api_key')).toBe('models');
+        expect(ui?.tabForIssue('models/models/0/model_type')).toBe('models');
+        expect(ui?.tabForIssue('models/models/0/price_periods/0/start_time')).toBe('models');
+        expect(ui?.tabForIssue('models/model_task_config/fast_model/model_list/0')).toBe('models');
+        expect(ui?.tabForIssue('models/model_task_config/image_embedding/model_list/0')).toBe(
+            'models',
+        );
+        expect(ui?.tabForIssue('models/model_task_config/web_search/model_list/0')).toBe('models');
+        expect(ui?.tabForIssue('models/web/services/search/category')).toBe('models');
+        expect(ui?.tabForIssue('bot/agent/acp_timeout')).toBe('agent');
+        expect(ui?.tabForIssue('bot/capabilities/planner_subagent')).toBe('agent');
         expect(ui?.tabForIssue('bot/personality/multiple_probability')).toBe('persona');
         // chat 整节在回复设置，其中按会话的规则字段在会话规则：最长前缀赢
         expect(ui?.tabForIssue('bot/chat/max_context_size')).toBe('talk');
         expect(ui?.tabForIssue('bot/chat/reply_timing/talk_value')).toBe('talk');
+        expect(ui?.tabForIssue('bot/chat/reply_timing/planner_message_steering')).toBe('talk');
         expect(ui?.tabForIssue('bot/chat/reply_timing/talk_value_rules/1/value')).toBe('rules');
         expect(ui?.tabForIssue('bot/chat/reply_style/chat_prompts/0/prompt')).toBe('rules');
         expect(ui?.tabForIssue('bot/keyword_reaction/regex_rules/0/regex/2')).toBe('rules');
         expect(ui?.tabForIssue('bot/a_memorix/threshold/min_threshold')).toBe('memory');
+        expect(ui?.tabForIssue('bot/a_memorix/image_memory/max_pixels')).toBe('memory');
         expect(ui?.tabForIssue('bot/jargon/learning_list/0/type')).toBe('learning');
         expect(ui?.tabForIssue('bot/mcp/servers/0/command')).toBe('mcp');
         expect(ui?.tabForIssue('bot/log/log_level')).toBe('advanced');
+        expect(ui?.tabForIssue('bot/debug/replyer_retro_prompt')).toBe('advanced');
         // 原始文件、日志由外壳挂到「实例」组末尾
         expect(
             buildDetailNav(ui)

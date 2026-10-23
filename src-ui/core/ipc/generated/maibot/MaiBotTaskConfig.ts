@@ -14,10 +14,6 @@ max_tokens: number,
  */
 temperature: number, 
 /**
- * 超时警告时间（秒），超过此时间会输出警告日志
- */
-slow_threshold: number, 
-/**
  * 模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）
  */
 selection_strategy: string, 

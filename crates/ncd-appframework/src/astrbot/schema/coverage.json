@@ -1,0 +1,2346 @@
+{
+  "source": {
+    "repository": "AstrBotDevs/AstrBot",
+    "commit": "0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e",
+    "version": "4.29.1",
+    "files": {
+      "astrbot/core/config/default.py": "b7fe73f785ae9bc386d00cd0e27c8c12dc15c7e718e41e4819677ad4ea0f2b5b",
+      "astrbot/core/config/agent_runner.py": "1d2e105c003ce58a19265fcb274e529193d9302ed2ed669acd27711acf82c2aa",
+      "astrbot/core/computer/booters/cua_defaults.py": "4771e5e2d1d00e47eb5e4bda9c13fa86df0e40fd4c1d95d0bae279a8c7885577",
+      "dashboard/src/i18n/locales/zh-CN/features/config-metadata.json": "9b8909b9087dcfc65a128aa23cfbc93ea1e0f143fa1e52faf68202012cd9cffc"
+    }
+  },
+  "inventory": [
+    {
+      "path": "admins_id",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.auto_save_history",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.bot_id",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.compression.fallback_max_tokens",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.compression.instruction",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.compression.keep_recent_ratio",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.compression.max_turns",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.compression.overflow_strategy",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.compression.provider_id",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.compression.trim_turns",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.coze_api_base",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.coze_api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dashscope_api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dashscope_app_id",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dashscope_app_type",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_api_base",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_assistant_id",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_auth_header",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_max_concurrent_subagents",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_model_name",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_plan_mode",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_recursion_limit",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_subagent_enabled",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.deerflow_thinking_enabled",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dify_api_base",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dify_api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dify_api_type",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dify_query_input_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.dify_workflow_output_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.misc.max_steps",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.misc.sanitize_context_by_modalities",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.misc.tool_call_timeout",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.misc.tool_schema_mode",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.model.fallback_provider_ids",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.model.provider_id",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.model.request_max_retries",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.persona.persona_id",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.persona.safety_mode",
+      "surface": "dedicated"
+    },
+    {
+      "path": "agent_runner.config.persona.safety_mode_strategy",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.proxy",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.rag_options.file_ids",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.rag_options.output_reference",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.rag_options.pipeline_ids",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.timeout",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.config.variables",
+      "surface": "advanced"
+    },
+    {
+      "path": "agent_runner.runner_type",
+      "surface": "advanced"
+    },
+    {
+      "path": "callback_api_base",
+      "surface": "advanced"
+    },
+    {
+      "path": "config_version",
+      "surface": "dedicated"
+    },
+    {
+      "path": "content_safety.also_use_in_response",
+      "surface": "advanced"
+    },
+    {
+      "path": "content_safety.baidu_aip.api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "content_safety.baidu_aip.app_id",
+      "surface": "advanced"
+    },
+    {
+      "path": "content_safety.baidu_aip.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "content_safety.baidu_aip.secret_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "content_safety.internal_keywords.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "content_safety.internal_keywords.extra_keywords",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.auth_rate_limit.average_interval",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.auth_rate_limit.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.auth_rate_limit.max_burst",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.disable_access_log",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.host",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.jwt_secret",
+      "surface": "dedicated"
+    },
+    {
+      "path": "dashboard.password",
+      "surface": "dedicated"
+    },
+    {
+      "path": "dashboard.password_change_required",
+      "surface": "dedicated"
+    },
+    {
+      "path": "dashboard.password_storage_upgraded",
+      "surface": "dedicated"
+    },
+    {
+      "path": "dashboard.pbkdf2_password",
+      "surface": "dedicated"
+    },
+    {
+      "path": "dashboard.port",
+      "surface": "dedicated"
+    },
+    {
+      "path": "dashboard.ssl.ca_certs",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.ssl.cert_file",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.ssl.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.ssl.key_file",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.totp.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.totp.recovery_code_hash",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.totp.secret",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.trust_proxy_headers",
+      "surface": "advanced"
+    },
+    {
+      "path": "dashboard.username",
+      "surface": "dedicated"
+    },
+    {
+      "path": "default_kb_collection",
+      "surface": "advanced"
+    },
+    {
+      "path": "disable_builtin_commands",
+      "surface": "advanced"
+    },
+    {
+      "path": "disable_metrics",
+      "surface": "advanced"
+    },
+    {
+      "path": "http_proxy",
+      "surface": "advanced"
+    },
+    {
+      "path": "kb_agentic_mode",
+      "surface": "dedicated"
+    },
+    {
+      "path": "kb_final_top_k",
+      "surface": "dedicated"
+    },
+    {
+      "path": "kb_fusion_top_k",
+      "surface": "dedicated"
+    },
+    {
+      "path": "kb_names",
+      "surface": "dedicated"
+    },
+    {
+      "path": "log_file_enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "log_file_max_mb",
+      "surface": "advanced"
+    },
+    {
+      "path": "log_file_path",
+      "surface": "advanced"
+    },
+    {
+      "path": "log_level",
+      "surface": "advanced"
+    },
+    {
+      "path": "no_proxy",
+      "surface": "advanced"
+    },
+    {
+      "path": "persona",
+      "surface": "advanced"
+    },
+    {
+      "path": "pip_install_arg",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform",
+      "surface": "dedicated"
+    },
+    {
+      "path": "platform_settings.empty_mention_waiting",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.empty_mention_waiting_need_reply",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.enable_id_white_list",
+      "surface": "dedicated"
+    },
+    {
+      "path": "platform_settings.forward_threshold",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.friend_message_needs_wake_prefix",
+      "surface": "dedicated"
+    },
+    {
+      "path": "platform_settings.id_whitelist",
+      "surface": "dedicated"
+    },
+    {
+      "path": "platform_settings.id_whitelist_log",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.ignore_at_all",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.ignore_bot_self_message",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.no_permission_reply",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.path_mapping",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.rate_limit.count",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.rate_limit.strategy",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.rate_limit.time",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.reply_prefix",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.reply_with_mention",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.reply_with_quote",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.content_cleanup_rule",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.interval",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.interval_method",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.log_base",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.only_llm_result",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.regex",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.split_mode",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.split_words",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.segmented_reply.words_count_threshold",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.unique_session",
+      "surface": "dedicated"
+    },
+    {
+      "path": "platform_settings.wl_ignore_admin_on_friend",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_settings.wl_ignore_admin_on_group",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_specific.discord.pre_ack_emoji.emojis",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_specific.discord.pre_ack_emoji.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_specific.lark.pre_ack_emoji.emojis",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_specific.lark.pre_ack_emoji.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_specific.telegram.pre_ack_emoji.emojis",
+      "surface": "advanced"
+    },
+    {
+      "path": "platform_specific.telegram.pre_ack_emoji.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "plugin_set",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_ltm_settings.active_reply.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.active_reply.method",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.active_reply.possibility_reply",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.active_reply.whitelist",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.group_icl_enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.group_message_history_enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.group_message_history_max_cnt",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.group_message_max_cnt",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.image_caption",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_ltm_settings.image_caption_provider_id",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.buffer_intermediate_messages",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions.admin.allow_execution",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions.admin.allow_network",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions.admin.filesystem_scope",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions.member.allow_execution",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions.member.allow_network",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_local_permissions.member.filesystem_scope",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_require_admin",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.computer_use_runtime",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.datetime_system_prompt",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.default_image_caption_provider_id",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.display_reasoning_text",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.enable",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.file_extract.enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.file_extract.moonshotai_api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.file_extract.provider",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.group_name_display",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.identifier",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.image_caption_prompt",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.image_compress_options.max_size",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.max_quoted_fallback_images",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.persona_pool",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.proactive_capability.add_cron_tools",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.prompt_prefix",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.provider_pool",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.quoted_message_parser.max_component_chain_depth",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.quoted_message_parser.max_forward_fetch",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.quoted_message_parser.max_forward_node_depth",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.quoted_message_parser.warn_on_action_failure",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.reachability_check",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.booter",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.cua_api_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.cua_idle_timeout",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.cua_image",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.cua_local",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.cua_os_type",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.cua_telemetry_enabled",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_access_token",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_endpoint",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_max_sessions",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_neo_access_token",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_neo_endpoint",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_neo_profile",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_neo_ttl",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.sandbox.shipyard_ttl",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.show_tool_call_result",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.show_tool_use_status",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.streaming_response",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.unsupported_streaming_strategy",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.wake_prefix",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.web_search",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_settings.web_search_link",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_anysearch_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_baidu_app_builder_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_bocha_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_brave_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_deepseek_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_exa_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_firecrawl_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_provider",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_serpapi_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_settings.websearch_tavily_key",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_sources",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_stt_settings.enable",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_stt_settings.provider_id",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_tts_settings.dual_output",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_tts_settings.enable",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_tts_settings.provider_id",
+      "surface": "dedicated"
+    },
+    {
+      "path": "provider_tts_settings.trigger_probability",
+      "surface": "advanced"
+    },
+    {
+      "path": "provider_tts_settings.use_file_service",
+      "surface": "advanced"
+    },
+    {
+      "path": "pypi_index_url",
+      "surface": "advanced"
+    },
+    {
+      "path": "subagent_orchestrator.agents",
+      "surface": "dedicated"
+    },
+    {
+      "path": "subagent_orchestrator.main_enable",
+      "surface": "dedicated"
+    },
+    {
+      "path": "subagent_orchestrator.remove_main_duplicate_tools",
+      "surface": "dedicated"
+    },
+    {
+      "path": "subagent_orchestrator.router_system_prompt",
+      "surface": "dedicated"
+    },
+    {
+      "path": "t2i",
+      "surface": "advanced"
+    },
+    {
+      "path": "t2i_active_template",
+      "surface": "advanced"
+    },
+    {
+      "path": "t2i_endpoint",
+      "surface": "advanced"
+    },
+    {
+      "path": "t2i_strategy",
+      "surface": "advanced"
+    },
+    {
+      "path": "t2i_template",
+      "surface": "advanced"
+    },
+    {
+      "path": "t2i_use_file_service",
+      "surface": "advanced"
+    },
+    {
+      "path": "t2i_word_threshold",
+      "surface": "advanced"
+    },
+    {
+      "path": "temp_dir_max_size",
+      "surface": "advanced"
+    },
+    {
+      "path": "timezone",
+      "surface": "advanced"
+    },
+    {
+      "path": "trace_db_max_mb",
+      "surface": "advanced"
+    },
+    {
+      "path": "trace_db_path",
+      "surface": "advanced"
+    },
+    {
+      "path": "trace_enable",
+      "surface": "advanced"
+    },
+    {
+      "path": "trace_retention_days",
+      "surface": "advanced"
+    },
+    {
+      "path": "wake_prefix",
+      "surface": "dedicated"
+    }
+  ],
+  "template_inventory": [
+    {
+      "kind": "provider",
+      "template": "OpenAI Compatible",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "OpenAI Responses",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Google Gemini",
+      "paths": [
+        "api_base",
+        "enable",
+        "gm_native_coderunner",
+        "gm_native_search",
+        "gm_resp_image_modal",
+        "gm_safety_settings.dangerous_content",
+        "gm_safety_settings.harassment",
+        "gm_safety_settings.hate_speech",
+        "gm_safety_settings.sexually_explicit",
+        "gm_thinking_config.budget",
+        "gm_thinking_config.level",
+        "gm_url_context",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Anthropic",
+      "paths": [
+        "anth_thinking_config.budget",
+        "anth_thinking_config.effort",
+        "anth_thinking_config.type",
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Kimi Coding Plan",
+      "paths": [
+        "anth_thinking_config.budget",
+        "anth_thinking_config.effort",
+        "anth_thinking_config.type",
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Moonshot",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "MiniMax",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "MiniMax Token Plan",
+      "paths": [
+        "anth_thinking_config.budget",
+        "anth_thinking_config.effort",
+        "anth_thinking_config.type",
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Xiaomi",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Xiaomi Token Plan",
+      "paths": [
+        "anth_thinking_config.budget",
+        "anth_thinking_config.effort",
+        "anth_thinking_config.type",
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "xAI",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "DeepSeek",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "DeepSeek Responses",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Zhipu",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "LongCat",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "AIHubMix",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "MiraRouter",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "OpenRouter",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "SSYCloud(胜算云)",
+      "paths": [
+        "api_base",
+        "custom_headers.X-Title",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "NVIDIA",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Azure OpenAI",
+      "paths": [
+        "api_base",
+        "api_version",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Ollama",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "ollama_disable_thinking",
+        "provider",
+        "provider_type",
+        "proxy",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "LM Studio",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Gemini_OpenAI_API",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Groq",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "302.AI",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "SiliconFlow",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "PPIO",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "TokenPony",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Compshare",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "ModelScope",
+      "paths": [
+        "api_base",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "FastGPT",
+      "paths": [
+        "api_base",
+        "custom_extra_body",
+        "custom_headers",
+        "enable",
+        "id",
+        "key",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Whisper(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "id",
+        "model",
+        "provider",
+        "provider_type",
+        "proxy",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "MiMo STT(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "id",
+        "model",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Whisper(Local)",
+      "paths": [
+        "enable",
+        "id",
+        "model",
+        "provider",
+        "provider_type",
+        "type",
+        "whisper_device"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "SenseVoice(Local)",
+      "paths": [
+        "enable",
+        "id",
+        "is_emotion",
+        "provider",
+        "provider_type",
+        "stt_model",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "OpenAI TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "id",
+        "model",
+        "openai-tts-voice",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "MiMo TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "id",
+        "mimo-tts-dialect",
+        "mimo-tts-format",
+        "mimo-tts-seed-text",
+        "mimo-tts-style-prompt",
+        "mimo-tts-voice",
+        "model",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Genie TTS",
+      "paths": [
+        "enable",
+        "genie_character_name",
+        "genie_language",
+        "genie_onnx_model_dir",
+        "genie_refer_audio_path",
+        "genie_refer_text",
+        "id",
+        "provider",
+        "provider_type",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Edge TTS",
+      "paths": [
+        "edge-tts-voice",
+        "enable",
+        "id",
+        "pitch",
+        "provider",
+        "provider_type",
+        "rate",
+        "timeout",
+        "type",
+        "volume"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "GSV TTS(Local)",
+      "paths": [
+        "api_base",
+        "enable",
+        "gpt_weights_path",
+        "gsv_default_parms.gsv_aux_ref_audio_paths",
+        "gsv_default_parms.gsv_batch_size",
+        "gsv_default_parms.gsv_batch_threshold",
+        "gsv_default_parms.gsv_fragment_interval",
+        "gsv_default_parms.gsv_media_type",
+        "gsv_default_parms.gsv_parallel_infer",
+        "gsv_default_parms.gsv_prompt_lang",
+        "gsv_default_parms.gsv_prompt_text",
+        "gsv_default_parms.gsv_ref_audio_path",
+        "gsv_default_parms.gsv_repetition_penalty",
+        "gsv_default_parms.gsv_seed",
+        "gsv_default_parms.gsv_speed_factor",
+        "gsv_default_parms.gsv_split_bucket",
+        "gsv_default_parms.gsv_streaming_mode",
+        "gsv_default_parms.gsv_temperature",
+        "gsv_default_parms.gsv_text_lang",
+        "gsv_default_parms.gsv_text_split_method",
+        "gsv_default_parms.gsv_top_k",
+        "gsv_default_parms.gsv_top_p",
+        "id",
+        "provider",
+        "provider_type",
+        "sovits_weights_path",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "GSVI TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "character",
+        "emotion",
+        "enable",
+        "id",
+        "prompt_text_lang",
+        "provider",
+        "provider_type",
+        "text_lang",
+        "timeout",
+        "type",
+        "version"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "FishAudio TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "fishaudio-tts-character",
+        "fishaudio-tts-reference-id",
+        "id",
+        "model",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "阿里云百炼 TTS(API)",
+      "paths": [
+        "api_key",
+        "dashscope_tts_voice",
+        "enable",
+        "hint",
+        "id",
+        "model",
+        "provider",
+        "provider_type",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Azure TTS",
+      "paths": [
+        "azure_tts_rate",
+        "azure_tts_region",
+        "azure_tts_role",
+        "azure_tts_style",
+        "azure_tts_subscription_key",
+        "azure_tts_voice",
+        "azure_tts_volume",
+        "enable",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "MiniMax TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "id",
+        "minimax-group-id",
+        "minimax-is-timber-weight",
+        "minimax-langboost",
+        "minimax-timber-weight",
+        "minimax-voice-emotion",
+        "minimax-voice-english-normalization",
+        "minimax-voice-id",
+        "minimax-voice-latex",
+        "minimax-voice-pitch",
+        "minimax-voice-speed",
+        "minimax-voice-vol",
+        "model",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "火山引擎_TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "appid",
+        "enable",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type",
+        "volcengine_cluster",
+        "volcengine_speed_ratio",
+        "volcengine_voice_type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Gemini TTS",
+      "paths": [
+        "enable",
+        "gemini_tts_api_base",
+        "gemini_tts_api_key",
+        "gemini_tts_model",
+        "gemini_tts_prefix",
+        "gemini_tts_timeout",
+        "gemini_tts_voice_name",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "ElevenLabs TTS(API)",
+      "paths": [
+        "api_base",
+        "api_key",
+        "elevenlabs-tts-output-format",
+        "elevenlabs-tts-similarity-boost",
+        "elevenlabs-tts-stability",
+        "elevenlabs-tts-style",
+        "elevenlabs-tts-use-speaker-boost",
+        "elevenlabs-tts-voice-id",
+        "enable",
+        "hint",
+        "id",
+        "model",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "OpenAI Embedding",
+      "paths": [
+        "embedding_api_base",
+        "embedding_api_key",
+        "embedding_dimensions",
+        "embedding_dimensions_mode",
+        "embedding_model",
+        "enable",
+        "hint",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Gemini Embedding",
+      "paths": [
+        "embedding_api_base",
+        "embedding_api_key",
+        "embedding_dimensions",
+        "embedding_model",
+        "enable",
+        "hint",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "NVIDIA Embedding",
+      "paths": [
+        "embedding_api_base",
+        "embedding_api_key",
+        "embedding_dimensions",
+        "embedding_model",
+        "enable",
+        "hint",
+        "id",
+        "input_type",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Ollama Embedding",
+      "paths": [
+        "embedding_api_base",
+        "embedding_dimensions",
+        "embedding_model",
+        "enable",
+        "hint",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "DashScope Embedding",
+      "paths": [
+        "embedding_api_base",
+        "embedding_api_key",
+        "embedding_dimensions",
+        "embedding_model",
+        "enable",
+        "hint",
+        "id",
+        "provider",
+        "provider_type",
+        "proxy",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "vLLM Rerank",
+      "paths": [
+        "enable",
+        "id",
+        "provider",
+        "provider_type",
+        "rerank_api_base",
+        "rerank_api_key",
+        "rerank_api_suffix",
+        "rerank_model",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Xinference Rerank",
+      "paths": [
+        "enable",
+        "id",
+        "launch_model_if_not_running",
+        "provider",
+        "provider_type",
+        "rerank_api_base",
+        "rerank_api_key",
+        "rerank_model",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "阿里云百炼重排序",
+      "paths": [
+        "enable",
+        "id",
+        "instruct",
+        "provider",
+        "provider_type",
+        "rerank_api_base",
+        "rerank_api_key",
+        "rerank_model",
+        "return_documents",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "NVIDIA Rerank",
+      "paths": [
+        "enable",
+        "id",
+        "nvidia_rerank_api_base",
+        "nvidia_rerank_api_key",
+        "nvidia_rerank_model",
+        "nvidia_rerank_model_endpoint",
+        "nvidia_rerank_truncate",
+        "provider",
+        "provider_type",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "TEI Rerank",
+      "paths": [
+        "enable",
+        "id",
+        "provider",
+        "provider_type",
+        "rerank_api_base",
+        "rerank_api_key",
+        "tei_rerank_raw_scores",
+        "tei_rerank_return_text",
+        "tei_rerank_truncate",
+        "tei_rerank_truncation_direction",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "provider",
+      "template": "Xinference STT",
+      "paths": [
+        "api_base",
+        "api_key",
+        "enable",
+        "id",
+        "launch_model_if_not_running",
+        "model",
+        "provider",
+        "provider_type",
+        "timeout",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "QQ 官方机器人(Websocket, 推荐)",
+      "paths": [
+        "appid",
+        "enable",
+        "enable_group_c2c",
+        "enable_guild_direct_message",
+        "id",
+        "secret",
+        "type",
+        "use_markdown"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "QQ 官方机器人(Webhook)",
+      "paths": [
+        "appid",
+        "callback_server_host",
+        "enable",
+        "id",
+        "is_sandbox",
+        "port",
+        "secret",
+        "type",
+        "unified_webhook_mode",
+        "use_markdown",
+        "webhook_uuid"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "OneBot v11",
+      "paths": [
+        "enable",
+        "id",
+        "type",
+        "ws_reverse_host",
+        "ws_reverse_port",
+        "ws_reverse_token"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "飞书(Lark)",
+      "paths": [
+        "app_id",
+        "app_secret",
+        "domain",
+        "enable",
+        "id",
+        "lark_connection_mode",
+        "lark_encrypt_key",
+        "lark_verification_token",
+        "type",
+        "webhook_uuid"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "个人微信",
+      "paths": [
+        "enable",
+        "id",
+        "type",
+        "weixin_oc_api_timeout_ms",
+        "weixin_oc_base_url",
+        "weixin_oc_bot_type",
+        "weixin_oc_long_poll_timeout_ms",
+        "weixin_oc_qr_poll_interval"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "企业微信 (智能机器人)",
+      "paths": [
+        "callback_server_host",
+        "enable",
+        "hint",
+        "id",
+        "msg_push_webhook_url",
+        "only_use_webhook_url_to_send",
+        "port",
+        "type",
+        "unified_webhook_mode",
+        "webhook_uuid",
+        "wecom_ai_bot_connection_mode",
+        "wecom_ai_bot_name",
+        "wecomaibot_encoding_aes_key",
+        "wecomaibot_friend_message_welcome_text",
+        "wecomaibot_heartbeat_interval",
+        "wecomaibot_init_respond_text",
+        "wecomaibot_token",
+        "wecomaibot_ws_bot_id",
+        "wecomaibot_ws_secret",
+        "wecomaibot_ws_url"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "企业微信应用 & 微信客服",
+      "paths": [
+        "api_base_url",
+        "callback_server_host",
+        "corpid",
+        "enable",
+        "encoding_aes_key",
+        "id",
+        "kf_name",
+        "port",
+        "secret",
+        "token",
+        "type",
+        "unified_webhook_mode",
+        "webhook_uuid"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "微信公众平台",
+      "paths": [
+        "active_send_mode",
+        "api_base_url",
+        "appid",
+        "callback_server_host",
+        "enable",
+        "encoding_aes_key",
+        "id",
+        "port",
+        "secret",
+        "token",
+        "type",
+        "unified_webhook_mode",
+        "webhook_uuid"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "钉钉(DingTalk)",
+      "paths": [
+        "card_template_id",
+        "client_id",
+        "client_secret",
+        "enable",
+        "id",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Telegram",
+      "paths": [
+        "enable",
+        "id",
+        "start_message",
+        "telegram_api_base_url",
+        "telegram_command_auto_refresh",
+        "telegram_command_register",
+        "telegram_command_register_interval",
+        "telegram_file_base_url",
+        "telegram_polling_restart_delay",
+        "telegram_token",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Discord",
+      "paths": [
+        "discord_activity_name",
+        "discord_allow_bot_messages",
+        "discord_command_register",
+        "discord_proxy",
+        "discord_token",
+        "enable",
+        "id",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Misskey",
+      "paths": [
+        "enable",
+        "id",
+        "misskey_allow_insecure_downloads",
+        "misskey_default_visibility",
+        "misskey_download_chunk_size",
+        "misskey_download_timeout",
+        "misskey_enable_chat",
+        "misskey_enable_file_upload",
+        "misskey_instance_url",
+        "misskey_local_only",
+        "misskey_max_download_bytes",
+        "misskey_token",
+        "misskey_upload_concurrency",
+        "misskey_upload_folder",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Slack",
+      "paths": [
+        "app_token",
+        "bot_token",
+        "enable",
+        "id",
+        "signing_secret",
+        "slack_connection_mode",
+        "slack_webhook_host",
+        "slack_webhook_path",
+        "slack_webhook_port",
+        "type",
+        "unified_webhook_mode",
+        "webhook_uuid"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Line",
+      "paths": [
+        "channel_access_token",
+        "channel_secret",
+        "enable",
+        "id",
+        "type",
+        "unified_webhook_mode",
+        "webhook_uuid"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Satori",
+      "paths": [
+        "enable",
+        "id",
+        "satori_api_base_url",
+        "satori_auto_reconnect",
+        "satori_endpoint",
+        "satori_heartbeat_interval",
+        "satori_reconnect_delay",
+        "satori_token",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "KOOK",
+      "paths": [
+        "enable",
+        "id",
+        "kook_bot_token",
+        "kook_heartbeat_interval",
+        "kook_heartbeat_timeout",
+        "kook_max_consecutive_failures",
+        "kook_max_heartbeat_failures",
+        "kook_max_reconnect_delay",
+        "kook_max_retry_delay",
+        "kook_reconnect_delay",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    },
+    {
+      "kind": "platform",
+      "template": "Mattermost",
+      "paths": [
+        "enable",
+        "id",
+        "mattermost_bot_token",
+        "mattermost_reconnect_delay",
+        "mattermost_url",
+        "type"
+      ],
+      "surface": "dedicated_or_raw"
+    }
+  ],
+  "provider_parameters": "Provider-specific templates remain available through the existing raw cmd_config.json editor; unknown provider keys are preserved by typed saves.",
+  "live_metadata": [
+    "/api/config/default",
+    "/api/config/abconf?system_config=1"
+  ],
+  "offline_metadata": "snapshot.json"
+}

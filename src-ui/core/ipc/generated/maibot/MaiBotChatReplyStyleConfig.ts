@@ -3,9 +3,13 @@ import type { MaiBotExtraPromptItem } from "./MaiBotExtraPromptItem";
 
 export type MaiBotChatReplyStyleConfig = { 
 /**
- * 回复时是否可以引用上一条或相关消息。
+ * 全局群聊引用频率：不引用、偶尔引用、经常引用。按固定规律随机决定，经常引用的概率为偶尔引用的两倍；不影响私聊。
  */
-enable_reply_quote: boolean, 
+group_quote_frequency: "never" | "occasionally" | "often", 
+/**
+ * 全局私聊引用频率：不引用、偶尔引用、经常引用。结合用户连发条数、发言间隔和回复目标位置随机决定；经常引用的概率为偶尔引用的两倍。
+ */
+private_quote_frequency: "never" | "occasionally" | "often", 
 /**
  * 群聊通用提示词，告诉麦麦群聊中该怎么说话。
  */

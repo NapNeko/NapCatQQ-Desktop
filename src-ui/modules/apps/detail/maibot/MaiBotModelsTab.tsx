@@ -5,6 +5,7 @@ import { AlertTriangle, Plus } from 'lucide-react';
 import {
     Button,
     FormSection,
+    Select,
     Popover,
     PopoverClose,
     PopoverContent,
@@ -43,6 +44,7 @@ import {
     TASK_ADVANCED_FIELDS,
     TaskCard,
 } from './maibotModelCards';
+import { FieldGrid } from './SchemaForm';
 import { ModelIdPicker, ProviderProbe } from './maibotProbes';
 import { AdvancedToggle, useRevealOnError, type AdvancedSections } from './advancedToggle';
 
@@ -59,9 +61,10 @@ const TASKS: Readonly<Record<TaskKey, { title: string; hint: string }>> = {
     voice: { title: '语音识别', hint: '把语音转成文字' },
     embedding: { title: '嵌入', hint: '文本嵌入模型，不能用对话模型；长期记忆靠它' },
     memory: { title: '长期记忆', hint: '总结、抽取、写回记忆；留空时按需回退' },
-    mid_memory: { title: '聊天回想', hint: '留空用规划的模型' },
+    mid_memory: { title: '聊天回想', hint: '留空用快速响应模型，再回退杂务模型' },
     learner: { title: '学习', hint: '学表达方式和黑话；留空用杂务的模型' },
-    expression_use: { title: '用表达方式', hint: '留空用杂务的模型' },
+    fast_model: { title: '快速响应', hint: '表达选择、回复断句等快速任务；留空用杂务模型' },
+    image_embedding: { title: '图片嵌入', hint: '图片嵌入模型，供图片记忆检索使用' },
     emoji: { title: '表情包', hint: '留空按规划 / 识图的模型选' },
 };
 
@@ -207,6 +210,15 @@ export const MaiBotModelsTab: React.FC<{
     };
 
     const tasks = TASK_ORDER.filter((k) => open.tasks || !taskHidden(k));
+    const webNode = nodeAt(MODEL_SCHEMA, ['web']);
+    const webServices = Object.keys(models.web.services);
+    let noWebService = '__ncd_no_service__';
+    while (webServices.includes(noWebService)) noWebService += '_';
+    const selectedWeb = models.model_task_config.web_search.model_list[0];
+    const webChoices =
+        selectedWeb && !webServices.includes(selectedWeb)
+            ? [...webServices, selectedWeb]
+            : webServices;
 
     return (
         <ConfigForm>
@@ -379,6 +391,47 @@ export const MaiBotModelsTab: React.FC<{
                     />
                 ))}
             </FormSection>
+            {webNode && (
+                <FormSection
+                    title="联网服务"
+                    description="添加服务后，选择要交给麦麦使用的服务；留空关闭联网工具。"
+                >
+                    <FieldGrid
+                        path={['web']}
+                        node={webNode}
+                        ctx={{
+                            value: models,
+                            onChange: (value) => setModels(value as MaiBotModelConfigFile),
+                            prefix: 'models',
+                            errors,
+                            disabled,
+                            showAdvanced: true,
+                        }}
+                    />
+                    <Select
+                        label="联网工具使用的服务"
+                        items={[
+                            { value: noWebService, label: '关闭联网工具' },
+                            ...webChoices.map((name) => ({ value: name, label: name })),
+                        ]}
+                        value={selectedWeb ?? noWebService}
+                        disabled={disabled}
+                        error={
+                            errors['models/model_task_config/web_search/model_list'] ??
+                            errors['models/model_task_config/web_search/model_list/0']
+                        }
+                        onValueChange={(name) =>
+                            setModels({
+                                ...models,
+                                model_task_config: {
+                                    ...models.model_task_config,
+                                    web_search: { model_list: name === noWebService ? [] : [name] },
+                                },
+                            })
+                        }
+                    />
+                </FormSection>
+            )}
         </ConfigForm>
     );
 };

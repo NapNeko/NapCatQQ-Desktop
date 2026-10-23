@@ -51,6 +51,14 @@ export const YunzaiBasicTab: React.FC<YunzaiTabProps> = ({
                         onValueChange={(v) => set({ log_length: v ?? 0 })}
                     />
                 </div>
+                <TextField
+                    label="日志 ID 对齐"
+                    hint="改后重启生效；保留空格可调整对齐宽度"
+                    value={bot.log_align}
+                    disabled={disabled}
+                    className="font-mono"
+                    onValueChange={(log_align) => set({ log_align })}
+                />
                 <Switch
                     label="对象按结构展开"
                     checked={bot.log_object}
@@ -115,6 +123,12 @@ export const YunzaiBasicTab: React.FC<YunzaiTabProps> = ({
                         onCheckedChange={(slash_to_hash) => set({ slash_to_hash })}
                     />
                     <Switch
+                        label="统计消息类型"
+                        checked={bot.msg_type_count}
+                        disabled={disabled}
+                        onCheckedChange={(msg_type_count) => set({ msg_type_count })}
+                    />
+                    <Switch
                         label="缓存群成员列表"
                         checked={bot.cache_group_member}
                         disabled={disabled}
@@ -135,6 +149,17 @@ export const YunzaiBasicTab: React.FC<YunzaiTabProps> = ({
                         min={0}
                         disabled={disabled}
                         onValueChange={(v) => set({ file_to_url_time: v ?? 0 })}
+                    />
+                    <NumberField
+                        label="文件链接最多访问次数"
+                        hint="留空不限制；0 禁止访问"
+                        value={bot.file_to_url_times}
+                        min={0}
+                        error={errors['bot/file_to_url_times']}
+                        disabled={disabled}
+                        onValueChange={(file_to_url_times) =>
+                            set({ file_to_url_times: file_to_url_times ?? undefined })
+                        }
                     />
                 </div>
             </FormSection>

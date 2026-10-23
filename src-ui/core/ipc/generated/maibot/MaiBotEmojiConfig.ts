@@ -3,6 +3,10 @@ import type { MaiBotEmojiCacheCleanupConfig } from "./MaiBotEmojiCacheCleanupCon
 
 export type MaiBotEmojiConfig = { 
 /**
+ * 开启后由思考模型直接查看并挑选表情包，在文字回复后发送，需要思考模型支持视觉；关闭时沿用独立选择并发送表情包的旧方式。
+ */
+use_new_send_logic: boolean, 
+/**
  * 每次从多少个候选表情里挑一个发送；不是一次发送这么多。
  */
 emoji_send_num: number, 

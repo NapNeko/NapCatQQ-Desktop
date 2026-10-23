@@ -1,4 +1,4 @@
-// 由 scripts/maibot/codegen.py 从 MaiBot bot_config 8.14.40 / model_config 1.17.9 生成，别手改；升级上游后重跑。
+// 由 scripts/maibot/codegen.py 从 MaiBot bot_config 8.15.37 / model_config 1.17.22 生成，别手改；升级上游后重跑。
 // 字段名、类型照上游 pydantic 类；默认值不在这里，读取时垫 defaults/ 下的上游默认文件。
 
 #![allow(clippy::derivable_impls)]
@@ -7,6 +7,78 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::IssueSink;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotAgentConfig {
+    /// 启用与普通聊天并行的外接 Agent 接口，通过 ACP 连接 dsh 等外部程序。
+    pub enabled: bool,
+    /// dsh CLI 自动使用 --profile acp；dsh Desktop 连接正在运行的桌面应用，在界面中显示同一会话；自定义用于其他 ACP 程序。模型与凭据使用外部 Agent 自身配置。
+    #[ts(type = "\"dsh\" | \"dsh_desktop\" | \"custom\"")]
+    pub connection: String,
+    /// dsh Desktop 模式使用，留空读取 ~/.dsh/maibot-desktop.json。先在 Desktop 安装 dsh-maibot-bridge 插件；不启动第二个 dsh 进程，不关闭 Desktop 应用。
+    pub desktop_manifest: String,
+    /// 外部 Agent 可执行程序或绝对路径，不是整段 shell 命令；Windows 可填写 dsh.cmd。
+    pub acp_command: String,
+    /// 仅自定义 ACP 使用，逐项填写参数；dsh 预设忽略此项并自动生成 --profile acp。
+    pub acp_args: Vec<String>,
+    /// 外部进程的主机工作目录，留空使用 data/agent/workspace；不是沙盒 C:\MaiWorkspace。同一会话恢复时保持不变。
+    pub acp_cwd: String,
+    /// 追加或覆盖外部进程环境变量，例如 DSH_HOME；模型凭据建议保存在 dsh 自身配置中。
+    pub acp_env: std::collections::BTreeMap<String, String>,
+    /// 留空使用外部 Agent 自身模型配置；填写时必须是其 model 配置选项公布的值，不使用本体 planner 回退。
+    pub acp_model: String,
+    /// 握手、会话恢复和取消确认的等待时间，不限制任务执行时长。
+    pub acp_timeout: f64,
+    /// 是否向外接 Agent 提供沙盒桌面工具及 WebUI 接管界面；人工接管期间不执行 Agent 输入。
+    pub computer_tools: bool,
+    /// 允许沙盒联网；修改后在下一次启动沙盒时生效。
+    pub networking: bool,
+    /// 沙盒内存 MB，下次启动沙盒时生效。
+    #[ts(type = "number")]
+    pub memory_mb: i64,
+    /// 等待沙盒启动的超时秒数。
+    pub startup_timeout: f64,
+    /// 等待代理回复的超时秒数；超时不重放操作，可继续领取原请求结果。
+    pub request_timeout: f64,
+    /// 截图最长边，0 表示原始分辨率；鼠标坐标始终按返回截图换算。
+    #[ts(type = "number")]
+    pub screenshot_max_edge: i64,
+}
+
+impl MaiBotAgentConfig {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/connection"), &self.connection, &["dsh", "dsh_desktop", "custom"]);
+        if !((self.acp_timeout as f64) > 0.0) { sink.push(&format!("{path}/acp_timeout"), "要大于 0"); }
+        sink.range(&format!("{path}/memory_mb"), self.memory_mb as f64, Some(2048.0), None);
+        if !((self.startup_timeout as f64) > 0.0) { sink.push(&format!("{path}/startup_timeout"), "要大于 0"); }
+        if !((self.request_timeout as f64) > 0.0) { sink.push(&format!("{path}/request_timeout"), "要大于 0"); }
+        sink.range(&format!("{path}/screenshot_max_edge"), self.screenshot_max_edge as f64, Some(0.0), None);
+    }
+}
+
+impl Default for MaiBotAgentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            connection: String::from("dsh"),
+            desktop_manifest: String::from(""),
+            acp_command: String::from("dsh"),
+            acp_args: vec![],
+            acp_cwd: String::from(""),
+            acp_env: std::collections::BTreeMap::new(),
+            acp_model: String::from(""),
+            acp_timeout: 60.0,
+            computer_tools: false,
+            networking: true,
+            memory_mb: 4096,
+            startup_timeout: 120.0,
+            request_timeout: 60.0,
+            screenshot_max_edge: 1600,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(default)]
@@ -67,8 +139,8 @@ impl MaiBotPersonalityConfig {
 impl Default for MaiBotPersonalityConfig {
     fn default() -> Self {
         Self {
-            personality: String::from("是一个大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。"),
-            behavior_style: String::from("是大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。不会没话题硬找话题，"),
+            personality: String::from("是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。"),
+            behavior_style: String::from("是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。不会没话题硬找话题，具有足够的自主性，会自行搜集信息理解内容。"),
             reply_style: String::from("你的风格平淡简短，可以参考贴吧的回复风格。不滥用比喻或者生硬句子。视情况省略主语或者进行倒装，风格较为随意。"),
             multiple_reply_style: vec![String::from("你的风格平淡但不失讽刺，很简短,很白话。可以参考贴吧，微博的回复风格。"), String::from("用1-2个字进行回复"), String::from("用1-2个符号进行回复"), String::from("言辭凝練古雅，穿插《論語》經句卻不晦澀，以文言短句為基，輔以淺白語意，持長者溫和風範，全用繁體字表達，具先秦儒者談吐韻致。"), String::from("带点翻译腔，但不要太长")],
             multiple_probability: 0.0,
@@ -115,6 +187,11 @@ impl Default for MaiBotTalkRulesItem {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotChatReplyTimingConfig {
+    /// 默认自然，只需选择关闭、快速、自然或沉稳，无需另开开关。
+    #[ts(type = "\"off\" | \"fast\" | \"natural\" | \"steady\"")]
+    pub message_debounce_mode: String,
+    /// 强制 Planner 使用流式请求；思考或输出期间收到新消息立即打断并带上新消息重新请求，wait 等待也可被新消息提前结束。
+    pub planner_message_steering: bool,
     /// 群聊里麦麦主动说话的频率；越小越安静。
     pub talk_value: f64,
     /// 私聊里麦麦主动说话的频率；越小越安静。
@@ -123,12 +200,6 @@ pub struct MaiBotChatReplyTimingConfig {
     pub mentioned_bot_reply: bool,
     /// 开启后，被 @ 时会尽量回复。
     pub inevitable_at_reply: bool,
-    /// 控制新消息何时进入 Planner。
-    #[ts(type = "\"frequency\" | \"reply_necessity\"")]
-    pub reply_trigger_mode: String,
-    /// 思考时来了新消息，最多重新思考多少次。
-    #[ts(type = "number")]
-    pub planner_interrupt_max_consecutive_count: i64,
     /// Planner 最多连续调用 wait 多少次；达到上限后 wait 工具会拒绝继续进入等待。
     #[ts(type = "number")]
     pub max_consecutive_wait_count: i64,
@@ -150,10 +221,9 @@ pub struct MaiBotChatReplyTimingConfig {
 
 impl MaiBotChatReplyTimingConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/message_debounce_mode"), &self.message_debounce_mode, &["off", "fast", "natural", "steady"]);
         sink.range(&format!("{path}/talk_value"), self.talk_value, Some(0.0), Some(1.0));
         sink.range(&format!("{path}/private_talk_value"), self.private_talk_value, Some(0.0), Some(1.0));
-        sink.one_of(&format!("{path}/reply_trigger_mode"), &self.reply_trigger_mode, &["frequency", "reply_necessity"]);
-        sink.range(&format!("{path}/planner_interrupt_max_consecutive_count"), self.planner_interrupt_max_consecutive_count as f64, Some(0.0), None);
         sink.range(&format!("{path}/max_consecutive_wait_count"), self.max_consecutive_wait_count as f64, Some(1.0), None);
         sink.range(&format!("{path}/no_action_backoff_base_seconds"), self.no_action_backoff_base_seconds, Some(0.0), None);
         sink.range(&format!("{path}/no_action_backoff_cap_seconds"), self.no_action_backoff_cap_seconds, Some(0.0), None);
@@ -168,12 +238,12 @@ impl MaiBotChatReplyTimingConfig {
 impl Default for MaiBotChatReplyTimingConfig {
     fn default() -> Self {
         Self {
+            message_debounce_mode: String::from("natural"),
+            planner_message_steering: false,
             talk_value: 1.0,
             private_talk_value: 1.0,
-            mentioned_bot_reply: false,
+            mentioned_bot_reply: true,
             inevitable_at_reply: true,
-            reply_trigger_mode: String::from("frequency"),
-            planner_interrupt_max_consecutive_count: 0,
             max_consecutive_wait_count: 3,
             no_action_backoff_base_seconds: 15.0,
             no_action_backoff_cap_seconds: 300.0,
@@ -221,8 +291,12 @@ impl Default for MaiBotExtraPromptItem {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotChatReplyStyleConfig {
-    /// 回复时是否可以引用上一条或相关消息。
-    pub enable_reply_quote: bool,
+    /// 全局群聊引用频率：不引用、偶尔引用、经常引用。按固定规律随机决定，经常引用的概率为偶尔引用的两倍；不影响私聊。
+    #[ts(type = "\"never\" | \"occasionally\" | \"often\"")]
+    pub group_quote_frequency: String,
+    /// 全局私聊引用频率：不引用、偶尔引用、经常引用。结合用户连发条数、发言间隔和回复目标位置随机决定；经常引用的概率为偶尔引用的两倍。
+    #[ts(type = "\"never\" | \"occasionally\" | \"often\"")]
+    pub private_quote_frequency: String,
     /// 群聊通用提示词，告诉麦麦群聊中该怎么说话。
     pub group_chat_prompt: String,
     /// 私聊通用提示词，告诉麦麦私聊中该怎么说话。
@@ -233,6 +307,8 @@ pub struct MaiBotChatReplyStyleConfig {
 
 impl MaiBotChatReplyStyleConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/group_quote_frequency"), &self.group_quote_frequency, &["never", "occasionally", "often"]);
+        sink.one_of(&format!("{path}/private_quote_frequency"), &self.private_quote_frequency, &["never", "occasionally", "often"]);
         for (i, item) in self.chat_prompts.iter().enumerate() {
             item.validate(&format!("{path}/chat_prompts/{i}"), sink);
         }
@@ -242,8 +318,9 @@ impl MaiBotChatReplyStyleConfig {
 impl Default for MaiBotChatReplyStyleConfig {
     fn default() -> Self {
         Self {
-            enable_reply_quote: true,
-            group_chat_prompt: String::from("你正在qq群里聊天，下面是群里正在聊的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。请注意把握聊天内容。\n不要总是提及自己的身份背景，根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包，只要关注表情包表达的含义。你可以适当发送表情包表达情绪。控制回复的频率，不要每个人的消息都回复，优先回复你感兴趣的或者主动提及你的，适当回复其他话题。\n"),
+            group_quote_frequency: String::from("occasionally"),
+            private_quote_frequency: String::from("occasionally"),
+            group_chat_prompt: String::from("下面是聊天中的的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。\n根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包。你可以适当发送表情包表达情绪。如果有人不喜欢你或者不理你，就不要强行回复，回复前读空气。不要每个人的消息都回复，适当回复其他话题。可以适当回过头回复之前用户的消息。\n"),
             private_chat_prompts: String::from("你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n"),
             chat_prompts: vec![],
         }
@@ -254,14 +331,14 @@ impl Default for MaiBotChatReplyStyleConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotChatConfig {
+    /// 允许麦麦在回复开头 @ 一个或多个用户，由模型根据聊天内容决定是否使用。
+    pub enable_reply_at: bool,
     /// 群聊回复时参考的最近消息数量；越大越懂上下文，也更耗模型。
     #[ts(type = "number")]
     pub max_context_size: i64,
     /// 私聊回复时参考的最近消息数量。
     #[ts(type = "number")]
     pub max_private_context_size: i64,
-    /// 压缩部分上下文，减少模型消耗；一般建议开启。
-    pub enable_context_optimization: bool,
     /// 打开后会主动召回最近聊天发生的事情。
     pub mid_term_memory: bool,
     /// 最多保留多少条聊天回想；设为 0 表示不保留。
@@ -284,13 +361,45 @@ impl MaiBotChatConfig {
 impl Default for MaiBotChatConfig {
     fn default() -> Self {
         Self {
+            enable_reply_at: true,
             max_context_size: 40,
             max_private_context_size: 60,
-            enable_context_optimization: true,
             mid_term_memory: true,
             mid_term_memory_lenth: 10,
-            reply_timing: MaiBotChatReplyTimingConfig { talk_value: 1.0, private_talk_value: 1.0, mentioned_bot_reply: false, inevitable_at_reply: true, reply_trigger_mode: String::from("frequency"), planner_interrupt_max_consecutive_count: 0, max_consecutive_wait_count: 3, no_action_backoff_base_seconds: 15.0, no_action_backoff_cap_seconds: 300.0, no_action_backoff_start_count: 2, no_action_backoff_bypass_pending_count: 6, enable_talk_value_rules: false, talk_value_rules: vec![MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("00:00-08:59"), value: 0.8 }, MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("09:00-18:59"), value: 1.0 }] },
-            reply_style: MaiBotChatReplyStyleConfig { enable_reply_quote: true, group_chat_prompt: String::from("你正在qq群里聊天，下面是群里正在聊的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。请注意把握聊天内容。\n不要总是提及自己的身份背景，根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包，只要关注表情包表达的含义。你可以适当发送表情包表达情绪。控制回复的频率，不要每个人的消息都回复，优先回复你感兴趣的或者主动提及你的，适当回复其他话题。\n"), private_chat_prompts: String::from("你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n"), chat_prompts: vec![] },
+            reply_timing: MaiBotChatReplyTimingConfig { message_debounce_mode: String::from("natural"), planner_message_steering: false, talk_value: 1.0, private_talk_value: 1.0, mentioned_bot_reply: true, inevitable_at_reply: true, max_consecutive_wait_count: 3, no_action_backoff_base_seconds: 15.0, no_action_backoff_cap_seconds: 300.0, no_action_backoff_start_count: 2, no_action_backoff_bypass_pending_count: 6, enable_talk_value_rules: false, talk_value_rules: vec![MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("00:00-08:59"), value: 0.8 }, MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("09:00-18:59"), value: 1.0 }] },
+            reply_style: MaiBotChatReplyStyleConfig { group_quote_frequency: String::from("occasionally"), private_quote_frequency: String::from("occasionally"), group_chat_prompt: String::from("下面是聊天中的的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。\n根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包。你可以适当发送表情包表达情绪。如果有人不喜欢你或者不理你，就不要强行回复，回复前读空气。不要每个人的消息都回复，适当回复其他话题。可以适当回过头回复之前用户的消息。\n"), private_chat_prompts: String::from("你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n"), chat_prompts: vec![] },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotCapabilitiesConfig {
+    /// 工具返回的结果超过阈值字数时，先交给子代理按 Planner 当前意图整理成结论再写入上下文，减少后续每轮的上下文占用；会多一次模型请求。
+    pub tool_result_condense: bool,
+    /// 工具结果达到多少字时才触发整理，仅在开启“超长工具结果整理”时生效；调低会更频繁地整理，调高则更多原文留在上下文里。
+    #[ts(type = "number")]
+    pub tool_result_condense_threshold: i64,
+    /// 给 Planner 提供 subagent 工具：把自包含的查询或整理任务交给子代理，子代理在独立上下文里多轮调用被授权的工具，只把结论交还给 Planner。
+    pub planner_subagent: bool,
+    /// 子代理改为在后台运行：派发后立刻返回任务 id，麦麦可以继续聊天，子代理结束时结论作为一条新消息送回并唤醒 Planner；同时提供查看和终止后台任务的工具。需要先开启“子代理任务派发”。
+    pub advanced_sub_agent: bool,
+}
+
+impl MaiBotCapabilitiesConfig {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.range(&format!("{path}/tool_result_condense_threshold"), self.tool_result_condense_threshold as f64, Some(500.0), None);
+    }
+}
+
+impl Default for MaiBotCapabilitiesConfig {
+    fn default() -> Self {
+        Self {
+            tool_result_condense: false,
+            tool_result_condense_threshold: 3000,
+            planner_subagent: false,
+            advanced_sub_agent: false,
         }
     }
 }
@@ -327,41 +436,6 @@ impl Default for MaiBotAttentionDriftConfig {
             drift_level: String::from("scattered"),
             anchor_policy: String::from("balanced"),
             reaction_style: String::from("lively"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[serde(default)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
-pub struct MaiBotLearningItem {
-    /// 平台，与ID一起留空表示全局
-    pub platform: String,
-    /// 要单独配置的群号或用户 ID；留空表示默认规则。
-    pub item_id: String,
-    /// 这条规则作用于群聊还是私聊。
-    #[ts(type = "\"group\" | \"private\"")]
-    pub r#type: String,
-    /// 是否在这个聊天里使用已学到的内容。
-    pub r#use: bool,
-    /// 是否从这个聊天里继续学习新内容。
-    pub learn: bool,
-}
-
-impl MaiBotLearningItem {
-    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
-        sink.one_of(&format!("{path}/type"), &self.r#type, &["group", "private"]);
-    }
-}
-
-impl Default for MaiBotLearningItem {
-    fn default() -> Self {
-        Self {
-            platform: String::from(""),
-            item_id: String::from(""),
-            r#type: String::from("group"),
-            r#use: true,
-            learn: true,
         }
     }
 }
@@ -423,66 +497,38 @@ impl Default for MaiBotChatStreamGroup {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotExperimentalConfig {
-    /// 让麦麦从聊天中学习什么时候该怎么回应的经验。
-    pub enable_behavior_learning: bool,
-    /// 开启后，reply 动作可通过 attach_pic、attach_emoji、attach_at 参数附加图片、表情包或 at。
-    pub enable_rich_reply: bool,
-    /// 实验性人格情绪特点；理性冷静和多愁善感会追加人格后缀，中性不追加内容。
-    #[ts(type = "\"rational_calm\" | \"neutral\" | \"sentimental\"")]
-    pub emotion_trait: String,
     /// 注意力漂移实验模式；让麦麦在群聊/私聊中表现出更活跃的联想和轻微话题漂移。
     pub attention_drift: MaiBotAttentionDriftConfig,
-    /// 配置哪些聊天会学习和使用行为经验；默认规则不够时再单独添加。
-    pub behavior_learning_list: Vec<MaiBotLearningItem>,
-    /// 让多个群聊或私聊共享学到的行为经验。
-    pub behavior_groups: Vec<MaiBotChatStreamGroup>,
-    /// 让麦麦同一时间只专注一个聊天流，适合直播或高强度聊天场景。
+    /// 让同组聊天共享一个持续思考的 Planner；全部消息共同进入上下文，工具通过 session_id 指定处理目标。
     pub focus_mode: bool,
     /// Focus 模式是否也作用于私聊。
     pub focus_on_private: bool,
     /// Focus 白名单。配置后只有命中的群聊或私聊会进入 Focus；留空表示所有符合聊天类型开关的聊天都可进入 Focus。
     pub focus_chat_whitelist: Vec<MaiBotTargetItem>,
-    /// 把聊天流分组后，同组共享 Focus，不同组互不抢占。
+    /// 同组聊天共享 Planner 与完整上下文，不同组独立运行；未匹配的聊天各自形成独立组。
     pub focus_groups: Vec<MaiBotChatStreamGroup>,
-    /// 当前关注的聊天多久没继续处理后，允许被其他聊天唤醒。
-    #[ts(type = "number")]
-    pub focus_cool_time: i64,
 }
 
 impl MaiBotExperimentalConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
-        sink.one_of(&format!("{path}/emotion_trait"), &self.emotion_trait, &["rational_calm", "neutral", "sentimental"]);
         self.attention_drift.validate(&format!("{path}/attention_drift"), sink);
-        for (i, item) in self.behavior_learning_list.iter().enumerate() {
-            item.validate(&format!("{path}/behavior_learning_list/{i}"), sink);
-        }
-        for (i, item) in self.behavior_groups.iter().enumerate() {
-            item.validate(&format!("{path}/behavior_groups/{i}"), sink);
-        }
         for (i, item) in self.focus_chat_whitelist.iter().enumerate() {
             item.validate(&format!("{path}/focus_chat_whitelist/{i}"), sink);
         }
         for (i, item) in self.focus_groups.iter().enumerate() {
             item.validate(&format!("{path}/focus_groups/{i}"), sink);
         }
-        sink.range(&format!("{path}/focus_cool_time"), self.focus_cool_time as f64, Some(1.0), None);
     }
 }
 
 impl Default for MaiBotExperimentalConfig {
     fn default() -> Self {
         Self {
-            enable_behavior_learning: false,
-            enable_rich_reply: false,
-            emotion_trait: String::from("neutral"),
             attention_drift: MaiBotAttentionDriftConfig { enabled: false, drift_level: String::from("scattered"), anchor_policy: String::from("balanced"), reaction_style: String::from("lively") },
-            behavior_learning_list: vec![MaiBotLearningItem { platform: String::from(""), item_id: String::from(""), r#type: String::from("group"), r#use: true, learn: true }],
-            behavior_groups: vec![],
             focus_mode: false,
             focus_on_private: false,
             focus_chat_whitelist: vec![],
             focus_groups: vec![],
-            focus_cool_time: 120,
         }
     }
 }
@@ -526,12 +572,6 @@ impl Default for MaiBotImageCacheCleanupConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotVisualConfig {
-    /// 控制规划阶段是否把图片内容直接发送给 planner 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。
-    #[ts(type = "\"text\" | \"multimodal\" | \"auto\"")]
-    pub planner_mode: String,
-    /// 控制回复生成阶段是否把图片内容直接发送给 replyer 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。
-    #[ts(type = "\"text\" | \"multimodal\" | \"auto\"")]
-    pub replyer_mode: String,
     /// 一次多模态请求最多带多少张图，太大可能更慢更贵。
     #[ts(type = "number")]
     pub max_image_num: i64,
@@ -550,8 +590,6 @@ pub struct MaiBotVisualConfig {
 
 impl MaiBotVisualConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
-        sink.one_of(&format!("{path}/planner_mode"), &self.planner_mode, &["text", "multimodal", "auto"]);
-        sink.one_of(&format!("{path}/replyer_mode"), &self.replyer_mode, &["text", "multimodal", "auto"]);
         sink.range(&format!("{path}/max_image_num"), self.max_image_num as f64, Some(0.0), None);
         sink.range(&format!("{path}/wait_image_recognize_max_time"), self.wait_image_recognize_max_time, Some(0.0), None);
         sink.range(&format!("{path}/max_image_size_mb"), self.max_image_size_mb, Some(0.0), None);
@@ -563,14 +601,47 @@ impl MaiBotVisualConfig {
 impl Default for MaiBotVisualConfig {
     fn default() -> Self {
         Self {
-            planner_mode: String::from("auto"),
-            replyer_mode: String::from("auto"),
-            max_image_num: 128,
-            wait_image_recognize_max_time: 10.0,
+            max_image_num: 64,
+            wait_image_recognize_max_time: 32.0,
             handle_oversized_images: true,
-            max_image_size_mb: 30.0,
+            max_image_size_mb: 16.0,
             oversized_image_handle_method: String::from("compress"),
             image_cache_cleanup: MaiBotImageCacheCleanupConfig { enabled: true, check_interval_hours: 6.0, image_file_retention_days: 14, no_file_result_retention_days: 30 },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotLearningItem {
+    /// 平台，与ID一起留空表示全局
+    pub platform: String,
+    /// 要单独配置的群号或用户 ID；留空表示默认规则。
+    pub item_id: String,
+    /// 这条规则作用于群聊还是私聊。
+    #[ts(type = "\"group\" | \"private\"")]
+    pub r#type: String,
+    /// 是否在这个聊天里使用已学到的内容。
+    pub r#use: bool,
+    /// 是否从这个聊天里继续学习新内容。
+    pub learn: bool,
+}
+
+impl MaiBotLearningItem {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/type"), &self.r#type, &["group", "private"]);
+    }
+}
+
+impl Default for MaiBotLearningItem {
+    fn default() -> Self {
+        Self {
+            platform: String::from(""),
+            item_id: String::from(""),
+            r#type: String::from("group"),
+            r#use: true,
+            learn: true,
         }
     }
 }
@@ -583,9 +654,8 @@ pub struct MaiBotExpressionConfig {
     pub expression_checked_only: bool,
     /// 写入表达方式前先让 AI 检查，减少学到奇怪内容。
     pub expression_self_reflect: bool,
-    /// 表达方式的使用策略：legacy 随手抽取候选，vector_intent 使用表达意图与嵌入召回。
-    #[ts(type = "\"legacy\" | \"vector_intent\"")]
-    pub expression_selection_mode: String,
+    /// 开启后使用表达意图与嵌入召回，需要配置嵌入模型；关闭时使用随手候选。
+    pub use_vector_expression: bool,
     /// 向量召回使用的表达索引 JSON；相对路径按项目根目录解析。
     pub expression_vector_index_path: String,
     /// 向量召回后最多交给表达方式 LLM 选择的候选数；硬上限为 50。
@@ -602,7 +672,6 @@ pub struct MaiBotExpressionConfig {
 
 impl MaiBotExpressionConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
-        sink.one_of(&format!("{path}/expression_selection_mode"), &self.expression_selection_mode, &["legacy", "vector_intent"]);
         sink.range(&format!("{path}/expression_vector_candidate_pool_size"), self.expression_vector_candidate_pool_size as f64, Some(1.0), Some(50.0));
         for (i, item) in self.learning_list.iter().enumerate() {
             item.validate(&format!("{path}/learning_list/{i}"), sink);
@@ -616,9 +685,9 @@ impl MaiBotExpressionConfig {
 impl Default for MaiBotExpressionConfig {
     fn default() -> Self {
         Self {
-            expression_checked_only: true,
+            expression_checked_only: false,
             expression_self_reflect: true,
-            expression_selection_mode: String::from("legacy"),
+            use_vector_expression: true,
             expression_vector_index_path: String::from("data/expression_selection/expression_vector_index.json"),
             expression_vector_candidate_pool_size: 50,
             max_expression_learner: 3,
@@ -847,6 +916,70 @@ impl Default for MaiBotAMemorixStorageConfig {
     fn default() -> Self {
         Self {
             data_dir: String::from("data/a-memorix"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotAMemorixImageMemoryConfig {
+    pub enabled: bool,
+    pub task_name: String,
+    pub preprocess_version: String,
+    pub probe_retry_seconds: f64,
+    #[ts(type = "number")]
+    pub max_bytes: i64,
+    #[ts(type = "number")]
+    pub max_pixels: i64,
+    #[ts(type = "number")]
+    pub candidate_limit: i64,
+    pub similarity_threshold: f64,
+    pub job_poll_interval_seconds: f64,
+    #[ts(type = "number")]
+    pub job_batch_size: i64,
+    #[ts(type = "number")]
+    pub job_enqueue_batch_size: i64,
+    pub job_lease_seconds: f64,
+    #[ts(type = "number")]
+    pub job_max_retries: i64,
+    #[ts(type = "number")]
+    pub min_train_threshold: i64,
+}
+
+impl MaiBotAMemorixImageMemoryConfig {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.range(&format!("{path}/probe_retry_seconds"), self.probe_retry_seconds, Some(0.0), None);
+        sink.range(&format!("{path}/max_bytes"), self.max_bytes as f64, Some(1.0), None);
+        sink.range(&format!("{path}/max_pixels"), self.max_pixels as f64, Some(1.0), None);
+        sink.range(&format!("{path}/candidate_limit"), self.candidate_limit as f64, Some(1.0), Some(100.0));
+        sink.range(&format!("{path}/similarity_threshold"), self.similarity_threshold, Some(-1.0), Some(1.0));
+        sink.range(&format!("{path}/job_poll_interval_seconds"), self.job_poll_interval_seconds, Some(0.1), None);
+        sink.range(&format!("{path}/job_batch_size"), self.job_batch_size as f64, Some(1.0), Some(100.0));
+        sink.range(&format!("{path}/job_enqueue_batch_size"), self.job_enqueue_batch_size as f64, Some(1.0), None);
+        sink.range(&format!("{path}/job_lease_seconds"), self.job_lease_seconds, Some(1.0), None);
+        sink.range(&format!("{path}/job_max_retries"), self.job_max_retries as f64, Some(0.0), None);
+        sink.range(&format!("{path}/min_train_threshold"), self.min_train_threshold as f64, Some(1.0), None);
+    }
+}
+
+impl Default for MaiBotAMemorixImageMemoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            task_name: String::from("image_embedding"),
+            preprocess_version: String::from("identity_v1"),
+            probe_retry_seconds: 60.0,
+            max_bytes: 10485760,
+            max_pixels: 40000000,
+            candidate_limit: 8,
+            similarity_threshold: 0.72,
+            job_poll_interval_seconds: 2.0,
+            job_batch_size: 4,
+            job_enqueue_batch_size: 200,
+            job_lease_seconds: 120.0,
+            job_max_retries: 5,
+            min_train_threshold: 40,
         }
     }
 }
@@ -1488,7 +1621,6 @@ pub struct MaiBotAMemorixPersonProfileConfig {
     pub top_k_evidence: i64,
     #[ts(type = "number")]
     pub evidence_classification_max_tokens: i64,
-    pub evidence_classification_temperature: f64,
 }
 
 impl MaiBotAMemorixPersonProfileConfig {
@@ -1514,7 +1646,6 @@ impl Default for MaiBotAMemorixPersonProfileConfig {
             max_retry: 3,
             top_k_evidence: 12,
             evidence_classification_max_tokens: 1200,
-            evidence_classification_temperature: 0.1,
         }
     }
 }
@@ -1549,8 +1680,11 @@ pub struct MaiBotAMemorixMemoryEvolutionConfig {
 impl MaiBotAMemorixMemoryEvolutionConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
         sink.range(&format!("{path}/half_life_hours"), self.half_life_hours, Some(0.1), None);
+        if !((self.prune_threshold as f64) > 0.0) { sink.push(&format!("{path}/prune_threshold"), "要大于 0"); }
+        if !((self.prune_threshold as f64) < 1.0) { sink.push(&format!("{path}/prune_threshold"), "要小于 1"); }
         sink.range(&format!("{path}/freeze_duration_hours"), self.freeze_duration_hours, Some(0.0), None);
         sink.range(&format!("{path}/revive_threshold"), self.revive_threshold, None, Some(1.0));
+        if !((self.revive_threshold as f64) > 0.0) { sink.push(&format!("{path}/revive_threshold"), "要大于 0"); }
         sink.range(&format!("{path}/access_reinforcement_alpha"), self.access_reinforcement_alpha, Some(0.0), Some(1.0));
         sink.range(&format!("{path}/access_reinforcement_cooldown_minutes"), self.access_reinforcement_cooldown_minutes, Some(0.0), None);
         sink.range(&format!("{path}/explicit_reinforcement_alpha"), self.explicit_reinforcement_alpha, Some(0.0), Some(1.0));
@@ -1786,6 +1920,8 @@ pub struct MaiBotAMemorixConfig {
     /// 控制麦麦在聊天中如何使用长期记忆
     pub integration: MaiBotAMemorixIntegrationConfig,
     pub storage: MaiBotAMemorixStorageConfig,
+    /// 图片资产留存、图片嵌入和相似内容召回配置
+    pub image_memory: MaiBotAMemorixImageMemoryConfig,
     /// 把记忆内容转换为向量时使用的基础设置
     pub embedding: MaiBotAMemorixEmbeddingConfig,
     /// 检索配置
@@ -1815,6 +1951,7 @@ impl MaiBotAMemorixConfig {
         self.plugin.validate(&format!("{path}/plugin"), sink);
         self.integration.validate(&format!("{path}/integration"), sink);
         self.storage.validate(&format!("{path}/storage"), sink);
+        self.image_memory.validate(&format!("{path}/image_memory"), sink);
         self.embedding.validate(&format!("{path}/embedding"), sink);
         self.retrieval.validate(&format!("{path}/retrieval"), sink);
         self.threshold.validate(&format!("{path}/threshold"), sink);
@@ -1836,6 +1973,7 @@ impl Default for MaiBotAMemorixConfig {
             plugin: MaiBotAMemorixPluginConfig { enabled: false },
             integration: MaiBotAMemorixIntegrationConfig { enable_memory_query_tool: true, memory_query_default_limit: 5, enable_person_profile_query_tool: true, enable_person_profile_injection: true, person_profile_injection_max_profiles: 3, heuristic_memory_recall_enabled: false, heuristic_memory_cross_chat_enabled: false, heuristic_memory_recall_window_size: 20, heuristic_memory_recall_limit: 3, heuristic_memory_recall_max_chars: 900, heuristic_memory_recall_min_interval_seconds: 180, heuristic_memory_recall_min_new_messages: 60, heuristic_memory_recall_cache_ttl_seconds: 300, heuristic_memory_group_to_private_enabled: false, heuristic_memory_private_to_group_enabled: false, person_fact_writeback_enabled: true, chat_summary_writeback_enabled: true, chat_summary_writeback_message_threshold: 36, chat_summary_writeback_context_length: 36, fuzzy_modify_enabled: true, fuzzy_modify_auto_execute_enabled: false, fuzzy_modify_confirm_threshold: 0.85, fuzzy_modify_candidate_limit: 20, fuzzy_modify_max_targets: 5, fuzzy_modify_allow_global_scope: false, feedback_correction_enabled: false, feedback_correction_window_hours: 12.0, feedback_correction_check_interval_minutes: 30, feedback_correction_batch_size: 20, feedback_correction_auto_apply_threshold: 0.85, feedback_correction_max_feedback_messages: 30, feedback_correction_prefilter_enabled: true, feedback_correction_paragraph_mark_enabled: true, feedback_correction_paragraph_hard_filter_enabled: true, feedback_correction_profile_refresh_enabled: true, feedback_correction_profile_force_refresh_on_read: true, feedback_correction_episode_rebuild_enabled: true, feedback_correction_episode_query_block_enabled: true, feedback_correction_reconcile_interval_minutes: 5, feedback_correction_reconcile_batch_size: 20 },
             storage: MaiBotAMemorixStorageConfig { data_dir: String::from("data/a-memorix") },
+            image_memory: MaiBotAMemorixImageMemoryConfig { enabled: true, task_name: String::from("image_embedding"), preprocess_version: String::from("identity_v1"), probe_retry_seconds: 60.0, max_bytes: 10485760, max_pixels: 40000000, candidate_limit: 8, similarity_threshold: 0.72, job_poll_interval_seconds: 2.0, job_batch_size: 4, job_enqueue_batch_size: 200, job_lease_seconds: 120.0, job_max_retries: 5, min_train_threshold: 40 },
             embedding: MaiBotAMemorixEmbeddingConfig { model_name: String::from("auto"), dimension: 1024, dimension_request_mode: String::from("explicit"), batch_size: 32, max_concurrent: 5, enable_cache: false, runtime_train_threshold: 256, quantization_type: String::from("int8"), fallback: MaiBotAMemorixEmbeddingFallbackConfig { enabled: true, probe_interval_seconds: 180, allow_metadata_only_write: true }, paragraph_vector_backfill: MaiBotAMemorixParagraphVectorBackfillConfig { enabled: true, interval_seconds: 60, batch_size: 64, max_retry: 5 } },
             retrieval: MaiBotAMemorixRetrievalConfig { top_k_paragraphs: 20, top_k_relations: 10, top_k_final: 10, alpha: 0.5, enable_ppr: true, ppr_alpha: 0.85, ppr_timeout_seconds: 1.5, ppr_concurrency_limit: 4, enable_parallel: true, search: MaiBotAMemorixRetrievalSearchConfig { smart_fallback: MaiBotAMemorixSmartFallbackConfig { enabled: true } }, fusion: MaiBotAMemorixFusionRetrievalConfig { method: String::from("weighted_rrf"), rrf_k: 60, vector_weight: 0.7, bm25_weight: 0.3 }, relation_vectorization: MaiBotAMemorixRelationVectorizationConfig { enabled: false, backfill_enabled: false, write_on_import: true }, vector_pools: MaiBotAMemorixVectorPoolsConfig { mode: String::from("dual"), paragraph_top_k: 20, graph_top_k: 40, graph_expand_paragraph_k: 80, relation_expand_per_hit: 5, entity_expand_per_hit: 8, relation_evidence_weight: 1.0, entity_evidence_weight: 0.55, semantic_weight: 0.65, sparse_weight: 0.2, graph_weight: 0.15, relation_intent: MaiBotAMemorixRelationIntentVectorPoolConfig { graph_top_k: 80, semantic_weight: 0.45, sparse_weight: 0.15, graph_weight: 0.4, return_relation_items: false } }, sparse: MaiBotAMemorixSparseRetrievalConfig { enabled: true, backend: String::from("fts5"), mode: String::from("auto"), tokenizer_mode: String::from("jieba"), candidate_k: 80, relation_candidate_k: 60 } },
             threshold: MaiBotAMemorixThresholdConfig { min_threshold: 0.29, max_threshold: 0.95, percentile: 75, min_results: 4 },
@@ -1843,7 +1981,7 @@ impl Default for MaiBotAMemorixConfig {
             global_memory_sharing_enabled: false,
             shared_memory_groups: vec![],
             episode: MaiBotAMemorixEpisodeConfig { enabled: true, generation_enabled: true, source_poll_interval_seconds: 1.0, source_batch_size: 20, source_max_retry: 3, source_lease_seconds: 1800.0, source_max_wait_seconds: 60.0, max_paragraphs_per_call: 20, max_chars_per_call: 6000, source_time_window_hours: 24.0, segmentation_model: String::from("auto"), disabled_source_types: vec![String::from("person_fact")] },
-            person_profile: MaiBotAMemorixPersonProfileConfig { enabled: true, refresh_interval_minutes: 30, active_window_hours: 72.0, max_refresh_per_cycle: 50, refresh_debounce_seconds: 120, refresh_queue_interval_seconds: 60, refresh_queue_batch_size: 10, refresh_retry_backoff_seconds: 300, max_retry: 3, top_k_evidence: 12, evidence_classification_max_tokens: 1200, evidence_classification_temperature: 0.1 },
+            person_profile: MaiBotAMemorixPersonProfileConfig { enabled: true, refresh_interval_minutes: 30, active_window_hours: 72.0, max_refresh_per_cycle: 50, refresh_debounce_seconds: 120, refresh_queue_interval_seconds: 60, refresh_queue_batch_size: 10, refresh_retry_backoff_seconds: 300, max_retry: 3, top_k_evidence: 12, evidence_classification_max_tokens: 1200 },
             memory: MaiBotAMemorixMemoryEvolutionConfig { enabled: true, half_life_hours: 24.0, prune_threshold: 0.1, freeze_duration_hours: 24.0, revive_threshold: 0.15, access_reinforcement_alpha: 0.05, access_reinforcement_cooldown_minutes: 60.0, explicit_reinforcement_alpha: 0.5, weaken_alpha: 0.5, lifecycle_batch_size: 1000 },
             advanced: MaiBotAMemorixAdvancedConfig { enable_auto_save: true, auto_save_interval_minutes: 5, debug: false },
             web: MaiBotAMemorixWebConfig { import_config: MaiBotAMemorixWebImportConfig { enabled: true, max_queue_size: 20, max_files_per_task: 200, max_file_size_mb: 20, max_paste_chars: 200000, default_file_concurrency: 2, default_chunk_concurrency: 4, default_narrative_window_size: 1600, default_narrative_overlap: 400, default_factual_target_size: 1200, max_chunk_chars: 3200, timeout: MaiBotAMemorixWebImportTimeoutConfig { llm_call_seconds: 240.0, process_poll_seconds: 1.0, process_terminate_seconds: 5.0, process_kill_seconds: 3.0, convert_preflight_seconds: 20.0 } }, tuning: MaiBotAMemorixWebTuningConfig { enabled: true, max_queue_size: 8, poll_interval_ms: 1200, default_intensity: String::from("standard"), default_objective: String::from("precision_priority"), default_top_k_eval: 20, default_sample_size: 24 } },
@@ -1941,6 +2079,8 @@ impl Default for MaiBotEmojiCacheCleanupConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotEmojiConfig {
+    /// 开启后由思考模型直接查看并挑选表情包，在文字回复后发送，需要思考模型支持视觉；关闭时沿用独立选择并发送表情包的旧方式。
+    pub use_new_send_logic: bool,
     /// 每次从多少个候选表情里挑一个发送；不是一次发送这么多。
     #[ts(type = "number")]
     pub emoji_send_num: i64,
@@ -1973,6 +2113,7 @@ impl MaiBotEmojiConfig {
 impl Default for MaiBotEmojiConfig {
     fn default() -> Self {
         Self {
+            use_new_send_logic: false,
             emoji_send_num: 25,
             max_reg_num: 64,
             do_replace: true,
@@ -2116,6 +2257,9 @@ impl Default for MaiBotChineseTypoConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotResponseSplitterConfig {
+    /// 规则断句或使用 LLM 按语义断句。
+    #[ts(type = "\"rule\" | \"llm\"")]
+    pub mode: String,
     /// 把过长回复拆成多条发送。
     pub enable: bool,
     /// 单条回复允许的最大长度。
@@ -2135,6 +2279,7 @@ pub struct MaiBotResponseSplitterConfig {
 
 impl MaiBotResponseSplitterConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/mode"), &self.mode, &["rule", "llm"]);
         sink.range(&format!("{path}/max_split_num"), self.max_split_num as f64, Some(1.0), None);
     }
 }
@@ -2142,6 +2287,7 @@ impl MaiBotResponseSplitterConfig {
 impl Default for MaiBotResponseSplitterConfig {
     fn default() -> Self {
         Self {
+            mode: String::from("rule"),
             enable: true,
             max_length: 512,
             max_sentence_num: 8,
@@ -2210,9 +2356,16 @@ pub struct MaiBotLogConfig {
     /// 每个聊天最多保留多少组 Prompt 预览。
     #[ts(type = "number")]
     pub maisaka_prompt_preview_limit: i64,
-    /// 每个聊天最多保留多少条回复效果记录。
-    #[ts(type = "number")]
-    pub maisaka_reply_effect_limit: i64,
+    /// 启用独立内存诊断日志；最多四个 5 MiB 文件，修改后重启生效。
+    pub memory_diagnostics_enabled: bool,
+    /// 启用 tracemalloc 分配位置对比（每十分钟）；有额外内存和 CPU 开销，排查时开启，重启生效。
+    pub memory_diagnostics_deep_enabled: bool,
+    /// 轻量内存诊断采集间隔（秒，至少 10 秒），修改后重启生效。
+    pub memory_diagnostics_interval_seconds: f64,
+    /// 是否记录事件循环卡顿；主循环与 WebUI 循环各有一份，用于排查界面卡顿。
+    pub event_loop_watchdog_enabled: bool,
+    /// 事件循环唤醒延迟超过该秒数时记录一条警告日志。
+    pub event_loop_watchdog_warn_seconds: f64,
     /// 完全不显示日志的第三方库名称列表。
     pub suppress_libraries: Vec<String>,
     /// 单独设置某些第三方库的日志等级。
@@ -2226,6 +2379,7 @@ impl MaiBotLogConfig {
         sink.one_of(&format!("{path}/log_level"), &self.log_level, &["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]);
         sink.one_of(&format!("{path}/console_log_level"), &self.console_log_level, &["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]);
         sink.one_of(&format!("{path}/file_log_level"), &self.file_log_level, &["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]);
+        sink.range(&format!("{path}/memory_diagnostics_interval_seconds"), self.memory_diagnostics_interval_seconds, Some(10.0), None);
     }
 }
 
@@ -2243,7 +2397,11 @@ impl Default for MaiBotLogConfig {
             log_cleanup_days: 30,
             llm_request_snapshot_limit: 128,
             maisaka_prompt_preview_limit: 256,
-            maisaka_reply_effect_limit: 256,
+            memory_diagnostics_enabled: true,
+            memory_diagnostics_deep_enabled: false,
+            memory_diagnostics_interval_seconds: 60.0,
+            event_loop_watchdog_enabled: false,
+            event_loop_watchdog_warn_seconds: 0.5,
             suppress_libraries: vec![String::from("faiss"), String::from("httpx"), String::from("urllib3"), String::from("asyncio"), String::from("websockets"), String::from("httpcore"), String::from("requests"), String::from("sqlalchemy"), String::from("openai"), String::from("uvicorn"), String::from("jieba")],
             library_log_levels: std::collections::BTreeMap::from([(String::from("aiohttp"), String::from("WARNING")), (String::from("PIL"), String::from("WARNING"))]),
         }
@@ -2254,20 +2412,22 @@ impl Default for MaiBotLogConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotDebugConfig {
+    /// 按旧版（0.12.x）的方式组织 replyer 提示词：全部回复指令集中在一份完整模板里，用块占位符填充，群聊/私聊/简短回复各用一套模板，并整段作为一条 user 消息发送。模型名称或标识包含 mai_replier（兼容 mai-replier），或为 v2p1-contract、v2p1-raw 时自动开启且不可关闭，全部移走后自动关闭；其他模型可手动开启。
+    pub replyer_retro_prompt: bool,
     /// 在交互式终端中启用本地消息和指令输入。
     pub enable_console_input: bool,
-    /// 在日志或界面中显示麦麦的思考过程。
+    /// 在终端显示思考过程大框，不影响推理记录保存和 WebUI 查看。
     pub show_maisaka_thinking: bool,
-    /// 允许使用 /clear 清空当前聊天流的 Maisaka 短期历史上下文。
-    pub enable_clear_context_command: bool,
-    /// 记录回复效果评分，方便观察回复质量。
-    pub enable_reply_effect_tracking: bool,
+    /// 保存 Planner、工具调用及聊天回想的完整推理记录，供 WebUI 查看，与终端显示独立。
+    pub save_maisaka_reasoning: bool,
     /// Prompt 预览里保留图片 base64，便于复现但会占空间。
     pub keep_prompt_preview_json_base64: bool,
     /// 保存工具返回的结构化内容，便于调试但会增加数据库体积。
     pub record_tool_structured_content: bool,
     /// 记录模型 prompt cache 统计，用于性能调试。
     pub enable_llm_cache_stats: bool,
+    /// 跳过插件声明的 Host 和 SDK 版本范围校验，直接加载插件；开启后需重启生效。
+    pub force_plugin_compatibility: bool,
 }
 
 impl MaiBotDebugConfig {
@@ -2279,13 +2439,14 @@ impl MaiBotDebugConfig {
 impl Default for MaiBotDebugConfig {
     fn default() -> Self {
         Self {
-            enable_console_input: false,
-            show_maisaka_thinking: true,
-            enable_clear_context_command: false,
-            enable_reply_effect_tracking: false,
+            replyer_retro_prompt: false,
+            enable_console_input: true,
+            show_maisaka_thinking: false,
+            save_maisaka_reasoning: true,
             keep_prompt_preview_json_base64: false,
             record_tool_structured_content: false,
             enable_llm_cache_stats: false,
+            force_plugin_compatibility: false,
         }
     }
 }
@@ -2294,6 +2455,8 @@ impl Default for MaiBotDebugConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotMaimMessageConfig {
+    /// 消息服务总开关；关闭后不启动旧版 WS 和新版 API 服务，重启生效，不影响插件式适配器。
+    pub enabled: bool,
     /// 旧版 WebSocket 服务监听地址；不清楚就保持默认。
     pub ws_server_host: String,
     /// 旧版 WebSocket 服务端口。
@@ -2327,6 +2490,7 @@ impl MaiBotMaimMessageConfig {
 impl Default for MaiBotMaimMessageConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             ws_server_host: String::from("127.0.0.1"),
             ws_server_port: 8000,
             auth_token: vec![],
@@ -2355,7 +2519,7 @@ pub struct MaiBotWebUIConfig {
     /// WebUI 运行模式；普通使用保持 production。
     #[ts(type = "\"development\" | \"production\"")]
     pub mode: String,
-    /// 界面风格编号；0 为旧风格，1 为未来复古风格。
+    /// 界面风格编号；0 为旧风格，1 为未来复古风格，2 为千禧风格。
     #[ts(type = "number")]
     pub webui_style: i64,
     /// 防爬虫策略；basic 只记录，strict/loose 会拦截更多请求。
@@ -2378,7 +2542,7 @@ pub struct MaiBotWebUIConfig {
 impl MaiBotWebUIConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
         sink.one_of(&format!("{path}/mode"), &self.mode, &["development", "production"]);
-        sink.range(&format!("{path}/webui_style"), self.webui_style as f64, Some(0.0), Some(1.0));
+        sink.range(&format!("{path}/webui_style"), self.webui_style as f64, Some(0.0), Some(2.0));
         sink.one_of(&format!("{path}/anti_crawler_mode"), &self.anti_crawler_mode, &["false", "strict", "loose", "basic"]);
     }
 }
@@ -2390,7 +2554,7 @@ impl Default for MaiBotWebUIConfig {
             host: vec![String::from("127.0.0.1"), String::from("::1")],
             port: 8001,
             mode: String::from("production"),
-            webui_style: 1,
+            webui_style: 2,
             anti_crawler_mode: String::from("basic"),
             allowed_ips: String::from("127.0.0.1"),
             trusted_proxies: String::from(""),
@@ -2632,6 +2796,8 @@ pub struct MaiBotMCPServerItemConfig {
 impl MaiBotMCPServerItemConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
         sink.one_of(&format!("{path}/transport"), &self.transport, &["stdio", "streamable_http", "sse"]);
+        if !((self.http_timeout_seconds as f64) > 0.0) { sink.push(&format!("{path}/http_timeout_seconds"), "要大于 0"); }
+        if !((self.read_timeout_seconds as f64) > 0.0) { sink.push(&format!("{path}/read_timeout_seconds"), "要大于 0"); }
         self.authorization.validate(&format!("{path}/authorization"), sink);
     }
 }
@@ -2716,8 +2882,12 @@ impl Default for MaiBotCommandPermissionConfig {
 pub struct MaiBotPluginConfig {
     /// 允许用聊天命令管理插件的用户，格式如 qq:123456789。
     pub permission: Vec<String>,
+    /// 开启后，用户执行无权限命令时不再发送提示消息，仅静默拦截并记录日志。
+    pub silent_permission_denied: bool,
     /// 受保护命令按用户和真实聊天流配置的额外放行规则。
     pub command_permissions: std::collections::BTreeMap<String, MaiBotCommandPermissionConfig>,
+    /// 在命令管理中停用的命令 ID 列表（格式为 plugin_id.command_name，内置命令为 core.clear）。
+    pub disabled_commands: Vec<String>,
 }
 
 impl MaiBotPluginConfig {
@@ -2732,7 +2902,9 @@ impl Default for MaiBotPluginConfig {
     fn default() -> Self {
         Self {
             permission: vec![],
+            silent_permission_denied: false,
             command_permissions: std::collections::BTreeMap::new(),
+            disabled_commands: vec![],
         }
     }
 }
@@ -2772,6 +2944,9 @@ pub struct MaiBotPluginRuntimeRenderConfig {
 impl MaiBotPluginRuntimeRenderConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
         sink.range(&format!("{path}/concurrency_limit"), self.concurrency_limit as f64, Some(1.0), None);
+        if !((self.startup_timeout_sec as f64) > 0.0) { sink.push(&format!("{path}/startup_timeout_sec"), "要大于 0"); }
+        if !((self.render_timeout_sec as f64) > 0.0) { sink.push(&format!("{path}/render_timeout_sec"), "要大于 0"); }
+        if !((self.download_connection_timeout_sec as f64) > 0.0) { sink.push(&format!("{path}/download_connection_timeout_sec"), "要大于 0"); }
         sink.range(&format!("{path}/restart_after_render_count"), self.restart_after_render_count as f64, Some(0.0), None);
     }
 }
@@ -2840,12 +3015,16 @@ impl Default for MaiBotPluginRuntimeConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotBotConfigFile {
+    /// 统一独立 Agent 配置
+    pub agent: MaiBotAgentConfig,
     /// 机器人配置类
     pub bot: MaiBotBotConfig,
     /// 人格配置类
     pub personality: MaiBotPersonalityConfig,
     /// 聊天配置类
     pub chat: MaiBotChatConfig,
+    /// 能力配置类
+    pub capabilities: MaiBotCapabilitiesConfig,
     /// 实验性功能配置类
     pub experimental: MaiBotExperimentalConfig,
     /// 视觉配置类
@@ -2892,9 +3071,11 @@ pub struct MaiBotBotConfigFile {
 
 impl MaiBotBotConfigFile {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        self.agent.validate(&format!("{path}/agent"), sink);
         self.bot.validate(&format!("{path}/bot"), sink);
         self.personality.validate(&format!("{path}/personality"), sink);
         self.chat.validate(&format!("{path}/chat"), sink);
+        self.capabilities.validate(&format!("{path}/capabilities"), sink);
         self.experimental.validate(&format!("{path}/experimental"), sink);
         self.visual.validate(&format!("{path}/visual"), sink);
         self.expression.validate(&format!("{path}/expression"), sink);
@@ -2922,29 +3103,31 @@ impl MaiBotBotConfigFile {
 impl Default for MaiBotBotConfigFile {
     fn default() -> Self {
         Self {
+            agent: MaiBotAgentConfig { enabled: false, connection: String::from("dsh"), desktop_manifest: String::from(""), acp_command: String::from("dsh"), acp_args: vec![], acp_cwd: String::from(""), acp_env: std::collections::BTreeMap::new(), acp_model: String::from(""), acp_timeout: 60.0, computer_tools: false, networking: true, memory_mb: 4096, startup_timeout: 120.0, request_timeout: 60.0, screenshot_max_edge: 1600 },
             bot: MaiBotBotConfig { platform: String::from(""), qq_account: String::from(""), platforms: vec![], nickname: String::from("麦麦"), alias_names: vec![] },
-            personality: MaiBotPersonalityConfig { personality: String::from("是一个大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。"), behavior_style: String::from("是大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。不会没话题硬找话题，"), reply_style: String::from("你的风格平淡简短，可以参考贴吧的回复风格。不滥用比喻或者生硬句子。视情况省略主语或者进行倒装，风格较为随意。"), multiple_reply_style: vec![String::from("你的风格平淡但不失讽刺，很简短,很白话。可以参考贴吧，微博的回复风格。"), String::from("用1-2个字进行回复"), String::from("用1-2个符号进行回复"), String::from("言辭凝練古雅，穿插《論語》經句卻不晦澀，以文言短句為基，輔以淺白語意，持長者溫和風範，全用繁體字表達，具先秦儒者談吐韻致。"), String::from("带点翻译腔，但不要太长")], multiple_probability: 0.0 },
-            chat: MaiBotChatConfig { max_context_size: 40, max_private_context_size: 60, enable_context_optimization: true, mid_term_memory: true, mid_term_memory_lenth: 10, reply_timing: MaiBotChatReplyTimingConfig { talk_value: 1.0, private_talk_value: 1.0, mentioned_bot_reply: false, inevitable_at_reply: true, reply_trigger_mode: String::from("frequency"), planner_interrupt_max_consecutive_count: 0, max_consecutive_wait_count: 3, no_action_backoff_base_seconds: 15.0, no_action_backoff_cap_seconds: 300.0, no_action_backoff_start_count: 2, no_action_backoff_bypass_pending_count: 6, enable_talk_value_rules: false, talk_value_rules: vec![MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("00:00-08:59"), value: 0.8 }, MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("09:00-18:59"), value: 1.0 }] }, reply_style: MaiBotChatReplyStyleConfig { enable_reply_quote: true, group_chat_prompt: String::from("你正在qq群里聊天，下面是群里正在聊的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。请注意把握聊天内容。\n不要总是提及自己的身份背景，根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包，只要关注表情包表达的含义。你可以适当发送表情包表达情绪。控制回复的频率，不要每个人的消息都回复，优先回复你感兴趣的或者主动提及你的，适当回复其他话题。\n"), private_chat_prompts: String::from("你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n"), chat_prompts: vec![] } },
-            experimental: MaiBotExperimentalConfig { enable_behavior_learning: false, enable_rich_reply: false, emotion_trait: String::from("neutral"), attention_drift: MaiBotAttentionDriftConfig { enabled: false, drift_level: String::from("scattered"), anchor_policy: String::from("balanced"), reaction_style: String::from("lively") }, behavior_learning_list: vec![MaiBotLearningItem { platform: String::from(""), item_id: String::from(""), r#type: String::from("group"), r#use: true, learn: true }], behavior_groups: vec![], focus_mode: false, focus_on_private: false, focus_chat_whitelist: vec![], focus_groups: vec![], focus_cool_time: 120 },
-            visual: MaiBotVisualConfig { planner_mode: String::from("auto"), replyer_mode: String::from("auto"), max_image_num: 128, wait_image_recognize_max_time: 10.0, handle_oversized_images: true, max_image_size_mb: 30.0, oversized_image_handle_method: String::from("compress"), image_cache_cleanup: MaiBotImageCacheCleanupConfig { enabled: true, check_interval_hours: 6.0, image_file_retention_days: 14, no_file_result_retention_days: 30 } },
-            expression: MaiBotExpressionConfig { expression_checked_only: true, expression_self_reflect: true, expression_selection_mode: String::from("legacy"), expression_vector_index_path: String::from("data/expression_selection/expression_vector_index.json"), expression_vector_candidate_pool_size: 50, max_expression_learner: 3, learning_list: vec![MaiBotLearningItem { platform: String::from(""), item_id: String::from(""), r#type: String::from("group"), r#use: true, learn: true }], expression_groups: vec![] },
+            personality: MaiBotPersonalityConfig { personality: String::from("是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。"), behavior_style: String::from("是女大学生，现在正在上网聊天。一般不包容且善良，但有时候有点一反常态，表现出锐利攻击性。善于用人类的角度思考问题，聊天比较日常。不会没话题硬找话题，具有足够的自主性，会自行搜集信息理解内容。"), reply_style: String::from("你的风格平淡简短，可以参考贴吧的回复风格。不滥用比喻或者生硬句子。视情况省略主语或者进行倒装，风格较为随意。"), multiple_reply_style: vec![String::from("你的风格平淡但不失讽刺，很简短,很白话。可以参考贴吧，微博的回复风格。"), String::from("用1-2个字进行回复"), String::from("用1-2个符号进行回复"), String::from("言辭凝練古雅，穿插《論語》經句卻不晦澀，以文言短句為基，輔以淺白語意，持長者溫和風範，全用繁體字表達，具先秦儒者談吐韻致。"), String::from("带点翻译腔，但不要太长")], multiple_probability: 0.0 },
+            chat: MaiBotChatConfig { enable_reply_at: true, max_context_size: 40, max_private_context_size: 60, mid_term_memory: true, mid_term_memory_lenth: 10, reply_timing: MaiBotChatReplyTimingConfig { message_debounce_mode: String::from("natural"), planner_message_steering: false, talk_value: 1.0, private_talk_value: 1.0, mentioned_bot_reply: true, inevitable_at_reply: true, max_consecutive_wait_count: 3, no_action_backoff_base_seconds: 15.0, no_action_backoff_cap_seconds: 300.0, no_action_backoff_start_count: 2, no_action_backoff_bypass_pending_count: 6, enable_talk_value_rules: false, talk_value_rules: vec![MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("00:00-08:59"), value: 0.8 }, MaiBotTalkRulesItem { platform: String::from(""), item_id: String::from(""), rule_type: String::from("group"), time: String::from("09:00-18:59"), value: 1.0 }] }, reply_style: MaiBotChatReplyStyleConfig { group_quote_frequency: String::from("occasionally"), private_quote_frequency: String::from("occasionally"), group_chat_prompt: String::from("下面是聊天中的的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。\n根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包。你可以适当发送表情包表达情绪。如果有人不喜欢你或者不理你，就不要强行回复，回复前读空气。不要每个人的消息都回复，适当回复其他话题。可以适当回过头回复之前用户的消息。\n"), private_chat_prompts: String::from("你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n"), chat_prompts: vec![] } },
+            capabilities: MaiBotCapabilitiesConfig { tool_result_condense: false, tool_result_condense_threshold: 3000, planner_subagent: false, advanced_sub_agent: false },
+            experimental: MaiBotExperimentalConfig { attention_drift: MaiBotAttentionDriftConfig { enabled: false, drift_level: String::from("scattered"), anchor_policy: String::from("balanced"), reaction_style: String::from("lively") }, focus_mode: false, focus_on_private: false, focus_chat_whitelist: vec![], focus_groups: vec![] },
+            visual: MaiBotVisualConfig { max_image_num: 64, wait_image_recognize_max_time: 32.0, handle_oversized_images: true, max_image_size_mb: 16.0, oversized_image_handle_method: String::from("compress"), image_cache_cleanup: MaiBotImageCacheCleanupConfig { enabled: true, check_interval_hours: 6.0, image_file_retention_days: 14, no_file_result_retention_days: 30 } },
+            expression: MaiBotExpressionConfig { expression_checked_only: false, expression_self_reflect: true, use_vector_expression: true, expression_vector_index_path: String::from("data/expression_selection/expression_vector_index.json"), expression_vector_candidate_pool_size: 50, max_expression_learner: 3, learning_list: vec![MaiBotLearningItem { platform: String::from(""), item_id: String::from(""), r#type: String::from("group"), r#use: true, learn: true }], expression_groups: vec![] },
             jargon: MaiBotJargonConfig { learning_list: vec![MaiBotLearningItem { platform: String::from(""), item_id: String::from(""), r#type: String::from("group"), r#use: true, learn: true }], jargon_groups: vec![] },
-            a_memorix: MaiBotAMemorixConfig { plugin: MaiBotAMemorixPluginConfig { enabled: false }, integration: MaiBotAMemorixIntegrationConfig { enable_memory_query_tool: true, memory_query_default_limit: 5, enable_person_profile_query_tool: true, enable_person_profile_injection: true, person_profile_injection_max_profiles: 3, heuristic_memory_recall_enabled: false, heuristic_memory_cross_chat_enabled: false, heuristic_memory_recall_window_size: 20, heuristic_memory_recall_limit: 3, heuristic_memory_recall_max_chars: 900, heuristic_memory_recall_min_interval_seconds: 180, heuristic_memory_recall_min_new_messages: 60, heuristic_memory_recall_cache_ttl_seconds: 300, heuristic_memory_group_to_private_enabled: false, heuristic_memory_private_to_group_enabled: false, person_fact_writeback_enabled: true, chat_summary_writeback_enabled: true, chat_summary_writeback_message_threshold: 36, chat_summary_writeback_context_length: 36, fuzzy_modify_enabled: true, fuzzy_modify_auto_execute_enabled: false, fuzzy_modify_confirm_threshold: 0.85, fuzzy_modify_candidate_limit: 20, fuzzy_modify_max_targets: 5, fuzzy_modify_allow_global_scope: false, feedback_correction_enabled: false, feedback_correction_window_hours: 12.0, feedback_correction_check_interval_minutes: 30, feedback_correction_batch_size: 20, feedback_correction_auto_apply_threshold: 0.85, feedback_correction_max_feedback_messages: 30, feedback_correction_prefilter_enabled: true, feedback_correction_paragraph_mark_enabled: true, feedback_correction_paragraph_hard_filter_enabled: true, feedback_correction_profile_refresh_enabled: true, feedback_correction_profile_force_refresh_on_read: true, feedback_correction_episode_rebuild_enabled: true, feedback_correction_episode_query_block_enabled: true, feedback_correction_reconcile_interval_minutes: 5, feedback_correction_reconcile_batch_size: 20 }, storage: MaiBotAMemorixStorageConfig { data_dir: String::from("data/a-memorix") }, embedding: MaiBotAMemorixEmbeddingConfig { model_name: String::from("auto"), dimension: 1024, dimension_request_mode: String::from("explicit"), batch_size: 32, max_concurrent: 5, enable_cache: false, runtime_train_threshold: 256, quantization_type: String::from("int8"), fallback: MaiBotAMemorixEmbeddingFallbackConfig { enabled: true, probe_interval_seconds: 180, allow_metadata_only_write: true }, paragraph_vector_backfill: MaiBotAMemorixParagraphVectorBackfillConfig { enabled: true, interval_seconds: 60, batch_size: 64, max_retry: 5 } }, retrieval: MaiBotAMemorixRetrievalConfig { top_k_paragraphs: 20, top_k_relations: 10, top_k_final: 10, alpha: 0.5, enable_ppr: true, ppr_alpha: 0.85, ppr_timeout_seconds: 1.5, ppr_concurrency_limit: 4, enable_parallel: true, search: MaiBotAMemorixRetrievalSearchConfig { smart_fallback: MaiBotAMemorixSmartFallbackConfig { enabled: true } }, fusion: MaiBotAMemorixFusionRetrievalConfig { method: String::from("weighted_rrf"), rrf_k: 60, vector_weight: 0.7, bm25_weight: 0.3 }, relation_vectorization: MaiBotAMemorixRelationVectorizationConfig { enabled: false, backfill_enabled: false, write_on_import: true }, vector_pools: MaiBotAMemorixVectorPoolsConfig { mode: String::from("dual"), paragraph_top_k: 20, graph_top_k: 40, graph_expand_paragraph_k: 80, relation_expand_per_hit: 5, entity_expand_per_hit: 8, relation_evidence_weight: 1.0, entity_evidence_weight: 0.55, semantic_weight: 0.65, sparse_weight: 0.2, graph_weight: 0.15, relation_intent: MaiBotAMemorixRelationIntentVectorPoolConfig { graph_top_k: 80, semantic_weight: 0.45, sparse_weight: 0.15, graph_weight: 0.4, return_relation_items: false } }, sparse: MaiBotAMemorixSparseRetrievalConfig { enabled: true, backend: String::from("fts5"), mode: String::from("auto"), tokenizer_mode: String::from("jieba"), candidate_k: 80, relation_candidate_k: 60 } }, threshold: MaiBotAMemorixThresholdConfig { min_threshold: 0.29, max_threshold: 0.95, percentile: 75, min_results: 4 }, filter: MaiBotAMemorixFilterConfig { enabled: true, mode: String::from("blacklist"), chats: vec![], retrieval: MaiBotAMemorixRetrievalFilterConfig { chat_stream: MaiBotAMemorixRetrievalSubtypeFilterConfig { enabled: false, mode: String::from("blacklist"), chats: vec![] }, chat_summary: MaiBotAMemorixRetrievalSubtypeFilterConfig { enabled: false, mode: String::from("blacklist"), chats: vec![] }, episode: MaiBotAMemorixRetrievalSubtypeFilterConfig { enabled: false, mode: String::from("blacklist"), chats: vec![] } } }, global_memory_sharing_enabled: false, shared_memory_groups: vec![], episode: MaiBotAMemorixEpisodeConfig { enabled: true, generation_enabled: true, source_poll_interval_seconds: 1.0, source_batch_size: 20, source_max_retry: 3, source_lease_seconds: 1800.0, source_max_wait_seconds: 60.0, max_paragraphs_per_call: 20, max_chars_per_call: 6000, source_time_window_hours: 24.0, segmentation_model: String::from("auto"), disabled_source_types: vec![String::from("person_fact")] }, person_profile: MaiBotAMemorixPersonProfileConfig { enabled: true, refresh_interval_minutes: 30, active_window_hours: 72.0, max_refresh_per_cycle: 50, refresh_debounce_seconds: 120, refresh_queue_interval_seconds: 60, refresh_queue_batch_size: 10, refresh_retry_backoff_seconds: 300, max_retry: 3, top_k_evidence: 12, evidence_classification_max_tokens: 1200, evidence_classification_temperature: 0.1 }, memory: MaiBotAMemorixMemoryEvolutionConfig { enabled: true, half_life_hours: 24.0, prune_threshold: 0.1, freeze_duration_hours: 24.0, revive_threshold: 0.15, access_reinforcement_alpha: 0.05, access_reinforcement_cooldown_minutes: 60.0, explicit_reinforcement_alpha: 0.5, weaken_alpha: 0.5, lifecycle_batch_size: 1000 }, advanced: MaiBotAMemorixAdvancedConfig { enable_auto_save: true, auto_save_interval_minutes: 5, debug: false }, web: MaiBotAMemorixWebConfig { import_config: MaiBotAMemorixWebImportConfig { enabled: true, max_queue_size: 20, max_files_per_task: 200, max_file_size_mb: 20, max_paste_chars: 200000, default_file_concurrency: 2, default_chunk_concurrency: 4, default_narrative_window_size: 1600, default_narrative_overlap: 400, default_factual_target_size: 1200, max_chunk_chars: 3200, timeout: MaiBotAMemorixWebImportTimeoutConfig { llm_call_seconds: 240.0, process_poll_seconds: 1.0, process_terminate_seconds: 5.0, process_kill_seconds: 3.0, convert_preflight_seconds: 20.0 } }, tuning: MaiBotAMemorixWebTuningConfig { enabled: true, max_queue_size: 8, poll_interval_ms: 1200, default_intensity: String::from("standard"), default_objective: String::from("precision_priority"), default_top_k_eval: 20, default_sample_size: 24 } } },
+            a_memorix: MaiBotAMemorixConfig { plugin: MaiBotAMemorixPluginConfig { enabled: false }, integration: MaiBotAMemorixIntegrationConfig { enable_memory_query_tool: true, memory_query_default_limit: 5, enable_person_profile_query_tool: true, enable_person_profile_injection: true, person_profile_injection_max_profiles: 3, heuristic_memory_recall_enabled: false, heuristic_memory_cross_chat_enabled: false, heuristic_memory_recall_window_size: 20, heuristic_memory_recall_limit: 3, heuristic_memory_recall_max_chars: 900, heuristic_memory_recall_min_interval_seconds: 180, heuristic_memory_recall_min_new_messages: 60, heuristic_memory_recall_cache_ttl_seconds: 300, heuristic_memory_group_to_private_enabled: false, heuristic_memory_private_to_group_enabled: false, person_fact_writeback_enabled: true, chat_summary_writeback_enabled: true, chat_summary_writeback_message_threshold: 36, chat_summary_writeback_context_length: 36, fuzzy_modify_enabled: true, fuzzy_modify_auto_execute_enabled: false, fuzzy_modify_confirm_threshold: 0.85, fuzzy_modify_candidate_limit: 20, fuzzy_modify_max_targets: 5, fuzzy_modify_allow_global_scope: false, feedback_correction_enabled: false, feedback_correction_window_hours: 12.0, feedback_correction_check_interval_minutes: 30, feedback_correction_batch_size: 20, feedback_correction_auto_apply_threshold: 0.85, feedback_correction_max_feedback_messages: 30, feedback_correction_prefilter_enabled: true, feedback_correction_paragraph_mark_enabled: true, feedback_correction_paragraph_hard_filter_enabled: true, feedback_correction_profile_refresh_enabled: true, feedback_correction_profile_force_refresh_on_read: true, feedback_correction_episode_rebuild_enabled: true, feedback_correction_episode_query_block_enabled: true, feedback_correction_reconcile_interval_minutes: 5, feedback_correction_reconcile_batch_size: 20 }, storage: MaiBotAMemorixStorageConfig { data_dir: String::from("data/a-memorix") }, image_memory: MaiBotAMemorixImageMemoryConfig { enabled: true, task_name: String::from("image_embedding"), preprocess_version: String::from("identity_v1"), probe_retry_seconds: 60.0, max_bytes: 10485760, max_pixels: 40000000, candidate_limit: 8, similarity_threshold: 0.72, job_poll_interval_seconds: 2.0, job_batch_size: 4, job_enqueue_batch_size: 200, job_lease_seconds: 120.0, job_max_retries: 5, min_train_threshold: 40 }, embedding: MaiBotAMemorixEmbeddingConfig { model_name: String::from("auto"), dimension: 1024, dimension_request_mode: String::from("explicit"), batch_size: 32, max_concurrent: 5, enable_cache: false, runtime_train_threshold: 256, quantization_type: String::from("int8"), fallback: MaiBotAMemorixEmbeddingFallbackConfig { enabled: true, probe_interval_seconds: 180, allow_metadata_only_write: true }, paragraph_vector_backfill: MaiBotAMemorixParagraphVectorBackfillConfig { enabled: true, interval_seconds: 60, batch_size: 64, max_retry: 5 } }, retrieval: MaiBotAMemorixRetrievalConfig { top_k_paragraphs: 20, top_k_relations: 10, top_k_final: 10, alpha: 0.5, enable_ppr: true, ppr_alpha: 0.85, ppr_timeout_seconds: 1.5, ppr_concurrency_limit: 4, enable_parallel: true, search: MaiBotAMemorixRetrievalSearchConfig { smart_fallback: MaiBotAMemorixSmartFallbackConfig { enabled: true } }, fusion: MaiBotAMemorixFusionRetrievalConfig { method: String::from("weighted_rrf"), rrf_k: 60, vector_weight: 0.7, bm25_weight: 0.3 }, relation_vectorization: MaiBotAMemorixRelationVectorizationConfig { enabled: false, backfill_enabled: false, write_on_import: true }, vector_pools: MaiBotAMemorixVectorPoolsConfig { mode: String::from("dual"), paragraph_top_k: 20, graph_top_k: 40, graph_expand_paragraph_k: 80, relation_expand_per_hit: 5, entity_expand_per_hit: 8, relation_evidence_weight: 1.0, entity_evidence_weight: 0.55, semantic_weight: 0.65, sparse_weight: 0.2, graph_weight: 0.15, relation_intent: MaiBotAMemorixRelationIntentVectorPoolConfig { graph_top_k: 80, semantic_weight: 0.45, sparse_weight: 0.15, graph_weight: 0.4, return_relation_items: false } }, sparse: MaiBotAMemorixSparseRetrievalConfig { enabled: true, backend: String::from("fts5"), mode: String::from("auto"), tokenizer_mode: String::from("jieba"), candidate_k: 80, relation_candidate_k: 60 } }, threshold: MaiBotAMemorixThresholdConfig { min_threshold: 0.29, max_threshold: 0.95, percentile: 75, min_results: 4 }, filter: MaiBotAMemorixFilterConfig { enabled: true, mode: String::from("blacklist"), chats: vec![], retrieval: MaiBotAMemorixRetrievalFilterConfig { chat_stream: MaiBotAMemorixRetrievalSubtypeFilterConfig { enabled: false, mode: String::from("blacklist"), chats: vec![] }, chat_summary: MaiBotAMemorixRetrievalSubtypeFilterConfig { enabled: false, mode: String::from("blacklist"), chats: vec![] }, episode: MaiBotAMemorixRetrievalSubtypeFilterConfig { enabled: false, mode: String::from("blacklist"), chats: vec![] } } }, global_memory_sharing_enabled: false, shared_memory_groups: vec![], episode: MaiBotAMemorixEpisodeConfig { enabled: true, generation_enabled: true, source_poll_interval_seconds: 1.0, source_batch_size: 20, source_max_retry: 3, source_lease_seconds: 1800.0, source_max_wait_seconds: 60.0, max_paragraphs_per_call: 20, max_chars_per_call: 6000, source_time_window_hours: 24.0, segmentation_model: String::from("auto"), disabled_source_types: vec![String::from("person_fact")] }, person_profile: MaiBotAMemorixPersonProfileConfig { enabled: true, refresh_interval_minutes: 30, active_window_hours: 72.0, max_refresh_per_cycle: 50, refresh_debounce_seconds: 120, refresh_queue_interval_seconds: 60, refresh_queue_batch_size: 10, refresh_retry_backoff_seconds: 300, max_retry: 3, top_k_evidence: 12, evidence_classification_max_tokens: 1200 }, memory: MaiBotAMemorixMemoryEvolutionConfig { enabled: true, half_life_hours: 24.0, prune_threshold: 0.1, freeze_duration_hours: 24.0, revive_threshold: 0.15, access_reinforcement_alpha: 0.05, access_reinforcement_cooldown_minutes: 60.0, explicit_reinforcement_alpha: 0.5, weaken_alpha: 0.5, lifecycle_batch_size: 1000 }, advanced: MaiBotAMemorixAdvancedConfig { enable_auto_save: true, auto_save_interval_minutes: 5, debug: false }, web: MaiBotAMemorixWebConfig { import_config: MaiBotAMemorixWebImportConfig { enabled: true, max_queue_size: 20, max_files_per_task: 200, max_file_size_mb: 20, max_paste_chars: 200000, default_file_concurrency: 2, default_chunk_concurrency: 4, default_narrative_window_size: 1600, default_narrative_overlap: 400, default_factual_target_size: 1200, max_chunk_chars: 3200, timeout: MaiBotAMemorixWebImportTimeoutConfig { llm_call_seconds: 240.0, process_poll_seconds: 1.0, process_terminate_seconds: 5.0, process_kill_seconds: 3.0, convert_preflight_seconds: 20.0 } }, tuning: MaiBotAMemorixWebTuningConfig { enabled: true, max_queue_size: 8, poll_interval_ms: 1200, default_intensity: String::from("standard"), default_objective: String::from("precision_priority"), default_top_k_eval: 20, default_sample_size: 24 } } },
             message_receive: MaiBotMessageReceiveConfig { image_parse_threshold: 5, ban_words: vec![], ban_msgs_regex: vec![] },
             voice: MaiBotVoiceConfig { enable_asr: false },
-            emoji: MaiBotEmojiConfig { emoji_send_num: 25, max_reg_num: 64, do_replace: true, check_interval: 10, steal_emoji: true, max_emoji_size_mb: 5.0, content_filtration: false, cache_cleanup: MaiBotEmojiCacheCleanupConfig { enabled: true, check_interval_hours: 6.0, emoji_file_retention_days: 30, no_file_record_retention_days: 30 } },
+            emoji: MaiBotEmojiConfig { use_new_send_logic: false, emoji_send_num: 25, max_reg_num: 64, do_replace: true, check_interval: 10, steal_emoji: true, max_emoji_size_mb: 5.0, content_filtration: false, cache_cleanup: MaiBotEmojiCacheCleanupConfig { enabled: true, check_interval_hours: 6.0, emoji_file_retention_days: 30, no_file_record_retention_days: 30 } },
             keyword_reaction: MaiBotKeywordReactionConfig { keyword_rules: vec![], regex_rules: vec![] },
             response_post_process: MaiBotResponsePostProcessConfig { enable_response_post_process: true, typing_speed: 1.0 },
             chinese_typo: MaiBotChineseTypoConfig { enable: true, enable_correction_quote: true, correction_quote_probability: 1.0, error_rate: 0.01, min_freq: 9, tone_error_rate: 0.1, word_replace_rate: 0.006 },
-            response_splitter: MaiBotResponseSplitterConfig { enable: true, max_length: 512, max_sentence_num: 8, max_split_num: 3, enable_kaomoji_protection: false, enable_overflow_return_all: false },
+            response_splitter: MaiBotResponseSplitterConfig { mode: String::from("rule"), enable: true, max_length: 512, max_sentence_num: 8, max_split_num: 3, enable_kaomoji_protection: false, enable_overflow_return_all: false },
             telemetry: MaiBotTelemetryConfig { enable: true },
-            log: MaiBotLogConfig { date_style: String::from("m-d H:i:s"), log_level_style: String::from("lite"), color_text: String::from("full"), log_level: String::from("INFO"), console_log_level: String::from("INFO"), file_log_level: String::from("DEBUG"), log_file_max_bytes: 5242880, max_log_files: 30, log_cleanup_days: 30, llm_request_snapshot_limit: 128, maisaka_prompt_preview_limit: 256, maisaka_reply_effect_limit: 256, suppress_libraries: vec![String::from("faiss"), String::from("httpx"), String::from("urllib3"), String::from("asyncio"), String::from("websockets"), String::from("httpcore"), String::from("requests"), String::from("sqlalchemy"), String::from("openai"), String::from("uvicorn"), String::from("jieba")], library_log_levels: std::collections::BTreeMap::from([(String::from("aiohttp"), String::from("WARNING")), (String::from("PIL"), String::from("WARNING"))]) },
-            debug: MaiBotDebugConfig { enable_console_input: false, show_maisaka_thinking: true, enable_clear_context_command: false, enable_reply_effect_tracking: false, keep_prompt_preview_json_base64: false, record_tool_structured_content: false, enable_llm_cache_stats: false },
-            maim_message: MaiBotMaimMessageConfig { ws_server_host: String::from("127.0.0.1"), ws_server_port: 8000, auth_token: vec![], enable_api_server: false, api_server_host: String::from("0.0.0.0"), api_server_port: 8090, api_server_use_wss: false, api_server_cert_file: String::from(""), api_server_key_file: String::from(""), api_server_allowed_api_keys: vec![] },
-            webui: MaiBotWebUIConfig { enabled: true, host: vec![String::from("127.0.0.1"), String::from("::1")], port: 8001, mode: String::from("production"), webui_style: 1, anti_crawler_mode: String::from("basic"), allowed_ips: String::from("127.0.0.1"), trusted_proxies: String::from(""), trust_xff: false, secure_cookie: false, enforce_public_outbound_url: true, enable_paragraph_content: false },
+            log: MaiBotLogConfig { date_style: String::from("m-d H:i:s"), log_level_style: String::from("lite"), color_text: String::from("full"), log_level: String::from("INFO"), console_log_level: String::from("INFO"), file_log_level: String::from("DEBUG"), log_file_max_bytes: 5242880, max_log_files: 30, log_cleanup_days: 30, llm_request_snapshot_limit: 128, maisaka_prompt_preview_limit: 256, memory_diagnostics_enabled: true, memory_diagnostics_deep_enabled: false, memory_diagnostics_interval_seconds: 60.0, event_loop_watchdog_enabled: false, event_loop_watchdog_warn_seconds: 0.5, suppress_libraries: vec![String::from("faiss"), String::from("httpx"), String::from("urllib3"), String::from("asyncio"), String::from("websockets"), String::from("httpcore"), String::from("requests"), String::from("sqlalchemy"), String::from("openai"), String::from("uvicorn"), String::from("jieba")], library_log_levels: std::collections::BTreeMap::from([(String::from("aiohttp"), String::from("WARNING")), (String::from("PIL"), String::from("WARNING"))]) },
+            debug: MaiBotDebugConfig { replyer_retro_prompt: false, enable_console_input: true, show_maisaka_thinking: false, save_maisaka_reasoning: true, keep_prompt_preview_json_base64: false, record_tool_structured_content: false, enable_llm_cache_stats: false, force_plugin_compatibility: false },
+            maim_message: MaiBotMaimMessageConfig { enabled: true, ws_server_host: String::from("127.0.0.1"), ws_server_port: 8000, auth_token: vec![], enable_api_server: false, api_server_host: String::from("0.0.0.0"), api_server_port: 8090, api_server_use_wss: false, api_server_cert_file: String::from(""), api_server_key_file: String::from(""), api_server_allowed_api_keys: vec![] },
+            webui: MaiBotWebUIConfig { enabled: true, host: vec![String::from("127.0.0.1"), String::from("::1")], port: 8001, mode: String::from("production"), webui_style: 2, anti_crawler_mode: String::from("basic"), allowed_ips: String::from("127.0.0.1"), trusted_proxies: String::from(""), trust_xff: false, secure_cookie: false, enforce_public_outbound_url: true, enable_paragraph_content: false },
             database: MaiBotDatabaseConfig { save_binary_data: false },
             mcp: MaiBotMCPConfig { enable: true, client: MaiBotMCPClientConfig { client_name: String::from("MaiBot"), client_version: String::from("1.0.0"), roots: MaiBotMCPRootsConfig { enable: false, items: vec![] }, sampling: MaiBotMCPSamplingConfig { enable: false, task_name: String::from("planner"), include_context_support: false, tool_support: false }, elicitation: MaiBotMCPElicitationConfig { enable: false, allow_form: true, allow_url: false } }, servers: vec![] },
-            plugin: MaiBotPluginConfig { permission: vec![], command_permissions: std::collections::BTreeMap::new() },
+            plugin: MaiBotPluginConfig { permission: vec![], silent_permission_denied: false, command_permissions: std::collections::BTreeMap::new(), disabled_commands: vec![] },
             plugin_runtime: MaiBotPluginRuntimeConfig { enabled: true, health_check_interval_sec: 30.0, max_restart_attempts: 3, runner_spawn_timeout_sec: 30.0, hook_blocking_timeout_sec: 60.0, ipc_socket_path: String::from(""), render: MaiBotPluginRuntimeRenderConfig { enabled: true, browser_ws_endpoint: String::from(""), executable_path: String::from(""), browser_install_root: String::from("data/playwright-browsers"), headless: true, launch_args: vec![String::from("--disable-gpu"), String::from("--disable-dev-shm-usage"), String::from("--disable-setuid-sandbox"), String::from("--no-sandbox"), String::from("--no-zygote")], concurrency_limit: 2, startup_timeout_sec: 20.0, render_timeout_sec: 15.0, auto_download_chromium: true, download_connection_timeout_sec: 120.0, restart_after_render_count: 200 } },
         }
     }
@@ -2953,7 +3136,129 @@ impl Default for MaiBotBotConfigFile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotWebServiceConfig {
+    /// 服务协议类型，不需要配置模型列表。
+    #[ts(type = "\"deepseek\" | \"tavily\" | \"stepsearch_mcp\"")]
+    pub adapter: String,
+    /// HTTP API 根地址；留空使用适配器的官方地址。
+    pub base_url: String,
+    /// HTTP API 密钥。MCP 服务的鉴权由已有 MCP 连接管理。
+    pub api_key: String,
+    /// StepSearch 对应的 bot_config.toml 中 mcp.servers 的名称。
+    pub server_ref: String,
+    /// 单次联网调用的总时限，单位秒。
+    pub timeout: f64,
+    /// Tavily 搜索深度，仅对 tavily 生效。
+    #[ts(type = "\"basic\" | \"advanced\" | \"fast\" | \"ultra-fast\"")]
+    pub search_depth: String,
+    /// Tavily 网页提取深度，仅对 tavily 生效。
+    #[ts(type = "\"basic\" | \"advanced\"")]
+    pub extract_depth: String,
+    /// StepSearch 搜索类别；留空不传递类别。
+    #[ts(type = "\"\" | \"programming\" | \"research\" | \"gov\" | \"business\"")]
+    pub category: String,
+}
+
+impl MaiBotWebServiceConfig {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/adapter"), &self.adapter, &["deepseek", "tavily", "stepsearch_mcp"]);
+        sink.range(&format!("{path}/timeout"), self.timeout, None, Some(300.0));
+        if !((self.timeout as f64) > 0.0) { sink.push(&format!("{path}/timeout"), "要大于 0"); }
+        sink.one_of(&format!("{path}/search_depth"), &self.search_depth, &["basic", "advanced", "fast", "ultra-fast"]);
+        sink.one_of(&format!("{path}/extract_depth"), &self.extract_depth, &["basic", "advanced"]);
+        sink.one_of(&format!("{path}/category"), &self.category, &["", "programming", "research", "gov", "business"]);
+    }
+}
+
+impl Default for MaiBotWebServiceConfig {
+    fn default() -> Self {
+        Self {
+            adapter: String::from("deepseek"),
+            base_url: String::from(""),
+            api_key: String::from(""),
+            server_ref: String::from(""),
+            timeout: 60.0,
+            search_depth: String::from("basic"),
+            extract_depth: String::from("basic"),
+            category: String::from(""),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotWebConfig {
+    /// 单次返回的内容预览字数，完整内容通过 read_tool_result 读取。
+    #[ts(type = "number")]
+    pub preview_chars: i64,
+    /// 联网服务定义；仅添加服务不会启用工具，需要在功能分配中选择。
+    pub services: std::collections::BTreeMap<String, MaiBotWebServiceConfig>,
+}
+
+impl MaiBotWebConfig {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.range(&format!("{path}/preview_chars"), self.preview_chars as f64, Some(500.0), Some(12000.0));
+        for (k, item) in &self.services {
+            item.validate(&format!("{path}/services/{k}"), sink);
+        }
+    }
+}
+
+impl Default for MaiBotWebConfig {
+    fn default() -> Self {
+        Self {
+            preview_chars: 4000,
+            services: std::collections::BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotModelPricePeriod {
+    /// 开始时间，服务器本地时间 HH:MM，包含该时刻。
+    pub start_time: String,
+    /// 结束时间，服务器本地时间 HH:MM，不包含该时刻；早于开始时间表示跨午夜。
+    pub end_time: String,
+    /// 该时段的普通输入价格，单位：元 / M token。
+    pub price_in: f64,
+    /// 该时段的输出价格，单位：元 / M token。
+    pub price_out: f64,
+    /// 该时段的缓存命中输入价格，单位：元 / M token；0 表示缓存命中免费，未命中部分按 price_in 计费。
+    pub cache_price_in: f64,
+}
+
+impl MaiBotModelPricePeriod {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        if !fancy_regex::Regex::new("^(?:[01][0-9]|2[0-3]):[0-5][0-9]$").expect("上游配置正则").is_match(&self.start_time).unwrap_or(false) { sink.push(&format!("{path}/start_time"), "格式不正确"); }
+        if !fancy_regex::Regex::new("^(?:[01][0-9]|2[0-3]):[0-5][0-9]$").expect("上游配置正则").is_match(&self.end_time).unwrap_or(false) { sink.push(&format!("{path}/end_time"), "格式不正确"); }
+        sink.range(&format!("{path}/price_in"), self.price_in, Some(0.0), None);
+        sink.range(&format!("{path}/price_out"), self.price_out, Some(0.0), None);
+        sink.range(&format!("{path}/cache_price_in"), self.cache_price_in, Some(0.0), None);
+    }
+}
+
+impl Default for MaiBotModelPricePeriod {
+    fn default() -> Self {
+        Self {
+            start_time: String::from(""),
+            end_time: String::from(""),
+            price_in: 0.0,
+            price_out: 0.0,
+            cache_price_in: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotModelInfo {
+    /// 模型类型：LLM、文本嵌入或图片嵌入；必填，旧配置由版本升级钩子一次性标注。
+    #[ts(type = "\"llm\" | \"embedding\" | \"image_embedding\"")]
+    pub model_type: String,
     /// 模型标识符 (API服务商提供的模型标识符)
     pub model_identifier: String,
     /// 模型名称 (可随意命名, 在models中需使用这个命名)
@@ -2962,12 +3267,14 @@ pub struct MaiBotModelInfo {
     pub api_provider: String,
     /// 输入价格 (用于API调用统计, 单位：元/ M token) (可选, 若无该字段, 默认值为0)
     pub price_in: f64,
-    /// 是否启用模型输入缓存计费。开启后命中缓存的输入 token 使用 cache_price_in 计费。
+    /// 遗留兼容字段，不参与任何逻辑：是否按缓存价计费由 cache_price_in 决定，统计页是否展示缓存用量由服务商是否在响应中返回缓存字段自动探测。
     pub cache: bool,
-    /// 缓存命中输入价格 (用于API调用统计, 单位：元/ M token)。仅当 cache=true 时使用。
+    /// 缓存命中输入价格 (用于API调用统计, 单位：元/ M token)。0 表示缓存命中免费，未命中部分按 price_in 计费；WebUI 中留空按输入价格解析。
     pub cache_price_in: f64,
     /// 输出价格 (用于API调用统计, 单位：元/ M token) (可选, 若无该字段, 默认值为0)
     pub price_out: f64,
+    /// 分时价格组合，每天按服务器本地时间重复，以成功请求尝试的开始时间计价。
+    pub price_periods: Vec<MaiBotModelPricePeriod>,
     /// 模型级别温度（可选），会覆盖任务配置中的温度
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -2989,15 +3296,20 @@ pub struct MaiBotModelInfo {
 
 impl MaiBotModelInfo {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        sink.one_of(&format!("{path}/model_type"), &self.model_type, &["llm", "embedding", "image_embedding"]);
         sink.range(&format!("{path}/price_in"), self.price_in, Some(0.0), None);
         sink.range(&format!("{path}/cache_price_in"), self.cache_price_in, Some(0.0), None);
         sink.range(&format!("{path}/price_out"), self.price_out, Some(0.0), None);
+        for (i, item) in self.price_periods.iter().enumerate() {
+            item.validate(&format!("{path}/price_periods/{i}"), sink);
+        }
     }
 }
 
 impl Default for MaiBotModelInfo {
     fn default() -> Self {
         Self {
+            model_type: String::from(""),
             model_identifier: String::from(""),
             name: String::from(""),
             api_provider: String::from(""),
@@ -3005,12 +3317,35 @@ impl Default for MaiBotModelInfo {
             cache: false,
             cache_price_in: 0.0,
             price_out: 0.0,
+            price_periods: vec![],
             temperature: None,
             send_temperature: true,
             max_tokens: None,
             force_stream_mode: false,
             visual: false,
             extra_params: String::from("{}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
+pub struct MaiBotWebSearchTaskConfig {
+    /// 选择一个 web.services 中的联网服务名称；留空不开放统一联网工具。
+    pub model_list: Vec<String>,
+}
+
+impl MaiBotWebSearchTaskConfig {
+    pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        if self.model_list.len() > 1 { sink.push(&format!("{path}/model_list"), "最多 1 项"); }
+    }
+}
+
+impl Default for MaiBotWebSearchTaskConfig {
+    fn default() -> Self {
+        Self {
+            model_list: vec![],
         }
     }
 }
@@ -3026,8 +3361,6 @@ pub struct MaiBotTaskConfig {
     pub max_tokens: i64,
     /// 模型温度
     pub temperature: f64,
-    /// 超时警告时间（秒），超过此时间会输出警告日志
-    pub slow_threshold: f64,
     /// 模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）
     pub selection_strategy: String,
     /// 任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿
@@ -3038,7 +3371,6 @@ impl MaiBotTaskConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
         sink.range(&format!("{path}/max_tokens"), self.max_tokens as f64, Some(1.0), None);
         sink.range(&format!("{path}/temperature"), self.temperature, Some(0.0), Some(2.0));
-        sink.range(&format!("{path}/slow_threshold"), self.slow_threshold, Some(0.0), None);
         sink.range(&format!("{path}/hard_timeout"), self.hard_timeout, Some(1.0), None);
     }
 }
@@ -3048,8 +3380,7 @@ impl Default for MaiBotTaskConfig {
         Self {
             model_list: vec![],
             max_tokens: 4096,
-            temperature: 0.3,
-            slow_threshold: 15.0,
+            temperature: 0.7,
             selection_strategy: String::from("balance"),
             hard_timeout: 240.0,
         }
@@ -3060,60 +3391,68 @@ impl Default for MaiBotTaskConfig {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotModelTaskConfig {
+    /// 选择已定义的联网服务，用于搜索和网页读取；未分配时不开放统一联网工具。
+    pub web_search: MaiBotWebSearchTaskConfig,
     /// 回复模型，影响麦麦的回复表现
     pub replyer: MaiBotTaskConfig,
     /// 规划模型，决定麦麦的行动，需要有一定Agent能力的模型
     pub planner: MaiBotTaskConfig,
     /// 记忆模型配置，用于长期记忆总结、抽取、写回等高记忆任务；留空时由调用方按需回退
     pub memory: MaiBotTaskConfig,
-    /// 聊天回想模型配置；留空时自动继用 planner 模型
+    /// 聊天回想模型配置；留空时自动继用 fast_model 模型，fast_model 留空时使用 utils 模型
     pub mid_memory: MaiBotTaskConfig,
     /// 执行文本概括，整理等小任务，是麦麦必须的模型。可以选择速度快的小尺寸模型
     pub utils: MaiBotTaskConfig,
     /// 学习模型配置，用于表达方式学习和黑话学习；留空时用 utils 模型
     pub learner: MaiBotTaskConfig,
-    /// 表达方式使用模型配置；留空时用 utils 模型
-    pub expression_use: MaiBotTaskConfig,
+    /// 快速模型配置，用于表达方式选择、回复断句等需要快速完成的小任务，建议选择响应快的模型；留空时用 utils 模型
+    pub fast_model: MaiBotTaskConfig,
     /// 表情包发送模型配置；留空时保持原有 planner/vlm 选择逻辑
     pub emoji: MaiBotTaskConfig,
     /// 视觉模型，需要能够识图的模型
     pub vlm: MaiBotTaskConfig,
     /// 语音识别模型
     pub voice: MaiBotTaskConfig,
-    /// 嵌入模型，需要文本嵌入类型的模型，不可使用LLM
+    /// 嵌入模型；可选择文本或图片嵌入类型，不可使用 LLM，所选模型需支持文本向量化
     pub embedding: MaiBotTaskConfig,
+    /// 图片嵌入模型；可选择文本或图片嵌入类型，不可使用 LLM，留空时不启用；所选模型必须实现图片输入到向量的协议
+    pub image_embedding: MaiBotTaskConfig,
 }
 
 impl MaiBotModelTaskConfig {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        self.web_search.validate(&format!("{path}/web_search"), sink);
         self.replyer.validate(&format!("{path}/replyer"), sink);
         self.planner.validate(&format!("{path}/planner"), sink);
         self.memory.validate(&format!("{path}/memory"), sink);
         self.mid_memory.validate(&format!("{path}/mid_memory"), sink);
         self.utils.validate(&format!("{path}/utils"), sink);
         self.learner.validate(&format!("{path}/learner"), sink);
-        self.expression_use.validate(&format!("{path}/expression_use"), sink);
+        self.fast_model.validate(&format!("{path}/fast_model"), sink);
         self.emoji.validate(&format!("{path}/emoji"), sink);
         self.vlm.validate(&format!("{path}/vlm"), sink);
         self.voice.validate(&format!("{path}/voice"), sink);
         self.embedding.validate(&format!("{path}/embedding"), sink);
+        self.image_embedding.validate(&format!("{path}/image_embedding"), sink);
     }
 }
 
 impl Default for MaiBotModelTaskConfig {
     fn default() -> Self {
         Self {
-            replyer: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            planner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            mid_memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            utils: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            learner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            expression_use: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            emoji: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            vlm: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            voice: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
-            embedding: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            web_search: MaiBotWebSearchTaskConfig { model_list: vec![] },
+            replyer: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            planner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            mid_memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            utils: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            learner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            fast_model: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            emoji: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            vlm: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            voice: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            embedding: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
+            image_embedding: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 },
         }
     }
 }
@@ -3156,7 +3495,7 @@ pub struct MaiBotAPIProvider {
     pub reasoning_parse_mode: String,
     /// 工具参数解析模式。可选值：`auto`、`strict`、`repair`、`double_decode`。
     pub tool_argument_parse_mode: String,
-    /// 最大重试次数 (单个模型API调用失败, 最多重试的次数)
+    /// 最大尝试次数 (单个模型API调用失败时, 含首次请求在内最多发送的请求总数, 设为 0 或 1 表示不重试)
     #[ts(type = "number")]
     pub max_retry: i64,
     /// API调用的超时时长 (超过这个时长, 本次请求将被视为"请求超时", 单位: 秒)
@@ -3194,8 +3533,8 @@ impl Default for MaiBotAPIProvider {
             reasoning_parse_mode: String::from("auto"),
             tool_argument_parse_mode: String::from("auto"),
             max_retry: 3,
-            timeout: 60,
-            retry_interval: 5,
+            timeout: 120,
+            retry_interval: 4,
         }
     }
 }
@@ -3204,6 +3543,8 @@ impl Default for MaiBotAPIProvider {
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/maibot/")]
 pub struct MaiBotModelConfigFile {
+    /// 统一联网服务配置，与模型列表独立；默认关闭。
+    pub web: MaiBotWebConfig,
     /// 模型配置列表
     pub models: Vec<MaiBotModelInfo>,
     /// 模型任务配置
@@ -3214,6 +3555,7 @@ pub struct MaiBotModelConfigFile {
 
 impl MaiBotModelConfigFile {
     pub fn validate(&self, path: &str, sink: &mut IssueSink) {
+        self.web.validate(&format!("{path}/web"), sink);
         for (i, item) in self.models.iter().enumerate() {
             item.validate(&format!("{path}/models/{i}"), sink);
         }
@@ -3227,8 +3569,9 @@ impl MaiBotModelConfigFile {
 impl Default for MaiBotModelConfigFile {
     fn default() -> Self {
         Self {
+            web: MaiBotWebConfig { preview_chars: 4000, services: std::collections::BTreeMap::new() },
             models: vec![],
-            model_task_config: MaiBotModelTaskConfig { replyer: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, planner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, mid_memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, utils: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, learner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, expression_use: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, emoji: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, vlm: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, voice: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, embedding: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.3, slow_threshold: 15.0, selection_strategy: String::from("balance"), hard_timeout: 240.0 } },
+            model_task_config: MaiBotModelTaskConfig { web_search: MaiBotWebSearchTaskConfig { model_list: vec![] }, replyer: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, planner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, mid_memory: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, utils: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, learner: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, fast_model: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, emoji: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, vlm: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, voice: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, embedding: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 }, image_embedding: MaiBotTaskConfig { model_list: vec![], max_tokens: 4096, temperature: 0.7, selection_strategy: String::from("balance"), hard_timeout: 240.0 } },
             api_providers: vec![],
         }
     }

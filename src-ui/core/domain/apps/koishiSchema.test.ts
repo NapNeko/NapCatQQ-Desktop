@@ -125,4 +125,44 @@ describe('koishiSchema', () => {
         const i18n = gprops.i18n;
         expect(i18n).toBeTruthy();
     });
+    it('运行时新增字段自动进入表单，默认值预览和保存都保留未知配置', () => {
+        // Context.Config 从当前实例提取；新字段无需登记到 Desktop 字段表。
+        const node = hydrateSchema({
+            uid: 1,
+            refs: {
+                1: { type: 'object', dict: { prefixMode: 2, futureOption: 3 } },
+                2: { type: 'union', list: [4, 5], meta: { default: 'auto' } },
+                3: { type: 'boolean', meta: { default: false } },
+                4: { type: 'const', value: 'auto' },
+                5: { type: 'const', value: 'strict' },
+            },
+        })!;
+        const saved = { prefixMode: 'strict', unknown: { keep: true } };
+        const preview = materializeConfig(node, saved);
+        expect(visibleFields(node, saved).map((f) => f.key)).toContain('futureOption');
+        expect(renderable(node)).toBe(true);
+        expect(preview).toEqual({ ...saved, futureOption: false });
+        expect(simplifyConfig(node, preview)).toEqual(saved);
+        expect(saved).toEqual({ prefixMode: 'strict', unknown: { keep: true } });
+    });
+
+    it('交叉分段中的标签联合也校验当前分支新增的必填字段', () => {
+        const node = hydrateSchema({
+            uid: 1,
+            refs: {
+                1: { type: 'intersect', list: [2, 3] },
+                2: { type: 'object', dict: { protocol: 4 } },
+                3: { type: 'union', list: [5, 6] },
+                4: { type: 'string', meta: { default: 'ws' } },
+                5: { type: 'object', dict: { protocol: 7, endpoint: 9 } },
+                6: { type: 'object', dict: { protocol: 8 } },
+                7: { type: 'const', value: 'ws', meta: { required: false } },
+                8: { type: 'const', value: 'reverse' },
+                9: { type: 'string', meta: { required: true } },
+            },
+        })!;
+        expect(missingRequired(node, { protocol: 'ws' })).toContain('endpoint');
+        expect(missingRequired(node, { protocol: 'ws', endpoint: 'ws://localhost' })).toEqual([]);
+        expect(missingRequired(node, { protocol: 'reverse' })).toEqual([]);
+    });
 });

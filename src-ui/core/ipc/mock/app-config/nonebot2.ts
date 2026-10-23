@@ -11,6 +11,7 @@ import {
     nonebot2LinkInputsChanged,
     validateNoneBot2Config,
 } from '../../../domain/apps/nonebot2Config';
+import { normalizeNoneBot2Duration } from '../../../domain/apps/nonebot2Duration';
 import { makeAppConfigError } from '../../../domain/apps/appConfigError';
 import { withMockDelay } from '../bootstrap.mock';
 import { NONEBOT2_DOCS } from './data';
@@ -65,6 +66,9 @@ export async function nbWriteConfig(
             issues,
         );
     }
+    next.env_prod.session_expire_timeout = normalizeNoneBot2Duration(
+        next.env_prod.session_expire_timeout,
+    )!;
     const before = s.config;
     if (JSON.stringify(before.env_prod) !== JSON.stringify(next.env_prod)) {
         s.docRev.env_prod = (s.docRev.env_prod ?? 0) + 1;

@@ -44,7 +44,7 @@ export const MaiBotBehaviorTab: React.FC<{
     instance: AppInstance;
     status: MaiBotRuntimeStatus | undefined;
     /** 配置里「启用行为学习」；关着时已经学到的照样会用，只是不再学新的 */
-    learningOn: boolean;
+    learningOn?: boolean;
     onGoTab: (tab: string) => void;
     onOpenWebUi: (path: string) => void;
     onStart: () => void;
@@ -146,7 +146,7 @@ export const MaiBotBehaviorTab: React.FC<{
         </>
     );
 
-    const notice = !learningOn && (
+    const notice = learningOn === false && (
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-tertiary">
             <Info size={13} className="shrink-0 text-info" />
             行为学习没开：麦麦不会再学新的，已经学到的照样会用。
@@ -179,12 +179,14 @@ export const MaiBotBehaviorTab: React.FC<{
                     title={
                         narrowed
                             ? '没有对得上的经验'
-                            : learningOn
-                              ? '麦麦还没学到行为经验。它会在聊天里看什么情况下怎么回应效果好，攒够了才有。'
-                              : '还没有学到的行为经验。打开行为学习后，麦麦会在聊天里慢慢攒。'
+                            : learningOn === undefined
+                              ? '还没有可查看的行为经验。'
+                              : learningOn
+                                ? '麦麦还没学到行为经验。它会在聊天里看什么情况下怎么回应效果好，攒够了才有。'
+                                : '还没有学到的行为经验。打开行为学习后，麦麦会在聊天里慢慢攒。'
                     }
                     action={
-                        !narrowed && !learningOn ? (
+                        !narrowed && learningOn === false ? (
                             <Button
                                 size="sm"
                                 variant="secondary"

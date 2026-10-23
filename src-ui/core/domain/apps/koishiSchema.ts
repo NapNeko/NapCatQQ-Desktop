@@ -441,7 +441,7 @@ export function missingRequired(
     if (node.meta.required && (v === undefined || v === null || v === '')) return [path.join('.')];
     if (isObjectLike(node)) {
         const obj = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
-        return objectFields(node).flatMap((f) =>
+        return visibleFields(node, obj).flatMap((f) =>
             missingRequired(f.node, obj[f.key], [...path, f.key], depth + 1),
         );
     }

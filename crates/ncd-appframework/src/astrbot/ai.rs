@@ -271,12 +271,24 @@ impl Default for AstrBotPlatformGates {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotSubagentRow {
     pub provider_id: String,
     pub persona_id: String,
+    /// 每行自己的未建模配置，与该行一起编辑、重排，不依赖数组下标猜身份。
+    pub extra_json: String,
+}
+
+impl Default for AstrBotSubagentRow {
+    fn default() -> Self {
+        Self {
+            provider_id: String::new(),
+            persona_id: String::new(),
+            extra_json: "{}".into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
@@ -307,6 +319,7 @@ pub fn ai_from_root(root: &Value) -> AstrBotAiSettings {
     let mut out = AstrBotAiSettings::default();
     let ps = root.get("provider_settings").and_then(Value::as_object);
     let Some(ps) = ps else {
+        super::runner::read(root, &mut out);
         return out;
     };
     out.enable = bool_of(ps, "enable", out.enable);
@@ -355,6 +368,7 @@ pub fn ai_from_root(root: &Value) -> AstrBotAiSettings {
     if let Some(s) = ps.get("tool_schema_mode").and_then(Value::as_str) {
         out.tool_schema_mode = s.to_string();
     }
+    super::runner::read(root, &mut out);
     out
 }
 
@@ -479,9 +493,13 @@ pub fn subagent_from_root(root: &Value) -> AstrBotSubagentConfig {
             .iter()
             .filter_map(|row| {
                 let obj = row.as_object()?;
+                let mut extra = obj.clone();
+                extra.remove("provider_id");
+                extra.remove("persona_id");
                 Some(AstrBotSubagentRow {
                     provider_id: str_of(obj, "provider_id"),
                     persona_id: str_of(obj, "persona_id"),
+                    extra_json: serde_json::to_string(&extra).unwrap_or_else(|_| "{}".into()),
                 })
             })
             .collect();
@@ -505,6 +523,7 @@ pub struct AstrBotAiPatch<'a> {
 
 /// 只改已知指针，其它键原样留着（含 `provider_settings` 兄弟字段）。
 pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<(), String> {
+    let latest = root.clone();
     let AstrBotAiPatch {
         sources,
         models,
@@ -695,6 +714,25 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
     obj.insert("kb_fusion_top_k".into(), Value::from(kb.fusion_top_k));
     obj.insert("kb_final_top_k".into(), Value::from(kb.final_top_k));
     obj.insert("kb_agentic_mode".into(), Value::Bool(kb.agentic_mode));
+    let agents: Vec<Value> = subagent
+        .agents
+        .iter()
+        .map(|a| {
+            let value: Value = serde_json::from_str(if a.extra_json.trim().is_empty() {
+                "{}"
+            } else {
+                &a.extra_json
+            })
+            .map_err(|e| format!("子代理额外配置不是有效 JSON: {e}"))?;
+            let mut m = value
+                .as_object()
+                .cloned()
+                .ok_or_else(|| "子代理额外配置必须是对象".to_string())?;
+            m.insert("provider_id".into(), Value::String(a.provider_id.clone()));
+            m.insert("persona_id".into(), Value::String(a.persona_id.clone()));
+            Ok(Value::Object(m))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     patch_object(obj, "subagent_orchestrator", |so| {
         so.insert("main_enable".into(), Value::Bool(subagent.main_enable));
         so.insert(
@@ -705,18 +743,10 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
             "router_system_prompt".into(),
             Value::String(subagent.router_system_prompt.clone()),
         );
-        let agents: Vec<Value> = subagent
-            .agents
-            .iter()
-            .map(|a| {
-                let mut m = Map::new();
-                m.insert("provider_id".into(), Value::String(a.provider_id.clone()));
-                m.insert("persona_id".into(), Value::String(a.persona_id.clone()));
-                Value::Object(m)
-            })
-            .collect();
         so.insert("agents".into(), Value::Array(agents));
     });
+    super::runner::apply(root, ai);
+    super::advanced::retain_owned_changes(root, &latest);
     Ok(())
 }
 
@@ -1118,6 +1148,7 @@ mod tests {
             agents: vec![AstrBotSubagentRow {
                 provider_id: "ds/chat".into(),
                 persona_id: "p".into(),
+                ..AstrBotSubagentRow::default()
             }],
         };
         let mut root = json!({});
@@ -1135,13 +1166,63 @@ mod tests {
         apply_ai_patch(&mut root, &patch).unwrap();
         assert_eq!(sources_from_root(&root), sources);
         assert_eq!(models_from_root(&root), models);
-        assert_eq!(ai_from_root(&root), ai);
+        let read_ai = ai_from_root(&root);
+        assert_eq!(read_ai.enable, ai.enable);
+        assert_eq!(read_ai.default_provider_id, ai.default_provider_id);
+        assert_eq!(read_ai.fallback_chat_models, ai.fallback_chat_models);
+        assert_eq!(read_ai.wake_prefix, ai.wake_prefix);
+        assert_eq!(read_ai.max_context_length, ai.max_context_length);
+        assert_eq!(read_ai.streaming_response, ai.streaming_response);
+        // tool_schema_mode 现归高级页，旧兼容投影无写权限。
+        assert_eq!(
+            read_ai.tool_schema_mode,
+            AstrBotAiSettings::default().tool_schema_mode
+        );
         assert_eq!(stt_from_root(&root), stt);
-        assert_eq!(tts_from_root(&root), tts);
-        assert_eq!(websearch_from_root(&root), websearch);
+        let read_tts = tts_from_root(&root);
+        assert_eq!(read_tts.enable, tts.enable);
+        assert_eq!(read_tts.provider_id, tts.provider_id);
+        assert!(!read_tts.dual_output);
+        assert_eq!(websearch_from_root(&root).enable, websearch.enable);
+        assert!(
+            root.pointer("/provider_settings/websearch_tavily_key")
+                .is_none()
+        );
         assert_eq!(kb_from_root(&root), kb);
         assert_eq!(gates_from_root(&root), gates);
         assert_eq!(subagent_from_root(&root), subagent);
+    }
+
+    #[test]
+    fn subagent_row_unknown_fields_move_with_the_row_and_survive_known_field_edits() {
+        let mut root = json!({"subagent_orchestrator":{"agents":[
+            {"provider_id":"one","persona_id":"p1","future":{"tag":1}},
+            {"provider_id":"two","persona_id":"p2","future":{"tag":2}}
+        ]}});
+        let mut cfg = crate::astrbot::AstrBotInstanceConfig::from_root(&root, "a", 6199);
+        cfg.subagent.agents.reverse();
+        cfg.subagent.agents[0].persona_id = "changed".into();
+        apply_ai_patch(&mut root, &cfg.ai_patch(&[], &[])).unwrap();
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/0/provider_id")
+                .unwrap(),
+            "two"
+        );
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/0/persona_id")
+                .unwrap(),
+            "changed"
+        );
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/0/future/tag")
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            root.pointer("/subagent_orchestrator/agents/1/future/tag")
+                .unwrap(),
+            1
+        );
     }
 
     #[test]

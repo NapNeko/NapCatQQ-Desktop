@@ -11,6 +11,14 @@ fn astrbot_api(
 }
 
 impl AppManager {
+    pub async fn astrbot_config_schema(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<ncd_appframework::astrbot::AstrBotConfigSchema, AppFrameworkError> {
+        let (adapter, session) = self.astrbot_session(id).await?;
+        astrbot_api(adapter.as_ref())?.config_schema(&session).await
+    }
+
     pub async fn astrbot_dashboard_status(
         &self,
         id: &AppInstanceId,

@@ -21,7 +21,8 @@ import type {
 } from '../../../../core/ipc/types';
 import { CONFIG_PAIR } from '../karin/configLayout';
 import { StringMapEditor } from './listEditors';
-import { WIDE } from './SchemaForm';
+import { FieldGrid, WIDE } from './SchemaForm';
+import { MODEL_SCHEMA, nodeAt } from '../../../../core/domain/apps/maibotSchema';
 
 type Errors = Record<string, string>;
 
@@ -51,8 +52,65 @@ export const MODEL_ADVANCED_FIELDS: readonly string[] = [
     'send_temperature',
     'force_stream_mode',
     'extra_params',
+    'price_periods',
 ];
-export const TASK_ADVANCED_FIELDS: readonly string[] = ['slow_threshold', 'hard_timeout'];
+export const TASK_ADVANCED_FIELDS: readonly string[] = ['hard_timeout'];
+
+const MODEL_FIELDS = [
+    'name',
+    'model_type',
+    'model_identifier',
+    'api_provider',
+    'visual',
+    'temperature',
+    'max_tokens',
+    'price_in',
+    'price_out',
+    'cache',
+    'cache_price_in',
+    'send_temperature',
+    'force_stream_mode',
+    'extra_params',
+];
+const PROVIDER_FIELDS = ['name', 'client_type', 'base_url', 'api_key', ...PROVIDER_ADVANCED_FIELDS];
+const TASK_FIELDS = [
+    'model_list',
+    'max_tokens',
+    'temperature',
+    'selection_strategy',
+    'hard_timeout',
+];
+
+/** 新增的上游字段自动承接为 schema 表单，避免手写卡片悄悄漏掉快照里的配置。 */
+const SchemaRemainder: React.FC<{
+    kind: 'models' | 'api_providers' | 'task';
+    value: unknown;
+    onChange: (value: unknown) => void;
+    path: string;
+    errors: Errors;
+    disabled?: boolean;
+}> = ({ kind, value, onChange, path, errors, disabled }) => {
+    const node = nodeAt(MODEL_SCHEMA, kind === 'task' ? ['model_task_config', 'replyer'] : [kind]);
+    if (!node) return null;
+    const handled =
+        kind === 'models' ? MODEL_FIELDS : kind === 'api_providers' ? PROVIDER_FIELDS : TASK_FIELDS;
+    const fields = node.fields.filter((field) => !handled.includes(field.name));
+    if (!fields.length) return null;
+    return (
+        <FieldGrid
+            path={[]}
+            node={{ ...node, fields }}
+            ctx={{
+                value,
+                onChange,
+                errors,
+                prefix: path,
+                disabled,
+                showAdvanced: true,
+            }}
+        />
+    );
+};
 
 /** 文件里写了列表外的值（插件扩展的接口类型之类）也得选得中，不然一渲染就像被清掉了 */
 function withCurrent(items: readonly SelectItem[], value: string): SelectItem[] {
@@ -355,6 +413,16 @@ export const ProviderCard: React.FC<{
                     />
                 </div>
             </ExpandPresence>
+            <ExpandPresence visible={showAdvanced} keepMounted>
+                <SchemaRemainder
+                    kind="api_providers"
+                    value={p}
+                    onChange={(value) => onChange(value as MaiBotAPIProvider)}
+                    path={path}
+                    errors={errors}
+                    disabled={disabled}
+                />
+            </ExpandPresence>
             {footer}
         </Card>
     );
@@ -402,6 +470,20 @@ export const ModelCard: React.FC<{
             disabled={disabled}
         >
             <div className={CONFIG_PAIR}>
+                <Select
+                    label="模型类型"
+                    items={[
+                        { value: 'llm', label: '大语言模型' },
+                        { value: 'embedding', label: '文本嵌入' },
+                        { value: 'image_embedding', label: '图片嵌入' },
+                    ]}
+                    value={m.model_type}
+                    error={err('model_type')}
+                    disabled={disabled}
+                    onValueChange={(value) =>
+                        set({ model_type: value as MaiBotModelInfo['model_type'] })
+                    }
+                />
                 <NameField
                     label="名称"
                     hint="任务里按这个名字挑模型"
@@ -482,13 +564,13 @@ export const ModelCard: React.FC<{
                         onValueChange={(v) => set({ price_out: numOrKeep(v, m.price_out) })}
                     />
                     <Switch
-                        label="缓存计费"
-                        hint="命中缓存的输入按缓存价算"
+                        label="旧版缓存标记"
+                        hint="保留旧版兼容；当前版本按缓存命中价格计费"
                         checked={m.cache}
                         disabled={disabled}
                         onCheckedChange={(cache) => set({ cache })}
                     />
-                    <ExpandPresence visible={m.cache} keepMounted>
+                    <div>
                         <NumberField
                             label="缓存命中价格"
                             hint="元 / 百万 token"
@@ -500,7 +582,7 @@ export const ModelCard: React.FC<{
                                 set({ cache_price_in: numOrKeep(v, m.cache_price_in) })
                             }
                         />
-                    </ExpandPresence>
+                    </div>
                     <Switch
                         label="发送温度参数"
                         hint="有的模型不收 temperature，关掉就不发"
@@ -527,6 +609,14 @@ export const ModelCard: React.FC<{
                         onValueChange={(extra_params) => set({ extra_params })}
                     />
                 </div>
+                <SchemaRemainder
+                    kind="models"
+                    value={m}
+                    onChange={(value) => onChange(value as MaiBotModelInfo)}
+                    path={path}
+                    errors={errors}
+                    disabled={disabled}
+                />
             </ExpandPresence>
         </Card>
     );
@@ -672,18 +762,6 @@ export const TaskCard: React.FC<{
                 <ExpandPresence visible={showAdvanced} className={WIDE} keepMounted>
                     <div className={CONFIG_PAIR}>
                         <NumberField
-                            label="慢请求警告（秒）"
-                            hint="超过这么久在日志里提醒"
-                            allowFloat
-                            min={0}
-                            value={t.slow_threshold}
-                            error={err('slow_threshold')}
-                            disabled={disabled}
-                            onValueChange={(v) =>
-                                set({ slow_threshold: numOrKeep(v, t.slow_threshold) })
-                            }
-                        />
-                        <NumberField
                             label="硬超时（秒）"
                             hint="到点没回就取消，换下一个模型"
                             allowFloat
@@ -698,6 +776,16 @@ export const TaskCard: React.FC<{
                     </div>
                 </ExpandPresence>
             </div>
+            <ExpandPresence visible={showAdvanced} keepMounted>
+                <SchemaRemainder
+                    kind="task"
+                    value={t}
+                    onChange={(value) => onChange(value as MaiBotTaskConfig)}
+                    path={path}
+                    errors={errors}
+                    disabled={disabled}
+                />
+            </ExpandPresence>
         </Card>
     );
 };

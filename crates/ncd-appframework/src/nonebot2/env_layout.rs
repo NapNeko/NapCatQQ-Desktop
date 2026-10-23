@@ -41,7 +41,7 @@ pub fn layout_from_base(
 }
 
 pub fn environment_from_dotenv(text: &str) -> String {
-    let env = EnvFile::parse(text);
+    let env = EnvFile::parse_python(text);
     env.get_ci("ENVIRONMENT")
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())

@@ -11,16 +11,19 @@ MaiBot 的 bot_config / model_config 由 pydantic 类定义、没有模板文件
 
     <实例>/.venv/Scripts/python.exe scripts/maibot/codegen.py --src <MaiBot 源码目录>
 
-会在临时目录里跑上游代码（导入时会建日志 / 数据库），不碰源码目录和实例目录。
+在临时目录中通过 AST 白名单仅载入上游配置模型及纯数据导出函数，不运行框架启动、数据库迁移或网络逻辑。\n只需 Python 3.12+ 与 pydantic / tomlkit，无需安装 MaiBot 业务依赖。
 升级上游 MaiBot 后重跑一遍，看 git diff 决定要不要跟进界面和校验。
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import shutil
+import subprocess
+import tomllib
 import sys
 import tempfile
 import types
@@ -40,6 +43,8 @@ UI_KEYS = (
     "name", "type", "label", "description", "default", "options", "minValue", "maxValue",
     "step", "x-widget", "x-option-labels", "x-option-descriptions", "advanced", "x-row",
     "placeholder", "items", "x-textarea-rows", "x-description-display", "hidden",
+    "exclusiveMinValue", "exclusiveMaxValue", "minLength", "maxLength", "pattern",
+    "mapValues", "secret",
 )
 UI_NODE_KEYS = ("className", "uiLabel", "uiAdvanced", "uiOrder", "uiParent")
 
@@ -104,6 +109,8 @@ class Gen:
         return isinstance(t, type) and issubclass(t, self.ConfigBase)
 
     def collect(self, cls, override_repr: bool):
+        # 安全导出没有框架首次初始化；在类所在模块已完整载入后显式解析前向引用。
+        cls.model_rebuild(force=True)
         seen = self.classes.get(cls.__name__)
         if seen is not None:
             # 按类名去重：两个不同的类撞名会生成成同一个结构体，得先改名规则
@@ -169,7 +176,55 @@ class Gen:
 
     def field_schema(self, cls) -> dict[str, dict]:
         schema = self.schema_gen.generate_schema(cls, include_nested=False)
-        return {f["name"]: f for f in schema.get("fields", [])}
+        fields = {f["name"]: f for f in schema.get("fields", [])}
+        for name, info in cls.model_fields.items():
+            if name in fields:
+                self.add_constraints(fields[name], info)
+        return fields
+
+    @staticmethod
+    def add_constraints(field: dict, info) -> None:
+        # 上游 WebUI 目前只导出 ge/le；保存时 pydantic 同样检查开区间、长度和正则。
+        for constraint in info.metadata:
+            for attr, key in (
+                ("gt", "exclusiveMinValue"), ("lt", "exclusiveMaxValue"),
+                ("min_length", "minLength"), ("max_length", "maxLength"),
+                ("pattern", "pattern"),
+            ):
+                value = getattr(constraint, attr, None)
+                if value is not None:
+                    field[key] = value
+        if not info.repr:
+            field["secret"] = True
+
+    def ui_schema(self, cls) -> dict:
+        schema = self.schema_gen.generate_config_schema(cls, include_nested=True)
+
+        def enrich(node, model):
+            nested = node.setdefault("nested", {})
+            for field in node.get("fields", []):
+                info = model.model_fields.get(field["name"])
+                if info is None:
+                    continue
+                self.add_constraints(field, info)
+                annotation = info.annotation
+                origin, args = typing.get_origin(annotation), typing.get_args(annotation)
+                if origin in (typing.Union, getattr(types, "UnionType", None)):
+                    annotation = next((a for a in args if a is not type(None)), annotation)
+                    origin, args = typing.get_origin(annotation), typing.get_args(annotation)
+                inner = annotation
+                if origin in (list, set, frozenset, tuple):
+                    inner = args[0] if args else None
+                elif origin is dict:
+                    inner = args[1] if len(args) > 1 else None
+                    if self.is_cfg(inner):
+                        field["mapValues"] = True
+                        nested[field["name"]] = self.schema_gen.generate_config_schema(inner, include_nested=True)
+                if self.is_cfg(inner) and field["name"] in nested:
+                    enrich(nested[field["name"]], inner)
+
+        enrich(schema, cls)
+        return trim_ui(schema)
 
     # ---- Rust 输出 ----
 
@@ -319,6 +374,24 @@ class Gen:
             lo_s = "None" if lo is None else f"Some({float(lo)!r})"
             hi_s = "None" if hi is None else f"Some({float(hi)!r})"
             out.append(f"sink.range({p}, {v}, {lo_s}, {hi_s});")
+        if numeric:
+            for key, comparison, message in (
+                ("exclusiveMinValue", ">", "要大于"), ("exclusiveMaxValue", "<", "要小于"),
+            ):
+                if key in fs:
+                    limit = float(fs[key])
+                    out.append(f'if !((self.{field} as f64) {comparison} {limit!r}) {{ sink.push({p}, "{message} {limit:g}"); }}')
+        if rtype == "String" and fs.get("pattern"):
+            pattern = rust_str(str(fs["pattern"]))
+            out.append(f'if !fancy_regex::Regex::new({pattern}).expect("上游配置正则").is_match(&self.{field}).unwrap_or(false) {{ sink.push({p}, "格式不正确"); }}')
+        if rtype == "String" or rtype.startswith(("Vec<", "std::collections::BTreeMap<")):
+            length = f"self.{field}.chars().count()" if rtype == "String" else f"self.{field}.len()"
+            for key, comparison, message in (
+                ("minLength", "<", "至少"), ("maxLength", ">", "最多"),
+            ):
+                if key in fs:
+                    limit = int(fs[key])
+                    out.append(f'if {length} {comparison} {limit} {{ sink.push({p}, "{message} {limit} 项"); }}')
         if "literal" in extra and rtype == "String":
             opts = ", ".join(json.dumps(o) for o in extra["literal"])
             out.append(f"sink.one_of({p}, &self.{field}, &[{opts}]);")
@@ -350,20 +423,121 @@ def trim_ui(node: dict) -> dict:
     return out
 
 
+# 只运行配置模型及其纯数据导出函数，不导入 MaiBot 的启动、数据库或网络模块。
+# AST 白名单在上游新增依赖时明确失败，避免升级时悄悄运行新的业务初始化。
+SCHEMA_MODULES = (
+    "src/config/config_base.py",
+    "src/config/official_configs.py",
+    "src/config/model_configs.py",
+    "src/config/config_utils.py",
+    "src/config/default_model_config.py",
+    "src/agent/config.py",
+    "src/web_search/config.py",
+    "src/webui/config_schema.py",
+    "src/config/config.py",
+)
+SCHEMA_IMPORTS = {
+    "src.common.logger", "src.common.i18n", "src.config.config_base",
+    "src.config.official_configs", "src.config.model_configs", "src.config.config_utils",
+    "src.config.default_model_config", "src.agent.config", "src.web_search.config",
+    "pydantic", "pydantic.fields", "pydantic_core", "tomlkit", "tomlkit.items",
+}
+ROOT_DECLARATIONS = {
+    "Config", "ModelConfig", "CONFIG_VERSION", "MODEL_CONFIG_VERSION", "T", "logger",
+    "generate_new_config_file", "write_config_to_file",
+}
+
+
+def prepare_schema_sources(src: Path, work: Path) -> None:
+    def import_module(node, module):
+        if isinstance(node, ast.Import):
+            return [alias.name for alias in node.names]
+        if not node.level:
+            return [node.module or ""]
+        package = module.split(".")[:-node.level]
+        return [".".join(package + ([node.module] if node.module else []))]
+
+    def allowed_import(name):
+        return name.split(".")[0] in sys.stdlib_module_names or name in SCHEMA_IMPORTS
+
+    for rel in SCHEMA_MODULES:
+        source = src / rel
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        module = rel.removesuffix(".py").replace("/", ".")
+        selected = []
+        class_names = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                names = import_module(node, module)
+                if all(allowed_import(name) for name in names):
+                    selected.append(node)
+                elif rel != "src/config/config.py":
+                    raise SystemExit(f"{rel}: 配置元数据新增未审查的依赖 {names!r}")
+                continue
+            if rel == "src/config/config.py":
+                names = [node.name] if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) else [
+                    target.id for target in (
+                        node.targets if isinstance(node, ast.Assign) else
+                        [node.target] if isinstance(node, ast.AnnAssign) else []
+                    ) if isinstance(target, ast.Name)
+                ]
+                if not names or not all(name in ROOT_DECLARATIONS for name in names):
+                    continue
+            elif not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef, ast.Assign, ast.AnnAssign, ast.Expr)):
+                # TYPE_CHECKING 分支等不参与运行时配置元数据。
+                continue
+            if isinstance(node, ast.Expr) and not isinstance(node.value, ast.Constant):
+                call = node.value
+                schema_rebuild = (
+                    isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "model_rebuild" and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id in class_names and not call.args and not call.keywords
+                )
+                if not schema_rebuild:
+                    raise SystemExit(f"{rel}:{node.lineno}: 不允许配置导出时运行顶层表达式 {ast.dump(node.value)}")
+            selected.append(node)
+        target = work / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(ast.unparse(ast.Module(body=selected, type_ignores=[])) + "\n", encoding="utf-8")
+        for parent in target.parents:
+            if parent == work:
+                break
+            (parent / "__init__.py").touch()
+
+    common = work / "src/common"
+    common.mkdir(parents=True, exist_ok=True)
+    (common / "__init__.py").touch()
+    (common / "logger.py").write_text(
+        "class _SchemaLogger:\n    def __getattr__(self, name):\n        return lambda *args, **kwargs: None\n"
+        "def get_logger(*args, **kwargs):\n    return _SchemaLogger()\n", encoding="utf-8"
+    )
+    (common / "i18n.py").write_text(
+        "def t(key, **kwargs):\n    return key\n", encoding="utf-8"
+    )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True, help="MaiBot 源码根目录（含 src/ 与 pyproject.toml）")
+    ap.add_argument("--revision", help="上游 commit；默认从源码仓库读取（归档输入须显式提供）")
     args = ap.parse_args()
     src = Path(args.src).resolve()
+    revision = args.revision
+    if not revision:
+        result = subprocess.run(["git", "-C", str(src), "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+        revision = result.stdout.strip()
+    if len(revision) != 40 or any(ch not in "0123456789abcdef" for ch in revision):
+        raise SystemExit("--revision 必须是完整的上游 commit SHA")
+    project = tomllib.loads((src / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     work = Path(tempfile.mkdtemp(prefix="ncd-maibot-codegen-"))
     try:
-        shutil.copytree(src / "src", work / "src")
-        if (src / "locales").exists():
-            shutil.copytree(src / "locales", work / "locales")
+        prepare_schema_sources(src, work)
         shutil.copy(src / "pyproject.toml", work / "pyproject.toml")
         os.chdir(work)
         sys.path.insert(0, str(work))
         sys.dont_write_bytecode = True
+        # 只加载配置类，不触发 MaiBot 全局配置初始化或旧数据库迁移。
+        os.environ["MAIBOT_INITIALIZE_ONLY"] = "1"
 
         from src.config.config import (  # noqa: E402
             CONFIG_VERSION, MODEL_CONFIG_VERSION, Config, ModelConfig, generate_new_config_file,
@@ -392,13 +566,29 @@ def main() -> None:
 
         UI_OUT.mkdir(parents=True, exist_ok=True)
         for name, cls in (("bot", Config), ("model", ModelConfig)):
-            schema = ConfigSchemaGenerator.generate_config_schema(cls, include_nested=True)
+            schema = gen.ui_schema(cls)
             (UI_OUT / f"{name}.json").write_text(
-                json.dumps(trim_ui(schema), ensure_ascii=False, indent=1) + "\n",
+                json.dumps(schema, ensure_ascii=False, indent=1) + "\n",
                 encoding="utf-8",
                 newline="\n",
             )
-        print(f"ok: {len(gen.order)} 个类，{version}")
+        snapshot = {
+            "repository": "https://github.com/Mai-with-u/MaiBot",
+            "revision": revision,
+            "projectVersion": project["version"],
+            "botConfigVersion": CONFIG_VERSION,
+            "modelConfigVersion": MODEL_CONFIG_VERSION,
+            "classes": {
+                cls.__name__: [
+                    name for name, info in cls.model_fields.items()
+                    if name not in SKIP_FIELDS and (info.repr or gen.override[cls.__name__])
+                ] for cls in gen.order
+            },
+        }
+        (UI_OUT / "upstream.json").write_text(
+            json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
+        print(f"ok: {len(gen.order)} 个类，{version}，upstream {revision}")
     finally:
         os.chdir(REPO)
         shutil.rmtree(work, ignore_errors=True)

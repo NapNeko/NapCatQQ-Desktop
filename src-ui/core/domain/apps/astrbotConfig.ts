@@ -323,11 +323,22 @@ export function astrbotDefaultConfig(port: number): AstrBotInstanceConfig {
         kb: astrbotDefaultKb(),
         gates: astrbotDefaultGates(),
         subagent: astrbotDefaultSubagent(),
+        advanced_json: '',
+        advanced_base_json: '',
     };
 }
 
 export function validateAstrBotConfig(cfg: AstrBotInstanceConfig): AppConfigIssue[] {
     const out: AppConfigIssue[] = [];
+    if (cfg.advanced_json?.trim()) {
+        try {
+            const value: unknown = JSON.parse(cfg.advanced_json);
+            if (!value || typeof value !== 'object' || Array.isArray(value))
+                out.push({ path: 'advanced_json', message: '高级设置必须是 JSON 对象' });
+        } catch {
+            out.push({ path: 'advanced_json', message: '高级设置不是有效 JSON' });
+        }
+    }
     if (!Number.isInteger(cfg.onebot.ws_reverse_port) || cfg.onebot.ws_reverse_port < 1) {
         out.push({ path: 'onebot/ws_reverse_port', message: '端口不能为 0' });
     }
@@ -340,6 +351,22 @@ export function validateAstrBotConfig(cfg: AstrBotInstanceConfig): AppConfigIssu
             message: `OneBot 口不能与 WebUI 口相同（${cfg.dashboard_port}）`,
         });
     }
+    cfg.subagent.agents.forEach((row, i) => {
+        if (!row.extra_json?.trim()) return;
+        try {
+            const value: unknown = JSON.parse(row.extra_json);
+            if (!value || typeof value !== 'object' || Array.isArray(value))
+                out.push({
+                    path: 'subagent/agents/' + i + '/extra_json',
+                    message: '子代理额外配置必须是 JSON 对象',
+                });
+        } catch {
+            out.push({
+                path: 'subagent/agents/' + i + '/extra_json',
+                message: '子代理额外配置不是有效 JSON',
+            });
+        }
+    });
     const seenSrc = new Set<string>();
     cfg.sources.forEach((s, i) => {
         if (!s.id.trim()) {
@@ -480,7 +507,9 @@ export function astrbotSetup(cfg: AstrBotInstanceConfig, linked: boolean): AstrB
     const chatSourceIndex = enabledIdx >= 0 ? enabledIdx : cfg.sources.findIndex(isChat);
     const chat = enabledChatModels(cfg);
     let llmIssue: AstrBotLlmIssue | null = null;
-    if (chatSourceIndex < 0) llmIssue = 'no_source';
+    if (cfg.ai.agent_runner_type && cfg.ai.agent_runner_type !== 'local')
+        llmIssue = cfg.ai.enable ? null : 'llm_off';
+    else if (chatSourceIndex < 0) llmIssue = 'no_source';
     else if (chat.length === 0) llmIssue = 'no_model';
     else if (!chat.some((m) => m.id === cfg.ai.default_provider_id)) llmIssue = 'no_default';
     else if (!cfg.ai.enable) llmIssue = 'llm_off';

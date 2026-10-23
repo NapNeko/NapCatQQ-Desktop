@@ -1,0 +1,180 @@
+{
+  "scan_date": "2026-10-22",
+  "ncd_baseline": "ee54f93d75999c0d16e2703af91e2667be572116",
+  "frameworks": [
+    {
+      "id": "koishi",
+      "upstream": {
+        "repository": "koishijs/koishi",
+        "commit": "97d5c395750cec37b772e0b94dc63c427e3bb868",
+        "source": "packages/core/src/context.ts"
+      },
+      "coverage": "Schemas are read from the installed instance at runtime, including Context.Config and each plugin Config/schema. New upstream fields do not require a Desktop field allowlist.",
+      "global_fields": [
+        "prefix",
+        "prefixMode",
+        "nickname",
+        "autoAssign",
+        "autoAuthorize",
+        "minSimilarity",
+        "i18n",
+        "delay",
+        "maxListeners",
+        "request"
+      ],
+      "fixes": [
+        "Validate required fields in the active tagged-union branch inside intersect schemas."
+      ],
+      "regressions": [
+        "New runtime schema fields appear in visibleFields without registration.",
+        "Default materialization/simplification leaves unknown nested keys and saved input unchanged.",
+        "Required fields introduced inside active intersect/union branches are validated."
+      ]
+    },
+    {
+      "id": "yunzai",
+      "upstream": {
+        "repository": "TimeRainStarSky/Yunzai",
+        "commit": "29bf29ff2f162bb7968f2cee237b148777521f6e",
+        "version": "3.1.3",
+        "sources": [
+          "config/default_config/*.yaml",
+          "lib/bot.js",
+          "lib/config/log.js",
+          "plugins/adapter/Milky.js",
+          "plugins/adapter/Satori.js"
+        ]
+      },
+      "covered_default_paths": {
+        "bot": [
+          "log_level",
+          "log_length",
+          "log_object",
+          "log_align",
+          "plugin_load_timeout",
+          "file_watch",
+          "update_time",
+          "restart_time",
+          "update_cron",
+          "restart_cron",
+          "stop_cron",
+          "start_cron",
+          "cache_group_member",
+          "online_msg_exp",
+          "file_to_url_time",
+          "file_to_url_times",
+          "msg_type_count",
+          "/→#",
+          "chromium_path",
+          "puppeteer_ws",
+          "puppeteer_timeout",
+          "proxyAddress"
+        ],
+        "other": [
+          "autoFriend",
+          "autoGroup",
+          "autoQuit",
+          "masterQQ",
+          "master",
+          "disablePrivate",
+          "disableMsg",
+          "disableAdopt",
+          "whiteGroup",
+          "whiteUser",
+          "blackGroup",
+          "blackUser"
+        ],
+        "group": [
+          "default.groupCD",
+          "default.singleCD",
+          "default.onlyReplyAt",
+          "default.botAlias",
+          "default.addLimit",
+          "default.addPrivate",
+          "default.addReply",
+          "default.addAt",
+          "default.addRecall",
+          "default.enable",
+          "default.disable",
+          "<bot/group overrides>"
+        ],
+        "server": [
+          "url",
+          "port",
+          "redirect",
+          "auth.Authorization",
+          "https.url",
+          "https.port",
+          "https.key",
+          "https.cert"
+        ],
+        "redis": [
+          "path",
+          "host",
+          "port",
+          "username",
+          "password",
+          "db"
+        ],
+        "renderer": [
+          "name"
+        ],
+        "db": [
+          "dialect",
+          "storage",
+          "logging"
+        ],
+        "milky": [
+          "enable",
+          "host",
+          "port",
+          "prefix",
+          "access_token",
+          "connection",
+          "webhook.path",
+          "ws.heartbeat",
+          "ws.reconnect_interval",
+          "http_timeout"
+        ],
+        "satori": [
+          "enable",
+          "http_endpoint",
+          "ws_endpoint",
+          "token",
+          "platform",
+          "timeout",
+          "heartbeat_interval"
+        ]
+      },
+      "added_paths": [
+        "bot.log_align",
+        "bot.file_to_url_times",
+        "bot.msg_type_count",
+        "server.https.{url,port,key,cert}",
+        "db.{dialect,storage,logging}",
+        "milky.{enable,host,port,prefix,access_token,connection,webhook.path,ws.heartbeat,ws.reconnect_interval,http_timeout}",
+        "satori.{enable,http_endpoint,ws_endpoint,token,platform,timeout,heartbeat_interval}",
+        "redis.username (existing model now exposed in the UI)"
+      ],
+      "raw_file_extensions": [
+        "server.auth custom request headers remain preserved and displayed as names; their values are edited through raw YAML.",
+        "Milky ssl/use_ssl compatibility aliases remain preserved through raw YAML.",
+        "Database dialect-specific connection options remain preserved through raw YAML."
+      ],
+      "write_semantics": "Only changed typed fields are patched into the original YAML. Comments, unknown keys, compatibility aliases, and untouched documents are retained. Optional file access counts distinguish absent/null (unlimited) from zero (deny).",
+      "restart_semantics": [
+        "HTTPS, database, Milky, Satori and log alignment changes require restart.",
+        "milky.yaml and satori.yaml raw document hot_reload corrected to false."
+      ],
+      "regressions": [
+        "All nine upstream default documents have typed coverage.",
+        "Unchanged config produces no writes.",
+        "Round-trip edits preserve unknown YAML keys, comments and aliases.",
+        "HTTPS children can be added below an empty upstream https key.",
+        "New protocol validation points to exact form fields."
+      ]
+    }
+  ],
+  "validation_status": "Executed in GitHub Actions. Related configuration regressions and TypeScript checks passed; final merge and publication require the complete CI gate.",
+  "validation_evidence": "https://github.com/NapNeko/NapCatQQ-Desktop/pull/161/checks"
+}

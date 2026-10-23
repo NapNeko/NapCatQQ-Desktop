@@ -18,4 +18,12 @@ other_platforms: Array<string>,
 /**
  * 文件里已经有可认领的 aiocqhttp
  */
-claimed: boolean, sources: Array<AstrBotProviderSource>, models: Array<AstrBotProviderModel>, ai: AstrBotAiSettings, stt: AstrBotSttSettings, tts: AstrBotTtsSettings, websearch: AstrBotWebSearchSettings, kb: AstrBotKbBind, gates: AstrBotPlatformGates, subagent: AstrBotSubagentConfig, };
+claimed: boolean, sources: Array<AstrBotProviderSource>, models: Array<AstrBotProviderModel>, ai: AstrBotAiSettings, stt: AstrBotSttSettings, tts: AstrBotTtsSettings, websearch: AstrBotWebSearchSettings, kb: AstrBotKbBind, gates: AstrBotPlatformGates, subagent: AstrBotSubagentConfig, 
+/**
+ * 未由专页管理的配置。保存时相对 advanced_base_json 做叶节点差量。
+ */
+advanced_json: string, 
+/**
+ * 读取时的高级配置基线；不作为专页字段的写入授权。
+ */
+advanced_base_json: string, };

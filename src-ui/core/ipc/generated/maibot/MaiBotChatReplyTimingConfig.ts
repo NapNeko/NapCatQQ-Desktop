@@ -3,6 +3,14 @@ import type { MaiBotTalkRulesItem } from "./MaiBotTalkRulesItem";
 
 export type MaiBotChatReplyTimingConfig = { 
 /**
+ * 默认自然，只需选择关闭、快速、自然或沉稳，无需另开开关。
+ */
+message_debounce_mode: "off" | "fast" | "natural" | "steady", 
+/**
+ * 强制 Planner 使用流式请求；思考或输出期间收到新消息立即打断并带上新消息重新请求，wait 等待也可被新消息提前结束。
+ */
+planner_message_steering: boolean, 
+/**
  * 群聊里麦麦主动说话的频率；越小越安静。
  */
 talk_value: number, 
@@ -18,14 +26,6 @@ mentioned_bot_reply: boolean,
  * 开启后，被 @ 时会尽量回复。
  */
 inevitable_at_reply: boolean, 
-/**
- * 控制新消息何时进入 Planner。
- */
-reply_trigger_mode: "frequency" | "reply_necessity", 
-/**
- * 思考时来了新消息，最多重新思考多少次。
- */
-planner_interrupt_max_consecutive_count: number, 
 /**
  * Planner 最多连续调用 wait 多少次；达到上限后 wait 工具会拒绝继续进入等待。
  */

@@ -24,6 +24,8 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
         onChange({ ...config, server: { ...server, ...patch } });
     const setRedis = (patch: Partial<YunzaiRedisConfig>) =>
         onChange({ ...config, redis: { ...redis, ...patch } });
+    const setHttps = (patch: Partial<YunzaiServerConfig['https']>) =>
+        setServer({ https: { ...server.https, ...patch } });
     const linked = !!instance.link;
 
     return (
@@ -99,6 +101,44 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
             </FormSection>
 
             <FormSection
+                title="HTTPS"
+                description="私钥和证书路径都非空时开启；路径相对云崽实例目录，改后重启生效"
+            >
+                <div className={CONFIG_PAIR}>
+                    <NumberField
+                        label="HTTPS 端口"
+                        value={server.https.port}
+                        min={1}
+                        max={65535}
+                        error={errors['server/https/port']}
+                        disabled={disabled}
+                        onValueChange={(port) => setHttps({ port: port ?? undefined })}
+                    />
+                    <TextField
+                        label="HTTPS 对外地址"
+                        hint="留空沿用 HTTP 对外地址"
+                        value={server.https.url}
+                        disabled={disabled}
+                        onValueChange={(url) => setHttps({ url })}
+                    />
+                    <TextField
+                        label="私钥路径"
+                        value={server.https.key}
+                        disabled={disabled}
+                        className="font-mono"
+                        onValueChange={(key) => setHttps({ key })}
+                    />
+                    <TextField
+                        label="证书路径"
+                        value={server.https.cert}
+                        disabled={disabled}
+                        className="font-mono"
+                        onValueChange={(cert) => setHttps({ cert })}
+                    />
+                </div>
+            </FormSection>
+
+            <FormSection
                 title="Redis"
                 description="连不上且地址是 127.0.0.1 时云崽自己拉起一个；改了要重启"
             >
@@ -126,6 +166,12 @@ export const YunzaiConnectionTab: React.FC<YunzaiTabProps & { instance: AppInsta
                         min={0}
                         disabled={disabled}
                         onValueChange={(v) => setRedis({ db: v ?? 0 })}
+                    />
+                    <TextField
+                        label="用户名"
+                        value={redis.username}
+                        disabled={disabled}
+                        onValueChange={(username) => setRedis({ username })}
                     />
                     <SecretField
                         label="密码"

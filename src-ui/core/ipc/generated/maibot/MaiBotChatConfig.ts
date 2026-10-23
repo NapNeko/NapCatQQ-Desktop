@@ -4,6 +4,10 @@ import type { MaiBotChatReplyTimingConfig } from "./MaiBotChatReplyTimingConfig"
 
 export type MaiBotChatConfig = { 
 /**
+ * 允许麦麦在回复开头 @ 一个或多个用户，由模型根据聊天内容决定是否使用。
+ */
+enable_reply_at: boolean, 
+/**
  * 群聊回复时参考的最近消息数量；越大越懂上下文，也更耗模型。
  */
 max_context_size: number, 
@@ -11,10 +15,6 @@ max_context_size: number,
  * 私聊回复时参考的最近消息数量。
  */
 max_private_context_size: number, 
-/**
- * 压缩部分上下文，减少模型消耗；一般建议开启。
- */
-enable_context_optimization: boolean, 
 /**
  * 打开后会主动召回最近聊天发生的事情。
  */

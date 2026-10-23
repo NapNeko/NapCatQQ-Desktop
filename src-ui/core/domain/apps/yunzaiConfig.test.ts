@@ -77,4 +77,43 @@ describe('yunzaiConfig', () => {
         expect(yunzaiPluginToggleable('chuo.js')).toBe(true);
         expect(yunzaiPluginToggleable('miao-plugin')).toBe(false);
     });
+    it('新增协议字段的错误能定位，修改后会提示重启', () => {
+        const a = yunzaiDefaultConfig(24100);
+        const b = structuredClone(a);
+        b.server.https = { port: 24100, key: 'server.key', cert: 'server.crt', url: '' };
+        b.milky.enable = true;
+        b.milky.connection = 'other';
+        b.satori.enable = true;
+        b.satori.ws_endpoint = 'http://wrong';
+        const paths = validateYunzaiConfig(b).map((i) => i.path);
+        expect(paths).toEqual(
+            expect.arrayContaining(['server/https/port', 'milky/connection', 'satori/ws_endpoint']),
+        );
+        expect(yunzaiRestartInputsChanged(a, b)).toBe(true);
+        expect(yunzaiLinkInputsChanged(a, b)).toBe(false);
+        const c = structuredClone(a);
+        c.db.logging = true;
+        expect(yunzaiRestartInputsChanged(a, c)).toBe(true);
+    });
+
+    it('文件访问次数的 0 和不限制是不同配置', () => {
+        const cfg = yunzaiDefaultConfig(24100);
+        expect(cfg.bot.file_to_url_times).toBeUndefined();
+        cfg.bot.file_to_url_times = 0;
+        expect(validateYunzaiConfig(cfg)).toEqual([]);
+        cfg.bot.file_to_url_times = -1;
+        expect(validateYunzaiConfig(cfg).map((i) => i.path)).toContain('bot/file_to_url_times');
+    });
+
+    it('Satori 的空地址和零时间沿用上游默认值', () => {
+        const cfg = yunzaiDefaultConfig(24100);
+        Object.assign(cfg.satori, {
+            enable: true,
+            http_endpoint: '',
+            ws_endpoint: '',
+            timeout: 0,
+            heartbeat_interval: 0,
+        });
+        expect(validateYunzaiConfig(cfg)).toEqual([]);
+    });
 });

@@ -1,0 +1,730 @@
+{
+  "repository": "https://github.com/Mai-with-u/MaiBot",
+  "revision": "c602a2780f4f4dda4a6be46d67abc1cfb1ad420c",
+  "projectVersion": "1.3.14",
+  "botConfigVersion": "8.15.37",
+  "modelConfigVersion": "1.17.22",
+  "classes": {
+    "AgentConfig": [
+      "enabled",
+      "connection",
+      "desktop_manifest",
+      "acp_command",
+      "acp_args",
+      "acp_cwd",
+      "acp_env",
+      "acp_model",
+      "acp_timeout",
+      "computer_tools",
+      "networking",
+      "memory_mb",
+      "startup_timeout",
+      "request_timeout",
+      "screenshot_max_edge"
+    ],
+    "BotConfig": [
+      "platform",
+      "qq_account",
+      "platforms",
+      "nickname",
+      "alias_names"
+    ],
+    "PersonalityConfig": [
+      "personality",
+      "behavior_style",
+      "reply_style",
+      "multiple_reply_style",
+      "multiple_probability"
+    ],
+    "TalkRulesItem": [
+      "platform",
+      "item_id",
+      "rule_type",
+      "time",
+      "value"
+    ],
+    "ChatReplyTimingConfig": [
+      "message_debounce_mode",
+      "planner_message_steering",
+      "talk_value",
+      "private_talk_value",
+      "mentioned_bot_reply",
+      "inevitable_at_reply",
+      "max_consecutive_wait_count",
+      "no_action_backoff_base_seconds",
+      "no_action_backoff_cap_seconds",
+      "no_action_backoff_start_count",
+      "no_action_backoff_bypass_pending_count",
+      "enable_talk_value_rules",
+      "talk_value_rules"
+    ],
+    "ExtraPromptItem": [
+      "platform",
+      "item_id",
+      "rule_type",
+      "prompt"
+    ],
+    "ChatReplyStyleConfig": [
+      "group_quote_frequency",
+      "private_quote_frequency",
+      "group_chat_prompt",
+      "private_chat_prompts",
+      "chat_prompts"
+    ],
+    "ChatConfig": [
+      "enable_reply_at",
+      "max_context_size",
+      "max_private_context_size",
+      "mid_term_memory",
+      "mid_term_memory_lenth",
+      "reply_timing",
+      "reply_style"
+    ],
+    "CapabilitiesConfig": [
+      "tool_result_condense",
+      "tool_result_condense_threshold",
+      "planner_subagent",
+      "advanced_sub_agent"
+    ],
+    "AttentionDriftConfig": [
+      "enabled",
+      "drift_level",
+      "anchor_policy",
+      "reaction_style"
+    ],
+    "TargetItem": [
+      "platform",
+      "item_id",
+      "rule_type"
+    ],
+    "ChatStreamGroup": [
+      "targets"
+    ],
+    "ExperimentalConfig": [
+      "attention_drift",
+      "focus_mode",
+      "focus_on_private",
+      "focus_chat_whitelist",
+      "focus_groups"
+    ],
+    "ImageCacheCleanupConfig": [
+      "enabled",
+      "check_interval_hours",
+      "image_file_retention_days",
+      "no_file_result_retention_days"
+    ],
+    "VisualConfig": [
+      "max_image_num",
+      "wait_image_recognize_max_time",
+      "handle_oversized_images",
+      "max_image_size_mb",
+      "oversized_image_handle_method",
+      "image_cache_cleanup"
+    ],
+    "LearningItem": [
+      "platform",
+      "item_id",
+      "type",
+      "use",
+      "learn"
+    ],
+    "ExpressionConfig": [
+      "expression_checked_only",
+      "expression_self_reflect",
+      "use_vector_expression",
+      "expression_vector_index_path",
+      "expression_vector_candidate_pool_size",
+      "max_expression_learner",
+      "learning_list",
+      "expression_groups"
+    ],
+    "JargonConfig": [
+      "learning_list",
+      "jargon_groups"
+    ],
+    "AMemorixPluginConfig": [
+      "enabled"
+    ],
+    "AMemorixIntegrationConfig": [
+      "enable_memory_query_tool",
+      "memory_query_default_limit",
+      "enable_person_profile_query_tool",
+      "enable_person_profile_injection",
+      "person_profile_injection_max_profiles",
+      "heuristic_memory_recall_enabled",
+      "heuristic_memory_cross_chat_enabled",
+      "heuristic_memory_recall_window_size",
+      "heuristic_memory_recall_limit",
+      "heuristic_memory_recall_max_chars",
+      "heuristic_memory_recall_min_interval_seconds",
+      "heuristic_memory_recall_min_new_messages",
+      "heuristic_memory_recall_cache_ttl_seconds",
+      "heuristic_memory_group_to_private_enabled",
+      "heuristic_memory_private_to_group_enabled",
+      "person_fact_writeback_enabled",
+      "chat_summary_writeback_enabled",
+      "chat_summary_writeback_message_threshold",
+      "chat_summary_writeback_context_length",
+      "fuzzy_modify_enabled",
+      "fuzzy_modify_auto_execute_enabled",
+      "fuzzy_modify_confirm_threshold",
+      "fuzzy_modify_candidate_limit",
+      "fuzzy_modify_max_targets",
+      "fuzzy_modify_allow_global_scope",
+      "feedback_correction_enabled",
+      "feedback_correction_window_hours",
+      "feedback_correction_check_interval_minutes",
+      "feedback_correction_batch_size",
+      "feedback_correction_auto_apply_threshold",
+      "feedback_correction_max_feedback_messages",
+      "feedback_correction_prefilter_enabled",
+      "feedback_correction_paragraph_mark_enabled",
+      "feedback_correction_paragraph_hard_filter_enabled",
+      "feedback_correction_profile_refresh_enabled",
+      "feedback_correction_profile_force_refresh_on_read",
+      "feedback_correction_episode_rebuild_enabled",
+      "feedback_correction_episode_query_block_enabled",
+      "feedback_correction_reconcile_interval_minutes",
+      "feedback_correction_reconcile_batch_size"
+    ],
+    "AMemorixStorageConfig": [
+      "data_dir"
+    ],
+    "AMemorixImageMemoryConfig": [
+      "enabled",
+      "task_name",
+      "preprocess_version",
+      "probe_retry_seconds",
+      "max_bytes",
+      "max_pixels",
+      "candidate_limit",
+      "similarity_threshold",
+      "job_poll_interval_seconds",
+      "job_batch_size",
+      "job_enqueue_batch_size",
+      "job_lease_seconds",
+      "job_max_retries",
+      "min_train_threshold"
+    ],
+    "AMemorixEmbeddingFallbackConfig": [
+      "enabled",
+      "probe_interval_seconds",
+      "allow_metadata_only_write"
+    ],
+    "AMemorixParagraphVectorBackfillConfig": [
+      "enabled",
+      "interval_seconds",
+      "batch_size",
+      "max_retry"
+    ],
+    "AMemorixEmbeddingConfig": [
+      "model_name",
+      "dimension",
+      "dimension_request_mode",
+      "batch_size",
+      "max_concurrent",
+      "enable_cache",
+      "runtime_train_threshold",
+      "quantization_type",
+      "fallback",
+      "paragraph_vector_backfill"
+    ],
+    "AMemorixSmartFallbackConfig": [
+      "enabled"
+    ],
+    "AMemorixRetrievalSearchConfig": [
+      "smart_fallback"
+    ],
+    "AMemorixFusionRetrievalConfig": [
+      "method",
+      "rrf_k",
+      "vector_weight",
+      "bm25_weight"
+    ],
+    "AMemorixRelationVectorizationConfig": [
+      "enabled",
+      "backfill_enabled",
+      "write_on_import"
+    ],
+    "AMemorixRelationIntentVectorPoolConfig": [
+      "graph_top_k",
+      "semantic_weight",
+      "sparse_weight",
+      "graph_weight",
+      "return_relation_items"
+    ],
+    "AMemorixVectorPoolsConfig": [
+      "mode",
+      "paragraph_top_k",
+      "graph_top_k",
+      "graph_expand_paragraph_k",
+      "relation_expand_per_hit",
+      "entity_expand_per_hit",
+      "relation_evidence_weight",
+      "entity_evidence_weight",
+      "semantic_weight",
+      "sparse_weight",
+      "graph_weight",
+      "relation_intent"
+    ],
+    "AMemorixSparseRetrievalConfig": [
+      "enabled",
+      "backend",
+      "mode",
+      "tokenizer_mode",
+      "candidate_k",
+      "relation_candidate_k"
+    ],
+    "AMemorixRetrievalConfig": [
+      "top_k_paragraphs",
+      "top_k_relations",
+      "top_k_final",
+      "alpha",
+      "enable_ppr",
+      "ppr_alpha",
+      "ppr_timeout_seconds",
+      "ppr_concurrency_limit",
+      "enable_parallel",
+      "search",
+      "fusion",
+      "relation_vectorization",
+      "vector_pools",
+      "sparse"
+    ],
+    "AMemorixThresholdConfig": [
+      "min_threshold",
+      "max_threshold",
+      "percentile",
+      "min_results"
+    ],
+    "AMemorixRetrievalSubtypeFilterConfig": [
+      "enabled",
+      "mode",
+      "chats"
+    ],
+    "AMemorixRetrievalFilterConfig": [
+      "chat_stream",
+      "chat_summary",
+      "episode"
+    ],
+    "AMemorixFilterConfig": [
+      "enabled",
+      "mode",
+      "chats",
+      "retrieval"
+    ],
+    "AMemorixEpisodeConfig": [
+      "enabled",
+      "generation_enabled",
+      "source_poll_interval_seconds",
+      "source_batch_size",
+      "source_max_retry",
+      "source_lease_seconds",
+      "source_max_wait_seconds",
+      "max_paragraphs_per_call",
+      "max_chars_per_call",
+      "source_time_window_hours",
+      "segmentation_model",
+      "disabled_source_types"
+    ],
+    "AMemorixPersonProfileConfig": [
+      "enabled",
+      "refresh_interval_minutes",
+      "active_window_hours",
+      "max_refresh_per_cycle",
+      "refresh_debounce_seconds",
+      "refresh_queue_interval_seconds",
+      "refresh_queue_batch_size",
+      "refresh_retry_backoff_seconds",
+      "max_retry",
+      "top_k_evidence",
+      "evidence_classification_max_tokens"
+    ],
+    "AMemorixMemoryEvolutionConfig": [
+      "enabled",
+      "half_life_hours",
+      "prune_threshold",
+      "freeze_duration_hours",
+      "revive_threshold",
+      "access_reinforcement_alpha",
+      "access_reinforcement_cooldown_minutes",
+      "explicit_reinforcement_alpha",
+      "weaken_alpha",
+      "lifecycle_batch_size"
+    ],
+    "AMemorixAdvancedConfig": [
+      "enable_auto_save",
+      "auto_save_interval_minutes",
+      "debug"
+    ],
+    "AMemorixWebImportTimeoutConfig": [
+      "llm_call_seconds",
+      "process_poll_seconds",
+      "process_terminate_seconds",
+      "process_kill_seconds",
+      "convert_preflight_seconds"
+    ],
+    "AMemorixWebImportConfig": [
+      "enabled",
+      "max_queue_size",
+      "max_files_per_task",
+      "max_file_size_mb",
+      "max_paste_chars",
+      "default_file_concurrency",
+      "default_chunk_concurrency",
+      "default_narrative_window_size",
+      "default_narrative_overlap",
+      "default_factual_target_size",
+      "max_chunk_chars",
+      "timeout"
+    ],
+    "AMemorixWebTuningConfig": [
+      "enabled",
+      "max_queue_size",
+      "poll_interval_ms",
+      "default_intensity",
+      "default_objective",
+      "default_top_k_eval",
+      "default_sample_size"
+    ],
+    "AMemorixWebConfig": [
+      "import_config",
+      "tuning"
+    ],
+    "AMemorixConfig": [
+      "plugin",
+      "integration",
+      "storage",
+      "image_memory",
+      "embedding",
+      "retrieval",
+      "threshold",
+      "filter",
+      "global_memory_sharing_enabled",
+      "shared_memory_groups",
+      "episode",
+      "person_profile",
+      "memory",
+      "advanced",
+      "web"
+    ],
+    "MessageReceiveConfig": [
+      "image_parse_threshold",
+      "ban_words",
+      "ban_msgs_regex"
+    ],
+    "VoiceConfig": [
+      "enable_asr"
+    ],
+    "EmojiCacheCleanupConfig": [
+      "enabled",
+      "check_interval_hours",
+      "emoji_file_retention_days",
+      "no_file_record_retention_days"
+    ],
+    "EmojiConfig": [
+      "use_new_send_logic",
+      "emoji_send_num",
+      "max_reg_num",
+      "do_replace",
+      "check_interval",
+      "steal_emoji",
+      "max_emoji_size_mb",
+      "content_filtration",
+      "cache_cleanup"
+    ],
+    "KeywordRuleConfig": [
+      "keywords",
+      "regex",
+      "reaction"
+    ],
+    "KeywordReactionConfig": [
+      "keyword_rules",
+      "regex_rules"
+    ],
+    "ResponsePostProcessConfig": [
+      "enable_response_post_process",
+      "typing_speed"
+    ],
+    "ChineseTypoConfig": [
+      "enable",
+      "enable_correction_quote",
+      "correction_quote_probability",
+      "error_rate",
+      "min_freq",
+      "tone_error_rate",
+      "word_replace_rate"
+    ],
+    "ResponseSplitterConfig": [
+      "mode",
+      "enable",
+      "max_length",
+      "max_sentence_num",
+      "max_split_num",
+      "enable_kaomoji_protection",
+      "enable_overflow_return_all"
+    ],
+    "TelemetryConfig": [
+      "enable"
+    ],
+    "LogConfig": [
+      "date_style",
+      "log_level_style",
+      "color_text",
+      "log_level",
+      "console_log_level",
+      "file_log_level",
+      "log_file_max_bytes",
+      "max_log_files",
+      "log_cleanup_days",
+      "llm_request_snapshot_limit",
+      "maisaka_prompt_preview_limit",
+      "memory_diagnostics_enabled",
+      "memory_diagnostics_deep_enabled",
+      "memory_diagnostics_interval_seconds",
+      "event_loop_watchdog_enabled",
+      "event_loop_watchdog_warn_seconds",
+      "suppress_libraries",
+      "library_log_levels"
+    ],
+    "DebugConfig": [
+      "replyer_retro_prompt",
+      "enable_console_input",
+      "show_maisaka_thinking",
+      "save_maisaka_reasoning",
+      "keep_prompt_preview_json_base64",
+      "record_tool_structured_content",
+      "enable_llm_cache_stats",
+      "force_plugin_compatibility"
+    ],
+    "MaimMessageConfig": [
+      "enabled",
+      "ws_server_host",
+      "ws_server_port",
+      "auth_token",
+      "enable_api_server",
+      "api_server_host",
+      "api_server_port",
+      "api_server_use_wss",
+      "api_server_cert_file",
+      "api_server_key_file",
+      "api_server_allowed_api_keys"
+    ],
+    "WebUIConfig": [
+      "enabled",
+      "host",
+      "port",
+      "mode",
+      "webui_style",
+      "anti_crawler_mode",
+      "allowed_ips",
+      "trusted_proxies",
+      "trust_xff",
+      "secure_cookie",
+      "enforce_public_outbound_url",
+      "enable_paragraph_content"
+    ],
+    "DatabaseConfig": [
+      "save_binary_data"
+    ],
+    "MCPRootItemConfig": [
+      "enabled",
+      "uri",
+      "name"
+    ],
+    "MCPRootsConfig": [
+      "enable",
+      "items"
+    ],
+    "MCPSamplingConfig": [
+      "enable",
+      "task_name",
+      "include_context_support",
+      "tool_support"
+    ],
+    "MCPElicitationConfig": [
+      "enable",
+      "allow_form",
+      "allow_url"
+    ],
+    "MCPClientConfig": [
+      "client_name",
+      "client_version",
+      "roots",
+      "sampling",
+      "elicitation"
+    ],
+    "MCPAuthorizationConfig": [
+      "mode",
+      "bearer_token"
+    ],
+    "MCPServerItemConfig": [
+      "name",
+      "enabled",
+      "transport",
+      "command",
+      "args",
+      "env",
+      "url",
+      "headers",
+      "http_timeout_seconds",
+      "read_timeout_seconds",
+      "authorization"
+    ],
+    "MCPConfig": [
+      "enable",
+      "client",
+      "servers"
+    ],
+    "CommandPermissionConfig": [
+      "allow_users",
+      "allow_chats"
+    ],
+    "PluginConfig": [
+      "permission",
+      "silent_permission_denied",
+      "command_permissions",
+      "disabled_commands"
+    ],
+    "PluginRuntimeRenderConfig": [
+      "enabled",
+      "browser_ws_endpoint",
+      "executable_path",
+      "browser_install_root",
+      "headless",
+      "launch_args",
+      "concurrency_limit",
+      "startup_timeout_sec",
+      "render_timeout_sec",
+      "auto_download_chromium",
+      "download_connection_timeout_sec",
+      "restart_after_render_count"
+    ],
+    "PluginRuntimeConfig": [
+      "enabled",
+      "health_check_interval_sec",
+      "max_restart_attempts",
+      "runner_spawn_timeout_sec",
+      "hook_blocking_timeout_sec",
+      "ipc_socket_path",
+      "render"
+    ],
+    "Config": [
+      "agent",
+      "bot",
+      "personality",
+      "chat",
+      "capabilities",
+      "experimental",
+      "visual",
+      "expression",
+      "jargon",
+      "a_memorix",
+      "message_receive",
+      "voice",
+      "emoji",
+      "keyword_reaction",
+      "response_post_process",
+      "chinese_typo",
+      "response_splitter",
+      "telemetry",
+      "log",
+      "debug",
+      "maim_message",
+      "webui",
+      "database",
+      "mcp",
+      "plugin",
+      "plugin_runtime"
+    ],
+    "WebServiceConfig": [
+      "adapter",
+      "base_url",
+      "api_key",
+      "server_ref",
+      "timeout",
+      "search_depth",
+      "extract_depth",
+      "category"
+    ],
+    "WebConfig": [
+      "preview_chars",
+      "services"
+    ],
+    "ModelPricePeriod": [
+      "start_time",
+      "end_time",
+      "price_in",
+      "price_out",
+      "cache_price_in"
+    ],
+    "ModelInfo": [
+      "model_type",
+      "model_identifier",
+      "name",
+      "api_provider",
+      "price_in",
+      "cache",
+      "cache_price_in",
+      "price_out",
+      "price_periods",
+      "temperature",
+      "send_temperature",
+      "max_tokens",
+      "force_stream_mode",
+      "visual",
+      "extra_params"
+    ],
+    "WebSearchTaskConfig": [
+      "model_list"
+    ],
+    "TaskConfig": [
+      "model_list",
+      "max_tokens",
+      "temperature",
+      "selection_strategy",
+      "hard_timeout"
+    ],
+    "ModelTaskConfig": [
+      "web_search",
+      "replyer",
+      "planner",
+      "memory",
+      "mid_memory",
+      "utils",
+      "learner",
+      "fast_model",
+      "emoji",
+      "vlm",
+      "voice",
+      "embedding",
+      "image_embedding"
+    ],
+    "APIProvider": [
+      "name",
+      "base_url",
+      "api_key",
+      "client_type",
+      "auth_type",
+      "auth_header_name",
+      "auth_header_prefix",
+      "auth_query_name",
+      "default_headers",
+      "default_query",
+      "organization",
+      "project",
+      "model_list_endpoint",
+      "reasoning_parse_mode",
+      "tool_argument_parse_mode",
+      "max_retry",
+      "timeout",
+      "retry_interval"
+    ],
+    "ModelConfig": [
+      "web",
+      "models",
+      "model_task_config",
+      "api_providers"
+    ]
+  }
+}

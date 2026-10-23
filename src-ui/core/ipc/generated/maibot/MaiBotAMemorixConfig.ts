@@ -3,6 +3,7 @@ import type { MaiBotAMemorixAdvancedConfig } from "./MaiBotAMemorixAdvancedConfi
 import type { MaiBotAMemorixEmbeddingConfig } from "./MaiBotAMemorixEmbeddingConfig";
 import type { MaiBotAMemorixEpisodeConfig } from "./MaiBotAMemorixEpisodeConfig";
 import type { MaiBotAMemorixFilterConfig } from "./MaiBotAMemorixFilterConfig";
+import type { MaiBotAMemorixImageMemoryConfig } from "./MaiBotAMemorixImageMemoryConfig";
 import type { MaiBotAMemorixIntegrationConfig } from "./MaiBotAMemorixIntegrationConfig";
 import type { MaiBotAMemorixMemoryEvolutionConfig } from "./MaiBotAMemorixMemoryEvolutionConfig";
 import type { MaiBotAMemorixPersonProfileConfig } from "./MaiBotAMemorixPersonProfileConfig";
@@ -22,6 +23,10 @@ plugin: MaiBotAMemorixPluginConfig,
  * 控制麦麦在聊天中如何使用长期记忆
  */
 integration: MaiBotAMemorixIntegrationConfig, storage: MaiBotAMemorixStorageConfig, 
+/**
+ * 图片资产留存、图片嵌入和相似内容召回配置
+ */
+image_memory: MaiBotAMemorixImageMemoryConfig, 
 /**
  * 把记忆内容转换为向量时使用的基础设置
  */

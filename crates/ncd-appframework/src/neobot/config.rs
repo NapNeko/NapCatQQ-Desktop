@@ -7,9 +7,8 @@
 //! 只声明**对接与开 WebUI 需要**的键，上游其余几百个配置键原样留在文件里不动
 //! （差量写：`toml_patch::patch` 只改有变化的键，保注释与未知键）。
 //!
-//! 热加载：两份都吃热改。`app/data/config.toml` 改完 `adapter_supervisor` 会
-//! stop → reconfigure → start 重建监听；面板配置由面板自己读。所以两份都标
-//! `hot_reload = true`，改完不必重启实例。
+//! 主配置的 adapter 由 `adapter_supervisor` 在热重载时重建监听。
+//! 面板 host / port 在启动时绑定，上游 `dashboard/hot_reload.py` 将其标为需重启。
 
 use ncd_domain::{AppConfigDocument, AppConfigFormat, AppConfigIssue};
 use ncd_host::{Host, HostPath};
@@ -98,10 +97,11 @@ impl NeoBotInstanceConfig {
             || self.adapter.mode != after.adapter.mode
     }
 
-    /// 面板口变了要重开隧道；OneBot 口变了要重启监听
+    /// 面板监听地址或端口变化需重启；OneBot 口变化要重新建立监听与对接
     pub fn restart_inputs_changed(&self, after: &Self) -> bool {
         self.adapter.reverse_ws_port != after.adapter.reverse_ws_port
             || self.dashboard.port != after.dashboard.port
+            || self.dashboard.host != after.dashboard.host
     }
 
     pub fn validate(&self) -> Vec<AppConfigIssue> {
@@ -170,8 +170,8 @@ fn config_doc(id: &str, rel: &str, format: AppConfigFormat) -> AppConfigDocument
         },
         rel_path: rel.to_string(),
         format,
-        // 两份都吃热改：adapter 由 adapter_supervisor 重建监听，面板自己读
-        hot_reload: true,
+        // 面板 host / port 由 HTTP 服务启动时绑定，改文件不能立即换监听。
+        hot_reload: id == DOC_ADAPTER,
     }
 }
 
@@ -683,7 +683,12 @@ mod tests {
         let mut dash = before.clone();
         dash.dashboard.port = 9999;
         assert!(!before.link_inputs_changed(&dash));
-        assert!(before.restart_inputs_changed(&dash), "换面板口要重开隧道");
+        assert!(before.restart_inputs_changed(&dash), "换面板口需重启");
+
+        let mut host_change = before.clone();
+        host_change.dashboard.host = "0.0.0.0".to_string();
+        assert!(!before.link_inputs_changed(&host_change));
+        assert!(before.restart_inputs_changed(&host_change));
     }
 
     #[test]
@@ -696,7 +701,8 @@ mod tests {
             "app/data/plugins_data/dashboard/config.toml"
         );
         assert!(docs.iter().all(|d| d.format == AppConfigFormat::Toml));
-        assert!(docs.iter().all(|d| d.hot_reload));
+        assert!(docs[0].hot_reload);
+        assert!(!docs[1].hot_reload, "面板监听设置需重启进程");
     }
 
     // ---- 旧版桌面端写进 data/config.toml 的对接，启动前搬到 app/data ----

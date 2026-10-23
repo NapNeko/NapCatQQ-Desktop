@@ -1,3 +1,4 @@
+import type { AstrBotConfigSchema } from '../../core/ipc/generated/domain/AstrBotConfigSchema';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
@@ -135,6 +136,17 @@ export function useAstrBotSubagentTools(instanceId: string, enabled: boolean) {
     return useQuery<string[], Error>({
         queryKey: astrbotToolsKey(instanceId),
         queryFn: () => appFrameworkService.astrbotListSubagentTools(instanceId),
+        enabled,
+        retry: false,
+        staleTime: 30_000,
+    });
+}
+
+/** 元数据按实例取，版本切换或重启后由详情页重新启用；失败时高级页使用内置快照。 */
+export function useAstrBotConfigSchema(instanceId: string, enabled: boolean) {
+    return useQuery<AstrBotConfigSchema, Error>({
+        queryKey: ['astrbotConfigSchema', instanceId],
+        queryFn: () => appFrameworkService.astrbotConfigSchema(instanceId),
         enabled,
         retry: false,
         staleTime: 30_000,

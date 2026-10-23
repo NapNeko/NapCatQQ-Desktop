@@ -2,21 +2,21 @@
 
 export type MaiBotDebugConfig = { 
 /**
+ * 按旧版（0.12.x）的方式组织 replyer 提示词：全部回复指令集中在一份完整模板里，用块占位符填充，群聊/私聊/简短回复各用一套模板，并整段作为一条 user 消息发送。模型名称或标识包含 mai_replier（兼容 mai-replier），或为 v2p1-contract、v2p1-raw 时自动开启且不可关闭，全部移走后自动关闭；其他模型可手动开启。
+ */
+replyer_retro_prompt: boolean, 
+/**
  * 在交互式终端中启用本地消息和指令输入。
  */
 enable_console_input: boolean, 
 /**
- * 在日志或界面中显示麦麦的思考过程。
+ * 在终端显示思考过程大框，不影响推理记录保存和 WebUI 查看。
  */
 show_maisaka_thinking: boolean, 
 /**
- * 允许使用 /clear 清空当前聊天流的 Maisaka 短期历史上下文。
+ * 保存 Planner、工具调用及聊天回想的完整推理记录，供 WebUI 查看，与终端显示独立。
  */
-enable_clear_context_command: boolean, 
-/**
- * 记录回复效果评分，方便观察回复质量。
- */
-enable_reply_effect_tracking: boolean, 
+save_maisaka_reasoning: boolean, 
 /**
  * Prompt 预览里保留图片 base64，便于复现但会占空间。
  */
@@ -28,4 +28,8 @@ record_tool_structured_content: boolean,
 /**
  * 记录模型 prompt cache 统计，用于性能调试。
  */
-enable_llm_cache_stats: boolean, };
+enable_llm_cache_stats: boolean, 
+/**
+ * 跳过插件声明的 Host 和 SDK 版本范围校验，直接加载插件；开启后需重启生效。
+ */
+force_plugin_compatibility: boolean, };

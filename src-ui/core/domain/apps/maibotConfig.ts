@@ -86,7 +86,8 @@ export const MAIBOT_TASK_KEYS = [
     'mid_memory',
     'utils',
     'learner',
-    'expression_use',
+    'fast_model',
+    'image_embedding',
     'emoji',
     'vlm',
     'voice',
@@ -388,6 +389,97 @@ function botRules(bot: MaiBotBotConfigFile, out: Issues) {
     });
 }
 
+function modelPricePeriods(
+    model: MaiBotModelConfigFile['models'][number],
+    path: string,
+    out: Issues,
+) {
+    const intervals: { start: number; end: number; index: number }[] = [];
+    const minute = (value: string): number | null => {
+        if (!/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value)) return null;
+        const [hours, minutes] = value.split(':').map(Number);
+        return hours! * 60 + minutes!;
+    };
+    model.price_periods.forEach((period, i) => {
+        const start = minute(period.start_time);
+        const end = minute(period.end_time);
+        if (start === null || end === null) return;
+        if (start === end) {
+            out.push({
+                path: `${path}/price_periods/${i}/start_time`,
+                message: '价格时段的开始时间和结束时间不能相同',
+            });
+        } else if (start < end) {
+            intervals.push({ start, end, index: i });
+        } else {
+            intervals.push({ start, end: 1440, index: i });
+            if (end > 0) intervals.push({ start: 0, end, index: i });
+        }
+    });
+    intervals.sort((a, b) => a.start - b.start || a.end - b.end);
+    intervals.slice(1).forEach((period, i) => {
+        const previous = intervals[i]!;
+        if (period.start < previous.end)
+            out.push({
+                path: `${path}/price_periods/${period.index}/start_time`,
+                message: `价格时段 ${previous.index + 1} 与 ${period.index + 1} 重叠`,
+            });
+    });
+}
+
+function webRules(models: MaiBotModelConfigFile, out: Issues) {
+    const services = models.web.services;
+    for (const [name, service] of Object.entries(services)) {
+        if (!service) continue;
+        const path = `models/web/services/${name}`;
+        if (!name.trim() || name !== name.trim())
+            out.push({ path, message: '联网服务名称不能为空或包含首尾空格' });
+        if (service.base_url) {
+            let valid = false;
+            try {
+                const url = new URL(service.base_url);
+                valid =
+                    ['http:', 'https:'].includes(url.protocol) &&
+                    !!url.hostname &&
+                    !url.username &&
+                    !url.password &&
+                    !url.search &&
+                    !url.hash &&
+                    !service.base_url.includes('?') &&
+                    !service.base_url.includes('#');
+            } catch {
+                /* 统一报地址错误 */
+            }
+            if (!valid)
+                out.push({
+                    path: `${path}/base_url`,
+                    message: '联网服务地址要是无用户名、密码、查询参数和片段的 HTTP(S) 地址',
+                });
+        }
+        if (service.adapter === 'stepsearch_mcp' && (service.api_key || service.base_url))
+            out.push({
+                path: `${path}/base_url`,
+                message: 'StepSearch MCP 的地址和密钥在 MCP 连接中配置',
+            });
+    }
+    models.model_task_config.web_search.model_list.forEach((name, i) => {
+        const service = services[name];
+        if (!service) {
+            out.push({
+                path: `models/model_task_config/web_search/model_list/${i}`,
+                message: `没有叫 ${JSON.stringify(name)} 的联网服务`,
+            });
+        } else if (service.adapter === 'stepsearch_mcp' && !service.server_ref.trim()) {
+            out.push({
+                path: `models/web/services/${name}/server_ref`,
+                message: '要填写 MCP 服务名称',
+            });
+        } else if (service.adapter !== 'stepsearch_mcp' && !service.api_key.trim()) {
+            out.push({ path: `models/web/services/${name}/api_key`, message: '要填 API Key' });
+        }
+    });
+}
+
 function modelRules(models: MaiBotModelConfigFile, out: Issues) {
     if (!models.api_providers.length)
         out.push({ path: 'models/api_providers', message: '至少要有一个提供商' });
@@ -420,6 +512,7 @@ function modelRules(models: MaiBotModelConfigFile, out: Issues) {
             out.push({ path: `${path}/model_identifier`, message: '要填服务商那边的模型标识' });
         if (!providers.has(m.api_provider))
             out.push({ path: `${path}/api_provider`, message: '选一个已有的提供商' });
+        modelPricePeriods(m, path, out);
     });
     for (const task of MAIBOT_TASK_KEYS) {
         models.model_task_config[task].model_list.forEach((name, j) => {
@@ -458,6 +551,7 @@ export function validateMaiBotConfig(cfg: MaiBotInstanceConfig): AppConfigIssue[
     botRules(cfg.bot, out);
     out.push(...schemaIssues(MODEL_SCHEMA, cfg.models, 'models'));
     modelRules(cfg.models, out);
+    webRules(cfg.models, out);
     const chat = cfg.adapter?.chat;
     if (chat) {
         const lists: [string, string[], string][] = [

@@ -21,6 +21,7 @@ pub use manager::{
     AppManager, AppTerminalContext, BotConfigPort, app_link_connections, upsert_ws_client,
 };
 pub use native_runtime::{APP_PID_FILE, AppLaunchSpec, NativeAppRuntime};
+pub use ncd_appframework::astrbot::AstrBotConfigSchema;
 pub use ncd_appframework::config_backup::{
     FrameworkConfigBackup, FrameworkConfigFile, FrameworkConfigRecovery,
 };

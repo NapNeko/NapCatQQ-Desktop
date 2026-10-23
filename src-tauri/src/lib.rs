@@ -949,6 +949,7 @@ pub fn run() {
             commands::app_framework::submit_app_plugin_op,
             commands::app_framework::set_app_plugin_enabled,
             commands::app_framework::astrbot_dashboard_status,
+            commands::app_framework::astrbot_config_schema,
             commands::app_framework::astrbot_list_personas,
             commands::app_framework::astrbot_upsert_persona,
             commands::app_framework::astrbot_delete_persona,

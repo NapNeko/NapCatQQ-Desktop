@@ -2,6 +2,10 @@
 
 export type MaiBotMaimMessageConfig = { 
 /**
+ * 消息服务总开关；关闭后不启动旧版 WS 和新版 API 服务，重启生效，不影响插件式适配器。
+ */
+enabled: boolean, 
+/**
  * 旧版 WebSocket 服务监听地址；不清楚就保持默认。
  */
 ws_server_host: string, 

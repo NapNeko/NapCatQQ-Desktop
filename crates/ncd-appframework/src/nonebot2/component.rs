@@ -433,7 +433,7 @@ if __name__ == "__main__":
             .await
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .map_err(|e| ActionError::install_step("write-env", e.to_string()))?;
-        let mut env = EnvFile::parse(&text);
+        let mut env = EnvFile::parse_python(&text);
         Self::apply_listen_env(&mut env, self.port);
         host.write_file(&path, env.render().as_bytes()).await?;
         Ok(())
@@ -441,11 +441,11 @@ if __name__ == "__main__":
 
     /// 只补 PORT / HOST;已有 DRIVER(含正向适配器并上的 httpx)不覆盖
     pub fn apply_listen_env(env: &mut EnvFile, port: u16) {
-        if env.get(ENV_DRIVER).is_none_or(|v| v.trim().is_empty()) {
-            env.set(ENV_DRIVER, DRIVER_FASTAPI);
+        if env.get_ci(ENV_DRIVER).is_none_or(|v| v.trim().is_empty()) {
+            env.set_ci(ENV_DRIVER, DRIVER_FASTAPI);
         }
-        env.set(ENV_PORT, &port.to_string());
-        env.set(ENV_HOST, "127.0.0.1");
+        env.set_ci(ENV_PORT, &port.to_string());
+        env.set_ci(ENV_HOST, "127.0.0.1");
     }
 
     /// 从 `uv.lock` 取某包版本：`[[package]]` 块里 `name = "<pkg>"` 之后的 `version = "…"`
@@ -697,13 +697,29 @@ version = "2.4.6"
 
     #[test]
     fn listen_env_keeps_existing_driver() {
-        let mut env = EnvFile::parse("DRIVER=~fastapi+~httpx\nPORT=1\n");
+        let mut env = EnvFile::parse_python("DRIVER=~fastapi+~httpx\nPORT=1\n");
         NoneBot2Component::apply_listen_env(&mut env, 8081);
         assert_eq!(env.get("DRIVER").as_deref(), Some("~fastapi+~httpx"));
         assert_eq!(env.get("PORT").as_deref(), Some("8081"));
         assert_eq!(env.get("HOST").as_deref(), Some("127.0.0.1"));
-        let mut empty = EnvFile::parse("");
+        let mut empty = EnvFile::parse_python("");
         NoneBot2Component::apply_listen_env(&mut empty, 9);
         assert_eq!(empty.get("DRIVER").as_deref(), Some("~fastapi"));
+    }
+    #[test]
+    fn listen_env_preserves_lowercase_client_driver_and_updates_duplicate_ports() {
+        let mut env =
+            EnvFile::parse_python("driver=~fastapi+~httpx\nPORT=1\nport=2\nhost=0.0.0.0\n");
+        NoneBot2Component::apply_listen_env(&mut env, 8081);
+        assert_eq!(env.get_ci(ENV_DRIVER).as_deref(), Some("~fastapi+~httpx"));
+        assert_eq!(env.get_ci(ENV_PORT).as_deref(), Some("8081"));
+        assert_eq!(env.get_ci(ENV_HOST).as_deref(), Some("127.0.0.1"));
+        assert_eq!(
+            env.entries_ci()
+                .iter()
+                .filter(|entry| entry.key.eq_ignore_ascii_case(ENV_PORT))
+                .count(),
+            1
+        );
     }
 }

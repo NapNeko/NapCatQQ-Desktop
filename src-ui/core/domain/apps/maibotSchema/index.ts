@@ -18,6 +18,13 @@ export interface UiField {
     minValue?: number;
     maxValue?: number;
     step?: number;
+    exclusiveMinValue?: number;
+    exclusiveMaxValue?: number;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+    mapValues?: boolean;
+    secret?: boolean;
     'x-widget'?: string;
     'x-option-labels'?: Record<string, string>;
     'x-option-descriptions'?: Record<string, string>;
@@ -111,11 +118,39 @@ export function schemaIssues(
             const here = `${path}/${f.name}`;
             const val = bag[f.name];
             const sub = n.nested?.[f.name];
-            if (sub && Array.isArray(val)) {
+            const length =
+                typeof val === 'string'
+                    ? [...val].length
+                    : Array.isArray(val)
+                      ? val.length
+                      : f.mapValues && val && typeof val === 'object'
+                        ? Object.keys(val).length
+                        : undefined;
+            if (length !== undefined) {
+                if (f.minLength !== undefined && length < f.minLength)
+                    out.push({ path: here, message: `至少 ${f.minLength} 项` });
+                if (f.maxLength !== undefined && length > f.maxLength)
+                    out.push({ path: here, message: `最多 ${f.maxLength} 项` });
+            }
+            if (typeof val === 'string' && f.pattern) {
+                try {
+                    if (!new RegExp(f.pattern).test(val))
+                        out.push({ path: here, message: '格式不正确' });
+                } catch {
+                    /* 上游 Python 专用表达式交给后端检查 */
+                }
+            }
+            if (sub && f.mapValues && val && typeof val === 'object' && !Array.isArray(val)) {
+                Object.entries(val).forEach(([key, item]) => walk(sub, item, `${here}/${key}`));
+            } else if (sub && Array.isArray(val)) {
                 val.forEach((item, i) => walk(sub, item, `${here}/${i}`));
             } else if (sub) {
                 walk(sub, val, here);
             } else if (typeof val === 'number') {
+                if (f.exclusiveMinValue !== undefined && !(val > f.exclusiveMinValue))
+                    out.push({ path: here, message: `要大于 ${fmt(f.exclusiveMinValue)}` });
+                if (f.exclusiveMaxValue !== undefined && !(val < f.exclusiveMaxValue))
+                    out.push({ path: here, message: `要小于 ${fmt(f.exclusiveMaxValue)}` });
                 const lo = f.minValue;
                 const hi = f.maxValue;
                 if (lo !== undefined && hi !== undefined && (val < lo || val > hi)) {
@@ -151,7 +186,7 @@ export function newItemFor(node: UiNode): Bag {
         // 默认 null 的是可选字段，不写就是没设
         if (f.default === null) continue;
         if (f.default !== undefined) out[f.name] = structuredClone(f.default);
-        else if (sub && f.type === 'object') out[f.name] = newItemFor(sub);
+        else if (sub && f.type === 'object' && !f.mapValues) out[f.name] = newItemFor(sub);
         else out[f.name] = zeroOf(f);
     }
     return out;

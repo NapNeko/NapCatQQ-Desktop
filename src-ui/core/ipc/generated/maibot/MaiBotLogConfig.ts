@@ -46,9 +46,25 @@ llm_request_snapshot_limit: number,
  */
 maisaka_prompt_preview_limit: number, 
 /**
- * 每个聊天最多保留多少条回复效果记录。
+ * 启用独立内存诊断日志；最多四个 5 MiB 文件，修改后重启生效。
  */
-maisaka_reply_effect_limit: number, 
+memory_diagnostics_enabled: boolean, 
+/**
+ * 启用 tracemalloc 分配位置对比（每十分钟）；有额外内存和 CPU 开销，排查时开启，重启生效。
+ */
+memory_diagnostics_deep_enabled: boolean, 
+/**
+ * 轻量内存诊断采集间隔（秒，至少 10 秒），修改后重启生效。
+ */
+memory_diagnostics_interval_seconds: number, 
+/**
+ * 是否记录事件循环卡顿；主循环与 WebUI 循环各有一份，用于排查界面卡顿。
+ */
+event_loop_watchdog_enabled: boolean, 
+/**
+ * 事件循环唤醒延迟超过该秒数时记录一条警告日志。
+ */
+event_loop_watchdog_warn_seconds: number, 
 /**
  * 完全不显示日志的第三方库名称列表。
  */

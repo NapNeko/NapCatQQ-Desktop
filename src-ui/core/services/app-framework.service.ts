@@ -1,3 +1,4 @@
+import type { AstrBotConfigSchema } from '../ipc/generated/domain/AstrBotConfigSchema';
 // 应用端框架（Karin 等）IPC。
 // 命令字面量只在此文件出现，后端改命令名、查前端调了哪些命令都只看这一处；浏览器预览走 mock。
 
@@ -363,6 +364,14 @@ export const appFrameworkService = {
             overwrite: overwrite ?? null,
             resource: resource ?? null,
         });
+    },
+
+    astrbotConfigSchema: async (instanceId: string): Promise<AstrBotConfigSchema> => {
+        if (!isTauri) {
+            const { fallbackAstrBotSchema } = await import('../domain/apps/astrbotAdvanced');
+            return fallbackAstrBotSchema();
+        }
+        return invoke<AstrBotConfigSchema>('astrbot_config_schema', { instanceId });
     },
 
     astrbotDashboardStatus: async (instanceId: string): Promise<AstrBotDashboardStatus> => {

@@ -62,7 +62,7 @@ reasoning_parse_mode: string,
  */
 tool_argument_parse_mode: string, 
 /**
- * 最大重试次数 (单个模型API调用失败, 最多重试的次数)
+ * 最大尝试次数 (单个模型API调用失败时, 含首次请求在内最多发送的请求总数, 设为 0 或 1 表示不重试)
  */
 max_retry: number, 
 /**

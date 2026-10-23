@@ -20,4 +20,4 @@ max_refresh_per_cycle: number, refresh_debounce_seconds: number, refresh_queue_i
 /**
  * 证据条数
  */
-top_k_evidence: number, evidence_classification_max_tokens: number, evidence_classification_temperature: number, };
+top_k_evidence: number, evidence_classification_max_tokens: number, };

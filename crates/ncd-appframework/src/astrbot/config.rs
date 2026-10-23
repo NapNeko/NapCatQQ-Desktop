@@ -64,6 +64,12 @@ pub struct AstrBotInstanceConfig {
     pub gates: AstrBotPlatformGates,
     #[serde(default)]
     pub subagent: AstrBotSubagentConfig,
+    /// 未由专页管理的配置。保存时相对 advanced_base_json 做叶节点差量。
+    #[serde(default)]
+    pub advanced_json: String,
+    /// 读取时的高级配置基线；不作为专页字段的写入授权。
+    #[serde(default)]
+    pub advanced_base_json: String,
 }
 
 impl Default for AstrBotOneBotRow {
@@ -94,6 +100,8 @@ impl Default for AstrBotInstanceConfig {
             kb: AstrBotKbBind::default(),
             gates: AstrBotPlatformGates::default(),
             subagent: AstrBotSubagentConfig::default(),
+            advanced_json: String::new(),
+            advanced_base_json: String::new(),
         }
     }
 }
@@ -148,6 +156,8 @@ impl AstrBotInstanceConfig {
             kb: ai::kb_from_root(root),
             gates: ai::gates_from_root(root),
             subagent: ai::subagent_from_root(root),
+            advanced_json: super::advanced::encode(root),
+            advanced_base_json: super::advanced::encode(root),
         }
     }
 
@@ -166,6 +176,27 @@ impl AstrBotInstanceConfig {
             );
         }
         sink.extend(ai::validate_ai(&self.sources, &self.models));
+        for (i, row) in self.subagent.agents.iter().enumerate() {
+            if !row.extra_json.trim().is_empty() {
+                match serde_json::from_str::<Value>(&row.extra_json) {
+                    Ok(value) if value.is_object() => {}
+                    _ => sink.push(
+                        format!("subagent/agents/{i}/extra_json"),
+                        "子代理额外配置必须是有效 JSON 对象",
+                    ),
+                }
+            }
+        }
+        for (path, text) in [
+            ("advanced_json", &self.advanced_json),
+            ("advanced_base_json", &self.advanced_base_json),
+        ] {
+            if !text.trim().is_empty()
+                && let Err(error) = super::advanced::parse(text)
+            {
+                sink.push(path, error.to_string());
+            }
+        }
         sink.into_vec()
     }
 
@@ -246,11 +277,24 @@ pub async fn write_astrbot_config(
     let mut sources = cfg.sources.clone();
     let mut models = cfg.models.clone();
     ai::restore_extras(&root, &mut sources, &mut models);
-    ai::apply_ai_patch(&mut root, &cfg.ai_patch(&sources, &models))
-        .map_err(AppFrameworkError::Integration)?;
+    apply_ai_projection(&mut root, cfg, &sources, &models)?;
 
     save_cmd_config(host, &install_dir, &root, write_project_sidecar(instance)).await?;
     read_astrbot_config(host, &install_dir, instance.id.as_str(), instance.port).await
+}
+
+/// 离线和在线共用的保存顺序：先切换执行器，再写专页的显式所有权，最后只应用高级草稿的实际差量。
+pub fn apply_ai_projection(
+    root: &mut Value,
+    cfg: &AstrBotInstanceConfig,
+    sources: &[AstrBotProviderSource],
+    models: &[AstrBotProviderModel],
+) -> Result<(), AppFrameworkError> {
+    super::advanced::prepare_runner_change(root, &cfg.advanced_base_json, &cfg.advanced_json)?;
+    ai::apply_ai_patch(root, &cfg.ai_patch(sources, models))
+        .map_err(AppFrameworkError::Integration)?;
+    super::advanced::apply(root, &cfg.advanced_base_json, &cfg.advanced_json)?;
+    Ok(())
 }
 
 pub fn apply_onebot_to_root(
@@ -367,6 +411,176 @@ mod tests {
         assert_eq!(cfg.onebot.ws_reverse_token, "tok");
         assert_eq!(cfg.dashboard_port, 6185);
         assert_eq!(cfg.other_platforms, vec!["lark".to_string()]);
+    }
+
+    #[test]
+    fn modern_runner_populates_dedicated_controls_and_advanced_owns_the_remaining_fields() {
+        let root = serde_json::json!({
+            "agent_runner":{"runner_type":"local","config":{
+                "model":{"provider_id":"new/model","request_max_retries":7},
+                "persona":{"persona_id":"friendly","safety_mode":false},
+                "compression":{"keep_recent_ratio":0.2},
+                "misc":{"max_steps":64}
+            }},
+            "provider_tts_settings":{"enable":true,"provider_id":"tts","use_file_service":true}
+        });
+        let cfg = AstrBotInstanceConfig::from_root(&root, "a", 6199);
+        assert_eq!(cfg.ai.default_provider_id, "new/model");
+        assert_eq!(cfg.ai.default_personality, "friendly");
+        assert_eq!(cfg.ai.max_agent_step, 64);
+        let advanced: Value = serde_json::from_str(&cfg.advanced_json).unwrap();
+        assert!(
+            advanced
+                .pointer("/agent_runner/config/model/provider_id")
+                .is_none()
+        );
+        assert_eq!(
+            advanced
+                .pointer("/agent_runner/config/model/request_max_retries")
+                .unwrap(),
+            7
+        );
+        assert_eq!(
+            advanced
+                .pointer("/provider_tts_settings/use_file_service")
+                .unwrap(),
+            true
+        );
+        assert_eq!(cfg.advanced_json, cfg.advanced_base_json);
+    }
+
+    #[test]
+    fn save_pipeline_preserves_unedited_advanced_values_from_the_latest_document() {
+        let before = serde_json::json!({
+            "provider_settings":{"enable":true,"display_reasoning_text":false,"dequeue_context_length":1,"tool_schema_mode":"full","websearch_brave_key":["old"]},
+            "provider_tts_settings":{"enable":false,"provider_id":"","dual_output":false},
+            "platform_settings":{"id_whitelist_log":true}
+        });
+        let mut cfg = AstrBotInstanceConfig::from_root(&before, "a", 6199);
+        cfg.ai.enable = false;
+        let mut edited: Value = serde_json::from_str(&cfg.advanced_json).unwrap();
+        edited["provider_settings"]["websearch_brave_key"] = serde_json::json!(["edited"]);
+        cfg.advanced_json = edited.to_string();
+        let mut current = before.clone();
+        current["provider_settings"]["display_reasoning_text"] = serde_json::json!(true);
+        current["provider_settings"]["dequeue_context_length"] = serde_json::json!(9);
+        current["provider_settings"]["tool_schema_mode"] = serde_json::json!("changed");
+        current["provider_settings"]["upstream_added"] = serde_json::json!({"keep":true});
+        current["provider_tts_settings"]["dual_output"] = serde_json::json!(true);
+        current["platform_settings"]["id_whitelist_log"] = serde_json::json!(false);
+        apply_ai_projection(&mut current, &cfg, &[], &[]).unwrap();
+        assert_eq!(current.pointer("/provider_settings/enable").unwrap(), false);
+        assert_eq!(
+            current
+                .pointer("/provider_settings/display_reasoning_text")
+                .unwrap(),
+            true
+        );
+        assert_eq!(
+            current
+                .pointer("/provider_settings/dequeue_context_length")
+                .unwrap(),
+            9
+        );
+        assert_eq!(
+            current
+                .pointer("/provider_settings/tool_schema_mode")
+                .unwrap(),
+            "changed"
+        );
+        assert_eq!(
+            current
+                .pointer("/provider_settings/upstream_added/keep")
+                .unwrap(),
+            true
+        );
+        assert_eq!(
+            current
+                .pointer("/provider_tts_settings/dual_output")
+                .unwrap(),
+            true
+        );
+        assert_eq!(
+            current
+                .pointer("/platform_settings/id_whitelist_log")
+                .unwrap(),
+            false
+        );
+        assert_eq!(
+            current
+                .pointer("/provider_settings/websearch_brave_key")
+                .unwrap(),
+            &serde_json::json!(["edited"])
+        );
+    }
+
+    #[test]
+    fn save_pipeline_switches_runner_before_applying_this_saves_model_and_persona() {
+        let mut root = serde_json::json!({
+            "provider_settings":{"enable":true},
+            "agent_runner":{"runner_type":"dify","config":{"dify_api_key":"old-secret"}}
+        });
+        let mut cfg = AstrBotInstanceConfig::from_root(&root, "a", 6199);
+        cfg.ai.default_provider_id = "new/model".into();
+        cfg.ai.default_personality = "new-persona".into();
+        cfg.ai.max_context_length = 21;
+        cfg.advanced_json = serde_json::json!({"agent_runner":{"runner_type":"local","config":{
+            "model":{"request_max_retries":7},
+            "compression":{"keep_recent_ratio":0.2}
+        }}})
+        .to_string();
+        apply_ai_projection(&mut root, &cfg, &[], &[]).unwrap();
+        assert_eq!(root.pointer("/agent_runner/runner_type").unwrap(), "local");
+        assert_eq!(
+            root.pointer("/agent_runner/config/model/provider_id")
+                .unwrap(),
+            "new/model"
+        );
+        assert_eq!(
+            root.pointer("/agent_runner/config/persona/persona_id")
+                .unwrap(),
+            "new-persona"
+        );
+        assert_eq!(
+            root.pointer("/agent_runner/config/compression/max_turns")
+                .unwrap(),
+            21
+        );
+        assert_eq!(
+            root.pointer("/agent_runner/config/model/request_max_retries")
+                .unwrap(),
+            7
+        );
+        assert_eq!(
+            root.pointer("/agent_runner/config/compression/keep_recent_ratio")
+                .unwrap(),
+            0.2
+        );
+        assert!(root.pointer("/agent_runner/config/dify_api_key").is_none());
+    }
+
+    #[test]
+    fn full_save_pipeline_cannot_replace_protected_ancestors() {
+        let mut root = serde_json::json!({
+            "dashboard":{"port":6185,"password":"keep"},
+            "provider_settings":{"enable":true},
+            "agent_runner":{"runner_type":"local","config":{"model":{"provider_id":"old"}}}
+        });
+        let mut cfg = AstrBotInstanceConfig::from_root(&root, "a", 6199);
+        cfg.ai.default_provider_id = "selected".into();
+        cfg.advanced_json = serde_json::json!({
+            "dashboard":null, "provider_settings":[], "agent_runner":{"config":{"model":null}}
+        })
+        .to_string();
+        apply_ai_projection(&mut root, &cfg, &[], &[]).unwrap();
+        assert_eq!(root.pointer("/dashboard/port").unwrap(), 6185);
+        assert_eq!(root.pointer("/dashboard/password").unwrap(), "keep");
+        assert_eq!(root.pointer("/provider_settings/enable").unwrap(), true);
+        assert_eq!(
+            root.pointer("/agent_runner/config/model/provider_id")
+                .unwrap(),
+            "selected"
+        );
     }
 
     #[test]

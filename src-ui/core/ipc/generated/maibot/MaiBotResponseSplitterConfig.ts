@@ -2,6 +2,10 @@
 
 export type MaiBotResponseSplitterConfig = { 
 /**
+ * 规则断句或使用 LLM 按语义断句。
+ */
+mode: "rule" | "llm", 
+/**
  * 把过长回复拆成多条发送。
  */
 enable: boolean, 

@@ -12,9 +12,9 @@ expression_checked_only: boolean,
  */
 expression_self_reflect: boolean, 
 /**
- * 表达方式的使用策略：legacy 随手抽取候选，vector_intent 使用表达意图与嵌入召回。
+ * 开启后使用表达意图与嵌入召回，需要配置嵌入模型；关闭时使用随手候选。
  */
-expression_selection_mode: "legacy" | "vector_intent", 
+use_vector_expression: boolean, 
 /**
  * 向量召回使用的表达索引 JSON；相对路径按项目根目录解析。
  */

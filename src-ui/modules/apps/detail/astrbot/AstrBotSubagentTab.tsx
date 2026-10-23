@@ -57,7 +57,11 @@ export const AstrBotSubagentTab: React.FC<{
     const modelLabel = (id: string) => modelItems.find((m) => m.value === id)?.label ?? id;
 
     const commitAgent = (d: AgentDraft) => {
-        const agent = { provider_id: d.agent.provider_id, persona_id: d.agent.persona_id.trim() };
+        const agent = {
+            ...d.agent,
+            provider_id: d.agent.provider_id,
+            persona_id: d.agent.persona_id.trim(),
+        };
         set({
             agents:
                 d.index === null
@@ -76,7 +80,11 @@ export const AstrBotSubagentTab: React.FC<{
             onClick={() =>
                 setAgentDraft({
                     index: null,
-                    agent: { provider_id: modelItems[0]?.value ?? '', persona_id: '' },
+                    agent: {
+                        provider_id: modelItems[0]?.value ?? '',
+                        persona_id: '',
+                        extra_json: '{}',
+                    },
                 })
             }
         >

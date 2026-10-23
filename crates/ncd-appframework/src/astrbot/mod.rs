@@ -1,5 +1,6 @@
 //! AstrBot 适配器：manifest + Component + Integration + 窄配置 + 官方插件店。
 
+mod advanced;
 pub mod ai;
 pub mod api;
 mod component;
@@ -13,6 +14,7 @@ pub mod manifest;
 mod platform;
 pub mod plugin_config;
 mod probe;
+mod runner;
 pub mod runtime;
 pub mod store;
 
@@ -38,8 +40,8 @@ pub use config::{AstrBotInstanceConfig, AstrBotOneBotRow};
 pub use integration::{AstrBotIntegration, join_webui_url};
 pub use manifest::{ASTRBOT_FRAMEWORK_ID, astrbot_manifest};
 pub use runtime::{
-    AstrBotAbconfInfo, AstrBotDashboardGate, AstrBotDashboardStatus, AstrBotKbCreate,
-    AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
+    AstrBotAbconfInfo, AstrBotConfigSchema, AstrBotDashboardGate, AstrBotDashboardStatus,
+    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
 };
 pub use store::{ASTRBOT_PLUGINS_URL, astrbot_plugin_market_urls, parse_astrbot_plugins_json};
 

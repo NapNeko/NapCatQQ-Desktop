@@ -39,6 +39,13 @@ export function useAppConfigForm<F extends AppConfigFramework>(
     const [serverIssues, setServerIssues] = useState<AppConfigIssue[]>([]);
     const [conflict, setConflict] = useState(false);
     const hydratedRevision = useRef<string | null>(null);
+    const instanceScope = useRef({ instanceId, generation: 0 });
+    if (instanceScope.current.instanceId !== instanceId) {
+        instanceScope.current = {
+            instanceId,
+            generation: instanceScope.current.generation + 1,
+        };
+    }
 
     useEffect(() => {
         hydratedRevision.current = null;
@@ -52,9 +59,6 @@ export function useAppConfigForm<F extends AppConfigFramework>(
         () => !!form && !!pristine && JSON.stringify(form) !== JSON.stringify(pristine),
         [form, pristine],
     );
-    const dirtyRef = useRef(dirty);
-    dirtyRef.current = dirty;
-
     useEffect(() => {
         if (!remote.error) return;
         pushErrorBar({
@@ -69,12 +73,12 @@ export function useAppConfigForm<F extends AppConfigFramework>(
         const data = env ? configDataOf(env.config, framework) : null;
         if (!env || !data) return;
         if (hydratedRevision.current === env.revision) return;
-        if (dirtyRef.current && hydratedRevision.current !== null) return;
+        if (dirty && hydratedRevision.current !== null) return;
         hydratedRevision.current = env.revision;
         setFormState(structuredClone(data));
         setPristine(structuredClone(data));
         setServerIssues([]);
-    }, [framework, remote.envelope]);
+    }, [dirty, framework, remote.envelope]);
 
     const setForm = useCallback((next: AppConfigData<F>) => {
         setFormState(next);
@@ -99,11 +103,26 @@ export function useAppConfigForm<F extends AppConfigFramework>(
 
     /** 丢弃本地改动，拉最新 */
     const reloadDiscard = useCallback(async () => {
-        hydratedRevision.current = null;
-        setPristine(null);
+        const generation = instanceScope.current.generation;
+        const loaded = await reload();
+        if (
+            instanceScope.current.generation !== generation ||
+            instanceScope.current.instanceId !== instanceId ||
+            loaded.error ||
+            !loaded.data
+        ) {
+            return;
+        }
+        const data = configDataOf(loaded.data.config, framework);
+        if (!data) return;
+        // 重读结果可能与 query 缓存共用引用，不能只等 envelope 的 effect 再灌表。
+        // 失败时保留草稿与基线，避免尚未读到新配置就把未保存改动标成干净。
+        hydratedRevision.current = loaded.data.revision;
+        setFormState(structuredClone(data));
+        setPristine(structuredClone(data));
+        setServerIssues([]);
         setConflict(false);
-        await reload();
-    }, [reload]);
+    }, [framework, instanceId, reload]);
 
     const dismissConflict = useCallback(() => setConflict(false), []);
 

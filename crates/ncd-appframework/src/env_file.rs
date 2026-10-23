@@ -31,16 +31,34 @@ pub struct EnvEntry {
     pub comment: String,
 }
 
+/// Node dotenv 与 python-dotenv 的引号转义规则不同，不能共用反转义逻辑。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum EnvDialect {
+    #[default]
+    Node,
+    Python,
+}
+
 /// 解析后的 .env 文本（按行保留）
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EnvFile {
     lines: Vec<String>,
+    dialect: EnvDialect,
 }
 
 impl EnvFile {
     pub fn parse(text: &str) -> Self {
         Self {
             lines: text.lines().map(str::to_string).collect(),
+            dialect: EnvDialect::Node,
+        }
+    }
+
+    /// NoneBot 使用 python-dotenv：单双引号内的反斜线按 Python dotenv 规则解码。
+    pub fn parse_python(text: &str) -> Self {
+        Self {
+            dialect: EnvDialect::Python,
+            ..Self::parse(text)
         }
     }
 
@@ -48,7 +66,7 @@ impl EnvFile {
     pub fn get(&self, key: &str) -> Option<String> {
         self.lines.iter().rev().find_map(|line| {
             let (k, v) = split_kv(line)?;
-            (k == key).then(|| unquote(v))
+            (k == key).then(|| unquote(v, self.dialect))
         })
     }
 
@@ -57,21 +75,34 @@ impl EnvFile {
         let want = key.to_ascii_lowercase();
         self.lines.iter().rev().find_map(|line| {
             let (k, v) = split_kv(line)?;
-            (k.eq_ignore_ascii_case(&want)).then(|| unquote(v))
+            (k.eq_ignore_ascii_case(&want)).then(|| unquote(v, self.dialect))
         })
     }
 
-    /// 已有同名键（忽略大小写）则改那一处，避免 `PORT` / `port` 双写
+    /// 已有同名键（忽略大小写）则沿用最后一处的大小写，并移除其它同名键。
     pub fn set_ci(&mut self, key: &str, value: &str) {
         let existing = self.lines.iter().rev().find_map(|line| {
             let (k, _) = split_kv(line)?;
             k.eq_ignore_ascii_case(key).then(|| k.to_string())
         });
-        self.set(existing.as_deref().unwrap_or(key), value);
+        let target = existing.as_deref().unwrap_or(key);
+        self.set(target, value);
+        self.lines.retain(|line| {
+            split_kv(line).is_none_or(|(k, _)| !k.eq_ignore_ascii_case(key) || k == target)
+        });
     }
 
     /// 按文件顺序列出所有键（重复键取最后一处的位置与值），带上一行注释
     pub fn entries(&self) -> Vec<EnvEntry> {
+        self.entries_by_case(false)
+    }
+
+    /// NoneBot Settings 的环境变量键不区分大小写，重复项使用最后一处的值与说明。
+    pub fn entries_ci(&self) -> Vec<EnvEntry> {
+        self.entries_by_case(true)
+    }
+
+    fn entries_by_case(&self, case_insensitive: bool) -> Vec<EnvEntry> {
         let mut out: Vec<EnvEntry> = Vec::new();
         for (i, line) in self.lines.iter().enumerate() {
             let Some((k, v)) = split_kv(line) else {
@@ -79,10 +110,16 @@ impl EnvFile {
             };
             let entry = EnvEntry {
                 key: k.to_string(),
-                value: unquote(v),
+                value: unquote(v, self.dialect),
                 comment: self.comment_above(i),
             };
-            match out.iter_mut().find(|e| e.key == k) {
+            match out.iter_mut().find(|e| {
+                if case_insensitive {
+                    e.key.eq_ignore_ascii_case(k)
+                } else {
+                    e.key == k
+                }
+            }) {
                 Some(existing) => *existing = entry,
                 None => out.push(entry),
             }
@@ -142,13 +179,17 @@ impl EnvFile {
 
     /// 存在则原位替换（多处取最后一处，其余删除），不存在则追加到末尾
     pub fn set(&mut self, key: &str, value: &str) {
-        let rendered = format!("{key}={}", quote_if_needed(value));
+        let rendered = format!("{key}={}", quote_if_needed(value, self.dialect));
         let positions: Vec<usize> = self
             .lines
             .iter()
             .enumerate()
             .filter_map(|(i, line)| split_kv(line).filter(|(k, _)| *k == key).map(|_| i))
             .collect();
+        // 未修改的值保留原始引号、转义和行尾注释；同名重复项仍需收敛。
+        if positions.len() == 1 && self.get(key).as_deref() == Some(value) {
+            return;
+        }
         match positions.split_last() {
             Some((last, earlier)) => {
                 self.lines[*last] = rendered;
@@ -207,29 +248,113 @@ fn split_kv(line: &str) -> Option<(&str, &str)> {
     Some((k, v.trim()))
 }
 
-fn unquote(raw: &str) -> String {
+fn unquote(raw: &str, dialect: EnvDialect) -> String {
     let raw = raw.trim();
-    if raw.len() >= 2 {
-        let bytes = raw.as_bytes();
-        if (bytes[0] == b'"' && bytes[raw.len() - 1] == b'"')
-            || (bytes[0] == b'\'' && bytes[raw.len() - 1] == b'\'')
-        {
-            return raw[1..raw.len() - 1].to_string();
+    if let Some(quote) = raw
+        .chars()
+        .next()
+        .filter(|c| matches!(*c, '"' | '\'') || (*c == '\u{60}' && dialect == EnvDialect::Node))
+    {
+        let mut escaped = false;
+        for (idx, ch) in raw.char_indices().skip(1) {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                continue;
+            }
+            if ch == quote {
+                // dotenv 的裸值分支允许内部未转义引号；只接受后接注释或行尾的闭引号。
+                let suffix = raw[idx + ch.len_utf8()..].trim_start();
+                if dialect == EnvDialect::Node && !suffix.is_empty() && !suffix.starts_with('#') {
+                    continue;
+                }
+                let value = &raw[1..idx];
+                return match dialect {
+                    EnvDialect::Python => decode_python_escapes(value, quote),
+                    EnvDialect::Node if quote == '"' => {
+                        value.replace("\\n", "\n").replace("\\r", "\r")
+                    }
+                    EnvDialect::Node => value.to_string(),
+                };
+            }
         }
     }
-    // 未加引号：去掉行尾注释
-    match raw.find(" #") {
-        Some(idx) => raw[..idx].trim().to_string(),
-        None => raw.to_string(),
-    }
+    let end = raw.char_indices().find_map(|(idx, ch)| {
+        (ch == '#' && (dialect == EnvDialect::Node || raw[..idx].ends_with(char::is_whitespace)))
+            .then_some(idx)
+    });
+    raw[..end.unwrap_or(raw.len())].trim_end().to_string()
 }
 
-fn quote_if_needed(value: &str) -> String {
+fn decode_python_escapes(value: &str, quote: char) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        let decoded = match chars.peek().copied() {
+            Some('\\') => Some('\\'),
+            Some('\'') => Some('\''),
+            Some('"') if quote == '"' => Some('"'),
+            Some('a') if quote == '"' => Some('\u{7}'),
+            Some('b') if quote == '"' => Some('\u{8}'),
+            Some('f') if quote == '"' => Some('\u{c}'),
+            Some('n') if quote == '"' => Some('\n'),
+            Some('r') if quote == '"' => Some('\r'),
+            Some('t') if quote == '"' => Some('\t'),
+            Some('v') if quote == '"' => Some('\u{b}'),
+            _ => None,
+        };
+        match decoded {
+            Some(decoded) => {
+                chars.next();
+                out.push(decoded);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
+fn quote_if_needed(value: &str, dialect: EnvDialect) -> String {
     if value.is_empty() {
         return String::new();
     }
-    if value.contains(char::is_whitespace) || value.contains('#') || value.contains('"') {
-        format!("\"{}\"", value.replace('"', "\\\""))
+    // Node dotenv 不解 \" / \\；JSON 和中间空格可直接裸写，避免引入转义字符。
+    if dialect == EnvDialect::Node
+        && value.contains(['"', '\\'])
+        && !value.contains('#')
+        && !value.contains(['\n', '\r'])
+        && value.trim() == value
+        && !value.starts_with(['"', '\'', '\u{60}'])
+        && !value.ends_with('"')
+    {
+        return value.to_string();
+    }
+    if value.contains(char::is_whitespace)
+        || value.contains('#')
+        || value.contains('"')
+        || value.starts_with('\'')
+    {
+        let escaped = match dialect {
+            // Karin 的 dotenv 仅展开双引号下的 \n / \r，不解 \" 或 \\。
+            EnvDialect::Node => value
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+                .replace('\r', "\\r"),
+            EnvDialect::Python => value
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+                .replace('\r', "\\r")
+                .replace('\t', "\\t"),
+        };
+        format!("\"{escaped}\"")
     } else {
         value.to_string()
     }
@@ -334,5 +459,123 @@ mod tests {
         env.set_with_comment("B", "3", "");
         env.set_with_comment("C", "x", "fresh");
         assert_eq!(env.render(), "# new\nA=9\nB=3\n\n# fresh\nC=x\n");
+    }
+
+    #[test]
+    fn python_values_remain_stable_over_repeated_edits() {
+        let values = [
+            r#"["ws://localhost:3001","ws://localhost:3002"]"#,
+            r#"{"headers":{"Authorization":"Bearer token"},"path":"C:\\new dir\\test.exe"}"#,
+            r#"a "quote" # hash and \slash"#,
+            "line one\nline two\tend\r",
+            "'leading quote",
+        ];
+        for value in values {
+            let mut env = EnvFile::parse_python("# user key\nCUSTOM=old\nUNKNOWN=keep\n");
+            for _ in 0..3 {
+                env.set("CUSTOM", value);
+                env = EnvFile::parse_python(&env.render());
+                assert_eq!(env.get("CUSTOM").as_deref(), Some(value));
+                assert_eq!(env.entries()[0].value, value);
+                assert_eq!(env.get("UNKNOWN").as_deref(), Some("keep"));
+            }
+        }
+    }
+
+    #[test]
+    fn quoted_values_allow_inline_comments_without_losing_hashes() {
+        let text = "A=\"x # y\" # note\nB='x # y' # note\nC=plain\t# note\n";
+        for env in [EnvFile::parse(text), EnvFile::parse_python(text)] {
+            assert_eq!(env.get("A").as_deref(), Some("x # y"));
+            assert_eq!(env.get("B").as_deref(), Some("x # y"));
+            assert_eq!(env.get("C").as_deref(), Some("plain"));
+        }
+    }
+
+    #[test]
+    fn node_and_python_quote_rules_remain_distinct() {
+        let text = r#"A="quote: \"x\", path: C:\\temp"
+B='path: C:\new dir\test.exe'
+"#;
+        let node = EnvFile::parse(text);
+        let python = EnvFile::parse_python(text);
+        assert_eq!(
+            node.get("A").as_deref(),
+            Some(r#"quote: \"x\", path: C:\\temp"#)
+        );
+        assert_eq!(
+            python.get("A").as_deref(),
+            Some(r#"quote: "x", path: C:\temp"#)
+        );
+        assert_eq!(node.get("B"), python.get("B"));
+        assert_eq!(
+            python.get("B").as_deref(),
+            Some(r#"path: C:\new dir\test.exe"#)
+        );
+    }
+
+    #[test]
+    fn unchanged_values_preserve_original_quotes_and_comments() {
+        let text = "# user\nTOKEN='abc # def' # note\nOTHER=keep\n";
+        for mut env in [EnvFile::parse(text), EnvFile::parse_python(text)] {
+            env.set("TOKEN", "abc # def");
+            assert_eq!(env.render(), text);
+        }
+    }
+
+    #[test]
+    fn set_ci_removes_all_case_insensitive_duplicates() {
+        let mut env = EnvFile::parse_python("PORT=1\nOther=keep\nport=2\nPoRt=3\n");
+        env.set_ci("PORT", "8080");
+        assert_eq!(env.render(), "Other=keep\nPoRt=8080\n");
+        assert_eq!(env.get_ci("port").as_deref(), Some("8080"));
+    }
+
+    #[test]
+    fn node_json_and_windows_paths_do_not_gain_escape_characters() {
+        let values = [
+            r#"{"list":["a b","c"],"path":"C:\\new dir\\test.exe"}"#,
+            r#"C:\new dir\test.exe"#,
+        ];
+        for value in values {
+            let mut env = EnvFile::parse("");
+            env.set("CUSTOM", value);
+            assert!(env.render().starts_with(&format!("CUSTOM={value}")));
+            assert_eq!(
+                EnvFile::parse(&env.render()).get("CUSTOM").as_deref(),
+                Some(value)
+            );
+        }
+    }
+
+    #[test]
+    fn entries_ci_uses_last_spelling_value_and_comment() {
+        let env = EnvFile::parse_python("# first\nCUSTOM=one\ncustom=two\n# last\nCUSTOM=three\n");
+        let entries = env.entries_ci();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].key, "CUSTOM");
+        assert_eq!(entries[0].value, "three");
+        assert_eq!(entries[0].comment, "last");
+        assert_eq!(env.entries().len(), 2);
+    }
+
+    #[test]
+    fn python_bare_hash_is_a_value_until_a_whitespace_comment() {
+        let text = "SECRET=#secret\nCUSTOM=prefix#value # trailing note\n";
+        let mut env = EnvFile::parse_python(text);
+        assert_eq!(env.get("SECRET").as_deref(), Some("#secret"));
+        assert_eq!(env.get("CUSTOM").as_deref(), Some("prefix#value"));
+        env.set("SECRET", "#secret");
+        assert_eq!(env.render(), text);
+        let node = EnvFile::parse(text);
+        assert_eq!(node.get("SECRET").as_deref(), Some(""));
+        assert_eq!(node.get("CUSTOM").as_deref(), Some("prefix"));
+    }
+
+    #[test]
+    fn node_accepts_karin_json_with_unescaped_inner_quotes() {
+        let env = EnvFile::parse("CUSTOM=\"{\"key\":\"value\"}\" # comment\nPARTIAL=\"abc\"def\n");
+        assert_eq!(env.get("CUSTOM").as_deref(), Some(r#"{"key":"value"}"#));
+        assert_eq!(env.get("PARTIAL").as_deref(), Some(r#""abc"def"#));
     }
 }
