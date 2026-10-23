@@ -45,6 +45,7 @@ mod helpers;
 mod host_recovery;
 mod listeners;
 mod metrics;
+mod migration;
 mod novnc;
 mod qr_login;
 mod read_only;
@@ -53,6 +54,7 @@ mod remote_network;
 pub mod runtime_gate;
 mod watch_relogin;
 use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
+pub(crate) use migration::migration_protocol_scope;
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
@@ -227,6 +229,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     debug_recovery: host_recovery::DebugRecoveryGates,
     reconcile_locks: crate::bootstrap_reconcile::ReconcileLocks,
     refresh_lock: Arc<Mutex<()>>,
+    migration_reserved: Arc<std::sync::Mutex<migration::MigrationProtocolGate>>,
     /// 和组件执行器共用的远端库存副本;启动路由按它取选中路径,装卸后的重探对这边也生效
     remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
     /// 启动前的框架 / 依赖预检;None 不检查(测试与纯本机 wiring)
@@ -271,6 +274,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             debug_recovery: Arc::clone(&self.debug_recovery),
             reconcile_locks: Arc::clone(&self.reconcile_locks),
             refresh_lock: Arc::clone(&self.refresh_lock),
+            migration_reserved: Arc::clone(&self.migration_reserved),
             remote_inventory: self.remote_inventory.clone(),
             runtime_gate: self.runtime_gate.clone(),
         }
@@ -283,6 +287,14 @@ impl<S: ConfigStore + 'static> BotManager<crate::LocalBotConfigRepo<S>, S> {
         bots: Option<Vec<BotConfig>>,
         write: impl std::future::Future<Output = Result<T, String>>,
     ) -> Result<T, String> {
+        let _migration_guard = if bots.is_some() {
+            Some(
+                self.guard_all_protocol_mutation()
+                    .map_err(|e| e.to_string())?,
+            )
+        } else {
+            None
+        };
         let previous = if bots.is_some() {
             self.repo.list().await.unwrap_or_default()
         } else {
@@ -361,6 +373,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             debug_recovery: Arc::new(Mutex::new(HashMap::new())),
             reconcile_locks: Arc::new(Mutex::new(HashMap::new())),
             refresh_lock: Arc::new(Mutex::new(())),
+            migration_reserved: Arc::new(std::sync::Mutex::new(Default::default())),
             remote_inventory: None,
             runtime_gate: None,
         }
@@ -865,6 +878,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .filter(|c| c.advanced.auto_start)
                 .map(|c| BotId::new(c.bot.qq_id.to_string()))
                 .filter(|id| !skipped.contains(id) && !reconciled.contains(id))
+                .filter(|id| !self.is_protocol_reserved(id))
                 .collect()
         } else {
             Vec::new()
@@ -930,6 +944,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     ) -> Result<BotActorSnapshot, BotManagerError> {
         use crate::config_drift::DriftDecision;
 
+        let _migration_guard = self.guard_protocol_mutation(bot_id)?;
+
         // 把 AcceptExternal 的决议转成 overrides map
         let mut overrides: std::collections::HashMap<String, Vec<(String, serde_json::Value)>> =
             std::collections::HashMap::new();
@@ -982,6 +998,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 启动指定 Bot(无 drift 决议版本,等价于全部 UseInternal)
     /// 前置条件:Actor 已存在且处于可启动状态(Stopped / Crashed)
     pub async fn start_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
+        let _migration_guard = self.guard_protocol_mutation(bot_id)?;
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到启动 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
         let config = self.get_required_bot_config(bot_id).await?;
@@ -1005,6 +1022,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 停止指定 Bot
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
+        let _migration_guard = self.guard_protocol_mutation(bot_id)?;
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
         if let Ok(Some(config)) = self.get_bot_config(bot_id).await {
             self.write_watch_intent(&config, false).await;
@@ -1104,6 +1122,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 错误返回给调用方;RestartHandle::restart_bot impl 会把
     /// 错误转为 DomainEvent::bot_error 发布给前端
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
+        let _migration_guard = self.guard_protocol_mutation(bot_id)?;
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到重启 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
         let snap = handle.snapshot();
@@ -1264,6 +1283,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         overrides: &std::collections::HashMap<String, Vec<(String, serde_json::Value)>>,
     ) -> Result<BotActorSnapshot, BotManagerError> {
         let bot_id = BotId::new(config.bot.qq_id.to_string());
+        let _migration_guard = self.guard_protocol_mutation(&bot_id)?;
         let is_new = {
             let actors = self.actors.read().await;
             !actors.contains_key(&bot_id)
@@ -2293,26 +2313,42 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// - 任何错误只记录到返回值,不会阻塞其它 Bot 的清理
     pub async fn shutdown_all(&self) -> BatchResult {
         info!(target: "ncd_runtime::bot_manager", "应用退出：正在停止所有运行中的 Bot");
-        crate::launch::router::cancel_remote_snowluma_initialization(
-            &self.remote_snowluma_init_locks,
-            None,
-        )
-        .await;
+        // 远端初始化按主机共享，不能取消迁移任务持有的初始化。
+        if !self.has_protocol_reservations() {
+            crate::launch::router::cancel_remote_snowluma_initialization(
+                &self.remote_snowluma_init_locks,
+                None,
+            )
+            .await;
+        }
         let snapshots: Vec<BotActorSnapshot> = {
             let actors = self.actors.read().await;
             actors.values().map(|h| h.snapshot()).collect()
         };
 
-        let active_ids: Vec<BotId> = snapshots
-            .iter()
-            .filter(|s| s.state.is_active() || matches!(s.state, BotActorState::Running))
-            .map(|s| s.bot_id.clone())
-            .collect();
-
         let mut result = BatchResult {
             succeeded: Vec::new(),
             failed: Vec::new(),
         };
+        let mut mutation_guards = Vec::new();
+        let mut shutdown_ids = HashSet::new();
+        for snapshot in &snapshots {
+            if self.is_protocol_reserved(&snapshot.bot_id) {
+                continue;
+            }
+            match self.guard_protocol_mutation(&snapshot.bot_id) {
+                Ok(guard) => {
+                    shutdown_ids.insert(snapshot.bot_id.clone());
+                    mutation_guards.push(guard);
+                }
+                Err(error) => result.failed.push((snapshot.bot_id.clone(), error)),
+            }
+        }
+        let active_ids: Vec<BotId> = snapshots
+            .iter()
+            .filter(|s| shutdown_ids.contains(&s.bot_id) && s.state.is_active())
+            .map(|s| s.bot_id.clone())
+            .collect();
 
         for bot_id in &active_ids {
             match self.stop_bot(bot_id).await {
@@ -2321,24 +2357,30 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // 关闭所有 actor 邮箱,释放后台任务
+        // 保留迁移 Actor；其余 Actor 在计数租约释放前不能被迁移任务认领。
         let handles: Vec<BotActorHandle> = {
             let actors = self.actors.read().await;
-            actors.values().cloned().collect()
+            actors
+                .iter()
+                .filter(|(id, _)| shutdown_ids.contains(*id))
+                .map(|(_, handle)| handle.clone())
+                .collect()
         };
         for handle in handles {
             let _ = handle.shutdown().await;
         }
         {
             let mut actors = self.actors.write().await;
-            actors.clear();
+            actors.retain(|id, _| !shutdown_ids.contains(id));
         }
 
-        // dispose 所有 NapCatLoginPoller,取消其后台轮询任务
+        // 迁移中的登录轮询仍供目标在线检查使用。
         {
             let mut pollers = self.login_pollers.write().await;
-            for (_, poller) in pollers.drain() {
-                poller.dispose();
+            for id in &shutdown_ids {
+                if let Some(poller) = pollers.remove(id) {
+                    poller.dispose();
+                }
             }
         }
 
@@ -2347,7 +2389,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             daemon.shutdown().await;
         }
 
-        self.remote_runtime_sessions().shutdown_all().await;
+        for id in &shutdown_ids {
+            self.remote_runtime_sessions().shutdown_bot(id).await;
+        }
 
         result
     }
@@ -2417,6 +2461,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 停止运行中 Bot 必须发生在 repo.delete 前;否则旧 config/backend identity
     /// 丢失后只能按新默认路由停进程,远端或 Docker 场景会留下真实 runtime
     async fn delete_bot_internal(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
+        let _migration_guard = self.guard_protocol_mutation(bot_id)?;
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "删除 Bot 配置与 Actor");
         let qq_id: u64 = bot_id
             .as_str()

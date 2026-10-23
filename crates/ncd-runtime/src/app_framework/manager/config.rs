@@ -56,6 +56,7 @@ impl AppManager {
         conf_id: Option<String>,
     ) -> Result<AppConfigWriteResult, AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let (instance, adapter, host) = self.config_context(id).await?;
         let before = adapter.read_config(host.as_ref(), &instance).await?;
         if let Some(base) = base_revision.as_deref()
@@ -197,6 +198,7 @@ impl AppManager {
         base_revision: Option<String>,
     ) -> Result<AppConfigText, AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let (instance, adapter, host) = self.config_context(id).await?;
         let before = self
             .typed_snapshot(adapter.as_ref(), host.as_ref(), &instance)

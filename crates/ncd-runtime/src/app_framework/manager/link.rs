@@ -93,6 +93,7 @@ impl AppManager {
         bot_id: &BotId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         self.apply_link_inner(instance_id, bot_id).await
     }
 
@@ -247,6 +248,7 @@ impl AppManager {
         instance_id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         self.unlink_inner(instance_id).await
     }
 

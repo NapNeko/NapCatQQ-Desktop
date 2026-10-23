@@ -82,6 +82,7 @@ use crate::events::{BroadcastEventBus, DomainEvent};
 use crate::metrics::now_ms;
 
 mod astrbot;
+mod bot_migration;
 mod config;
 mod config_backup;
 mod install_dir;
@@ -89,6 +90,7 @@ mod koishi;
 mod lifecycle;
 mod link;
 mod maibot;
+mod migration_apps;
 mod store;
 mod terminal;
 mod tunnel;
@@ -157,6 +159,41 @@ pub trait BotConfigPort: Send + Sync {
     async fn list_bot_configs_for_link(&self) -> Result<Vec<BotConfig>, String> {
         Ok(Vec::new())
     }
+
+    async fn migration_reserve_protocol(
+        &self,
+        _bot_id: &BotId,
+        _reserve: bool,
+    ) -> Result<(), String> {
+        Err("当前协议端不支持迁移锁定".into())
+    }
+
+    async fn migration_upsert_protocol(&self, _config: BotConfig) -> Result<(), String> {
+        Err("当前协议端不支持迁移配置".into())
+    }
+
+    async fn migration_stop_protocol(&self, _bot_id: &BotId) -> Result<(), String> {
+        Err("当前协议端不支持迁移停机".into())
+    }
+
+    async fn migration_start_protocol(&self, _bot_id: &BotId) -> Result<(), String> {
+        Err("当前协议端不支持迁移启动".into())
+    }
+
+    async fn migration_protocol_online(&self, _bot_id: &BotId) -> Result<bool, String> {
+        Err("当前协议端不支持迁移在线检查".into())
+    }
+
+    async fn migration_protocol_running(&self, _bot_id: &BotId) -> Result<bool, String> {
+        Err("当前协议端不支持迁移进程检查".into())
+    }
+
+    async fn migration_protocol_preflight(
+        &self,
+        _config: &BotConfig,
+    ) -> Result<Vec<String>, String> {
+        Err("当前协议端不支持迁移预检".into())
+    }
 }
 
 #[async_trait::async_trait]
@@ -180,6 +217,41 @@ where
 
     async fn list_bot_configs_for_link(&self) -> Result<Vec<BotConfig>, String> {
         self.list_bot_configs().await.map_err(|e| e.to_string())
+    }
+
+    async fn migration_reserve_protocol(
+        &self,
+        bot_id: &BotId,
+        reserve: bool,
+    ) -> Result<(), String> {
+        BotManager::migration_reserve_protocol(self, bot_id, reserve).await
+    }
+
+    async fn migration_upsert_protocol(&self, config: BotConfig) -> Result<(), String> {
+        BotManager::migration_upsert_protocol(self, config).await
+    }
+
+    async fn migration_stop_protocol(&self, bot_id: &BotId) -> Result<(), String> {
+        BotManager::migration_stop_protocol(self, bot_id).await
+    }
+
+    async fn migration_start_protocol(&self, bot_id: &BotId) -> Result<(), String> {
+        BotManager::migration_start_protocol(self, bot_id).await
+    }
+
+    async fn migration_protocol_online(&self, bot_id: &BotId) -> Result<bool, String> {
+        BotManager::migration_protocol_online(self, bot_id).await
+    }
+
+    async fn migration_protocol_running(&self, bot_id: &BotId) -> Result<bool, String> {
+        BotManager::migration_protocol_running(self, bot_id).await
+    }
+
+    async fn migration_protocol_preflight(
+        &self,
+        config: &BotConfig,
+    ) -> Result<Vec<String>, String> {
+        BotManager::migration_protocol_preflight(self, config).await
     }
 }
 
@@ -269,6 +341,7 @@ pub struct AppManager {
     config_write_slots: std::sync::Mutex<HashMap<AppInstanceId, Instant>>,
     /// 配置备份、恢复、起停和写盘共用，恢复期间不能启动框架或插入一次编辑。
     framework_config_gate: tokio::sync::Mutex<()>,
+    migration: bot_migration::MigrationState,
     webui_endpoints: std::sync::Mutex<HashMap<AppInstanceId, WebUiEndpoint>>,
     market_cache: plugin_market::MarketCache,
 }
@@ -300,6 +373,7 @@ impl AppManager {
             install_watches: std::sync::Mutex::new(HashMap::new()),
             config_write_slots: std::sync::Mutex::new(HashMap::new()),
             framework_config_gate: tokio::sync::Mutex::new(()),
+            migration: bot_migration::MigrationState::default(),
             webui_endpoints: std::sync::Mutex::new(HashMap::new()),
             market_cache: plugin_market::MarketCache::default(),
         }

@@ -186,6 +186,9 @@ impl AppManager {
         targets: &[AppInstance],
         servers: Option<&[ServerProfile]>,
     ) -> Result<PreparedFrameworkRestore, String> {
+        self.ensure_framework_write_allowed()
+            .await
+            .map_err(|e| e.to_string())?;
         let current = self.store.list().await;
         let mut result = PreparedFrameworkRestore {
             plan: FrameworkConfigRestorePlan::default(),

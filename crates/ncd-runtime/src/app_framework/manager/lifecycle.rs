@@ -7,6 +7,8 @@ impl AppManager {
         &self,
         req: CreateAppInstanceRequest,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let adapter = self.registry.get(&req.framework_id)?;
         let manifest = adapter.manifest();
         if !manifest.terms.is_empty() && req.accept_terms != Some(true) {
@@ -139,6 +141,8 @@ impl AppManager {
         &self,
         req: ImportAppInstanceRequest,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let adapter = self.registry.get(&req.framework_id)?;
         let manifest = adapter.manifest();
         let placement = AppPlacement::native_for_host(&req.host_id);
@@ -223,10 +227,10 @@ impl AppManager {
             }
         }
 
-        let refreshed = self.refresh_instance(&saved.id).await?;
+        let refreshed = self.refresh_instance_inner(&saved.id).await?;
         // systemd 没停干净就再拉一份，会和 Restart=always 对打
         let current = if probe.ready && refreshed.state != AppInstanceState::Running {
-            match self.start_instance(&refreshed.id).await {
+            match self.start_instance_inner(&refreshed.id).await {
                 Ok(started) => started,
                 Err(_) => self.store.require(&refreshed.id).await?,
             }
@@ -250,6 +254,8 @@ impl AppManager {
         task_id: Option<String>,
         install_version: Option<String>,
     ) -> Result<String, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let components = Arc::clone(self.component_executor()?);
         let instance = self.store.require(id).await?;
         let component_id = self
@@ -521,6 +527,15 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
+        self.refresh_instance_inner(id).await
+    }
+
+    async fn refresh_instance_inner(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         // 手动刷新 / 冷启动对账：用户可能在盘上改过口令或端口
         self.forget_webui_endpoint(id);
@@ -692,7 +707,12 @@ impl AppManager {
     }
 
     async fn reconcile_one(&self, id: &AppInstanceId) {
-        if let Err(e) = self.refresh_instance(id).await {
+        let _config_guard = self.framework_config_gate.lock().await;
+        if let Err(e) = self.ensure_framework_write_allowed().await {
+            tracing::info!(instance = id.as_str(), error = %e, "app reconcile skipped");
+            return;
+        }
+        if let Err(e) = self.refresh_instance_inner(id).await {
             tracing::info!(instance = id.as_str(), error = %e, "app reconcile skipped");
         }
         let current = match self.store.require(id).await {
@@ -744,6 +764,14 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
+        self.start_instance_inner(id).await
+    }
+
+    async fn start_instance_inner(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         if self
             .data_root
@@ -823,6 +851,8 @@ impl AppManager {
 
     /// 用户在同意框里点了同意
     pub async fn accept_terms(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
@@ -834,6 +864,7 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await?;
@@ -909,6 +940,8 @@ impl AppManager {
         id: &AppInstanceId,
         auto_start: bool,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let updated = self.store.update(id, |i| i.auto_start = auto_start).await?;
         self.publish(&updated, "auto_start_changed");
         Ok(updated)
@@ -921,6 +954,7 @@ impl AppManager {
         remove_files: bool,
     ) -> Result<(), AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await;

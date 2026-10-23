@@ -100,6 +100,8 @@ impl AppManager {
         action: AppPluginAction,
         resource: AppStoreResource,
     ) -> Result<String, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let tasks = self.task_queue()?;
         let instance = self.store.require(id).await?;
         // 先连上主机：连不上当场报错，不排一个注定失败的任务
@@ -170,6 +172,7 @@ impl AppManager {
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         if !instance.state.is_installed() {
             return Err(AppFrameworkError::Validation(
@@ -265,6 +268,7 @@ impl AppManager {
         }
 
         let _config_guard = self.framework_config_gate.lock().await;
+        self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         let host = self.resolve_host(&instance.host_id).await?;
         self.prime_live_port(adapter.as_ref(), &instance).await?;
