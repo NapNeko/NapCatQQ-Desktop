@@ -28,7 +28,8 @@ const debugLesson: DemoLesson = {
   reset: () => resetWorkspaceDemo('debugging'),
   actions: [
     async d => {
-      await d.select(d.by('button[aria-label^="当前 Bot："], button[aria-label="选择 Bot"]'), d.text(workspaceBotName, '[role="option"]'));
+      await d.select(d.by('button[aria-label^="当前 Bot："], button[aria-label="选择 Bot"]'), d.text(workspaceBotName, '[role="option"]'),
+        () => document.querySelector('button[aria-label^="当前 Bot："]')?.getAttribute('aria-label')?.includes(workspaceBotName) === true);
       await d.point(d.by('[aria-label="调试目标"]'));
       await d.wait(900);
     },
@@ -102,7 +103,8 @@ const appsLesson: DemoLesson = {
       await d.find(d.text('对接应用端', '[role="dialog"] h2'));
     },
     async d => {
-      await d.select(selectField('协议 Bot'), d.text(workspaceBotName, '[role="option"]'));
+      await d.select(selectField('协议 Bot'), d.text(workspaceBotName, '[role="option"]'),
+        () => selectField('协议 Bot')()?.textContent?.includes(workspaceBotName) === true);
       await d.find(d.text('写入协议 Bot 的连接', '[role="dialog"] p'));
       await d.point(d.text('写入协议 Bot 的连接', '[role="dialog"] p'));
       await d.wait(1700);

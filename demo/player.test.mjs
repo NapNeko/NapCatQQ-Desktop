@@ -301,7 +301,8 @@ test('暂停期间替换控件后，点击和填写只作用于重新取得的�
 test('真实 Radix 菜单在暂停时因 blur 关闭，继续后重新打开并只提交一次选择', async t => {
   const changes = [];
   const player = fixture(t, [async driver => {
-    await driver.select(driver.by('#proxy-mode'), driver.text('manual', '[role="option"]'));
+    await driver.select(driver.by('#proxy-mode'), driver.text('manual', '[role="option"]'),
+      () => player.window.document.getElementById('proxy-mode')?.textContent === 'manual');
   }]);
   const { window } = player;
   const container = window.document.createElement('div');
@@ -320,4 +321,66 @@ test('真实 Radix 菜单在暂停时因 blur 关闭，继续后重新打开并�
   assert.deepEqual(changes, ['manual']);
   assert.equal(window.document.getElementById('proxy-mode').textContent, 'manual');
   assert.equal(player.reports.some(report => report.mode === 'error'), false);
+});
+
+test('后台页面不消耗下拉重试，恢复可见后真实 Radix 继续选择', async t => {
+  const changes = [];
+  const player = fixture(t, [async driver => {
+    await driver.select(driver.by('#proxy-mode'), driver.text('manual', '[role="option"]'),
+      () => player.window.document.getElementById('proxy-mode')?.textContent === 'manual');
+  }]);
+  const { window } = player;
+  let hidden = false;
+  Object.defineProperty(window.document, 'hidden', { configurable: true, get: () => hidden });
+  const container = window.document.createElement('div');
+  window.document.getElementById('root').append(container);
+  player.cleanup(player.api.mountSelectFixture(container, value => changes.push(value)));
+  player.command('play');
+  await until(() => window.document.querySelector('[role="option"][data-demo-target]'), '选项未打开', 4000);
+  hidden = true;
+  window.dispatchEvent(new window.Event('blur'));
+  await until(() => window.document.getElementById('proxy-mode').getAttribute('aria-expanded') === 'false', '失焦未关闭菜单');
+  await delay(1000);
+  assert.deepEqual(changes, []);
+  assert.equal(window.document.getElementById('proxy-mode').getAttribute('aria-expanded'), 'false');
+  assert.equal(player.reports.some(report => report.mode === 'error'), false);
+  hidden = false;
+  await until(() => player.state().mode === 'complete', '恢复可见后未完成', 5000);
+  assert.deepEqual(changes, ['manual']);
+});
+
+test('菜单关闭但值未提交时不会误报成功，也不会在指向阶段夺走焦点', async t => {
+  let selections = 0;
+  const player = fixture(t, [async driver => {
+    await driver.select(driver.by('#choice'), driver.by('#option'),
+      () => player.window.document.getElementById('choice')?.textContent === '已选中');
+  }]);
+  const { document } = player.window;
+  const input = document.createElement('input');
+  const control = document.createElement('button');
+  control.id = 'choice';
+  control.textContent = '请选择';
+  control.setAttribute('aria-expanded', 'false');
+  const option = document.createElement('button');
+  option.id = 'option';
+  option.setAttribute('role', 'option');
+  option.textContent = '已选中';
+  control.addEventListener('click', () => {
+    control.setAttribute('aria-expanded', 'true');
+    document.getElementById('root').append(option);
+  });
+  option.addEventListener('click', () => {
+    selections += 1;
+    if (selections === 2) control.textContent = '已选中';
+    control.setAttribute('aria-expanded', 'false');
+    option.remove();
+  });
+  document.getElementById('root').append(input, control);
+  input.focus();
+  player.command('play');
+  await until(() => control.hasAttribute('data-demo-target'), '未进入指向阶段');
+  assert.equal(document.activeElement, input);
+  await until(() => player.state().mode === 'complete', '未重新提交选项', 6000);
+  assert.equal(selections, 2);
+  assert.equal(control.textContent, '已选中');
 });

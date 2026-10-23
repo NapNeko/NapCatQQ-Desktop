@@ -9,7 +9,7 @@ export type DemoDriver = {
   input(label: string): DemoTarget;
   text(text: string, selector?: string): DemoTarget;
   click(target: DemoTarget): Promise<void>;
-  select(trigger: DemoTarget, option: DemoTarget): Promise<void>;
+  select(trigger: DemoTarget, option: DemoTarget, selected: () => boolean): Promise<void>;
   type(target: DemoTarget, value: string): Promise<void>;
   point(target: DemoTarget): Promise<void>;
   find(target: DemoTarget): Promise<HTMLElement>;

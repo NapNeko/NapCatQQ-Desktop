@@ -38,7 +38,7 @@ export function installPlayer(lesson: DemoLesson, adapter: Adapter) {
   }
 
   async function gate(token: number) {
-    while (!disposed && token === generation && mode === 'paused') await delay(60);
+    while (!disposed && token === generation && (mode === 'paused' || (mode === 'playing' && document.hidden))) await delay(60);
     if (disposed || token !== generation || mode !== 'playing') throw new DOMException('演示已接管', 'AbortError');
   }
 
@@ -81,7 +81,6 @@ export function installPlayer(lesson: DemoLesson, adapter: Adapter) {
       }
       clearHighlight();
       highlighted = element;
-      if (element.matches('button,input,textarea,select,[tabindex]')) element.focus({ preventScroll: true });
       element.setAttribute('data-demo-target', '');
       const rect = element.getBoundingClientRect();
       const x = Math.max(10, Math.min(innerWidth - 60, rect.left + Math.min(rect.width * .65, 200)));
@@ -121,9 +120,10 @@ export function installPlayer(lesson: DemoLesson, adapter: Adapter) {
       await settleClick();
     }
 
-    async function select(trigger: DemoTarget, option: DemoTarget) {
+    async function select(trigger: DemoTarget, option: DemoTarget, selected: () => boolean) {
       await point(trigger);
       for (let attempt = 0; attempt < 6; attempt++) {
+        if (selected()) return;
         await find(trigger, true);
         const control = trigger();
         if (!enabled(control)) continue;
@@ -143,9 +143,10 @@ export function installPlayer(lesson: DemoLesson, adapter: Adapter) {
         press(item);
         await settleClick();
         await until(() => trigger()?.getAttribute('aria-expanded') === 'false', '下拉选择尚未完成');
-        return;
+        // Blur also closes Radix menus; only the selected value proves the click succeeded.
+        if (selected()) return;
       }
-      throw new Error('下拉菜单多次关闭，请继续演示时保持当前窗口可见。');
+      throw new Error('未能完成下拉选择，请重新演示或切换为自己操作。');
     }
 
     async function type(get: DemoTarget, value: string) {

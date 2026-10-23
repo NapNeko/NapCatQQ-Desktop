@@ -130,6 +130,8 @@ function controller(t, { compact = false, reduced = false, count = 1, showcase =
     url: 'https://docs.example.test/', runScripts: 'outside-only', pretendToBeVisual: true,
   });
   const { window } = dom;
+  let focused = true;
+  window.document.hasFocus = () => focused;
   const clock = fakeClock();
   window.setTimeout = clock.setTimeout;
   window.clearTimeout = clock.clearTimeout;
@@ -172,6 +174,11 @@ function controller(t, { compact = false, reduced = false, count = 1, showcase =
     hidden(value) {
       Object.defineProperty(window.document, 'hidden', { configurable: true, value });
       window.document.dispatchEvent(new window.Event('visibilitychange'));
+    },
+    focused(value) {
+      focused = value;
+      window.dispatchEvent(new window.Event(value ? 'focus' : 'blur'));
+      clock.advance(0);
     },
     motion(value) {
       const query = queries.get('(prefers-reduced-motion: reduce)');
@@ -287,6 +294,7 @@ test('展开窗口遮住的自动演示暂停并可回收，收起后才重新�
   demo.report('ready');
   demo.visible(.8, 1);
   const secondRoot = demo.window.document.querySelectorAll('[data-tutorial-demo]')[1];
+  secondRoot.querySelector('[data-fbd-play]').click();
   demo.report('ready', secondRoot.querySelector('iframe').contentWindow);
   assert.equal(secondRoot.dataset.mode, 'playing');
   demo.click('expand');
@@ -295,7 +303,83 @@ test('展开窗口遮住的自动演示暂停并可回收，收起后才重新�
   assert.equal(secondRoot.dataset.mode, 'idle');
   assert.equal(demo.root.dataset.mode, 'playing');
   demo.click('expand');
+  assert.equal(secondRoot.dataset.mode, 'idle');
+  demo.visible(0);
+  demo.clock.advance(0);
   assert.equal(secondRoot.dataset.mode, 'loading');
+});
+
+test('同时可见的预览只有一个播放，主动播放让位且旧状态不能抢回焦点', t => {
+  const demo = controller(t, { count: 2 });
+  demo.visible(.8);
+  demo.connect();
+  demo.report('ready');
+  assert.equal(demo.frame().inert, false);
+  assert.equal(demo.frame().style.pointerEvents, 'none');
+  demo.visible(.8, 1);
+  const second = demo.window.document.querySelectorAll('[data-tutorial-demo]')[1];
+  assert.equal(second.querySelector('iframe').hasAttribute('src'), false);
+  second.querySelector('[data-fbd-play]').click();
+  const secondWindow = second.querySelector('iframe').contentWindow;
+  demo.report('ready', secondWindow);
+  assert.equal(second.dataset.mode, 'playing');
+  assert.equal(demo.root.dataset.mode, 'paused');
+  assert.equal(demo.frame().inert, true);
+  demo.report('playing');
+  assert.equal(demo.root.dataset.mode, 'paused');
+  second.querySelector('[data-fbd-manual]').click();
+  demo.clock.advance(0);
+  assert.equal(second.dataset.mode, 'manual');
+  assert.equal(second.querySelector('iframe').inert, false);
+  assert.equal(second.querySelector('iframe').style.pointerEvents, '');
+  assert.equal(demo.root.dataset.mode, 'paused');
+});
+
+test('窗口失焦暂停，iframe 获焦不暂停，父页面输入时不抢焦点', t => {
+  const demo = controller(t);
+  demo.visible(.8);
+  demo.connect();
+  demo.report('ready');
+  demo.focused(false);
+  assert.equal(demo.root.dataset.mode, 'paused');
+  demo.clock.advance(5_000);
+  assert.equal(demo.root.dataset.mode, 'paused');
+  demo.focused(true);
+  assert.equal(demo.root.dataset.mode, 'playing');
+  demo.window.dispatchEvent(new demo.window.Event('blur'));
+  demo.clock.advance(0);
+  assert.equal(demo.root.dataset.mode, 'playing');
+  const input = demo.window.document.createElement('input');
+  demo.window.document.body.append(input);
+  input.focus();
+  assert.equal(demo.root.dataset.mode, 'paused');
+  assert.equal(demo.window.document.activeElement, input);
+  input.blur();
+  demo.clock.advance(0);
+  assert.equal(demo.root.dataset.mode, 'playing');
+});
+
+test('手动窗口让位后禁用交互，延迟的 manual 回报不能夺回播放权', t => {
+  const demo = controller(t, { count: 2 });
+  demo.visible(.8);
+  demo.click('manual');
+  demo.connect();
+  demo.report('ready');
+  assert.equal(demo.root.dataset.mode, 'manual');
+  assert.equal(demo.frame().inert, false);
+  demo.visible(.8, 1);
+  const second = demo.window.document.querySelectorAll('[data-tutorial-demo]')[1];
+  second.querySelector('[data-fbd-play]').click();
+  demo.report('ready', second.querySelector('iframe').contentWindow);
+  assert.equal(second.dataset.mode, 'playing');
+  assert.equal(demo.frame().inert, true);
+  assert.equal(demo.frame().style.pointerEvents, 'none');
+  demo.report('manual');
+  assert.equal(second.dataset.mode, 'playing');
+  assert.equal(demo.frame().inert, true);
+  demo.click('manual');
+  assert.equal(second.dataset.mode, 'paused');
+  assert.equal(demo.frame().inert, false);
 });
 
 test('滚动时经过演示区不启动真实前端，停稳后才按可见状态加载', t => {

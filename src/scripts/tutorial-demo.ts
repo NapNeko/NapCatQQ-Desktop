@@ -5,6 +5,16 @@ import { isScrollActive, subscribeScrollActivity } from './scroll-activity';
 
 let budgetNotification = 0;
 let expandedDemo: HTMLElement | null = null;
+let playbackOwner: HTMLElement | null = null;
+let playbackNotification = 0;
+
+function notifyPlaybackAvailable() {
+  if (playbackNotification) return;
+  playbackNotification = window.setTimeout(() => {
+    playbackNotification = 0;
+    document.dispatchEvent(new Event('demo:playback-change'));
+  }, 0);
+}
 const residency = new DemoResidency({
   now: () => performance.now(),
   setTimeout: (callback, delay) => window.setTimeout(callback, delay),
@@ -96,6 +106,26 @@ function setupDemo(root: HTMLElement) {
   let automaticScroll = showcase;
   const lease = residency.register(recycle);
 
+  function claimPlayback(force = false) {
+    if (playbackOwner === root) return true;
+    if (playbackOwner && !force) return false;
+    playbackOwner = root;
+    document.dispatchEvent(new Event('demo:playback-change'));
+    return true;
+  }
+
+  function releasePlayback(notify = true) {
+    if (playbackOwner !== root) return;
+    playbackOwner = null;
+    if (notify) notifyPlaybackAvailable();
+  }
+
+  function environmentAvailable() {
+    const editing = document.activeElement?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
+    return !document.hidden && document.hasFocus() && !editing && isVisible()
+      && !(automaticScroll && isScrollActive());
+  }
+
   function syncResidency() {
     lease.update({ visible: (isVisible() && !document.hidden) || expanded, protected: retainedByUser || expanded || !showcase });
   }
@@ -117,6 +147,7 @@ function setupDemo(root: HTMLElement) {
   }
 
   function recycle() {
+    releasePlayback();
     window.clearTimeout(timeout);
     mounted = ready = false;
     pendingIntent = null;
@@ -182,14 +213,18 @@ function setupDemo(root: HTMLElement) {
 
   function setFrameAvailable(available: boolean) {
     cover.hidden = available;
-    const interactive = available && (!showcase || mode === 'manual');
-    if (interactive) frame.removeAttribute('aria-hidden');
+    const interactive = available && (!showcase || (mode === 'manual' && playbackOwner === root));
+    const focusAvailable = available && playbackOwner === root && (mode === 'playing' || mode === 'manual');
+    if (interactive || focusAvailable) frame.removeAttribute('aria-hidden');
     else frame.setAttribute('aria-hidden', 'true');
     frame.tabIndex = interactive ? 0 : -1;
-    frame.inert = !interactive;
+    // Radix portals need programmatic focus even when the preview ignores pointer input.
+    frame.inert = !interactive && !focusAvailable;
+    frame.style.pointerEvents = interactive ? '' : 'none';
   }
 
   function showError(message: string) {
+    releasePlayback();
     window.clearTimeout(timeout);
     pendingIntent = null;
     mode = 'error';
@@ -206,8 +241,10 @@ function setupDemo(root: HTMLElement) {
   }
 
   function beginLoading(intent: Intent | null) {
+    if (intent === 'play' || intent === 'manual') claimPlayback(true);
+    else if (!intent) releasePlayback();
     syncResidency();
-    if (!lease.acquire(explicitlyStarted || retainedByUser || expanded)) return;
+    if (!lease.acquire(explicitlyStarted || retainedByUser || expanded)) { releasePlayback(false); return; }
     replaceFrame();
     ready = false;
     pendingIntent = intent;
@@ -231,7 +268,18 @@ function setupDemo(root: HTMLElement) {
     frame.src = url.href;
   }
 
-  function request(intent: Intent) {
+  function request(intent: Intent, force = false) {
+    if (intent === 'play' && (!environmentAvailable() || !claimPlayback(force))) {
+      autoPaused = true;
+      if (mounted && !ready) pendingIntent = 'pause';
+      return;
+    }
+    if (intent === 'manual' && !claimPlayback(force)) {
+      mode = 'manual';
+      renderControls();
+      return;
+    }
+    else if (intent === 'pause') releasePlayback();
     if (!mounted || mode === 'error' || (intent === 'play' && (mode === 'manual' || mode === 'complete'))) {
       beginLoading(intent);
       return;
@@ -246,9 +294,9 @@ function setupDemo(root: HTMLElement) {
         behavior: reducedMotion.matches ? 'instant' : 'smooth',
       });
     }
-    post(intent);
     mode = intent === 'play' ? 'playing' : intent === 'pause' ? 'paused' : 'manual';
     renderControls();
+    post(intent);
   }
 
   function resize() {
@@ -319,6 +367,8 @@ function setupDemo(root: HTMLElement) {
     previousOverflow = document.documentElement.style.overflow;
     expanded = true;
     expandedDemo = root;
+    claimPlayback(true);
+    renderControls();
     root.dataset.expanded = 'true';
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
@@ -363,6 +413,8 @@ function setupDemo(root: HTMLElement) {
       requestAnimationFrame(() => { if (ready && frame === activeFrame) setFrameAvailable(true); });
     }
     mode = state.mode;
+    if (mode === 'manual' && !showcase && document.activeElement === frame) claimPlayback(true);
+    else if (mode === 'complete') releasePlayback();
     updateStep(state);
     renderControls();
     if (pendingIntent) {
@@ -419,13 +471,13 @@ function setupDemo(root: HTMLElement) {
     explicitlyStarted = true;
     retainedByUser = intent === 'pause';
     syncResidency();
-    request(intent);
+    request(intent, true);
   });
   manualButton.addEventListener('click', () => {
     interact();
     explicitlyStarted = retainedByUser = true;
     syncResidency();
-    request('manual');
+    request('manual', true);
   });
   resetButton.addEventListener('click', () => {
     if (ready) {
@@ -436,7 +488,7 @@ function setupDemo(root: HTMLElement) {
     }
   });
   expandButton.addEventListener('click', () => {
-    const resume = automaticScroll && isScrollActive() && autoPaused && (mode === 'paused' || pendingIntent === 'pause');
+    const resume = autoPaused && (mode === 'paused' || pendingIntent === 'pause');
     interact();
     expanded ? closeExpanded() : openExpanded();
     if (resume && expanded) request('play');
@@ -497,17 +549,27 @@ function setupDemo(root: HTMLElement) {
 
   function pauseWhenUnseen() {
     syncResidency();
-    if (document.hidden || !isVisible() || (automaticScroll && isScrollActive())) {
-      if (mode === 'playing') { autoPaused = showcase; request('pause'); }
-      else if (pendingIntent === 'play') { autoPaused = showcase; pendingIntent = 'pause'; }
-    } else if (showcase && !reducedMotion.matches && (!compactScreen.matches || explicitlyStarted)
+    if (!environmentAvailable() || (playbackOwner && playbackOwner !== root)) {
+      if (mode === 'playing') { autoPaused = true; request('pause'); }
+      else if (pendingIntent === 'play') { autoPaused = true; pendingIntent = 'pause'; releasePlayback(); }
+      else if (!isVisible()) releasePlayback();
+    } else if ((showcase || autoPaused) && !reducedMotion.matches && (!compactScreen.matches || explicitlyStarted)
       && !['pending', 'playing'].includes(document.documentElement.dataset.homeIntro ?? '')) {
       if (!autoStarted) { request('play'); autoStarted = mounted; }
-      else if (autoPaused && mode === 'paused') { autoPaused = false; request('play'); }
+      else if (autoPaused && ['paused', 'idle', 'ready'].includes(mode)) { autoPaused = false; request('play'); }
     }
   }
   document.addEventListener('visibilitychange', pauseWhenUnseen);
   document.addEventListener('demo:expanded-change', pauseWhenUnseen);
+  document.addEventListener('demo:playback-change', () => {
+    if (playbackOwner !== root) { pauseWhenUnseen(); renderControls(); }
+  });
+  document.addEventListener('focusin', pauseWhenUnseen);
+  // Entering an iframe also blurs window; check the whole document after focus settles.
+  const afterFocusChange = () => window.setTimeout(pauseWhenUnseen, 0);
+  document.addEventListener('focusout', afterFocusChange);
+  window.addEventListener('blur', afterFocusChange);
+  window.addEventListener('focus', afterFocusChange);
   new IntersectionObserver((entries) => {
     const ratio = entries[0]?.intersectionRatio ?? 0;
     visibleRatio = ratio;

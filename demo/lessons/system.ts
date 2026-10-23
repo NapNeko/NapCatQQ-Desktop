@@ -144,11 +144,12 @@ const networkLesson: DemoLesson = {
       await driver.point(driver.by('#network-proxy-mode'));
     },
     async driver => {
-      await driver.select(driver.by('#network-proxy-mode'), option('手动配置'));
+      await driver.select(driver.by('#network-proxy-mode'), option('手动配置'),
+        () => document.querySelector('#network-proxy-mode')?.textContent?.includes('手动配置') === true);
       await driver.type(driver.input('代理地址'), 'http://127.0.0.1:7890');
     },
     async driver => {
-      await driver.select(githubRoute, option('仅原站'));
+      await driver.select(githubRoute, option('仅原站'), () => githubRoute()?.getAttribute('title') === '仅原站');
       await driver.until(() => githubRoute()?.getAttribute('title') === '仅原站');
     },
     async driver => {
