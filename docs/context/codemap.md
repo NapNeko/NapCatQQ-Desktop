@@ -127,6 +127,7 @@ flowchart TB
 | 前端页 | `src-ui/modules/bot/BotPage.next.tsx`, `list/`, `log/`, `dialogs/` |
 | 前端服务/hooks | `src-ui/core/services/bot.service.ts`, `src-ui/hooks/bot/` |
 | 配置模型 | `crates/ncd-domain/src/bot_config.rs`, `runtime_scenario.rs` |
+| 服务器间整套迁移 | `ncd-domain/bot_migration.rs` → `app_framework/manager/bot_migration/` + `bot_migration.rs` / `migration_apps.rs` / `migration_transfer.py`；协议端停止核实和租约 `bot_manager/migration.rs`；薄壳 `commands/bot_migration.rs`；UI `BotMigrationDialog` / `useBotMigration`；使用说明 [bot-migration.md](../user/bot-migration.md) |
 | BotBackend trait | `crates/ncd-traits/src/runtime_backend.rs` |
 
 KB：`.claude/kb/desktop-routing.md`, `nc-vs-sl.md`
