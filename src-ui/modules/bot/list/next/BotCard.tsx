@@ -88,6 +88,7 @@ import {
     runtimeTargetTooltip,
 } from '../../../../core/domain/bot/runtime-target';
 import { BotRuntimeMetricsStrip } from './BotRuntimeMetricsStrip';
+import { BotMigrationDialog } from '../../dialogs/BotMigrationDialog';
 
 interface BotCardProps {
     bot: BotActorSnapshot;
@@ -156,6 +157,7 @@ export function BotCard({
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
     const [remoteQrOpen, setRemoteQrOpen] = useState(false);
+    const [migrationOpen, setMigrationOpen] = useState(false);
     const localQrEligible =
         config?.bot.backend_type === 'snowluma' &&
         isRuntimeTargetLocal(config.bot.runtime_target) &&
@@ -607,6 +609,19 @@ export function BotCard({
                                                     type="button"
                                                     className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
                                                     onClick={stopAction(() =>
+                                                        setMigrationOpen(true),
+                                                    )}
+                                                >
+                                                    <Server
+                                                        size={13}
+                                                        className="text-text-tertiary"
+                                                    />
+                                                    <span>迁移到服务器</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
+                                                    onClick={stopAction(() =>
                                                         onViewMetrics(bot.bot_id),
                                                     )}
                                                 >
@@ -787,6 +802,10 @@ export function BotCard({
                     <Settings size={13} />
                     <span>配置参数</span>
                 </ContextMenuItem>
+                <ContextMenuItem onClick={() => setMigrationOpen(true)}>
+                    <Server size={13} />
+                    <span>迁移到服务器</span>
+                </ContextMenuItem>
                 <ContextMenuItem onClick={() => onViewLogs(bot.bot_id)}>
                     <FileText size={13} />
                     <span>查看日志</span>
@@ -831,6 +850,21 @@ export function BotCard({
                 </ContextMenuItem>
             </ContextMenuContent>
 
+            <BotMigrationDialog
+                botId={bot.bot_id}
+                sourceRuntimeTarget={config?.bot.runtime_target ?? 'local'}
+                open={migrationOpen}
+                onOpenChange={setMigrationOpen}
+                onOpenLogin={
+                    hasQrcode
+                        ? () => setQrOpen(true)
+                        : remoteQrAvailable
+                          ? () => setRemoteQrOpen(true)
+                          : novncAvailable && onOpenNovnc
+                            ? () => onOpenNovnc(bot.bot_id)
+                            : undefined
+                }
+            />
             <QrCodeDialog
                 open={qrOpen}
                 onOpenChange={setQrOpen}
