@@ -638,5 +638,12 @@
     "src-ui/modules/apps/detail/maibot/SchemaForm.test.tsx"
   ],
   "regeneration": "python scripts/maibot/codegen.py --src <checkout> --revision c602a2780f4f4dda4a6be46d67abc1cfb1ad420c",
-  "generatorBoundary": "AST白名单仅载入配置模型、Pydantic类型元数据与纯默认文件导出函数；不启动框架、执行数据库迁移或调用网络。"
+  "generatorBoundary": "AST白名单仅载入配置模型、Pydantic类型元数据与纯默认文件导出函数；不启动框架、执行数据库迁移或调用网络。",
+  "validation": {
+    "execution": "GitHub Actions",
+    "generator": "Pinned upstream source regeneration completed; 83 generated type export tests passed.",
+    "frontend": "Configuration regression tests, TypeScript checking and production frontend build executed.",
+    "releaseGate": "Full Windows core/Tauri tests and generated IPC consistency are required before merge and publication.",
+    "evidence": "https://github.com/NapNeko/NapCatQQ-Desktop/pull/161/checks"
+  }
 }

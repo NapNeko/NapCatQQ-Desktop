@@ -175,5 +175,6 @@
       ]
     }
   ],
-  "validation_status": "Prepared for local/CI validation; no test execution while the cloud environment is unavailable."
+  "validation_status": "Executed in GitHub Actions. Related configuration regressions and TypeScript checks passed; final merge and publication require the complete CI gate.",
+  "validation_evidence": "https://github.com/NapNeko/NapCatQQ-Desktop/pull/161/checks"
 }

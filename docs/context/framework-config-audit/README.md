@@ -12,6 +12,8 @@
 | TRSS-Yunzai | 3.1.3，`29bf29ff` | 九份默认配置进入表单，补齐 bot、HTTPS、数据库、Milky、Satori 与 Redis 用户名；按实际加载方式提示重启。 |
 | NeoBot | 2.0.2-a1 / 配置 0.8.0，`3f3b048d881190e69376777223718cec02b36edb` | 动态承接全部本体配置分区，补齐模型参数目录编辑，修复已有值显示与面板重启提示。 |
 
+2026-10-22 23:50 UTC 再次核对七个框架及 OneBot 适配器的默认分支，八个上游 HEAD 均与本表固定基准一致。
+
 ## 保存与兼容性
 
 - dotenv 分别遵循 Node dotenv 与 python-dotenv 方言；未变值保留原文，JSON、引号和反斜线可稳定往返。NoneBot 的变量名、官方别名和覆盖文件按框架规则处理。
@@ -40,3 +42,14 @@ cargo test -p ncd-appframework export_bindings_ -- --test-threads=2
 ```
 
 生成器仅加载受限配置声明或解释白名单 AST，不启动上游应用。运行时元数据优先于离线快照。
+
+## 验证记录
+
+验证在 GitHub Actions 执行，最终结果见 [PR #161 检查记录](https://github.com/NapNeko/NapCatQQ-Desktop/pull/161/checks)。
+
+- 固定上游源码再生成 MaiBot（83 类）与 AstrBot（231 个配置路径、6 组），核对生成结果与 IPC 类型。
+- 执行配置前端回归、TypeScript 检查、生产构建、lint 和格式检查；完整 CI 另运行全部前端、协议探针与外部登录辅助程序测试。
+- dotenv 独立测试 18 项，并与 python-dotenv 1.2.1、Vite 5.2.11 内置 Node dotenv 解析器进行 20 项真实结果对照；时长边界另与 Python 标准库参考结果核对。
+- 完整 CI 在 Windows 执行 Rust core、标准账户 Agent 与 Tauri 壳测试，检查 IPC 类型未漂移。合入与发布以最终提交的完整 CI 成功为门禁。
+
+以上是自动化测试和上游静态配置审计；没有连接用户真实 Bot 实例进行在线运行验证。

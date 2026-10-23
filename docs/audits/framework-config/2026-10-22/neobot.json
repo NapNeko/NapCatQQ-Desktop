@@ -101,13 +101,15 @@
     "Unrelated/future settings remain in the parent object when a params draft is edited."
   ],
   "validation": {
-    "status": "prepared_not_run",
-    "reason": "Managed execution environment is still starting; local exec is unavailable.",
+    "status": "ci_gate",
     "required": [
       "pnpm run test:related src-ui/core/domain/apps/neobotWorkspace.ts src-ui/modules/apps/detail/neobot/NeoBotSchemaFields.tsx src-ui/modules/apps/detail/neobot/NeoBotConfigTab.test.tsx",
       "cargo test -p ncd-appframework neobot::config::tests",
       "pnpm run typecheck",
       "pnpm run fmt:check"
-    ]
+    ],
+    "execution": "GitHub Actions",
+    "evidence": "https://github.com/NapNeko/NapCatQQ-Desktop/pull/161/checks",
+    "note": "Related configuration regressions, TypeScript checks and production frontend build passed. Full Windows core/Tauri tests and generated IPC consistency gate merge and publication."
   }
 }

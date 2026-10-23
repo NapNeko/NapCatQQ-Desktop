@@ -38,9 +38,9 @@ OneBot v12 的 4 个独立命名空间键也提供按需预设：ONEBOT_V12_ACCE
 
 读写兼容：NoneBot2 dotenv 全部使用 Python 方言；overlay 按大小写不敏感规则覆盖 base；JSON 数组/字典可往返；自定义键与注释保留，重复键和系统键冲突可在保存前定位。
 
-## 验证计划
+## 验证记录
 
-Rust NoneBot2 局部测试覆盖核心与 OneBot 字段往返、别名优先与重新对接、未知插件键及注释保留、官方缺省值、大小写 overlay、错误 JSON/URL/非有限超时。前端局部测试覆盖默认值、路径校验、20 项可选预设、不覆盖既有设置及自定义键冲突。发布前需执行真实 typecheck / Rust 检查 / 绑定导出；环境尚不可用时不得声称已验证。
+Rust NoneBot2 局部测试覆盖核心与 OneBot 字段往返、别名优先与重新对接、未知插件键及注释保留、官方缺省值、大小写 overlay、错误 JSON/URL/非有限超时。前端局部测试覆盖默认值、路径校验、20 项可选预设、不覆盖既有设置及自定义键冲突。验证在 GitHub Actions 执行：已完成 TypeScript 检查、dotenv 18 项测试与 20 项真实 Node / Python 解析器对照、时长参考脚本及相关前端回归；完整 Windows Rust / Tauri 测试与 IPC 绑定一致性由发布前 CI 门禁执行。最终结果见 [PR #161 的检查记录](https://github.com/NapNeko/NapCatQQ-Desktop/pull/161/checks)。
 
 追加审查：OneBot URL 使用 URL 真解析检查协议和主机，接受大写协议，拒绝空主机；自定义环境键拒绝首尾空白，避免保留键绕过。安装/对接写入使用大小写不敏感更新，保留已有客户端驱动并去重端口。
 
