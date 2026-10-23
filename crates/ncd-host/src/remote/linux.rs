@@ -1110,7 +1110,7 @@ impl Host for RemoteLinuxHost {
             }
         }
 
-        let bytes = tokio::fs::read(local).await.map_err(HostError::Io)?;
+        let mut source = tokio::fs::File::open(local).await.map_err(HostError::Io)?;
         let sftp = self.sftp_session().await?;
         let mut file = match sftp.create(&remote_str).await {
             Ok(f) => f,
@@ -1122,7 +1122,9 @@ impl Host for RemoteLinuxHost {
                 return Err(err);
             }
         };
-        file.write_all(&bytes).await.map_err(HostError::Io)?;
+        tokio::io::copy(&mut source, &mut file)
+            .await
+            .map_err(HostError::Io)?;
         file.flush().await.map_err(HostError::Io)?;
         Ok(())
     }
@@ -1140,14 +1142,18 @@ impl Host for RemoteLinuxHost {
                 return Err(err);
             }
         };
-        let mut buf = Vec::new();
-        file.read_to_end(&mut buf).await.map_err(HostError::Io)?;
         if let Some(parent) = local.parent() {
             if !parent.as_os_str().is_empty() && !parent.exists() {
                 tokio::fs::create_dir_all(parent).await?;
             }
         }
-        tokio::fs::write(local, buf).await.map_err(HostError::Io)?;
+        let mut destination = tokio::fs::File::create(local)
+            .await
+            .map_err(HostError::Io)?;
+        tokio::io::copy(&mut file, &mut destination)
+            .await
+            .map_err(HostError::Io)?;
+        destination.flush().await.map_err(HostError::Io)?;
         Ok(())
     }
 
