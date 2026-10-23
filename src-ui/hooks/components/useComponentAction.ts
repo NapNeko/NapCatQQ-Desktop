@@ -23,13 +23,19 @@ export interface ComponentActionProgress {
     cancellable: boolean;
 }
 
+export interface ComponentActionOptions {
+    snowlumaLinuxPackage?: SnowLumaLinuxPackage;
+    sudoPassword?: string;
+    rememberSudo?: boolean;
+}
+
 export interface UseComponentActionResult {
     /** 启动一次操作，返回 task_id。 */
     startAction: (
         componentId: ComponentId,
         hostId: string,
         kind: StepKind,
-        options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
+        options?: ComponentActionOptions,
     ) => Promise<string>;
     /** 取消进行中的 task。 */
     cancelAction: (taskId: string) => Promise<void>;
@@ -69,11 +75,11 @@ export function useComponentAction(): UseComponentActionResult {
             componentId: ComponentId,
             hostId: string,
             kind: StepKind,
-            options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
+            options?: ComponentActionOptions,
         ) => {
             const taskId = crypto.randomUUID();
             // 排队提示（等前置 / 等包管理器）由后端入队时以 log 事件推来，这里不猜
-            componentActionStore.started(taskId, componentId, hostId);
+            componentActionStore.started(taskId, componentId, hostId, kind);
             try {
                 // Desktop 自身更新走 ncd-update MSI 路径，不走 DeployPlan/Component::update
                 if (componentId === 'desktop_self' && kind === 'update') {
@@ -94,6 +100,8 @@ export function useComponentAction(): UseComponentActionResult {
                     kind,
                     taskId,
                     options?.snowlumaLinuxPackage,
+                    options?.sudoPassword,
+                    options?.rememberSudo,
                 );
                 return backendTaskId;
             } catch (err) {

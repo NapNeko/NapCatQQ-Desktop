@@ -91,6 +91,16 @@ describe('注册与初始状态', () => {
         componentActionStore.registerTarget('t1', 'napcat', 'host-a');
         expect(taskOf('t1').status).toBe('success');
     });
+
+    it('retains the original action when late target registration arrives', () => {
+        componentActionStore.started('qq-update', 'qq', 'remote:one', 'update');
+        componentActionStore.registerTarget('qq-update', 'qq', 'remote:one');
+        expect(componentActionStore.getSnapshot().taskTargets['qq-update']).toEqual({
+            componentId: 'qq',
+            hostId: 'remote:one',
+            kind: 'update',
+        });
+    });
 });
 
 describe('状态迁移与 linger 清理', () => {

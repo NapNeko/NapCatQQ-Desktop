@@ -19,11 +19,17 @@ import {
     reduceActionProgress,
     type ActionProgressView,
 } from '../../core/domain/components/progress';
-import type { ComponentId, ProgressEvent } from '../../core/ipc/types';
+import type { ComponentId, ProgressEvent, StepKind } from '../../core/ipc/types';
 import {
     scheduleTaskQueueTerminalCleanup,
     trimTerminalTasksWhenAutoCleanupOff,
 } from '../task-queue/taskQueueTerminalLinger';
+
+export interface ComponentActionTarget {
+    componentId: ComponentId;
+    hostId: string;
+    kind?: StepKind;
+}
 
 export interface ComponentActionStoreState {
     /** task_id → 进度视图 */
@@ -37,7 +43,7 @@ export interface ComponentActionStoreState {
      * 标题就只能写"安装失败"四个字、丢失上下文。所以单独再开一张表，活到
      * task 整个被遗忘为止。
      */
-    taskTargets: Record<string, { componentId: ComponentId; hostId: string }>;
+    taskTargets: Record<string, ComponentActionTarget>;
 }
 
 const initialState: ComponentActionStoreState = {
@@ -63,7 +69,7 @@ function clearActiveForTask(taskId: string): void {
     // taskTargets 保留，让任务队列能显示完整标题。
     // 会在后续清理 tasks 时一并删除。
     const cleanedTasks: Record<string, ActionProgressView> = {};
-    const cleanedTargets: Record<string, { componentId: ComponentId; hostId: string }> = {};
+    const cleanedTargets: Record<string, ComponentActionTarget> = {};
     for (const [k, v] of Object.entries(current.tasks)) {
         if (k !== taskId) {
             cleanedTasks[k] = v;
@@ -136,7 +142,12 @@ export const componentActionStore = {
      * 把 task 绑定到组件主机目标。ProgressEvent 可能比 runComponentAction 返回更早到，
      * 所以这里只补 target 映射，不重置已有进度，尤其不能把终态覆盖回 pending。
      */
-    registerTarget(taskId: string, componentId: ComponentId, hostId: string): void {
+    registerTarget(
+        taskId: string,
+        componentId: ComponentId,
+        hostId: string,
+        kind?: StepKind,
+    ): void {
         const current = store.getSnapshot();
         const key = targetKey(componentId, hostId);
         // 同 (component, host) 上一次的 linger 计时器要先清掉，否则新任务起来
@@ -150,14 +161,22 @@ export const componentActionStore = {
         store.setState({
             tasks: { ...current.tasks, [taskId]: progress },
             activeByTarget: { ...current.activeByTarget, [key]: taskId },
-            taskTargets: { ...current.taskTargets, [taskId]: { componentId, hostId } },
+            taskTargets: {
+                ...current.taskTargets,
+                [taskId]: {
+                    ...current.taskTargets[taskId],
+                    componentId,
+                    hostId,
+                    ...(kind === undefined ? {} : { kind }),
+                },
+            },
         });
         if (isTerminal(progress)) onTaskReachedTerminal(taskId);
     },
 
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
-    started(taskId: string, componentId: ComponentId, hostId: string): void {
-        this.registerTarget(taskId, componentId, hostId);
+    started(taskId: string, componentId: ComponentId, hostId: string, kind?: StepKind): void {
+        this.registerTarget(taskId, componentId, hostId, kind);
     },
 
     /** invoke 失败时把任务标为 failed，避免队列里一直 pending。 */

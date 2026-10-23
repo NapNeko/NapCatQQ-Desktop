@@ -55,6 +55,8 @@ export const componentService = {
         kind: StepKind,
         taskId?: string,
         snowlumaLinuxPackage?: SnowLumaLinuxPackage | null,
+        sudoPassword?: string,
+        rememberSudo?: boolean,
     ): Promise<string> => {
         if (isTauri) {
             return invoke<string>('run_component_action', {
@@ -63,6 +65,9 @@ export const componentService = {
                 kind,
                 taskId: taskId ?? null,
                 snowlumaLinuxPackage: snowlumaLinuxPackage ?? null,
+                ...(sudoPassword === undefined
+                    ? {}
+                    : { sudoPassword, rememberSudo: rememberSudo ?? false }),
             });
         }
         return withMockDelay(mockRunAction(componentId, hostId, kind, taskId), 50);

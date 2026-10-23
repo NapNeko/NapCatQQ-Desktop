@@ -28,6 +28,7 @@ import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { CreateInstanceDialog, ImportInstanceDialog } from '../apps';
 import { machineSummary, type ComponentRow } from '../../core/domain/components/types';
+import { qqSudoActionLabel } from '../../core/domain/components/qqProbe';
 import {
     getComponentsHostBridge,
     subscribeComponentsHostBridge,
@@ -51,7 +52,7 @@ export const ComponentsPageNext: React.FC = () => {
     const queryClient = useQueryClient();
     const { view, hosts, isLoading, error, refetch } = useComponents();
     const action = useComponentAction();
-    const { detectQqDependencies, rememberSudoPassword } = useQqDependencyOps();
+    const { detectQqDependencies } = useQqDependencyOps();
     const {
         snapshot: releases,
         refetch: refetchReleases,
@@ -154,7 +155,6 @@ export const ComponentsPageNext: React.FC = () => {
     } = useDockerSudoOps({
         hostNameOf,
         installDocker: dockerHosts.install,
-        rememberSudoPassword,
         startAction: action.startAction,
         onTaskTerminal: action.onTaskTerminal,
         refetch,
@@ -349,12 +349,17 @@ export const ComponentsPageNext: React.FC = () => {
 
             {sudoPrompt && (
                 <SudoPasswordDialog
+                    key={
+                        sudoPrompt.purpose === 'qq_action'
+                            ? sudoPrompt.taskId
+                            : `docker:${sudoPrompt.hostId}`
+                    }
                     hostName={sudoPrompt.hostName}
-                    reason={
-                        sudoPrompt.reason ??
-                        (sudoPrompt.purpose === 'qq_deps'
-                            ? '安装 QQ 系统依赖需要 sudo 权限'
-                            : undefined)
+                    reason={sudoPrompt.reason}
+                    actionLabel={
+                        sudoPrompt.purpose === 'qq_action'
+                            ? qqSudoActionLabel(sudoPrompt.kind)
+                            : '安装 Docker'
                     }
                     isSubmitting={
                         sudoPrompt.purpose === 'docker'
