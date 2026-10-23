@@ -11,6 +11,7 @@ pub mod app_framework;
 pub mod bootstrap;
 pub mod bot_actor;
 pub mod bot_config;
+pub mod bot_migration;
 pub mod bot_runtime_metrics;
 pub mod bot_status;
 pub mod cache_cleanup;
