@@ -1,8 +1,7 @@
 //! QQComponent:QQ runtime 组件
 //!
 //! 跨平台:
-//! - Linux 本地/远端:rootless 安装,对齐 NapCat-Installer 官方一键脚本
-//!   下载 deb/rpm 解压到 <install_base_dir>/opt/QQ/
+//! - Linux 本地/远端:用户目录解包安装；系统 /opt/QQ 交给 dpkg/rpm 更新
 //! - Windows 本地:侧装,不碰用户自己装的系统 QQ。安装包解包到
 //!   <install_base_dir>/versions/<curVersion>/,current.txt 记当前版本;
 //!   detect 先认侧装,没有才回落注册表里的系统 QQ(只读,不卸不改)
@@ -220,6 +219,9 @@ mod windows_tests;
 
 #[path = "qq_windows_remote.rs"]
 mod windows_remote;
+
+#[path = "qq_linux_install.rs"]
+mod linux_install;
 
 async fn commit_managed_qq(
     files: &Path,
@@ -776,15 +778,16 @@ impl QQComponent {
         }))
     }
 
-    /// Linux install:rootless 下载 deb/rpm → 上传 → dpkg-deb -x / rpm2cpio 解包
+    /// Linux 下载 deb/rpm 后按系统布局或用户目录安装。
     async fn install_linux(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
-            message: "check system dependencies".into(),
+            message: "check installation permissions and system dependencies".into(),
         })
         .await;
+        let install_access = self.prepare_linux_install(host).await?;
         self.ensure_linux_dependencies(host, ctx).await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
@@ -793,7 +796,7 @@ impl QQComponent {
             message: "detect package format".into(),
         })
         .await;
-        let pkg_format = self.detect_package_format(host).await?;
+        let pkg_format = self.linux_package_format(host, install_access).await?;
         ctx.info(format!("QQ 安装包格式: {pkg_format:?}")).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -893,32 +896,25 @@ impl QQComponent {
 
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
-            message: "extract QQ".into(),
+            message: if install_access == linux_install::LinuxInstallAccess::Rootless {
+                "extract QQ".into()
+            } else {
+                "install QQ package".into()
+            },
         })
         .await;
-        host.create_dir_all(&self.install_base_dir).await?;
-        let install_base = self.install_base_dir.as_posix();
-        let pkg_path = remote_pkg.as_posix();
-        ctx.info(format!("解包 QQ 安装包到 {install_base}")).await;
-
-        let extract_cmd = match pkg_format {
-            PackageFormat::Deb => HostCommand::new("dpkg-deb")
-                .arg("-x")
-                .arg(pkg_path)
-                .arg(install_base),
-            PackageFormat::Rpm => HostCommand::new("sh").arg("-c").arg(format!(
-                "rpm2cpio {} | (cd {} && cpio -idm)",
-                BashShell.escape(pkg_path),
-                BashShell.escape(install_base)
-            )),
-        };
-        let out = host.run_to_string(extract_cmd).await?;
-        if !out.success() {
-            return Err(ActionError::install_step(
-                "extract_qq",
-                format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
-            ));
+        if install_access == linux_install::LinuxInstallAccess::Rootless {
+            host.create_dir_all(&self.install_base_dir).await?;
+            ctx.info(format!(
+                "解包 QQ 安装包到 {}",
+                self.install_base_dir.as_posix()
+            ))
+            .await;
+        } else {
+            ctx.info("通过系统包管理器安装 QQ 到 /opt/QQ").await;
         }
+        self.install_linux_package(host, pkg_format, &remote_pkg, install_access)
+            .await?;
         let _ = host.remove_file(&remote_pkg).await;
         ctx.info(format!(
             "Linux QQ {} 已安装到 {} (source={})",
