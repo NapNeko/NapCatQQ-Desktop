@@ -47,6 +47,7 @@ mod listeners;
 mod metrics;
 mod novnc;
 mod qr_login;
+mod read_only;
 mod refresh;
 mod remote_network;
 pub mod runtime_gate;

@@ -58,6 +58,17 @@ impl LazyStore {
             .await
     }
 
+    async fn get_read_only(&self) -> Result<ReadOnlyStore<'_>, String> {
+        // 与导入互斥；冷读取不填充 cell，保留下一次 GUI 初始化的修复和告警。
+        let _gate = self.initialization_gate.lock().await;
+        match self.cell.get() {
+            Some(store) => Ok(ReadOnlyStore::Cached(store)),
+            None => DebugStore::load_read_only(&self.data_root)
+                .await
+                .map(|store| ReadOnlyStore::Cold(Box::new(store))),
+        }
+    }
+
     async fn replace_config_with<R>(
         &self,
         workspace: Option<DebugWorkspace>,
@@ -146,6 +157,22 @@ impl LazyStore {
     }
 }
 
+enum ReadOnlyStore<'a> {
+    Cached(&'a DebugStore),
+    Cold(Box<DebugStore>),
+}
+
+impl std::ops::Deref for ReadOnlyStore<'_> {
+    type Target = DebugStore;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cached(store) => store,
+            Self::Cold(store) => store,
+        }
+    }
+}
+
 /// 历史写入队列；第一次记历史时才建队列和写入任务
 pub(super) struct HistoryQueue {
     tx: OnceLock<mpsc::Sender<DebugHistoryEntry>>,
@@ -213,6 +240,33 @@ async fn write_history(
 }
 
 impl DebugManager {
+    pub async fn workspace_read_only(&self) -> Result<DebugWorkspace, String> {
+        Ok(self.store.get_read_only().await?.workspace().await)
+    }
+
+    pub async fn collections_read_only(&self) -> Result<DebugCollections, String> {
+        Ok(self.store.get_read_only().await?.collections().await)
+    }
+
+    pub async fn history_read_only(
+        &self,
+        query: DebugHistoryQuery,
+    ) -> Result<DebugHistoryPage, String> {
+        self.history_queue.drained().await;
+        Ok(self.store.get_read_only().await?.history(query).await)
+    }
+
+    pub async fn history_entry_read_only(
+        &self,
+        id: &str,
+    ) -> Result<Option<DebugHistoryEntry>, String> {
+        self.store
+            .get_read_only()
+            .await?
+            .history_entry_read_only(id)
+            .await
+    }
+
     pub async fn workspace_snapshot(&self) -> DebugWorkspaceSnapshot {
         self.store.workspace_snapshot().await
     }
@@ -312,6 +366,52 @@ impl DebugManager {
 mod tests {
     use super::*;
     use ncd_traits::{ConfigStore, JsonTransaction};
+
+    #[tokio::test]
+    async fn mcp_cold_read_preserves_files_and_gui_initialization() {
+        let root = tempfile::tempdir().unwrap();
+        let store = LazyStore::new(root.path().to_path_buf());
+        assert_eq!(
+            store.get_read_only().await.unwrap().workspace().await,
+            DebugWorkspace::default()
+        );
+        assert!(!root.path().join(DIR_NAME).exists());
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        let workspace = DebugWorkspace {
+            selected_bot: Some("12345".into()),
+            ..Default::default()
+        };
+        let bytes = serde_json::to_vec(&workspace).unwrap();
+        std::fs::write(dir.join("workspace.json"), &bytes).unwrap();
+        let orphan = dir.join("workspace.json.tmp-test");
+        std::fs::write(&orphan, b"unfinished").unwrap();
+        assert_eq!(
+            store.get_read_only().await.unwrap().workspace().await,
+            workspace
+        );
+        assert!(store.cell.get().is_none());
+        assert_eq!(std::fs::read(dir.join("workspace.json")).unwrap(), bytes);
+        assert_eq!(std::fs::read(&orphan).unwrap(), b"unfinished");
+        assert_eq!(store.get().await.workspace().await, workspace);
+        assert!(!orphan.exists());
+    }
+
+    #[tokio::test]
+    async fn mcp_cold_read_rejects_corrupt_files_without_quarantining() {
+        for file in ["workspace.json", "collections.json", "history.jsonl"] {
+            let root = tempfile::tempdir().unwrap();
+            let dir = root.path().join(DIR_NAME);
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join(file);
+            std::fs::write(&path, b"corrupt data").unwrap();
+            let store = LazyStore::new(root.path().to_path_buf());
+            assert!(store.get_read_only().await.is_err(), "{file}");
+            assert!(store.cell.get().is_none());
+            assert_eq!(std::fs::read(&path).unwrap(), b"corrupt data");
+            assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        }
+    }
 
     #[tokio::test]
     async fn old_workspace_save_queued_behind_import_is_rejected() {

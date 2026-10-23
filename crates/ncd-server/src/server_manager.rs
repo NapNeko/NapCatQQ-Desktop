@@ -486,6 +486,19 @@ impl ServerManager {
         self.repo.load().await
     }
 
+    /// 查询入口只读已有档案；旧版档案留在原位，避免读取触发迁移写盘。
+    pub async fn list_servers_read_only(&self) -> Vec<ServerProfile> {
+        if let Some(profiles) = read_profiles_file(&self.repo.path).await {
+            return profiles;
+        }
+        for path in &self.repo.legacy_paths {
+            if let Some(profiles) = read_profiles_file(path).await {
+                return profiles;
+            }
+        }
+        Vec::new()
+    }
+
     /// 添加档案时，若本机 OpenSSH known_hosts 已有该主机明文指纹，抄进应用
     /// known_hosts。用户用 ssh 信任过的机器，导入后第一次连接不再弹 TOFU。
     /// 抄不了（哈希主机名 / 没连过）就保持原样，仍走确认框。只按 host 和端口找，

@@ -130,7 +130,6 @@ pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
 };
 pub use bot_actor::{BotActorError, BotActorSnapshot, BotActorState};
-pub use ncd_config::LocalBotConfigRepo;
 pub use bot_manager::auto_restart::{
     PREVIEW_COUNT as AUTO_RESTART_PREVIEW_COUNT, preview_cron as preview_auto_restart_cron,
 };
@@ -185,15 +184,17 @@ pub use ncd_appframework::{
     MaiBotProviderCheck, MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus,
     MaiBotStatsSummary, PackageVersions,
 };
+pub use ncd_config::LocalBotConfigRepo;
+pub use ncd_config::LocalPathProbe;
+pub use ncd_config::{SecretStoreImpl, SystemSecretStore};
 pub use ncd_server::DiscoveredSshHost;
 pub use notify::{
     CompositeOfflineNotifier, DesktopToastSink, LocalHttpServerCandidate,
     NoopOneBotEndpointResolver, OneBotEndpointResolver, OneBotMessenger,
-    SwappableOneBotEndpointResolver, resolve_local_onebot_messenger,
-    send_test_email, send_test_webhook,
+    SwappableOneBotEndpointResolver, resolve_local_onebot_messenger, send_test_email,
+    send_test_webhook,
 };
 pub use onebot_debug::{DebugBotPort, DebugEventSink, DebugManager, DebugStreamSink};
-pub use ncd_config::LocalPathProbe;
 pub use remote::importable_bots::collect_importable_remote_bots;
 pub use remote::inventory::layout_from_selected;
 pub use remote_bot_log_follow::RemoteBotLogFollowRegistry;
@@ -202,7 +203,6 @@ pub use runtime_launch_plan::{
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
     local_qq_source,
 };
-pub use ncd_config::SecretStoreImpl;
 pub use server_manager::{
     AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport,
     ServerCredentialStore, ServerManager, ServerProfile, ServerState,

@@ -14,6 +14,7 @@ pub mod path_probe;
 pub mod renderer;
 pub mod secret_store;
 pub mod store;
+pub mod system_secret_store;
 
 pub use app_migration::{
     APP_SETTINGS_FILE, AppConfigMigrationResult, AppSettingsSeedResult, LEGACY_APP_COMPAT_VERSION,
@@ -36,3 +37,4 @@ pub use renderer::{
 };
 pub use secret_store::SecretStoreImpl;
 pub use store::{LocalConfigStore, prune_json_bak_files, prune_migration_backups};
+pub use system_secret_store::SystemSecretStore;

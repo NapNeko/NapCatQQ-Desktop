@@ -38,6 +38,18 @@ impl<S: ConfigStore + 'static> LocalBotConfigRepo<S> {
         *self.cache.lock().await = None;
     }
 
+    /// 不加载磁盘或迁移旧配置，供禁止隐式凭据写入的只读调用使用。
+    pub async fn get_cached(&self, qq_id: u64) -> Result<Option<BotConfig>, BotConfigError> {
+        let cache = self.cache.lock().await;
+        let bots = cache
+            .as_ref()
+            .ok_or_else(|| BotConfigError::Storage("Bot 配置缓存尚未初始化".to_owned()))?;
+        Ok(bots
+            .iter()
+            .find(|config| config.bot.qq_id == qq_id)
+            .cloned())
+    }
+
     /// Replace an externally committed Bot file without letting a cached read-modify-write overwrite it.
     pub async fn replace_with<T>(
         &self,

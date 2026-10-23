@@ -26,7 +26,9 @@ use ncd_domain::onebot_debug::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{
+    AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter,
+};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -54,6 +56,10 @@ const COMPACT_BACKOFF: usize = 200;
 const HISTORY_RESPONSE_LIMIT: usize = 256 * 1024;
 /// 内存里所有历史回包全文加起来的字节预算，超了从最老的条目开始丢内存里的回包
 const RESPONSE_BUDGET: usize = 32 * 1024 * 1024;
+const READ_ONLY_RESPONSE_BUDGET: usize = 1024 * 1024;
+const READ_ONLY_HISTORY_LINE_LIMIT: u64 = 1024 * 1024;
+const READ_ONLY_HISTORY_SCAN_LIMIT: u64 = 32 * 1024 * 1024;
+const READ_ONLY_HISTORY_RETAINED_LIMIT: usize = 8 * 1024 * 1024;
 const HISTORY_PAGE_MAX: u32 = 200;
 
 /// rename 失败后的重试：Windows 上杀软 / 索引服务会短暂占着刚写完的文件
@@ -166,6 +172,40 @@ impl DebugStore {
     /// 读三份文件。缺失就用默认值；读不出来的挪开并留提示。本身不创建目录，第一次写才建
     pub async fn load(data_root: &Path) -> Self {
         Self::load_with_budget(data_root, RESPONSE_BUDGET).await
+    }
+
+    /// MCP 冷读取不触发 GUI 的隔离、历史修复和临时文件清理，也不接管其缓存。
+    pub(super) async fn load_read_only(data_root: &Path) -> Result<Self, String> {
+        let dir = data_root.join(DIR_NAME);
+        let workspace = read_json_read_only::<DebugWorkspace>(&dir.join(WORKSPACE_FILE)).await?;
+        let collections =
+            read_json_read_only::<DebugCollections>(&dir.join(COLLECTIONS_FILE)).await?;
+        let (history, history_lines) = match tokio::fs::File::open(dir.join(HISTORY_FILE)).await {
+            Ok(file) => {
+                let scan = scan_history_bounded(file, READ_ONLY_RESPONSE_BUDGET, true)
+                    .await
+                    .map_err(|_| "无法只读加载调用历史".to_owned())?;
+                if scan.bad > 0 {
+                    return Err("调用历史含损坏记录，请在桌面调试台处理".to_owned());
+                }
+                (scan.mem, scan.lines)
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                (HistoryMem::new(READ_ONLY_RESPONSE_BUDGET), 0)
+            }
+            Err(_) => return Err("无法只读加载调用历史".to_owned()),
+        };
+        Ok(Self {
+            dir,
+            workspace: Mutex::new(normalize_workspace(workspace)),
+            collections: Mutex::new(collections),
+            history: Mutex::new(history),
+            notices: StdMutex::new(Vec::new()),
+            write_gate: Mutex::new(WriteState {
+                history_lines,
+                compact_retry_at: 0,
+            }),
+        })
     }
 
     /// 和 `load` 一样，只是回包内存预算可调（测试里调小，免得要写几十 MB 才能碰到淘汰）
@@ -451,6 +491,29 @@ impl DebugStore {
         Some(entry)
     }
 
+    pub(super) async fn history_entry_read_only(
+        &self,
+        id: &str,
+    ) -> Result<Option<DebugHistoryEntry>, String> {
+        let (entry, on_disk) = {
+            let history = self.history.lock().await;
+            let Some(item) = history.entries.iter().rev().find(|m| m.entry.id == id) else {
+                return Ok(None);
+            };
+            (item.entry.clone(), item.response_on_disk)
+        };
+        if !on_disk {
+            return Ok(Some(entry));
+        }
+        // GUI 缓存已加载也不能让 MCP 的磁盘补读绕过行与扫描上限。
+        let _gate = self.write_gate.lock().await;
+        let full = read_history_entry_bounded(&self.path(HISTORY_FILE), id)
+            .await
+            .map_err(|_| "调用历史全文不可读、损坏或超过只读加载限制".to_owned())?
+            .ok_or_else(|| "调用历史全文已不可用，请在桌面调试台处理".to_owned())?;
+        Ok(Some(full))
+    }
+
     /// 清空历史。文件没删掉时不清内存，否则界面上清空了、下次启动又冒出来
     pub async fn clear_history(&self) -> Result<(), String> {
         let mut gate = self.write_gate.lock().await;
@@ -715,6 +778,24 @@ fn is_blank(line: &[u8]) -> bool {
     line.iter().all(u8::is_ascii_whitespace)
 }
 
+async fn read_json_read_only<T: DeserializeOwned + Default>(path: &Path) -> Result<T, String> {
+    let file = match tokio::fs::File::open(path).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(T::default()),
+        Err(_) => return Err("无法只读加载调试台配置".to_owned()),
+    };
+    let mut bytes = Vec::new();
+    file.take(IMPORT_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| "无法只读加载调试台配置".to_owned())?;
+    if bytes.len() as u64 > IMPORT_MAX_BYTES {
+        return Err("调试台配置超过只读加载大小限制".to_owned());
+    }
+    serde_json::from_slice(strip_bom(&bytes))
+        .map_err(|_| "调试台配置损坏，请在桌面调试台处理".to_owned())
+}
+
 async fn read_json<T: DeserializeOwned>(path: &Path) -> Loaded<T> {
     let bytes = match tokio::fs::read(path).await {
         Ok(bytes) => bytes,
@@ -844,6 +925,14 @@ struct HistoryScan {
 }
 
 async fn scan_history(file: tokio::fs::File, budget: usize) -> std::io::Result<HistoryScan> {
+    scan_history_bounded(file, budget, false).await
+}
+
+async fn scan_history_bounded(
+    file: tokio::fs::File,
+    budget: usize,
+    read_only: bool,
+) -> std::io::Result<HistoryScan> {
     let mut reader = BufReader::new(file);
     let mut buf = Vec::new();
     let mut scan = HistoryScan {
@@ -857,9 +946,17 @@ async fn scan_history(file: tokio::fs::File, budget: usize) -> std::io::Result<H
         ends_with_newline: true,
     };
     let mut physical = 0usize;
+    let mut scanned_bytes = 0;
+    let mut retained_bytes = 0usize;
+    let mut retained_lines = VecDeque::new();
     loop {
         buf.clear();
-        if reader.read_until(b'\n', &mut buf).await? == 0 {
+        let count = if read_only {
+            read_history_line_bounded(&mut reader, &mut buf, &mut scanned_bytes).await?
+        } else {
+            reader.read_until(b'\n', &mut buf).await?
+        };
+        if count == 0 {
             break;
         }
         physical += 1;
@@ -872,12 +969,26 @@ async fn scan_history(file: tokio::fs::File, budget: usize) -> std::io::Result<H
         scan.lines += 1;
         match serde_json::from_slice::<DebugHistoryEntry>(line) {
             Ok(entry) => {
+                if read_only {
+                    // 回包预算不包含 params/error；按完整原始行计费，限制累计保留量。
+                    retained_bytes += count;
+                    retained_lines.push_back(count);
+                    if retained_lines.len() > HISTORY_KEEP {
+                        retained_bytes -= retained_lines.pop_front().unwrap_or(0);
+                    }
+                    if retained_bytes > READ_ONLY_HISTORY_RETAINED_LIMIT {
+                        return Err(std::io::Error::new(
+                            ErrorKind::InvalidData,
+                            "history retained entries exceed read limit",
+                        ));
+                    }
+                }
                 let bytes = entry
                     .response
                     .as_ref()
                     .and_then(serialized_len)
                     .unwrap_or(0);
-                // 每读一条就过一遍预算，峰值内存是预算加一条，而不是整个文件的回包
+                // 每读一条就限制回包预算，不累计整个文件的回包。
                 scan.mem.push(entry, bytes, true);
                 scan.good_count += 1;
                 scan.good_tail.push_back(ordinal);
@@ -895,6 +1006,50 @@ async fn scan_history(file: tokio::fs::File, budget: usize) -> std::io::Result<H
         }
     }
     Ok(scan)
+}
+
+async fn read_history_line_bounded(
+    reader: &mut (impl AsyncBufRead + Unpin),
+    buf: &mut Vec<u8>,
+    scanned_bytes: &mut u64,
+) -> std::io::Result<usize> {
+    let limit = READ_ONLY_HISTORY_LINE_LIMIT
+        .min(READ_ONLY_HISTORY_SCAN_LIMIT.saturating_sub(*scanned_bytes));
+    let count = reader.take(limit + 1).read_until(b'\n', buf).await?;
+    if count as u64 > limit {
+        return Err(std::io::Error::new(
+            ErrorKind::InvalidData,
+            "history line or total scan exceeds read limit",
+        ));
+    }
+    *scanned_bytes += count as u64;
+    Ok(count)
+}
+
+async fn read_history_entry_bounded(
+    path: &Path,
+    id: &str,
+) -> std::io::Result<Option<DebugHistoryEntry>> {
+    let prefix = format!(
+        "{{\"id\":{},",
+        serde_json::to_string(id).map_err(std::io::Error::other)?
+    );
+    let file = tokio::fs::File::open(path).await?;
+    let mut reader = BufReader::new(file);
+    let mut buf = Vec::new();
+    let mut scanned_bytes = 0;
+    loop {
+        buf.clear();
+        if read_history_line_bounded(&mut reader, &mut buf, &mut scanned_bytes).await? == 0 {
+            return Ok(None);
+        }
+        let line = trim_line(&buf);
+        if line.starts_with(prefix.as_bytes()) {
+            return serde_json::from_slice(line)
+                .map(Some)
+                .map_err(|error| std::io::Error::new(ErrorKind::InvalidData, error));
+        }
+    }
 }
 
 /// 在文件里找 `id` 这一条，读出完整记录。本模块写的每一行都以 `{"id":"<id>",` 开头
@@ -1175,6 +1330,126 @@ mod tests {
             text: None,
             limit: 200,
             offset: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_cold_history_read_never_compacts_or_repairs_missing_newline() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut bytes = Vec::new();
+        for index in 0..=HISTORY_COMPACT_AT {
+            if index > 0 {
+                bytes.push(b'\n');
+            }
+            bytes.extend(
+                serde_json::to_vec(&entry(&index.to_string(), "get_status", "1", true)).unwrap(),
+            );
+        }
+        let path = dir.join(HISTORY_FILE);
+        std::fs::write(&path, &bytes).unwrap();
+        let store = DebugStore::load_read_only(root.path()).await.unwrap();
+        assert_eq!(store.history(query()).await.total as usize, HISTORY_KEEP);
+        assert!(
+            store
+                .history_entry(&HISTORY_COMPACT_AT.to_string())
+                .await
+                .is_some()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn mcp_cold_read_bounds_oversized_history_lines_without_repair() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(HISTORY_FILE);
+        let bytes = vec![b' '; READ_ONLY_HISTORY_LINE_LIMIT as usize + 1];
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(DebugStore::load_read_only(root.path()).await.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn mcp_cold_history_bounds_retained_params_without_modifying_file() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(HISTORY_FILE);
+        let mut record = entry("large-params", "send_msg", "1", true);
+        record.response = None;
+        record.params = json!(vec!["a".repeat(60 * 1024); 4]);
+        let mut bytes = Vec::new();
+        let mut index = 0;
+        while bytes.len() <= READ_ONLY_HISTORY_RETAINED_LIMIT {
+            record.id = index.to_string();
+            let line = serde_json::to_vec(&record).unwrap();
+            assert!(line.len() < READ_ONLY_HISTORY_LINE_LIMIT as usize);
+            bytes.extend(line);
+            bytes.push(b'\n');
+            index += 1;
+        }
+        assert!(bytes.len() < READ_ONLY_HISTORY_SCAN_LIMIT as usize);
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(DebugStore::load_read_only(root.path()).await.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
+    fn over_scan_history_payload() -> Vec<u8> {
+        let mut line = vec![b' '; 64 * 1024];
+        *line.last_mut().unwrap() = b'\n';
+        line.repeat(READ_ONLY_HISTORY_SCAN_LIMIT as usize / line.len() + 1)
+    }
+
+    #[tokio::test]
+    async fn mcp_cold_history_bounds_total_scan_without_modifying_file() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(HISTORY_FILE);
+        let bytes = over_scan_history_payload();
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(DebugStore::load_read_only(root.path()).await.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn mcp_warm_history_detail_bounds_disk_lines_and_scan() {
+        for oversized_line in [true, false] {
+            let root = tempfile::tempdir().unwrap();
+            let store = DebugStore::load_with_budget(root.path(), 1).await;
+            let record = entry("cached", "get_status", "1", true);
+            store.append_history(record.clone()).await.unwrap();
+            assert!(store.history.lock().await.entries[0].response_on_disk);
+            assert_eq!(
+                store.history_entry_read_only("cached").await.unwrap(),
+                Some(record.clone())
+            );
+            let path = root.path().join(DIR_NAME).join(HISTORY_FILE);
+            let mut bytes = if oversized_line {
+                vec![b' '; READ_ONLY_HISTORY_LINE_LIMIT as usize + 1]
+            } else {
+                over_scan_history_payload()
+            };
+            bytes.push(b'\n');
+            bytes.extend(serde_json::to_vec(&record).unwrap());
+            bytes.push(b'\n');
+            std::fs::write(&path, &bytes).unwrap();
+            assert!(store.history_entry_read_only("cached").await.is_err());
+            assert_eq!(store.history(query()).await.total, 1);
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+            assert_eq!(
+                std::fs::read_dir(root.path().join(DIR_NAME))
+                    .unwrap()
+                    .count(),
+                1
+            );
         }
     }
 
