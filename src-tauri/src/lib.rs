@@ -426,8 +426,18 @@ pub fn run() {
             .with_component_executor(Arc::clone(&components)),
         )
     };
+    // 迁移恢复先建立主机交接保护，再开放 reconcile / auto_start。
+    if let Err(error) = tauri::async_runtime::block_on(app_manager.recover_bot_migrations()) {
+        tracing::error!(%error, "bot migration recovery failed");
+        desktop_log::write_session_line(
+            "EROR",
+            "ncd::bot_migration",
+            &format!("bot migration recovery failed: {error}"),
+        );
+    }
     let app_manager_reconcile = Arc::clone(&app_manager);
     let app_manager_host_recovery = Arc::clone(&app_manager);
+    let app_manager_migration_monitor = Arc::clone(&app_manager);
 
     let mcp = Arc::new(
         ncd_mcp::McpServer::new(
@@ -722,6 +732,9 @@ pub fn run() {
                         );
                     }
                 }
+                tauri::async_runtime::spawn(
+                    app_manager_migration_monitor.run_bot_migration_monitor(),
+                );
             });
 
             if let Err(err) = commands::window::apply_main_window_startup_geometry(app.handle()) {
@@ -1047,6 +1060,10 @@ pub fn run() {
             commands::deployment_tasks::delete_deployment_task,
             commands::deployment_tasks::clear_finished_deployment_tasks,
             commands::bot::list_bot_snapshots,
+            commands::bot_migration::preview_bot_migration,
+            commands::bot_migration::start_bot_migration,
+            commands::bot_migration::get_bot_migration,
+            commands::bot_migration::rollback_bot_migration,
             commands::bot::refresh_bot_statuses,
             commands::bot::list_importable_remote_bots,
             commands::bot::reconcile_bot_runtimes,
