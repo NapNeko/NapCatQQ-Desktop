@@ -1,19 +1,16 @@
-//! 权限闸：按工具分级决定一次工具调用怎么走。
-//!
-//! 「需确认」用挑战-重放而不是 MCP elicitation：不假设客户端实现了 elicitation，
-//! 任何客户端都能用「带 confirm_token 重放同一调用」完成确认。令牌绑（工具名, 参数指纹），
-//! 一次性、两分钟有效；指纹不含 confirm_token 本身。
+//! 桌面控制的只读权限与一次性调用挑战；挑战不能证明用户已经批准。
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use tokio_util::sync::CancellationToken;
 
 const CHALLENGE_TTL: Duration = Duration::from_secs(120);
 pub(crate) const CHALLENGE_TTL_SECS: u64 = 120;
+const MAX_CHALLENGES: usize = 256;
 
 /// 一次调用的副作用分级。`call_action` 按目录里动作的分级现查，其余工具用静态表
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,11 +23,26 @@ pub(crate) enum ToolSafety {
 /// 工具自带的静态分级；`call_action` 不走这张表（动作的分级在目录里）
 pub(crate) fn static_safety(tool: &str) -> ToolSafety {
     match tool {
-        "list_targets" | "list_channels" | "list_actions" | "describe_action"
-        | "read_events" | "list_receivers" | "get_workspace" | "get_collections"
-        | "query_history" | "get_history_entry" | "server_status"
-        // 取消 / 退订只收掉发起方自己的在途操作，不再产生新的外部效果
-        | "cancel_call" | "unsubscribe_events" => ToolSafety::ReadOnly,
+        "list_targets"
+        | "list_channels"
+        | "list_actions"
+        | "describe_action"
+        | "read_events"
+        | "list_receivers"
+        | "get_workspace"
+        | "get_collections"
+        | "query_history"
+        | "get_history_entry"
+        | "server_status"
+        | "get_security_policy"
+        | "search_actions"
+        | "diagnose_bot"
+        | "get_bot_runtime"
+        | "tail_bot_logs"
+        | "list_app_instances"
+        | "get_app_runtime"
+        | "list_servers"
+        | "list_component_tasks" => ToolSafety::ReadOnly,
         "clear_history" => ToolSafety::Dangerous,
         _ => ToolSafety::SideEffect,
     }
@@ -48,41 +60,164 @@ struct Challenge {
 }
 
 pub(crate) struct GateKeeper {
-    allow_dangerous: AtomicBool,
-    challenges: Mutex<HashMap<String, Challenge>>,
+    state: Mutex<GateState>,
+}
+
+struct GateState {
+    read_only: bool,
+    allow_dangerous: bool,
+    challenges: HashMap<String, Challenge>,
+    subscriptions: HashSet<String>,
+    generation: u64,
+    cancellation: CancellationToken,
+}
+
+#[derive(Clone)]
+pub(crate) struct AuthorizationEpoch {
+    pub generation: u64,
+    cancellation: CancellationToken,
+}
+
+impl AuthorizationEpoch {
+    pub async fn cancelled(&self) {
+        self.cancellation.cancelled().await;
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+}
+
+impl GateState {
+    fn revoke(&mut self) {
+        self.challenges.clear();
+        self.generation = self.generation.wrapping_add(1);
+        self.cancellation.cancel();
+        self.cancellation = CancellationToken::new();
+    }
 }
 
 impl GateKeeper {
     pub fn new() -> Self {
         Self {
-            allow_dangerous: AtomicBool::new(false),
-            challenges: Mutex::new(HashMap::new()),
+            state: Mutex::new(GateState {
+                read_only: true,
+                allow_dangerous: false,
+                challenges: HashMap::new(),
+                subscriptions: HashSet::new(),
+                generation: 0,
+                cancellation: CancellationToken::new(),
+            }),
         }
     }
 
+    #[cfg(test)]
     pub fn set_allow_dangerous(&self, on: bool) {
-        self.allow_dangerous.store(on, Ordering::SeqCst);
+        let mut state = lock(&self.state);
+        if state.allow_dangerous != on {
+            state.allow_dangerous = on;
+            state.revoke();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_read_only(&self, on: bool) {
+        let mut state = lock(&self.state);
+        if state.read_only != on {
+            state.read_only = on;
+            state.revoke();
+        }
+    }
+
+    pub fn set_policy(&self, read_only: bool, allow_dangerous: bool) -> bool {
+        let mut state = lock(&self.state);
+        let changed = state.read_only != read_only || state.allow_dangerous != allow_dangerous;
+        if changed {
+            state.read_only = read_only;
+            state.allow_dangerous = allow_dangerous;
+            state.revoke();
+        }
+        changed
+    }
+
+    pub fn read_only(&self) -> bool {
+        lock(&self.state).read_only
+    }
+
+    pub fn allow_dangerous(&self) -> bool {
+        lock(&self.state).allow_dangerous
+    }
+
+    pub fn reset(&self) {
+        lock(&self.state).revoke();
+    }
+
+    pub fn generation(&self) -> u64 {
+        lock(&self.state).generation
+    }
+
+    pub fn epoch(&self) -> AuthorizationEpoch {
+        let state = lock(&self.state);
+        AuthorizationEpoch {
+            generation: state.generation,
+            cancellation: state.cancellation.clone(),
+        }
+    }
+
+    pub fn register_subscription(&self, id: String, generation: u64) -> Result<(), String> {
+        let mut state = lock(&self.state);
+        if generation != state.generation || state.subscriptions.len() >= 32 {
+            return Err("MCP 订阅已失效或已达32个上限".to_owned());
+        }
+        state.subscriptions.insert(id);
+        Ok(())
+    }
+
+    pub fn remove_subscription(&self, id: &str) -> bool {
+        lock(&self.state).subscriptions.remove(id)
+    }
+
+    pub fn take_subscriptions(&self) -> Vec<String> {
+        lock(&self.state).subscriptions.drain().collect()
     }
 
     /// 带 `confirm_token` 的调用会在这里核销；没带 / 牌不对就只发新牌，不执行
+    #[cfg(test)]
     pub fn decide(&self, tool: &str, safety: ToolSafety, args: &Value) -> Decision {
+        self.decide_at_generation(tool, safety, args, self.generation())
+    }
+
+    pub fn decide_at_generation(
+        &self,
+        tool: &str,
+        safety: ToolSafety,
+        args: &Value,
+        generation: u64,
+    ) -> Decision {
+        let fingerprint = fingerprint(tool, args);
+        let mut state = lock(&self.state);
+        if state.generation != generation {
+            return Decision::Reject {
+                reason: "MCP 权限已改变，请重新发起调用".to_owned(),
+            };
+        }
         match safety {
             ToolSafety::ReadOnly => Decision::Allow,
-            ToolSafety::Dangerous if !self.allow_dangerous.load(Ordering::SeqCst) => {
-                Decision::Reject {
-                    reason: format!(
-                        "危险级操作默认不执行（{tool}）；设置 mcp.allowDangerous 打开后降级为「需确认」"
-                    ),
-                }
-            }
-            _ => self.check_or_issue(tool, args),
+            _ if state.read_only => Decision::Reject {
+                reason: "MCP 当前为只读模式；写操作只能由用户在桌面设置中开启".to_owned(),
+            },
+            ToolSafety::Dangerous if !state.allow_dangerous => Decision::Reject {
+                reason: format!(
+                    "危险级操作默认不执行（{tool}）；设置 mcp.allowDangerous 打开后降级为「需确认」"
+                ),
+            },
+            _ => Self::check_or_issue(&mut state, fingerprint, args),
         }
     }
 
     /// 令牌只认参数完全一致的回放（指纹一致才核销）；过期、串参数、串工具的都换新牌
-    fn check_or_issue(&self, tool: &str, args: &Value) -> Decision {
-        let fingerprint = fingerprint(tool, args);
-        let mut challenges = lock(&self.challenges);
+    fn check_or_issue(state: &mut GateState, fingerprint: [u8; 32], args: &Value) -> Decision {
+        let challenges = &mut state.challenges;
         challenges.retain(|_, c| c.expires_at > Instant::now());
 
         if let Some(token) = args.get("confirm_token").and_then(Value::as_str) {
@@ -93,6 +228,12 @@ impl GateKeeper {
                 challenges.remove(token);
                 return Decision::Allow;
             }
+        }
+
+        if challenges.len() >= MAX_CHALLENGES {
+            return Decision::Reject {
+                reason: "待确认调用过多，请等待两分钟后重试".to_owned(),
+            };
         }
 
         let token = hex::encode(rand::random::<[u8; 16]>());
@@ -157,8 +298,8 @@ mod tests {
     #[test]
     fn static_table_ranks_tools() {
         assert_eq!(static_safety("list_targets"), ToolSafety::ReadOnly);
-        assert_eq!(static_safety("cancel_call"), ToolSafety::ReadOnly);
-        assert_eq!(static_safety("unsubscribe_events"), ToolSafety::ReadOnly);
+        assert_eq!(static_safety("cancel_call"), ToolSafety::SideEffect);
+        assert_eq!(static_safety("unsubscribe_events"), ToolSafety::SideEffect);
         assert_eq!(static_safety("test_channel"), ToolSafety::SideEffect);
         assert_eq!(static_safety("set_enabled"), ToolSafety::SideEffect);
         assert_eq!(static_safety("clear_history"), ToolSafety::Dangerous);
@@ -176,6 +317,7 @@ mod tests {
     #[test]
     fn side_effect_needs_replay_with_fresh_token() {
         let g = gate();
+        g.set_read_only(false);
         let args = json!({"bot_id": "1"});
         let token = match g.decide("test_channel", ToolSafety::SideEffect, &args) {
             Decision::NeedConfirm { token } => token,
@@ -207,6 +349,7 @@ mod tests {
     #[test]
     fn dangerous_rejected_by_default_and_confirmed_when_allowed() {
         let g = gate();
+        g.set_read_only(false);
         assert!(matches!(
             g.decide("clear_history", ToolSafety::Dangerous, &json!({})),
             Decision::Reject { .. }
@@ -226,5 +369,89 @@ mod tests {
         assert_eq!(a, b);
         let other_tool = fingerprint("other", &json!({"x": 1, "y": {"a": [1, 2], "b": 2}}));
         assert_ne!(a, other_tool);
+    }
+
+    #[test]
+    fn readonly_and_policy_changes_revoke_challenges() {
+        let g = gate();
+        assert!(matches!(
+            g.decide("close_all", ToolSafety::SideEffect, &json!({})),
+            Decision::Reject { .. }
+        ));
+        g.set_read_only(false);
+        let Decision::NeedConfirm { token } =
+            g.decide("close_all", ToolSafety::SideEffect, &json!({}))
+        else {
+            panic!("challenge");
+        };
+        g.set_read_only(true);
+        g.set_read_only(false);
+        assert!(matches!(
+            g.decide(
+                "close_all",
+                ToolSafety::SideEffect,
+                &json!({"confirm_token": token})
+            ),
+            Decision::NeedConfirm { .. }
+        ));
+    }
+
+    #[test]
+    fn challenge_storage_is_bounded() {
+        let g = gate();
+        g.set_read_only(false);
+        for _ in 0..MAX_CHALLENGES {
+            assert!(matches!(
+                g.decide("close_all", ToolSafety::SideEffect, &json!({})),
+                Decision::NeedConfirm { .. }
+            ));
+        }
+        assert!(matches!(
+            g.decide("close_all", ToolSafety::SideEffect, &json!({})),
+            Decision::Reject { .. }
+        ));
+    }
+
+    #[test]
+    fn policy_updates_revoke_admission_and_subscription_generation() {
+        let g = gate();
+        let before = g.epoch();
+        assert!(!g.set_policy(true, false));
+        assert!(!before.is_cancelled());
+        assert!(g.set_policy(false, true));
+        assert!(before.is_cancelled());
+        assert!(matches!(
+            g.decide_at_generation(
+                "list_targets",
+                ToolSafety::ReadOnly,
+                &json!({}),
+                before.generation
+            ),
+            Decision::Reject { .. }
+        ));
+        assert!(
+            g.register_subscription("stale".to_owned(), before.generation)
+                .is_err()
+        );
+        let current = g.epoch();
+        assert!(!current.is_cancelled());
+        assert!(
+            g.register_subscription("current".to_owned(), current.generation)
+                .is_ok()
+        );
+        g.reset();
+        assert!(current.is_cancelled());
+        assert_eq!(g.take_subscriptions(), vec!["current".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn reset_wakes_requests_waiting_on_old_epoch() {
+        let g = gate();
+        let epoch = g.epoch();
+        g.reset();
+        tokio::time::timeout(Duration::from_secs(1), epoch.cancelled())
+            .await
+            .unwrap();
+        assert!(!g.epoch().is_cancelled());
     }
 }

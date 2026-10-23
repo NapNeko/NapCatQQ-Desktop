@@ -20,6 +20,8 @@ hex = "0.4"
 rand = "0.8"
 sha2 = "0.10"
 tracing = "0.1"
+regex = "1"
+subtle = "2.6"
 
 [dev-dependencies]
 tempfile = "3"
