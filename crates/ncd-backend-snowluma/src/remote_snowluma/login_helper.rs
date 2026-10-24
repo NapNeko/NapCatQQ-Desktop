@@ -1,5 +1,6 @@
 // 短期 AT-SPI 请求绑定 QQ 进程；二维码只通过 SSH 私有管道返回。
 use super::layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths};
+use base64::Engine;
 use ncd_domain::{BotId, SnowLumaQrLoginSnapshot, SnowLumaQrLoginState};
 use ncd_host::{Host, HostCommand, HostPath, Os};
 use ncd_traits::runtime_backend::BotBackendError;
@@ -8,6 +9,8 @@ use std::{collections::BTreeMap, time::Duration};
 use tokio_util::sync::CancellationToken;
 
 const HELPER: &[u8] = include_bytes!("../../resources/login-helper/atspi-login.py");
+pub(super) const DEPLOY_HELPER: &str =
+    include_str!("../../resources/login-helper/deploy-helper.py");
 pub(crate) const DESKTOP_SESSION_UNAVAILABLE: &str = "QQ 桌面会话已失效，请重新启动此 Bot";
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 struct ProcessBinding {
@@ -259,37 +262,35 @@ impl LoginSession {
         if self.cancel.is_cancelled() {
             return Err(io_error());
         }
-        host.create_dir_all(&HostPath::from_posix(&self.directory))
-            .await
-            .map_err(|_| io_error())?;
+        let request = serde_json::to_vec(&serde_json::json!({
+            "v": 1,
+            "directory": self.directory,
+            "body": base64::engine::general_purpose::STANDARD.encode(HELPER),
+        }))
+        .map_err(|_| io_error())?;
         let out = host
             .run_to_string(
-                HostCommand::new("chmod")
-                    .args(["700", "--", &self.directory])
-                    .timeout(Duration::from_secs(3))
+                HostCommand::new(&self.python_bin)
+                    .args(["-I", "-B", "-c", DEPLOY_HELPER])
+                    .stdin(request)
+                    .timeout(Duration::from_secs(8))
                     .cancel_token(self.cancel.clone()),
             )
             .await
             .map_err(|_| io_error())?;
-        if !out.success() || self.cancel.is_cancelled() {
+        #[derive(Deserialize)]
+        struct DeploymentReply {
+            v: u32,
+            changed: bool,
+        }
+        if !out.success() || out.stdout.len() > 1024 || self.cancel.is_cancelled() {
             return Err(io_error());
         }
-        let path = format!("{}/atspi-login.py", self.directory);
-        host.write_file(&HostPath::from_posix(&path), HELPER)
-            .await
-            .map_err(|_| io_error())?;
-        let out = host
-            .run_to_string(
-                HostCommand::new("chmod")
-                    .args(["600", "--", &path])
-                    .timeout(Duration::from_secs(3))
-                    .cancel_token(self.cancel.clone()),
-            )
-            .await
-            .map_err(|_| io_error())?;
-        if !out.success() {
+        let reply = serde_json::from_str::<DeploymentReply>(&out.stdout).map_err(|_| io_error())?;
+        if reply.v != 1 {
             return Err(io_error());
         }
+        let _ = reply.changed;
         Ok(())
     }
     async fn inspect(&self, host: &dyn Host, pid: u32) -> Result<ProcessBinding, BotBackendError> {
@@ -583,6 +584,7 @@ mod tests {
         Arch, ArchiveKind, CommandOutput, DirEntry, HostError, HostProcess, HostShell, Locality,
         ShellKind,
     };
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::{collections::HashMap, path::Path, sync::Mutex};
 
     struct TestShell;
@@ -602,6 +604,8 @@ mod tests {
     struct BindingHost {
         files: Mutex<HashMap<String, Vec<u8>>>,
         commands: Mutex<Vec<HostCommand>>,
+        writes: AtomicUsize,
+        deployment_exit: i32,
         birth: &'static str,
         bind_error: Option<&'static str>,
         cancel_on_bind: Option<CancellationToken>,
@@ -612,6 +616,8 @@ mod tests {
             Self {
                 files: Mutex::new(HashMap::new()),
                 commands: Mutex::new(Vec::new()),
+                writes: AtomicUsize::new(0),
+                deployment_exit: 0,
                 birth: "881923",
                 bind_error: None,
                 cancel_on_bind: None,
@@ -646,6 +652,7 @@ mod tests {
                 .ok_or_else(|| HostError::PathNotFound { path: path.clone() })
         }
         async fn write_file(&self, path: &HostPath, bytes: &[u8]) -> Result<(), HostError> {
+            self.writes.fetch_add(1, Ordering::SeqCst);
             self.files
                 .lock()
                 .unwrap()
@@ -702,6 +709,22 @@ mod tests {
             }
             let (code, stdout) = if command.program == "chmod" {
                 (0, String::new())
+            } else if command.args.iter().any(|arg| arg == DEPLOY_HELPER) {
+                assert!(!command.elevated);
+                assert_eq!(command.args, ["-I", "-B", "-c", DEPLOY_HELPER]);
+                let request: serde_json::Value =
+                    serde_json::from_slice(command.stdin.as_ref().unwrap()).unwrap();
+                let body = base64::engine::general_purpose::STANDARD
+                    .decode(request["body"].as_str().unwrap())
+                    .unwrap();
+                assert_eq!(body, HELPER);
+                let path = format!("{}/atspi-login.py", request["directory"].as_str().unwrap());
+                let changed = self.deployment_exit == 0
+                    && self.files.lock().unwrap().insert(path, body.clone()) != Some(body);
+                (
+                    self.deployment_exit,
+                    serde_json::json!({"v":1,"changed":changed}).to_string(),
+                )
             } else if command.args.iter().any(|arg| arg == "--probe") {
                 (0, "{\"available\":true}".into())
             } else if command.args.iter().any(|arg| arg == "--bind") {
@@ -749,7 +772,7 @@ mod tests {
 
     fn session() -> LoginSession {
         LoginSession {
-            directory: "/tmp/private".into(),
+            directory: "/tmp/runtime/login-assist/123456".into(),
             session_id: "session".into(),
             python_bin: "python3".into(),
             qq_exe: "/opt/QQ/qq".into(),
@@ -786,7 +809,7 @@ mod tests {
             host.files
                 .lock()
                 .unwrap()
-                .contains_key("/tmp/private/atspi-login.py")
+                .contains_key("/tmp/runtime/login-assist/123456/atspi-login.py")
         );
     }
 
@@ -919,8 +942,42 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .all(|command| command.stdin.is_none())
+                .all(|command| command.stdin.is_none()
+                    || command.args.iter().any(|arg| arg == DEPLOY_HELPER))
         );
+    }
+
+    #[tokio::test]
+    async fn static_helper_deployment_is_one_bounded_unprivileged_exec_without_sftp() {
+        let host = BindingHost::new();
+        let mut session = session();
+        session.deploy(&host).await.unwrap();
+        session.deploy(&host).await.unwrap();
+        let commands = host.commands.lock().unwrap();
+        assert_eq!(commands.len(), 2);
+        assert_eq!(host.writes.load(Ordering::SeqCst), 0);
+        for command in commands.iter() {
+            assert_eq!(command.args, ["-I", "-B", "-c", DEPLOY_HELPER]);
+            assert_eq!(command.timeout, Some(Duration::from_secs(8)));
+            assert!(!command.elevated);
+        }
+        let path = format!("{}/atspi-login.py", session.directory);
+        assert_eq!(host.files.lock().unwrap().get(&path).unwrap(), HELPER);
+    }
+
+    #[tokio::test]
+    async fn failed_or_cancelled_helper_deployment_never_reports_ready() {
+        let mut host = BindingHost::new();
+        host.deployment_exit = 2;
+        let mut value = session();
+        assert!(value.deploy(&host).await.is_err());
+        assert_eq!(host.commands.lock().unwrap().len(), 1);
+        assert!(host.files.lock().unwrap().is_empty());
+        assert_eq!(host.writes.load(Ordering::SeqCst), 0);
+        let host = BindingHost::new();
+        value.cancel.cancel();
+        assert!(value.deploy(&host).await.is_err());
+        assert!(host.commands.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
