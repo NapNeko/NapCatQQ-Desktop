@@ -143,7 +143,7 @@ pub(crate) async fn inject_via_tunnel_cancellable(
     webui_pid: u32,
     cancel: Option<&tokio_util::sync::CancellationToken>,
     on_client: Option<&(dyn Fn(Arc<dyn SnowLumaWebUiClient>) + Send + Sync)>,
-    load_submitted: Option<&std::sync::atomic::AtomicBool>,
+    needs_unload: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<Arc<dyn SnowLumaWebUiClient>, BotBackendError> {
     super::startup_cancel::check(cancel)?;
     if endpoints.webui_password.is_empty() {
@@ -192,12 +192,15 @@ pub(crate) async fn inject_via_tunnel_cancellable(
     })
     .await?
     {
+        if let Some(required) = needs_unload {
+            required.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         return Ok(client);
     }
 
     // "already" 视为注入成功;其它拒绝若 error 为空则补 /api/processes 快照
     super::startup_cancel::check(cancel)?;
-    if let Some(submitted) = load_submitted {
+    if let Some(submitted) = needs_unload {
         submitted.store(true, std::sync::atomic::Ordering::SeqCst);
     }
     let load_res = client.load_process(qq_pid).await;
@@ -258,6 +261,91 @@ pub(crate) async fn inject_via_tunnel_cancellable(
 #[cfg(test)]
 mod tests {
     use super::relogin_cmdline_matches;
+
+    #[tokio::test]
+    async fn an_existing_injection_without_a_previous_client_still_requires_cancel_unload() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, Mutex};
+
+        use serde_json::json;
+        use tokio_util::sync::CancellationToken;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        use super::{
+            RemoteSnowLumaTunnelEndpoints, SnowLumaWebUiClient, inject_via_tunnel_cancellable,
+        };
+
+        for state in ["loaded", "online", "connecting", "loading"] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/api/status"))
+                .respond_with(ResponseTemplate::new(200))
+                .mount(&server)
+                .await;
+            Mock::given(method("POST"))
+                .and(path("/api/login"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token":"fixture-token"})),
+                )
+                .mount(&server)
+                .await;
+            let process = json!({"pid":7,"name":"QQ","path":"/opt/QQ/qq","uin":"0","status":state});
+            Mock::given(method("GET"))
+                .and(path("/api/processes"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list":[process]})))
+                .expect(1)
+                .mount(&server)
+                .await;
+            Mock::given(method("POST"))
+                .and(path("/api/processes/7/load"))
+                .respond_with(ResponseTemplate::new(500))
+                .expect(0)
+                .mount(&server)
+                .await;
+            Mock::given(method("POST")).and(path("/api/processes/7/unload"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "success":true,"process":{"pid":7,"name":"QQ","path":"/opt/QQ/qq","uin":"0","status":"available","injected":false}
+                }))).expect(1).mount(&server).await;
+
+            let owned = Mutex::new(None::<Arc<dyn SnowLumaWebUiClient>>);
+            let record = |client| {
+                *owned.lock().unwrap() = Some(client);
+            };
+            let needs_unload = AtomicBool::new(false);
+            let cancel = CancellationToken::new();
+            let endpoints = RemoteSnowLumaTunnelEndpoints {
+                webui_local_port: server.address().port(),
+                novnc_local_port: 1,
+                webui_password: "fixture-password".into(),
+                vnc_password: String::new(),
+            };
+            inject_via_tunnel_cancellable(
+                &endpoints,
+                42,
+                7,
+                Some(&cancel),
+                Some(&record),
+                Some(&needs_unload),
+            )
+            .await
+            .unwrap();
+            cancel.cancel();
+            assert!(
+                needs_unload.load(Ordering::SeqCst),
+                "observed {state} requires confirmed unload before logical detach"
+            );
+            let client = owned
+                .lock()
+                .unwrap()
+                .clone()
+                .expect("mapped client retained for cleanup");
+            let unloaded = client.unload_process(42).await.unwrap();
+            assert_eq!(unloaded.pid, 42);
+            assert_eq!(unloaded.injected, Some(false));
+            server.verify().await;
+        }
+    }
 
     #[test]
     fn relogin_accepts_only_exact_account_arguments_of_the_main_process() {
