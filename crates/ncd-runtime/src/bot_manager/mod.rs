@@ -52,7 +52,9 @@ mod read_only;
 mod refresh;
 mod remote_network;
 pub mod runtime_gate;
+mod stop;
 mod watch_relogin;
+mod webui;
 use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
 pub(crate) use migration::migration_protocol_scope;
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
@@ -742,20 +744,24 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(done.into_iter().collect())
     }
 
-    /// 远端 SnowLuma UI 失败后的手动恢复：复用运行中的 QQ/容器，重建 WebUI 与 noVNC 隧道。
+    /// 远端 SnowLuma WebUI 手动恢复，复用正在运行的 QQ/容器。
     pub async fn retry_snowluma_ui(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         let config = self.get_required_bot_config(bot_id).await?;
         if config.bot.backend_type != BackendType::SnowLuma || config.bot.runtime_target.is_local()
         {
             return Err(BotManagerError::Render(
-                "仅远端 SnowLuma 支持手动重建 WebUI/noVNC 隧道".to_string(),
+                "仅远端 SnowLuma 支持手动恢复 WebUI".to_string(),
             ));
         }
 
+        let docker = config.bot.deployment_type == ncd_domain::DeploymentType::Docker;
+        if !docker {
+            self.prepare_snowluma_webui(bot_id).await?;
+        }
         self.reconcile_remote_runtime_for(std::slice::from_ref(bot_id))
             .await?;
-
-        self.prepare_snowluma_novnc(bot_id).await.map(|_| ())
+        // Reconcile may clear local handles when authentication or attachment fails.
+        self.prepare_snowluma_webui(bot_id).await.map(|_| ())
     }
 
     /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。
@@ -946,6 +952,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         let _migration_guard = self.guard_protocol_mutation(bot_id)?;
 
+        let handle = self.get_actor(bot_id).await?;
+        let current = handle.snapshot();
+        if matches!(
+            current.state,
+            BotActorState::Starting | BotActorState::Running
+        ) {
+            return Ok(current);
+        }
+
         // 把 AcceptExternal 的决议转成 overrides map
         let mut overrides: std::collections::HashMap<String, Vec<(String, serde_json::Value)>> =
             std::collections::HashMap::new();
@@ -975,7 +990,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        let handle = self.get_actor(bot_id).await?;
         let config = self.get_required_bot_config(bot_id).await?;
         // 协议门禁必须在 request_start 之前：未同意不应进入 Starting，更不能 mark_crashed
         self.ensure_snowluma_agreements_ready(&config).await?;
@@ -988,10 +1002,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(starting);
         }
         self.publish_state_change(&starting, "start_requested");
-        self.remote_runtime_sessions()
-            .prepare_before_runtime_start(&config)
-            .await;
-        self.start_runtime_from_starting(bot_id, &handle, &config)
+        self.start_runtime_from_starting(bot_id, &handle, &config, starting.revision)
             .await
     }
 
@@ -1001,6 +1012,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let _migration_guard = self.guard_protocol_mutation(bot_id)?;
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到启动 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
+        let current = handle.snapshot();
+        // Repeated starts must not repeat remote agreement/runtime probes or rendering.
+        if matches!(
+            current.state,
+            BotActorState::Starting | BotActorState::Running
+        ) {
+            return Ok(current);
+        }
         let config = self.get_required_bot_config(bot_id).await?;
         // 协议门禁必须在 request_start 之前：未同意不应进入 Starting，更不能 mark_crashed
         self.ensure_snowluma_agreements_ready(&config).await?;
@@ -1013,144 +1032,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(starting);
         }
         self.publish_state_change(&starting, "start_requested");
-        self.remote_runtime_sessions()
-            .prepare_before_runtime_start(&config)
-            .await;
-        self.start_runtime_from_starting(bot_id, &handle, &config)
+        self.start_runtime_from_starting(bot_id, &handle, &config, starting.revision)
             .await
     }
 
-    /// 停止指定 Bot
-    pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
-        let _migration_guard = self.guard_protocol_mutation(bot_id)?;
-        info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
-        if let Ok(Some(config)) = self.get_bot_config(bot_id).await {
-            self.write_watch_intent(&config, false).await;
-        }
-        self.remote_runtime_sessions()
-            .mark_remote_docker_stop_expected(bot_id)
-            .await;
-        let handle = self.get_actor(bot_id).await?;
-        let stopping = handle.request_stop().await?;
-        self.publish_state_change(&stopping, "stop_requested");
-
-        // 按 deployment_type + runtime_target 选 backend;路由失败必须向上报错
-        let cfg = self.get_required_bot_config(bot_id).await?;
-        let backend = self.backend_for_lifecycle(&cfg).await?;
-
-        let status = backend.status(bot_id.clone()).await?;
-        if status.state == BotActorState::Stopped {
-            let stopped = match stopping.state {
-                BotActorState::Stopping => handle.confirm_stopped().await?,
-                _ => stopping,
-            };
-            self.dispose_poller(bot_id).await;
-            self.remote_runtime_sessions().shutdown_bot(bot_id).await;
-            self.publish_state_change(&stopped, "stop_completed");
-            self.refresh_snowluma_metrics_registration(&cfg).await;
-            if stopped.state == BotActorState::Starting {
-                let config = self.get_required_bot_config(bot_id).await?;
-                return self
-                    .start_runtime_from_starting(bot_id, &handle, &config)
-                    .await;
-            }
-            return Ok(stopped);
-        }
-
-        match backend.stop(bot_id.clone(), StopMode::Force).await {
-            Ok(()) => {
-                let status = backend.status(bot_id.clone()).await?;
-                self.event_bus
-                    .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
-                let stopped = handle.confirm_stopped().await?;
-                self.dispose_poller(bot_id).await;
-                self.remote_runtime_sessions().shutdown_bot(bot_id).await;
-                self.publish_state_change(&stopped, "stop_completed");
-                self.refresh_snowluma_metrics_registration(&cfg).await;
-                if stopped.state == BotActorState::Starting {
-                    let config = self.get_required_bot_config(bot_id).await?;
-                    return self
-                        .start_runtime_from_starting(bot_id, &handle, &config)
-                        .await;
-                }
-                Ok(stopped)
-            }
-            Err(err) => {
-                let message = err.to_string();
-                error!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    err = %message,
-                    "停止 Bot 失败（后端 stop 报错）"
-                );
-
-                // 传输类错误(远端 SSH 断连,host 刷新失败等):只发信息性 bot_error,
-                // 不 mark_crashed,actor 状态保持原样(Running/Stopping)
-                // 这样前端看到的是“远端主机临时不可达”,而不是“bot 崩溃”
-                if is_remote_transport_error(&err) {
-                    self.event_bus.publish(DomainEvent::bot_error(
-                        bot_id.clone(),
-                        message,
-                        Some("远端主机连接中断，停止操作未完成；连接恢复后可重试".to_string()),
-                    ));
-                    // 不改变 actor 状态,直接返回错误
-                    return Err(err.into());
-                }
-
-                // 非传输类错误:按原有逻辑标记崩溃
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "stop_failed");
-                self.event_bus.publish(DomainEvent::bot_error(
-                    bot_id.clone(),
-                    message,
-                    Some("请检查进程是否仍在运行，必要时手动结束后重试".to_string()),
-                ));
-                Err(err.into())
-            }
-        }
-    }
-
-    /// 重启指定 Bot
-    /// 6 状态分支语义:
-    /// - Running | Starting:actor.request_restart()(标记 pending_restart 并转 Stopping)
-    ///   → backend.stop(Force) → 等 actor 经 confirm_stopped 转入 Starting → start_bot
-    /// - Stopped | Crashed:直接 start_bot
-    /// - Stopping:actor.request_restart() 标 pending_restart → 等 actor 转入 Starting → start_bot
-    /// - Repairing:返回 BotManagerError::InvalidState
-    ///
-    /// 设计:复用 BotActor 现有的 pending_restart 机制,不新增状态机分支
-    /// 错误返回给调用方;RestartHandle::restart_bot impl 会把
-    /// 错误转为 DomainEvent::bot_error 发布给前端
+    /// 重启沿用停止的确认与失败收敛；Stopping 时只排队，不并发重复停机。
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let _migration_guard = self.guard_protocol_mutation(bot_id)?;
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到重启 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
         let snap = handle.snapshot();
-        let config = self.get_required_bot_config(bot_id).await.ok();
-
         match snap.state {
             BotActorState::Running | BotActorState::Starting => {
                 let stopping = handle.request_restart().await?;
                 self.publish_state_change(&stopping, "restart_requested");
-                let cfg = match &config {
-                    Some(cfg) => cfg.clone(),
-                    None => self.get_required_bot_config(bot_id).await?,
-                };
-                let backend = self.backend_for_lifecycle(&cfg).await?;
-                backend.stop(bot_id.clone(), StopMode::Force).await?;
-                // 远端 Native stop 不保证发 BotProcessExited,这里主动清 poller/会话
-                self.dispose_poller(bot_id).await;
-                self.remote_runtime_sessions().shutdown_bot(bot_id).await;
-                match handle.confirm_stopped().await {
-                    Ok(s) => self.publish_state_change(&s, "restart_stopped"),
-                    Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
-                    Err(e) => return Err(e.into()),
-                }
-                let current = handle.snapshot();
-                if current.state != BotActorState::Starting {
-                    return Ok(current);
-                }
-                self.start_runtime_from_starting(bot_id, &handle, &cfg)
+                self.finish_requested_stop(bot_id, &handle, snap, stopping, None)
                     .await
             }
             BotActorState::Stopped | BotActorState::Crashed => self.start_bot(bot_id).await,
@@ -1498,38 +1394,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 切换 backend_type 时的专用 restart:用 previous_config 对应的完整路由
-    /// 停掉老进程,再用 start_bot(自动按新 config 选 backend)启动新进程
-    ///
-    /// 与普通 restart_bot 的关键差异:
-    /// - stop 阶段使用旧配置路由,避免远端 / Docker / backend 切换时老进程留尸
-    /// - stop 返回后直接 confirm_stopped 推进 actor 到 Starting,不依赖
-    ///   异步 BotProcessExited 事件链原因:
-    ///   1. backend.stop 是同步 await 的,返回时进程树已被 force kill
-    ///   2. 切换 backend 时 actor 上层不一定能立刻收到旧 backend 的 exit 事件
-    ///      (例如旧 backend processes map 已被 stop 主动 remove,spawn_exit_watcher
-    ///      持有的 child handle 还在等 wait 完成,wait_until_state 会 10s 超时)
+    /// 切换框架时先按旧配置确认停止，再按已保存的新配置启动。
     async fn restart_bot_with_backend_switch(
         &self,
         bot_id: &BotId,
         previous_config: BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
+        let before = handle.snapshot();
         let stopping = handle.request_restart().await?;
         self.publish_state_change(&stopping, "restart_requested");
-        // 用旧配置的完整 runtime scenario 停老进程
-        self.backend_for_lifecycle(&previous_config)
-            .await?
-            .stop(bot_id.clone(), StopMode::Force)
-            .await?;
-        // confirm_stopped 可能跟 exit watcher listener 竞争(参见 restart_bot 注释)
-        match handle.confirm_stopped().await {
-            Ok(s) => self.publish_state_change(&s, "restart_stopped"),
-            Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
-            Err(e) => return Err(e.into()),
-        }
-        // start_bot 内部按当前 config 重新选 backend,自动用新 flavor 启动
-        self.start_bot(bot_id).await
+        self.finish_requested_stop(bot_id, &handle, before, stopping, Some(previous_config))
+            .await
     }
 
     /// 删除 Bot 配置及其 Actor如果 Bot 正在运行,先停止
@@ -2007,14 +1883,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         bot_id: &BotId,
         handle: &BotActorHandle,
+        revision: u64,
         err: BotManagerError,
     ) -> BotManagerError {
         let message = err.to_string();
-        if let Ok(stopping) = handle.request_stop().await {
-            self.publish_state_change(&stopping, "start_aborted_consent");
-            if let Ok(stopped) = handle.confirm_stopped().await {
-                self.publish_state_change(&stopped, "start_aborted_consent");
-            }
+        if let Ok(Some(stopped)) = handle.abort_start(revision, None).await {
+            self.publish_state_change(&stopped, "start_aborted_consent");
         }
         self.event_bus.publish(DomainEvent::bot_error(
             bot_id.clone(),
@@ -2098,27 +1972,77 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         bot_id: &BotId,
         handle: &BotActorHandle,
         config: &BotConfig,
+        revision: u64,
     ) -> Result<BotActorSnapshot, BotManagerError> {
-        // 取消令牌:stop_bot 在 Starting 阶段会 cancel,检测到后静默退出,避免重复报错
+        use futures_util::FutureExt;
+
         let cancel = handle.cancellation_token();
-        let scenario = RuntimeScenario::from_config(config)?;
-        // A completed old probe must finish releasing its lease before this Bot
-        // can acquire a new one. Different Bots retain their parallel startup.
-        let _reconcile_guard = if matches!(
-            &scenario,
-            RuntimeScenario::RemoteNative {
-                backend: BackendType::SnowLuma,
-                ..
-            }
-        ) {
-            Some(tokio::select! {
+        let mut commit = None;
+        let start = async {
+            let operation = tokio::select! {
                 biased;
                 _ = cancel.cancelled() => return Err(BotManagerError::Cancelled),
-                guard = crate::bootstrap_reconcile::lock_bot_reconcile(&self.reconcile_locks, bot_id) => guard,
-            })
-        } else {
-            None
+                guard = crate::bootstrap_reconcile::lock_bot_reconcile(&self.reconcile_locks, bot_id) => Arc::new(guard),
+            };
+            let current = handle.snapshot();
+            if current.state != BotActorState::Starting || current.revision != revision {
+                return Err(BotManagerError::Cancelled);
+            }
+            self.remote_runtime_sessions()
+                .prepare_before_runtime_start(config)
+                .await;
+            self.start_runtime_generation(
+                handle,
+                config,
+                revision,
+                cancel.clone(),
+                operation,
+                &mut commit,
+            )
+            .await
         };
+        let outcome = match tokio::time::timeout(
+            Duration::from_secs(180),
+            std::panic::AssertUnwindSafe(start).catch_unwind(),
+        )
+        .await
+        {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(BotManagerError::TaskJoinFailed(
+                "启动 Bot 时后端异常退出".into(),
+            )),
+            Err(_) => Err(BotManagerError::RemoteRead(
+                "启动 Bot 超时；已发起的进程将等待本轮启动返回后确认清理，请刷新后重试".into(),
+            )),
+        };
+        drop(commit);
+        if let Err(error) = &outcome {
+            if let Some(failed) = handle
+                .abort_start(revision, Some(error.to_string()))
+                .await?
+            {
+                self.publish_state_change(&failed, "start_failed");
+                self.event_bus.publish(DomainEvent::bot_error(
+                    bot_id.clone(),
+                    error.to_string(),
+                    Some("请刷新运行状态后重试".into()),
+                ));
+            }
+        }
+        outcome
+    }
+
+    async fn start_runtime_generation(
+        &self,
+        handle: &BotActorHandle,
+        config: &BotConfig,
+        revision: u64,
+        cancel: tokio_util::sync::CancellationToken,
+        operation: Arc<tokio::sync::OwnedMutexGuard<()>>,
+        commit: &mut Option<tokio::sync::oneshot::Sender<()>>,
+    ) -> Result<BotActorSnapshot, BotManagerError> {
+        let bot_id = handle.bot_id();
+        let scenario = RuntimeScenario::from_config(config)?;
         self.write_watch_intent(config, true).await;
         let mut runtime_config = match &scenario {
             RuntimeScenario::LocalNative { .. } => {
@@ -2150,13 +2074,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                 "启动计划构造失败：请检查后端类型与运行时安装状态。".to_string(),
                             ),
                         };
-                        let crashed = handle.mark_crashed(message.clone()).await?;
-                        self.publish_state_change(&crashed, "start_failed");
-                        self.event_bus.publish(DomainEvent::bot_error(
-                            bot_id.clone(),
-                            message,
-                            hint,
-                        ));
+                        if let Some(crashed) =
+                            handle.abort_start(revision, Some(message.clone())).await?
+                        {
+                            self.publish_state_change(&crashed, "start_failed");
+                            self.event_bus.publish(DomainEvent::bot_error(
+                                bot_id.clone(),
+                                message,
+                                hint,
+                            ));
+                        }
                         return Err(BotManagerError::Render(err.to_string()));
                     }
                 }
@@ -2176,7 +2103,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             if cancel.is_cancelled() {
                 return Err(BotManagerError::Cancelled);
             }
-            return Err(self.abort_start_for_consent(bot_id, handle, err).await);
+            return Err(self
+                .abort_start_for_consent(bot_id, handle, revision, err)
+                .await);
         }
 
         let backend = match self.backend_for_config(config).await {
@@ -2186,26 +2115,36 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     return Err(BotManagerError::Cancelled);
                 }
                 let message = err.to_string();
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "start_failed");
-                self.event_bus
-                    .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
+                if let Some(crashed) = handle.abort_start(revision, Some(message.clone())).await? {
+                    self.publish_state_change(&crashed, "start_failed");
+                    self.event_bus
+                        .publish(DomainEvent::bot_error(bot_id.clone(), message, None));
+                }
                 return Err(err);
             }
         };
-        if cancel.is_cancelled() {
+        if cancel.is_cancelled() || handle.snapshot().revision != revision {
             return Err(BotManagerError::Cancelled);
         }
-        match backend
-            .start(&BotStartCtx {
+        let (result, acknowledge) = self.spawn_backend_start(
+            Arc::clone(&backend),
+            BotStartCtx {
                 config: runtime_config,
                 bot_config: Some(config.clone()),
-            })
+            },
+            handle.clone(),
+            revision,
+            Arc::clone(&operation),
+        )?;
+        *commit = Some(acknowledge);
+        let result = result
             .await
-        {
+            .map_err(|_| BotManagerError::TaskJoinFailed("启动 Bot 任务提前结束".into()))?;
+        if cancel.is_cancelled() || handle.snapshot().revision != revision {
+            return Err(BotManagerError::Cancelled);
+        }
+        match result {
             Ok(status) => {
-                self.event_bus
-                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
                 // 防快速退出竞态:backend.start Ok 只代表 spawn / compose up 成功,
                 // 进程可能在 confirm_running 之前就崩了Starting 阶段的
                 // BotProcessExited 被 handle_process_exited 有意忽略(无法区分本轮新
@@ -2237,15 +2176,19 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         }
                     }
                     if let Some(detail) = fail_detail {
-                        let crashed = handle.mark_crashed(detail.clone()).await?;
-                        self.publish_state_change(&crashed, "start_failed");
-                        self.event_bus.publish(DomainEvent::bot_error(
-                            bot_id.clone(),
-                            detail.clone(),
-                            Some(
-                                "Bot 启动后立即退出,请检查启动命令、运行时依赖与日志。".to_string(),
-                            ),
-                        ));
+                        if let Some(crashed) =
+                            handle.abort_start(revision, Some(detail.clone())).await?
+                        {
+                            self.publish_state_change(&crashed, "start_failed");
+                            self.event_bus.publish(DomainEvent::bot_error(
+                                bot_id.clone(),
+                                detail.clone(),
+                                Some(
+                                    "Bot 启动后立即退出,请检查启动命令、运行时依赖与日志。"
+                                        .to_string(),
+                                ),
+                            ));
+                        }
                         return Err(BotManagerError::Render(detail));
                     }
                 }
@@ -2269,13 +2212,33 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         if cancel.is_cancelled() {
                             return Err(BotManagerError::Cancelled);
                         }
-                        // 容器/进程已起：先停后端，再把 actor 收回 Stopped（勿标 Crashed）
-                        let _ = backend.stop(bot_id.clone(), StopMode::Force).await;
+                        backend.stop(bot_id.clone(), StopMode::Force).await?;
+                        if backend.status(bot_id.clone()).await?.state != BotActorState::Stopped {
+                            return Err(BotManagerError::RemoteRead(
+                                "协议检查未通过，且运行进程尚未确认停止，请刷新后重试".into(),
+                            ));
+                        }
+                        if let Some(commit) = commit.take() {
+                            let _ = commit.send(());
+                        }
                         let err = Self::snowluma_consent_required_error(&payload.version);
-                        return Err(self.abort_start_for_consent(bot_id, handle, err).await);
+                        return Err(self
+                            .abort_start_for_consent(bot_id, handle, revision, err)
+                            .await);
                     }
                 }
-                let running = handle.confirm_running().await?;
+                if cancel.is_cancelled() {
+                    return Err(BotManagerError::Cancelled);
+                }
+                let running = handle
+                    .confirm_running_revision(revision)
+                    .await?
+                    .ok_or(BotManagerError::Cancelled)?;
+                if let Some(commit) = commit.take() {
+                    let _ = commit.send(());
+                }
+                self.event_bus
+                    .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
                 self.publish_state_change(&running, "start_completed");
                 if !attached_after_runtime_start {
                     self.remote_runtime_sessions()
@@ -2293,23 +2256,102 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 if cancel.is_cancelled() {
                     return Err(BotManagerError::Cancelled);
                 }
-                let message = err.to_string();
+                let message = match &err {
+                    BotManagerError::Runtime(error) => error.to_string(),
+                    error => error.to_string(),
+                };
                 error!(
                     target: "ncd_runtime::bot_manager",
                     bot_id = %bot_id,
                     err = %message,
                     "启动 Bot 失败（后端 start 报错）"
                 );
-                let crashed = handle.mark_crashed(message.clone()).await?;
-                self.publish_state_change(&crashed, "start_failed");
-                self.event_bus.publish(DomainEvent::bot_error(
-                    bot_id.clone(),
-                    message,
-                    Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
-                ));
-                Err(err.into())
+                if let Some(crashed) = handle.abort_start(revision, Some(message.clone())).await? {
+                    self.publish_state_change(&crashed, "start_failed");
+                    self.event_bus.publish(DomainEvent::bot_error(
+                        bot_id.clone(),
+                        message,
+                        Some("请在运行时设置中配置 NapCat/SnowLuma 启动命令后重试".to_string()),
+                    ));
+                }
+                Err(err)
             }
         }
+    }
+
+    fn spawn_backend_start(
+        &self,
+        backend: Arc<dyn BotBackend>,
+        context: BotStartCtx,
+        actor: BotActorHandle,
+        revision: u64,
+        operation: Arc<tokio::sync::OwnedMutexGuard<()>>,
+    ) -> Result<
+        (
+            tokio::sync::oneshot::Receiver<
+                Result<ncd_traits::runtime_backend::BotStatus, BotManagerError>,
+            >,
+            tokio::sync::oneshot::Sender<()>,
+        ),
+        BotManagerError,
+    > {
+        use futures_util::FutureExt;
+
+        let starting = actor.snapshot();
+        if starting.state != BotActorState::Starting || starting.revision != revision {
+            return Err(BotManagerError::Cancelled);
+        }
+        let token_generation = starting.token_generation;
+        let mutation = self.guard_protocol_mutation(actor.bot_id())?;
+        let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+        let (commit_tx, commit_rx) = tokio::sync::oneshot::channel();
+        let event_bus = Arc::clone(&self.event_bus);
+        tokio::spawn(async move {
+            // 保留本代操作锁直到后端返回及提交确认；取消调用方不能遗弃已发起的启动。
+            let _operation = operation;
+            let _mutation = mutation;
+            let bot_id = context.config.bot_id.clone();
+            let result = match std::panic::AssertUnwindSafe(backend.start(&context))
+                .catch_unwind()
+                .await
+            {
+                Ok(result) => result.map_err(BotManagerError::Runtime),
+                Err(_) => Err(BotManagerError::TaskJoinFailed(
+                    "启动 Bot 时后端异常退出".into(),
+                )),
+            };
+            let started = result.is_ok();
+            let delivered = result_tx.send(result).is_ok();
+            if !started || (delivered && commit_rx.await.is_ok()) {
+                return;
+            }
+            let cleanup = async {
+                backend.stop(bot_id.clone(), StopMode::Force).await?;
+                if backend.status(bot_id.clone()).await?.state != BotActorState::Stopped {
+                    return Err(BotBackendError::Io("取消的启动尚未确认停止".into()));
+                }
+                Ok::<_, BotBackendError>(())
+            };
+            let confirmed = matches!(
+                tokio::time::timeout(
+                    Duration::from_secs(30),
+                    std::panic::AssertUnwindSafe(cleanup).catch_unwind(),
+                )
+                .await,
+                Ok(Ok(Ok(())))
+            );
+            if !confirmed {
+                warn!(target: "ncd_runtime::bot_manager", bot_id = %bot_id,
+                    "取消启动后的进程未确认停止，请刷新后重试");
+            }
+            if let Ok(Some(failed)) = actor
+                .settle_unacknowledged_start(revision, token_generation, confirmed)
+                .await
+            {
+                event_bus.publish(DomainEvent::bot_state_changed(failed, "start_cancelled"));
+            }
+        });
+        Ok((result_rx, commit_tx))
     }
 
     fn publish_state_change(&self, snapshot: &BotActorSnapshot, reason: &str) {
@@ -2432,6 +2474,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     vnc_password: String::new(),
                 },
             );
+        }
+        let daemon = self
+            .remote_snowluma_daemons
+            .lock()
+            .await
+            .get(server_id)
+            .cloned();
+        if let Some(daemon) = daemon {
+            if let Some(endpoint) = daemon.tunnel_endpoints().await {
+                return Some(endpoint);
+            }
         }
         self.remote_snowluma_tunnels
             .endpoints_for_server(server_id)

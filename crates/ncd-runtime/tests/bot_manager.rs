@@ -27,7 +27,15 @@ struct FakeBackend {
     exit_after_start: Mutex<HashSet<BotId>>,
     start_count: Mutex<std::collections::HashMap<BotId, usize>>,
     stop_count: Mutex<std::collections::HashMap<BotId, usize>>,
+    start_gate: Mutex<
+        Option<(
+            tokio::sync::oneshot::Receiver<()>,
+            tokio::sync::oneshot::Sender<()>,
+        )>,
+    >,
     stop_gate: Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
+    status_failures: Mutex<std::collections::VecDeque<bool>>,
+    leave_running_after_stop: Mutex<HashSet<BotId>>,
     last_config: Mutex<Option<BotRuntimeConfig>>,
 }
 
@@ -69,6 +77,18 @@ impl FakeBackend {
         self.stop_gate.lock().await.replace(rx);
         tx
     }
+
+    async fn block_next_start(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Sender<()>,
+        tokio::sync::oneshot::Receiver<()>,
+    ) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        self.start_gate.lock().await.replace((rx, entered_tx));
+        (tx, entered_rx)
+    }
 }
 
 #[async_trait]
@@ -94,6 +114,11 @@ impl BotBackend for FakeBackend {
             .await
             .entry(ctx.config.bot_id.clone())
             .or_insert(0) += 1;
+        let gate = self.start_gate.lock().await.take();
+        if let Some((gate, entered)) = gate {
+            let _ = entered.send(());
+            let _ = gate.await;
+        }
         assert_ne!(ctx.config.bot_id.as_str(), "19998", "fake backend panic");
         if self.fail_start.lock().await.remove(&ctx.config.bot_id) {
             return Err(BotBackendError::Io("fake start failed".to_string()));
@@ -120,17 +145,23 @@ impl BotBackend for FakeBackend {
             .await
             .entry(bot_id.clone())
             .or_insert(0) += 1;
-        if let Some(rx) = self.stop_gate.lock().await.take() {
+        let gate = self.stop_gate.lock().await.take();
+        if let Some(rx) = gate {
             let _ = rx.await;
         }
         if self.fail_stop.lock().await.remove(&bot_id) {
             return Err(BotBackendError::Io("fake stop failed".to_string()));
         }
-        self.running.lock().await.remove(&bot_id);
+        if !self.leave_running_after_stop.lock().await.contains(&bot_id) {
+            self.running.lock().await.remove(&bot_id);
+        }
         Ok(())
     }
 
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
+        if self.status_failures.lock().await.pop_front() == Some(true) {
+            return Err(BotBackendError::Io("fake status unavailable".into()));
+        }
         if self.running.lock().await.contains(&bot_id) {
             Ok(BotStatus::running(bot_id, 42, 1))
         } else {
@@ -149,6 +180,12 @@ impl BotBackend for FakeBackend {
         })
     }
 }
+
+#[path = "bot_manager/stop_recovery.rs"]
+mod stop_recovery;
+
+#[path = "bot_manager/lifecycle_concurrency.rs"]
+mod lifecycle_concurrency;
 
 #[path = "bot_manager/derived_config_lifecycle.rs"]
 mod derived_config_lifecycle;
