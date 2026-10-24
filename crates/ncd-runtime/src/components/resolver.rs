@@ -149,7 +149,7 @@ async fn probe_host_packages(group: HostPackageGroup, host: &dyn Host) -> Requir
     match group {
         HostPackageGroup::QqDependencies => {
             let detector = QqDependencyDetector::new(qq_qqnt_dependencies_v3_2_25());
-            match detector.detect(host, None).await {
+            match detector.detect_runtime(host).await {
                 Ok(report) if report.missing.is_empty() => RequirementStatus::Satisfied {
                     version: None,
                     source: None,

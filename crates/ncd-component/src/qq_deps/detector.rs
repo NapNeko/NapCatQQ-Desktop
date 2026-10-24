@@ -8,6 +8,9 @@ use ncd_host::{Host, HostCommand, HostPath, LinuxPackageManager};
 use crate::error::ActionError;
 use crate::qq_deps::QQDependencyManifest;
 
+#[path = "runtime_batch.rs"]
+mod runtime_batch;
+
 /// QQ 依赖检测器
 pub struct QqDependencyDetector {
     manifest: QQDependencyManifest,
