@@ -6,8 +6,11 @@ use ncd_host::{
     shell::BashShell,
 };
 use std::path::Path;
+
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::{Notify, Semaphore};
 
 struct EntryHost {
     package: Mutex<Vec<u8>>,
@@ -16,6 +19,10 @@ struct EntryHost {
     commands: Mutex<Vec<HostCommand>>,
     reject_sudo: bool,
     native_entry: Option<&'static str>,
+    read_gate: Option<Arc<Semaphore>>,
+    read_entered: Notify,
+    write_gate: Option<Arc<Semaphore>>,
+    write_entered: Notify,
 }
 
 impl EntryHost {
@@ -32,6 +39,10 @@ impl EntryHost {
             commands: Mutex::new(Vec::new()),
             reject_sudo: false,
             native_entry: Some(QQ_MAIN_NATIVE),
+            read_gate: None,
+            read_entered: Notify::new(),
+            write_gate: None,
+            write_entered: Notify::new(),
         }
     }
 }
@@ -55,6 +66,10 @@ impl Host for EntryHost {
     }
     async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
         self.reads.fetch_add(1, Ordering::SeqCst);
+        if let Some(gate) = &self.read_gate {
+            self.read_entered.notify_one();
+            gate.acquire().await.unwrap().forget();
+        }
         Ok(self.package.lock().unwrap().clone().into())
     }
     async fn write_file(&self, path: &HostPath, bytes: &[u8]) -> Result<(), HostError> {
@@ -92,6 +107,10 @@ impl Host for EntryHost {
                 hex::encode(Sha256::digest(package)),
             ]
         );
+        if let Some(gate) = &self.write_gate {
+            self.write_entered.notify_one();
+            gate.acquire().await.unwrap().forget();
+        }
         if !self.reject_sudo {
             *self.package.lock().unwrap() = command.stdin.clone().unwrap();
         }
@@ -244,6 +263,50 @@ fn native_layout_probe_prefers_regular_asar_and_rejects_virtual_paths() {
     std::fs::create_dir_all(archive.join("app_launcher")).unwrap();
     std::fs::write(archive.join("app_launcher/index.js"), b"not-an-archive").unwrap();
     assert_eq!(probe().stdout, QQ_MAIN_NATIVE.as_bytes());
+}
+
+#[tokio::test]
+async fn entry_read_cancellation_never_writes_but_submitted_atomic_write_is_completed() {
+    let mut host = EntryHost::new(QQ_MAIN_NAPCAT_INJECT);
+    host.read_gate = Some(Arc::new(Semaphore::new(0)));
+    let cancel = CancellationToken::new();
+    let base = HostPath::from_posix("/");
+    let change = set_remote_qq_package_main_cancellable(&host, &base, QQ_MAIN_NATIVE, &cancel);
+    tokio::pin!(change);
+    tokio::select! {
+        result = &mut change => panic!("read should wait: {result:?}"),
+        _ = host.read_entered.notified() => {}
+    }
+    cancel.cancel();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), change)
+            .await
+            .unwrap()
+            .is_err()
+    );
+    assert!(host.commands.lock().unwrap().is_empty());
+    assert_eq!(host.writes.load(Ordering::SeqCst), 0);
+
+    let mut host = EntryHost::new(QQ_MAIN_NAPCAT_INJECT);
+    let release = Arc::new(Semaphore::new(0));
+    host.write_gate = Some(release.clone());
+    let cancel = CancellationToken::new();
+    let change = set_remote_qq_package_main_cancellable(&host, &base, QQ_MAIN_NATIVE, &cancel);
+    tokio::pin!(change);
+    tokio::select! {
+        result = &mut change => panic!("atomic write should wait: {result:?}"),
+        _ = host.write_entered.notified() => {}
+    }
+    cancel.cancel();
+    tokio::select! {
+        biased;
+        result = &mut change => panic!("submitted write must finish: {result:?}"),
+        _ = std::future::ready(()) => {}
+    }
+    release.add_permits(1);
+    assert!(change.await.is_err());
+    let package: serde_json::Value = serde_json::from_slice(&host.package.lock().unwrap()).unwrap();
+    assert_eq!(package["main"], QQ_MAIN_NATIVE);
 }
 
 #[cfg(unix)]

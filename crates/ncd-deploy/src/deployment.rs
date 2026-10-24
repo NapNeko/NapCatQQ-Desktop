@@ -17,6 +17,7 @@ use async_trait::async_trait;
 use ncd_domain::{BotConfig, BotFlavor, BotId, StopMode};
 use ncd_host::{Host, HostError};
 use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
 /// 部署形态错误,所有 Deployment 实装的失败模式都收敛到这里
@@ -161,6 +162,22 @@ pub struct NativeLaunchCommand {
 pub trait NativeLaunchTranslator: Send + Sync {
     /// 把用户配置翻译成原生进程启动命令
     async fn translate(&self, config: &BotConfig) -> Result<NativeLaunchCommand, DeploymentError>;
+
+    async fn translate_cancellable(
+        &self,
+        config: &BotConfig,
+        cancel: &CancellationToken,
+    ) -> Result<NativeLaunchCommand, DeploymentError> {
+        if cancel.is_cancelled() {
+            return Err(HostError::Cancelled.into());
+        }
+        // Existing translators may write configuration, so their future must finish.
+        let command = self.translate(config).await?;
+        if cancel.is_cancelled() {
+            return Err(HostError::Cancelled.into());
+        }
+        Ok(command)
+    }
 }
 
 /// 部署形态的统一接口

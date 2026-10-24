@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ncd_host::{Host, HostPath};
+use tokio_util::sync::CancellationToken;
 
 /// per-server mutex 协调器，防止同服务器多 bot 并发翻转 package.json 导致竞态。
 ///
@@ -45,27 +46,61 @@ impl RemoteQqEntryCoordinator {
         server_id: &str,
         install_base: &HostPath,
     ) -> Result<(), String> {
-        use ncd_component::remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, set_remote_qq_package_main};
+        self.ensure_for_napcat_cancellable(host, server_id, install_base, &CancellationToken::new())
+            .await
+    }
 
-        self.with_server(server_id, || async {
+    pub async fn ensure_for_napcat_cancellable(
+        &self,
+        host: &dyn Host,
+        server_id: &str,
+        install_base: &HostPath,
+        cancel: &CancellationToken,
+    ) -> Result<(), String> {
+        use ncd_component::remote_qq_entry::{
+            QQ_MAIN_NAPCAT_INJECT, set_remote_qq_package_main_cancellable,
+        };
+
+        let inner = {
+            let mut map = self.per_server.lock().await;
+            map.entry(server_id.to_string())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+                .clone()
+        };
+        let _permit = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Err("NapCat 启动已取消".into()),
+            guard = inner.lock() => guard,
+        };
+        {
             let pkg_path = ncd_component::remote_qq_entry::qq_package_json_path(install_base);
             let desired = QQ_MAIN_NAPCAT_INJECT;
 
             let mut current = None;
-            if let Ok(bytes) = host.read_file(&pkg_path).await {
+            let read = tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err("NapCat 启动已取消".into()),
+                result = host.read_file(&pkg_path) => result,
+            };
+            if let Ok(bytes) = read {
                 if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                     current = v.get("main").and_then(|m| m.as_str()).map(str::to_string);
                 }
             }
 
             if current.as_deref() != Some(desired) {
-                set_remote_qq_package_main(host, install_base, desired)
+                set_remote_qq_package_main_cancellable(host, install_base, desired, cancel)
                     .await
                     .map_err(|e| format!("patch package.json main to napcat-inject failed: {e}"))?;
             }
 
             let load_js = ncd_component::remote_qq_entry::load_napcat_js_path(install_base);
-            if !host.exists(&load_js).await.map_err(|e| e.to_string())? {
+            let exists = tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err("NapCat 启动已取消".into()),
+                result = host.exists(&load_js) => result.map_err(|e| e.to_string())?,
+            };
+            if !exists {
                 return Err(format!(
                     "远端未找到 NapCat 注入入口脚本 {}（server_id={}）。\
                      请先到「组件」页为该 SSH 主机安装 NapCat 组件（该步骤会写入 loadNapCat.js 并修改 package.json）。",
@@ -75,7 +110,12 @@ impl RemoteQqEntryCoordinator {
             }
 
             let napcat_mjs = ncd_component::remote_qq_entry::napcat_mjs_path(install_base);
-            if !host.exists(&napcat_mjs).await.map_err(|e| e.to_string())? {
+            let exists = tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err("NapCat 启动已取消".into()),
+                result = host.exists(&napcat_mjs) => result.map_err(|e| e.to_string())?,
+            };
+            if !exists {
                 return Err(format!(
                     "远端未找到 NapCat 核心模块 {}。请先在组件页安装 NapCat。",
                     napcat_mjs.as_posix()
@@ -83,8 +123,7 @@ impl RemoteQqEntryCoordinator {
             }
 
             Ok(())
-        })
-        .await
+        }
     }
 
     /// 确保远端共享 QQ 树处于 vanilla/native 模式（SnowLuma 冷启路径）。
