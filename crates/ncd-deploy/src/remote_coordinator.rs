@@ -99,23 +99,9 @@ impl RemoteQqEntryCoordinator {
         use ncd_component::remote_qq_entry::{QQ_MAIN_NATIVE, set_remote_qq_package_main};
 
         self.with_server(server_id, || async {
-            let pkg_path = ncd_component::remote_qq_entry::qq_package_json_path(install_base);
-            let desired = QQ_MAIN_NATIVE;
-
-            let mut current = None;
-            if let Ok(bytes) = host.read_file(&pkg_path).await {
-                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                    current = v.get("main").and_then(|m| m.as_str()).map(str::to_string);
-                }
-            }
-
-            if current.as_deref() != Some(desired) {
-                set_remote_qq_package_main(host, install_base, desired)
-                    .await
-                    .map_err(|e| format!("patch package.json main to native failed: {e}"))?;
-            }
-
-            Ok(())
+            set_remote_qq_package_main(host, install_base, QQ_MAIN_NATIVE)
+                .await
+                .map_err(|e| format!("patch package.json main to native failed: {e}"))
         })
         .await
     }
