@@ -187,6 +187,9 @@ mod stop_recovery;
 #[path = "bot_manager/lifecycle_concurrency.rs"]
 mod lifecycle_concurrency;
 
+#[path = "bot_manager/cooperative_start.rs"]
+mod cooperative_start;
+
 #[derive(Debug, Clone)]
 struct TestLaunchPlanner;
 

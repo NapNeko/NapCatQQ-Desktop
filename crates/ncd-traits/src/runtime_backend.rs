@@ -158,6 +158,17 @@ pub trait BotBackend: Send + Sync {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError>;
+
+    /// 合作取消只中断安全等待；已发起的写入/启动必须完成归属和收尾后才返回。
+    /// 默认保留完整 start 语义，调用方不能通过丢弃 future 取消副作用。
+    async fn start_cancellable(
+        &self,
+        ctx: &BotStartCtx,
+        _cancel: tokio_util::sync::CancellationToken,
+    ) -> Result<BotStatus, BotBackendError> {
+        self.start(ctx).await
+    }
+
     async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError>;
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError>;
     async fn tail_log(&self, bot_id: BotId, opts: TailOpts)
