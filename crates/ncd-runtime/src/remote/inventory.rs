@@ -736,8 +736,8 @@ pub struct RemoteInventoryService {
     server_manager: Arc<ServerManager>,
     /// server_id → 最近一次拿到的库存
     cache: Mutex<HashMap<String, CachedInventory>>,
-    /// 装 / 卸过的机器：下一次 ensure 不信内存也不信档案里的副本，重探一次
-    dirty: std::sync::Mutex<HashSet<String>>,
+    /// 安装失效代次只有同代探测成功才能确认，重探中不能提前信任旧缓存。
+    revisions: std::sync::Mutex<HashMap<String, InventoryRevision>>,
     /// 每台机器一把探测锁：冷缓存时并发进来的调用排队，后到的拿锁后先看前一个探到的
     probing: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
@@ -746,6 +746,13 @@ struct CachedInventory {
     host: Weak<dyn Host>,
     profile: ServerProfile,
     inventory: RemoteInventory,
+    generation: u64,
+}
+
+#[derive(Clone, Copy, Default)]
+struct InventoryRevision {
+    generation: u64,
+    dirty: bool,
 }
 
 impl CachedInventory {
@@ -763,7 +770,7 @@ impl RemoteInventoryService {
         Self {
             server_manager,
             cache: Mutex::new(HashMap::new()),
-            dirty: std::sync::Mutex::new(HashSet::new()),
+            revisions: std::sync::Mutex::new(HashMap::new()),
             probing: std::sync::Mutex::new(HashMap::new()),
         }
     }
@@ -791,6 +798,9 @@ impl RemoteInventoryService {
         owner: Option<&Arc<dyn Host>>,
         force: bool,
     ) -> Result<RemoteInventory, String> {
+        if force {
+            self.invalidate(server_id).await;
+        }
         let profile = self
             .server_manager
             .list_servers()
@@ -799,8 +809,7 @@ impl RemoteInventoryService {
             .find(|p| p.id == server_id)
             .ok_or_else(|| format!("server not found: {server_id}"))?;
         let overrides = profile.path_overrides.as_ref();
-        // 探的途中又装卸过一次时，内存里那份是装卸前探的，标记还在就不能拿
-        if !force && !self.is_dirty(server_id) {
+        if !force {
             if let Some(inv) = self
                 .fresh_cached(server_id, host, &profile)
                 .await
@@ -811,71 +820,82 @@ impl RemoteInventoryService {
         }
         let lock = self.probe_lock(server_id);
         let _probing = lock.lock().await;
-        // 在锁里摘标记：排在后面的调用不会再各自重探一遍
-        let dirty = self.take_dirty(server_id);
-        let reuse = !force && !dirty;
-        if reuse {
-            if let Some(inv) = self
-                .fresh_cached(server_id, host, &profile)
+        for _ in 0..3 {
+            let profile = self
+                .server_manager
+                .list_servers()
                 .await
-                .filter(|inv| inventory_matches_target(inv, host, overrides))
-            {
+                .into_iter()
+                .find(|p| p.id == server_id)
+                .ok_or_else(|| format!("server not found: {server_id}"))?;
+            let overrides = profile.path_overrides.as_ref();
+            let revision = self.revision(server_id);
+            let reuse = !force && !revision.dirty;
+            if reuse {
+                if let Some(inv) = self
+                    .fresh_cached(server_id, host, &profile)
+                    .await
+                    .filter(|inv| inventory_matches_target(inv, host, overrides))
+                {
+                    return Ok(inv);
+                }
+            }
+            let now = chrono::Utc::now();
+            let same_connection = self
+                .cache
+                .lock()
+                .await
+                .get(server_id)
+                .is_none_or(|cached| cached.matches(host, &profile));
+            // 老版持久 Windows 快照没有目标身份；新连接必须先读取真实目标。
+            let previous = profile
+                .inventory
+                .clone()
+                .filter(|_| {
+                    owner.is_some() && same_connection && host.os() != ncd_host::Os::Windows
+                })
+                .filter(|inv| inventory_matches_target(inv, host, overrides));
+            if reuse {
+                if let Some(inv) = previous
+                    .as_ref()
+                    .filter(|i| !inventory_is_stale(&i.probed_at, now))
+                {
+                    self.remember(server_id, owner, &profile, inv, revision.generation)
+                        .await;
+                    if self.confirm_revision(server_id, revision.generation) {
+                        return Ok(inv.clone());
+                    }
+                    continue;
+                }
+            }
+
+            let inv = probe_remote_inventory(host, overrides, previous.as_ref()).await?;
+            if let Some(current) = self.server_manager.get_host(server_id).await {
+                if !std::ptr::addr_eq(current.as_ref(), host) {
+                    return Err("探测期间主机连接已更换，请重新探测".into());
+                }
+            }
+            if self.revision(server_id).generation != revision.generation {
+                continue;
+            }
+            self.server_manager
+                .set_inventory_for_profile(&profile, inv.clone())
+                .await?;
+            self.remember(server_id, owner, &profile, &inv, revision.generation)
+                .await;
+            if self.confirm_revision(server_id, revision.generation) {
                 return Ok(inv);
             }
         }
-        let now = chrono::Utc::now();
-        let same_connection = self
-            .cache
-            .lock()
-            .await
-            .get(server_id)
-            .is_none_or(|cached| cached.matches(host, &profile));
-        // 老版持久 Windows 快照没有目标身份；新连接必须先读取真实目标。
-        let previous = profile
-            .inventory
-            .clone()
-            .filter(|_| owner.is_some() && same_connection && host.os() != ncd_host::Os::Windows)
-            .filter(|inv| inventory_matches_target(inv, host, overrides));
-        let saved_fresh = previous
-            .clone()
-            .filter(|i| !inventory_is_stale(&i.probed_at, now));
-        if reuse {
-            if let Some(inv) = &saved_fresh {
-                self.remember(server_id, owner, &profile, inv).await;
-                return Ok(inv.clone());
-            }
-        }
-        let inv = match probe_remote_inventory(host, overrides, previous.as_ref()).await {
-            Ok(inv) => inv,
-            Err(err) => {
-                return match saved_fresh.filter(|_| !force && host.os() != ncd_host::Os::Windows) {
-                    Some(inv) => {
-                        tracing::warn!(server_id, error = %err, "re-probe after component action failed; using saved inventory");
-                        Ok(inv)
-                    }
-                    None => Err(err),
-                };
-            }
-        };
-        if let Some(current) = self.server_manager.get_host(server_id).await {
-            if !std::ptr::addr_eq(current.as_ref(), host) {
-                return Err("探测期间主机连接已更换，请重新探测".into());
-            }
-        }
-        self.server_manager
-            .set_inventory_for_profile(&profile, inv.clone())
-            .await?;
-        self.remember(server_id, owner, &profile, &inv).await;
-        Ok(inv)
+        Err("探测期间组件状态持续变化，请在组件操作完成后重新探测".into())
     }
 
-    /// 装卸后强制重探，同时保留旧连接身份用于隔离失败回退。
+    /// 装卸后强制重探，同时保留旧连接身份用于隔离库存路径。
     pub async fn invalidate(&self, server_id: &str) {
-        self.dirty
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(server_id.to_string());
-        // 保留连接身份供重探校验，dirty 标记使旧内容不可命中。
+        let mut revisions = self.revisions.lock().unwrap_or_else(|e| e.into_inner());
+        let revision = revisions.entry(server_id.to_string()).or_default();
+        revision.generation = revision.generation.wrapping_add(1);
+        revision.dirty = true;
     }
 
     async fn fresh_cached(
@@ -885,25 +905,40 @@ impl RemoteInventoryService {
         profile: &ServerProfile,
     ) -> Option<RemoteInventory> {
         let cache = self.cache.lock().await;
+        let revision = self.revision(server_id);
+        if revision.dirty {
+            return None;
+        }
         cache
             .get(server_id)
+            .filter(|c| c.generation == revision.generation)
             .filter(|c| c.matches(host, profile))
             .filter(|c| !inventory_is_stale(&c.inventory.probed_at, chrono::Utc::now()))
             .map(|c| c.inventory.clone())
     }
 
-    fn is_dirty(&self, server_id: &str) -> bool {
-        self.dirty
+    fn revision(&self, server_id: &str) -> InventoryRevision {
+        self.revisions
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .contains(server_id)
+            .get(server_id)
+            .copied()
+            .unwrap_or_default()
     }
 
-    fn take_dirty(&self, server_id: &str) -> bool {
-        self.dirty
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(server_id)
+    #[cfg(test)]
+    pub(crate) fn is_dirty_for_test(&self, server_id: &str) -> bool {
+        self.revision(server_id).dirty
+    }
+
+    fn confirm_revision(&self, server_id: &str, generation: u64) -> bool {
+        let mut revisions = self.revisions.lock().unwrap_or_else(|e| e.into_inner());
+        let revision = revisions.entry(server_id.to_string()).or_default();
+        if revision.generation != generation {
+            return false;
+        }
+        revision.dirty = false;
+        true
     }
 
     fn probe_lock(&self, server_id: &str) -> Arc<Mutex<()>> {
@@ -941,6 +976,7 @@ impl RemoteInventoryService {
         owner: Option<&Arc<dyn Host>>,
         profile: &ServerProfile,
         inv: &RemoteInventory,
+        generation: u64,
     ) {
         let mut cache = self.cache.lock().await;
         if let Some(owner) = owner {
@@ -950,6 +986,7 @@ impl RemoteInventoryService {
                     host: Arc::downgrade(owner),
                     profile: profile.clone(),
                     inventory: inv.clone(),
+                    generation,
                 },
             );
         } else {
@@ -1238,7 +1275,18 @@ mod tests {
         assert!(sel.needs_sudo);
     }
 
-    /// 每次探测都返回同一段 stdout;记探了几次,可以让探测慢一点或直接失败
+    #[derive(Default)]
+    struct ProbePause {
+        entered: tokio::sync::Notify,
+        resume: tokio::sync::Notify,
+    }
+
+    struct ProbeResponse {
+        stdout: Result<String, &'static str>,
+        pause: Option<Arc<ProbePause>>,
+    }
+
+    /// 默认固定输出；队列里的响应可在探测途中等待测试推进安装失效代次。
     #[derive(Default)]
     struct ScriptedHost {
         stdout: String,
@@ -1246,6 +1294,7 @@ mod tests {
         delay: Duration,
         fail: bool,
         windows_root: Option<String>,
+        responses: std::sync::Mutex<std::collections::VecDeque<ProbeResponse>>,
     }
 
     impl ScriptedHost {
@@ -1258,6 +1307,13 @@ mod tests {
 
         fn probes(&self) -> usize {
             self.probes.load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        fn respond(&self, stdout: Result<String, &'static str>, pause: Option<Arc<ProbePause>>) {
+            self.responses
+                .lock()
+                .unwrap()
+                .push_back(ProbeResponse { stdout, pause });
         }
     }
 
@@ -1359,6 +1415,21 @@ mod tests {
             assert_eq!(cmd.timeout, Some(INVENTORY_PROBE_TIMEOUT));
             self.probes
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let response = self.responses.lock().unwrap().pop_front();
+            if let Some(response) = response {
+                if let Some(pause) = response.pause {
+                    pause.entered.notify_one();
+                    pause.resume.notified().await;
+                }
+                let stdout = response
+                    .stdout
+                    .map_err(|operation| ncd_host::HostError::Unsupported { operation })?;
+                return Ok(ncd_host::CommandOutput {
+                    exit_code: Some(0),
+                    stdout,
+                    stderr: String::new(),
+                });
+            }
             if !self.delay.is_zero() {
                 tokio::time::sleep(self.delay).await;
             }
@@ -1429,6 +1500,21 @@ mod tests {
         service
             .ensure_for_owner("s1", host.as_ref(), Some(&owner), force)
             .await
+    }
+
+    fn spawn_ensure(
+        service: &Arc<RemoteInventoryService>,
+        host: &Arc<ScriptedHost>,
+    ) -> tokio::task::JoinHandle<Result<RemoteInventory, String>> {
+        let service = Arc::clone(service);
+        let host = Arc::clone(host);
+        tokio::spawn(async move { ensure_scripted(&service, &host, false).await })
+    }
+
+    async fn wait_for_probe(pause: &ProbePause) {
+        tokio::time::timeout(Duration::from_secs(5), pause.entered.notified())
+            .await
+            .expect("scripted inventory probe did not start");
     }
 
     #[tokio::test]
@@ -1523,6 +1609,178 @@ mod tests {
         let calls = (0..6).map(|_| ensure_scripted(&service, &host, false));
         futures_util::future::join_all(calls).await;
         assert_eq!(host.probes(), 2);
+    }
+
+    #[tokio::test]
+    async fn failed_reprobe_keeps_inventory_dirty_until_success() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = RemoteInventoryService::new(manager_with_server(tmp.path()).await);
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/old", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+
+        service.invalidate("s1").await;
+        host.respond(Err("probe failed"), None);
+        assert!(ensure_scripted(&service, &host, false).await.is_err());
+        assert!(service.is_dirty_for_test("s1"));
+
+        host.respond(Ok(sample_stdout("/home/new", "")), None);
+        assert_eq!(
+            ensure_scripted(&service, &host, false).await.unwrap().home,
+            "/home/new"
+        );
+        assert!(!service.is_dirty_for_test("s1"));
+        assert_eq!(
+            ensure_scripted(&service, &host, false).await.unwrap().home,
+            "/home/new"
+        );
+        assert_eq!(host.probes(), 3);
+    }
+
+    #[tokio::test]
+    async fn concurrent_ensure_waits_for_invalidated_probe_instead_of_old_cache() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = Arc::new(RemoteInventoryService::new(
+            manager_with_server(tmp.path()).await,
+        ));
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/old", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+        service.invalidate("s1").await;
+        let pause = Arc::new(ProbePause::default());
+        host.respond(Ok(sample_stdout("/home/new", "")), Some(Arc::clone(&pause)));
+        let first = spawn_ensure(&service, &host);
+        wait_for_probe(&pause).await;
+
+        let follower = ensure_scripted(&service, &host, false);
+        tokio::pin!(follower);
+        assert!(matches!(
+            futures_util::poll!(&mut follower),
+            std::task::Poll::Pending
+        ));
+
+        pause.resume.notify_one();
+        assert_eq!(first.await.unwrap().unwrap().home, "/home/new");
+        assert_eq!(follower.await.unwrap().home, "/home/new");
+        assert_eq!(host.probes(), 2);
+    }
+
+    #[tokio::test]
+    async fn invalidate_during_probe_requires_a_new_generation_before_returning() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_with_server(tmp.path()).await;
+        let service = Arc::new(RemoteInventoryService::new(Arc::clone(&manager)));
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/old", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+        service.invalidate("s1").await;
+
+        let pause = Arc::new(ProbePause::default());
+        host.respond(
+            Ok(sample_stdout("/home/before-second-install", "")),
+            Some(Arc::clone(&pause)),
+        );
+        host.respond(Ok(sample_stdout("/home/current", "")), None);
+        let probing = spawn_ensure(&service, &host);
+        wait_for_probe(&pause).await;
+        service.invalidate("s1").await;
+        pause.resume.notify_one();
+
+        assert_eq!(probing.await.unwrap().unwrap().home, "/home/current");
+        assert!(!service.is_dirty_for_test("s1"));
+        assert_eq!(
+            manager.list_servers().await[0]
+                .inventory
+                .as_ref()
+                .unwrap()
+                .home,
+            "/home/current"
+        );
+        assert_eq!(
+            ensure_scripted(&service, &host, false).await.unwrap().home,
+            "/home/current"
+        );
+        assert_eq!(host.probes(), 3);
+    }
+
+    #[tokio::test]
+    async fn repeated_invalidation_is_bounded_and_leaves_inventory_dirty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_with_server(tmp.path()).await;
+        let service = Arc::new(RemoteInventoryService::new(Arc::clone(&manager)));
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/old", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+        service.invalidate("s1").await;
+
+        let pauses: Vec<_> = (0..3).map(|_| Arc::new(ProbePause::default())).collect();
+        for pause in &pauses {
+            host.respond(
+                Ok(sample_stdout("/home/not-current", "")),
+                Some(Arc::clone(pause)),
+            );
+        }
+        let probing = spawn_ensure(&service, &host);
+        for pause in &pauses {
+            wait_for_probe(pause).await;
+            service.invalidate("s1").await;
+            pause.resume.notify_one();
+        }
+
+        let error = probing.await.unwrap().unwrap_err();
+        assert!(error.contains("组件状态持续变化"), "{error}");
+        assert!(service.is_dirty_for_test("s1"));
+        assert_eq!(host.probes(), 4);
+        assert_eq!(
+            manager.list_servers().await[0]
+                .inventory
+                .as_ref()
+                .unwrap()
+                .home,
+            "/home/old"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_forced_probe_does_not_restore_the_pre_refresh_cache() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = RemoteInventoryService::new(manager_with_server(tmp.path()).await);
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/old", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+        host.respond(Err("forced probe failed"), None);
+        assert!(ensure_scripted(&service, &host, true).await.is_err());
+        assert!(service.is_dirty_for_test("s1"));
+
+        host.respond(Ok(sample_stdout("/home/new", "")), None);
+        assert_eq!(
+            ensure_scripted(&service, &host, false).await.unwrap().home,
+            "/home/new"
+        );
+        assert_eq!(host.probes(), 3);
+    }
+
+    #[tokio::test]
+    async fn cancelled_reprobe_keeps_invalidation_for_the_next_request() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = Arc::new(RemoteInventoryService::new(
+            manager_with_server(tmp.path()).await,
+        ));
+        let host = Arc::new(ScriptedHost::new(sample_stdout("/home/old", "")));
+        ensure_scripted(&service, &host, false).await.unwrap();
+        service.invalidate("s1").await;
+        let pause = Arc::new(ProbePause::default());
+        host.respond(
+            Ok(sample_stdout("/home/aborted", "")),
+            Some(Arc::clone(&pause)),
+        );
+        let probing = spawn_ensure(&service, &host);
+        wait_for_probe(&pause).await;
+        probing.abort();
+        assert!(probing.await.unwrap_err().is_cancelled());
+        assert!(service.is_dirty_for_test("s1"));
+
+        host.respond(Ok(sample_stdout("/home/new", "")), None);
+        assert_eq!(
+            ensure_scripted(&service, &host, false).await.unwrap().home,
+            "/home/new"
+        );
+        assert_eq!(host.probes(), 3);
     }
 
     #[tokio::test]

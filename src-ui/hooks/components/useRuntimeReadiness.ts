@@ -18,16 +18,17 @@ export function runtimeReadinessQueryKey(hostId: string, backend: BackendType) {
 
 export interface RuntimeReadinessState {
     readiness: RuntimeReadiness | undefined;
-    /** 还没有结果（首次探测中 / 未启用）；有旧结果时后台刷新不算 */
+    /** 首次探测或重新确认组件状态。 */
     probing: boolean;
     error: string | null;
 }
 
 function toState(q: UseQueryResult<RuntimeReadiness>, enabled: boolean): RuntimeReadinessState {
     return {
-        readiness: q.data,
-        probing: enabled && q.data === undefined && !q.error,
-        error: q.error ? String(q.error) : null,
+        // 安装后重查时，旧的 missing 结果已失效，不能继续用它拦截启动。
+        readiness: q.isFetching || q.error ? undefined : q.data,
+        probing: enabled && (q.isFetching || (q.data === undefined && !q.error)),
+        error: !q.isFetching && q.error ? String(q.error) : null,
     };
 }
 
