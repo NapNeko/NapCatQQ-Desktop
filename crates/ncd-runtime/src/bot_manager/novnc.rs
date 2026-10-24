@@ -25,14 +25,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
                 // 路由会在 SSH 重连后替换 daemon 中的旧 Host。
                 self.backend_for_config(&config).await?;
-                let daemon = self
-                    .remote_snowluma_daemons
+                let backend = self
+                    .remote_snowluma_backends
                     .lock()
                     .await
                     .get(&server_id)
                     .cloned()
                     .ok_or_else(|| BotManagerError::Render("远端 SnowLuma 尚未就绪".into()))?;
-                let endpoint = daemon.ensure_novnc_ready().await?;
+                let configs = self.repo.list().await?;
+                let counts = crate::bootstrap_reconcile::count_native_snowluma_bots(&configs);
+                let endpoint = backend
+                    .prepare_novnc_for_bot(bot_id, counts.get(&server_id) == Some(&1))
+                    .await?;
                 (endpoint.novnc_local_port, endpoint.vnc_password)
             }
             RuntimeScenario::RemoteDocker { .. } => {

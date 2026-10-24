@@ -38,11 +38,36 @@ enum BotActorCommand {
     ConfirmRunning {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
     },
+    ConfirmRunningRevision {
+        revision: u64,
+        reply: oneshot::Sender<Result<Option<BotActorSnapshot>, BotActorError>>,
+    },
+    AbortStart {
+        revision: u64,
+        reason: Option<String>,
+        reply: oneshot::Sender<Result<Option<BotActorSnapshot>, BotActorError>>,
+    },
+    SettleUnacknowledgedStart {
+        revision: u64,
+        token_generation: u64,
+        stopped: bool,
+        reply: oneshot::Sender<Result<Option<BotActorSnapshot>, BotActorError>>,
+    },
     RequestStop {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
     },
     ConfirmStopped {
         reply: oneshot::Sender<Result<BotActorSnapshot, BotActorError>>,
+    },
+    ConfirmStoppedRevision {
+        revision: u64,
+        reply: oneshot::Sender<Result<Option<BotActorSnapshot>, BotActorError>>,
+    },
+    AbortStop {
+        revision: u64,
+        was_running: bool,
+        reason: String,
+        reply: oneshot::Sender<Result<Option<BotActorSnapshot>, BotActorError>>,
     },
     ReconcileObserved {
         revision: u64,
@@ -129,6 +154,42 @@ impl BotActorHandle {
             .await
     }
 
+    pub(crate) async fn confirm_running_revision(
+        &self,
+        revision: u64,
+    ) -> Result<Option<BotActorSnapshot>, BotActorError> {
+        self.send_command(|reply| BotActorCommand::ConfirmRunningRevision { revision, reply })
+            .await
+    }
+
+    pub(crate) async fn abort_start(
+        &self,
+        revision: u64,
+        reason: Option<String>,
+    ) -> Result<Option<BotActorSnapshot>, BotActorError> {
+        self.send_command(|reply| BotActorCommand::AbortStart {
+            revision,
+            reason,
+            reply,
+        })
+        .await
+    }
+
+    pub(crate) async fn settle_unacknowledged_start(
+        &self,
+        revision: u64,
+        token_generation: u64,
+        stopped: bool,
+    ) -> Result<Option<BotActorSnapshot>, BotActorError> {
+        self.send_command(|reply| BotActorCommand::SettleUnacknowledgedStart {
+            revision,
+            token_generation,
+            stopped,
+            reply,
+        })
+        .await
+    }
+
     pub async fn request_stop(&self) -> Result<BotActorSnapshot, BotActorError> {
         self.send_snapshot_command(|reply| BotActorCommand::RequestStop { reply })
             .await
@@ -136,6 +197,29 @@ impl BotActorHandle {
 
     pub async fn confirm_stopped(&self) -> Result<BotActorSnapshot, BotActorError> {
         self.send_snapshot_command(|reply| BotActorCommand::ConfirmStopped { reply })
+            .await
+    }
+
+    pub(crate) async fn abort_stop(
+        &self,
+        revision: u64,
+        was_running: bool,
+        reason: String,
+    ) -> Result<Option<BotActorSnapshot>, BotActorError> {
+        self.send_command(|reply| BotActorCommand::AbortStop {
+            revision,
+            was_running,
+            reason,
+            reply,
+        })
+        .await
+    }
+
+    pub(crate) async fn confirm_stopped_revision(
+        &self,
+        revision: u64,
+    ) -> Result<Option<BotActorSnapshot>, BotActorError> {
+        self.send_command(|reply| BotActorCommand::ConfirmStoppedRevision { revision, reply })
             .await
     }
 
@@ -265,6 +349,65 @@ async fn run_actor(
                 }
                 let _ = reply.send(result.map(|_| snapshot.clone()));
             }
+            BotActorCommand::ConfirmRunningRevision { revision, reply } => {
+                if snapshot.state == BotActorState::Starting && snapshot.revision == revision {
+                    let result = confirm_running(&mut snapshot);
+                    if result.is_ok() {
+                        let _ = snapshot_tx.send(snapshot.clone());
+                    }
+                    let _ = reply.send(result.map(|_| Some(snapshot.clone())));
+                } else {
+                    let _ = reply.send(Ok(None));
+                }
+            }
+            BotActorCommand::AbortStart {
+                revision,
+                reason,
+                reply,
+            } => {
+                let accepted =
+                    snapshot.state == BotActorState::Starting && snapshot.revision == revision;
+                if accepted {
+                    cancel_current_token(&cancellation_token);
+                    snapshot.pending_restart = false;
+                    if let Some(reason) = reason {
+                        snapshot.note_error(reason);
+                        snapshot.advance(BotActorState::Crashed, "start_failed");
+                    } else {
+                        snapshot.clear_error();
+                        snapshot.advance(BotActorState::Stopped, "start_aborted_consent");
+                    }
+                    let _ = snapshot_tx.send(snapshot.clone());
+                }
+                let _ = reply.send(Ok(accepted.then(|| snapshot.clone())));
+            }
+            BotActorCommand::SettleUnacknowledgedStart {
+                revision,
+                token_generation,
+                stopped,
+                reply,
+            } => {
+                // confirm_running 的回复与提交 ack 之间也可能取消，只收敛这同一代。
+                let accepted = snapshot.token_generation == token_generation
+                    && ((snapshot.state == BotActorState::Starting
+                        && snapshot.revision == revision)
+                        || (snapshot.state == BotActorState::Running
+                            && snapshot.revision == revision.saturating_add(1)
+                            && snapshot.last_transition.as_deref() == Some("start_completed")));
+                if accepted {
+                    cancel_current_token(&cancellation_token);
+                    snapshot.pending_restart = false;
+                    if stopped {
+                        snapshot.clear_error();
+                        snapshot.advance(BotActorState::Stopped, "start_cancelled");
+                    } else {
+                        snapshot.note_error("取消的启动尚未确认停止，请刷新运行状态后重试");
+                        snapshot.advance(BotActorState::Crashed, "start_cancelled");
+                    }
+                    let _ = snapshot_tx.send(snapshot.clone());
+                }
+                let _ = reply.send(Ok(accepted.then(|| snapshot.clone())));
+            }
             BotActorCommand::RequestStop { reply } => {
                 let result = request_stop(&mut snapshot, &cancellation_token);
                 log_actor_result(&bot_id, &result, "stop");
@@ -272,6 +415,44 @@ async fn run_actor(
                     let _ = snapshot_tx.send(snapshot.clone());
                 }
                 let _ = reply.send(result.map(|_| snapshot.clone()));
+            }
+            BotActorCommand::AbortStop {
+                revision,
+                was_running,
+                reason,
+                reply,
+            } => {
+                let accepted =
+                    snapshot.state == BotActorState::Stopping && snapshot.revision == revision;
+                if accepted {
+                    // A failed stop cannot prove exit; restore a refreshable observation.
+                    if was_running {
+                        reset_token(&mut snapshot, &cancellation_token);
+                    }
+                    snapshot.pending_restart = false;
+                    snapshot.note_error(reason);
+                    snapshot.advance(
+                        if was_running {
+                            BotActorState::Running
+                        } else {
+                            BotActorState::Crashed
+                        },
+                        "stop_failed",
+                    );
+                    let _ = snapshot_tx.send(snapshot.clone());
+                }
+                let _ = reply.send(Ok(accepted.then(|| snapshot.clone())));
+            }
+            BotActorCommand::ConfirmStoppedRevision { revision, reply } => {
+                if snapshot.state == BotActorState::Stopping && snapshot.revision == revision {
+                    let result = confirm_stopped(&mut snapshot, &cancellation_token);
+                    if result.is_ok() {
+                        let _ = snapshot_tx.send(snapshot.clone());
+                    }
+                    let _ = reply.send(result.map(|_| Some(snapshot.clone())));
+                } else {
+                    let _ = reply.send(Ok(None));
+                }
             }
             BotActorCommand::ConfirmStopped { reply } => {
                 let result = confirm_stopped(&mut snapshot, &cancellation_token);
@@ -305,8 +486,14 @@ async fn run_actor(
                         reset_token(&mut snapshot, &cancellation_token);
                         snapshot.clear_error();
                         snapshot.advance(BotActorState::Running, "runtime_refreshed");
-                    } else if !running && snapshot.state == BotActorState::Running {
+                    } else if !running
+                        && matches!(
+                            snapshot.state,
+                            BotActorState::Running | BotActorState::Crashed
+                        )
+                    {
                         cancel_current_token(&cancellation_token);
+                        snapshot.clear_error();
                         snapshot.advance(BotActorState::Stopped, "runtime_refreshed");
                     }
                     let _ = snapshot_tx.send(snapshot.clone());
@@ -553,6 +740,10 @@ fn cancel_current_token(cancellation_token: &Arc<Mutex<CancellationToken>>) {
         .unwrap_or_else(|e| e.into_inner())
         .cancel();
 }
+
+#[cfg(test)]
+#[path = "bot_actor_stop_tests.rs"]
+mod stop_recovery_tests;
 
 #[cfg(test)]
 mod tests {

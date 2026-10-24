@@ -235,56 +235,17 @@ fn map_snowluma_agreements_payload(
     }
 }
 
-/// 打开 SnowLuma WebUI:解析 endpoint URL + 当前生效的 password
-/// 优先级(与 daemon render_daemon_globals 对齐):
-/// 1. App 级 override(state/snowluma/app-config.json 的
-/// snowlumaWebuiPasswordOverride,非空)
-/// 2. session.json 中的强随机密码
-/// bot_id 当前未使用——SnowLuma daemon 是全局单例,所有 SL bot 共享同一个
-/// WebUI 端点保留参数是为了未来支持每 Bot 隔离时改造方便
+/// 准备 SnowLuma WebUI 的本机入口，不尝试登录。
 #[tauri::command]
 pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::BotId;
-    use ncd_domain::{DeploymentType, RuntimeTarget};
-
-    let bid = BotId::new(bot_id.clone());
-    if let Ok(Some(cfg)) = state.bot_manager.get_bot_config(&bid).await {
-        if cfg.bot.deployment_type == DeploymentType::Docker {
-            if let Some(ep) = state.bot_manager.snowluma_docker_endpoints(&bid).await {
-                return Ok(SnowLumaWebuiEndpoint {
-                    url: format!("http://127.0.0.1:{}/", ep.webui_local_port),
-                    password: ep.webui_password,
-                });
-            }
-            return Err("SnowLuma Docker 隧道未就绪，请确认 Bot 已启动且运行宿主为远端 SSH".into());
-        }
-        if cfg.bot.backend_type == ncd_domain::BackendType::SnowLuma
-            && cfg.bot.deployment_type == DeploymentType::Native
-        {
-            if let RuntimeTarget::Server(server_id) = &cfg.bot.runtime_target {
-                if let Some(ep) = state
-                    .bot_manager
-                    .snowluma_native_endpoints_for_server(server_id)
-                    .await
-                {
-                    return Ok(SnowLumaWebuiEndpoint {
-                        url: format!("http://127.0.0.1:{}/", ep.webui_local_port),
-                        password: ep.webui_password,
-                    });
-                }
-                return Err(
-                    "SnowLuma 远端 Native 隧道未就绪，请确认 Bot 已启动或重开软件后 reconcile 成功"
-                        .into(),
-                );
-            }
-        }
-    }
-
-    // 本机 daemon:端口/密码的解析与调试台共用 ncd-runtime 的同一份实现
-    let (port, password) = ncd_runtime::local_snowluma_webui_endpoint(&state.data_root)?;
+    let (port, password) = state
+        .bot_manager
+        .prepare_snowluma_webui(&ncd_domain::BotId::new(bot_id))
+        .await
+        .map_err(|error| error.to_string())?;
     Ok(SnowLumaWebuiEndpoint {
         url: format!("http://127.0.0.1:{port}/"),
         password,

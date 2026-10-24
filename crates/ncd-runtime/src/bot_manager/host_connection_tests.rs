@@ -174,7 +174,12 @@ async fn snowluma_start_serializes_with_same_bot_reconcile_cleanup_and_can_cance
         actor.request_start().await.unwrap();
         let cleanup =
             crate::bootstrap_reconcile::lock_bot_reconcile(&manager.reconcile_locks, &bot_id).await;
-        let start = manager.start_runtime_from_starting(&bot_id, &actor, &config);
+        let start = manager.start_runtime_from_starting(
+            &bot_id,
+            &actor,
+            &config,
+            actor.snapshot().revision,
+        );
         tokio::pin!(start);
         tokio::select! {
             biased;

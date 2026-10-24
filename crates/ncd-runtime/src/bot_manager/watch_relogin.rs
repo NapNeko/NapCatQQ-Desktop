@@ -186,7 +186,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     let Ok(port) =
                         ncd_backend_snowluma::remote_snowluma::resolve_remote_webui_port(
                             host.as_ref(),
-                            daemon.paths(),
+                            daemon.layout(),
                         )
                         .await
                     else {
