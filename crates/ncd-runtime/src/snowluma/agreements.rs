@@ -268,10 +268,12 @@ async fn load_payload_from_remote(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
 ) -> Result<Option<AgreementsPayload>, BotManagerError> {
-    let eula = read_remote_agreement(host, &paths.snowluma_dir, "EULA.md").await;
-    let privacy = read_remote_agreement(host, &paths.snowluma_dir, "PRIVACY.md").await;
     let consent_path = format!("{}/consent.json", paths.config_dir);
-    let consent_text = read_remote_optional(host, &consent_path).await;
+    let (eula, privacy, consent_text) = tokio::try_join!(
+        read_remote_agreement(host, &paths.snowluma_dir, "EULA.md"),
+        read_remote_agreement(host, &paths.snowluma_dir, "PRIVACY.md"),
+        read_remote_optional(host, &consent_path),
+    )?;
     let consent_version = parse_consent_version_json(&consent_text);
     Ok(payload_from_agreement_texts(
         &eula,
@@ -307,19 +309,32 @@ async fn record_consent_on_remote(
     Ok(())
 }
 
-async fn read_remote_agreement(host: &dyn Host, snowluma_dir: &str, file_name: &str) -> String {
+async fn read_remote_agreement(
+    host: &dyn Host,
+    snowluma_dir: &str,
+    file_name: &str,
+) -> Result<String, BotManagerError> {
     let primary = format!("{snowluma_dir}/{file_name}");
-    let text = read_remote_optional(host, &primary).await;
+    let text = read_remote_optional(host, &primary).await?;
     if !text.trim().is_empty() {
-        return text;
+        return Ok(text);
     }
     let dist = format!("{snowluma_dir}/dist/{file_name}");
     read_remote_optional(host, &dist).await
 }
 
-async fn read_remote_optional(host: &dyn Host, path: &str) -> String {
+async fn read_remote_optional(host: &dyn Host, path: &str) -> Result<String, BotManagerError> {
     match host.read_file(&HostPath::from_posix(path)).await {
-        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-        Err(_) => String::new(),
+        Ok(bytes) => String::from_utf8(bytes.to_vec()).map_err(|_| {
+            BotManagerError::RemoteRead(format!("SnowLuma 协议文件不是有效 UTF-8：{path}"))
+        }),
+        Err(ncd_host::HostError::PathNotFound { .. }) => Ok(String::new()),
+        Err(error) => Err(BotManagerError::Runtime(BotBackendError::Io(
+            error.to_string(),
+        ))),
     }
 }
+
+#[cfg(test)]
+#[path = "agreements_tests.rs"]
+mod tests;

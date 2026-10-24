@@ -353,8 +353,8 @@ impl SnowLumaComponent {
         }
 
         let pkg = dir.join("package.json");
-        if host.exists(&pkg).await? {
-            if let Ok(bytes) = host.read_file(&pkg).await {
+        match host.read_file(&pkg).await {
+            Ok(bytes) => {
                 if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                     if let Some(version) = json.get("version").and_then(|v| v.as_str()) {
                         return Ok(Some(DetectedVersion {
@@ -364,6 +364,8 @@ impl SnowLumaComponent {
                     }
                 }
             }
+            Err(HostError::PathNotFound { .. }) => {}
+            Err(error) => return Err(ActionError::Host(error)),
         }
 
         Ok(Some(DetectedVersion {

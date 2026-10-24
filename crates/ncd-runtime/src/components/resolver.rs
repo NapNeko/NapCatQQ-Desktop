@@ -2,10 +2,11 @@
 //!
 //! 「装 X 前要什么」「跑 X 前缺什么」「Y 现在算不算装好」三个问题都从这里回答,
 //! 装前闭包(executor)、Bot 启动预检(BotManager)、UI 都只消费 plan,不再各写一份链。
-//! 探测串行做:远端走的是同一条 SSH 会话,并发没有收益还容易抖。
+//! 启动预检有限并发复用 SSH/SFTP；安装计划仍按原顺序探测。
 
 use std::sync::Arc;
 
+use futures_util::stream::{self, StreamExt};
 use ncd_appframework::AppFrameworkRegistry;
 use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_v3_2_25};
 use ncd_component::{
@@ -31,20 +32,36 @@ pub struct ResolveCtx<'a> {
 }
 
 pub async fn resolve_dependencies(root: &dyn Component, ctx: &ResolveCtx<'_>) -> DependencyPlan {
+    resolve_dependencies_with_limit(root, ctx, 1).await
+}
+
+async fn resolve_dependencies_with_limit(
+    root: &dyn Component,
+    ctx: &ResolveCtx<'_>,
+    parallelism: usize,
+) -> DependencyPlan {
     let os = ctx.host.os();
     let locality = ctx.host.locality();
     let closure = requirement_closure(ctx.registry, root, os, locality, ctx.phase);
 
-    let mut nodes = Vec::with_capacity(closure.len());
-    for node in closure {
-        let status = probe_node(&node, ctx).await;
-        nodes.push(DependencyNode {
-            target: node.target,
-            required_by: node.required_by,
-            version_reqs: node.version_reqs,
-            status,
-        });
-    }
+    let mut probed = stream::iter(closure.into_iter().enumerate())
+        .map(|(index, node)| async move {
+            let status = probe_node(&node, ctx).await;
+            (
+                index,
+                DependencyNode {
+                    target: node.target,
+                    required_by: node.required_by,
+                    version_reqs: node.version_reqs,
+                    status,
+                },
+            )
+        })
+        .buffer_unordered(parallelism)
+        .collect::<Vec<_>>()
+        .await;
+    probed.sort_unstable_by_key(|(index, _)| *index);
+    let nodes = probed.into_iter().map(|(_, node)| node).collect();
 
     DependencyPlan {
         root: root.id(),
@@ -63,8 +80,11 @@ pub async fn resolve_runtime_readiness(
         phase: RequirementPhase::Run,
         ..*ctx
     };
-    let status = probe_built_component(root, &[], run_ctx.host).await;
-    let plan = resolve_dependencies(root, &run_ctx).await;
+    // root 占一项、依赖最多两项；整次预检同时至多三个只读探测。
+    let (status, plan) = tokio::join!(
+        probe_built_component(root, &[], run_ctx.host),
+        resolve_dependencies_with_limit(root, &run_ctx, 2),
+    );
     RuntimeReadiness {
         root: DependencyNode {
             target: DependencyTarget::Component { id: root.id() },
@@ -172,6 +192,9 @@ async fn probe_host_packages(group: HostPackageGroup, host: &dyn Host) -> Requir
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[path = "resolver_concurrency_tests.rs"]
+    mod concurrency_tests;
 
     use std::collections::HashMap;
     use std::path::Path;

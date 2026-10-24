@@ -752,10 +752,6 @@ impl QQComponent {
     /// 的 version 字段
     async fn detect_linux(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let pkg_json = self.qq_package_json();
-        if !host.exists(&pkg_json).await? {
-            return Ok(None);
-        }
-
         let bytes = match host.read_file(&pkg_json).await {
             Ok(b) => b,
             Err(HostError::PathNotFound { .. }) => return Ok(None),
@@ -1737,6 +1733,10 @@ fn parse_linux_qq_from_nclatest(
         source: "nclatest",
     })
 }
+
+#[cfg(test)]
+#[path = "linux_detect_tests.rs"]
+mod linux_detect_tests;
 
 #[cfg(test)]
 mod tests {
