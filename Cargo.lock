@@ -3371,6 +3371,7 @@ name = "ncd-backend-napcat"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "chrono",
  "hex",
  "ncd-component",
