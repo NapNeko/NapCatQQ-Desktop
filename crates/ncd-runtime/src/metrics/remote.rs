@@ -22,6 +22,9 @@ use super::{BotRuntimeMetricsPrefs, remote_metrics_nodes_posix, remote_metrics_s
 
 const REMOTE_PROBE_NAME: &str = "ncd-ob11-stats.cjs";
 
+#[path = "remote_assets.rs"]
+mod assets;
+
 #[derive(Debug, Clone)]
 pub struct RemoteMetricsPaths {
     pub home: String,
@@ -302,7 +305,7 @@ impl ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector
         config: &BotConfig,
     ) -> Option<BTreeMap<String, String>> {
         let prefs = self.prefs();
-        let paths = match ensure_remote_metrics_assets(
+        let paths = if let Some(paths) = assets::current_snowluma_assets(
             host,
             home,
             bot_id,
@@ -312,23 +315,41 @@ impl ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector
         )
         .await
         {
-            Ok(p) => p,
-            Err(err) => {
-                tracing::warn!(
-                    target: "ncd_runtime::metrics",
-                    bot_id,
-                    %err,
-                    "remote SL metrics assets failed (start continues without probe)"
-                );
+            paths
+        } else if host.os() == ncd_host::Os::Linux {
+            tracing::warn!(target: "ncd_runtime::metrics", bot_id,
+                "remote SL metrics asset synchronization failed (start continues without probe)");
+            return None;
+        } else {
+            let paths = match ensure_remote_metrics_assets(
+                host,
+                home,
+                bot_id,
+                config,
+                &prefs,
+                &self.local_data_root,
+            )
+            .await
+            {
+                Ok(paths) => paths,
+                Err(err) => {
+                    tracing::warn!(
+                        target: "ncd_runtime::metrics",
+                        bot_id,
+                        %err,
+                        "remote SL metrics assets failed (start continues without probe)"
+                    );
+                    return None;
+                }
+            };
+            if let Err(err) =
+                super::write_remote_snowluma_registration(host, home, bot_id, config, &prefs).await
+            {
+                tracing::warn!(target: "ncd_runtime::metrics", bot_id, %err, "remote SL metrics registration failed");
                 return None;
             }
+            paths
         };
-        if let Err(err) =
-            super::write_remote_snowluma_registration(host, home, bot_id, config, &prefs).await
-        {
-            tracing::warn!(target: "ncd_runtime::metrics", bot_id, %err, "remote SL metrics registration failed");
-            return None;
-        }
         let env = paths.env_map_for_snowluma();
         tracing::info!(
             target: "ncd_runtime::metrics",
