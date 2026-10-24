@@ -1285,7 +1285,6 @@ impl BotBackend for RemoteSnowLumaBackend {
             .await
             .get(&ctx.config.bot_id)
             .cloned();
-        let had_client = previous_client.is_some();
         let staged_client = std::sync::Mutex::new(previous_client);
         let injected_here = AtomicBool::new(false);
         let record_client = |client| {
@@ -1554,7 +1553,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                 self.dispose_poller(&ctx.config.bot_id).await;
             } else if cancel.is_cancelled() {
                 let hot = ctx.bot_config.as_ref().is_some_and(|config| !resolve_start_mode(config).is_cold());
-                if injected_here.load(Ordering::SeqCst) || (hot && had_client) {
+                if injected_here.load(Ordering::SeqCst) || (hot && saved_client.is_some()) {
                     let client = saved_client.as_ref().ok_or_else(|| BotBackendError::Io("取消启动后缺少卸载客户端，状态尚未确认".into()))?;
                     let tracked = self.login_pids.lock().await.get(&ctx.config.bot_id).cloned()
                         .ok_or_else(|| BotBackendError::Io("取消启动后 QQ 归属尚未确认".into()))?;
