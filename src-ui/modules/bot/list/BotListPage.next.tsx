@@ -223,8 +223,8 @@ export function BotListPageNext({
                                 pushInfoBar({
                                     key: `snowluma-ui-retry:${id}`,
                                     tone: 'success',
-                                    title: '连接已重建',
-                                    content: 'SnowLuma WebUI 与 noVNC 隧道已重新建立。',
+                                    title: 'WebUI 连接已重建',
+                                    content: '可重新打开 SnowLuma WebUI。',
                                 });
                             } catch (err: unknown) {
                                 pushErrorBar({
