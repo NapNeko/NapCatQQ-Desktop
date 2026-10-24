@@ -6,8 +6,10 @@
 import { useCallback } from 'react';
 import { openExternalUrl } from '../../core/ipc/transport';
 import { snowlumaService } from '../../core/services/desktop.service';
+import { clipboardService } from '../../core/services/clipboard.service';
 import { buildNapcatWebuiUrl, type NapcatWebuiBinding } from '../../core/domain/webui/availability';
 import type { Flavor } from '../../core/domain/bot/flavor';
+import { pushInfoBar } from '../ui/globalInfoBarStore';
 
 export interface OpenWebuiArgs {
     botId: string;
@@ -18,20 +20,39 @@ export interface OpenWebuiArgs {
 export function useOpenWebui() {
     return useCallback(async ({ botId, flavor, napcat }: OpenWebuiArgs): Promise<void> => {
         if (flavor === 'snowluma') {
-            try {
-                const ep = await snowlumaService.openWebui(botId);
-                if (ep.password) {
-                    try {
-                        await navigator.clipboard.writeText(ep.password);
-                    } catch (e) {
-                        console.warn('密码写入剪贴板失败:', e);
-                    }
+            const ep = await snowlumaService.openWebui(botId);
+            let copyState: 'copied' | 'missing' | 'failed' = 'missing';
+            if (ep.password.trim()) {
+                try {
+                    await clipboardService.writeText(ep.password);
+                    copyState = 'copied';
+                } catch {
+                    copyState = 'failed';
                 }
+            }
+            let opened = false;
+            try {
                 await openExternalUrl(ep.url);
-            } catch (err) {
-                console.error('打开 SnowLuma WebUI 失败:', err);
-                // 让上层决定怎么提示，这里只 throw。
-                throw err;
+                opened = true;
+            } finally {
+                const copied = copyState === 'copied';
+                pushInfoBar({
+                    key: `snowluma-webui-clipboard:${botId}`,
+                    tone: copied && opened ? 'success' : 'warning',
+                    title: copied
+                        ? '密码已复制'
+                        : copyState === 'missing'
+                          ? '未读取到登录密码'
+                          : '未能复制登录密码',
+                    content: opened
+                        ? copied
+                            ? '粘贴到 SnowLuma WebUI 登录。'
+                            : 'WebUI 已打开，请使用你设置的密码登录。'
+                        : copied
+                          ? '浏览器未能打开，请重试打开 WebUI。'
+                          : '浏览器未能打开，剪贴板未更新。',
+                    autoDismissMs: copied && opened ? 3000 : undefined,
+                });
             }
             return;
         }

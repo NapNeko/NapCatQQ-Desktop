@@ -1163,6 +1163,7 @@ pub fn run() {
             commands::terminal::terminal_download,
             commands::terminal::terminal_export_text,
             commands::terminal::read_clipboard_text,
+            commands::terminal::write_clipboard_text,
             commands::onebot_debug::onebot_debug_targets,
             commands::chat::chat_targets,
             commands::chat::chat_call,
