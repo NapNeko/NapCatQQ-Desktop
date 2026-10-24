@@ -17,6 +17,11 @@ impl RemoteLinuxHost {
     ) -> Result<CommandOutput, HostError> {
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
         let deadline = tokio::time::Instant::now() + timeout;
+        let _permit = tokio::time::timeout_at(deadline, self.acquire_short_exec())
+            .await
+            .map_err(|_| HostError::Timeout {
+                operation: "remote_exec_capacity",
+            })??;
         let mut channel =
             tokio::time::timeout_at(deadline, self.open_raw_channel(line, cmd.stdin.as_deref()))
                 .await

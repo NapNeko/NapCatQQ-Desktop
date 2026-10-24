@@ -1,7 +1,6 @@
 //! 远端交互终端：在现有 SSH 会话上开一条带 pty 的通道
 //!
-//! 只在开通道那一下拿会话锁，之后通道自己跑。主连接被自愈作废时，已开的终端通道
-//! 仍握着 russh 会话的发送端，照常活到用户关掉或网络真断。
+//! 会话读锁仅覆盖开通道；连接失效会显式断开旧会话，终端 IO 不占主锁。
 
 use std::time::Duration;
 
@@ -11,7 +10,6 @@ use russh::client::Msg;
 
 use crate::command::HostCommand;
 use crate::error::HostError;
-use crate::host::Host;
 use crate::pty::{
     PtyBackend, PtyExit, PtyInput, PtyProgram, PtyRequest, PtySession, pty_channel_pair,
 };
@@ -36,20 +34,7 @@ impl RemoteLinuxHost {
         req: PtyRequest,
         line: Option<String>,
     ) -> Result<PtySession, HostError> {
-        let channel = {
-            let guard = self.handle.lock().await;
-            let Some(session) = guard.as_ref() else {
-                return Err(HostError::remote_disconnected("ssh session poisoned"));
-            };
-            match session.channel_open_session().await {
-                Ok(channel) => channel,
-                Err(e) => {
-                    drop(guard);
-                    Host::invalidate_connection(self).await;
-                    return Err(HostError::remote_disconnected(format!("open channel: {e}")));
-                }
-            }
-        };
+        let channel = self.open_session_channel().await?;
 
         channel
             .request_pty(
