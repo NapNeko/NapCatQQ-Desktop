@@ -620,3 +620,141 @@ async fn replaced_host_start_cannot_restore_or_remove_the_new_sessions_bindings(
     );
     backend.detach_login_pollers().await;
 }
+
+async fn completed_start_fixture(
+    mode: SnowLumaStartMode,
+) -> (
+    Arc<RemoteSnowLumaBackend>,
+    Arc<MetricsHost>,
+    BotStatus,
+    Arc<ReuseClient>,
+) {
+    let (backend, host, bot) = bound().await;
+    let client = install_reusable_poller(&backend, &bot).await;
+    client.allow_unload.store(true, Ordering::SeqCst);
+    backend.start_modes.lock().await.insert(bot.clone(), mode);
+    let status = BotStatus::running(bot.clone(), 42, 0);
+    backend.completed_starts.lock().await.insert(
+        bot,
+        CompletedStart {
+            status: status.clone(),
+            host: backend.daemon.current_host().await,
+            tracked: TrackedQq {
+                pid: 42,
+                start_time: "12345".into(),
+            },
+            mode,
+            client: client.clone(),
+        },
+    );
+    (backend, host, status, client)
+}
+
+#[tokio::test(start_paused = true)]
+async fn unacknowledged_start_cleanup_never_targets_a_replacement_host_or_its_maps() {
+    for mode in [SnowLumaStartMode::ColdStart, SnowLumaStartMode::HotStart] {
+        let (backend, old_host, status, old_client) = completed_start_fixture(mode).await;
+        let new_host = Arc::new(MetricsHost::default());
+        backend
+            .daemon
+            .replace_host_if_current(new_host.clone(), async { true })
+            .await
+            .unwrap();
+        let new_client = install_reusable_poller(&backend, &status.bot_id).await;
+        backend.login_pids.lock().await.insert(
+            status.bot_id.clone(),
+            TrackedQq {
+                pid: 99,
+                start_time: "54321".into(),
+            },
+        );
+        backend
+            .start_modes
+            .lock()
+            .await
+            .insert(status.bot_id.clone(), SnowLumaStartMode::HotStart);
+        backend
+            .hot_detached
+            .lock()
+            .await
+            .insert(status.bot_id.clone());
+        let result = backend.cleanup_unacknowledged_start(&status).await;
+        assert_eq!(result.is_ok(), mode.is_cold());
+        let actions = old_host.qq_operations.lock().unwrap().clone();
+        if mode.is_cold() {
+            assert_eq!(actions, [("stop".into(), false, 42, "12345".into())]);
+        } else {
+            assert!(actions.is_empty());
+        }
+        assert!(new_host.qq_operations.lock().unwrap().is_empty());
+        assert!(new_host.commands.lock().unwrap().is_empty());
+        assert_eq!(old_client.unloads.load(Ordering::SeqCst), 0);
+        assert_eq!(new_client.unloads.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            backend
+                .login_pids
+                .lock()
+                .await
+                .get(&status.bot_id)
+                .unwrap()
+                .pid,
+            99
+        );
+        assert!(backend.hot_detached.lock().await.contains(&status.bot_id));
+        let current = backend
+            .login_clients
+            .lock()
+            .await
+            .get(&status.bot_id)
+            .cloned()
+            .unwrap();
+        let expected: Arc<dyn SnowLumaWebUiClient> = new_client;
+        assert!(Arc::ptr_eq(&current, &expected));
+        backend.detach_login_pollers().await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn unacknowledged_hot_start_unloads_only_its_bound_session_and_preserves_qq() {
+    let (backend, host, status, client) =
+        completed_start_fixture(SnowLumaStartMode::HotStart).await;
+    backend.cleanup_unacknowledged_start(&status).await.unwrap();
+    assert_eq!(client.unloads.load(Ordering::SeqCst), 1);
+    assert!(host.qq_operations.lock().unwrap().is_empty());
+    assert_eq!(
+        backend
+            .login_pids
+            .lock()
+            .await
+            .get(&status.bot_id)
+            .unwrap()
+            .pid,
+        42
+    );
+    assert!(backend.hot_detached.lock().await.contains(&status.bot_id));
+    assert_eq!(
+        backend.status(status.bot_id).await.unwrap().state,
+        ncd_domain::bot_actor::BotActorState::Stopped
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn unacknowledged_cleanup_rejects_a_status_that_does_not_match_the_success_record() {
+    let (backend, host, mut status, client) =
+        completed_start_fixture(SnowLumaStartMode::ColdStart).await;
+    status.started_at = Some(1);
+    assert!(backend.cleanup_unacknowledged_start(&status).await.is_err());
+    assert!(host.qq_operations.lock().unwrap().is_empty());
+    assert_eq!(client.unloads.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        backend
+            .login_pids
+            .lock()
+            .await
+            .get(&status.bot_id)
+            .unwrap()
+            .pid,
+        42
+    );
+    backend.detach_login_pollers().await;
+}
