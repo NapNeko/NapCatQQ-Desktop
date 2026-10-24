@@ -31,6 +31,15 @@ struct RecoveryHost {
     tunnel_entered: Notify,
     fail_prereqs: AtomicBool,
     fail_tunnels: AtomicBool,
+    metadata_permission_denied: AtomicBool,
+    metadata_reply_override: StdMutex<Option<String>>,
+    metadata_checks: AtomicUsize,
+    metadata_elevated: AtomicUsize,
+    recoveries: AtomicUsize,
+    node_scan_reply: StdMutex<Option<String>>,
+    node_inspect_reply: StdMutex<Option<String>>,
+    node_snapshot_reply: StdMutex<Option<String>>,
+    node_elevated: AtomicUsize,
 }
 
 impl RecoveryHost {
@@ -51,6 +60,15 @@ impl RecoveryHost {
             tunnel_entered: Notify::new(),
             fail_prereqs: AtomicBool::new(false),
             fail_tunnels: AtomicBool::new(false),
+            metadata_permission_denied: AtomicBool::new(false),
+            metadata_reply_override: StdMutex::new(None),
+            metadata_checks: AtomicUsize::new(0),
+            metadata_elevated: AtomicUsize::new(0),
+            recoveries: AtomicUsize::new(0),
+            node_scan_reply: StdMutex::new(None),
+            node_inspect_reply: StdMutex::new(None),
+            node_snapshot_reply: StdMutex::new(None),
+            node_elevated: AtomicUsize::new(0),
         }
     }
 }
@@ -149,19 +167,78 @@ impl Host for RecoveryHost {
             stdout: String::new(),
             stderr: String::new(),
         };
-        if cmd.program == "python3" {
+        if cmd.program == "id" && cmd.args == ["-u"] {
+            out.stdout = "1000\n".into();
+        } else if cmd.program == "python3"
+            && cmd
+                .args
+                .iter()
+                .any(|arg| arg.starts_with("# Read only same-user Node identities;"))
+        {
+            assert_eq!(&cmd.args[5..8], ["1000", "/opt/sl/node", "/opt/sl"]);
+            let mode = cmd.args[4].as_str();
+            if cmd.elevated {
+                assert!(
+                    matches!(mode, "inspect" | "endpoint_inspect"),
+                    "elevated probing must never scan /proc"
+                );
+                self.node_elevated.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(
+                    cmd.args.last().unwrap(),
+                    r#"[{"pid":901,"start_time":"12345"}]"#
+                );
+            }
+            let override_reply = match mode {
+                "scan" | "endpoint_scan" => self.node_scan_reply.lock().unwrap().clone(),
+                "inspect" | "endpoint_inspect" => self.node_inspect_reply.lock().unwrap().clone(),
+                "snapshot" => self.node_snapshot_reply.lock().unwrap().clone(),
+                _ => panic!("unexpected Node probe mode"),
+            };
+            out.stdout = override_reply.unwrap_or_else(|| {
+                if mode == "snapshot" {
+                    r#"{"state":"snapshot","snapshot":[{"pid":901,"start_time":"12345"}]}"#.into()
+                } else if mode.starts_with("endpoint_") && self.node_running.load(Ordering::SeqCst) {
+                    r#"{"state":"present","node":{"pid":901,"uid":1000,"start_time":"12345","exe":"/opt/sl/node","cwd":"/opt/sl","entry":"/opt/sl/index.mjs","ns_pids":[901,19],"pid_namespace":"pid:[4026532569]"},"snapshot":[{"pid":901,"start_time":"12345"}],"host":"127.0.0.1","port":13105,"listeners":[{"host":"127.0.0.1","port":13105}]}"#.into()
+                } else if self.node_running.load(Ordering::SeqCst) {
+                    r#"{"state":"present","node":{"pid":901,"uid":1000,"start_time":"12345","exe":"/opt/sl/node"},"snapshot":[{"pid":901,"start_time":"12345"}]}"#.into()
+                } else {
+                    r#"{"state":"absent","snapshot":[]}"#.into()
+                }
+            });
+        } else if cmd.program == "python3"
+            && cmd
+                .args
+                .iter()
+                .any(|arg| arg.starts_with("# Read only one attributed QQ process;"))
+        {
+            self.metadata_checks.fetch_add(1, Ordering::SeqCst);
+            if cmd.elevated {
+                self.metadata_elevated.fetch_add(1, Ordering::SeqCst);
+            }
+            assert_eq!(
+                &cmd.args[cmd.args.len() - 5..],
+                ["/opt/QQ/qq", "42", "12345", "10001", "1000"]
+            );
+            if let Some(reply) = self.metadata_reply_override.lock().unwrap().clone() {
+                out.stdout = reply;
+            } else if self.metadata_permission_denied.load(Ordering::SeqCst) && !cmd.elevated {
+                out.exit_code = Some(1);
+                out.stdout = r#"{"error":{"code":"permission_denied","message":"protected process metadata"}}"#.into();
+            } else {
+                out.stdout = r#"{"target":{"pid":42,"uid":1000,"start_time":"12345","exe":"/opt/QQ/qq","display":":106","xauthority":null}}"#.into();
+            }
+        } else if cmd.program == "python3" {
+            assert!(
+                !cmd.elevated,
+                "desktop services must remain under the original SSH user"
+            );
+            self.recoveries.fetch_add(1, Ordering::SeqCst);
             if self.fail_start {
                 out.exit_code = Some(1);
                 out.stderr = "VNC service unavailable".into();
             } else {
                 out.stdout = r#"{"port":6099}"#.into();
             }
-        } else if script == super::super::probe::stack_ready_script(&layout().paths) {
-            out.exit_code = Some(if self.node_running.load(Ordering::SeqCst) {
-                0
-            } else {
-                1
-            });
         } else if script.starts_with("# ncd-snowluma-node-identity") {
             let identity = self.identity.load(Ordering::SeqCst);
             let gate = self.identity_gate.lock().unwrap().take();
@@ -779,7 +856,7 @@ async fn shared_metrics_update_preserves_running_node_and_is_used_for_recovery()
 async fn novnc_recovery_uses_verified_custom_port_without_starting_node_or_acquiring_bot_lease() {
     let host = Arc::new(RecoveryHost::new(true, "running", false));
     let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
-    daemon.ensure_novnc_ready().await.unwrap();
+    daemon.ensure_novnc_ready(42, "12345", 10001).await.unwrap();
     assert_eq!(
         *daemon.tunnel_remote_ports.lock().await,
         Some((13105, 6099))
@@ -792,9 +869,140 @@ async fn novnc_recovery_uses_verified_custom_port_without_starting_node_or_acqui
 async fn failed_novnc_recovery_does_not_publish_an_endpoint() {
     let host = Arc::new(RecoveryHost::new(true, "running", true));
     let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
-    assert!(daemon.ensure_novnc_ready().await.is_err());
+    assert!(daemon.ensure_novnc_ready(42, "12345", 10001).await.is_err());
     assert!(daemon.tunnel_endpoints().await.is_none());
     assert!(host.node_running.load(Ordering::SeqCst));
+    assert_eq!(host.starts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn novnc_metadata_permission_fallback_never_elevates_service_recovery() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    host.metadata_permission_denied
+        .store(true, Ordering::SeqCst);
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    daemon.ensure_novnc_ready(42, "12345", 10001).await.unwrap();
+    assert_eq!(host.metadata_checks.load(Ordering::SeqCst), 2);
+    assert_eq!(host.metadata_elevated.load(Ordering::SeqCst), 1);
+    assert_eq!(host.recoveries.load(Ordering::SeqCst), 1);
+    assert_eq!(host.starts.load(Ordering::SeqCst), 0);
+    assert_eq!(daemon.leases.lock().await.count(), 0);
+}
+
+#[tokio::test]
+async fn novnc_non_permission_failures_never_trigger_metadata_elevation_or_recovery() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    *host.metadata_reply_override.lock().unwrap() =
+        Some(r#"{"error":{"code":"identity_changed","message":"target process changed"}}"#.into());
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    let error = daemon
+        .ensure_novnc_ready(42, "12345", 10001)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("target process changed"));
+    assert_eq!(host.metadata_checks.load(Ordering::SeqCst), 1);
+    assert_eq!(host.metadata_elevated.load(Ordering::SeqCst), 0);
+    assert_eq!(host.recoveries.load(Ordering::SeqCst), 0);
+    assert!(daemon.tunnel_endpoints().await.is_none());
+}
+
+#[tokio::test]
+async fn novnc_rejects_metadata_for_another_owner_before_service_recovery() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    *host.metadata_reply_override.lock().unwrap() = Some(
+        r#"{"target":{"pid":42,"uid":2000,"start_time":"12345","exe":"/opt/QQ/qq","display":":106","xauthority":null}}"#.into(),
+    );
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    assert!(daemon.ensure_novnc_ready(42, "12345", 10001).await.is_err());
+    assert_eq!(host.metadata_elevated.load(Ordering::SeqCst), 0);
+    assert_eq!(host.recoveries.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn node_presence_unknown_conflict_and_changed_never_start_in_either_entry_path() {
+    for reply in [
+        r#"{"state":"error","code":"unknown","message":"无法读取 Node 元数据"}"#,
+        r#"{"state":"error","code":"conflict","message":"同一安装存在多个 Node"}"#,
+        r#"{"state":"error","code":"changed","message":"Node PID 已复用"}"#,
+        r#"{"state":"absent","snapshot":null}"#,
+    ] {
+        for cold_start in [false, true] {
+            let host = Arc::new(RecoveryHost::new(true, "running", false));
+            *host.node_scan_reply.lock().unwrap() = Some(reply.into());
+            let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+            let bot = BotId::new("10001");
+            let result = if cold_start {
+                daemon.ensure_running_for_bot(&bot, None, false, None).await
+            } else {
+                daemon.ensure_running_for_reconcile_bot(&bot).await
+            };
+            assert!(result.is_err(), "cold_start={cold_start}, reply={reply}");
+            assert_eq!(host.starts.load(Ordering::SeqCst), 0);
+            assert_eq!(host.tunnels.load(Ordering::SeqCst), 0);
+            assert_eq!(host.node_elevated.load(Ordering::SeqCst), 0);
+            assert!(host.node_running.load(Ordering::SeqCst));
+            assert!(host.commands.lock().unwrap().iter().all(|script| {
+                !script.contains("nohup setsid Xvfb") && !script.contains("node_pid=$!")
+            }));
+        }
+    }
+}
+
+#[tokio::test]
+async fn node_presence_permission_fallback_reuses_only_the_bound_single_instance() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    *host.node_scan_reply.lock().unwrap() = Some(
+        r#"{"state":"permission_denied","snapshot":[{"pid":901,"start_time":"12345"}]}"#.into(),
+    );
+    let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+    daemon
+        .ensure_running_for_reconcile_bot(&BotId::new("10001"))
+        .await
+        .unwrap();
+    // Readiness and endpoint resolution each verify the protected Node metadata.
+    assert_eq!(host.node_elevated.load(Ordering::SeqCst), 2);
+    assert_eq!(host.starts.load(Ordering::SeqCst), 0);
+    assert_eq!(host.tunnels.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        *daemon.tunnel_remote_ports.lock().await,
+        Some((13105, 6081))
+    );
+}
+
+#[tokio::test]
+async fn node_presence_failed_permission_or_changed_snapshot_never_recovers() {
+    for failed_permission in [true, false] {
+        let host = Arc::new(RecoveryHost::new(true, "running", false));
+        let protected =
+            r#"{"state":"permission_denied","snapshot":[{"pid":901,"start_time":"12345"}]}"#;
+        *host.node_scan_reply.lock().unwrap() = Some(protected.into());
+        if failed_permission {
+            *host.node_inspect_reply.lock().unwrap() = Some(protected.into());
+        } else {
+            *host.node_snapshot_reply.lock().unwrap() = Some(
+                r#"{"state":"snapshot","snapshot":[{"pid":901,"start_time":"67890"}]}"#.into(),
+            );
+        }
+        let daemon = daemon(Arc::clone(&host), Arc::new(BroadcastEventBus::default()));
+        assert!(
+            daemon
+                .ensure_running_for_reconcile_bot(&BotId::new("10001"))
+                .await
+                .is_err()
+        );
+        assert_eq!(host.node_elevated.load(Ordering::SeqCst), 1);
+        assert_eq!(host.starts.load(Ordering::SeqCst), 0);
+        assert_eq!(host.tunnels.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[tokio::test]
+async fn node_presence_rechecks_before_recovery_and_reuses_a_now_running_node() {
+    let host = Arc::new(RecoveryHost::new(true, "running", false));
+    let port = recover_node_for_reconcile(host.as_ref(), &layout(), None)
+        .await
+        .unwrap();
+    assert_eq!(port, 13105);
     assert_eq!(host.starts.load(Ordering::SeqCst), 0);
 }
 

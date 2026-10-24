@@ -352,6 +352,9 @@ pub(crate) async fn recover_node_for_reconcile(
 ) -> Result<u16, BotBackendError> {
     // QQ 仍依赖原来的 X server；完整启栈会覆盖 PID 文件并干扰现有会话。
     ensure_dirs(host, &layout.paths).await?;
+    if is_stack_ready(host, layout).await? {
+        return resolve_remote_webui_port(host, layout).await;
+    }
     start_node_with_env(host, layout, metrics_env).await?;
     wait_remote_webui_ready(host, &layout.paths, Duration::from_secs(20)).await
 }
@@ -559,26 +562,10 @@ pub async fn ensure_stack_running(
     metrics_env: Option<&BTreeMap<String, String>>,
 ) -> Result<u16, BotBackendError> {
     let paths = &layout.paths;
-    if is_stack_ready(host, paths).await? {
-        return resolve_remote_webui_port(host, paths).await;
+    if is_stack_ready(host, layout).await? {
+        return resolve_remote_webui_port(host, layout).await;
     }
     ensure_dirs(host, paths).await?;
-
-    let pid_daemon = shell_single_quote(&paths.pid_daemon);
-    let script_check = format!(
-        r#"if [ -f {pid_daemon} ] && kill -0 "$(cat {pid_daemon} 2>/dev/null || echo 0)" 2>/dev/null; then
-  echo "daemon already running"
-  exit 0
-fi
-"#
-    );
-    if run_remote_bash(host, &script_check)
-        .await
-        .map(|o| o.contains("daemon already running"))
-        .unwrap_or(false)
-    {
-        return resolve_remote_webui_port(host, paths).await;
-    }
 
     ensure_dbus_env(host, paths).await?;
     start_xvfb(host, layout).await?;

@@ -53,8 +53,18 @@ pub(crate) async fn process_start_time(
     if pid == 0 {
         return Err(io_error());
     }
-    let bytes = bounded_read(host, &format!("/proc/{pid}/stat"), 4096).await?;
-    parse_start_time(&bytes).ok_or_else(io_error)
+    let output = host
+        .run_to_string(
+            HostCommand::new("head")
+                .args(["-c", "4097", "--", &format!("/proc/{pid}/stat")])
+                .timeout(Duration::from_secs(3)),
+        )
+        .await
+        .map_err(|_| io_error())?;
+    if !output.success() || output.stdout.len() > 4096 {
+        return Err(io_error());
+    }
+    parse_start_time(output.stdout.as_bytes()).ok_or_else(io_error)
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct LoginSession {
@@ -680,6 +690,16 @@ mod tests {
             Ok(Some("/usr/bin/python3".into()))
         }
         async fn run_to_string(&self, command: HostCommand) -> Result<CommandOutput, HostError> {
+            if command.program == "head" {
+                let path = HostPath::from_posix(command.args.last().unwrap());
+                let bytes = self.read_file(&path).await?;
+                self.commands.lock().unwrap().push(command);
+                return Ok(CommandOutput {
+                    exit_code: Some(0),
+                    stdout: String::from_utf8_lossy(&bytes[..bytes.len().min(4097)]).into_owned(),
+                    stderr: String::new(),
+                });
+            }
             let (code, stdout) = if command.program == "chmod" {
                 (0, String::new())
             } else if command.args.iter().any(|arg| arg == "--probe") {
@@ -794,6 +814,39 @@ mod tests {
             SnowLumaQrLoginState::LoginDetected
         );
     }
+    #[tokio::test]
+    async fn process_birth_is_one_bounded_readonly_exec() {
+        let host = BindingHost::new();
+        let mut fields = vec!["S"; 20];
+        fields[19] = "12345";
+        host.files.lock().unwrap().insert(
+            "/proc/19/stat".into(),
+            format!("19 (qq worker) {}", fields.join(" ")).into_bytes(),
+        );
+        assert_eq!(process_start_time(&host, 19).await.unwrap(), "12345");
+        let commands = host.commands.lock().unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].program, "head");
+        assert_eq!(commands[0].args, ["-c", "4097", "--", "/proc/19/stat"]);
+        assert_eq!(commands[0].timeout, Some(Duration::from_secs(3)));
+        assert!(!commands[0].elevated);
+    }
+
+    #[tokio::test]
+    async fn process_birth_rejects_missing_oversized_invalid_and_zero_pid_without_fallback() {
+        let host = BindingHost::new();
+        assert!(process_start_time(&host, 0).await.is_err());
+        assert!(host.commands.lock().unwrap().is_empty());
+        assert!(process_start_time(&host, 19).await.is_err());
+        for bytes in [vec![b'a'; 4097], b"not proc stat".to_vec()] {
+            host.files
+                .lock()
+                .unwrap()
+                .insert("/proc/19/stat".into(), bytes);
+            assert!(process_start_time(&host, 19).await.is_err());
+        }
+    }
+
     #[test]
     fn proc_stat_uses_birth_field_even_with_parentheses_in_process_name() {
         let mut fields = vec!["S"; 20];

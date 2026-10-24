@@ -19,10 +19,11 @@ impl RemoteSnowLumaBackend {
         if activity.cleanup_failed.load(Ordering::SeqCst) {
             return Ok(QrReloginPreparation::Unchanged);
         }
-        let Some(client) = self.login_clients.lock().await.get(bot_id).cloned() else {
+        let Some(old_client) = self.login_clients.lock().await.get(bot_id).cloned() else {
             return Ok(QrReloginPreparation::Waiting);
         };
-        let processes = client
+        let mut client = Arc::clone(&old_client);
+        let mut processes = client
             .list_processes()
             .await
             .map_err(|error| BotBackendError::Io(error.to_string()))?;
@@ -91,6 +92,24 @@ impl RemoteSnowLumaBackend {
             pid,
             start_time: login_helper::process_start_time(host.as_ref(), pid).await?,
         };
+        if pid != tracked.pid && self.daemon.webui_uses_pid_namespace().await {
+            if activity.close_revision.load(Ordering::SeqCst) != request_close_revision {
+                return Ok(QrReloginPreparation::Unchanged);
+            }
+            let Some(endpoints) = self.daemon.tunnel_endpoints().await else {
+                return Ok(QrReloginPreparation::Waiting);
+            };
+            let webui_pid = self
+                .daemon
+                .webui_process_pid(pid, &current.start_time)
+                .await?;
+            // The old per-Bot client intentionally cannot expose the replacement PID.
+            client = super::super::inject::inject_via_tunnel(&endpoints, pid, webui_pid).await?;
+            processes = client
+                .list_processes()
+                .await
+                .map_err(|error| BotBackendError::Io(error.to_string()))?;
+        }
         let process = processes.iter().find(|process| process.pid == pid);
         if process.is_none() {
             return Ok(QrReloginPreparation::Waiting);
@@ -153,7 +172,7 @@ impl RemoteSnowLumaBackend {
                 .lock()
                 .await
                 .get(bot_id)
-                .is_none_or(|value| !Arc::ptr_eq(value, &client))
+                .is_none_or(|value| !Arc::ptr_eq(value, &old_client))
         {
             return Ok(QrReloginPreparation::Unchanged);
         }

@@ -30,6 +30,7 @@ struct TunnelBundle {
     webui_password: String,
     vnc_password: String,
     remote_webui_port: u16,
+    remote_webui_host: String,
     remote_novnc_port: u16,
     refcount: u32,
 }
@@ -81,6 +82,28 @@ impl RemoteSnowLumaTunnelRegistry {
         remote_webui_port: u16,
         remote_novnc_port: u16,
     ) -> Result<RemoteSnowLumaTunnelEndpoints, HostError> {
+        self.acquire_at(
+            server_id,
+            host,
+            webui_password,
+            vnc_password,
+            "127.0.0.1",
+            remote_webui_port,
+            remote_novnc_port,
+        )
+        .await
+    }
+
+    pub(crate) async fn acquire_at(
+        &self,
+        server_id: &str,
+        host: &dyn Host,
+        webui_password: String,
+        vnc_password: String,
+        remote_webui_host: &str,
+        remote_webui_port: u16,
+        remote_novnc_port: u16,
+    ) -> Result<RemoteSnowLumaTunnelEndpoints, HostError> {
         let slot = self
             .by_server
             .lock()
@@ -99,7 +122,8 @@ impl RemoteSnowLumaTunnelRegistry {
                 remote_webui_port,
                 bundle.remote_novnc_port,
                 remote_novnc_port,
-            ) {
+            ) || bundle.remote_webui_host != remote_webui_host
+            {
                 tracing::info!(
                     target: "ncd_runtime::remote_snowluma",
                     server_id,
@@ -134,10 +158,16 @@ impl RemoteSnowLumaTunnelRegistry {
             remote_novnc_port
         };
         let opened = async {
-            let webui =
-                open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, remote_webui).await?;
+            let webui = open_tunnel_preferred(
+                host,
+                PREFERRED_WEBUI_LOCAL_PORT,
+                remote_webui_host,
+                remote_webui,
+            )
+            .await?;
             let novnc =
-                open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, remote_novnc).await?;
+                open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, "127.0.0.1", remote_novnc)
+                    .await?;
             Ok::<_, HostError>((webui, novnc))
         }
         .await;
@@ -168,6 +198,7 @@ impl RemoteSnowLumaTunnelRegistry {
             webui_password,
             vnc_password,
             remote_webui_port: remote_webui,
+            remote_webui_host: remote_webui_host.to_owned(),
             remote_novnc_port: remote_novnc,
             refcount: 1,
         });
@@ -243,14 +274,17 @@ fn tunnel_remote_ports_changed(
 async fn open_tunnel_preferred(
     host: &dyn Host,
     preferred_local: u16,
+    remote_host: &str,
     remote_port: u16,
 ) -> Result<TunnelHandle, HostError> {
-    let spec_fixed = TunnelSpec::local_to_remote(preferred_local, remote_port);
+    let mut spec_fixed = TunnelSpec::local_to_remote(preferred_local, remote_port);
+    spec_fixed.remote_host = remote_host.to_owned();
     if let Ok(h) = host.open_tunnel(spec_fixed).await {
         return Ok(h);
     }
-    host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
-        .await
+    let mut fallback = TunnelSpec::local_to_remote(0, remote_port);
+    fallback.remote_host = remote_host.to_owned();
+    host.open_tunnel(fallback).await
 }
 
 #[cfg(test)]

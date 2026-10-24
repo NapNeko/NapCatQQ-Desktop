@@ -21,7 +21,7 @@ pub async fn remote_qq_running_pid(
     remote_qq_running_pid_with_hint(host, qq_id, None, None, false).await
 }
 
-/// `pid_file`：Desktop 写下的 `pid_bot_<qq>`，导入接管时优先认。
+/// `pid_file`：历史 PID 文件路径；账号归属仍须由进程证据确认。
 /// `qq_bin`：库存/布局里的 QQ 可执行文件，用来对齐 /proc/pid/exe。
 /// `allow_single_main_fallback`：无任何账号证据时允许按「整机唯一 QQ 主进程」归因，
 /// 只有 reconcile（导入接管 / 冷启动恢复）传 true；start/status/stop 必须传 false。
@@ -132,7 +132,13 @@ fn relogin_cmdline_matches(bytes: &[u8], expected_uin: &str) -> bool {
 pub(crate) async fn inject_via_tunnel(
     endpoints: &RemoteSnowLumaTunnelEndpoints,
     qq_pid: u32,
+    webui_pid: u32,
 ) -> Result<Arc<dyn SnowLumaWebUiClient>, BotBackendError> {
+    if endpoints.webui_password.is_empty() {
+        return Err(BotBackendError::Io(
+            "未找到可用的 SnowLuma WebUI 登录密码，请打开 WebUI 手动登录".into(),
+        ));
+    }
     let client = ReqwestSnowLumaWebUiClient::new(
         endpoints.webui_local_port,
         endpoints.webui_password.clone(),
@@ -147,9 +153,19 @@ pub(crate) async fn inject_via_tunnel(
         .await
         .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI login: {e}")))?;
 
+    let mut client: Arc<dyn SnowLumaWebUiClient> = Arc::new(client);
+    if qq_pid != webui_pid {
+        client = Arc::new(
+            super::mapped_webui_client::MappedSnowLumaWebUiClient::new(client, qq_pid, webui_pid)
+                .map_err(|error| BotBackendError::Io(error.to_string()))?,
+        );
+    }
+
     // 冷启动刚 spawn QQ 后,SnowLuma daemon 侧扫描器需要时间把该 PID 识别为 Available
     // 立即 load_process 极大概率拿到 "server rejected"(success=false,error 常为空)
-    wait_process_available(&client, qq_pid, Duration::from_secs(12)).await;
+    if wait_process_available(client.as_ref(), qq_pid, Duration::from_secs(12)).await {
+        return Ok(client);
+    }
 
     // "already" 视为注入成功;其它拒绝若 error 为空则补 /api/processes 快照
     let load_res = client.load_process(qq_pid).await;
@@ -203,7 +219,7 @@ pub(crate) async fn inject_via_tunnel(
         }
     }
 
-    Ok(Arc::new(client) as Arc<dyn SnowLumaWebUiClient>)
+    Ok(client)
 }
 
 #[cfg(test)]
@@ -255,21 +271,26 @@ mod tests {
 }
 
 /// 等待 /api/processes 出现指定 pid(best-effort,超时不抛错)
-async fn wait_process_available(client: &dyn SnowLumaWebUiClient, pid: u32, timeout: Duration) {
+async fn wait_process_available(
+    client: &dyn SnowLumaWebUiClient,
+    pid: u32,
+    timeout: Duration,
+) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
         if Instant::now() >= deadline {
-            return;
+            return false;
         }
         if let Ok(list) = client.list_processes().await {
             if let Some(p) = list.into_iter().find(|p| p.pid == pid) {
                 match p.status {
-                    HookProcessStatus::Error | HookProcessStatus::Disconnected => return,
-                    HookProcessStatus::Available
-                    | HookProcessStatus::Loaded
+                    HookProcessStatus::Error
+                    | HookProcessStatus::Disconnected
+                    | HookProcessStatus::Available => return false,
+                    HookProcessStatus::Loaded
                     | HookProcessStatus::Online
                     | HookProcessStatus::Connecting
-                    | HookProcessStatus::Loading => return,
+                    | HookProcessStatus::Loading => return true,
                 }
             }
         }
