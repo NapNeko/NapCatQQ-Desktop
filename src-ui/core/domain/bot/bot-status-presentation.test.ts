@@ -55,7 +55,7 @@ describe('buildBotListCardStatus', () => {
         expect(s.session?.label).toBe('探测登录');
     });
 
-    it('SL running 探测不可用时显示 WebUI 不可用', () => {
+    it('SL 探测失败仅表示登录状态未确认，仍允许在浏览器检查 WebUI', () => {
         const s = buildBotListCardStatus({
             state: 'running',
             flavor: 'snowluma',
@@ -66,7 +66,12 @@ describe('buildBotListCardStatus', () => {
             snowlumaProbeUnavailable: true,
             snowlumaDockerEndpointsReady: true,
         });
-        expect(s.session?.label).toBe('WebUI 不可用');
+        expect(s.session).toMatchObject({
+            tone: 'warning',
+            label: '登录状态未确认',
+        });
+        expect(s.session?.tooltip).toContain('未能读取 QQ 登录状态');
+        expect(s.session?.tooltip).toContain('在浏览器打开 WebUI');
     });
 
     it('SL running 隧道未就绪时显示等待 WebUI', () => {

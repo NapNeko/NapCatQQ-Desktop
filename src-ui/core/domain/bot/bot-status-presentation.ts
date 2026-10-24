@@ -18,6 +18,7 @@ export type StatusBadgeSpec = {
     tone: StatusTone;
     label: string;
     dot?: boolean;
+    tooltip?: string;
 };
 
 export type BotListCardStatus = {
@@ -136,7 +137,12 @@ function snowlumaSessionBadge(args: {
     const ls = args.loginState;
     if (!ls) {
         if (args.probeUnavailable) {
-            return { tone: 'warning', label: SESSION_LABELS.webuiDown };
+            return {
+                tone: 'warning',
+                label: '登录状态未确认',
+                tooltip:
+                    '未能读取 QQ 登录状态，可能是 WebUI 鉴权失败或连接异常；可尝试在浏览器打开 WebUI。',
+            };
         }
         if (args.state === 'running' && args.dockerEndpointsReady) {
             return { tone: 'info', label: SESSION_LABELS.probing };

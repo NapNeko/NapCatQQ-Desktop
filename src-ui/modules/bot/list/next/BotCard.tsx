@@ -785,7 +785,7 @@ export function BotCard({
                         onClick={() => void runSnowlumaUiRetry()}
                     >
                         <RefreshCw size={13} className="text-brand" />
-                        <span>重建 WebUI / noVNC 连接</span>
+                        <span>重建 WebUI 连接</span>
                     </ContextMenuItem>
                 )}
                 {hasQrcode && (

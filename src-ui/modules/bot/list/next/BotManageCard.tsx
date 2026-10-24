@@ -20,7 +20,7 @@ function StatusBadgePill({
             appearance="soft"
             dot={spec.dot}
             className="max-w-[9.5rem] shrink-0 truncate"
-            title={spec.label}
+            title={spec.tooltip ?? spec.label}
         >
             {spec.label}
         </Badge>
