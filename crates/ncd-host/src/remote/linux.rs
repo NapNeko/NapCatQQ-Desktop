@@ -1,4 +1,5 @@
 //! RemoteLinuxHost:基于 russh + russh-sftp 的远端 Linux 主机实装
+
 //!
 //! 中档能力:
 //! - 密码 / 私钥认证(ed25519 + RSA)
@@ -14,6 +15,9 @@
 //! - SFTP 路径不做"路径越界"检查 —— 远端 Linux 上调用方有完整 POSIX 权限,
 //!   越界由远端 OS 拒绝(权限不足 → HostError::PermissionDenied)
 
+#[cfg(test)]
+mod transport_tests;
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -28,7 +32,7 @@ use russh::client::{self, Handle as ClientHandle, Handler, Msg};
 use russh::keys::{PublicKeyBase64, key};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{Mutex, Notify, RwLock, Semaphore, SemaphorePermit};
 use tracing::info;
 
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
@@ -47,6 +51,9 @@ use super::host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
 use super::tunnel::{TunnelDirection, TunnelHandle, TunnelSpec};
 
 mod pty;
+
+const SFTP_SESSION_TIMEOUT: Duration = Duration::from_secs(10);
+const SFTP_FILE_IO_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// `(远端听地址, 远端听口)` → `(本机目标 host, 本机目标口)`
 type RemoteForwardTable = Arc<Mutex<HashMap<(String, u16), (String, u16)>>>;
@@ -184,10 +191,10 @@ pub enum SudoAccess {
 pub struct RemoteLinuxHost {
     id: String,
     shell: BashShell,
-    /// SSH session 句柄(用 Mutex 串行化,避免多线程同时操作 channel)
-    /// 实际连接保留为 Arc 以便 spawn 出多个 channel 用同一 session
-    /// 用 Option 包装以支持 invalidate 时 poison 主句柄(设为 None 使后续操作快速失败)
-    handle: Arc<Mutex<Option<ClientHandle<ClientCallback>>>>,
+    /// 普通通道共享读锁；仅反向转发的可变 API 与连接失效需要写锁。
+    handle: Arc<RwLock<Option<ClientHandle<ClientCallback>>>>,
+    // 保留 SFTP、长期日志和终端的会话余量；短命令占用直到通道收尾。
+    short_exec: Semaphore,
     /// 复用的 SFTP 会话SFTP 子系统初始化(开 channel + request_subsystem +
     /// 协议版本协商)有好几个往返,原来每次 exists/read_file 都重开一条用完即弃,
     /// 是远端探测慢的大头这里缓存一条 session 反复用;russh-sftp 的 SftpSession
@@ -311,7 +318,8 @@ impl RemoteLinuxHost {
         Ok(Self {
             id: id_str,
             shell: BashShell,
-            handle: Arc::new(Mutex::new(Some(handle))),
+            handle: Arc::new(RwLock::new(Some(handle))),
+            short_exec: Semaphore::new(4),
             sftp: Arc::new(Mutex::new(None)),
             elevation_password: Arc::new(Mutex::new(None)),
             config,
@@ -330,21 +338,26 @@ impl RemoteLinuxHost {
     pub(super) async fn sftp_session(
         &self,
     ) -> Result<Arc<russh_sftp::client::SftpSession>, HostError> {
-        {
-            let guard = self.sftp.lock().await;
+        // 排队也消耗同一预算，初始化失败不能让等待者逐个再等完整握手超时。
+        let deadline = tokio::time::Instant::now() + SFTP_SESSION_TIMEOUT;
+        tokio::time::timeout_at(deadline, async {
+            let mut guard = self.sftp.lock().await;
+            if tokio::time::Instant::now() >= deadline {
+                return Err(HostError::Timeout {
+                    operation: "sftp_initialize",
+                });
+            }
             if let Some(session) = guard.as_ref() {
                 return Ok(Arc::clone(session));
             }
-        }
-        // 缓存未命中:开一条新 SFTP 会话并缓存等锁期间可能已有别的请求建好,
-        // 二次检查避免重复开
-        let mut guard = self.sftp.lock().await;
-        if let Some(session) = guard.as_ref() {
-            return Ok(Arc::clone(session));
-        }
-        let session = Arc::new(open_sftp(&self.handle).await?);
-        *guard = Some(Arc::clone(&session));
-        Ok(session)
+            let session = Arc::new(open_sftp(self).await?);
+            *guard = Some(Arc::clone(&session));
+            Ok(session)
+        })
+        .await
+        .map_err(|_| HostError::Timeout {
+            operation: "sftp_initialize",
+        })?
     }
 
     /// 丢弃缓存的 SFTP 会话某次 op 报错(多半连接断了)时调用,下次访问重开
@@ -352,18 +365,123 @@ impl RemoteLinuxHost {
         *self.sftp.lock().await = None;
     }
 
-    /// 主动失效主 SSH 句柄:poison 句柄(设为 None),使后续 channel_open_session 立即失败
-    /// 旧 handle 被 drop 时 russh 会尝试关闭底层 session(best-effort)
-    /// 用于自愈触发:让本对象后续操作快速失败,但不负责从 ServerManager 缓存驱逐
+    async fn invalidate_sftp_session(&self, session: &Arc<russh_sftp::client::SftpSession>) {
+        {
+            let mut guard = self.sftp.lock().await;
+            if guard
+                .as_ref()
+                .is_some_and(|cached| Arc::ptr_eq(cached, session))
+            {
+                *guard = None;
+            }
+        }
+        // 唤醒同一坏子系统上的请求，保留其他 SSH channel 和已重建的 SFTP。
+        let _ = session.close().await;
+    }
+
+    async fn sftp_failure(
+        &self,
+        session: &Arc<russh_sftp::client::SftpSession>,
+        path: &str,
+        operation: &'static str,
+        error: russh_sftp::client::error::Error,
+    ) -> HostError {
+        if !matches!(&error, russh_sftp::client::error::Error::Status(_)) {
+            self.invalidate_sftp_session(session).await;
+        }
+        sftp_err_to_host(path, operation, error)
+    }
+
+    async fn sftp_io<T>(
+        &self,
+        session: &Arc<russh_sftp::client::SftpSession>,
+        budget: Duration,
+        operation: &'static str,
+        future: impl std::future::Future<Output = std::io::Result<T>>,
+    ) -> Result<T, HostError> {
+        match tokio::time::timeout(budget, future).await {
+            Ok(Ok(value)) => Ok(value),
+            result => {
+                self.invalidate_sftp_session(session).await;
+                match result {
+                    Ok(Err(error)) => Err(HostError::Io(error)),
+                    _ => Err(HostError::Timeout { operation }),
+                }
+            }
+        }
+    }
+
+    /// 先移除主句柄，再限时通知 SSH 断开；已有 channel 的发送端不能延续旧连接。
     async fn invalidate_main_handle(&self) {
-        let mut guard = self.handle.lock().await;
-        // 直接 take 掉,旧 handle drop 时底层会尝试关闭
-        let _ = guard.take();
+        let session = self.handle.write().await.take();
+        if let Some(session) = session {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(2),
+                session.disconnect(
+                    russh::Disconnect::ByApplication,
+                    "connection invalidated",
+                    "en",
+                ),
+            )
+            .await;
+        }
     }
 
     /// 主机 id 引用
     pub fn server_id(&self) -> &str {
         &self.id
+    }
+
+    pub(super) async fn acquire_short_exec(&self) -> Result<SemaphorePermit<'_>, HostError> {
+        self.short_exec
+            .acquire()
+            .await
+            .map_err(|_| HostError::Io(std::io::Error::other("短命令并发队列已关闭")))
+    }
+
+    pub(super) async fn open_session_channel(&self) -> Result<Channel<Msg>, HostError> {
+        for attempt in 0..3 {
+            let result = {
+                let guard = self.handle.read().await;
+                let session = guard
+                    .as_ref()
+                    .ok_or_else(|| HostError::remote_disconnected("ssh session poisoned"))?;
+                session.channel_open_session().await
+            };
+            match result {
+                Ok(channel) => return Ok(channel),
+                Err(russh::Error::ChannelOpenFailure(reason)) => {
+                    if attempt < 2
+                        && matches!(
+                            reason,
+                            russh::ChannelOpenFailure::ConnectFailed
+                                | russh::ChannelOpenFailure::ResourceShortage
+                        )
+                    {
+                        tokio::time::sleep(Duration::from_millis(if attempt == 0 {
+                            100
+                        } else {
+                            250
+                        }))
+                        .await;
+                        continue;
+                    }
+                    return Err(HostError::Io(std::io::Error::new(
+                        std::io::ErrorKind::WouldBlock,
+                        format!("会话通道被服务器拒绝：{reason:?}"),
+                    )));
+                }
+                Err(error) => {
+                    self.invalidate_connection().await;
+                    return Err(HostError::remote_disconnected(format!(
+                        "open channel: {error}"
+                    )));
+                }
+            }
+        }
+        Err(HostError::Io(std::io::Error::other(
+            "会话通道重试次数已用尽",
+        )))
     }
 
     /// 只打开 SSH exec 通道；命令语法由目标平台的 Host 决定。
@@ -372,21 +490,7 @@ impl RemoteLinuxHost {
         line: &str,
         stdin: Option<&[u8]>,
     ) -> Result<Channel<Msg>, HostError> {
-        let guard = self.handle.lock().await;
-        let session = guard
-            .as_ref()
-            .ok_or_else(|| HostError::remote_disconnected("ssh session poisoned"))?;
-        let result = session.channel_open_session().await;
-        drop(guard);
-        let mut channel = match result {
-            Ok(channel) => channel,
-            Err(error) => {
-                self.invalidate_connection().await;
-                return Err(HostError::remote_disconnected(format!(
-                    "open channel: {error}"
-                )));
-            }
-        };
+        let mut channel = self.open_session_channel().await?;
         channel
             .exec(true, line.as_bytes())
             .await
@@ -624,29 +728,10 @@ impl Host for RemoteLinuxHost {
         };
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
 
-        let handle = self.handle.clone();
         let self_for_invalidate = self; // 为了 best-effort invalidate 借用
         let exec_fut = async move {
-            let mut guard = handle.lock().await;
-            let session = match guard.as_mut() {
-                Some(s) => s,
-                None => {
-                    return Err(HostError::remote_disconnected("ssh session poisoned"));
-                }
-            };
-            let mut channel = match session.channel_open_session().await {
-                Ok(c) => c,
-                Err(e) => {
-                    // 可识别的致命 session 错误:best-effort poison 本对象,后续操作快速失败
-                    // 注意:不负责从 ServerManager 缓存驱逐
-                    drop(guard);
-                    self_for_invalidate.invalidate_connection().await;
-                    return Err(HostError::remote_disconnected(format!("open channel: {e}")));
-                }
-            };
-
-            // Channel 独立持有连接；等命令输出时占锁会让扫码被后台探测排队至超时。
-            drop(guard);
+            let _permit = self.acquire_short_exec().await?;
+            let mut channel = self.open_session_channel().await?;
 
             if let Err(e) = channel.exec(true, line.as_bytes()).await {
                 self_for_invalidate.invalidate_connection().await;
@@ -691,22 +776,7 @@ impl Host for RemoteLinuxHost {
             (inner_line, cmd.stdin)
         };
 
-        let session_guard = self.handle.lock().await;
-        let session = match session_guard.as_ref() {
-            Some(s) => s,
-            None => {
-                return Err(HostError::remote_disconnected("ssh session poisoned"));
-            }
-        };
-        let channel = match session.channel_open_session().await {
-            Ok(c) => c,
-            Err(e) => {
-                drop(session_guard);
-                self.invalidate_connection().await;
-                return Err(HostError::remote_disconnected(format!("open channel: {e}")));
-            }
-        };
-        drop(session_guard);
+        let channel = self.open_session_channel().await?;
         if let Err(e) = channel.exec(true, line.as_bytes()).await {
             self.invalidate_connection().await;
             return Err(HostError::remote_disconnected(format!("exec: {e}")));
@@ -763,22 +833,7 @@ impl Host for RemoteLinuxHost {
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
 
         // channel 开启和 stdin 写入在 timeout 外做(通常很快),主循环套 timeout
-        let session_guard = self.handle.lock().await;
-        let session = match session_guard.as_ref() {
-            Some(s) => s,
-            None => {
-                return Err(HostError::remote_disconnected("ssh session poisoned"));
-            }
-        };
-        let mut channel = match session.channel_open_session().await {
-            Ok(c) => c,
-            Err(e) => {
-                drop(session_guard);
-                self.invalidate_connection().await;
-                return Err(HostError::remote_disconnected(format!("open channel: {e}")));
-            }
-        };
-        drop(session_guard);
+        let mut channel = self.open_session_channel().await?;
 
         if let Err(e) = channel.exec(true, line.as_bytes()).await {
             self.invalidate_connection().await;
@@ -898,7 +953,7 @@ impl Host for RemoteLinuxHost {
         // 3s 超时的 exec 会跟正在跑的 SFTP/长命令抢同一把 session 锁。
         // 超时 drop channel 会让 russh 报 Packet for unknown recipient，
         // 随后 mark_unhealthy 把还活着的会话毒死，启动就变成 ssh session poisoned。
-        match tokio::time::timeout(Duration::from_millis(200), self.handle.lock()).await {
+        match tokio::time::timeout(Duration::from_millis(200), self.handle.read()).await {
             Ok(guard) => session_lock_means_healthy(true, guard.is_some()),
             Err(_) => session_lock_means_healthy(false, false),
         }
@@ -912,15 +967,18 @@ impl Host for RemoteLinuxHost {
         let mut file = match sftp.open(&remote).await {
             Ok(f) => f,
             Err(e) => {
-                let err = sftp_err_to_host(&remote, "read", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote, "read", e).await;
                 return Err(err);
             }
         };
         let mut buf = Vec::new();
-        file.read_to_end(&mut buf).await.map_err(HostError::Io)?;
+        self.sftp_io(
+            &sftp,
+            SFTP_FILE_IO_TIMEOUT,
+            "sftp_read",
+            file.read_to_end(&mut buf),
+        )
+        .await?;
         Ok(Bytes::from(buf))
     }
 
@@ -939,16 +997,15 @@ impl Host for RemoteLinuxHost {
         let mut file = match sftp.create(&remote).await {
             Ok(f) => f,
             Err(e) => {
-                let err = sftp_err_to_host(&remote, "write", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote, "write", e).await;
                 return Err(err);
             }
         };
-        file.write_all(bytes).await.map_err(HostError::Io)?;
-        file.flush().await.map_err(HostError::Io)?;
-        Ok(())
+        self.sftp_io(&sftp, SFTP_FILE_IO_TIMEOUT, "sftp_write", async {
+            file.write_all(bytes).await?;
+            file.flush().await
+        })
+        .await
     }
 
     async fn list_dir(&self, path: &HostPath) -> Result<Vec<DirEntry>, HostError> {
@@ -957,10 +1014,7 @@ impl Host for RemoteLinuxHost {
         let entries = match sftp.read_dir(&remote).await {
             Ok(e) => e,
             Err(e) => {
-                let err = sftp_err_to_host(&remote, "list", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote, "list", e).await;
                 return Err(err);
             }
         };
@@ -1007,10 +1061,7 @@ impl Host for RemoteLinuxHost {
         match sftp.remove_file(&remote).await {
             Ok(()) => Ok(()),
             Err(e) => {
-                let err = sftp_err_to_host(&remote, "remove_file", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote, "remove_file", e).await;
                 Err(err)
             }
         }
@@ -1068,10 +1119,7 @@ impl Host for RemoteLinuxHost {
                 Ok(false)
             }
             Err(e) => {
-                let err = sftp_err_to_host(&remote, "exists", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote, "exists", e).await;
                 Err(err)
             }
         }
@@ -1090,10 +1138,7 @@ impl Host for RemoteLinuxHost {
                 Ok(None)
             }
             Err(e) => {
-                let err = sftp_err_to_host(&remote, "file_size", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote, "file_size", e).await;
                 Err(err)
             }
         }
@@ -1115,18 +1160,15 @@ impl Host for RemoteLinuxHost {
         let mut file = match sftp.create(&remote_str).await {
             Ok(f) => f,
             Err(e) => {
-                let err = sftp_err_to_host(&remote_str, "upload", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote_str, "upload", e).await;
                 return Err(err);
             }
         };
-        tokio::io::copy(&mut source, &mut file)
-            .await
-            .map_err(HostError::Io)?;
-        file.flush().await.map_err(HostError::Io)?;
-        Ok(())
+        self.sftp_io(&sftp, DEFAULT_COMMAND_TIMEOUT, "sftp_upload", async {
+            tokio::io::copy(&mut source, &mut file).await?;
+            file.flush().await
+        })
+        .await
     }
 
     async fn download(&self, remote: &HostPath, local: &Path) -> Result<(), HostError> {
@@ -1135,10 +1177,7 @@ impl Host for RemoteLinuxHost {
         let mut file = match sftp.open(&remote_str).await {
             Ok(f) => f,
             Err(e) => {
-                let err = sftp_err_to_host(&remote_str, "download", e);
-                if err.is_disconnect() {
-                    self.invalidate_connection().await;
-                }
+                let err = self.sftp_failure(&sftp, &remote_str, "download", e).await;
                 return Err(err);
             }
         };
@@ -1150,11 +1189,11 @@ impl Host for RemoteLinuxHost {
         let mut destination = tokio::fs::File::create(local)
             .await
             .map_err(HostError::Io)?;
-        tokio::io::copy(&mut file, &mut destination)
-            .await
-            .map_err(HostError::Io)?;
-        destination.flush().await.map_err(HostError::Io)?;
-        Ok(())
+        self.sftp_io(&sftp, DEFAULT_COMMAND_TIMEOUT, "sftp_download", async {
+            tokio::io::copy(&mut file, &mut destination).await?;
+            destination.flush().await
+        })
+        .await
     }
 
     async fn extract_archive(
@@ -1335,24 +1374,15 @@ fn build_elevated_stdin(password: Option<&str>, cmd_stdin: Option<Vec<u8>>) -> O
     }
 }
 
-async fn open_sftp(
-    handle: &Arc<Mutex<Option<ClientHandle<ClientCallback>>>>,
-) -> Result<russh_sftp::client::SftpSession, HostError> {
-    let session_guard = handle.lock().await;
-    let session = session_guard
-        .as_ref()
-        .ok_or_else(|| HostError::remote_disconnected("ssh session poisoned for sftp"))?;
-    let channel = session
-        .channel_open_session()
-        .await
-        .map_err(|e| HostError::remote_disconnected(format!("sftp open channel: {e}")))?;
+async fn open_sftp(host: &RemoteLinuxHost) -> Result<russh_sftp::client::SftpSession, HostError> {
+    let channel = host.open_session_channel().await?;
     channel
         .request_subsystem(true, "sftp")
         .await
         .map_err(|e| HostError::remote_disconnected(format!("sftp subsystem: {e}")))?;
     russh_sftp::client::SftpSession::new(channel.into_stream())
         .await
-        .map_err(|e| HostError::remote_disconnected(format!("sftp session: {e}")))
+        .map_err(|e| sftp_err_to_host("SFTP session", "initialize", e))
 }
 
 pub(super) fn sftp_err_to_host(
@@ -1363,6 +1393,8 @@ pub(super) fn sftp_err_to_host(
     use russh_sftp::client::error::Error as SftpErr;
     use russh_sftp::protocol::StatusCode;
     match e {
+        // An unanswered SFTP request does not prove the multiplexed SSH transport died.
+        SftpErr::Timeout => HostError::Timeout { operation: "sftp" },
         SftpErr::Status(s) => match s.status_code {
             StatusCode::NoSuchFile => HostError::PathNotFound {
                 path: HostPath::from_posix(path),
@@ -1376,9 +1408,8 @@ pub(super) fn sftp_err_to_host(
                 s.status_code
             ))),
         },
-        // 非 Status 错误(channel 关闭 / 流读写失败)= SFTP 会话本身坏了,标成
-        // 远端中断,让复用层 is_disconnect() 命中后丢弃缓存会话,下次重开
-        other => HostError::remote_disconnected(format!("sftp {op} {path}: {other}")),
+        // 子系统失败不证明复用的 SSH 连接已断，文件操作只重建该 SFTP session。
+        other => HostError::Io(std::io::Error::other(format!("sftp {op} {path}: {other}"))),
     }
 }
 
@@ -1558,7 +1589,7 @@ impl RemoteLinuxHost {
                         tokio::spawn(async move {
                             // 开 direct-tcpip channel
                             let channel = {
-                                let session_guard = h.lock().await;
+                                let session_guard = h.read().await;
                                 let session = match session_guard.as_ref() {
                                     Some(s) => s,
                                     None => {
@@ -1616,7 +1647,7 @@ impl RemoteLinuxHost {
         }
         let requested = spec.remote_port as u32;
         let replied = {
-            let mut guard = self.handle.lock().await;
+            let mut guard = self.handle.write().await;
             let session = guard.as_mut().ok_or_else(|| HostError::RemoteConnection {
                 reason: "ssh session poisoned".into(),
             })?;
@@ -1650,7 +1681,7 @@ impl RemoteLinuxHost {
         let task = tokio::spawn(async move {
             shutdown_for_task.notified().await;
             table.lock().await.remove(&(addr.clone(), remote_listen));
-            let guard = handle.lock().await;
+            let guard = handle.read().await;
             if let Some(session) = guard.as_ref() {
                 if let Err(e) = session
                     .cancel_tcpip_forward(addr, remote_listen as u32)
