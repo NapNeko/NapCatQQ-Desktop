@@ -2,6 +2,8 @@
 
 mod decision;
 pub mod launch;
+mod log_io;
+mod process;
 mod session;
 mod tunnel_io;
 
@@ -9,5 +11,7 @@ pub use session::{
     RemoteNativeNapcatSession, RemoteNativeNapcatSessionRegistry, WebuiUnreachableHook,
 };
 
+#[cfg(test)]
+mod io_tests;
 #[cfg(test)]
 mod tests;

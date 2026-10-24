@@ -72,36 +72,25 @@ pub(crate) async fn remote_loopback_listening(host: &dyn Host, remote_port: u16)
         .arg("-c")
         .arg(script)
         .timeout(Duration::from_secs(5));
-    match host.run_to_string(cmd).await {
-        Ok(out) => out.success(),
-        Err(_) => false,
+    match timeout(Duration::from_secs(5), host.run_to_string(cmd)).await {
+        Ok(Ok(out)) => out.success(),
+        _ => false,
     }
 }
 
 /// 对本机转发口做极短探测:能 connect 且至少读到 1 字节才算通
 pub(crate) async fn local_forward_healthy(local_port: u16) -> bool {
-    let connect = timeout(
-        TUNNEL_HEALTH_TIMEOUT,
-        TcpStream::connect(("127.0.0.1", local_port)),
-    )
-    .await;
-    let Ok(Ok(mut stream)) = connect else {
-        return false;
-    };
-    let req = b"GET / HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-    if timeout(TUNNEL_HEALTH_TIMEOUT, stream.write_all(req))
-        .await
-        .ok()
-        .and_then(|r| r.ok())
-        .is_none()
-    {
-        return false;
-    }
-    let mut buf = [0u8; 16];
-    matches!(
-        timeout(TUNNEL_HEALTH_TIMEOUT, stream.read(&mut buf)).await,
-        Ok(Ok(n)) if n > 0
-    )
+    timeout(TUNNEL_HEALTH_TIMEOUT, async {
+        let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await?;
+        let req = b"GET / HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+        stream.write_all(req).await?;
+        let mut buf = [0u8; 16];
+        stream.read(&mut buf).await.map(|count| count > 0)
+    })
+    .await
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(false)
 }
 
 pub(crate) async fn ensure_loopback_tunnel(
@@ -121,6 +110,12 @@ pub(crate) async fn open_loopback_tunnel(
     host: &dyn Host,
     remote_port: u16,
 ) -> Result<TunnelHandle, HostError> {
-    host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
-        .await
+    timeout(
+        Duration::from_secs(3),
+        host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port)),
+    )
+    .await
+    .map_err(|_| HostError::Timeout {
+        operation: "napcat_tunnel_open",
+    })?
 }

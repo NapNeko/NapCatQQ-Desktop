@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs, NapCatComponent, linux_qq_running_pid_script};
@@ -30,7 +31,10 @@ pub async fn probe_remote_napcat_layout(
 ) -> Result<(String, RemoteNapcatLayout), String> {
     let script = "echo \"$HOME\"; \
          test -e /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs && echo 1 || echo 0";
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
+    let cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(8));
     let out = host
         .run_to_string(cmd)
         .await
@@ -180,7 +184,8 @@ async fn build_napcat_remote_launch(
 
     let check = HostCommand::new("sh")
         .arg("-c")
-        .arg("command -v xvfb-run >/dev/null 2>&1");
+        .arg("command -v xvfb-run >/dev/null 2>&1")
+        .timeout(Duration::from_secs(8));
     let check_out = host
         .run_to_string(check)
         .await
@@ -192,15 +197,26 @@ async fn build_napcat_remote_launch(
     }
 
     let log_path = napcat_remote_log_path(install_base, qq_id);
-    let log_parent = log_path.rsplit_once('/').map(|(p, _)| p).unwrap_or(".");
-    let rotate = HostCommand::new("sh").arg("-c").arg(format!(
-        "mkdir -p {log_parent} && \
-         if [ -f {log_path} ]; then mv -f {log_path} {log_path}.prev 2>/dev/null || true; fi && \
-         : > {log_path}"
-    ));
-    host.run_to_string(rotate)
+    let log_parent = shell_single_quote(log_path.rsplit_once('/').map(|(p, _)| p).unwrap_or("."));
+    let log_file = shell_single_quote(&log_path);
+    let log_previous = shell_single_quote(&format!("{log_path}.prev"));
+    let rotate = HostCommand::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "mkdir -p {log_parent} && \
+         if [ -f {log_file} ]; then mv -f {log_file} {log_previous}; fi && \
+         : > {log_file}"
+        ))
+        .timeout(Duration::from_secs(8));
+    let rotated = host
+        .run_to_string(rotate)
         .await
         .map_err(|e| DeploymentError::LaunchFailed(e.to_string()))?;
+    if !rotated.success() {
+        return Err(DeploymentError::LaunchFailed(
+            "无法轮换远端 NapCat 日志，启动已取消".into(),
+        ));
+    }
 
     let mut qq_parts = vec![qq_cmd.program.clone()];
     qq_parts.extend(qq_cmd.args.clone());
@@ -367,15 +383,14 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
 
                 let mut metrics_env = std::collections::BTreeMap::new();
                 if let Some(inj) = &self.metrics_injector {
-                    if let Some(env) = inj
+                    if let Ok(Some(env)) = tokio::time::timeout(Duration::from_secs(5), inj
                         .prepare_napcat(
                             self.host.as_ref(),
                             &home,
                             bot_id.as_str(),
                             config,
                             &install_base,
-                        )
-                        .await
+                        )).await
                     {
                         metrics_env = env;
                     }
@@ -397,54 +412,25 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
     }
 }
 
-/// 停止远端 NapCat QQ 进程(pgrep + SIGTERM/SIGKILL,对齐 legacy launcher stop 语义)
-///
-/// 匹配策略(从严到宽,始终要求命令行里出现 `qq` + `-q <qq_id>` 结尾):
-/// 1. 精确: `qq --no-sandbox -q <qq>`
-/// 2. 回退: `qq` 与 `-q <qq>` 同 cmdline(允许路径/参数顺序变化)
-///
-/// 不用裸 `-q <qq>`,避免误杀其它工具。
+/// 仅停止已归因到该账号的 QQ，并确认没有服务重新拉起该账号。
 pub async fn stop_remote_napcat_on_host(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<(), BotBackendError> {
-    let script = format!(
-        r#"qq_id="{qq_id}"
-pids="$(pgrep -f -- "qq --no-sandbox -q ${{qq_id}}$" 2>/dev/null || true)"
-if [ -z "$pids" ]; then
-  pids="$(pgrep -f -- "qq.*-q ${{qq_id}}$" 2>/dev/null || true)"
-fi
-if [ -z "$pids" ]; then exit 0; fi
-echo "$pids" | while read -r pid; do
-  [ -z "$pid" ] && continue
-  kill "$pid" 2>/dev/null || true
-done
-sleep 1
-pids="$(pgrep -f -- "qq --no-sandbox -q ${{qq_id}}$" 2>/dev/null || true)"
-if [ -z "$pids" ]; then
-  pids="$(pgrep -f -- "qq.*-q ${{qq_id}}$" 2>/dev/null || true)"
-fi
-if [ -n "$pids" ]; then
-  echo "$pids" | while read -r pid; do
-    [ -z "$pid" ] && continue
-    kill -9 "$pid" 2>/dev/null || true
-  done
-fi
-"#
-    );
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
-    let out = host
-        .run_to_string(cmd)
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    if !out.success() {
-        return Err(BotBackendError::Io(format!(
-            "远端停止 NapCat 失败: exit={:?} stderr={}",
-            out.exit_code,
-            out.stderr.trim()
-        )));
-    }
-    Ok(())
+    tokio::time::timeout(Duration::from_secs(30), async {
+        let Some(pid) = remote_napcat_running_pid(host, qq_id).await? else {
+            return Ok(());
+        };
+        super::process::stop_attributed(host, qq_id, pid).await?;
+        if remote_napcat_running_pid(host, qq_id).await?.is_some() {
+            return Err(BotBackendError::Io(
+                "QQ 仍在运行或已被原服务重新启动，停止未完成".into(),
+            ));
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| BotBackendError::Io("停止远端 NapCat 超时，请刷新确认运行状态".into()))?
 }
 
 /// 探测远端 NapCat/QQ 是否在跑（cmdline `-q` 或 Ptlogin2 当前账号，不写死 WebUI 口）
@@ -453,7 +439,10 @@ pub async fn remote_napcat_running_pid(
     qq_id: u64,
 ) -> Result<Option<u32>, BotBackendError> {
     let script = linux_qq_running_pid_script(qq_id, None, None, false);
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
+    let cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(12));
     let out = host
         .run_to_string(cmd)
         .await
@@ -465,13 +454,15 @@ pub async fn remote_napcat_running_pid(
             out.stderr.trim()
         )));
     }
-    let line = out.stdout.lines().next().unwrap_or("").trim();
+    let line = out.stdout.trim();
     if line.is_empty() {
         return Ok(None);
     }
-    line.parse()
+    line.parse::<u32>()
+        .ok()
+        .filter(|pid| *pid != 0)
         .map(Some)
-        .map_err(|_| BotBackendError::InvalidConfig(format!("invalid qq pid: {line}")))
+        .ok_or_else(|| BotBackendError::InvalidConfig("远端 QQ 探测返回无效进程身份".into()))
 }
 
 #[cfg(test)]
