@@ -180,3 +180,114 @@ async fn cancelled_start_keeps_the_gate_until_mutation_cleanup_finishes_without_
     assert!(!backend.inner.running.lock().await.contains(&bot));
     assert_eq!(backend.inner.stop_count(bot).await, 1);
 }
+
+struct StartOwnershipBackend {
+    inner: Arc<FakeBackend>,
+    cleanup_statuses: Mutex<Vec<BotStatus>>,
+    cleanup_finished: tokio::sync::Notify,
+    normal_stops: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait]
+impl BotBackend for StartOwnershipBackend {
+    fn id(&self) -> &BotId {
+        self.inner.id()
+    }
+    fn kind(&self) -> BackendKind {
+        self.inner.kind()
+    }
+    fn flavor(&self) -> ncd_runtime::BotFlavor {
+        self.inner.flavor()
+    }
+    async fn start(&self, context: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        self.inner.start(context).await
+    }
+    async fn cleanup_unacknowledged_start(
+        &self,
+        started: &BotStatus,
+    ) -> Result<(), BotBackendError> {
+        self.cleanup_statuses.lock().await.push(started.clone());
+        self.inner
+            .stop(started.bot_id.clone(), StopMode::Force)
+            .await?;
+        self.cleanup_finished.notify_one();
+        Ok(())
+    }
+    async fn stop(&self, _: BotId, _: StopMode) -> Result<(), BotBackendError> {
+        self.normal_stops
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Err(BotBackendError::Io(
+            "normal stop must not clean an unacknowledged start".into(),
+        ))
+    }
+    async fn status(&self, id: BotId) -> Result<BotStatus, BotBackendError> {
+        self.inner.status(id).await
+    }
+    async fn tail_log(
+        &self,
+        id: BotId,
+        opts: TailOpts,
+    ) -> Result<ncd_runtime::LogSnapshot, BotBackendError> {
+        self.inner.tail_log(id, opts).await
+    }
+}
+
+#[tokio::test]
+async fn abandoned_start_uses_its_ownership_cleanup_hook_and_converges_actor() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (store, repo, inner, _) = make_manager(temp.path());
+    let (release, entered) = inner.block_next_start().await;
+    let backend = Arc::new(StartOwnershipBackend {
+        inner,
+        cleanup_statuses: Mutex::new(Vec::new()),
+        cleanup_finished: tokio::sync::Notify::new(),
+        normal_stops: std::sync::atomic::AtomicUsize::new(0),
+    });
+    let manager = BotManager::new(
+        repo,
+        Arc::clone(&store),
+        Arc::new(DispatchRenderer::new(
+            store.config_dir(),
+            store.config_dir(),
+        )),
+        backend.clone(),
+        Arc::new(TestLaunchPlanner),
+        Arc::new(BroadcastEventBus::default()),
+        default_webui_client(),
+        default_offline_notifier(),
+        default_poller_settings(),
+        default_desktop_notify(),
+    );
+    let bot = BotId::new("10422");
+    manager
+        .upsert_bot_config(bot_config(10422, "owned start cleanup"))
+        .await
+        .unwrap();
+    let starting_manager = manager.clone();
+    let starting_bot = bot.clone();
+    let start = tokio::spawn(async move { starting_manager.start_bot(&starting_bot).await });
+    entered.await.unwrap();
+    start.abort();
+    assert!(start.await.unwrap_err().is_cancelled());
+    release.send(()).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        backend.cleanup_finished.notified().await;
+        while manager.get_snapshot(&bot).await.unwrap().state != BotActorState::Stopped {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        backend
+            .normal_stops
+            .load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
+    let calls = backend.cleanup_statuses.lock().await;
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].bot_id, bot);
+    assert_eq!(calls[0].state, BotActorState::Running);
+    assert!(calls[0].pid.is_some());
+    assert!(!backend.inner.running.lock().await.contains(&bot));
+}

@@ -169,6 +169,20 @@ pub trait BotBackend: Send + Sync {
         self.start(ctx).await
     }
 
+    /// 只清理这次未被调用方确认的成功启动；可变远端连接应覆盖此方法绑定原主机。
+    async fn cleanup_unacknowledged_start(
+        &self,
+        started: &BotStatus,
+    ) -> Result<(), BotBackendError> {
+        self.stop(started.bot_id.clone(), StopMode::Force).await?;
+        if self.status(started.bot_id.clone()).await?.state
+            != ncd_domain::bot_actor::BotActorState::Stopped
+        {
+            return Err(BotBackendError::Io("取消的启动尚未确认停止".into()));
+        }
+        Ok(())
+    }
+
     async fn stop(&self, bot_id: BotId, mode: StopMode) -> Result<(), BotBackendError>;
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError>;
     async fn tail_log(&self, bot_id: BotId, opts: TailOpts)

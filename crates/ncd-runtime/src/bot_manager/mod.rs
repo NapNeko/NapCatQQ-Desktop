@@ -2385,18 +2385,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         "启动 Bot 时后端异常退出".into(),
                     )),
                 };
-            let started = result.is_ok();
+            let started = result.as_ref().ok().cloned();
             let delivered = result_tx.send(result).is_ok();
-            if !started || (delivered && commit_rx.await.is_ok()) {
+            let Some(started) = started else {
+                return;
+            };
+            if delivered && commit_rx.await.is_ok() {
                 return;
             }
-            let cleanup = async {
-                backend.stop(bot_id.clone(), StopMode::Force).await?;
-                if backend.status(bot_id.clone()).await?.state != BotActorState::Stopped {
-                    return Err(BotBackendError::Io("取消的启动尚未确认停止".into()));
-                }
-                Ok::<_, BotBackendError>(())
-            };
+            let cleanup = backend.cleanup_unacknowledged_start(&started);
             let confirmed = matches!(
                 tokio::time::timeout(
                     Duration::from_secs(30),
