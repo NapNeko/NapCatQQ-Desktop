@@ -57,7 +57,7 @@ pub use qq::{
     QQComponent, managed_qq_current_dir, managed_qq_root, probe_linux_qq_latest,
     probe_windows_qq_latest,
 };
-pub use qq_linux_pid::linux_qq_running_pid_script;
+pub use qq_linux_pid::{LINUX_QQ_PROCESS_PROBE, linux_qq_running_pid_script};
 pub use redis::{RedisComponent};
 
 pub use remote_qq_entry::{

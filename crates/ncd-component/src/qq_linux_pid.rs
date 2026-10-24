@@ -1,7 +1,6 @@
-//! 远端 Linux QQ 是否在跑：看进程和 Ptlogin 账号，不写死 WebUI 口、不只认 `-q`。
-//!
-//! 导入 / SnowLuma 自启的 QQ 经常没有 `qq -q <uin>`。
-//! 顺序：pid 文件 → cmdline `-q/--qq` → 本机 Ptlogin2（4301/4303/…）→ cmdline 里的 UIN。
+//! 一次进程快照确认 QQ 账号；单实例接管先认唯一主进程，再按需查其 Ptlogin。
+
+pub const LINUX_QQ_PROCESS_PROBE: &str = include_str!("../resources/qq-process.py");
 
 /// 生成 dash-safe 探测脚本。stdout 第一行是 pid，没有则空。
 ///
@@ -10,6 +9,31 @@
 /// 且调用方确认该主机只配置了这一个 native SL Bot，就把它当作目标实例。
 /// start / status / stop 路径必须传 false，不允许猜归因。
 pub fn linux_qq_running_pid_script(
+    qq_id: u64,
+    pid_file: Option<&str>,
+    qq_bin: Option<&str>,
+    allow_single_main_fallback: bool,
+) -> String {
+    let probe = ncd_host::shell_single_quote(include_str!("../resources/qq-running-pid.py"));
+    let args = [
+        qq_id.to_string(),
+        pid_file.unwrap_or_default().to_owned(),
+        qq_bin.unwrap_or_default().to_owned(),
+        if allow_single_main_fallback { "1" } else { "0" }.to_owned(),
+    ]
+    .iter()
+    .map(|value| ncd_host::shell_single_quote(value))
+    .collect::<Vec<_>>()
+    .join(" ");
+    let fallback =
+        legacy_qq_running_pid_script(qq_id, pid_file, qq_bin, allow_single_main_fallback);
+    format!(
+        "if command -v python3 >/dev/null 2>&1; then\nexec python3 -I -B -c {probe} {args}\nfi\n{fallback}"
+    )
+}
+
+// Older NapCat hosts may not have Python; preserve their existing probe contract.
+fn legacy_qq_running_pid_script(
     qq_id: u64,
     pid_file: Option<&str>,
     qq_bin: Option<&str>,
