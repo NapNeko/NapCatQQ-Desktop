@@ -2135,6 +2135,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             handle.clone(),
             revision,
             Arc::clone(&operation),
+            cancel.clone(),
         )?;
         *commit = Some(acknowledge);
         let result = result
@@ -2286,6 +2287,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         actor: BotActorHandle,
         revision: u64,
         operation: Arc<tokio::sync::OwnedMutexGuard<()>>,
+        cancel: tokio_util::sync::CancellationToken,
     ) -> Result<
         (
             tokio::sync::oneshot::Receiver<
@@ -2311,15 +2313,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let _operation = operation;
             let _mutation = mutation;
             let bot_id = context.config.bot_id.clone();
-            let result = match std::panic::AssertUnwindSafe(backend.start(&context))
-                .catch_unwind()
-                .await
-            {
-                Ok(result) => result.map_err(BotManagerError::Runtime),
-                Err(_) => Err(BotManagerError::TaskJoinFailed(
-                    "启动 Bot 时后端异常退出".into(),
-                )),
-            };
+            let result =
+                match std::panic::AssertUnwindSafe(backend.start_cancellable(&context, cancel))
+                    .catch_unwind()
+                    .await
+                {
+                    Ok(result) => result.map_err(BotManagerError::Runtime),
+                    Err(_) => Err(BotManagerError::TaskJoinFailed(
+                        "启动 Bot 时后端异常退出".into(),
+                    )),
+                };
             let started = result.is_ok();
             let delivered = result_tx.send(result).is_ok();
             if !started || (delivered && commit_rx.await.is_ok()) {

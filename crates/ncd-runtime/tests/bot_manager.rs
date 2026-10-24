@@ -187,6 +187,9 @@ mod stop_recovery;
 #[path = "bot_manager/lifecycle_concurrency.rs"]
 mod lifecycle_concurrency;
 
+#[path = "bot_manager/cooperative_start.rs"]
+mod cooperative_start;
+
 #[path = "bot_manager/derived_config_lifecycle.rs"]
 mod derived_config_lifecycle;
 
