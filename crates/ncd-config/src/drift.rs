@@ -422,7 +422,11 @@ fn align_snowluma_onebot_actual(expected: &Value, actual: &mut Value) {
     let Some(root) = actual.as_object_mut() else {
         return;
     };
-    root.remove("mode");
+    if let Some(mode) = expected.get("mode") {
+        root.insert("mode".into(), mode.clone());
+    } else {
+        root.remove("mode");
+    }
     if root
         .get("notifications")
         .is_some_and(is_empty_notifications)
@@ -735,6 +739,20 @@ mod tests {
             added.is_empty() && modified.is_empty(),
             "added={added:?} modified={modified:?}"
         );
+    }
+
+    #[test]
+    fn snowluma_snapshot_mode_matches_webui_save() {
+        let (mut explicit, mut sparse) = snowluma_explicit_and_sparse();
+        explicit["mode"] = json!("snapshot");
+        let (added, modified) = diff_snowluma(&explicit, &sparse);
+        assert!(added.is_empty() && modified.is_empty());
+        sparse.as_object_mut().unwrap().remove("mode");
+        let (added, modified) = diff_snowluma(&explicit, &sparse);
+        assert!(added.is_empty() && modified.is_empty());
+        sparse["mode"] = json!("overlay");
+        let (added, modified) = diff_snowluma(&explicit, &sparse);
+        assert!(added.is_empty() && modified.is_empty());
     }
 
     #[test]

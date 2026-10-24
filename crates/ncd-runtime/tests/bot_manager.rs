@@ -150,6 +150,9 @@ impl BotBackend for FakeBackend {
     }
 }
 
+#[path = "bot_manager/derived_config_lifecycle.rs"]
+mod derived_config_lifecycle;
+
 #[derive(Debug, Clone)]
 struct TestLaunchPlanner;
 

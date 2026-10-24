@@ -1373,8 +1373,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         // 清理不再需要的旧 backend 派生文件(例如 NapCat→SL 时删除 onebot11/napcat 文件)
         // napcat.json 是本机安装目录共享文件，WebUI/启动 Bypass 也读它，不随单个 Bot 切 backend 删除
         let target_backend = config.bot.backend_type;
-        let current_paths =
-            output_paths_for_backend(target_backend, self.store.config_dir(), &bot_id);
+        let current_paths: Vec<_> = self
+            .renderer
+            .render(&bot_id, &config)?
+            .writes
+            .into_iter()
+            .map(|write| write.path)
+            .collect();
         let all_paths = {
             let mut paths = self.renderer.output_paths(&bot_id);
             paths.sort();
@@ -1863,6 +1868,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         config: &BotConfig,
         overrides: &std::collections::HashMap<String, Vec<(String, serde_json::Value)>>,
     ) -> Result<(), BotManagerError> {
+        config.validate_network_urls()?;
         // 1. 把现有派生文件读进来(不存在的跳过)
         let mut existing: std::collections::HashMap<std::path::PathBuf, serde_json::Value> =
             std::collections::HashMap::new();
@@ -1907,6 +1913,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 };
                 if let Some(file_overrides) = overrides.get(&file_name) {
                     for (path, value) in file_overrides {
+                        // mode 由完整渲染契约决定，旧 drift 决议不能恢复全局继承。
+                        if config.bot.backend_type == BackendType::SnowLuma
+                            && path.split('.').next() == Some("mode")
+                        {
+                            continue;
+                        }
                         set_value_at_dot_path(&mut write.payload, path, value.clone()).map_err(
                             |e| {
                                 BotManagerError::Render(format!(
@@ -2505,14 +2517,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.remove_snowluma_metrics_registration(config).await;
         }
 
+        let mut paths = self.renderer.output_paths(bot_id);
+        for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+            paths.extend(output_paths_for_backend(
+                backend,
+                self.store.config_dir(),
+                bot_id,
+            ));
+        }
+        paths.sort();
+        paths.dedup();
         let mut txn = JsonTransaction::new();
-        for path in output_paths_for_backend(BackendType::NapCat, self.store.config_dir(), bot_id)
+        for path in paths
             .into_iter()
             .filter(|path| !is_shared_napcat_json(path))
-        {
-            txn = txn.delete(path);
-        }
-        for path in output_paths_for_backend(BackendType::SnowLuma, self.store.config_dir(), bot_id)
         {
             txn = txn.delete(path);
         }

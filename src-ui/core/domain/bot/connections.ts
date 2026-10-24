@@ -211,6 +211,14 @@ export interface ConnectionValidationFail {
 }
 export type ConnectionValidationResult = ConnectionValidationOk | ConnectionValidationFail;
 
+function isValidAbsoluteUrl(url: string): boolean {
+    try {
+        return new URL(url).hostname.length > 0;
+    } catch {
+        return false;
+    }
+}
+
 /// 单条连接保存前校验。挡住明显错误，详细规则交给后端。
 /// existingNames 不含自己（外层调用方先过滤）。
 export function validateConnection(
@@ -238,6 +246,9 @@ export function validateConnection(
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             return { ok: false, reason: 'Webhook URL 必须以 http:// 或 https:// 开头' };
         }
+        if (!isValidAbsoluteUrl(url)) {
+            return { ok: false, reason: 'Webhook URL 格式无效，请检查主机地址和端口' };
+        }
     }
 
     if (kind === 'websocketClient') {
@@ -246,6 +257,9 @@ export function validateConnection(
         if (!url) return { ok: false, reason: '服务端 WebSocket URL 不能为空' };
         if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
             return { ok: false, reason: 'WebSocket URL 必须以 ws:// 或 wss:// 开头' };
+        }
+        if (!isValidAbsoluteUrl(url)) {
+            return { ok: false, reason: 'WebSocket URL 格式无效，请检查主机地址和端口' };
         }
         if (!Number.isFinite(v.reconnectInterval) || v.reconnectInterval < 1000) {
             return { ok: false, reason: '重连间隔不能低于 1000 毫秒' };

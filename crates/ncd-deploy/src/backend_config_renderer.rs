@@ -456,8 +456,20 @@ pub fn parse_napcat_onebot_connect(raw: &Value) -> Option<ncd_domain::ImportedNe
 // SnowLuma Renderer
 
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合
-const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] =
-    &["networks", "musicSignUrl", "statusCommand", "historySync"];
+const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &[
+    "mode",
+    "networks",
+    "musicSignUrl",
+    "statusCommand",
+    "historySync",
+    "httpServers",
+    "httpClients",
+    "httpPostEndpoints",
+    "wsServers",
+    "wsClients",
+    "messageFormat",
+    "reportSelfMessage",
+];
 
 fn snowluma_message_format(fmt: MessagePostFormat) -> &'static str {
     match fmt {
@@ -629,6 +641,8 @@ impl SnowLumaConfigRenderer {
     /// 供 Docker SnowLuma 卷内 config 写入复用
     pub fn build_onebot_payload(config: &BotConfig) -> Value {
         let mut obj = serde_json::Map::new();
+        // 完整账号配置必须隔离 onebot.json，否则删掉的客户端仍会从全局配置继承。
+        obj.insert("mode".into(), json!("snapshot"));
         obj.insert("networks".into(), Self::build_networks(&config.connect));
         obj.insert("musicSignUrl".into(), json!(config.bot.music_sign_url));
         // SnowLuma assertValidOneBotConfig 强制要求 statusCommand / historySync 存在

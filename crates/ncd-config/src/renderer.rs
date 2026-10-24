@@ -246,6 +246,58 @@ mod tests {
     }
 
     #[test]
+    fn snowluma_full_config_replaces_overlay_with_account_snapshot() {
+        use serde_json::json;
+        use std::collections::HashMap;
+
+        let renderer = SnowLumaConfigRenderer::new("/tmp/snowluma/config");
+        let bot_id = make_bot_id();
+        let config = BotConfig {
+            bot: make_basic_config(),
+            connect: ConnectConfig::default(),
+            advanced: make_advanced_config(),
+            status_command: None,
+        };
+        let old = json!({
+            "mode": "overlay",
+            "networks": { "wsClients": [{ "name": "old-client", "url": "ws://" }] },
+            "wsClients": [{ "name": "legacy-client", "url": "ws://" }],
+            "httpPostEndpoints": [{ "name": "legacy-webhook", "url": "http://" }],
+            "messageFormat": "string",
+            "reportSelfMessage": true,
+            "notifications": { "channelIds": ["kept-channel"] }
+        });
+        let path = renderer.output_paths(&bot_id).remove(0);
+        let existing = HashMap::from([(path, old.clone())]);
+        let payload = renderer
+            .render_with_existing(&bot_id, &config, &existing)
+            .unwrap()
+            .writes
+            .remove(0)
+            .payload;
+
+        assert_eq!(payload["mode"], "snapshot");
+        assert_eq!(payload["networks"]["wsClients"], json!([]));
+        for legacy in [
+            "wsClients",
+            "httpPostEndpoints",
+            "messageFormat",
+            "reportSelfMessage",
+        ] {
+            assert!(payload.get(legacy).is_none(), "{legacy}");
+        }
+        assert_eq!(payload["notifications"], old["notifications"]);
+
+        let docker_existing = HashMap::from([("onebot_10001.json".to_owned(), old)]);
+        let docker = render_snowluma_docker_config_payloads(&bot_id, &config, &docker_existing);
+        assert_eq!(docker[0].payload, payload);
+        assert_eq!(
+            renderer.render(&bot_id, &config).unwrap().writes[0].payload["mode"],
+            "snapshot"
+        );
+    }
+
+    #[test]
     fn snowluma_field_mapping_enable_to_enabled() {
         let renderer = SnowLumaConfigRenderer::new("/tmp/snowluma");
         let bot_id = make_bot_id();

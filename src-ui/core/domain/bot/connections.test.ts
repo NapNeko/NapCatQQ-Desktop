@@ -238,6 +238,63 @@ describe('validateConnection', () => {
         ).toBe(true);
     });
 
+    it.each([
+        'http://',
+        'https://:8080/path',
+        'http://bad host/path',
+        'https://[::1/path',
+        'http://localhost:bad/path',
+        'https://localhost:65536/path',
+    ])('Webhook 拒绝不完整或主机、端口畸形的 URL：%s', (url) => {
+        expect(validateConnection('httpClient', httpClient({ url }), [])).toEqual({
+            ok: false,
+            reason: 'Webhook URL 格式无效，请检查主机地址和端口',
+        });
+    });
+
+    it.each([
+        'ws://',
+        'wss://:bad/path',
+        'ws://bad host/path',
+        'wss://[::1/path',
+        'ws://localhost:bad/path',
+        'wss://localhost:65536/path',
+    ])('反向 WS 拒绝不完整或主机、端口畸形的 URL：%s', (url) => {
+        expect(validateConnection('websocketClient', wsClient({ url }), [])).toEqual({
+            ok: false,
+            reason: 'WebSocket URL 格式无效，请检查主机地址和端口',
+        });
+    });
+
+    it.each([
+        ' http://localhost:8080/webhook?token=value ',
+        'https://hook.example.com/path?type=message',
+        'http://[::1]:8080/webhook',
+        ' https://[2001:db8::1]/path?type=message ',
+    ])('Webhook 接受完整 URL、IPv6 及首尾空白：%s', (url) => {
+        expect(validateConnection('httpClient', httpClient({ url }), [])).toEqual({ ok: true });
+    });
+
+    it.each([
+        ' ws://localhost:8080/onebot/v11?token=value ',
+        'wss://bot.example.com/path?type=message',
+        'ws://[::1]:8080/onebot/v11',
+        ' wss://[2001:db8::1]/path?type=message ',
+    ])('反向 WS 接受完整 URL、IPv6 及首尾空白：%s', (url) => {
+        expect(validateConnection('websocketClient', wsClient({ url }), [])).toEqual({ ok: true });
+    });
+
+    it('纯空白 URL 沿用不能为空提示', () => {
+        expect(validateConnection('httpClient', httpClient({ url: ' \t\n ' }), [])).toEqual({
+            ok: false,
+            reason: '上报 Webhook URL 不能为空',
+        });
+        expect(validateConnection('websocketClient', wsClient({ url: ' \t\n ' }), [])).toEqual({
+            ok: false,
+            reason: '服务端 WebSocket URL 不能为空',
+        });
+    });
+
     it('重连与心跳间隔各守 1000ms 下限', () => {
         expect(
             validateConnection(

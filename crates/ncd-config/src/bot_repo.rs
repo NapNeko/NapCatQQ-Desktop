@@ -220,6 +220,7 @@ impl<S: ConfigStore + 'static> BotConfigRepo for LocalBotConfigRepo<S> {
 
     async fn upsert(&self, config: BotConfig) -> Result<(), BotConfigError> {
         config.validate()?;
+        config.validate_network_urls()?;
         config.validate_runtime_matrix()?;
 
         // 持写锁覆盖整个 read-modify-write 流程,防止并发 upsert/delete 丢更新

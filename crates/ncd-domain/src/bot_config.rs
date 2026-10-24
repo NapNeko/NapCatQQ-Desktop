@@ -559,6 +559,21 @@ impl BotConfig {
         Ok(())
     }
 
+    /// 保存和启动时校验外连地址；读盘仍允许修正旧版本保存的畸形地址。
+    pub fn validate_network_urls(&self) -> Result<(), BotConfigError> {
+        for client in &self.connect.http_clients {
+            if client.base.enable {
+                validate_client_url(&client.url, &["http", "https"])?;
+            }
+        }
+        for client in &self.connect.websocket_clients {
+            if client.base.enable {
+                validate_client_url(&client.url, &["ws", "wss"])?;
+            }
+        }
+        Ok(())
+    }
+
     /// 校验运行矩阵是否支持
     ///
     /// 当前支持三类场景: local native, remote native, remote docker.
@@ -612,6 +627,18 @@ impl From<crate::errors::ConfigError> for BotConfigError {
 impl From<serde_json::Error> for BotConfigError {
     fn from(error: serde_json::Error) -> Self {
         Self::Json(error.to_string())
+    }
+}
+
+fn validate_client_url(raw: &str, schemes: &[&str]) -> Result<(), BotConfigError> {
+    let value = raw.trim();
+    let valid = value.split_once("://").is_some_and(|(scheme, _)| {
+        schemes.contains(&scheme) && url::Url::parse(value).is_ok_and(|url| url.has_host())
+    });
+    if valid {
+        Ok(())
+    } else {
+        Err(BotConfigError::InvalidUrl(raw.to_owned()))
     }
 }
 
