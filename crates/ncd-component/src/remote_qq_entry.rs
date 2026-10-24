@@ -2,10 +2,12 @@
 //!
 //! NapCat 注入与 SnowLuma 纯 QQ 互斥依赖同一入口字段;启动前按底座写入,避免多处复制 patch 逻辑
 
+use std::future::Future;
 use std::time::Duration;
 
 use ncd_host::{Host, HostCommand, HostError, HostPath};
 use sha2::{Digest, Sha256};
+use tokio_util::sync::CancellationToken;
 
 const REPLACE_SYSTEM_QQ_ENTRY: &str = r#"set -eu
 target=$1
@@ -79,8 +81,48 @@ pub async fn set_remote_qq_package_main(
     install_base: &HostPath,
     main_entry: &str,
 ) -> Result<(), String> {
+    set_remote_qq_package_main_inner(host, install_base, main_entry, None).await
+}
+
+pub async fn set_remote_qq_package_main_cancellable(
+    host: &dyn Host,
+    install_base: &HostPath,
+    main_entry: &str,
+    cancel: &CancellationToken,
+) -> Result<(), String> {
+    set_remote_qq_package_main_inner(host, install_base, main_entry, Some(cancel)).await
+}
+
+fn check_cancel(cancel: Option<&CancellationToken>) -> Result<(), String> {
+    if cancel.is_some_and(CancellationToken::is_cancelled) {
+        Err("QQ 入口切换已取消".into())
+    } else {
+        Ok(())
+    }
+}
+
+async fn read_cancellable<T>(
+    cancel: Option<&CancellationToken>,
+    read: impl Future<Output = T>,
+) -> Result<T, String> {
+    match cancel {
+        Some(cancel) => tokio::select! {
+            biased;
+            _ = cancel.cancelled() => Err("QQ 入口切换已取消".into()),
+            result = read => Ok(result),
+        },
+        None => Ok(read.await),
+    }
+}
+
+async fn set_remote_qq_package_main_inner(
+    host: &dyn Host,
+    install_base: &HostPath,
+    main_entry: &str,
+    cancel: Option<&CancellationToken>,
+) -> Result<(), String> {
     let path = qq_package_json(install_base);
-    let bytes = match host.read_file(&path).await {
+    let bytes = match read_cancellable(cancel, host.read_file(&path)).await? {
         Ok(bytes) => bytes,
         Err(HostError::PathNotFound { .. }) => {
             return Err(format!(
@@ -109,8 +151,9 @@ pub async fn set_remote_qq_package_main(
     let main_entry = if wants_native {
         // asar 是文件，不能用 archive 内部的虚拟入口路径做文件系统探测。
         let app_dir = ncd_domain::qq_app_dir(install_base.as_posix());
-        let output = host
-            .run_to_string(
+        let output = read_cancellable(
+            cancel,
+            host.run_to_string(
                 HostCommand::new("sh")
                     .args([
                         "-c",
@@ -119,9 +162,10 @@ pub async fn set_remote_qq_package_main(
                         app_dir.as_str(),
                     ])
                     .timeout(Duration::from_secs(10)),
-            )
-            .await
-            .map_err(|error| error.to_string())?;
+            ),
+        )
+        .await?
+        .map_err(|error| error.to_string())?;
         let entry = output.stdout.trim();
         if !output.success() || !is_native_entry(entry) {
             return Err("未找到 QQ 原生入口文件，已保留 package.json，请检查 QQ 安装。".into());
@@ -136,6 +180,7 @@ pub async fn set_remote_qq_package_main(
     );
     let new_bytes =
         serde_json::to_vec_pretty(&json).map_err(|e| format!("序列化 package.json: {e}"))?;
+    check_cancel(cancel)?;
     if path.as_posix() == "/opt/QQ/resources/app/package.json" {
         let length = new_bytes.len().to_string();
         let desired_hash = hex::encode(Sha256::digest(&new_bytes));
@@ -166,9 +211,9 @@ pub async fn set_remote_qq_package_main(
             .await
             .map_err(|e| e.to_string())?;
     }
-    let written = host
-        .read_file(&path)
-        .await
+    check_cancel(cancel)?;
+    let written = read_cancellable(cancel, host.read_file(&path))
+        .await?
         .map_err(|error| error.to_string())?;
     let written: serde_json::Value = serde_json::from_slice(&written)
         .map_err(|_| "切换 QQ 入口后回读不是有效 JSON".to_string())?;

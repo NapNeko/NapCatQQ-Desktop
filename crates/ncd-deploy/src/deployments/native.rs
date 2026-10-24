@@ -33,6 +33,7 @@ use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, LogSnapshot, StopMode
 use ncd_host::{Host, HostCommand, HostError, HostPath, HostProcess, Os};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
@@ -315,6 +316,26 @@ impl NativeDeployment {
     /// 把 BotConfig 推导成 BotId,BotId 取 qq_id 字符串
     fn derive_bot_id(config: &BotConfig) -> BotId {
         BotId::new(config.bot.qq_id.to_string())
+    }
+
+    pub async fn launch_cancellable(
+        &self,
+        host: &dyn Host,
+        config: &BotConfig,
+        cancel: &CancellationToken,
+    ) -> Result<DeploymentHandle, DeploymentError> {
+        if cancel.is_cancelled() {
+            return Err(HostError::Cancelled.into());
+        }
+        let plan = self
+            .translator
+            .translate_cancellable(config, cancel)
+            .await?;
+        if cancel.is_cancelled() {
+            return Err(HostError::Cancelled.into());
+        }
+        // Once spawn is submitted, retain its result and watcher for the caller's cleanup.
+        self.launch_with_command(host, config, plan).await
     }
 
     /// 用已准备好的启动命令 spawn（跳过 translator.translate / 二次 build_plan）
@@ -906,6 +927,10 @@ mod tests {
     use std::sync::Mutex as StdMutex;
     use tokio::sync::oneshot;
 
+    mod cancel_tests {
+        include!("native_cancel_tests.rs");
+    }
+
     // FakeHost:spawn 走真实 tokio::process::Command,run_to_string 仅记录调用
     //
     // 这套 fake 的目的:
@@ -935,6 +960,8 @@ mod tests {
         kill_calls: Arc<StdMutex<Vec<HostCommand>>>,
         spawn_calls: Arc<StdMutex<Vec<HostCommand>>>,
         queued_processes: Arc<StdMutex<VecDeque<Box<dyn HostProcess>>>>,
+        spawn_started: Option<Arc<tokio::sync::Notify>>,
+        spawn_release: Option<Arc<tokio::sync::Notify>>,
     }
 
     impl FakeHost {
@@ -944,6 +971,8 @@ mod tests {
                 kill_calls: Arc::new(StdMutex::new(Vec::new())),
                 spawn_calls: Arc::new(StdMutex::new(Vec::new())),
                 queued_processes: Arc::new(StdMutex::new(VecDeque::new())),
+                spawn_started: None,
+                spawn_release: None,
             }
         }
 
@@ -1015,6 +1044,12 @@ mod tests {
 
         async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
             self.spawn_calls.lock().unwrap().push(cmd.clone());
+            if let Some(started) = &self.spawn_started {
+                started.notify_one();
+            }
+            if let Some(release) = &self.spawn_release {
+                release.notified().await;
+            }
             if let Some(process) = self.queued_processes.lock().unwrap().pop_front() {
                 return Ok(process);
             }

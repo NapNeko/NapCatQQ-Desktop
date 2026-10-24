@@ -5,6 +5,8 @@
 //! $HOME/Napcat/opt/QQ/.../napcat/config/(或 system 布局 /opt/QQ/...)
 
 use std::collections::HashMap;
+
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +19,30 @@ use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 
 use ncd_deploy::backend_config_renderer::render_napcat_docker_config_payloads;
 use ncd_traits::runtime_backend::BotBackendError;
+use tokio_util::sync::CancellationToken;
+
+#[cfg(test)]
+#[path = "launch_cancel_tests.rs"]
+mod cancel_tests;
+
+fn check_cancel(cancel: &CancellationToken) -> Result<(), DeploymentError> {
+    if cancel.is_cancelled() {
+        Err(ncd_host::HostError::Cancelled.into())
+    } else {
+        Ok(())
+    }
+}
+
+async fn read_cancellable<T>(
+    cancel: &CancellationToken,
+    read: impl Future<Output = T>,
+) -> Result<T, DeploymentError> {
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => Err(ncd_host::HostError::Cancelled.into()),
+        value = read => Ok(value),
+    }
+}
 
 /// 与 src-tauri/commands/components.rs::RemoteLayout 同语义
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,34 +139,56 @@ pub async fn render_native_napcat_config_on_host(
     config: &BotConfig,
     install_base: &HostPath,
 ) -> Result<(), BotBackendError> {
+    render_napcat_config_cancellable(
+        host,
+        bot_id,
+        config,
+        install_base,
+        &CancellationToken::new(),
+    )
+    .await
+    .map_err(|error| match error {
+        DeploymentError::ConfigInvalid(message) => BotBackendError::InvalidConfig(message),
+        error => BotBackendError::Io(error.to_string()),
+    })
+}
+
+async fn render_napcat_config_cancellable(
+    host: &dyn Host,
+    bot_id: &BotId,
+    config: &BotConfig,
+    install_base: &HostPath,
+    cancel: &CancellationToken,
+) -> Result<(), DeploymentError> {
+    check_cancel(cancel)?;
     if config.bot.backend_type != BackendType::NapCat {
-        return Err(BotBackendError::InvalidConfig(
+        return Err(DeploymentError::ConfigInvalid(
             "render_native_napcat_config_on_host 仅支持 NapCat".into(),
         ));
     }
     let config_dir = napcat_config_dir(install_base);
+    let existing = read_existing_napcat_config(host, bot_id, &config_dir, cancel).await?;
+    check_cancel(cancel)?;
     let config_dir_path = HostPath::from_posix(&config_dir);
-    host.create_dir_all(&config_dir_path)
-        .await
-        .map_err(|e| BotBackendError::Io(format!("创建远端 NapCat 配置目录失败: {e}")))?;
-
-    let existing = read_existing_napcat_config(host, bot_id, &config_dir).await?;
+    host.create_dir_all(&config_dir_path).await?;
+    check_cancel(cancel)?;
+    // 新 QQ 尚未启动；单份配置写完即可取消，下次启动会重新渲染全部文件。
     for item in render_napcat_docker_config_payloads(bot_id, config, &existing) {
         let bytes = serde_json::to_vec_pretty(&item.payload)
-            .map_err(|e| BotBackendError::Json(e.to_string()))?;
+            .map_err(|e| DeploymentError::ConfigInvalid(e.to_string()))?;
         let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
-        host.write_file(&path, &bytes)
-            .await
-            .map_err(|e| BotBackendError::Io(format!("写远端 NapCat 配置失败: {e}")))?;
+        host.write_file(&path, &bytes).await?;
+        check_cancel(cancel)?;
     }
-    Ok(())
+    check_cancel(cancel)
 }
 
 async fn read_existing_napcat_config(
     host: &dyn Host,
     bot_id: &BotId,
     config_dir: &str,
-) -> Result<HashMap<String, serde_json::Value>, BotBackendError> {
+    cancel: &CancellationToken,
+) -> Result<HashMap<String, serde_json::Value>, DeploymentError> {
     let mut existing = HashMap::new();
     for file_name in [
         format!("onebot11_{}.json", bot_id.as_str()),
@@ -148,14 +196,14 @@ async fn read_existing_napcat_config(
         "napcat.json".to_string(),
     ] {
         let path = HostPath::from_posix(format!("{config_dir}/{file_name}"));
-        match host.read_file(&path).await {
+        match read_cancellable(cancel, host.read_file(&path)).await? {
             Ok(bytes) => {
                 if let Ok(value) = serde_json::from_slice(&bytes) {
                     existing.insert(file_name, value);
                 }
             }
             Err(ncd_host::HostError::PathNotFound { .. }) => {}
-            Err(error) => return Err(BotBackendError::Io(error.to_string())),
+            Err(error) => return Err(error.into()),
         }
     }
     Ok(existing)
@@ -171,7 +219,9 @@ async fn build_napcat_remote_launch(
     config: &BotConfig,
     install_base: &HostPath,
     metrics_env: &std::collections::BTreeMap<String, String>,
+    cancel: &CancellationToken,
 ) -> Result<NativeLaunchCommand, DeploymentError> {
+    check_cancel(cancel)?;
     let qq_id = config.bot.qq_id;
     let component = NapCatComponent::new(install_base.clone());
     let launch_args = LaunchArgs {
@@ -186,9 +236,8 @@ async fn build_napcat_remote_launch(
         .arg("-c")
         .arg("command -v xvfb-run >/dev/null 2>&1")
         .timeout(Duration::from_secs(8));
-    let check_out = host
-        .run_to_string(check)
-        .await
+    let check_out = read_cancellable(cancel, host.run_to_string(check))
+        .await?
         .map_err(|e| DeploymentError::LaunchFailed(e.to_string()))?;
     if !check_out.success() {
         return Err(DeploymentError::LaunchFailed(
@@ -217,6 +266,7 @@ async fn build_napcat_remote_launch(
             "无法轮换远端 NapCat 日志，启动已取消".into(),
         ));
     }
+    check_cancel(cancel)?;
 
     let mut qq_parts = vec![qq_cmd.program.clone()];
     qq_parts.extend(qq_cmd.args.clone());
@@ -356,30 +406,41 @@ pub fn napcat_paths_from_selected(
 #[async_trait]
 impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
     async fn translate(&self, config: &BotConfig) -> Result<NativeLaunchCommand, DeploymentError> {
+        self.translate_cancellable(config, &CancellationToken::new())
+            .await
+    }
+
+    async fn translate_cancellable(
+        &self,
+        config: &BotConfig,
+        cancel: &CancellationToken,
+    ) -> Result<NativeLaunchCommand, DeploymentError> {
+        check_cancel(cancel)?;
         match self.flavor {
             BotFlavor::NapCat => {
                 let bot_id = BotId::new(config.bot.qq_id.to_string());
-                let (home, _layout, install_base) = self.layout().await?;
+                let (home, _layout, install_base) = read_cancellable(cancel, self.layout()).await??;
 
                 // Per-bot config files can be rendered without the entry lock.
-                render_native_napcat_config_on_host(
+                render_napcat_config_cancellable(
                     self.host.as_ref(),
                     &bot_id,
                     config,
                     &install_base,
+                    cancel,
                 )
-                .await
-                .map_err(|e| DeploymentError::LaunchFailed(e.to_string()))?;
+                .await?;
 
                 // The critical shared operation: switch the common QQ tree to NapCat-injected
                 // mode *and* verify that loadNapCat.js + napcat/napcat.mjs actually exist.
                 // This is serialized per server_id by the coordinator so batch_start of
                 // multiple (possibly mixed NC+SL) bots on the same remote host cannot race
                 // the package.json write or launch a QQ that will immediately fail the require.
-                self.coordinator
-                    .ensure_for_napcat(self.host.as_ref(), &self.server_id, &install_base)
-                    .await
-                    .map_err(DeploymentError::LaunchFailed)?;
+                let entry = self.coordinator
+                    .ensure_for_napcat_cancellable(self.host.as_ref(), &self.server_id, &install_base, cancel)
+                    .await;
+                check_cancel(cancel)?;
+                entry.map_err(DeploymentError::LaunchFailed)?;
 
                 let mut metrics_env = std::collections::BTreeMap::new();
                 if let Some(inj) = &self.metrics_injector {
@@ -395,12 +456,14 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
                         metrics_env = env;
                     }
                 }
+                check_cancel(cancel)?;
 
                 build_napcat_remote_launch(
                     self.host.as_ref(),
                     config,
                     &install_base,
                     &metrics_env,
+                    cancel,
                 )
                 .await
             }

@@ -1,6 +1,8 @@
 //! 远端 SSH NativeDeployment -> BotBackend
 
+use std::future::Future;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 use async_trait::async_trait;
 use ncd_backend_napcat::remote_native_launch::{
@@ -24,11 +26,47 @@ enum HostOperation {
     Mutation,
 }
 
+#[derive(Clone)]
+struct PendingNativeStart {
+    host: Arc<dyn Host>,
+    bot_id: BotId,
+    pid: u32,
+    started_at: u64,
+}
+
+impl PendingNativeStart {
+    fn matches(&self, status: &BotStatus) -> bool {
+        status.state == ncd_domain::bot_actor::BotActorState::Running
+            && self.bot_id == status.bot_id
+            && status.pid == Some(self.pid)
+            && status.started_at == Some(self.started_at)
+    }
+}
+
 fn host_error(error: HostError) -> BotBackendError {
     if error.is_disconnect() {
         BotBackendError::RemoteHostTransport(error.to_string())
     } else {
         BotBackendError::Io(error.to_string())
+    }
+}
+
+async fn read_cancellable<T>(
+    cancel: &CancellationToken,
+    read: impl Future<Output = T>,
+) -> Result<T, BotBackendError> {
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => Err(BotBackendError::Io("NapCat 启动已取消".into())),
+        value = read => Ok(value),
+    }
+}
+
+fn check_cancel(cancel: &CancellationToken) -> Result<(), BotBackendError> {
+    if cancel.is_cancelled() {
+        Err(BotBackendError::Io("NapCat 启动已取消".into()))
+    } else {
+        Ok(())
     }
 }
 
@@ -79,6 +117,7 @@ pub struct RemoteNativeDeploymentBackend {
     backend_id: BotId,
     flavor: BotFlavor,
     selected: Option<ncd_domain::RemoteSelectedPaths>,
+    pending_start: tokio::sync::Mutex<Option<PendingNativeStart>>,
 }
 
 impl RemoteNativeDeploymentBackend {
@@ -96,6 +135,7 @@ impl RemoteNativeDeploymentBackend {
             backend_id: backend_id.into(),
             flavor,
             selected: None,
+            pending_start: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -169,37 +209,114 @@ impl BotBackend for RemoteNativeDeploymentBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        self.start_cancellable(ctx, CancellationToken::new()).await
+    }
+
+    async fn start_cancellable(
+        &self,
+        ctx: &BotStartCtx,
+        cancel: CancellationToken,
+    ) -> Result<BotStatus, BotBackendError> {
+        check_cancel(&cancel)?;
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
+        let host = read_cancellable(&cancel, self.current_host()).await??;
         // 远端 nohup 进程不在本机 processes 表里;若上次 stop 不彻底,先按 qq 清掉再起
         if self.flavor == BotFlavor::NapCat {
             let qq_id = bot_config.bot.qq_id;
-            self.with_host_refresh(HostOperation::Mutation, move |h| async move {
-                if remote_napcat_running_pid(h.as_ref(), qq_id)
-                    .await?
-                    .is_some()
-                {
-                    stop_remote_napcat_on_host(h.as_ref(), qq_id).await?;
-                }
-                Ok::<(), BotBackendError>(())
-            })
-            .await?;
+            let running =
+                read_cancellable(&cancel, remote_napcat_running_pid(host.as_ref(), qq_id))
+                    .await??;
+            check_cancel(&cancel)?;
+            if running.is_some() {
+                stop_remote_napcat_on_host(host.as_ref(), qq_id).await?;
+                check_cancel(&cancel)?;
+            }
         }
         let handle = self
-            .with_host_refresh(HostOperation::Mutation, |h| async move {
-                self.deployment
-                    .launch(h.as_ref(), &bot_config)
-                    .await
-                    .map_err(deployment_error)
-            })
-            .await?;
+            .deployment
+            .launch_cancellable(host.as_ref(), &bot_config, &cancel)
+            .await
+            .map_err(deployment_error)?;
+        // spawn 已提交后保留成功结果，让受管 worker 的未提交分支精确停止该进程。
         match handle {
-            ncd_deploy::DeploymentHandle::Native { pid, started_at } => Ok(BotStatus::running(
-                ctx.config.bot_id.clone(),
-                pid,
-                started_at,
-            )),
+            ncd_deploy::DeploymentHandle::Native { pid, started_at } => {
+                *self.pending_start.lock().await = Some(PendingNativeStart {
+                    host,
+                    bot_id: ctx.config.bot_id.clone(),
+                    pid,
+                    started_at,
+                });
+                Ok(BotStatus::running(
+                    ctx.config.bot_id.clone(),
+                    pid,
+                    started_at,
+                ))
+            }
             _ => Err(BotBackendError::Io("unexpected handle variant".into())),
         }
+    }
+
+    async fn cleanup_unacknowledged_start(
+        &self,
+        started: &BotStatus,
+    ) -> Result<(), BotBackendError> {
+        let pending = self
+            .pending_start
+            .lock()
+            .await
+            .clone()
+            .filter(|pending| pending.matches(started))
+            .ok_or_else(|| BotBackendError::Io("未匹配到原始远端启动，已拒绝取消清理".into()))?;
+        // Profile may now point elsewhere. This generation is owned only by its captured Host.
+        if self.flavor == BotFlavor::NapCat {
+            let qq_id = started
+                .bot_id
+                .as_str()
+                .parse::<u64>()
+                .map_err(|_| BotBackendError::InvalidConfig("Bot QQ 账号无效".into()))?;
+            if remote_napcat_running_pid(pending.host.as_ref(), qq_id)
+                .await?
+                .is_some()
+            {
+                stop_remote_napcat_on_host(pending.host.as_ref(), qq_id).await?;
+            } else if self
+                .deployment
+                .observe(pending.host.as_ref(), &started.bot_id)
+                .await
+                .map_err(deployment_error)?
+                == ncd_deploy::DeploymentState::Running
+            {
+                // SSH's process handle is zero; an active launcher may still create QQ later.
+                return Err(BotBackendError::Io(
+                    "原启动仍在运行，尚未确认 QQ 归属，已保留取消清理记录".into(),
+                ));
+            }
+        }
+        self.deployment
+            .stop(pending.host.as_ref(), &started.bot_id, StopMode::Force)
+            .await
+            .map_err(deployment_error)?;
+        if self.flavor == BotFlavor::NapCat {
+            let qq_id = started
+                .bot_id
+                .as_str()
+                .parse::<u64>()
+                .map_err(|_| BotBackendError::InvalidConfig("Bot QQ 账号无效".into()))?;
+            if remote_napcat_running_pid(pending.host.as_ref(), qq_id)
+                .await?
+                .is_some()
+            {
+                return Err(BotBackendError::Io("原主机的取消启动尚未确认停止".into()));
+            }
+        }
+        let mut current = self.pending_start.lock().await;
+        if current
+            .as_ref()
+            .is_some_and(|value| value.matches(started) && Arc::ptr_eq(&value.host, &pending.host))
+        {
+            *current = None;
+        }
+        Ok(())
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
@@ -287,6 +404,10 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         Ok(LogSnapshot { lines, total_lines })
     }
 }
+
+#[cfg(test)]
+#[path = "remote_cancel_tests.rs"]
+mod cancel_tests;
 
 #[cfg(test)]
 mod tests {
