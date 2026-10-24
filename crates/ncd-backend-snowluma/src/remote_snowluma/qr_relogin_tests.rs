@@ -256,6 +256,22 @@ impl Host for ReloginHost {
                 }})
                 .to_string()
             }
+            "/usr/bin/python3"
+                if command
+                    .args
+                    .iter()
+                    .any(|arg| arg == super::login_helper::DEPLOY_HELPER) =>
+            {
+                use base64::Engine;
+                let request: serde_json::Value =
+                    serde_json::from_slice(command.stdin.as_ref().unwrap()).unwrap();
+                let body = base64::engine::general_purpose::STANDARD
+                    .decode(request["body"].as_str().unwrap())
+                    .unwrap();
+                let path = format!("{}/atspi-login.py", request["directory"].as_str().unwrap());
+                self.files.lock().unwrap().insert(path, body);
+                r#"{"v":1,"changed":true}"#.into()
+            }
             "/usr/bin/python3" if command.args.iter().any(|arg| arg == "--probe") => {
                 r#"{"available":true}"#.into()
             }

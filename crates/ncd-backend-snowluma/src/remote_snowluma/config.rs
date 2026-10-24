@@ -1,6 +1,7 @@
 //! 远端 daemon 前置条件、配置渲染与场景判定
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use ncd_deploy::backend_config_renderer::render_snowluma_docker_config_payloads;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, SnowLumaStartMode};
@@ -14,7 +15,7 @@ use crate::snowluma::session::{
     build_webui_json_payload, generate_strong_password, verify_webui_password,
 };
 
-use super::helpers::host_file_nonempty;
+const CONFIG_READ_BUDGET: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WebuiCredentialSync {
@@ -28,12 +29,23 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
     paths: &SnowLumaRemotePaths,
     qq_bin: &str,
 ) -> Result<WebuiCredentialSync, BotBackendError> {
-    host.create_dir_all(&HostPath::from_posix(&paths.config_dir))
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-
     let runtime_path = format!("{}/runtime.json", paths.config_dir);
-    if !host_file_nonempty(host, &runtime_path).await {
+    let webui_path = format!("{}/webui.json", paths.config_dir);
+    let (runtime, webui, secret, vnc) = tokio::try_join!(
+        read_optional_config(host, &runtime_path),
+        read_optional_config(host, &webui_path),
+        read_optional_config(host, &paths.webui_secret),
+        read_optional_config(host, &paths.vnc_secret),
+    )?;
+    let existing = parse_webui_disk_creds(webui.as_deref())?;
+    let secret = decode_secret(secret.as_deref())?;
+    let runtime_missing = runtime.as_ref().is_none_or(|bytes| bytes.is_empty());
+    if runtime_missing || existing.as_ref().is_none_or(|disk| disk.must_change) {
+        host.create_dir_all(&HostPath::from_posix(&paths.config_dir))
+            .await
+            .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    }
+    if runtime_missing {
         let runtime_json = serde_json::to_vec_pretty(&json!({ "webuiPort": DEFAULT_WEBUI_PORT }))
             .map_err(|e| BotBackendError::Json(e.to_string()))?;
         host.write_file(&HostPath::from_posix(&runtime_path), &runtime_json)
@@ -41,9 +53,9 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
             .map_err(|e| BotBackendError::Io(e.to_string()))?;
     }
 
-    let creds = sync_remote_webui_credentials(host, paths).await?;
+    let creds = sync_loaded_webui_credentials(host, paths, existing, secret).await?;
 
-    if !host_file_nonempty(host, &paths.vnc_secret).await {
+    if vnc.as_ref().is_none_or(|bytes| bytes.is_empty()) {
         let vnc_pwd = generate_strong_password(8);
         host.write_file(&HostPath::from_posix(&paths.vnc_secret), vnc_pwd.as_bytes())
             .await
@@ -94,24 +106,44 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
 
 /// 对齐上游 `WebuiAuth.load`：`mustChangePassword=true` 时 node 会丢掉明文、自己换密。
 /// 桌面生成/接管的密码必须写成 false，且在启动 node 之前落盘。
+#[cfg(test)]
 async fn sync_remote_webui_credentials(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
 ) -> Result<WebuiCredentialSync, BotBackendError> {
     let webui_json_path = format!("{}/webui.json", paths.config_dir);
-    let existing = read_webui_disk_creds(host, &webui_json_path).await;
-    let secret = if host_file_nonempty(host, &paths.webui_secret).await {
-        let bytes = host
-            .read_file(&HostPath::from_posix(&paths.webui_secret))
-            .await
-            .map_err(|e| BotBackendError::Io(e.to_string()))?;
-        String::from_utf8_lossy(&bytes).trim().to_string()
-    } else {
-        String::new()
-    };
+    let (webui, secret) = tokio::try_join!(
+        read_optional_config(host, &webui_json_path),
+        read_optional_config(host, &paths.webui_secret),
+    )?;
+    sync_loaded_webui_credentials(
+        host,
+        paths,
+        parse_webui_disk_creds(webui.as_deref())?,
+        decode_secret(secret.as_deref())?,
+    )
+    .await
+}
+
+async fn sync_loaded_webui_credentials(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    existing: Option<WebuiDiskCreds>,
+    secret: String,
+) -> Result<WebuiCredentialSync, BotBackendError> {
+    let webui_json_path = format!("{}/webui.json", paths.config_dir);
 
     if let Some(disk) = existing {
-        let matches = !secret.is_empty() && verify_webui_password(&secret, &disk.hash, &disk.salt);
+        let matches = if secret.is_empty() {
+            false
+        } else {
+            let password = secret.clone();
+            let hash = disk.hash.clone();
+            let salt = disk.salt.clone();
+            tokio::task::spawn_blocking(move || verify_webui_password(&password, &hash, &salt))
+                .await
+                .map_err(|_| BotBackendError::Io("WebUI 凭据校验任务异常".into()))?
+        };
         if matches && !disk.must_change {
             return Ok(WebuiCredentialSync {
                 plaintext: secret,
@@ -119,23 +151,20 @@ async fn sync_remote_webui_credentials(
             });
         }
         if matches && disk.must_change {
-            write_webui_pair(host, paths, &webui_json_path, &secret).await?;
+            write_webui_pair(host, paths, &webui_json_path, &secret, false).await?;
             return Ok(WebuiCredentialSync {
                 plaintext: secret,
                 wrote: true,
             });
         }
         if disk.must_change {
-            let plain = if secret.is_empty() {
-                let pwd = generate_strong_password(16);
-                host.write_file(&HostPath::from_posix(&paths.webui_secret), pwd.as_bytes())
-                    .await
-                    .map_err(|e| BotBackendError::Io(e.to_string()))?;
-                pwd
+            let secret_missing = secret.is_empty();
+            let plain = if secret_missing {
+                generate_strong_password(16)
             } else {
                 secret
             };
-            write_webui_pair(host, paths, &webui_json_path, &plain).await?;
+            write_webui_pair(host, paths, &webui_json_path, &plain, secret_missing).await?;
             return Ok(WebuiCredentialSync {
                 plaintext: plain,
                 wrote: true,
@@ -147,16 +176,13 @@ async fn sync_remote_webui_credentials(
         });
     }
 
-    let plain = if secret.is_empty() {
-        let pwd = generate_strong_password(16);
-        host.write_file(&HostPath::from_posix(&paths.webui_secret), pwd.as_bytes())
-            .await
-            .map_err(|e| BotBackendError::Io(e.to_string()))?;
-        pwd
+    let secret_missing = secret.is_empty();
+    let plain = if secret_missing {
+        generate_strong_password(16)
     } else {
         secret
     };
-    write_webui_pair(host, paths, &webui_json_path, &plain).await?;
+    write_webui_pair(host, paths, &webui_json_path, &plain, secret_missing).await?;
     Ok(WebuiCredentialSync {
         plaintext: plain,
         wrote: true,
@@ -168,14 +194,21 @@ async fn write_webui_pair(
     paths: &SnowLumaRemotePaths,
     webui_json_path: &str,
     plain: &str,
+    write_secret: bool,
 ) -> Result<(), BotBackendError> {
-    let webui_payload =
-        build_webui_json_payload(plain, false).map_err(|e| BotBackendError::Io(e.to_string()))?;
+    let password = plain.to_owned();
+    let webui_payload = tokio::task::spawn_blocking(move || {
+        build_webui_json_payload(&password, false).map_err(|e| BotBackendError::Io(e.to_string()))
+    })
+    .await
+    .map_err(|_| BotBackendError::Io("WebUI 凭据生成任务异常".into()))??;
     let webui_json = serde_json::to_vec_pretty(&webui_payload)
         .map_err(|e| BotBackendError::Json(e.to_string()))?;
-    host.write_file(&HostPath::from_posix(&paths.webui_secret), plain.as_bytes())
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    if write_secret {
+        host.write_file(&HostPath::from_posix(&paths.webui_secret), plain.as_bytes())
+            .await
+            .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    }
     host.write_file(&HostPath::from_posix(webui_json_path), &webui_json)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
@@ -188,23 +221,69 @@ struct WebuiDiskCreds {
     must_change: bool,
 }
 
-async fn read_webui_disk_creds(host: &dyn Host, path: &str) -> Option<WebuiDiskCreds> {
-    let bytes = host.read_file(&HostPath::from_posix(path)).await.ok()?;
-    let v: Value = serde_json::from_slice(&bytes).ok()?;
-    let hash = v.get("passwordHash")?.as_str()?.trim().to_string();
-    let salt = v.get("passwordSalt")?.as_str()?.trim().to_string();
+async fn read_optional_config(
+    host: &dyn Host,
+    path: &str,
+) -> Result<Option<Vec<u8>>, BotBackendError> {
+    match tokio::time::timeout(
+        CONFIG_READ_BUDGET,
+        host.read_file(&HostPath::from_posix(path)),
+    )
+    .await
+    {
+        Ok(Ok(bytes)) => Ok(Some(bytes.to_vec())),
+        Ok(Err(HostError::PathNotFound { .. })) => Ok(None),
+        Ok(Err(error)) => Err(BotBackendError::Io(error.to_string())),
+        Err(_) => Err(BotBackendError::Io(format!("读取远端启动配置超时：{path}"))),
+    }
+}
+
+fn decode_secret(bytes: Option<&[u8]>) -> Result<String, BotBackendError> {
+    std::str::from_utf8(bytes.unwrap_or_default())
+        .map(|text| text.trim().to_owned())
+        .map_err(|_| BotBackendError::InvalidConfig("WebUI 凭据不是有效 UTF-8".into()))
+}
+
+fn parse_webui_disk_creds(bytes: Option<&[u8]>) -> Result<Option<WebuiDiskCreds>, BotBackendError> {
+    let Some(bytes) = bytes.filter(|bytes| !bytes.iter().all(u8::is_ascii_whitespace)) else {
+        return Ok(None);
+    };
+    let v: Value =
+        serde_json::from_slice(bytes).map_err(|e| BotBackendError::Json(e.to_string()))?;
+    let object = v
+        .as_object()
+        .ok_or_else(|| BotBackendError::InvalidConfig("WebUI 配置不是对象".into()))?;
+    fn field<'a>(
+        object: &'a serde_json::Map<String, Value>,
+        name: &str,
+    ) -> Result<&'a str, BotBackendError> {
+        match object.get(name) {
+            None | Some(Value::Null) => Ok(""),
+            Some(Value::String(value)) => Ok(value.trim()),
+            _ => Err(BotBackendError::InvalidConfig(
+                "WebUI 凭据字段类型无效".into(),
+            )),
+        }
+    }
+    let hash = field(object, "passwordHash")?.to_owned();
+    let salt = field(object, "passwordSalt")?.to_owned();
+    if hash.is_empty() && salt.is_empty() {
+        return Ok(None);
+    }
     if hash.is_empty() || salt.is_empty() {
-        return None;
+        return Err(BotBackendError::InvalidConfig(
+            "WebUI 凭据字段不完整".into(),
+        ));
     }
     let must_change = v
         .get("mustChangePassword")
         .and_then(|x| x.as_bool())
         .unwrap_or(false);
-    Some(WebuiDiskCreds {
+    Ok(Some(WebuiDiskCreds {
         hash,
         salt,
         must_change,
-    })
+    }))
 }
 
 /// 接管用明文：全局固定密码非空则用它，否则每次启动生成新密码。
@@ -283,19 +362,26 @@ pub async fn render_native_snowluma_config_on_host(
             "render_native_snowluma_config_on_host 仅支持 SnowLuma".into(),
         ));
     }
-    host.create_dir_all(&HostPath::from_posix(&paths.config_dir))
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
     let config_dir = &paths.config_dir;
     let mut existing = HashMap::new();
     let file_name = format!("onebot_{}.json", bot_id.as_str());
     let path = HostPath::from_posix(format!("{config_dir}/{file_name}"));
-    if let Ok(bytes) = host.read_file(&path).await {
-        if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+    if let Some(bytes) = read_optional_config(host, path.as_posix()).await? {
+        if !bytes.iter().all(u8::is_ascii_whitespace) {
+            let value = serde_json::from_slice::<Value>(&bytes)
+                .map_err(|error| BotBackendError::Json(error.to_string()))?;
+            if !value.is_object() {
+                return Err(BotBackendError::InvalidConfig(
+                    "SnowLuma OneBot 配置不是对象".into(),
+                ));
+            }
             existing.insert(file_name.clone(), value);
         }
     }
     for item in render_snowluma_docker_config_payloads(bot_id, config, &existing) {
+        if existing.get(&item.file_name) == Some(&item.payload) {
+            continue;
+        }
         let bytes = serde_json::to_vec_pretty(&item.payload)
             .map_err(|e| BotBackendError::Json(e.to_string()))?;
         let p = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
@@ -323,6 +409,9 @@ pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[path = "config_preflight_tests.rs"]
+    mod preflight_tests;
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::Mutex;
@@ -350,12 +439,29 @@ mod tests {
 
     struct FileHost {
         files: Mutex<HashMap<String, Vec<u8>>>,
+        reads: Mutex<Vec<String>>,
+        writes: Mutex<Vec<String>>,
+        failures: Mutex<HashMap<String, ReadFailure>>,
+        directories: std::sync::atomic::AtomicUsize,
+        read_barrier: Option<tokio::sync::Barrier>,
+    }
+
+    #[derive(Clone, Copy)]
+    enum ReadFailure {
+        Denied,
+        Timeout,
+        Pending,
     }
 
     impl FileHost {
         fn new() -> Self {
             Self {
                 files: Mutex::new(HashMap::new()),
+                reads: Mutex::new(Vec::new()),
+                writes: Mutex::new(Vec::new()),
+                failures: Mutex::new(HashMap::new()),
+                directories: std::sync::atomic::AtomicUsize::new(0),
+                read_barrier: None,
             }
         }
     }
@@ -378,6 +484,26 @@ mod tests {
             &NOOP_SHELL
         }
         async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+            self.reads.lock().unwrap().push(path.as_posix().to_owned());
+            if let Some(barrier) = &self.read_barrier {
+                barrier.wait().await;
+            }
+            let failure = self.failures.lock().unwrap().get(path.as_posix()).copied();
+            match failure {
+                Some(ReadFailure::Denied) => {
+                    return Err(HostError::PermissionDenied {
+                        path: path.clone(),
+                        operation: "read",
+                    });
+                }
+                Some(ReadFailure::Timeout) => {
+                    return Err(HostError::Timeout {
+                        operation: "fixture_read",
+                    });
+                }
+                Some(ReadFailure::Pending) => return std::future::pending().await,
+                None => {}
+            }
             self.files
                 .lock()
                 .unwrap()
@@ -387,6 +513,7 @@ mod tests {
                 .ok_or_else(|| HostError::PathNotFound { path: path.clone() })
         }
         async fn write_file(&self, path: &HostPath, bytes: &[u8]) -> Result<(), HostError> {
+            self.writes.lock().unwrap().push(path.as_posix().to_owned());
             self.files
                 .lock()
                 .unwrap()
@@ -397,6 +524,8 @@ mod tests {
             Err(HostError::Unsupported { operation: "mock" })
         }
         async fn create_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+            self.directories
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
         async fn remove_file(&self, _: &HostPath) -> Result<(), HostError> {
