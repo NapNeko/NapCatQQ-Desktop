@@ -1679,24 +1679,43 @@ impl BotBackend for RemoteSnowLumaBackend {
                     )
                     .await?;
                 } else {
-                    let unloaded = proof
-                        .client
-                        .unload_process(proof.tracked.pid)
-                        .await
-                        .map_err(|error| {
-                            BotBackendError::Io(format!("未确认启动的 QQ 尚未确认卸载：{error}"))
-                        })?;
-                    if unloaded.pid != proof.tracked.pid
-                        || unloaded.injected == Some(true)
-                        || !matches!(
+                    match qq_process::inspect(
+                        proof.host.as_ref(),
+                        &self.daemon.layout().qq_bin,
+                        qq_id,
+                        proof.tracked.pid,
+                        &proof.tracked.start_time,
+                    )
+                    .await?
+                    {
+                        qq_process::Identity::Absent => {}
+                        qq_process::Identity::Replaced => {
+                            return Err(BotBackendError::Io(
+                                "未确认启动的 QQ 进程已变化，已拒绝卸载替代进程".into(),
+                            ));
+                        }
+                        qq_process::Identity::Verified => {
+                            let unloaded = proof
+                                .client
+                                .unload_process(proof.tracked.pid)
+                                .await
+                                .map_err(|error| {
+                                    BotBackendError::Io(format!(
+                                        "未确认启动的 QQ 尚未确认卸载：{error}"
+                                    ))
+                                })?;
+                            if unloaded.pid != proof.tracked.pid
+                                || unloaded.injected == Some(true)
+                                || !matches!(
                             unloaded.status,
                             crate::snowluma::webui_client::HookProcessStatus::Available
                                 | crate::snowluma::webui_client::HookProcessStatus::Disconnected
-                        )
-                    {
-                        return Err(BotBackendError::Io(
-                            "未确认启动的目标 QQ 尚未确认卸载".into(),
-                        ));
+                        ) {
+                                return Err(BotBackendError::Io(
+                                    "未确认启动的目标 QQ 尚未确认卸载".into(),
+                                ));
+                            }
+                        }
                     }
                 }
                 self.dispose_poller(&started.bot_id).await;

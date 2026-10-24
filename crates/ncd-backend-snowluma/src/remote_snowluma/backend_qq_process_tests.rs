@@ -720,7 +720,10 @@ async fn unacknowledged_hot_start_unloads_only_its_bound_session_and_preserves_q
         completed_start_fixture(SnowLumaStartMode::HotStart).await;
     backend.cleanup_unacknowledged_start(&status).await.unwrap();
     assert_eq!(client.unloads.load(Ordering::SeqCst), 1);
-    assert!(host.qq_operations.lock().unwrap().is_empty());
+    assert_eq!(
+        host.qq_operations.lock().unwrap().as_slice(),
+        &[("inspect".into(), false, 42, "12345".into())]
+    );
     assert_eq!(
         backend
             .login_pids
@@ -736,6 +739,37 @@ async fn unacknowledged_hot_start_unloads_only_its_bound_session_and_preserves_q
         backend.status(status.bot_id).await.unwrap().state,
         ncd_domain::bot_actor::BotActorState::Stopped
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn unacknowledged_hot_cleanup_never_unloads_a_reused_or_unverified_pid() {
+    for reply in ["absent", "replaced", "error"] {
+        let (backend, host, status, client) =
+            completed_start_fixture(SnowLumaStartMode::HotStart).await;
+        host.qq_replies.lock().unwrap().push_back(reply.into());
+        let result = backend.cleanup_unacknowledged_start(&status).await;
+        assert_eq!(result.is_ok(), reply == "absent");
+        assert_eq!(client.unloads.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            host.qq_operations.lock().unwrap().as_slice(),
+            &[("inspect".into(), false, 42, "12345".into())]
+        );
+        assert_eq!(
+            backend.hot_detached.lock().await.contains(&status.bot_id),
+            reply == "absent"
+        );
+        assert_eq!(
+            backend
+                .login_pids
+                .lock()
+                .await
+                .get(&status.bot_id)
+                .unwrap()
+                .pid,
+            42
+        );
+        backend.detach_login_pollers().await;
+    }
 }
 
 #[tokio::test(start_paused = true)]
