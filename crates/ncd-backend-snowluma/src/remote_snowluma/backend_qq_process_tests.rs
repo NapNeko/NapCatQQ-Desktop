@@ -455,3 +455,168 @@ async fn earlier_observation_cannot_reattach_a_subsequently_detached_hot_session
     assert!(backend.hot_detached.lock().await.contains(&bot));
     backend.detach_login_pollers().await;
 }
+
+fn start_context(bot: &BotId, mode: SnowLumaStartMode) -> BotStartCtx {
+    let mut config = ncd_test_support::BotConfigBuilder::new().build();
+    config.bot.qq_id = bot.as_str().parse().unwrap();
+    config.bot.snowluma_start_mode = Some(mode);
+    BotStartCtx {
+        config: ncd_traits::runtime_backend::BotRuntimeConfig::default_path(
+            "/fixture",
+            bot.clone(),
+        )
+        .with_bot_config(&config),
+        bot_config: Some(config),
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn precancelled_start_does_not_issue_any_host_operation_or_spawn() {
+    let (backend, host, _) = fixture();
+    let bot = BotId::new("10001");
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    assert!(
+        backend
+            .start_cancellable(&start_context(&bot, SnowLumaStartMode::ColdStart), cancel)
+            .await
+            .is_err()
+    );
+    assert!(host.commands.lock().unwrap().is_empty());
+    assert!(backend.pending_spawns.lock().unwrap().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn cancellation_waits_for_the_inflight_metrics_mutation_and_then_cannot_spawn_qq() {
+    let (backend, host, gates) = fixture();
+    let bot = BotId::new("10001");
+    let cancel = CancellationToken::new();
+    let task = {
+        let backend = Arc::clone(&backend);
+        let cancel = cancel.clone();
+        let ctx = start_context(&bot, SnowLumaStartMode::ColdStart);
+        tokio::spawn(async move { backend.start_cancellable(&ctx, cancel).await })
+    };
+    permit(&gates.entered).await;
+    cancel.cancel();
+    tokio::task::yield_now().await;
+    assert!(
+        !task.is_finished(),
+        "a submitted mutating phase must be allowed to finish"
+    );
+    gates.release.add_permits(1);
+    assert!(task.await.unwrap().is_err());
+    assert_eq!(
+        gates.cancelled.available_permits(),
+        0,
+        "the mutation future was not dropped"
+    );
+    assert!(
+        host.commands
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|command| !command.contains("nohup"))
+    );
+    assert!(backend.pending_spawns.lock().unwrap().is_empty());
+    assert!(!backend.pollers.lock().await.contains_key(&bot));
+}
+
+#[tokio::test(start_paused = true)]
+async fn cancelling_hot_start_before_load_detaches_existing_hook_and_preserves_user_qq() {
+    let (backend, host, gates) = fixture();
+    let bot = BotId::new("10001");
+    backend
+        .start_modes
+        .lock()
+        .await
+        .insert(bot.clone(), SnowLumaStartMode::HotStart);
+    let client = install_reusable_poller(&backend, &bot).await;
+    client.allow_unload.store(true, Ordering::SeqCst);
+    let cancel = CancellationToken::new();
+    let task = {
+        let backend = Arc::clone(&backend);
+        let cancel = cancel.clone();
+        let ctx = start_context(&bot, SnowLumaStartMode::HotStart);
+        tokio::spawn(async move { backend.start_cancellable(&ctx, cancel).await })
+    };
+    permit(&gates.entered).await;
+    cancel.cancel();
+    gates.release.add_permits(1);
+    assert!(task.await.unwrap().is_err());
+    assert_eq!(client.unloads.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        backend.status(bot.clone()).await.unwrap().state,
+        ncd_domain::bot_actor::BotActorState::Stopped
+    );
+    assert_eq!(backend.login_pids.lock().await.get(&bot).unwrap().pid, 42);
+    assert_eq!(
+        backend.start_modes.lock().await.get(&bot),
+        Some(&SnowLumaStartMode::HotStart)
+    );
+    backend.stop(bot, StopMode::Force).await.unwrap();
+    assert!(
+        host.qq_operations
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|operation| operation.0 != "stop")
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn replaced_host_start_cannot_restore_or_remove_the_new_sessions_bindings() {
+    let (backend, old_host, gates) = fixture();
+    let bot = BotId::new("10001");
+    install_reusable_poller(&backend, &bot).await;
+    let task = {
+        let backend = Arc::clone(&backend);
+        let ctx = start_context(&bot, SnowLumaStartMode::HotStart);
+        tokio::spawn(async move {
+            backend
+                .start_cancellable(&ctx, CancellationToken::new())
+                .await
+        })
+    };
+    permit(&gates.entered).await;
+    let new_client = install_reusable_poller(&backend, &bot).await;
+    new_client.pid.store(99, Ordering::SeqCst);
+    backend.login_pids.lock().await.insert(
+        bot.clone(),
+        TrackedQq {
+            pid: 99,
+            start_time: "54321".into(),
+        },
+    );
+    backend.hot_detached.lock().await.insert(bot.clone());
+    let new_host = Arc::new(MetricsHost::default());
+    backend
+        .daemon
+        .replace_host_if_current(new_host.clone(), async { true })
+        .await
+        .unwrap();
+    gates.release.add_permits(1);
+    assert!(task.await.unwrap().is_err());
+    assert_eq!(backend.login_pids.lock().await.get(&bot).unwrap().pid, 99);
+    assert!(backend.hot_detached.lock().await.contains(&bot));
+    let current = backend
+        .login_clients
+        .lock()
+        .await
+        .get(&bot)
+        .cloned()
+        .unwrap();
+    let expected: Arc<dyn SnowLumaWebUiClient> = new_client.clone();
+    assert!(Arc::ptr_eq(&current, &expected));
+    assert_eq!(new_client.unloads.load(Ordering::SeqCst), 0);
+    assert!(new_host.qq_operations.lock().unwrap().is_empty());
+    assert!(
+        old_host
+            .qq_operations
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|operation| operation.0 != "stop")
+    );
+    backend.detach_login_pollers().await;
+}

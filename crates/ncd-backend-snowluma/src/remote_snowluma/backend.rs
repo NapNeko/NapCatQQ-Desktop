@@ -41,6 +41,13 @@ struct TrackedQq {
     start_time: String,
 }
 
+#[derive(Clone)]
+struct PendingSpawn {
+    pid: u32,
+    start_time: Option<String>,
+    host: Arc<dyn Host>,
+}
+
 struct ReusablePoller {
     tracked: TrackedQq,
     client: Arc<dyn SnowLumaWebUiClient>,
@@ -148,7 +155,7 @@ use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
 
 use super::config::{render_native_snowluma_config_on_host, resolve_start_mode};
 use super::daemon::RemoteSnowLumaDaemon;
-use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
+use super::helpers::read_remote_log_tail_lines;
 use super::inject::{inject_via_tunnel, remote_qq_running_pid_with_hint};
 
 #[path = "qr_relogin.rs"]
@@ -190,6 +197,7 @@ pub struct RemoteSnowLumaBackend {
     login_clients: Mutex<HashMap<BotId, Arc<dyn SnowLumaWebUiClient>>>,
     login_pids: Mutex<HashMap<BotId, TrackedQq>>,
     hot_detached: Mutex<HashSet<BotId>>,
+    pending_spawns: std::sync::Mutex<HashMap<BotId, PendingSpawn>>,
     qr_activity: Mutex<HashMap<BotId, Arc<QrActivity>>>,
 }
 
@@ -243,6 +251,7 @@ impl RemoteSnowLumaBackend {
             login_clients: Mutex::new(HashMap::new()),
             login_pids: Mutex::new(HashMap::new()),
             hot_detached: Mutex::new(HashSet::new()),
+            pending_spawns: std::sync::Mutex::new(HashMap::new()),
             qr_activity: Mutex::new(HashMap::new()),
         }
     }
@@ -695,6 +704,16 @@ impl RemoteSnowLumaBackend {
             )
             .await?
             else {
+                if self
+                    .pending_spawns
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .contains_key(bot_id)
+                {
+                    return Err(BotBackendError::Io(
+                        "QQ 启动操作的进程归属尚未确认，不能确认已停止".into(),
+                    ));
+                }
                 return Ok(observed(None, None));
             };
             let birth = login_helper::process_start_time(host.as_ref(), pid)
@@ -1248,7 +1267,44 @@ impl BotBackend for RemoteSnowLumaBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
+        self.start_cancellable(ctx, CancellationToken::new()).await
+    }
+
+    async fn start_cancellable(
+        &self,
+        ctx: &BotStartCtx,
+        cancel: CancellationToken,
+    ) -> Result<BotStatus, BotBackendError> {
+        let cancel = cancel.child_token();
+        super::startup_cancel::check(Some(&cancel))?;
+        let original_host = self.daemon.current_host().await;
+        let submitted = std::sync::Mutex::new(None::<PendingSpawn>);
+        let previous_client = self
+            .login_clients
+            .lock()
+            .await
+            .get(&ctx.config.bot_id)
+            .cloned();
+        let had_client = previous_client.is_some();
+        let staged_client = std::sync::Mutex::new(previous_client);
+        let injected_here = AtomicBool::new(false);
+        let record_client = |client| {
+            *staged_client
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = Some(client);
+        };
+        let record_spawn = |pid, start_time| {
+            *submitted.lock().unwrap_or_else(|error| error.into_inner()) = Some(PendingSpawn {
+                pid,
+                start_time,
+                host: Arc::clone(&original_host),
+            });
+        };
         let start = self.daemon.in_current_session(async {
+        super::startup_cancel::check(Some(&cancel))?;
+        if !Arc::ptr_eq(&original_host, &self.daemon.current_host().await) {
+            return Err(BotBackendError::Io("启动主机连接已更新，请重试".into()));
+        }
         let config = ctx
             .bot_config
             .as_ref()
@@ -1259,18 +1315,19 @@ impl BotBackend for RemoteSnowLumaBackend {
         if let Some(activity) = self.qr_activity.lock().await.remove(&bot_id) {
             activity.cancel.cancel();
         }
-        self.login_clients.lock().await.remove(&bot_id);
         let start_mode = resolve_start_mode(config);
         if start_mode.is_cold() && self.hot_detached.lock().await.contains(&bot_id) {
             return Err(BotBackendError::InvalidConfig(
                 "保留的 QQ 属于热启动会话，请以热启动恢复".into(),
             ));
         }
-        let known_running_pid = self.explicit_start_pid(&bot_id).await?;
+        let known_running_pid = super::startup_cancel::read_only(Some(&cancel), self.explicit_start_pid(&bot_id)).await?;
+        super::startup_cancel::check(Some(&cancel))?;
+        self.start_modes.lock().await.insert(bot_id.clone(), start_mode);
 
         // 指标资产先上传，再随 node 第一次拉起带上 env，避免先听口再 SIGTERM 重启
         // 导致隧道打到已死的旧 WebUI 口、界面卡在启动中。
-        let host = self.daemon.current_host().await;
+        let host = Arc::clone(&original_host);
         let metrics_env = if let Some(inj) = &self.metrics_injector {
             let home = self.daemon.remote_home();
             inj.prepare(host.as_ref(), home, bot_id.as_str(), config)
@@ -1278,6 +1335,7 @@ impl BotBackend for RemoteSnowLumaBackend {
         } else {
             None
         };
+        super::startup_cancel::check(Some(&cancel))?;
 
         // 首次接管可换密，先移除本 Bot 的旧凭据；其他 Bot 的 lease 由 daemon 保护。
         self.dispose_poller(&bot_id).await;
@@ -1287,13 +1345,15 @@ impl BotBackend for RemoteSnowLumaBackend {
             None
         };
         self.daemon
-            .ensure_running_for_bot(
+            .ensure_running_for_bot_cancellable(
                 &bot_id,
                 metrics_env,
                 config.bot.webui_password_takeover,
                 override_pwd.as_deref(),
+                &cancel,
             )
             .await?;
+        super::startup_cancel::check(Some(&cancel))?;
 
         let started = async {
             let paths = self.daemon.paths();
@@ -1302,6 +1362,7 @@ impl BotBackend for RemoteSnowLumaBackend {
             {
                 return Err(e);
             }
+            super::startup_cancel::check(Some(&cancel))?;
 
             let layout = self.daemon.layout();
 
@@ -1332,6 +1393,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                         )));
                     }
 
+                    super::startup_cancel::check(Some(&cancel))?;
                     let already_running = known_running_pid.is_some();
                     let prepared = if self.qr_login_enabled() && !already_running {
                         match login_helper::prepare(host.as_ref(), paths, layout, &bot_id, qq_id).await
@@ -1345,17 +1407,25 @@ impl BotBackend for RemoteSnowLumaBackend {
                     } else {
                         None
                     };
-                    match bot_cold_start_with_login(
+                    super::startup_cancel::check(Some(&cancel))?;
+                    match super::orchestrator::bot_cold_start_cancellable(
                         host.as_ref(),
                         layout,
                         &qq_id_str,
                         &qq_id_str,
                         prepared.as_ref(),
                         known_running_pid,
+                        Some(&cancel),
+                        Some(&record_spawn),
                     )
                     .await
                     {
                         Ok(pid) => {
+                            let pending = submitted.lock().unwrap_or_else(|error| error.into_inner()).clone();
+                            if let Some(PendingSpawn { start_time: Some(birth), .. }) = pending {
+                                self.login_pids.lock().await.insert(bot_id.clone(), TrackedQq { pid, start_time: birth });
+                            }
+                            super::startup_cancel::check(Some(&cancel))?;
                             if let Some(prepared) = prepared {
                                 let mut session = prepared.session;
                                 match session.bind(host.as_ref(), pid).await {
@@ -1384,6 +1454,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                                     .await
                                     .insert(bot_id.clone(), session);
                             }
+                            super::startup_cancel::check(Some(&cancel))?;
                             pid
                         }
                         Err(e) => {
@@ -1409,34 +1480,14 @@ impl BotBackend for RemoteSnowLumaBackend {
             self.login_pids.lock().await.insert(
                 bot_id.clone(), TrackedQq { pid, start_time: birth.clone() },
             );
+            super::startup_cancel::check(Some(&cancel))?;
             let webui_pid = self.daemon.webui_process_pid(pid, &birth).await?;
-            let http = match inject_via_tunnel(&endpoints, pid, webui_pid).await {
+            let http = match super::inject::inject_via_tunnel_cancellable(&endpoints, pid, webui_pid, Some(&cancel), Some(&record_client), Some(&injected_here)).await {
                 Ok(c) => c,
-                Err(e) => {
-                    if start_mode.is_cold() && known_running_pid.is_none() {
-                        let _ = tokio::time::timeout(Duration::from_secs(2), self.close_qr_login(&bot_id)).await;
-                        if let Err(cleanup) = qq_process::stop(
-                            host.as_ref(), &layout.qq_bin, qq_id, pid, &birth,
-                        ).await {
-                            return Err(BotBackendError::Io(format!(
-                                "{e}；启动后的目标 QQ 未能停止：{cleanup}"
-                            )));
-                        }
-                        self.login_pids.lock().await.remove(&bot_id);
-                        if let Ok(tail) =
-                            read_remote_log_tail(host.as_ref(), &paths.log_bot_path(&qq_id_str), 40)
-                                .await
-                        {
-                            if !tail.trim().is_empty() {
-                                return Err(BotBackendError::Io(format!(
-                                    "{e}\n--- 启动日志末尾 (bot log) ---\n{tail}"
-                                )));
-                            }
-                        }
-                    }
-                    return Err(e);
-                }
+                Err(e) => return Err(e),
             };
+            self.login_clients.lock().await.insert(bot_id.clone(), Arc::clone(&http));
+            super::startup_cancel::check(Some(&cancel))?;
 
             self.event_bus
                 .publish(DomainEvent::snowluma_bot_injected(bot_id.clone(), pid));
@@ -1454,8 +1505,10 @@ impl BotBackend for RemoteSnowLumaBackend {
                 expected_uin: Some(qq_id_str.clone()),
             };
             self.replace_poller(bot_id.clone(), pid, poller_deps).await;
+            super::startup_cancel::check(Some(&cancel))?;
             self.hot_detached.lock().await.remove(&bot_id);
             self.daemon.confirm_bot_started(&bot_id).await;
+            super::startup_cancel::check(Some(&cancel))?;
 
             self.event_bus
                 .publish(DomainEvent::SnowLumaDockerEndpointsReady {
@@ -1467,16 +1520,92 @@ impl BotBackend for RemoteSnowLumaBackend {
         .await;
         started
         });
-        let result = tokio::time::timeout(Duration::from_secs(180), start)
-            .await
-            .map_err(|_| BotBackendError::Io("远端 SnowLuma 启动超时，请刷新确认运行状态".into()))
-            .and_then(|result| result);
+        tokio::pin!(start);
+        let result = tokio::select! {
+            result = &mut start => result,
+            _ = tokio::time::sleep(Duration::from_secs(180)) => {
+                cancel.cancel();
+                start.await
+            }
+        };
+        let owned = submitted
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let saved_client = staged_client
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let finalized = self.daemon.on_current_host(&original_host, async {
+          if result.is_err() {
+            if let Some(client) = saved_client.as_ref() {
+                self.login_clients.lock().await.insert(ctx.config.bot_id.clone(), Arc::clone(client));
+            }
+            if let Some(owned) = owned.as_ref() {
+                self.pending_spawns.lock().unwrap_or_else(|error| error.into_inner()).insert(ctx.config.bot_id.clone(), owned.clone());
+                let Some(birth) = owned.start_time.as_ref() else {
+                    return Err(BotBackendError::Io(format!("启动未完成；本次 QQ PID {} 的身份尚未确认，请刷新后重试停止", owned.pid)));
+                };
+                self.login_pids.lock().await.insert(ctx.config.bot_id.clone(), TrackedQq { pid: owned.pid, start_time: birth.clone() });
+                let qq_id = ctx.config.bot_id.as_str().parse::<u64>().map_err(|_| BotBackendError::Io("QQ 账号无效".into()))?;
+                qq_process::stop(owned.host.as_ref(), &self.daemon.layout().qq_bin, qq_id, owned.pid, birth).await?;
+                self.pending_spawns.lock().unwrap_or_else(|error| error.into_inner()).remove(&ctx.config.bot_id);
+                self.login_pids.lock().await.remove(&ctx.config.bot_id);
+                self.dispose_poller(&ctx.config.bot_id).await;
+            } else if cancel.is_cancelled() {
+                let hot = ctx.bot_config.as_ref().is_some_and(|config| !resolve_start_mode(config).is_cold());
+                if injected_here.load(Ordering::SeqCst) || (hot && had_client) {
+                    let client = saved_client.as_ref().ok_or_else(|| BotBackendError::Io("取消启动后缺少卸载客户端，状态尚未确认".into()))?;
+                    let tracked = self.login_pids.lock().await.get(&ctx.config.bot_id).cloned()
+                        .ok_or_else(|| BotBackendError::Io("取消启动后 QQ 归属尚未确认".into()))?;
+                    let unloaded = client.unload_process(tracked.pid).await
+                        .map_err(|error| BotBackendError::Io(format!("取消启动后未能确认卸载：{error}")))?;
+                    if unloaded.pid != tracked.pid || unloaded.injected == Some(true)
+                        || !matches!(unloaded.status, crate::snowluma::webui_client::HookProcessStatus::Available | crate::snowluma::webui_client::HookProcessStatus::Disconnected)
+                    {
+                        return Err(BotBackendError::Io("取消启动后目标 QQ 尚未确认卸载".into()));
+                    }
+                }
+                if hot {
+                    self.start_modes.lock().await.insert(ctx.config.bot_id.clone(), SnowLumaStartMode::HotStart);
+                    self.hot_detached.lock().await.insert(ctx.config.bot_id.clone());
+                    self.dispose_poller(&ctx.config.bot_id).await;
+                }
+            }
+          } else {
+            self.pending_spawns.lock().unwrap_or_else(|error| error.into_inner()).remove(&ctx.config.bot_id);
+          }
+          Ok(())
+        }).await?;
+        if finalized.is_none() {
+            // An old startup owns only its captured Host and freshly spawned QQ.
+            if let Some(owned) = owned {
+                let birth = owned.start_time.as_deref().ok_or_else(|| {
+                    BotBackendError::Io("连接已更新，旧启动的 QQ 归属尚未确认".into())
+                })?;
+                let qq_id = ctx
+                    .config
+                    .bot_id
+                    .as_str()
+                    .parse::<u64>()
+                    .map_err(|_| BotBackendError::Io("QQ 账号无效".into()))?;
+                qq_process::stop(
+                    owned.host.as_ref(),
+                    &self.daemon.layout().qq_bin,
+                    qq_id,
+                    owned.pid,
+                    birth,
+                )
+                .await?;
+            }
+            return Err(BotBackendError::Io(
+                "启动连接已更新，请刷新当前状态后重试".into(),
+            ));
+        }
         if result.is_err() {
-            let _ = tokio::time::timeout(
-                Duration::from_secs(5),
-                self.daemon.release_bot(&ctx.config.bot_id),
-            )
-            .await;
+            self.daemon
+                .abandon_start_on_host(&original_host, &ctx.config.bot_id)
+                .await;
         }
         result
     }
@@ -1577,6 +1706,10 @@ impl BotBackend for RemoteSnowLumaBackend {
                 }
             }
             self.start_modes.lock().await.remove(&bot_id);
+            self.pending_spawns
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .remove(&bot_id);
         } else {
             self.hot_detached.lock().await.insert(bot_id.clone());
         }

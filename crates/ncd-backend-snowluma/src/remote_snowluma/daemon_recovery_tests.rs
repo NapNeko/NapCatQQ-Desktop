@@ -1,5 +1,9 @@
 use super::*;
 
+mod cancel_tests {
+    include!("daemon_cancel_tests.rs");
+}
+
 use std::path::Path;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

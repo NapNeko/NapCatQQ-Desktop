@@ -13,6 +13,7 @@ mod login_helper;
 mod mapped_webui_client;
 mod probe;
 mod remote_bash;
+mod startup_cancel;
 mod webui_process_pid;
 
 pub mod layout;

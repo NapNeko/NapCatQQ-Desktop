@@ -28,6 +28,7 @@ pub struct ReqwestSnowLumaWebUiClient {
     port: u16,
     password: String,
     login_gate: Mutex<()>,
+    action_timeout: Duration,
 }
 
 struct ReqwestInner {
@@ -60,7 +61,13 @@ impl ReqwestSnowLumaWebUiClient {
             port,
             password,
             login_gate: Mutex::new(()),
+            action_timeout: ACTION_REQUEST_TIMEOUT,
         })
+    }
+
+    pub(crate) fn with_action_timeout(mut self, timeout: Duration) -> Self {
+        self.action_timeout = timeout;
+        self
     }
 
     pub(crate) fn url_for(host: &str, port: u16, path: &str) -> String {
@@ -464,7 +471,7 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
     async fn load_process(&self, pid: u32) -> Result<HookProcessInfo, SnowLumaWebUiError> {
         let path = format!("/api/processes/{pid}/load");
         let resp: ProcessActionResponse = self
-            .authed_request_json(Method::POST, &path, ACTION_REQUEST_TIMEOUT)
+            .authed_request_json(Method::POST, &path, self.action_timeout)
             .await?;
         if !resp.success {
             return Err(SnowLumaWebUiError::ServerRejected {
@@ -481,7 +488,7 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
     async fn unload_process(&self, pid: u32) -> Result<HookProcessInfo, SnowLumaWebUiError> {
         let path = format!("/api/processes/{pid}/unload");
         let resp: ProcessActionResponse = self
-            .authed_request_json(Method::POST, &path, ACTION_REQUEST_TIMEOUT)
+            .authed_request_json(Method::POST, &path, self.action_timeout)
             .await?;
         if !resp.success {
             return Err(SnowLumaWebUiError::ServerRejected {

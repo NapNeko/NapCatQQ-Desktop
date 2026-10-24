@@ -24,8 +24,13 @@ fn display_str(num: i32) -> String {
 
 /// 执行短 bash 脚本(单条 detach 或 flock),禁止拼接百行 heredoc
 pub async fn run_remote_bash(host: &dyn Host, script: &str) -> Result<String, BotBackendError> {
-    let bash = resolve_remote_bash(host).await?;
-    let cmd = HostCommand::new(bash).arg("-c").arg(script);
+    let bash = tokio::time::timeout(Duration::from_secs(8), resolve_remote_bash(host))
+        .await
+        .map_err(|_| BotBackendError::Io("解析远端 bash 超时".into()))??;
+    let cmd = HostCommand::new(bash)
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(8));
     let out = host
         .run_to_string(cmd)
         .await
@@ -504,9 +509,21 @@ done
 exit 1
 "#
     );
-    run_remote_bash(host, &script)
+    let bash = resolve_remote_bash(host).await?;
+    let output = host
+        .run_to_string(
+            HostCommand::new(bash)
+                .arg("-c")
+                .arg(script)
+                .timeout(timeout + Duration::from_secs(2)),
+        )
         .await
         .map_err(|_| BotBackendError::Io(format!("SnowLuma WebUI 端口 {port} 在时限内未就绪")))?;
+    if !output.success() {
+        return Err(BotBackendError::Io(format!(
+            "SnowLuma WebUI 端口 {port} 在时限内未就绪"
+        )));
+    }
     Ok(())
 }
 
@@ -561,23 +578,46 @@ pub async fn ensure_stack_running(
     layout: &RemoteSnowLumaLayout,
     metrics_env: Option<&BTreeMap<String, String>>,
 ) -> Result<u16, BotBackendError> {
+    ensure_stack_running_cancellable(host, layout, metrics_env, None).await
+}
+
+pub(crate) async fn ensure_stack_running_cancellable(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    metrics_env: Option<&BTreeMap<String, String>>,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<u16, BotBackendError> {
+    use super::startup_cancel::{check, read_only};
+    check(cancel)?;
     let paths = &layout.paths;
-    if is_stack_ready(host, layout).await? {
-        return resolve_remote_webui_port(host, layout).await;
+    if read_only(cancel, is_stack_ready(host, layout)).await? {
+        return read_only(cancel, resolve_remote_webui_port(host, layout)).await;
     }
     ensure_dirs(host, paths).await?;
-
+    check(cancel)?;
     ensure_dbus_env(host, paths).await?;
+    check(cancel)?;
     start_xvfb(host, layout).await?;
+    check(cancel)?;
     start_wm(host, layout).await?;
+    check(cancel)?;
     // 给 WM 一点时间再抓屏,减轻 noVNC 全黑(QQ 尚未启动时属正常,冷启 QQ 后应能看到界面)
     tokio::time::sleep(Duration::from_millis(200)).await;
     cleanup_stale_x11vnc(host, layout).await?;
+    check(cancel)?;
     start_x11vnc(host, layout).await?;
+    check(cancel)?;
     cleanup_stale_websockify(host, layout).await?;
+    check(cancel)?;
     start_websockify(host, layout).await?;
+    check(cancel)?;
     start_node_with_env(host, layout, metrics_env).await?;
-    wait_remote_webui_ready(host, paths, Duration::from_secs(60)).await
+    check(cancel)?;
+    read_only(
+        cancel,
+        wait_remote_webui_ready(host, paths, Duration::from_secs(60)),
+    )
+    .await
 }
 
 #[cfg(test)]
