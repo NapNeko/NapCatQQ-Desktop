@@ -25,9 +25,9 @@ fn display_str(num: i32) -> String {
 
 pub async fn remote_daemon_already_ready(
     host: &dyn Host,
-    paths: &SnowLumaRemotePaths,
+    layout: &RemoteSnowLumaLayout,
 ) -> Result<bool, BotBackendError> {
-    is_stack_ready(host, paths).await
+    is_stack_ready(host, layout).await
 }
 
 pub async fn daemon_start(
@@ -287,9 +287,10 @@ pub(crate) async fn bot_cold_start_with_login(
     qq_id: &str,
     uin: &str,
     login: Option<&super::login_helper::PreparedLogin>,
+    verified_running_pid: Option<u32>,
 ) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
-    if let Some(pid) = bot_pid_if_running(host, paths, qq_id).await? {
+    if let Some(pid) = verified_running_pid {
         return Ok(pid);
     }
 

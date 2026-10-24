@@ -19,15 +19,18 @@ use super::orchestrator::{
 };
 use super::probe::{
     ManagedNodeIdentity, managed_node_identity, remote_qq_main_running, resolve_remote_novnc_port,
-    resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_port,
-    resolve_remote_webui_secret_near_snowluma_dir, wait_remote_webui_ready,
+    resolve_remote_vnc_secret_from_x11vnc, wait_remote_webui_ready,
 };
 use super::stack::{recover_node_for_reconcile, restart_node_with_env};
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
 
 use super::config::{ensure_remote_daemon_prereqs, take_over_remote_webui_credentials};
-use super::helpers::read_remote_file_trimmed;
+#[path = "novnc_target.rs"]
+mod novnc_target;
+
+#[path = "webui.rs"]
+mod webui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WebuiPortPlan {
@@ -132,7 +135,10 @@ pub struct RemoteSnowLumaDaemon {
     event_bus: Arc<BroadcastEventBus>,
     tunnel_eps: Mutex<Option<RemoteSnowLumaTunnelEndpoints>>,
     tunnel_remote_ports: Mutex<Option<(u16, u16)>>,
+    tunnel_remote_webui_host: Mutex<Option<String>>,
     tunnel_secret_paths: Mutex<Vec<String>>,
+    webui_tunnel: Mutex<Option<webui::WebuiTunnel>>,
+    webui_endpoint: Mutex<Option<super::probe::ResolvedWebuiEndpoint>>,
     /// 仅在共享 node 真正启动或显式重载时更新，其他 Bot 启动保留现有探针。
     metrics_node_env: Mutex<Option<BTreeMap<String, String>>>,
     /// 成功状态只属于当前连接代；接管状态不能替代完整启动预检。
@@ -170,7 +176,10 @@ impl RemoteSnowLumaDaemon {
             event_bus,
             tunnel_eps: Mutex::new(None),
             tunnel_remote_ports: Mutex::new(None),
+            tunnel_remote_webui_host: Mutex::new(None),
             tunnel_secret_paths: Mutex::new(Vec::new()),
+            webui_tunnel: Mutex::new(None),
+            webui_endpoint: Mutex::new(None),
             metrics_node_env: Mutex::new(None),
             ready_node_identity: Mutex::new(None),
         }
@@ -178,6 +187,46 @@ impl RemoteSnowLumaDaemon {
 
     pub async fn current_host(&self) -> Arc<dyn Host> {
         Arc::clone(&*self.host.lock().await)
+    }
+
+    async fn resolve_webui_port(&self, host: &dyn Host) -> Result<u16, BotBackendError> {
+        let endpoint = super::probe::resolve_remote_webui_endpoint(host, &self.layout).await?;
+        let port = endpoint.port;
+        *self.webui_endpoint.lock().await = Some(endpoint);
+        Ok(port)
+    }
+
+    pub(super) async fn webui_process_pid(
+        &self,
+        pid: u32,
+        start_time: &str,
+    ) -> Result<u32, BotBackendError> {
+        let host = self.current_host().await;
+        if self.webui_endpoint.lock().await.is_none() {
+            self.resolve_webui_port(host.as_ref()).await?;
+        }
+        let endpoint = self
+            .webui_endpoint
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| BotBackendError::Io("尚未确认 SnowLuma WebUI 所属 Node".into()))?;
+        super::webui_process_pid::resolve(
+            host.as_ref(),
+            &self.layout,
+            &endpoint.node,
+            pid,
+            start_time,
+        )
+        .await
+    }
+
+    pub(super) async fn webui_uses_pid_namespace(&self) -> bool {
+        self.webui_endpoint
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|endpoint| endpoint.node.ns_pids.len() > 1)
     }
 
     pub(crate) async fn in_current_session<T>(
@@ -218,7 +267,10 @@ impl RemoteSnowLumaDaemon {
         self.tunnels.drop_server(&self.server_id).await;
         *self.tunnel_eps.lock().await = None;
         *self.tunnel_remote_ports.lock().await = None;
+        *self.tunnel_remote_webui_host.lock().await = None;
         self.tunnel_secret_paths.lock().await.clear();
+        self.webui_tunnel.lock().await.take();
+        self.webui_endpoint.lock().await.take();
         *self.ready_node_identity.lock().await = None;
         self.leases.lock().await.discard_pending();
         *session = CancellationToken::new();
@@ -362,7 +414,7 @@ impl RemoteSnowLumaDaemon {
         )
         .await?;
 
-        let stack_up = remote_daemon_already_ready(host.as_ref(), &self.layout.paths).await?;
+        let stack_up = remote_daemon_already_ready(host.as_ref(), &self.layout).await?;
         let restart_node = restart_node || (creds.wrote && stack_up);
         if !stack_up || restart_node {
             self.event_bus
@@ -395,14 +447,13 @@ impl RemoteSnowLumaDaemon {
         };
         let node_restarted = stack_up && restart_node;
         let webui_port = match webui_port_plan(!stack_up, node_restarted, known_port) {
-            WebuiPortPlan::UseKnown(port) => port,
+            WebuiPortPlan::UseKnown(_) => self.resolve_webui_port(host.as_ref()).await?,
             WebuiPortPlan::WaitAfterRestart => {
                 wait_remote_webui_ready(host.as_ref(), &self.layout.paths, Duration::from_secs(90))
-                    .await?
+                    .await?;
+                self.resolve_webui_port(host.as_ref()).await?
             }
-            WebuiPortPlan::ResolveExisting => {
-                resolve_remote_webui_port(host.as_ref(), &self.layout.paths).await?
-            }
+            WebuiPortPlan::ResolveExisting => self.resolve_webui_port(host.as_ref()).await?,
         };
         write_status_daemon_json(host.as_ref(), &self.layout.paths, true, true, webui_port).await?;
 
@@ -553,17 +604,64 @@ impl RemoteSnowLumaDaemon {
     }
 
     pub async fn tunnel_endpoints(&self) -> Option<RemoteSnowLumaTunnelEndpoints> {
-        self.tunnel_eps.lock().await.clone()
+        let mut endpoints = self.tunnel_eps.lock().await.clone();
+        if let Some(endpoint) = endpoints.as_mut() {
+            if let Some(webui) = self.webui_tunnel.lock().await.as_ref() {
+                endpoint.webui_local_port = webui.handle.local_port();
+                endpoint.webui_password = webui.password.clone();
+            }
+        }
+        endpoints
     }
 
     /// 显式打开 QQ 界面时补齐缺失的 VNC 服务，保留正在运行的 X server / QQ。
     pub async fn ensure_novnc_ready(
         &self,
+        qq_pid: u32,
+        qq_start_time: &str,
+        qq_id: u64,
     ) -> Result<RemoteSnowLumaTunnelEndpoints, BotBackendError> {
-        self.in_current_session(async {
+        if qq_pid == 0
+            || qq_id == 0
+            || qq_start_time.is_empty()
+            || !qq_start_time.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err(BotBackendError::InvalidConfig(
+                "尚未确认目标 QQ 进程身份，请刷新 Bot 运行状态".into(),
+            ));
+        }
+        let started = std::time::Instant::now();
+        let mut stage = "等待图形会话";
+        let prepare = self.in_current_session(async {
+            let lock_started = std::time::Instant::now();
             let _stack_guard = self.stack_bootstrap.lock().await;
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                elapsed_ms = lock_started.elapsed().as_millis() as u64,
+                "noVNC 图形会话等待耗时"
+            );
             let host = self.current_host().await;
             let paths = &self.layout.paths;
+            stage = "验证 QQ 图形会话";
+            let metadata_started = std::time::Instant::now();
+            let target = novnc_target::inspect(
+                host.as_ref(),
+                &self.layout.qq_bin,
+                qq_pid,
+                qq_start_time,
+                qq_id,
+            )
+            .await;
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                elapsed_ms = metadata_started.elapsed().as_millis() as u64,
+                "noVNC QQ 图形会话验证耗时"
+            );
+            let target = target?;
+            let target = serde_json::to_string(&target)
+                .map_err(|_| BotBackendError::Io("无法传递 QQ 图形会话身份".into()))?;
+            stage = "恢复 noVNC 服务";
+            let recovery_started = std::time::Instant::now();
             let command = HostCommand::new("python3")
                 .arg("-c")
                 .arg(include_str!("../../resources/novnc-recovery.py"))
@@ -572,11 +670,15 @@ impl RemoteSnowLumaDaemon {
                 .arg(&paths.log_dir)
                 .arg(&paths.vnc_secret)
                 .arg(&self.layout.qq_bin)
+                .arg(target)
                 .timeout(Duration::from_secs(15));
-            let output = host
-                .run_to_string(command)
-                .await
-                .map_err(|error| BotBackendError::Io(error.to_string()))?;
+            let output = host.run_to_string(command).await;
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                elapsed_ms = recovery_started.elapsed().as_millis() as u64,
+                "noVNC 服务恢复耗时"
+            );
+            let output = output.map_err(|error| BotBackendError::Io(error.to_string()))?;
             if !output.success() {
                 return Err(BotBackendError::Io(format!(
                     "恢复 QQ 界面失败：{}",
@@ -589,14 +691,28 @@ impl RemoteSnowLumaDaemon {
             }
             let ready: Ready = serde_json::from_str(output.stdout.trim())
                 .map_err(|_| BotBackendError::Io("远端 noVNC 检查未返回有效端口".into()))?;
-            let webui_port = resolve_remote_webui_port(host.as_ref(), paths).await?;
+            stage = "验证 WebUI 端口";
+            let endpoint_started = std::time::Instant::now();
+            let webui_port = self.resolve_webui_port(host.as_ref()).await?;
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                elapsed_ms = endpoint_started.elapsed().as_millis() as u64,
+                "noVNC WebUI 端口验证耗时"
+            );
+            stage = "读取当前凭据并准备 SSH 隧道";
             self.open_tunnels_with_novnc_port(webui_port, None, Some(ready.port.get()))
                 .await?;
             self.tunnel_endpoints()
                 .await
                 .ok_or_else(|| BotBackendError::Io("noVNC 隧道未就绪".into()))
-        })
-        .await
+        });
+        let prepared = tokio::time::timeout(Duration::from_secs(30), prepare).await;
+        tracing::info!(
+            target: "ncd_backend_snowluma::remote",
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "noVNC 打开准备总耗时"
+        );
+        prepared.map_err(|_| BotBackendError::Io(format!("打开 QQ 界面超时（{stage}），请重试")))?
     }
 
     /// 桌面退出:只拆掉本机 SSH 隧道,不 stop 远端 daemon / QQ
@@ -610,12 +726,15 @@ impl RemoteSnowLumaDaemon {
     }
 
     async fn clear_local_startup(&self) {
+        self.webui_tunnel.lock().await.take();
+        self.webui_endpoint.lock().await.take();
         if self.tunnel_eps.lock().await.take().is_some() {
             self.tunnels.release(&self.server_id).await;
         } else {
             self.tunnels.drop_server(&self.server_id).await;
         }
         *self.tunnel_remote_ports.lock().await = None;
+        *self.tunnel_remote_webui_host.lock().await = None;
         self.tunnel_secret_paths.lock().await.clear();
         *self.ready_node_identity.lock().await = None;
     }
@@ -679,7 +798,7 @@ impl RemoteSnowLumaDaemon {
         recover_missing_node: bool,
     ) -> Result<(), BotBackendError> {
         let host = self.current_host().await;
-        let webui_port = if !remote_daemon_already_ready(host.as_ref(), &self.layout.paths).await? {
+        let webui_port = if !remote_daemon_already_ready(host.as_ref(), &self.layout).await? {
             if !recover_missing_node {
                 return Err(BotBackendError::Io("远端 SnowLuma node 未运行".into()));
             }
@@ -689,9 +808,10 @@ impl RemoteSnowLumaDaemon {
                 "reconcile: QQ 仍在运行，恢复缺失的 SnowLuma node"
             );
             let env = self.metrics_node_env.lock().await.clone();
-            recover_node_for_reconcile(host.as_ref(), &self.layout, env.as_ref()).await?
+            recover_node_for_reconcile(host.as_ref(), &self.layout, env.as_ref()).await?;
+            self.resolve_webui_port(host.as_ref()).await?
         } else {
-            resolve_remote_webui_port(host.as_ref(), &self.layout.paths).await?
+            self.resolve_webui_port(host.as_ref()).await?
         };
         let _ = write_status_daemon_json(host.as_ref(), &self.layout.paths, true, true, webui_port)
             .await;
@@ -725,44 +845,42 @@ impl RemoteSnowLumaDaemon {
         novnc_port: Option<u16>,
     ) -> Result<(), BotBackendError> {
         let host = self.current_host().await;
-        let mut secret_paths = Vec::new();
-        let webui_plain = match webui_password.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(pwd) => pwd.to_string(),
-            None => {
-                let primary =
-                    read_remote_file_trimmed(host.as_ref(), &self.layout.paths.webui_secret)
-                        .await
-                        .unwrap_or_default();
-                if primary.is_empty() {
-                    // 外来安装（systemd 自启等）常把 webui.secret 放在 snowluma_dir 父目录，
-                    // 不在 Desktop 假设的 {workspace}/webui.secret 下；以实际文件为准回退。
-                    let fallback = resolve_remote_webui_secret_near_snowluma_dir(
-                        host.as_ref(),
-                        &self.layout.paths.snowluma_dir,
-                    )
-                    .await?;
-                    match fallback {
-                        Some(p) => {
-                            secret_paths.push(p.clone());
-                            tracing::info!(
-                                target: "ncd_backend_snowluma::remote",
-                                server_id = %self.server_id,
-                                fallback = %p,
-                                "webui.secret 不在预期路径，已回退到 snowluma_dir 父目录"
-                            );
-                            read_remote_file_trimmed(host.as_ref(), &p)
-                                .await
-                                .unwrap_or_default()
-                        }
-                        None => String::new(),
-                    }
+        let webui_host = self
+            .webui_endpoint
+            .lock()
+            .await
+            .as_ref()
+            .filter(|endpoint| endpoint.port == webui_port)
+            .map(|endpoint| endpoint.host.clone())
+            .unwrap_or_else(|| "127.0.0.1".to_owned());
+        let credential_started = std::time::Instant::now();
+        let credentials = tokio::try_join!(
+            async {
+                match webui_password.map(str::trim).filter(|s| !s.is_empty()) {
+                    Some(pwd) => Ok((pwd.to_string(), Vec::new())),
+                    None => self.read_current_webui_credentials(host.as_ref()).await,
+                }
+            },
+            webui::read_credential_file(host.as_ref(), &self.layout.paths.vnc_secret, "VNC 凭据"),
+        );
+        tracing::info!(
+            target: "ncd_backend_snowluma::remote",
+            elapsed_ms = credential_started.elapsed().as_millis() as u64,
+            "SnowLuma 隧道凭据读取与校验耗时"
+        );
+        let ((webui_plain, mut secret_paths), vnc_bytes) = credentials?;
+        {
+            let mut webui = self.webui_tunnel.lock().await;
+            if let Some(tunnel) = webui.as_mut() {
+                if tunnel.remote_port == webui_port && tunnel.remote_host == webui_host {
+                    tunnel.password = webui_plain.clone();
                 } else {
-                    primary
+                    *webui = None;
                 }
             }
-        };
-        let mut vnc_plain = read_remote_file_trimmed(host.as_ref(), &self.layout.paths.vnc_secret)
-            .await
+        }
+        let mut vnc_plain = vnc_bytes
+            .map(|bytes| String::from_utf8_lossy(&bytes).trim().to_owned())
             .unwrap_or_default();
         if vnc_plain.is_empty() {
             // x11vnc -passwdfile 指向的才是实际 VNC 密码文件；外来启动脚本可能把它放在
@@ -775,8 +893,9 @@ impl RemoteSnowLumaDaemon {
                     fallback = %actual,
                     "vnc.secret 不在预期路径，已从 x11vnc -passwdfile 回退"
                 );
-                vnc_plain = read_remote_file_trimmed(host.as_ref(), &actual)
-                    .await
+                vnc_plain = webui::read_credential_file(host.as_ref(), &actual, "VNC 备用凭据")
+                    .await?
+                    .map(|bytes| String::from_utf8_lossy(&bytes).trim().to_owned())
                     .unwrap_or_default();
             }
         }
@@ -788,6 +907,8 @@ impl RemoteSnowLumaDaemon {
         };
 
         let previous_ports = *self.tunnel_remote_ports.lock().await;
+        let same_host =
+            self.tunnel_remote_webui_host.lock().await.as_deref() == Some(webui_host.as_str());
         let previous_eps = self.tunnel_eps.lock().await.clone();
         let had_bundle = self
             .tunnels
@@ -796,8 +917,9 @@ impl RemoteSnowLumaDaemon {
             .is_some();
         if let Some(previous) = previous_eps.as_ref() {
             if had_bundle
+                && same_host
                 && previous_ports == Some((webui_port, novnc_port))
-                && (webui_plain.is_empty() || previous.webui_password == webui_plain)
+                && previous.webui_password == webui_plain
                 && (vnc_plain.is_empty() || previous.vnc_password == vnc_plain)
             {
                 *self.tunnel_secret_paths.lock().await = secret_paths;
@@ -805,32 +927,46 @@ impl RemoteSnowLumaDaemon {
             }
         }
 
+        let current_webui_password = webui_plain.clone();
+        let tunnel_started = std::time::Instant::now();
         let opened = self
             .tunnels
-            .acquire(
+            .acquire_at(
                 &self.server_id,
                 host.as_ref(),
                 webui_plain,
                 vnc_plain,
+                &webui_host,
                 webui_port,
                 novnc_port,
             )
             .await;
-        let eps = match opened {
+        tracing::info!(
+            target: "ncd_backend_snowluma::remote",
+            elapsed_ms = tunnel_started.elapsed().as_millis() as u64,
+            "SnowLuma 隧道准备耗时"
+        );
+        let mut eps = match opened {
             Ok(eps) => eps,
             Err(error) => {
                 *self.tunnel_eps.lock().await = None;
                 *self.tunnel_remote_ports.lock().await = None;
+                *self.tunnel_remote_webui_host.lock().await = None;
                 return Err(BotBackendError::Io(format!("SnowLuma SSH 隧道: {error}")));
             }
         };
+        eps.webui_password = current_webui_password;
         // daemon 持有一个 bundle 引用；端口变动时 registry 已替换旧 bundle。
-        if had_bundle && previous_eps.is_some() && previous_ports == Some((webui_port, novnc_port))
+        if had_bundle
+            && same_host
+            && previous_eps.is_some()
+            && previous_ports == Some((webui_port, novnc_port))
         {
             self.tunnels.release(&self.server_id).await;
         }
         *self.tunnel_eps.lock().await = Some(eps);
         *self.tunnel_remote_ports.lock().await = Some((webui_port, novnc_port));
+        *self.tunnel_remote_webui_host.lock().await = Some(webui_host);
         *self.tunnel_secret_paths.lock().await = secret_paths;
         Ok(())
     }

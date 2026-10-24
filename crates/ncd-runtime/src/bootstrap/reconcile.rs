@@ -12,7 +12,6 @@ use crate::host_resolver::HostResolver;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_router::RuntimeBackendRouter;
 use ncd_backend_napcat::remote_native_launch::remote_napcat_running_pid;
-use ncd_backend_snowluma::remote_snowluma::remote_qq_running_pid_with_hint;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
 use ncd_domain::bot_status::BotStatus;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario};
@@ -166,6 +165,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             return Ok(running);
         }
         let mut sl_backend = None;
+        let mut sl_observation = None;
         let pid = match &scenario {
             RuntimeScenario::RemoteDocker { .. } => {
                 let state = DockerDeployment::new()
@@ -199,18 +199,15 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
                     .runtime_router
                     .remote_snowluma_backend_for_server(server_id, Arc::clone(&host))
                     .await?;
-                let hint = backend
-                    .daemon_paths()
-                    .pid_bot_path(&config.bot.qq_id.to_string());
-                let pid = remote_qq_running_pid_with_hint(
-                    host.as_ref(),
-                    config.bot.qq_id,
-                    Some(hint.as_str()),
-                    Some(backend.qq_bin()),
-                    snowluma_counts.get(server_id).copied().unwrap_or(0) == 1,
-                )
-                .await
-                .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;
+                let observation = backend
+                    .observe_reconciled_running(
+                        &bot_id,
+                        snowluma_counts.get(server_id).copied().unwrap_or(0) == 1,
+                    )
+                    .await
+                    .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;
+                let pid = observation.pid();
+                sl_observation = Some(observation);
                 sl_backend = Some(backend);
                 pid
             }
@@ -271,9 +268,15 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
                 ..
             } => {
                 if let Some(backend) = sl_backend {
-                    let result = backend
-                        .attach_reconciled_running(bot_id.clone(), pid, config)
-                        .await;
+                    let result = if let Some(observation) = sl_observation {
+                        backend
+                            .attach_reconciled_observation(bot_id.clone(), observation, config)
+                            .await
+                    } else {
+                        backend
+                            .attach_reconciled_running(bot_id.clone(), pid, config)
+                            .await
+                    };
                     self.remote_sessions
                         .attach_remote_native_snowluma_log_follow(
                             &bot_id,
@@ -342,9 +345,7 @@ mod windows_tests {
     use super::*;
     use async_trait::async_trait;
     use ncd_domain::{BackendKind, BotFlavor, StopMode};
-    use ncd_traits::runtime_backend::{
-        BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
-    };
+    use ncd_traits::runtime_backend::{BotBackendError, BotStartCtx, LogSnapshot, TailOpts};
 
     struct StatusOnlyBackend {
         status: BotStatus,

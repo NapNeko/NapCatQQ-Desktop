@@ -12,6 +12,7 @@ use crate::snowluma::webui_client::{
     QqPortLoginInfo,
 };
 use bytes::Bytes;
+use ncd_host::remote::tunnel::{TunnelHandle, TunnelSpec};
 use ncd_host::shell::BashShell;
 use ncd_host::{
     Arch, ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostProcess, HostShell,
@@ -35,6 +36,7 @@ struct ReloginHost {
     candidate: u32,
     close_on_bind: StdMutex<Option<Arc<QrActivity>>>,
     captures: AtomicUsize,
+    webui_port: AtomicU32,
 }
 
 impl ReloginHost {
@@ -56,6 +58,7 @@ impl ReloginHost {
             candidate,
             close_on_bind: StdMutex::new(None),
             captures: AtomicUsize::new(0),
+            webui_port: AtomicU32::new(0),
         }
     }
 }
@@ -154,11 +157,51 @@ impl Host for ReloginHost {
             _ => panic!("unexpected executable lookup: {name}"),
         }
     }
+    async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        let port = self.webui_port.load(Ordering::SeqCst) as u16;
+        assert_ne!(port, 0, "only namespace fixtures open virtual tunnels");
+        Ok(TunnelHandle::detached(
+            if spec.remote_port == 13105 {
+                port
+            } else {
+                31313
+            },
+            0,
+        ))
+    }
     async fn run_to_string(&self, command: HostCommand) -> Result<CommandOutput, HostError> {
+        if command.program == "head" {
+            assert_eq!(&command.args[..3], ["-c", "4097", "--"]);
+            assert_eq!(command.timeout, Some(Duration::from_secs(3)));
+            let bytes = self
+                .read_file(&HostPath::from_posix(command.args.last().unwrap()))
+                .await?;
+            return Ok(CommandOutput {
+                exit_code: Some(0),
+                stdout: String::from_utf8_lossy(&bytes).into_owned(),
+                stderr: String::new(),
+            });
+        }
         let stdout = match command.program.as_str() {
+            "id" => "1000\n".into(),
             "chmod" => String::new(),
             "sh" => {
                 let script = command.args.last().unwrap();
+                if script.starts_with("# ncd-snowluma-node-identity") {
+                    return Ok(CommandOutput {
+                        exit_code: Some(0),
+                        stdout: "901:999\n".into(),
+                        stderr: String::new(),
+                    });
+                }
+                if script.contains("ss -ltnp") && script.contains("awk '/websockify/") {
+                    assert_ne!(self.webui_port.load(Ordering::SeqCst), 0);
+                    return Ok(CommandOutput {
+                        exit_code: Some(0),
+                        stdout: "6081\n".into(),
+                        stderr: String::new(),
+                    });
+                }
                 assert!(script.contains("allow_single='0'"));
                 assert!(script.contains("pidfile=''"));
                 format!("{}\n", self.candidate)
@@ -173,6 +216,45 @@ impl Host for ReloginHost {
                 assert!(!script.contains("nohup"));
                 assert!(!script.contains("kill "));
                 String::new()
+            }
+            "python3"
+                if command
+                    .args
+                    .iter()
+                    .any(|arg| arg.starts_with("# Read only same-user Node identities;")) =>
+            {
+                let mode = command.args[4].as_str();
+                if mode == "snapshot" {
+                    serde_json::json!({"state":"snapshot","snapshot":[{"pid":901,"start_time":"999"}]}).to_string()
+                } else {
+                    let directory = &command.args[7];
+                    serde_json::json!({
+                        "state":"present", "node": {
+                            "pid":901,"uid":1000,"start_time":"999","exe":command.args[6],
+                            "cwd":directory,"entry":format!("{directory}/index.mjs"),
+                            "ns_pids":[901,19],"pid_namespace":"pid:[42]"
+                        }, "snapshot":[{"pid":901,"start_time":"999"}],
+                        "host":"127.0.0.1","port":13105,
+                        "listeners":[{"host":"127.0.0.1","port":13105}]
+                    })
+                    .to_string()
+                }
+            }
+            "python3"
+                if command
+                    .args
+                    .iter()
+                    .any(|arg| arg.starts_with("# Map two bound process identities")) =>
+            {
+                let request: serde_json::Value =
+                    serde_json::from_str(command.args.last().unwrap()).unwrap();
+                assert_eq!(request["qq"]["pid"], NEW_PID);
+                assert_eq!(request["qq"]["start_time"], "222");
+                serde_json::json!({"state":"mapped","process_pid":46,"snapshot":{
+                    "node":{"pid":901,"uid":1000,"start_time":"999","ns_pids":[901,19]},
+                    "qq":{"pid":NEW_PID,"uid":1000,"start_time":"222","ns_pids":[NEW_PID,46]}
+                }})
+                .to_string()
             }
             "/usr/bin/python3" if command.args.iter().any(|arg| arg == "--probe") => {
                 r#"{"available":true}"#.into()
@@ -423,6 +505,165 @@ async fn fixture(
         other_activity,
         _snowluma_root: snowluma_root,
     }
+}
+
+async fn namespace_fixture(
+    close_during_bind: bool,
+) -> (Fixture, wiremock::MockServer, Arc<dyn SnowLumaWebUiClient>) {
+    use wiremock::matchers::{body_json, header, method, path};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
+    let value = fixture(NEW_PID, BOT, false, false).await;
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/status"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/login"))
+        .and(body_json(
+            serde_json::json!({"password":"fixture-password"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"token":"fixture-token"})),
+        )
+        .mount(&server)
+        .await;
+    let loaded = Arc::new(AtomicBool::new(false));
+    Mock::given(method("GET"))
+        .and(path("/api/processes"))
+        .and(header("authorization", "Bearer fixture-token"))
+        .respond_with({
+            let loaded = Arc::clone(&loaded);
+            move |_: &Request| {
+                let mut target = process(46, false);
+                if loaded.load(Ordering::SeqCst) {
+                    target.status = HookProcessStatus::Loaded;
+                    target.injected = Some(true);
+                    target.connected = Some(true);
+                }
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "list":[target, process(NEW_PID, true)]
+                }))
+            }
+        })
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/processes/46/load"))
+        .and(header("authorization", "Bearer fixture-token"))
+        .respond_with(move |_: &Request| {
+            loaded.store(true, Ordering::SeqCst);
+            let mut target = process(46, false);
+            target.status = HookProcessStatus::Loaded;
+            target.injected = Some(true);
+            target.connected = Some(true);
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"success":true,"process":target}))
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    value
+        .host
+        .webui_port
+        .store(u32::from(server.address().port()), Ordering::SeqCst);
+    {
+        let mut files = value.host.files.lock().unwrap();
+        files.insert(
+            value.backend.daemon.paths().webui_secret.clone(),
+            b"fixture-password".to_vec(),
+        );
+        files.insert(
+            value.backend.daemon.paths().vnc_secret.clone(),
+            b"fixture-vnc".to_vec(),
+        );
+    }
+    value
+        .backend
+        .daemon
+        .ensure_running_for_reconcile_bot(&BotId::new(BOT))
+        .await
+        .unwrap();
+    *value.client.processes.lock().unwrap() = vec![process(45, false), process(46, false)];
+    let old_client: Arc<dyn SnowLumaWebUiClient> = Arc::new(
+        super::super::mapped_webui_client::MappedSnowLumaWebUiClient::new(
+            value.client.clone(),
+            OLD_PID,
+            45,
+        )
+        .unwrap(),
+    );
+    value
+        .backend
+        .login_clients
+        .lock()
+        .await
+        .insert(BotId::new(BOT), Arc::clone(&old_client));
+    if close_during_bind {
+        *value.host.close_on_bind.lock().unwrap() = Some(Arc::clone(&value.activity));
+    }
+    (value, server, old_client)
+}
+
+#[tokio::test]
+async fn namespaced_qq_relogin_maps_the_replacement_pid_and_publishes_only_after_binding() {
+    let (value, _server, old_client) = namespace_fixture(false).await;
+    let bot = BotId::new(BOT);
+    let prepared = value
+        .backend
+        .prepare_qr_relogin(&bot, &value.tracked, &value.activity, 0)
+        .await
+        .unwrap();
+    let QrReloginPreparation::Bound(current, renewed) = prepared else {
+        panic!("a verified replacement must not remain hidden by the old mapped client");
+    };
+    assert_eq!(current.pid, NEW_PID);
+    assert_eq!(current.start_time, "222");
+    assert!(!renewed.cancel.is_cancelled());
+    let client = value
+        .backend
+        .login_clients
+        .lock()
+        .await
+        .get(&bot)
+        .cloned()
+        .unwrap();
+    assert!(!Arc::ptr_eq(&client, &old_client));
+    let processes = client.list_processes().await.unwrap();
+    assert_eq!(processes.len(), 1);
+    assert_eq!(processes[0].pid, NEW_PID);
+    assert_eq!(processes[0].status, HookProcessStatus::Loaded);
+    assert!(
+        value.client.loads.lock().unwrap().is_empty(),
+        "old mapping must never receive the new host PID"
+    );
+    assert!(!value.other_activity.cancel.is_cancelled());
+    value.backend.detach_login_pollers().await;
+}
+
+#[tokio::test]
+async fn namespaced_qq_relogin_closed_during_binding_keeps_the_old_client_and_pid() {
+    let (value, _server, old_client) = namespace_fixture(true).await;
+    let bot = BotId::new(BOT);
+    let prepared = value
+        .backend
+        .prepare_qr_relogin(&bot, &value.tracked, &value.activity, 0)
+        .await
+        .unwrap();
+    assert!(matches!(prepared, QrReloginPreparation::Unchanged));
+    assert_eq!(
+        value.backend.login_pids.lock().await.get(&bot).unwrap().pid,
+        OLD_PID
+    );
+    assert!(Arc::ptr_eq(
+        value.backend.login_clients.lock().await.get(&bot).unwrap(),
+        &old_client
+    ));
+    assert!(value.client.loads.lock().unwrap().is_empty());
+    assert!(!value.other_activity.cancel.is_cancelled());
+    value.backend.detach_login_pollers().await;
 }
 
 #[tokio::test]

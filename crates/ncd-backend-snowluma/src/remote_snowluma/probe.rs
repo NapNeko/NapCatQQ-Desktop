@@ -1,73 +1,27 @@
 //! 远端 SnowLuma 是否在跑、WebUI 实际端口：看进程和套接字，不写死 5099。
 //!
-//! 栈就绪：Desktop pid 文件，或 node 的 cwd/cmdline 指向本安装的 index.mjs。
-//! WebUI 端口：日志换口 → runtime.json webuiPort → LISTEN 兜底 → 默认 5099。
+//! 栈就绪：验证同用户 Node 的真实安装路径，未知状态不得补启动。
+//! WebUI 端口只接受唯一安装 Node 拥有且通过 HTTP 确认的监听 socket。
 
 use std::time::Duration;
 
 use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 use ncd_traits::runtime_backend::BotBackendError;
 
-use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
-use super::layout::{DEFAULT_WEBUI_PORT, SnowLumaRemotePaths};
+use super::helpers::read_remote_log_tail;
+use super::layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths};
 use super::remote_bash::resolve_remote_bash;
-use crate::snowluma::session::parse_bound_webui_port_from_logs;
 
-/// 生成栈就绪探测脚本（无 WebUI 端口字面量，避免导入安装换口后误判）。
-pub(crate) fn stack_ready_script(paths: &SnowLumaRemotePaths) -> String {
-    let pid_daemon = shell_single_quote(&paths.pid_daemon);
-    let pid_node = shell_single_quote(&paths.pid_node_path());
-    let sl = shell_single_quote(&paths.snowluma_dir);
-    format!(
-        r#"PID_DAEMON={pid_daemon}
-PID_NODE={pid_node}
-SL={sl}
-alive() {{
-  pid="$1"
-  [ -n "$pid" ] && [ "$pid" != "0" ] && kill -0 "$pid" 2>/dev/null
-}}
-if [ -f "$PID_DAEMON" ]; then
-  pid=$(cat "$PID_DAEMON" 2>/dev/null || echo "")
-  if alive "$pid"; then exit 0; fi
-fi
-if [ -f "$PID_NODE" ]; then
-  pid=$(cat "$PID_NODE" 2>/dev/null || echo "")
-  if alive "$pid"; then exit 0; fi
-fi
-for proc in /proc/[0-9]*; do
-  [ -d "$proc" ] || continue
-  pid=${{proc#/proc/}}
-  comm=$(cat "$proc/comm" 2>/dev/null || true)
-  case "$comm" in node|nodejs) ;; *) continue ;; esac
-  alive "$pid" || continue
-  cwd=$(readlink -f "$proc/cwd" 2>/dev/null || true)
-  if [ -n "$cwd" ] && [ "$cwd" = "$SL" ]; then exit 0; fi
-  cmd=$(tr '\0' ' ' < "$proc/cmdline" 2>/dev/null || true)
-  case "$cmd" in
-    *"index.mjs"*)
-      case "$cmd" in
-        *"$SL"*) exit 0 ;;
-      esac
-      ;;
-  esac
-done
-exit 1
-"#
-    )
-}
+#[path = "node_presence.rs"]
+mod node_presence;
+pub use node_presence::{ResolvedWebuiEndpoint, VerifiedWebuiNode};
 
 /// daemon / node 是否已在远端就绪（进程，不是某个固定 TCP 口）
 pub async fn is_stack_ready(
     host: &dyn Host,
-    paths: &SnowLumaRemotePaths,
+    layout: &RemoteSnowLumaLayout,
 ) -> Result<bool, BotBackendError> {
-    let script = stack_ready_script(paths);
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
-    let out = host
-        .run_to_string(cmd)
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    Ok(out.success())
+    node_presence::is_present(host, layout).await
 }
 
 /// A successful bootstrap may be reused only while its exact node process lives.
@@ -246,145 +200,19 @@ pub fn parse_port_lines(out: &str) -> Vec<u16> {
     ports
 }
 
-/// 日志里的实际绑定口优先（SL 会在占用时换口且不回写 runtime.json）。
-pub fn pick_remote_webui_port(
-    log_port: Option<u16>,
-    socket_ports: &[u16],
-    runtime_port: Option<u16>,
-) -> u16 {
-    if let Some(p) = log_port {
-        return p;
-    }
-    if let Some(rt) = runtime_port {
-        return rt;
-    }
-    if let Some(&p) = socket_ports.first() {
-        return p;
-    }
-    DEFAULT_WEBUI_PORT as u16
-}
-
-fn node_listen_ports_script(paths: &SnowLumaRemotePaths) -> String {
-    let pid_daemon = shell_single_quote(&paths.pid_daemon);
-    let pid_node = shell_single_quote(&paths.pid_node_path());
-    let sl = shell_single_quote(&paths.snowluma_dir);
-    format!(
-        r#"PID_DAEMON={pid_daemon}
-PID_NODE={pid_node}
-SL={sl}
-alive() {{
-  pid="$1"
-  [ -n "$pid" ] && [ "$pid" != "0" ] && kill -0 "$pid" 2>/dev/null
-}}
-find_node_pid() {{
-  if [ -f "$PID_NODE" ]; then
-    pid=$(cat "$PID_NODE" 2>/dev/null || true)
-    if alive "$pid"; then echo "$pid"; return 0; fi
-  fi
-  if [ -f "$PID_DAEMON" ]; then
-    pid=$(cat "$PID_DAEMON" 2>/dev/null || true)
-    if alive "$pid"; then echo "$pid"; return 0; fi
-  fi
-  for proc in /proc/[0-9]*; do
-    [ -d "$proc" ] || continue
-    pid=${{proc#/proc/}}
-    comm=$(cat "$proc/comm" 2>/dev/null || true)
-    case "$comm" in node|nodejs) ;; *) continue ;; esac
-    alive "$pid" || continue
-    cwd=$(readlink -f "$proc/cwd" 2>/dev/null || true)
-    if [ -n "$cwd" ] && [ "$cwd" = "$SL" ]; then echo "$pid"; return 0; fi
-    cmd=$(tr '\0' ' ' < "$proc/cmdline" 2>/dev/null || true)
-    case "$cmd" in
-      *"index.mjs"*)
-        case "$cmd" in
-          *"$SL"*) echo "$pid"; return 0 ;;
-        esac
-        ;;
-    esac
-  done
-  return 1
-}}
-dump_listen_ports() {{
-  pid="$1"
-  alive "$pid" || return 0
-  inodes=" "
-  for fd in /proc/$pid/fd/*; do
-    t=$(readlink "$fd" 2>/dev/null || true)
-    case "$t" in
-      socket:\[*\])
-        ino=${{t#socket:[}}
-        ino=${{ino%']'}}
-        inodes="$inodes$ino "
-        ;;
-    esac
-  done
-  [ "$inodes" != " " ] || return 0
-  for table in /proc/net/tcp /proc/net/tcp6; do
-    [ -f "$table" ] || continue
-    tail -n +2 "$table" 2>/dev/null | while read -r _ local _ st _ _ _ _ _ inode _; do
-      [ "$st" = "0A" ] || continue
-      case "$inodes" in
-        *" $inode "*)
-          ph=${{local##*:}}
-          echo $((0x$ph)) 2>/dev/null || true
-          ;;
-      esac
-    done
-  done
-}}
-pid=$(find_node_pid || true)
-[ -n "$pid" ] || exit 0
-dump_listen_ports "$pid"
-"#
-    )
-}
-
-async fn read_runtime_webui_port(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Option<u16> {
-    let path = format!("{}/runtime.json", paths.config_dir);
-    let bytes = host.read_file(&HostPath::from_posix(&path)).await.ok()?;
-    parse_webui_port_from_runtime_json(&bytes)
-}
-
-async fn read_log_webui_port(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Option<u16> {
-    let resolved = resolve_remote_snowluma_log_targets(host, paths, &paths.log_daemon).await;
-    let mut seen = std::collections::HashSet::new();
-    for path in [resolved.daemon, resolved.bot] {
-        if !seen.insert(path.clone()) {
-            continue;
-        }
-        let Ok(lines) = read_remote_log_tail_lines(host, &path, 80).await else {
-            continue;
-        };
-        if let Some(p) = parse_bound_webui_port_from_logs(&lines) {
-            return Some(p);
-        }
-    }
-    None
-}
-
-async fn read_node_listen_ports(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Vec<u16> {
-    let script = node_listen_ports_script(paths);
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
-    let out = match host.run_to_string(cmd).await {
-        Ok(o) => o,
-        Err(_) => return Vec::new(),
-    };
-    parse_port_lines(&out.stdout)
-}
-
 /// 解析远端 SnowLuma WebUI 当前端口（导入安装可能不是 5099）。
 pub async fn resolve_remote_webui_port(
     host: &dyn Host,
-    paths: &SnowLumaRemotePaths,
+    layout: &RemoteSnowLumaLayout,
 ) -> Result<u16, BotBackendError> {
-    let runtime_port = read_runtime_webui_port(host, paths).await;
-    let log_port = read_log_webui_port(host, paths).await;
-    let socket_ports = read_node_listen_ports(host, paths).await;
-    Ok(pick_remote_webui_port(
-        log_port,
-        &socket_ports,
-        runtime_port,
-    ))
+    Ok(resolve_remote_webui_endpoint(host, layout).await?.port)
+}
+
+pub async fn resolve_remote_webui_endpoint(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<ResolvedWebuiEndpoint, BotBackendError> {
+    node_presence::resolve_endpoint(host, layout).await
 }
 
 const NOVNC_LISTEN_PORTS_SCRIPT: &str = r#"
@@ -829,18 +657,6 @@ mod tests {
     }
 
     #[test]
-    fn stack_ready_script_does_not_hardcode_webui_port() {
-        let script = stack_ready_script(&sample_paths());
-        assert!(
-            !script.contains("5099"),
-            "stack ready must not probe a fixed WebUI port"
-        );
-        assert!(script.contains("index.mjs"));
-        assert!(script.contains("pid_daemon"));
-        assert!(script.contains("pid_node"));
-    }
-
-    #[test]
     fn wait_script_discovers_port_instead_of_assuming_5099() {
         let script = wait_webui_ready_script(&sample_paths(), Duration::from_secs(5));
         assert!(script.contains("webuiPort"));
@@ -919,43 +735,6 @@ mod tests {
     fn parse_runtime_json_rejects_zero() {
         let bytes = br#"{ "webuiPort": 0 }"#;
         assert_eq!(parse_webui_port_from_runtime_json(bytes), None);
-    }
-
-    #[test]
-    fn pick_prefers_log_port_over_runtime() {
-        assert_eq!(
-            pick_remote_webui_port(Some(5103), &[5099], Some(5099)),
-            5103
-        );
-    }
-
-    #[test]
-    fn pick_prefers_runtime_when_socket_matches() {
-        assert_eq!(
-            pick_remote_webui_port(None, &[3000, 5099], Some(5099)),
-            5099
-        );
-    }
-
-    #[test]
-    fn pick_prefers_runtime_over_unrelated_listen_ports() {
-        assert_eq!(
-            pick_remote_webui_port(None, &[3000, 9229], Some(5099)),
-            5099
-        );
-    }
-
-    #[test]
-    fn pick_uses_first_socket_when_no_log() {
-        assert_eq!(pick_remote_webui_port(None, &[6123], None), 6123);
-    }
-
-    #[test]
-    fn pick_falls_back_to_default() {
-        assert_eq!(
-            pick_remote_webui_port(None, &[], None),
-            DEFAULT_WEBUI_PORT as u16
-        );
     }
 
     #[test]

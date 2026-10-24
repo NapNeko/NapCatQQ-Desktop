@@ -10,17 +10,6 @@ pub(crate) async fn host_file_nonempty(host: &dyn Host, path: &str) -> bool {
     }
 }
 
-pub(crate) async fn read_remote_file_trimmed(
-    host: &dyn Host,
-    path: &str,
-) -> Result<String, BotBackendError> {
-    let bytes = host
-        .read_file(&HostPath::from_posix(path))
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    Ok(String::from_utf8_lossy(&bytes).trim().to_string())
-}
-
 pub(crate) async fn read_remote_log_tail(
     host: &dyn Host,
     path: &str,

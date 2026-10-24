@@ -10,8 +10,10 @@ mod daemon;
 mod helpers;
 mod inject;
 mod login_helper;
+mod mapped_webui_client;
 mod probe;
 mod remote_bash;
+mod webui_process_pid;
 
 pub mod layout;
 pub mod log;
@@ -19,7 +21,7 @@ pub mod orchestrator;
 pub mod stack;
 pub mod tunnel;
 
-pub use backend::{RemoteSlMetricsInjector, RemoteSnowLumaBackend};
+pub use backend::{ReconciledQqObservation, RemoteSlMetricsInjector, RemoteSnowLumaBackend};
 pub use config::{
     is_remote_native_snowluma_config, read_remote_onebot_connect,
     render_native_snowluma_config_on_host, take_over_remote_webui_credentials,
@@ -27,7 +29,8 @@ pub use config::{
 pub use daemon::RemoteSnowLumaDaemon;
 pub use inject::{remote_qq_running_pid, remote_qq_running_pid_with_hint};
 pub use probe::{
-    ResolvedSnowLumaLogTargets, resolve_remote_novnc_port, resolve_remote_snowluma_log_targets,
-    resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_port,
-    resolve_remote_webui_secret_near_snowluma_dir,
+    ResolvedSnowLumaLogTargets, ResolvedWebuiEndpoint, VerifiedWebuiNode,
+    resolve_remote_novnc_port, resolve_remote_snowluma_log_targets,
+    resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_endpoint,
+    resolve_remote_webui_port, resolve_remote_webui_secret_near_snowluma_dir,
 };
