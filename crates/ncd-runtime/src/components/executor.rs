@@ -975,19 +975,27 @@ struct ComponentTaskRunner {
 
 impl ComponentTaskRunner {
     async fn run(mut self, task_ctx: DeploymentTaskContext) -> DeploymentTaskRunResult {
+        let task_id = task_ctx.task_id().to_string();
         let task_cancel = task_ctx.cancel_token();
-        let _cache_lease = tokio::select! {
-            lease = self.download_cache.lease() => match lease {
-                Ok(lease) => lease,
-                Err(error) => return DeploymentTaskRunResult::failed(error),
-            },
-            () = task_cancel.cancelled() => return DeploymentTaskRunResult::failed("任务已取消"),
+        let cache_lease = tokio::select! {
+            lease = self.download_cache.lease() => lease,
+            () = task_cancel.cancelled() => Err("任务已取消".to_string()),
+        };
+        let _cache_lease = match cache_lease {
+            Ok(lease) => lease,
+            Err(error) => {
+                if let Some(ref id) = self.server_id {
+                    self.inventory.invalidate(id).await;
+                }
+                self.emit(&task_ctx, &task_id, ProgressKind::Finished { ok: false })
+                    .await;
+                return DeploymentTaskRunResult::failed(error);
+            }
         };
         let (ctx, mut rx) = ActionCtx::new();
         let mut ctx =
             ctx.with_download_dir(crate::DataPaths::new(&self.data_root).download_cache_dir());
         let cancel_token = ctx.cancel_token();
-        let task_id = task_ctx.task_id().to_string();
         // 从哪条路返回都会摘掉,取消命令不会拿到已结束任务的令牌
         let registered = self
             .active_tasks
@@ -999,8 +1007,28 @@ impl ComponentTaskRunner {
         let event_bus = self.event_bus.clone();
         let progress_ctx = task_ctx.clone();
         let progress_task_id = task_id.clone();
-        tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
+        let (close_progress, mut close_requested) = oneshot::channel();
+        let progress_relay = tokio::spawn(async move {
+            let mut draining = false;
+            loop {
+                let event = if draining {
+                    rx.recv().await
+                } else {
+                    tokio::select! {
+                        _ = &mut close_requested => {
+                            // 组件可能保留 ctx clone；关闭接收端后排空，不能等所有发送端析构。
+                            rx.close();
+                            draining = true;
+                            continue;
+                        }
+                        event = rx.recv() => event,
+                    }
+                };
+                let Some(event) = event else { break };
+                // plan 完成后还有库存失效和设置落盘，终态由 runner 最后统一发。
+                if matches!(event.kind, ProgressKind::Finished { .. }) {
+                    continue;
+                }
                 progress_ctx.push_progress(event.clone()).await;
                 event_bus.publish(DomainEvent::component_action_progress(
                     progress_task_id.clone(),
@@ -1009,8 +1037,15 @@ impl ComponentTaskRunner {
             }
         });
 
-        if cancel_token.is_cancelled() {
+        if cancel_token.is_cancelled() || task_cancel.is_cancelled() {
+            let _ = close_progress.send(());
+            if let Err(error) = progress_relay.await {
+                tracing::error!(task_id, error = %error, "component progress relay failed");
+            }
             drop(registered);
+            if let Some(ref id) = self.server_id {
+                self.inventory.invalidate(id).await;
+            }
             self.emit(&task_ctx, &task_id, ProgressKind::Finished { ok: false })
                 .await;
             return DeploymentTaskRunResult::failed("任务已取消");
@@ -1039,6 +1074,11 @@ impl ComponentTaskRunner {
                 .map_err(|e| format!("{e}")),
         };
 
+        let _ = close_progress.send(());
+        if let Err(error) = progress_relay.await {
+            tracing::error!(task_id, error = %error, "component progress relay failed");
+        }
+
         if outcome.is_err() {
             if let Some(ref id) = self.server_id {
                 self.server_manager.disconnect_cached_host(id).await;
@@ -1050,9 +1090,9 @@ impl ComponentTaskRunner {
             self.inventory.invalidate(id).await;
         }
 
-        match outcome {
+        let result = match outcome {
             Ok(outcome) if outcome.ok => {
-                if self.component_id == ComponentId::SnowLuma
+                let persisted = if self.component_id == ComponentId::SnowLuma
                     && self.host.locality() == Locality::Local
                     && matches!(
                         self.kind,
@@ -1060,24 +1100,25 @@ impl ComponentTaskRunner {
                             | StepKind::ForceInstall
                             | StepKind::Update
                             | StepKind::Uninstall
-                    )
-                {
+                    ) {
                     let next = if self.kind == StepKind::Uninstall {
                         None
                     } else {
                         self.snowluma_linux_package
                     };
-                    if let Err(err) =
-                        persist_local_snowluma_package(&self.data_root, &self.app_settings, next)
-                            .await
-                    {
+                    persist_local_snowluma_package(&self.data_root, &self.app_settings, next).await
+                } else {
+                    Ok(())
+                };
+                match persisted {
+                    Ok(()) => DeploymentTaskRunResult::ok("组件操作完成"),
+                    Err(err) => {
                         tracing::error!(error = %err, "failed to persist SnowLuma package state");
-                        return DeploymentTaskRunResult::failed(format!(
+                        DeploymentTaskRunResult::failed(format!(
                             "组件操作已完成，但保存 SnowLuma 包类型失败: {err}"
-                        ));
+                        ))
                     }
                 }
-                DeploymentTaskRunResult::ok("组件操作完成")
             }
             Ok(outcome) => {
                 let err = outcome
@@ -1097,11 +1138,21 @@ impl ComponentTaskRunner {
                     },
                 )
                 .await;
-                self.emit(&task_ctx, &task_id, ProgressKind::Finished { ok: false })
-                    .await;
                 DeploymentTaskRunResult::failed(err)
             }
-        }
+        };
+        let result = if result.ok && task_ctx.is_cancelled() {
+            DeploymentTaskRunResult::failed("任务已取消")
+        } else {
+            result
+        };
+        self.emit(
+            &task_ctx,
+            &task_id,
+            ProgressKind::Finished { ok: result.ok },
+        )
+        .await;
+        result
     }
 
     async fn emit(&self, task_ctx: &DeploymentTaskContext, task_id: &str, kind: ProgressKind) {
@@ -1114,6 +1165,10 @@ impl ComponentTaskRunner {
             ));
     }
 }
+
+#[cfg(test)]
+#[path = "executor_completion_tests.rs"]
+mod completion_tests;
 
 /// 本机 SnowLuma 装完 / 卸完后把包类型写回 app-settings.json
 async fn persist_local_snowluma_package(
