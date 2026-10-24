@@ -14,9 +14,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use super::layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths, probe_remote_snowluma_layout};
-use super::orchestrator::{
-    daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
-};
+use super::orchestrator::{daemon_stop, remote_daemon_already_ready, write_status_daemon_json};
 use super::probe::{
     ManagedNodeIdentity, managed_node_identity, remote_qq_main_running, resolve_remote_novnc_port,
     resolve_remote_vnc_secret_from_x11vnc, wait_remote_webui_ready,
@@ -25,7 +23,7 @@ use super::stack::{recover_node_for_reconcile, restart_node_with_env};
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
 
-use super::config::{ensure_remote_daemon_prereqs, take_over_remote_webui_credentials};
+use super::config::{ensure_remote_daemon_prereqs_cancellable, take_over_remote_webui_credentials};
 #[path = "novnc_target.rs"]
 mod novnc_target;
 
@@ -320,6 +318,25 @@ impl RemoteSnowLumaDaemon {
         &self.layout
     }
 
+    pub(crate) async fn on_current_host<T>(
+        &self,
+        expected: &Arc<dyn Host>,
+        action: impl Future<Output = Result<T, BotBackendError>>,
+    ) -> Result<Option<T>, BotBackendError> {
+        let session = self.session.lock().await;
+        if session.is_cancelled() || !Arc::ptr_eq(expected, &self.current_host().await) {
+            return Ok(None);
+        }
+        action.await.map(Some)
+    }
+
+    pub(crate) async fn abandon_start_on_host(&self, expected: &Arc<dyn Host>, bot_id: &BotId) {
+        let session = self.session.lock().await;
+        if !session.is_cancelled() && Arc::ptr_eq(expected, &self.current_host().await) {
+            self.leases.lock().await.release(Some(bot_id));
+        }
+    }
+
     pub async fn ensure_running(&self) -> Result<(), BotBackendError> {
         self.ensure_running_ex(false, None, None).await
     }
@@ -339,8 +356,30 @@ impl RemoteSnowLumaDaemon {
         takeover_requested: bool,
         password_override: Option<&str>,
     ) -> Result<(), BotBackendError> {
+        self.ensure_running_for_bot_cancellable(
+            bot_id,
+            metrics_env,
+            takeover_requested,
+            password_override,
+            &CancellationToken::new(),
+        )
+        .await
+    }
+
+    pub async fn ensure_running_for_bot_cancellable(
+        &self,
+        bot_id: &BotId,
+        metrics_env: Option<BTreeMap<String, String>>,
+        takeover_requested: bool,
+        password_override: Option<&str>,
+        cancel: &CancellationToken,
+    ) -> Result<(), BotBackendError> {
         self.in_current_session(async {
-            let _stack_guard = self.stack_bootstrap.lock().await;
+            let _stack_guard = super::startup_cancel::read_only(Some(cancel), async {
+                Ok(self.stack_bootstrap.lock().await)
+            })
+            .await?;
+            super::startup_cancel::check(Some(cancel))?;
             let result = async {
                 let takeover = takeover_requested && !self.has_other_bot_leases(bot_id).await;
                 let webui_password = if takeover {
@@ -356,12 +395,23 @@ impl RemoteSnowLumaDaemon {
                 } else {
                     None
                 };
-                self.ensure_running_locked(takeover, metrics_env, webui_password, Some(bot_id))
-                    .await
+                // A completed credential pair must be followed by its node replacement before cancellation.
+                self.ensure_running_locked(
+                    takeover,
+                    metrics_env,
+                    webui_password,
+                    Some(bot_id),
+                    Some(cancel),
+                )
+                .await
             }
             .await;
             if result.is_err() {
-                self.clear_local_startup().await;
+                if cancel.is_cancelled() {
+                    *self.ready_node_identity.lock().await = None;
+                } else {
+                    self.clear_local_startup().await;
+                }
             }
             result
         })
@@ -377,7 +427,7 @@ impl RemoteSnowLumaDaemon {
         self.in_current_session(async {
             let _stack_guard = self.stack_bootstrap.lock().await;
             let result = self
-                .ensure_running_locked(restart_node, metrics_env, webui_password, None)
+                .ensure_running_locked(restart_node, metrics_env, webui_password, None, None)
                 .await;
             if result.is_err() {
                 self.clear_local_startup().await;
@@ -393,7 +443,11 @@ impl RemoteSnowLumaDaemon {
         metrics_env: Option<BTreeMap<String, String>>,
         webui_password: Option<String>,
         bot_id: Option<&BotId>,
+        cancel: Option<&CancellationToken>,
     ) -> Result<(), BotBackendError> {
+        if !restart_node {
+            super::startup_cancel::check(cancel)?;
+        }
         let host = self.current_host().await;
         if !restart_node
             && webui_password.is_none()
@@ -402,19 +456,32 @@ impl RemoteSnowLumaDaemon {
             if metrics_env.is_some() {
                 *self.metrics_node_env.lock().await = metrics_env;
             }
+            super::startup_cancel::check(cancel)?;
             return Ok(());
         }
         // A failed repair must never leave a previous success eligible for reuse.
         *self.ready_node_identity.lock().await = None;
-        let creds = ensure_remote_daemon_prereqs(
+        let creds = ensure_remote_daemon_prereqs_cancellable(
             host.as_ref(),
             &self.layout.home,
             &self.layout.paths,
             &self.layout.qq_bin,
+            if restart_node { None } else { cancel },
         )
         .await?;
+        if !restart_node && !creds.wrote {
+            super::startup_cancel::check(cancel)?;
+        }
 
-        let stack_up = remote_daemon_already_ready(host.as_ref(), &self.layout).await?;
+        let stack_up = if restart_node || creds.wrote {
+            remote_daemon_already_ready(host.as_ref(), &self.layout).await?
+        } else {
+            super::startup_cancel::read_only(
+                cancel,
+                remote_daemon_already_ready(host.as_ref(), &self.layout),
+            )
+            .await?
+        };
         let restart_node = restart_node || (creds.wrote && stack_up);
         if !stack_up || restart_node {
             self.event_bus
@@ -433,7 +500,17 @@ impl RemoteSnowLumaDaemon {
             );
         }
         let known_port = if !stack_up {
-            Some(daemon_start(host.as_ref(), &self.layout, metrics_env.as_ref()).await?)
+            // No Node exists to reload; a completed credential pair needs no spawn.
+            super::startup_cancel::check(cancel)?;
+            Some(
+                super::orchestrator::daemon_start_cancellable(
+                    host.as_ref(),
+                    &self.layout,
+                    metrics_env.as_ref(),
+                    cancel,
+                )
+                .await?,
+            )
         } else {
             if restart_node {
                 tracing::info!(
@@ -445,17 +522,34 @@ impl RemoteSnowLumaDaemon {
             }
             None
         };
+        super::startup_cancel::check(cancel)?;
         let node_restarted = stack_up && restart_node;
         let webui_port = match webui_port_plan(!stack_up, node_restarted, known_port) {
-            WebuiPortPlan::UseKnown(_) => self.resolve_webui_port(host.as_ref()).await?,
-            WebuiPortPlan::WaitAfterRestart => {
-                wait_remote_webui_ready(host.as_ref(), &self.layout.paths, Duration::from_secs(90))
-                    .await?;
-                self.resolve_webui_port(host.as_ref()).await?
+            WebuiPortPlan::UseKnown(_) => {
+                super::startup_cancel::read_only(cancel, self.resolve_webui_port(host.as_ref()))
+                    .await?
             }
-            WebuiPortPlan::ResolveExisting => self.resolve_webui_port(host.as_ref()).await?,
+            WebuiPortPlan::WaitAfterRestart => {
+                super::startup_cancel::read_only(
+                    cancel,
+                    wait_remote_webui_ready(
+                        host.as_ref(),
+                        &self.layout.paths,
+                        Duration::from_secs(90),
+                    ),
+                )
+                .await?;
+                super::startup_cancel::read_only(cancel, self.resolve_webui_port(host.as_ref()))
+                    .await?
+            }
+            WebuiPortPlan::ResolveExisting => {
+                super::startup_cancel::read_only(cancel, self.resolve_webui_port(host.as_ref()))
+                    .await?
+            }
         };
+        super::startup_cancel::check(cancel)?;
         write_status_daemon_json(host.as_ref(), &self.layout.paths, true, true, webui_port).await?;
+        super::startup_cancel::check(cancel)?;
 
         let tunnel_password = webui_password
             .as_deref()
@@ -472,6 +566,7 @@ impl RemoteSnowLumaDaemon {
             });
         self.open_tunnels(webui_port, tunnel_password.as_deref())
             .await?;
+        super::startup_cancel::check(cancel)?;
         if metrics_env.is_some() || !stack_up || restart_node {
             *self.metrics_node_env.lock().await = metrics_env;
         }
@@ -487,9 +582,11 @@ impl RemoteSnowLumaDaemon {
         *self.ready_node_identity.lock().await = identity;
 
         let mut guard = self.leases.lock().await;
+        super::startup_cancel::check(cancel)?;
         guard.acquire_start(bot_id);
         let rc = guard.count();
         drop(guard);
+        super::startup_cancel::check(cancel)?;
 
         self.event_bus
             .publish(DomainEvent::snowluma_daemon_state_changed(

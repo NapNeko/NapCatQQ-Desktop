@@ -134,6 +134,18 @@ pub(crate) async fn inject_via_tunnel(
     qq_pid: u32,
     webui_pid: u32,
 ) -> Result<Arc<dyn SnowLumaWebUiClient>, BotBackendError> {
+    inject_via_tunnel_cancellable(endpoints, qq_pid, webui_pid, None, None, None).await
+}
+
+pub(crate) async fn inject_via_tunnel_cancellable(
+    endpoints: &RemoteSnowLumaTunnelEndpoints,
+    qq_pid: u32,
+    webui_pid: u32,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+    on_client: Option<&(dyn Fn(Arc<dyn SnowLumaWebUiClient>) + Send + Sync)>,
+    load_submitted: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Arc<dyn SnowLumaWebUiClient>, BotBackendError> {
+    super::startup_cancel::check(cancel)?;
     if endpoints.webui_password.is_empty() {
         return Err(BotBackendError::Io(
             "未找到可用的 SnowLuma WebUI 登录密码，请打开 WebUI 手动登录".into(),
@@ -144,14 +156,23 @@ pub(crate) async fn inject_via_tunnel(
         endpoints.webui_password.clone(),
     )
     .map_err(|e: SnowLumaWebUiError| BotBackendError::Io(e.to_string()))?;
-    client
-        .wait_ready(Duration::from_secs(20), Box::new(|| false))
-        .await
-        .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI wait_ready: {e}")))?;
+    let client = if cancel.is_some() {
+        client.with_action_timeout(Duration::from_secs(8))
+    } else {
+        client
+    };
+    super::startup_cancel::read_only(cancel, async {
+        client
+            .wait_ready(Duration::from_secs(20), Box::new(|| false))
+            .await
+            .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI wait_ready: {e}")))
+    })
+    .await?;
     client
         .login()
         .await
         .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI login: {e}")))?;
+    super::startup_cancel::check(cancel)?;
 
     let mut client: Arc<dyn SnowLumaWebUiClient> = Arc::new(client);
     if qq_pid != webui_pid {
@@ -160,15 +181,27 @@ pub(crate) async fn inject_via_tunnel(
                 .map_err(|error| BotBackendError::Io(error.to_string()))?,
         );
     }
+    if let Some(record) = on_client {
+        record(Arc::clone(&client));
+    }
 
     // 冷启动刚 spawn QQ 后,SnowLuma daemon 侧扫描器需要时间把该 PID 识别为 Available
     // 立即 load_process 极大概率拿到 "server rejected"(success=false,error 常为空)
-    if wait_process_available(client.as_ref(), qq_pid, Duration::from_secs(12)).await {
+    if super::startup_cancel::read_only(cancel, async {
+        Ok(wait_process_available(client.as_ref(), qq_pid, Duration::from_secs(12)).await)
+    })
+    .await?
+    {
         return Ok(client);
     }
 
     // "already" 视为注入成功;其它拒绝若 error 为空则补 /api/processes 快照
+    super::startup_cancel::check(cancel)?;
+    if let Some(submitted) = load_submitted {
+        submitted.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
     let load_res = client.load_process(qq_pid).await;
+    super::startup_cancel::check(cancel)?;
     match load_res {
         Ok(_) => {}
         Err(SnowLumaWebUiError::ServerRejected { ref message, .. }) => {

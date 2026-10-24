@@ -29,14 +29,30 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
     paths: &SnowLumaRemotePaths,
     qq_bin: &str,
 ) -> Result<WebuiCredentialSync, BotBackendError> {
+    ensure_remote_daemon_prereqs_cancellable(host, home, paths, qq_bin, None).await
+}
+
+pub(crate) async fn ensure_remote_daemon_prereqs_cancellable(
+    host: &dyn Host,
+    home: &str,
+    paths: &SnowLumaRemotePaths,
+    qq_bin: &str,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<WebuiCredentialSync, BotBackendError> {
+    use super::startup_cancel::{check, read_only};
+    check(cancel)?;
     let runtime_path = format!("{}/runtime.json", paths.config_dir);
     let webui_path = format!("{}/webui.json", paths.config_dir);
-    let (runtime, webui, secret, vnc) = tokio::try_join!(
-        read_optional_config(host, &runtime_path),
-        read_optional_config(host, &webui_path),
-        read_optional_config(host, &paths.webui_secret),
-        read_optional_config(host, &paths.vnc_secret),
-    )?;
+    let (runtime, webui, secret, vnc) = read_only(cancel, async {
+        tokio::try_join!(
+            read_optional_config(host, &runtime_path),
+            read_optional_config(host, &webui_path),
+            read_optional_config(host, &paths.webui_secret),
+            read_optional_config(host, &paths.vnc_secret),
+        )
+    })
+    .await?;
+    check(cancel)?;
     let existing = parse_webui_disk_creds(webui.as_deref())?;
     let secret = decode_secret(secret.as_deref())?;
     let runtime_missing = runtime.as_ref().is_none_or(|bytes| bytes.is_empty());
@@ -44,6 +60,7 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
         host.create_dir_all(&HostPath::from_posix(&paths.config_dir))
             .await
             .map_err(|e| BotBackendError::Io(e.to_string()))?;
+        check(cancel)?;
     }
     if runtime_missing {
         let runtime_json = serde_json::to_vec_pretty(&json!({ "webuiPort": DEFAULT_WEBUI_PORT }))
@@ -51,18 +68,27 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
         host.write_file(&HostPath::from_posix(&runtime_path), &runtime_json)
             .await
             .map_err(|e| BotBackendError::Io(e.to_string()))?;
+        check(cancel)?;
     }
 
-    let creds = sync_loaded_webui_credentials(host, paths, existing, secret).await?;
+    let creds = sync_loaded_webui_credentials(host, paths, existing, secret, cancel).await?;
+    // 已提交密码对必须把 wrote 交回 daemon，先恢复 node 的凭据一致性再响应取消。
+    if !creds.wrote {
+        check(cancel)?;
+    }
 
     if vnc.as_ref().is_none_or(|bytes| bytes.is_empty()) {
         let vnc_pwd = generate_strong_password(8);
         host.write_file(&HostPath::from_posix(&paths.vnc_secret), vnc_pwd.as_bytes())
             .await
             .map_err(|e| BotBackendError::Io(e.to_string()))?;
+        if !creds.wrote {
+            check(cancel)?;
+        }
     }
 
-    resolve_remote_bash(host).await?;
+    let read_cancel = if creds.wrote { None } else { cancel };
+    read_only(read_cancel, resolve_remote_bash(host)).await?;
 
     let qq = if qq_bin.trim().is_empty() {
         napcat_layout_qq_executable(home)
@@ -75,10 +101,12 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
          command -v websockify >/dev/null && command -v dbus-launch >/dev/null && \
          test -x {qq_q}"
     ));
-    let out = host
-        .run_to_string(check)
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    let out = read_only(read_cancel, async {
+        host.run_to_string(check)
+            .await
+            .map_err(|e| BotBackendError::Io(e.to_string()))
+    })
+    .await?;
     if !out.success() {
         if host
             .run_to_string(
@@ -121,6 +149,7 @@ async fn sync_remote_webui_credentials(
         paths,
         parse_webui_disk_creds(webui.as_deref())?,
         decode_secret(secret.as_deref())?,
+        None,
     )
     .await
 }
@@ -130,7 +159,9 @@ async fn sync_loaded_webui_credentials(
     paths: &SnowLumaRemotePaths,
     existing: Option<WebuiDiskCreds>,
     secret: String,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<WebuiCredentialSync, BotBackendError> {
+    super::startup_cancel::check(cancel)?;
     let webui_json_path = format!("{}/webui.json", paths.config_dir);
 
     if let Some(disk) = existing {
@@ -140,9 +171,12 @@ async fn sync_loaded_webui_credentials(
             let password = secret.clone();
             let hash = disk.hash.clone();
             let salt = disk.salt.clone();
-            tokio::task::spawn_blocking(move || verify_webui_password(&password, &hash, &salt))
-                .await
-                .map_err(|_| BotBackendError::Io("WebUI 凭据校验任务异常".into()))?
+            super::startup_cancel::read_only(cancel, async {
+                tokio::task::spawn_blocking(move || verify_webui_password(&password, &hash, &salt))
+                    .await
+                    .map_err(|_| BotBackendError::Io("WebUI 凭据校验任务异常".into()))
+            })
+            .await?
         };
         if matches && !disk.must_change {
             return Ok(WebuiCredentialSync {
@@ -151,7 +185,7 @@ async fn sync_loaded_webui_credentials(
             });
         }
         if matches && disk.must_change {
-            write_webui_pair(host, paths, &webui_json_path, &secret, false).await?;
+            write_webui_pair(host, paths, &webui_json_path, &secret, false, cancel).await?;
             return Ok(WebuiCredentialSync {
                 plaintext: secret,
                 wrote: true,
@@ -164,7 +198,15 @@ async fn sync_loaded_webui_credentials(
             } else {
                 secret
             };
-            write_webui_pair(host, paths, &webui_json_path, &plain, secret_missing).await?;
+            write_webui_pair(
+                host,
+                paths,
+                &webui_json_path,
+                &plain,
+                secret_missing,
+                cancel,
+            )
+            .await?;
             return Ok(WebuiCredentialSync {
                 plaintext: plain,
                 wrote: true,
@@ -182,7 +224,15 @@ async fn sync_loaded_webui_credentials(
     } else {
         secret
     };
-    write_webui_pair(host, paths, &webui_json_path, &plain, secret_missing).await?;
+    write_webui_pair(
+        host,
+        paths,
+        &webui_json_path,
+        &plain,
+        secret_missing,
+        cancel,
+    )
+    .await?;
     Ok(WebuiCredentialSync {
         plaintext: plain,
         wrote: true,
@@ -195,15 +245,22 @@ async fn write_webui_pair(
     webui_json_path: &str,
     plain: &str,
     write_secret: bool,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<(), BotBackendError> {
+    super::startup_cancel::check(cancel)?;
     let password = plain.to_owned();
-    let webui_payload = tokio::task::spawn_blocking(move || {
-        build_webui_json_payload(&password, false).map_err(|e| BotBackendError::Io(e.to_string()))
+    let webui_payload = super::startup_cancel::read_only(cancel, async {
+        tokio::task::spawn_blocking(move || {
+            build_webui_json_payload(&password, false)
+                .map_err(|e| BotBackendError::Io(e.to_string()))
+        })
+        .await
+        .map_err(|_| BotBackendError::Io("WebUI 凭据生成任务异常".into()))?
     })
-    .await
-    .map_err(|_| BotBackendError::Io("WebUI 凭据生成任务异常".into()))??;
+    .await?;
     let webui_json = serde_json::to_vec_pretty(&webui_payload)
         .map_err(|e| BotBackendError::Json(e.to_string()))?;
+    super::startup_cancel::check(cancel)?;
     if write_secret {
         host.write_file(&HostPath::from_posix(&paths.webui_secret), plain.as_bytes())
             .await
@@ -445,6 +502,7 @@ mod tests {
         failures: Mutex<HashMap<String, ReadFailure>>,
         directories: std::sync::atomic::AtomicUsize,
         read_barrier: Option<tokio::sync::Barrier>,
+        cancel_on_write: Option<tokio_util::sync::CancellationToken>,
     }
 
     #[derive(Clone, Copy)]
@@ -463,6 +521,7 @@ mod tests {
                 failures: Mutex::new(HashMap::new()),
                 directories: std::sync::atomic::AtomicUsize::new(0),
                 read_barrier: None,
+                cancel_on_write: None,
             }
         }
     }
@@ -519,6 +578,9 @@ mod tests {
                 .lock()
                 .unwrap()
                 .insert(path.as_posix().to_string(), bytes.to_vec());
+            if let Some(cancel) = &self.cancel_on_write {
+                cancel.cancel();
+            }
             Ok(())
         }
         async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {

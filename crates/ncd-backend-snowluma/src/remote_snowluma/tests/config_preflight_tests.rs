@@ -71,6 +71,59 @@ async fn prerequisite_file_read_has_its_own_deadline() {
 }
 
 #[tokio::test]
+async fn cancellation_interrupts_pending_prerequisite_reads_without_writes() {
+    let host = FileHost::new();
+    let paths = paths();
+    host.failures.lock().unwrap().insert(
+        format!("{}/runtime.json", paths.config_dir),
+        ReadFailure::Pending,
+    );
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let prepare = ensure_remote_daemon_prereqs_cancellable(
+        &host,
+        "/home/fixture",
+        &paths,
+        "/opt/QQ/qq",
+        Some(&cancel),
+    );
+    tokio::pin!(prepare);
+    tokio::select! {
+        biased;
+        result = &mut prepare => panic!("read unexpectedly completed: {result:?}"),
+        _ = std::future::ready(()) => {}
+    }
+    assert_eq!(host.reads.lock().unwrap().len(), 4);
+    cancel.cancel();
+    let error = tokio::time::timeout(Duration::from_secs(1), prepare)
+        .await
+        .expect("cancellation must not await the file deadline")
+        .unwrap_err();
+    assert!(error.to_string().contains("取消"));
+    assert!(host.writes.lock().unwrap().is_empty());
+    assert_eq!(host.directories.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn cancellation_during_credential_commit_finishes_the_pair_and_returns_restart_evidence() {
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let mut host = FileHost::new();
+    host.cancel_on_write = Some(cancel.clone());
+    let paths = paths();
+    let result = sync_loaded_webui_credentials(&host, &paths, None, String::new(), Some(&cancel))
+        .await
+        .unwrap();
+    assert!(cancel.is_cancelled());
+    assert!(result.wrote);
+    assert_eq!(
+        host.writes.lock().unwrap().as_slice(),
+        [
+            paths.webui_secret.clone(),
+            format!("{}/webui.json", paths.config_dir),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn webui_secret_is_read_once_and_existing_non_bootstrap_auth_is_not_overwritten() {
     let host = FileHost::new();
     let paths = paths();

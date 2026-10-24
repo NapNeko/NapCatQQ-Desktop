@@ -45,6 +45,15 @@ pub async fn daemon_stop(
     stack_stop(host, paths).await
 }
 
+pub(crate) async fn daemon_start_cancellable(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    metrics_env: Option<&BTreeMap<String, String>>,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<u16, BotBackendError> {
+    super::stack::ensure_stack_running_cancellable(host, layout, metrics_env, cancel).await
+}
+
 async fn prepare_bot_launch_env(host: &dyn Host) -> Result<Option<String>, BotBackendError> {
     // 1. libgcc_s.so.1 LD_PRELOAD 修复(非特权)
     let script = r#"libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
@@ -289,6 +298,31 @@ pub(crate) async fn bot_cold_start_with_login(
     login: Option<&super::login_helper::PreparedLogin>,
     verified_running_pid: Option<u32>,
 ) -> Result<u32, BotBackendError> {
+    bot_cold_start_cancellable(
+        host,
+        layout,
+        qq_id,
+        uin,
+        login,
+        verified_running_pid,
+        None,
+        None,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn bot_cold_start_cancellable(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    qq_id: &str,
+    uin: &str,
+    login: Option<&super::login_helper::PreparedLogin>,
+    verified_running_pid: Option<u32>,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+    on_spawned: Option<&(dyn Fn(u32, Option<String>) + Send + Sync)>,
+) -> Result<u32, BotBackendError> {
+    super::startup_cancel::check(cancel)?;
     let paths = &layout.paths;
     if let Some(pid) = verified_running_pid {
         return Ok(pid);
@@ -317,6 +351,7 @@ fi
         prev_max = prev_max,
     );
     run_remote_bash(host, &rotate).await?;
+    super::startup_cancel::check(cancel)?;
 
     let install_base = HostPath::from_posix(layout.qq_install_base.clone());
     let qq = QQComponent::default_v3_2_25(install_base);
@@ -342,13 +377,16 @@ fi
         .map_err(|e| BotBackendError::InvalidConfig(e.to_string()))?;
 
     let ld_preload = prepare_bot_launch_env(host).await?;
+    super::startup_cancel::check(cancel)?;
 
     // Also try to grant cap_sys_ptrace to the remote node binary (best-effort).
     // This complements lowering ptrace_scope and is recommended in our own error messages.
     try_grant_node_ptrace_cap(host).await;
+    super::startup_cancel::check(cancel)?;
 
     // 共享 daemon 就绪不代表保存的 bus 还活着；仅新 QQ 读取修复后的环境。
     ensure_dbus_env(host, paths).await?;
+    super::startup_cancel::check(cancel)?;
 
     let rt = shell_single_quote(&paths.runtime_dir);
     let log_dir = shell_single_quote(&paths.log_dir);
@@ -387,6 +425,10 @@ fi
     if login.is_some() {
         script = format!("NCD_QR_ACCESSIBILITY=1\n{script}");
     }
+    super::startup_cancel::check(cancel)?;
+    if let Some(record) = on_spawned {
+        record(0, None);
+    }
     let out = run_remote_bash(host, &script).await?;
     let pid: u32 = out
         .lines()
@@ -396,7 +438,16 @@ fi
         .parse()
         .map_err(|_| BotBackendError::Io(format!("bot start 未返回 pid: {out}")))?;
 
+    if let Some(record) = on_spawned {
+        record(pid, None);
+    }
+    let birth = super::login_helper::process_start_time(host, pid).await?;
+    if let Some(record) = on_spawned {
+        record(pid, Some(birth));
+    }
+    super::startup_cancel::check(cancel)?;
     write_status_bot_json(host, paths, qq_id, uin, pid, true).await?;
+    super::startup_cancel::check(cancel)?;
     Ok(pid)
 }
 
