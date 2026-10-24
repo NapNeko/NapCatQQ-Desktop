@@ -29,17 +29,20 @@ interface InfoBarStackProps {
 }
 
 /// enter 工厂按 tone 分:danger/warning 进场更急(fast 替代 base) + 落位 shake;
-/// success/info 走标准 release。生成函数返回 EnterFn 闭包。
+/// success/info 走标准 release。
+///
+/// 整条不做 opacity 淡入:消息条是浮在页面上的不透明卡片,淡入期间页面文字会透出来
+/// (尤其压住右上角工具栏时),看起来像卡片坏了。进场只用位移 + 轻微缩放。
 function makeEnter(tone: InfoBarStackItem['tone']): EnterFn {
     return (el, env) => {
         const urgent = tone === 'danger' || tone === 'warning';
         const tl = gsap.timeline();
         tl.fromTo(
             el,
-            { autoAlpha: 0, x: 16, scale: 0.985 },
+            { opacity: 1, y: -10, scale: 0.985 },
             {
-                autoAlpha: 1,
-                x: 0,
+                opacity: 1,
+                y: 0,
                 scale: 1,
                 duration: urgent ? env.duration('fast') : env.duration('base'),
                 ease: env.ease.release,
@@ -58,7 +61,7 @@ function makeEnter(tone: InfoBarStackItem['tone']): EnterFn {
 const exit: ExitFn = (el, env) =>
     gsap.to(el, {
         autoAlpha: 0,
-        x: 12,
+        y: -6,
         duration: env.duration('fast'),
         ease: env.ease.exit,
     });
@@ -122,32 +125,35 @@ export function InfoBarStack({
     const node = (
         <div
             className={cn(
-                'pointer-events-auto fixed right-6 top-[calc(var(--titlebar-height)+1rem)] z-50 flex max-h-[calc(100dvh-var(--titlebar-height)-2rem)] w-[min(360px,calc(100vw-3rem))] flex-col gap-2.5 overflow-y-auto overscroll-contain',
+                'pointer-events-none fixed right-6 top-[calc(var(--titlebar-height)+1rem)] z-50 w-[min(360px,calc(100vw-3rem))]',
                 className,
             )}
         >
-            {displayed.map((item) => {
-                // visible 是退场动画的内部状态，不是 InfoBar 的 prop，别透传到 div 上
-                const { onUserDismiss: _omit, visible: _visible, ...barProps } = item;
-                return (
-                    <GsapPresence
-                        key={item.id}
-                        visible={item.visible}
-                        onEnter={makeEnter(item.tone)}
-                        onExit={exit}
-                        onExited={() => {
-                            setDisplayed((prev) => prev.filter((p) => p.id !== item.id));
-                        }}
-                    >
-                        <InfoBarRow
-                            {...barProps}
-                            onDismiss={() => onDismiss(item.id)}
-                            onAutoDismiss={() => (onAutoDismiss ?? onDismiss)(item.id)}
-                        />
-                    </GsapPresence>
-                );
-            })}
-            {children}
+            {/* 抖动、缩放和阴影需要缓冲区；横向禁止滚动，消息过多时只纵向滚动。 */}
+            <div className="pointer-events-auto -m-4 flex max-h-[calc(100dvh-var(--titlebar-height))] flex-col gap-2.5 overflow-x-hidden overflow-y-auto overscroll-contain p-4">
+                {displayed.map((item) => {
+                    // visible 是退场动画的内部状态，不是 InfoBar 的 prop，别透传到 div 上
+                    const { onUserDismiss: _omit, visible: _visible, ...barProps } = item;
+                    return (
+                        <GsapPresence
+                            key={item.id}
+                            visible={item.visible}
+                            onEnter={makeEnter(item.tone)}
+                            onExit={exit}
+                            onExited={() => {
+                                setDisplayed((prev) => prev.filter((p) => p.id !== item.id));
+                            }}
+                        >
+                            <InfoBarRow
+                                {...barProps}
+                                onDismiss={() => onDismiss(item.id)}
+                                onAutoDismiss={() => (onAutoDismiss ?? onDismiss)(item.id)}
+                            />
+                        </GsapPresence>
+                    );
+                })}
+                {children}
+            </div>
         </div>
     );
 
