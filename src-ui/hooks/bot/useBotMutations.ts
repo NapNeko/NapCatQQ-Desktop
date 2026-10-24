@@ -6,6 +6,7 @@ import { botService } from '../../core/services/bot.service';
 import type { BatchResultResponse, BotActorSnapshot } from '../../core/ipc/types';
 import { botSnapshotsKey } from './useBotSnapshots';
 import { updateBotSnapshots } from './botSnapshotCache';
+import { botLifecycleMutationKey } from './botLifecycleMutationKey';
 
 export type ActionMessage = { type: 'success' | 'error'; text: string };
 
@@ -42,66 +43,57 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
     const refetch = () => queryClient.invalidateQueries({ queryKey: botSnapshotsKey });
 
     const startMutation = useMutation({
+        mutationKey: [...botLifecycleMutationKey, 'start'],
         mutationFn: botService.start,
+        onSettled: refetch,
         onSuccess: (snap) => {
             applySnapshotUpdate(queryClient, snap);
             onMessage?.({ type: 'success', text: `已发送启动指令给 Bot: ${snap.bot_id}` });
         },
-        onError: (err: any) => {
-            const text = err.message || String(err);
-            if (
-                text.includes('SNOWLUMA_CONSENT_REQUIRED') ||
-                text.includes('DESKTOP_CONSENT_REQUIRED') ||
-                text.includes('"consentRequired":true')
-            ) {
-                return;
-            }
-            // 启动失败会把 actor 标成 crashed 并写入 last_error，列表页 snapshot
-            // 告警已经弹一条。这里再 push 会叠「操作失败」。
-            refetch();
-        },
     });
 
     const stopMutation = useMutation({
+        mutationKey: [...botLifecycleMutationKey, 'stop'],
         mutationFn: botService.stop,
+        onSettled: refetch,
         onSuccess: (snap) => {
             applySnapshotUpdate(queryClient, snap);
             onMessage?.({ type: 'success', text: `已发送停止指令给 Bot: ${snap.bot_id}` });
         },
         onError: (err: any) => {
-            refetch();
             onMessage?.({ type: 'error', text: `停止失败: ${err.message || err}` });
         },
     });
 
     const batchStartMutation = useMutation({
+        mutationKey: [...botLifecycleMutationKey, 'batchStart'],
         mutationFn: botService.batchStart,
+        onSettled: refetch,
         onSuccess: (res) => {
-            refetch();
             onMessage?.(describeBatch('批量启动', res));
         },
         onError: (err: any) => {
-            refetch();
             onMessage?.({ type: 'error', text: `批量启动失败: ${err.message || err}` });
         },
     });
 
     const batchStopMutation = useMutation({
+        mutationKey: [...botLifecycleMutationKey, 'batchStop'],
         mutationFn: botService.batchStop,
+        onSettled: refetch,
         onSuccess: (res) => {
-            refetch();
             onMessage?.(describeBatch('批量停止', res));
         },
         onError: (err: any) => {
-            refetch();
             onMessage?.({ type: 'error', text: `批量停止失败: ${err.message || err}` });
         },
     });
 
     const batchDeleteMutation = useMutation({
+        mutationKey: [...botLifecycleMutationKey, 'batchDelete'],
         mutationFn: botService.batchDelete,
+        onSettled: refetch,
         onSuccess: (res) => {
-            refetch();
             const sCount = res.succeeded.length;
             const fCount = res.failed.length;
             if (fCount > 0) console.error('[bots] 批量删除失败项', res.failed);

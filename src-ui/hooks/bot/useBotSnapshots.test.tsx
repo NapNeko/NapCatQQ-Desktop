@@ -6,14 +6,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BotActorSnapshot, DomainEvent } from '../../core/ipc/types';
 import { botSnapshotsKey, useBotSnapshots } from './useBotSnapshots';
 import { useBotMutations } from './useBotMutations';
+import { botLifecycleMutationKey } from './botLifecycleMutationKey';
 
 const mocks = vi.hoisted(() => ({
     list: vi.fn(),
     stop: vi.fn(),
+    start: vi.fn(),
+    refreshStatuses: vi.fn(),
+    reconcileRuntimes: vi.fn(),
     handler: undefined as ((event: DomainEvent) => void) | undefined,
 }));
 vi.mock('../../core/services/bot.service', () => ({
-    botService: { listSnapshots: mocks.list, stop: mocks.stop },
+    botService: {
+        listSnapshots: mocks.list,
+        stop: mocks.stop,
+        start: mocks.start,
+        refreshStatuses: mocks.refreshStatuses,
+        reconcileRuntimes: mocks.reconcileRuntimes,
+    },
 }));
 vi.mock('../../core/services/domain-event-hub', () => ({
     subscribeDomainEvents: (handler: (event: DomainEvent) => void) => {
@@ -107,5 +117,101 @@ describe('Bot card snapshot recovery', () => {
             expect(invalidated).toHaveBeenCalledWith({ queryKey: botSnapshotsKey }),
         );
         expect(message).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    });
+
+    it('polls only local snapshots every second while start is pending, including stopped preflight', async () => {
+        vi.useFakeTimers();
+        let observed = snapshot('stopped', 1);
+        mocks.list.mockImplementation(async () => [observed]);
+        let finish!: (value: BotActorSnapshot) => void;
+        mocks.start.mockReturnValue(
+            new Promise<BotActorSnapshot>((resolve) => {
+                finish = resolve;
+            }),
+        );
+        const { client, wrapper } = fixture();
+        const hook = renderHook(
+            () => ({ snapshots: useBotSnapshots(), mutations: useBotMutations() }),
+            { wrapper },
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(31_005);
+        });
+        const before = mocks.list.mock.calls.length;
+        let pending!: Promise<BotActorSnapshot>;
+        await act(async () => {
+            pending = hook.result.current.mutations.startBotAsync('one');
+            await vi.advanceTimersByTimeAsync(5);
+        });
+        expect(client.isMutating({ mutationKey: botLifecycleMutationKey })).toBe(1);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1100);
+        });
+        expect(mocks.list.mock.calls.length).toBeGreaterThan(before);
+        expect(hook.result.current.snapshots.data?.[0].state).toBe('stopped');
+        observed = snapshot('starting', 2);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1100);
+        });
+        expect(hook.result.current.snapshots.data?.[0].state).toBe('starting');
+        expect(mocks.refreshStatuses).not.toHaveBeenCalled();
+        expect(mocks.reconcileRuntimes).not.toHaveBeenCalled();
+        observed = snapshot('running', 3);
+        await act(async () => {
+            finish(observed);
+            await pending;
+            await vi.advanceTimersByTimeAsync(5);
+        });
+        expect(client.isMutating({ mutationKey: botLifecycleMutationKey })).toBe(0);
+        expect(hook.result.current.snapshots.data?.[0].state).toBe('running');
+        const settled = mocks.list.mock.calls.length;
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1100);
+        });
+        expect(mocks.list).toHaveBeenCalledTimes(settled);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(14_000);
+        });
+        expect(mocks.list.mock.calls.length).toBeGreaterThan(settled);
+    });
+
+    it('settled consent rejection still reads the real local snapshot without an optimistic state', async () => {
+        vi.useFakeTimers();
+        let observed = snapshot('stopped', 1);
+        mocks.list.mockImplementation(async () => [observed]);
+        let fail!: (reason: Error) => void;
+        mocks.start.mockReturnValue(
+            new Promise<BotActorSnapshot>((_, reject) => {
+                fail = reject;
+            }),
+        );
+        const { client, wrapper } = fixture();
+        const hook = renderHook(
+            () => ({
+                snapshots: useBotSnapshots({ disablePolling: true }),
+                mutations: useBotMutations(),
+            }),
+            { wrapper },
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5);
+        });
+        let pending!: Promise<unknown>;
+        await act(async () => {
+            pending = hook.result.current.mutations.startBotAsync('one').catch((error) => error);
+            await vi.advanceTimersByTimeAsync(5);
+        });
+        expect(hook.result.current.snapshots.data?.[0].state).toBe('stopped');
+        const before = mocks.list.mock.calls.length;
+        observed = snapshot('stopped', 3);
+        await act(async () => {
+            fail(new Error('SNOWLUMA_CONSENT_REQUIRED'));
+            await pending;
+            await vi.advanceTimersByTimeAsync(5);
+        });
+        expect(mocks.list.mock.calls.length).toBeGreaterThan(before);
+        expect(client.getQueryData(botSnapshotsKey)).toEqual([observed]);
+        expect(client.isMutating({ mutationKey: botLifecycleMutationKey })).toBe(0);
+        expect(mocks.refreshStatuses).not.toHaveBeenCalled();
     });
 });

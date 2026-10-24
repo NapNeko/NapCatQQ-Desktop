@@ -1,13 +1,14 @@
 // 实时同步 Bot snapshot 列表的 hook。
 // useQuery + bot_state_changed 事件合并 → 单一 source of truth。
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { botService } from '../../core/services/bot.service';
 import { useDomainEvents } from '../events/useDomainEvents';
 import { perfMark } from '../../core/domain/performance/perfMarks';
 import type { BotActorSnapshot } from '../../core/ipc/types';
 import { mergeBotSnapshotList, updateBotSnapshots } from './botSnapshotCache';
+import { botLifecycleMutationKey } from './botLifecycleMutationKey';
 
 const BOT_SNAPSHOTS_KEY = ['botSnapshots'] as const;
 
@@ -15,6 +16,7 @@ export function useBotSnapshots(options?: { disablePolling?: boolean }) {
     const queryClient = useQueryClient();
     const mountedAt = useRef(Date.now());
     const firstDataMarked = useRef(false);
+    const pendingLifecycleActions = useIsMutating({ mutationKey: botLifecycleMutationKey });
 
     const query = useQuery<BotActorSnapshot[], Error>({
         queryKey: BOT_SNAPSHOTS_KEY,
@@ -29,7 +31,8 @@ export function useBotSnapshots(options?: { disablePolling?: boolean }) {
         refetchInterval: (query) =>
             options?.disablePolling
                 ? false
-                : query.state.data?.some((snapshot) =>
+                : pendingLifecycleActions > 0 ||
+                    query.state.data?.some((snapshot) =>
                         ['starting', 'stopping', 'repairing'].includes(snapshot.state),
                     )
                   ? 1000
