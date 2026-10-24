@@ -7,6 +7,7 @@ import { botService } from '../../core/services/bot.service';
 import { useDomainEvents } from '../events/useDomainEvents';
 import { perfMark } from '../../core/domain/performance/perfMarks';
 import type { BotActorSnapshot } from '../../core/ipc/types';
+import { mergeBotSnapshotList, updateBotSnapshots } from './botSnapshotCache';
 
 const BOT_SNAPSHOTS_KEY = ['botSnapshots'] as const;
 
@@ -17,14 +18,24 @@ export function useBotSnapshots(options?: { disablePolling?: boolean }) {
 
     const query = useQuery<BotActorSnapshot[], Error>({
         queryKey: BOT_SNAPSHOTS_KEY,
-        queryFn: botService.listSnapshots,
-        // bootstrap 在 setup 里异步 reconcile；首屏 list 常早于 Running，短时轮询对齐卡片
-        refetchInterval: () =>
+        queryFn: async () => {
+            const snapshots = await botService.listSnapshots();
+            return mergeBotSnapshotList(
+                queryClient.getQueryData<BotActorSnapshot[]>(BOT_SNAPSHOTS_KEY),
+                snapshots,
+            );
+        },
+        // 补读的是本地 Actor 快照；事件丢失后也能恢复卡片，不重复探测 SSH。
+        refetchInterval: (query) =>
             options?.disablePolling
                 ? false
-                : Date.now() - mountedAt.current < 30_000
-                  ? 2_500
-                  : false,
+                : query.state.data?.some((snapshot) =>
+                        ['starting', 'stopping', 'repairing'].includes(snapshot.state),
+                    )
+                  ? 1000
+                  : Date.now() - mountedAt.current < 30_000
+                    ? 2500
+                    : 15_000,
     });
 
     useEffect(() => {
@@ -36,17 +47,9 @@ export function useBotSnapshots(options?: { disablePolling?: boolean }) {
 
     useDomainEvents((event) => {
         if (event.kind !== 'bot_state_changed') return;
-        queryClient.setQueryData<BotActorSnapshot[]>(BOT_SNAPSHOTS_KEY, (old) => {
-            const snap = event.snapshot;
-            if (!old?.length) {
-                return [snap];
-            }
-            const idx = old.findIndex((s) => s.bot_id === snap.bot_id);
-            if (idx < 0) {
-                return [...old, snap];
-            }
-            return old.map((s) => (s.bot_id === snap.bot_id ? snap : s));
-        });
+        queryClient.setQueryData<BotActorSnapshot[]>(BOT_SNAPSHOTS_KEY, (old) =>
+            updateBotSnapshots(old, event.snapshot),
+        );
     });
 
     return query;

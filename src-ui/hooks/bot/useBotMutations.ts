@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { botService } from '../../core/services/bot.service';
 import type { BatchResultResponse, BotActorSnapshot } from '../../core/ipc/types';
 import { botSnapshotsKey } from './useBotSnapshots';
+import { updateBotSnapshots } from './botSnapshotCache';
 
 export type ActionMessage = { type: 'success' | 'error'; text: string };
 
@@ -17,7 +18,7 @@ function applySnapshotUpdate(
     updated: BotActorSnapshot,
 ) {
     queryClient.setQueryData<BotActorSnapshot[]>(botSnapshotsKey, (old) =>
-        old ? old.map((s) => (s.bot_id === updated.bot_id ? updated : s)) : old,
+        updateBotSnapshots(old, updated),
     );
 }
 
@@ -68,6 +69,7 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
             onMessage?.({ type: 'success', text: `已发送停止指令给 Bot: ${snap.bot_id}` });
         },
         onError: (err: any) => {
+            refetch();
             onMessage?.({ type: 'error', text: `停止失败: ${err.message || err}` });
         },
     });
@@ -79,6 +81,7 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
             onMessage?.(describeBatch('批量启动', res));
         },
         onError: (err: any) => {
+            refetch();
             onMessage?.({ type: 'error', text: `批量启动失败: ${err.message || err}` });
         },
     });
@@ -90,6 +93,7 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
             onMessage?.(describeBatch('批量停止', res));
         },
         onError: (err: any) => {
+            refetch();
             onMessage?.({ type: 'error', text: `批量停止失败: ${err.message || err}` });
         },
     });
