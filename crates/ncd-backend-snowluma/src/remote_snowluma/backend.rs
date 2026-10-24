@@ -48,6 +48,15 @@ struct PendingSpawn {
     host: Arc<dyn Host>,
 }
 
+#[derive(Clone)]
+struct CompletedStart {
+    status: BotStatus,
+    host: Arc<dyn Host>,
+    tracked: TrackedQq,
+    mode: SnowLumaStartMode,
+    client: Arc<dyn SnowLumaWebUiClient>,
+}
+
 struct ReusablePoller {
     tracked: TrackedQq,
     client: Arc<dyn SnowLumaWebUiClient>,
@@ -198,6 +207,7 @@ pub struct RemoteSnowLumaBackend {
     login_pids: Mutex<HashMap<BotId, TrackedQq>>,
     hot_detached: Mutex<HashSet<BotId>>,
     pending_spawns: std::sync::Mutex<HashMap<BotId, PendingSpawn>>,
+    completed_starts: Mutex<HashMap<BotId, CompletedStart>>,
     qr_activity: Mutex<HashMap<BotId, Arc<QrActivity>>>,
 }
 
@@ -252,6 +262,7 @@ impl RemoteSnowLumaBackend {
             login_pids: Mutex::new(HashMap::new()),
             hot_detached: Mutex::new(HashSet::new()),
             pending_spawns: std::sync::Mutex::new(HashMap::new()),
+            completed_starts: Mutex::new(HashMap::new()),
             qr_activity: Mutex::new(HashMap::new()),
         }
     }
@@ -1279,6 +1290,7 @@ impl BotBackend for RemoteSnowLumaBackend {
         super::startup_cancel::check(Some(&cancel))?;
         let original_host = self.daemon.current_host().await;
         let submitted = std::sync::Mutex::new(None::<PendingSpawn>);
+        let completed = std::sync::Mutex::new(None::<CompletedStart>);
         let previous_client = self
             .login_clients
             .lock()
@@ -1497,7 +1509,7 @@ impl BotBackend for RemoteSnowLumaBackend {
 
             let poller_deps = PollerDeps {
                 event_bus: Arc::clone(&self.event_bus),
-                http,
+                http: Arc::clone(&http),
                 proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
                     pid,
                 )),
@@ -1514,7 +1526,15 @@ impl BotBackend for RemoteSnowLumaBackend {
                     bot_id: bot_id.clone(),
                 });
 
-            Ok(BotStatus::running(bot_id.clone(), pid, 0))
+            let status = BotStatus::running(bot_id.clone(), pid, 0);
+            *completed.lock().unwrap_or_else(|error| error.into_inner()) = Some(CompletedStart {
+                status: status.clone(),
+                host: Arc::clone(&original_host),
+                tracked: TrackedQq { pid, start_time: birth },
+                mode: start_mode,
+                client: http,
+            });
+            Ok(status)
         }
         .await;
         started
@@ -1573,6 +1593,9 @@ impl BotBackend for RemoteSnowLumaBackend {
             }
           } else {
             self.pending_spawns.lock().unwrap_or_else(|error| error.into_inner()).remove(&ctx.config.bot_id);
+            let proof = completed.lock().unwrap_or_else(|error| error.into_inner()).clone()
+                .ok_or_else(|| BotBackendError::Io("启动成功但缺少原进程归属记录".into()))?;
+            self.completed_starts.lock().await.insert(ctx.config.bot_id.clone(), proof);
           }
           Ok(())
         }).await?;
@@ -1607,6 +1630,109 @@ impl BotBackend for RemoteSnowLumaBackend {
                 .await;
         }
         result
+    }
+
+    async fn cleanup_unacknowledged_start(
+        &self,
+        started: &BotStatus,
+    ) -> Result<(), BotBackendError> {
+        let proof = self
+            .completed_starts
+            .lock()
+            .await
+            .get(&started.bot_id)
+            .cloned()
+            .filter(|proof| proof.status == *started && started.pid == Some(proof.tracked.pid))
+            .ok_or_else(|| {
+                BotBackendError::Io("未确认启动的原进程归属已不可用，已拒绝清理其它会话".into())
+            })?;
+        let qq_id = started
+            .bot_id
+            .as_str()
+            .parse::<u64>()
+            .map_err(|_| BotBackendError::InvalidConfig("QQ 账号无效".into()))?;
+        let cleaned = self
+            .daemon
+            .on_current_host(&proof.host, async {
+                let same_process =
+                    self.login_pids.lock().await.get(&started.bot_id) == Some(&proof.tracked);
+                let same_mode =
+                    self.start_modes.lock().await.get(&started.bot_id) == Some(&proof.mode);
+                let same_client = self
+                    .login_clients
+                    .lock()
+                    .await
+                    .get(&started.bot_id)
+                    .is_some_and(|client| Arc::ptr_eq(client, &proof.client));
+                if !same_process || !same_mode || !same_client {
+                    return Err(BotBackendError::Io(
+                        "未确认启动的会话已被替换，已拒绝清理当前会话".into(),
+                    ));
+                }
+                if proof.mode.is_cold() {
+                    qq_process::stop(
+                        proof.host.as_ref(),
+                        &self.daemon.layout().qq_bin,
+                        qq_id,
+                        proof.tracked.pid,
+                        &proof.tracked.start_time,
+                    )
+                    .await?;
+                } else {
+                    let unloaded = proof
+                        .client
+                        .unload_process(proof.tracked.pid)
+                        .await
+                        .map_err(|error| {
+                            BotBackendError::Io(format!("未确认启动的 QQ 尚未确认卸载：{error}"))
+                        })?;
+                    if unloaded.pid != proof.tracked.pid
+                        || unloaded.injected == Some(true)
+                        || !matches!(
+                            unloaded.status,
+                            crate::snowluma::webui_client::HookProcessStatus::Available
+                                | crate::snowluma::webui_client::HookProcessStatus::Disconnected
+                        )
+                    {
+                        return Err(BotBackendError::Io(
+                            "未确认启动的目标 QQ 尚未确认卸载".into(),
+                        ));
+                    }
+                }
+                self.dispose_poller(&started.bot_id).await;
+                if proof.mode.is_cold() {
+                    self.login_pids.lock().await.remove(&started.bot_id);
+                    self.start_modes.lock().await.remove(&started.bot_id);
+                    self.hot_detached.lock().await.remove(&started.bot_id);
+                } else {
+                    self.hot_detached
+                        .lock()
+                        .await
+                        .insert(started.bot_id.clone());
+                }
+                self.completed_starts.lock().await.remove(&started.bot_id);
+                Ok(())
+            })
+            .await?;
+        if cleaned.is_some() {
+            self.daemon
+                .abandon_start_on_host(&proof.host, &started.bot_id)
+                .await;
+            return Ok(());
+        }
+        if !proof.mode.is_cold() {
+            return Err(BotBackendError::Io(
+                "原热启动连接已更换，无法安全确认卸载，已保留当前会话".into(),
+            ));
+        }
+        qq_process::stop(
+            proof.host.as_ref(),
+            &self.daemon.layout().qq_bin,
+            qq_id,
+            proof.tracked.pid,
+            &proof.tracked.start_time,
+        )
+        .await
     }
 
     async fn stop(&self, bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
