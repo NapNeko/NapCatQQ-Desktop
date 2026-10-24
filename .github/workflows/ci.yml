@@ -116,7 +116,8 @@ jobs:
               - 'src-tauri/tauri.conf.json'
               - 'src-tauri/capabilities/**'
               - 'src-tauri/resources/**'
-              - 'crates/ncd-backend-snowluma/resources/login-helper/**'
+              - 'crates/ncd-backend-snowluma/resources/**'
+              - 'crates/ncd-component/resources/**'
               - 'scripts/build-snowluma-login-helper.mjs'
               - '.github/workflows/ci.yml'
 
@@ -168,7 +169,7 @@ jobs:
       - name: Validate external SnowLuma login helper assets
         run: pnpm run build:sl-login-helper
 
-      - name: External SnowLuma login helper tests
+      - name: Remote QQ and SnowLuma helper tests
         run: pnpm run test:sl-login-helper
 
   rust-core:
