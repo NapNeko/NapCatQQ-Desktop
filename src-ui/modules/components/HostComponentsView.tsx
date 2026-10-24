@@ -1,5 +1,4 @@
-// 单台主机组件：协议端 / 应用端 / 运行时依赖 / 桌面端。Docker 行算运行时依赖；
-// 应用端行是合成行（按实例安装，数据来自 useAppFrameworks / useAppInstances）。
+// 单台主机的组件分组与 Docker 部署区。
 
 import React from 'react';
 import { PackageX, WifiOff, Wrench } from 'lucide-react';
@@ -7,10 +6,8 @@ import { Button } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
-import { DockerRow } from './DockerRow';
+import { DockerDeploymentSection } from './DockerDeploymentSection';
 import { AppFrameworkRow, runtimeDepsFor } from './AppFrameworkRow';
-import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
-import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { isHostConnectivityFailureReason } from '../../core/domain/components/types';
 import { componentDisplayName } from '../../core/domain/task-queue/labels';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
@@ -26,7 +23,6 @@ import type {
     DeployedContainer,
     DockerFlavor,
     DockerStatus,
-    Os,
     StepKind,
 } from '../../core/ipc/types';
 
@@ -52,6 +48,8 @@ interface HostComponentsViewProps {
     lifecycleBlockedReason?: string | null;
     // Docker 数据 + 动作（来自 useDockerHosts）
     dockerStatus: DockerStatus | undefined;
+    dockerProbeError?: unknown;
+    dockerSectionRef?: React.Ref<HTMLElement>;
     isDockerProbing: boolean;
     isInstallingDocker: boolean;
     dockerInstallHint?: string;
@@ -70,6 +68,7 @@ interface HostComponentsViewProps {
     onPullImageError?: (hostId: string, flavor: DockerFlavor, error: unknown) => void;
     // 这台主机各 flavor 官方镜像是否已拉取（不创建 napcat/snowluma 演示容器）。
     imageReadyByFlavor: Partial<Record<DockerFlavor, boolean | undefined>>;
+    imageErrorByFlavor?: Partial<Record<DockerFlavor, unknown>>;
     // 容器列表（Docker 管理页等；框架按钮不再据此判定）。
     containers: ContainerInfo[];
 }
@@ -88,6 +87,8 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     onShowReleaseNotes,
     lifecycleBlockedReason = null,
     dockerStatus,
+    dockerProbeError,
+    dockerSectionRef,
     isDockerProbing,
     isInstallingDocker,
     dockerInstallHint,
@@ -100,6 +101,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     onPullImage,
     onPullImageError,
     imageReadyByFlavor,
+    imageErrorByFlavor,
     containers: _containers,
 }) => {
     const { host } = machine;
@@ -109,12 +111,8 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
     const allComponents = [...machine.framework, ...machine.runtimeDep, ...machine.selfApp];
 
-    // Docker 只用于远端 Linux：本机（Windows）不显示 Docker 行，也不在框架行
-    // 给「Docker 部署」按钮。
-    const dockerApplicable = host.locality === 'remote';
-
-    const dockerReady =
-        dockerApplicable && dockerStatus ? dockerStatusSummary(dockerStatus).ready : false;
+    // 本机和远端 Windows 不提供 Linux 容器部署。
+    const dockerApplicable = host.locality === 'remote' && host.os === 'linux';
 
     if (empty) {
         return (
@@ -174,27 +172,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
         );
     }
 
-    // 框架行的尾随「Docker 部署」按钮：仅 docker 就绪 + 该行是 NapCat/SnowLuma 时给。
-    const deployButtonFor = (row: MachineComponentRow): React.ReactNode => {
-        if (!dockerReady) return null;
-        const flavor = frameworkFlavor(row.info.id);
-        if (!flavor) return null;
-        // 本地已有官方镜像则禁用重复拉取。
-        const alreadyDeployed = imageReadyByFlavor[flavor] === true;
-        const pulling = isPullingImage(host.host_id, flavor);
-        return (
-            <FrameworkDockerDeployButton
-                flavor={flavor}
-                hostId={host.host_id}
-                hostLabel={host.display_name}
-                isDeploying={pulling}
-                alreadyDeployed={alreadyDeployed}
-                onPullImage={onPullImage}
-                onPullError={(error) => onPullImageError?.(host.host_id, flavor, error)}
-            />
-        );
-    };
-
     const runtimeTrailingFor = (row: MachineComponentRow): React.ReactNode => {
         if (row.info.id !== 'qq' || host.os !== 'linux') return null;
         if (row.status.state !== 'installed') return null;
@@ -238,10 +215,37 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                         onAction={onAction}
                         onRetryDetect={onRetryDetect}
                         onShowReleaseNotes={onShowReleaseNotes}
-                        trailingFor={isDemo ? undefined : deployButtonFor}
                     />
                 </div>
             ) : null}
+
+            {showDocker && (
+                <DockerDeploymentSection
+                    key={host.host_id}
+                    hostId={host.host_id}
+                    hostLabel={host.display_name}
+                    os={host.os}
+                    status={dockerStatus}
+                    probeError={dockerProbeError}
+                    isProbing={isDockerProbing}
+                    isInstalling={isInstallingDocker}
+                    installHint={dockerInstallHint}
+                    installProgress={dockerInstallProgress}
+                    flavors={machine.framework.flatMap((row) => {
+                        const flavor = frameworkFlavor(row.info.id);
+                        return flavor ? [flavor] : [];
+                    })}
+                    imageReadyByFlavor={imageReadyByFlavor}
+                    imageErrorByFlavor={imageErrorByFlavor}
+                    isPullingImage={isPullingImage}
+                    onPullImage={onPullImage}
+                    onPullImageError={onPullImageError}
+                    onInstall={() => onInstallDocker(host.host_id)}
+                    onRetry={() => onRetryDetect(host.host_id)}
+                    onOpenDownload={onOpenDockerDownload}
+                    sectionRef={dockerSectionRef}
+                />
+            )}
 
             <AppFrameworkGroup
                 manifests={appFrameworks}
@@ -256,8 +260,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 <RuntimeDepGroup
                     rows={machine.runtimeDep}
                     hostId={host.host_id}
-                    os={host.os}
-                    showDocker={showDocker}
                     disableActions={isDemo}
                     lifecycleBlockedReason={lifecycleBlockedReason}
                     latestVersionFor={latestVersionFor}
@@ -266,13 +268,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     onAction={onAction}
                     onRetryDetect={onRetryDetect}
                     onShowReleaseNotes={onShowReleaseNotes}
-                    dockerStatus={dockerStatus}
-                    isDockerProbing={isDockerProbing}
-                    isInstallingDocker={isInstallingDocker}
-                    dockerInstallHint={dockerInstallHint}
-                    dockerInstallProgress={dockerInstallProgress}
-                    onInstallDocker={() => onInstallDocker(host.host_id)}
-                    onOpenDockerDownload={onOpenDockerDownload}
                     trailingFor={isDemo ? undefined : runtimeTrailingFor}
                 />
             </div>
@@ -438,12 +433,10 @@ const Group: React.FC<{
     );
 };
 
-/// 运行时依赖组：常规组件行 + 一行 Docker（合成行，状态/动作走 docker hook）。
+/// 运行时依赖按当前主机的组件清单显示。
 const RuntimeDepGroup: React.FC<{
     rows: MachineComponentRow[];
     hostId: string;
-    os: Os;
-    showDocker: boolean;
     disableActions?: boolean;
     lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
@@ -456,19 +449,10 @@ const RuntimeDepGroup: React.FC<{
     ) => void;
     onRetryDetect: (hostId: string) => void;
     onShowReleaseNotes: (componentId: ComponentId) => void;
-    dockerStatus: DockerStatus | undefined;
-    isDockerProbing: boolean;
-    isInstallingDocker: boolean;
-    dockerInstallHint?: string;
-    dockerInstallProgress?: ActionProgressView | null;
-    onInstallDocker: () => void;
-    onOpenDockerDownload: () => void;
     trailingFor?: (row: MachineComponentRow) => React.ReactNode;
 }> = ({
     rows,
     hostId,
-    os,
-    showDocker,
     disableActions = false,
     lifecycleBlockedReason = null,
     latestVersionFor,
@@ -477,16 +461,9 @@ const RuntimeDepGroup: React.FC<{
     onAction,
     onRetryDetect,
     onShowReleaseNotes,
-    dockerStatus,
-    isDockerProbing,
-    isInstallingDocker,
-    dockerInstallHint,
-    dockerInstallProgress,
-    onInstallDocker,
-    onOpenDockerDownload,
     trailingFor,
 }) => {
-    const count = rows.length + (showDocker ? 1 : 0);
+    const count = rows.length;
     if (count === 0) return null;
     return (
         <ComponentSection title="运行时依赖" count={count}>
@@ -512,20 +489,6 @@ const RuntimeDepGroup: React.FC<{
                         />
                     </div>
                 ))}
-                {showDocker ? (
-                    <div data-tour-id="comp-row-docker" className="min-w-0">
-                        <DockerRow
-                            os={os}
-                            status={dockerStatus}
-                            isProbing={isDockerProbing}
-                            isInstalling={isInstallingDocker}
-                            installHint={dockerInstallHint}
-                            installProgress={dockerInstallProgress}
-                            onInstall={onInstallDocker}
-                            onOpenDownload={onOpenDockerDownload}
-                        />
-                    </div>
-                ) : null}
             </div>
         </ComponentSection>
     );

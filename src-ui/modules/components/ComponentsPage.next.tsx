@@ -3,7 +3,14 @@
 // useQqDependencyProbes（QQ 依赖探测）、useComponentActions（组件操作）、
 // useDockerSudoOps（Docker 安装 + sudo 弹框）、useAppInstanceDialogs（应用端实例对话框）。
 
-import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    useSyncExternalStore,
+} from 'react';
 import { Box, Loader2, Monitor, RefreshCw, Server } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../shared/ui';
@@ -12,6 +19,11 @@ import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
 import { useComponentPageAlerts } from '../../hooks/components/useComponentPageAlerts';
+import {
+    consumeDockerDeployment,
+    getPendingDockerDeployment,
+    usePendingDockerDeployment,
+} from '../../hooks/components/componentsNavigation';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useQqDependencyOps } from '../../hooks/components/useQqDependencyOps';
@@ -20,7 +32,10 @@ import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
 import { useAppFrameworks, useAppInstances } from '../../hooks/apps/useAppInstances';
 import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
+import { useMotion } from '../../hooks/preferences/useMotion';
+import { dockerSetupAction } from '../../core/domain/docker/setup';
 import { useServerManager } from '../../hooks/remote/useServerManager';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
@@ -69,7 +84,10 @@ export const ComponentsPageNext: React.FC = () => {
     const apps = useAppInstances();
     // 设置里关了应用端就不列应用端组
     const appsEnabled = useFeatureEnabled('apps');
-    const { servers } = useServerManager();
+    const { servers, isLoading: isServersLoading } = useServerManager();
+    const dockerDeploymentRequest = usePendingDockerDeployment();
+    const dockerSectionRef = useRef<HTMLElement>(null);
+    const motion = useMotion();
 
     // 组件主导矩阵 → 主机主导，再剔掉这台机器一个组件都装不了的空机器。
     const allRows = useMemo<ComponentRow[]>(
@@ -86,6 +104,57 @@ export const ComponentsPageNext: React.FC = () => {
         hosts,
         hostBridge,
     );
+
+    useEffect(() => {
+        const request = dockerDeploymentRequest;
+        if (!request || isLoading || isServersLoading || hostBridge.hostSelectionLocked) return;
+        const unavailable = (content: string) => {
+            pushInfoBar({
+                key: `docker-deployment-navigation:${request.requestId}`,
+                tone: 'warning',
+                title: '无法打开 Docker 部署',
+                content,
+            });
+            consumeDockerDeployment(request.requestId);
+        };
+        const target = machines.find((machine) => machine.host.host_id === request.hostId);
+        if (!target) {
+            unavailable('目标主机已移除或组件清单不可用，请刷新后重新选择远程主机。');
+            return;
+        }
+        if (target.host.locality !== 'remote' || target.host.os !== 'linux') {
+            unavailable('Docker 部署需要远程 Linux 主机，请重新选择主机。');
+            return;
+        }
+        if (activeHostId !== request.hostId) {
+            setActiveHostId(request.hostId);
+            return;
+        }
+        const frame = requestAnimationFrame(() => {
+            if (getPendingDockerDeployment()?.requestId !== request.requestId) return;
+            const section = dockerSectionRef.current;
+            if (!section) {
+                unavailable('该主机的 Docker 部署区暂不可用，请刷新组件清单后重试。');
+                return;
+            }
+            section.scrollIntoView({
+                behavior: motion.enabled ? 'smooth' : 'auto',
+                block: 'start',
+            });
+            section.focus({ preventScroll: true });
+            consumeDockerDeployment(request.requestId);
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [
+        dockerDeploymentRequest,
+        isLoading,
+        isServersLoading,
+        machines,
+        activeHostId,
+        setActiveHostId,
+        motion.enabled,
+        hostBridge.hostSelectionLocked,
+    ]);
 
     const { probeQqDependencies, reportByHost } = useQqDependencyProbes(
         machines,
@@ -162,15 +231,17 @@ export const ComponentsPageNext: React.FC = () => {
     });
 
     const refetchApps = apps.refetch;
+    const refetchDocker = dockerHosts.refetch;
     const handleRefresh = useCallback(() => {
         refetch();
+        refetchDocker();
         void refetchApps();
         // 远端版本必须 force，否则 1h 磁盘缓存会挡住中转/GitHub 重拉
         refetchReleases();
         if (activeMachine) {
             void probeQqDependencies(activeMachine.host.host_id, true);
         }
-    }, [refetch, refetchApps, refetchReleases, activeMachine, probeQqDependencies]);
+    }, [refetch, refetchDocker, refetchApps, refetchReleases, activeMachine, probeQqDependencies]);
 
     const handleRetryDetect = useCallback(
         (hostId: string) => {
@@ -270,6 +341,7 @@ export const ComponentsPageNext: React.FC = () => {
                 ) : activeMachine ? (
                     <HostComponentsView
                         machine={activeMachine}
+                        dockerSectionRef={dockerSectionRef}
                         appFrameworks={appsEnabled ? (appFrameworks.data ?? []) : []}
                         appInstances={apps.instances}
                         onCreateAppInstance={dialogs.handleCreateAppInstance}
@@ -285,6 +357,7 @@ export const ComponentsPageNext: React.FC = () => {
                         )}
                         qqDependencyReport={activeQqDependencyReport}
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
+                        dockerProbeError={dockerHosts.errorByHost[activeMachine.host.host_id]}
                         isDockerProbing={
                             dockerHosts.probingByHost[activeMachine.host.host_id] ?? false
                         }
@@ -307,6 +380,9 @@ export const ComponentsPageNext: React.FC = () => {
                         onPullImageError={handleDockerDeployError}
                         imageReadyByFlavor={
                             dockerHosts.imageReadyByHost[activeMachine.host.host_id] ?? {}
+                        }
+                        imageErrorByFlavor={
+                            dockerHosts.imageErrorByHost[activeMachine.host.host_id] ?? {}
                         }
                         containers={dockerHosts.containersByHost[activeMachine.host.host_id] ?? []}
                     />
@@ -359,7 +435,8 @@ export const ComponentsPageNext: React.FC = () => {
                     actionLabel={
                         sudoPrompt.purpose === 'qq_action'
                             ? qqSudoActionLabel(sudoPrompt.kind)
-                            : '安装 Docker'
+                            : (dockerSetupAction(dockerHosts.statusByHost[sudoPrompt.hostId])
+                                  ?.label ?? '准备 Docker')
                     }
                     isSubmitting={
                         sudoPrompt.purpose === 'docker'

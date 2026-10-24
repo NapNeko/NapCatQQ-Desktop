@@ -1,5 +1,6 @@
 // 删除前明确资源与副作用，失败时保留对话框。
 import { useRef, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -48,7 +49,12 @@ export function ResourceRemoveDialog({
         <Dialog open onOpenChange={(open) => !open && !busy && !submitting.current && onClose()}>
             <DialogContent size="md">
                 <DialogHeader>
-                    <DialogTitle>删除{label}</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">
+                        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-danger-soft text-danger">
+                            <Trash2 size={15} strokeWidth={2.2} aria-hidden />
+                        </span>
+                        删除{label}
+                    </DialogTitle>
                     <DialogDescription>
                         {target.kind === 'container'
                             ? '容器可写层中的数据将丢失，挂载的数据卷和宿主机目录保留。'
@@ -57,9 +63,10 @@ export function ResourceRemoveDialog({
                               : '正在被容器使用的网络不能删除。'}
                     </DialogDescription>
                 </DialogHeader>
-                <p className="break-all rounded-md bg-inset/40 p-3 font-mono text-sm text-text">
-                    {target.name}
-                </p>
+                <div className="rounded-md border border-border-subtle/60 bg-inset/25 px-3 py-2.5">
+                    <p className="text-2xs uppercase tracking-wide text-text-tertiary">{label}</p>
+                    <p className="mt-1 break-all font-mono text-sm text-text">{target.name}</p>
+                </div>
                 {target.kind === 'container' && (
                     <Checkbox
                         id="docker-container-force"
@@ -82,8 +89,11 @@ export function ResourceRemoveDialog({
                     </label>
                 )}
                 {error && (
-                    <p role="alert" className="break-all text-sm text-danger">
-                        {error}
+                    <p
+                        role="alert"
+                        className="break-all rounded-md border border-danger/30 bg-danger-soft/40 px-3 py-2 text-xs text-text-secondary"
+                    >
+                        <span className="font-medium text-danger">删除失败</span> · {error}
                     </p>
                 )}
                 <DialogFooter>

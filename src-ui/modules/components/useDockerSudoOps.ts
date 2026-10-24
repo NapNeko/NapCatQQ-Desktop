@@ -100,8 +100,8 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
             } catch (err) {
                 pushErrorBar({
                     key: `docker-install:${hostId}`,
-                    title: `Docker 安装失败 · ${hostNameOf(hostId)}`,
-                    raw: errorText(err, 'Docker 安装失败，请手动安装后重试'),
+                    title: `准备 Docker 失败 · ${hostNameOf(hostId)}`,
+                    raw: errorText(err, '无法准备 Docker 环境，请检查主机连接后重试'),
                 });
             }
         },

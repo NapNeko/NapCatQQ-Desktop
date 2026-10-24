@@ -44,6 +44,8 @@ interface BotConfigPageNextProps {
     tourDemoMode?: boolean;
     /** 引导强制切到的 Tab */
     tourForceTab?: TabValue | null;
+    /** 其它入口的新建预填；编辑已有实例与演示引导均忽略。 */
+    initialConfig?: BotConfig | null;
 }
 
 type TabValue = 'identity' | 'connections' | 'advanced' | 'docker';
@@ -54,18 +56,27 @@ export function BotConfigPageNext({
     onSavedStay,
     tourDemoMode = false,
     tourForceTab = null,
+    initialConfig = null,
 }: BotConfigPageNextProps) {
     const isEditMode = botId !== null;
     const formHydratedForBotRef = useRef<string | null>(null);
 
     const [activeTab, setActiveTab] = useState<TabValue>('identity');
-    const [formData, setFormData] = useState<BotConfig>(createDefaultBotConfig());
+    const [formData, setFormData] = useState<BotConfig>(() =>
+        !isEditMode && !tourDemoMode && initialConfig
+            ? structuredClone(initialConfig)
+            : createDefaultBotConfig(),
+    );
     const dockerGateMap = useMemo(() => ({ __form__: formData }), [formData]);
     const { saveBlock: dockerSaveBlock } = useBotDockerStartGate(dockerGateMap);
 
     const runtimeGateMap = useMemo(() => ({ __form__: formData }), [formData]);
     const { saveBlock: runtimeSaveBlock } = useBotRuntimeStartGate(runtimeGateMap);
-    const [pristine, setPristine] = useState<BotConfig>(createDefaultBotConfig());
+    const [pristine, setPristine] = useState<BotConfig>(() =>
+        !isEditMode && !tourDemoMode && initialConfig
+            ? structuredClone(initialConfig)
+            : createDefaultBotConfig(),
+    );
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     const {
@@ -163,7 +174,10 @@ export function BotConfigPageNext({
     useEffect(() => {
         if (!isEditMode) {
             formHydratedForBotRef.current = null;
-            const fresh = createDefaultBotConfig();
+            const fresh =
+                !tourDemoMode && initialConfig
+                    ? structuredClone(initialConfig)
+                    : createDefaultBotConfig();
             if (tourDemoMode) {
                 fresh.bot = {
                     ...fresh.bot,
@@ -195,7 +209,7 @@ export function BotConfigPageNext({
         setFormData(normalized);
         setPristine(normalized);
         formHydratedForBotRef.current = botId;
-    }, [loadedConfig, isEditMode, botId, tourDemoMode]);
+    }, [loadedConfig, isEditMode, botId, tourDemoMode, initialConfig]);
 
     const updateBot = (patch: Partial<BotConfig['bot']>) => {
         setFormData((prev) => ({ ...prev, bot: { ...prev.bot, ...patch } }));

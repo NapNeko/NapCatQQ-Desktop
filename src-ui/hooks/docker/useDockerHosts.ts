@@ -32,10 +32,12 @@ const DOCKER_DESKTOP_URL = 'https://www.docker.com/products/docker-desktop/';
 export interface UseDockerHostsResult {
     /// host_id → 该主机的 docker 探测结果（还没回来时 undefined）。
     statusByHost: Record<string, DockerStatus | undefined>;
+    errorByHost: Record<string, unknown>;
     /// host_id → 是否正在探测。
     probingByHost: Record<string, boolean>;
     /// host_id → 该主机 NapCat/SnowLuma 官方镜像是否已在本地（组件页「已拉取」判定）。
     imageReadyByHost: Record<string, Partial<Record<DockerFlavor, boolean | undefined>>>;
+    imageErrorByHost: Record<string, Partial<Record<DockerFlavor, unknown>>>;
     /// host_id → 容器列表（Docker 管理页等）。
     containersByHost: Record<string, ContainerInfo[]>;
     refetch: () => void;
@@ -71,6 +73,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
             queryKey: ['docker', 'status', hostId],
             queryFn: () => dockerService.probe(hostId),
             staleTime: 30 * 1000,
+            retry: false,
         })),
     });
 
@@ -82,10 +85,18 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         return out;
     }, [hostIds, queries]);
 
+    const errorByHost = useMemo<Record<string, unknown>>(() => {
+        const out: Record<string, unknown> = {};
+        hostIds.forEach((id, i) => {
+            out[id] = queries[i]?.error ?? null;
+        });
+        return out;
+    }, [hostIds, queries]);
+
     const probingByHost = useMemo<Record<string, boolean>>(() => {
         const out: Record<string, boolean> = {};
         hostIds.forEach((id, i) => {
-            out[id] = queries[i]?.isLoading ?? false;
+            out[id] = queries[i]?.isFetching ?? false;
         });
         return out;
     }, [hostIds, queries]);
@@ -94,7 +105,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         queries: hostIds.map((hostId) => ({
             queryKey: ['docker', 'imageReady', hostId, 'napcat'],
             queryFn: () => dockerService.imageReadyForFlavor(hostId, 'napcat'),
-            enabled: statusByHost[hostId]?.daemonRunning ?? false,
+            retry: false,
+            enabled: !errorByHost[hostId] && (statusByHost[hostId]?.daemonRunning ?? false),
             staleTime: 30 * 1000,
         })),
     });
@@ -103,7 +115,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         queries: hostIds.map((hostId) => ({
             queryKey: ['docker', 'imageReady', hostId, 'snowluma'],
             queryFn: () => dockerService.imageReadyForFlavor(hostId, 'snowluma'),
-            enabled: statusByHost[hostId]?.daemonRunning ?? false,
+            retry: false,
+            enabled: !errorByHost[hostId] && (statusByHost[hostId]?.daemonRunning ?? false),
             staleTime: 30 * 1000,
         })),
     });
@@ -121,12 +134,23 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         return out;
     }, [hostIds, imageReadyNapcatQueries, imageReadySnowlumaQueries]);
 
+    const imageErrorByHost = useMemo<Record<string, Partial<Record<DockerFlavor, unknown>>>>(() => {
+        const out: Record<string, Partial<Record<DockerFlavor, unknown>>> = {};
+        hostIds.forEach((id, i) => {
+            out[id] = {
+                napcat: imageReadyNapcatQueries[i]?.error ?? null,
+                snowluma: imageReadySnowlumaQueries[i]?.error ?? null,
+            };
+        });
+        return out;
+    }, [hostIds, imageReadyNapcatQueries, imageReadySnowlumaQueries]);
+
     // 容器列表：Docker 管理页等仍需要；框架「拉镜像」不再依赖容器是否存在。
     const containerQueries = useQueries({
         queries: hostIds.map((hostId) => ({
             queryKey: ['docker', 'containers', hostId],
             queryFn: () => dockerService.listContainers(hostId),
-            enabled: statusByHost[hostId]?.daemonRunning ?? false,
+            enabled: !errorByHost[hostId] && (statusByHost[hostId]?.daemonRunning ?? false),
             staleTime: 30 * 1000,
         })),
     });
@@ -139,11 +163,16 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         return out;
     }, [hostIds, containerQueries]);
 
-    const invalidate = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ['docker'] });
-        queryClient.invalidateQueries({ queryKey: ['docker', 'containers'] });
-        queryClient.invalidateQueries({ queryKey: ['docker', 'imageReady'] });
-    }, [queryClient]);
+    const invalidate = useCallback(
+        (hostId?: string) => {
+            void queryClient.invalidateQueries({
+                predicate: (query) =>
+                    query.queryKey[0] === 'docker' &&
+                    (hostId === undefined || query.queryKey[2] === hostId),
+            });
+        },
+        [queryClient],
+    );
 
     const installMutation = useMutation({
         mutationFn: (args: { hostId: string; taskId: string; options?: DockerInstallOptions }) =>
@@ -152,7 +181,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
             if (report.probedStatus) {
                 queryClient.setQueryData(['docker', 'status', args.hostId], report.probedStatus);
             }
-            invalidate();
+            invalidate(args.hostId);
         },
     });
 
@@ -180,10 +209,11 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
             const taskId = crypto.randomUUID();
             dockerInstallProgressStore.started(taskId, hostId);
             dockerActionStore.markInstalling(hostId, taskId);
+            let timer: ReturnType<typeof setTimeout> | undefined;
             try {
                 const work = installMutation.mutateAsync({ hostId, taskId, options });
                 const timeout = new Promise<never>((_, reject) => {
-                    window.setTimeout(
+                    timer = setTimeout(
                         () =>
                             reject(
                                 new Error(
@@ -198,6 +228,8 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
                 // 超时或网络异常：后端未发送终态事件，需手动清理
                 dockerActionStore.clearInstalling(hostId);
                 throw err;
+            } finally {
+                if (timer !== undefined) clearTimeout(timer);
             }
         },
         [installMutation],
@@ -214,7 +246,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         }) => dockerService.pullFrameworkImage(args.hostId, args.flavor, args.taskId, args.mirror),
         onSuccess: (_result, args) => {
             queryClient.setQueryData(['docker', 'imageReady', args.hostId, args.flavor], true);
-            invalidate();
+            invalidate(args.hostId);
         },
     });
 
@@ -252,8 +284,10 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
 
     return {
         statusByHost,
+        errorByHost,
         probingByHost,
         imageReadyByHost,
+        imageErrorByHost,
         containersByHost,
         refetch: invalidate,
         install,
