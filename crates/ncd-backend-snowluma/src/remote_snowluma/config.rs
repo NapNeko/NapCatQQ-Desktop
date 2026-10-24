@@ -410,8 +410,9 @@ pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
 mod tests {
     use super::*;
 
-    #[path = "config_preflight_tests.rs"]
-    mod preflight_tests;
+    mod preflight_tests {
+        include!("tests/config_preflight_tests.rs");
+    }
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::Mutex;

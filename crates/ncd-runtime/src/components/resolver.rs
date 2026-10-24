@@ -193,8 +193,9 @@ async fn probe_host_packages(group: HostPackageGroup, host: &dyn Host) -> Requir
 mod tests {
     use super::*;
 
-    #[path = "resolver_concurrency_tests.rs"]
-    mod concurrency_tests;
+    mod concurrency_tests {
+        include!("tests/resolver_concurrency_tests.rs");
+    }
 
     use std::collections::HashMap;
     use std::path::Path;
