@@ -33,8 +33,29 @@ mv -f -- "$temporary" "$target"
 /// NapCat Linux 注入后的 package.json main(与 [NapCatComponent] install 一致)
 pub const QQ_MAIN_NAPCAT_INJECT: &str = "./loadNapCat.js";
 
-/// QQ 官方默认 main(SnowLuma 冷启 / NapCat 卸载后)
+/// 旧版 QQ 原生入口；请求此值时按实际安装布局恢复。
 pub const QQ_MAIN_NATIVE: &str = "./app_launcher/index.js";
+pub const QQ_MAIN_NATIVE_ASAR: &str = "./application.asar/app_launcher/index.js";
+
+const RESOLVE_NATIVE_QQ_ENTRY: &str = r#"if [ -f "$1/application.asar" ]; then
+    printf '%s' './application.asar/app_launcher/index.js'
+elif [ -f "$1/app_launcher/index.js" ]; then
+    printf '%s' './app_launcher/index.js'
+else
+    exit 1
+fi
+"#;
+
+fn normalized_entry(entry: &str) -> &str {
+    entry.strip_prefix("./").unwrap_or(entry)
+}
+
+fn is_native_entry(entry: &str) -> bool {
+    matches!(
+        normalized_entry(entry),
+        "app_launcher/index.js" | "application.asar/app_launcher/index.js"
+    )
+}
 
 pub fn qq_package_json_path(install_base: &HostPath) -> HostPath {
     HostPath::from_posix(ncd_domain::qq_package_json(install_base.as_posix()))
@@ -74,17 +95,44 @@ pub async fn set_remote_qq_package_main(
     let Some(obj) = json.as_object_mut() else {
         return Err("package.json 根节点不是 object".into());
     };
-    let normalized = |entry: &str| entry.strip_prefix("./").unwrap_or(entry).to_owned();
+    let wants_native = is_native_entry(main_entry);
     if obj
         .get("main")
         .and_then(|value| value.as_str())
-        .is_some_and(|entry| normalized(entry) == normalized(main_entry))
+        .is_some_and(|entry| {
+            normalized_entry(entry) == normalized_entry(main_entry)
+                || (wants_native && is_native_entry(entry))
+        })
     {
         return Ok(());
     }
+    let main_entry = if wants_native {
+        // asar 是文件，不能用 archive 内部的虚拟入口路径做文件系统探测。
+        let app_dir = ncd_domain::qq_app_dir(install_base.as_posix());
+        let output = host
+            .run_to_string(
+                HostCommand::new("sh")
+                    .args([
+                        "-c",
+                        RESOLVE_NATIVE_QQ_ENTRY,
+                        "ncd-qq-native-entry",
+                        app_dir.as_str(),
+                    ])
+                    .timeout(Duration::from_secs(10)),
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        let entry = output.stdout.trim();
+        if !output.success() || !is_native_entry(entry) {
+            return Err("未找到 QQ 原生入口文件，已保留 package.json，请检查 QQ 安装。".into());
+        }
+        entry.to_owned()
+    } else {
+        main_entry.to_owned()
+    };
     obj.insert(
         "main".to_string(),
-        serde_json::Value::String(main_entry.to_string()),
+        serde_json::Value::String(main_entry.clone()),
     );
     let new_bytes =
         serde_json::to_vec_pretty(&json).map_err(|e| format!("序列化 package.json: {e}"))?;
@@ -124,7 +172,7 @@ pub async fn set_remote_qq_package_main(
         .map_err(|error| error.to_string())?;
     let written: serde_json::Value = serde_json::from_slice(&written)
         .map_err(|_| "切换 QQ 入口后回读不是有效 JSON".to_string())?;
-    if written.get("main").and_then(|value| value.as_str()) != Some(main_entry) {
+    if written.get("main").and_then(|value| value.as_str()) != Some(main_entry.as_str()) {
         return Err("切换 QQ 入口后回读不一致，已取消启动".into());
     }
     Ok(())

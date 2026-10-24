@@ -15,6 +15,7 @@ struct EntryHost {
     writes: AtomicUsize,
     commands: Mutex<Vec<HostCommand>>,
     reject_sudo: bool,
+    native_entry: Option<&'static str>,
 }
 
 impl EntryHost {
@@ -30,6 +31,7 @@ impl EntryHost {
             writes: AtomicUsize::new(0),
             commands: Mutex::new(Vec::new()),
             reject_sudo: false,
+            native_entry: Some(QQ_MAIN_NATIVE),
         }
     }
 }
@@ -62,8 +64,20 @@ impl Host for EntryHost {
         Ok(())
     }
     async fn run_to_string(&self, command: HostCommand) -> Result<CommandOutput, HostError> {
-        assert!(command.elevated);
         assert_eq!(command.program, "sh");
+        if !command.elevated {
+            assert_eq!(command.args[0], "-c");
+            assert_eq!(command.args[1], RESOLVE_NATIVE_QQ_ENTRY);
+            assert_eq!(command.args[2], "ncd-qq-native-entry");
+            assert!(command.args[3].ends_with("/opt/QQ/resources/app"));
+            assert!(command.stdin.is_none());
+            self.commands.lock().unwrap().push(command);
+            return Ok(CommandOutput {
+                exit_code: Some(if self.native_entry.is_some() { 0 } else { 1 }),
+                stdout: self.native_entry.unwrap_or_default().to_string(),
+                stderr: String::new(),
+            });
+        }
         let input = command.stdin.as_ref().unwrap();
         let package = self.package.lock().unwrap().clone();
         assert_eq!(
@@ -124,7 +138,12 @@ impl Host for EntryHost {
 
 #[tokio::test]
 async fn already_native_system_package_only_reads_even_without_write_permission() {
-    for main in [QQ_MAIN_NATIVE, "app_launcher/index.js"] {
+    for main in [
+        QQ_MAIN_NATIVE,
+        "app_launcher/index.js",
+        QQ_MAIN_NATIVE_ASAR,
+        "application.asar/app_launcher/index.js",
+    ] {
         let mut host = EntryHost::new(main);
         host.reject_sudo = true;
         set_remote_qq_package_main(&host, &HostPath::from_posix("/"), QQ_MAIN_NATIVE)
@@ -133,6 +152,9 @@ async fn already_native_system_package_only_reads_even_without_write_permission(
         assert_eq!(host.reads.load(Ordering::SeqCst), 1);
         assert_eq!(host.writes.load(Ordering::SeqCst), 0);
         assert!(host.commands.lock().unwrap().is_empty());
+        let package: serde_json::Value =
+            serde_json::from_slice(&host.package.lock().unwrap()).unwrap();
+        assert_eq!(package["main"], main);
     }
 }
 
@@ -142,7 +164,7 @@ async fn system_transition_uses_authorized_elevation_and_preserves_other_fields(
     set_remote_qq_package_main(&host, &HostPath::from_posix("/"), QQ_MAIN_NATIVE)
         .await
         .unwrap();
-    assert_eq!(host.commands.lock().unwrap().len(), 1);
+    assert_eq!(host.commands.lock().unwrap().len(), 2);
     assert_eq!(host.writes.load(Ordering::SeqCst), 0);
     let package: serde_json::Value = serde_json::from_slice(&host.package.lock().unwrap()).unwrap();
     assert_eq!(package["main"], QQ_MAIN_NATIVE);
@@ -161,7 +183,7 @@ async fn rootless_transition_stays_unprivileged_and_sudo_failure_is_not_success(
     .await
     .unwrap();
     assert_eq!(host.writes.load(Ordering::SeqCst), 1);
-    assert!(host.commands.lock().unwrap().is_empty());
+    assert_eq!(host.commands.lock().unwrap().len(), 1);
     let mut denied = EntryHost::new(QQ_MAIN_NAPCAT_INJECT);
     denied.reject_sudo = true;
     assert!(
@@ -172,6 +194,56 @@ async fn rootless_transition_stays_unprivileged_and_sudo_failure_is_not_success(
     let package: serde_json::Value =
         serde_json::from_slice(&denied.package.lock().unwrap()).unwrap();
     assert_eq!(package["main"], QQ_MAIN_NAPCAT_INJECT);
+}
+
+#[tokio::test]
+async fn native_transition_uses_detected_asar_and_refuses_unknown_layout() {
+    let mut asar = EntryHost::new(QQ_MAIN_NAPCAT_INJECT);
+    asar.native_entry = Some(QQ_MAIN_NATIVE_ASAR);
+    set_remote_qq_package_main(&asar, &HostPath::from_posix("/"), QQ_MAIN_NATIVE)
+        .await
+        .unwrap();
+    let package: serde_json::Value = serde_json::from_slice(&asar.package.lock().unwrap()).unwrap();
+    assert_eq!(package["main"], QQ_MAIN_NATIVE_ASAR);
+    let mut missing = EntryHost::new(QQ_MAIN_NAPCAT_INJECT);
+    missing.native_entry = None;
+    assert!(
+        set_remote_qq_package_main(&missing, &HostPath::from_posix("/"), QQ_MAIN_NATIVE)
+            .await
+            .is_err()
+    );
+    assert_eq!(missing.commands.lock().unwrap().len(), 1);
+    assert_eq!(missing.writes.load(Ordering::SeqCst), 0);
+    let package: serde_json::Value =
+        serde_json::from_slice(&missing.package.lock().unwrap()).unwrap();
+    assert_eq!(package["main"], QQ_MAIN_NAPCAT_INJECT);
+}
+
+#[cfg(unix)]
+#[test]
+fn native_layout_probe_prefers_regular_asar_and_rejects_virtual_paths() {
+    use std::process::Command;
+
+    let directory = tempfile::tempdir().unwrap();
+    let launcher = directory.path().join("app_launcher");
+    std::fs::create_dir(&launcher).unwrap();
+    let probe = || {
+        Command::new("sh")
+            .args(["-c", RESOLVE_NATIVE_QQ_ENTRY, "ncd-qq-native-entry"])
+            .arg(directory.path())
+            .output()
+            .unwrap()
+    };
+    assert!(!probe().status.success());
+    std::fs::write(launcher.join("index.js"), b"legacy-wrapper").unwrap();
+    assert_eq!(probe().stdout, QQ_MAIN_NATIVE.as_bytes());
+    let archive = directory.path().join("application.asar");
+    std::fs::write(&archive, b"archive-file-fixture").unwrap();
+    assert_eq!(probe().stdout, QQ_MAIN_NATIVE_ASAR.as_bytes());
+    std::fs::remove_file(&archive).unwrap();
+    std::fs::create_dir_all(archive.join("app_launcher")).unwrap();
+    std::fs::write(archive.join("app_launcher/index.js"), b"not-an-archive").unwrap();
+    assert_eq!(probe().stdout, QQ_MAIN_NATIVE.as_bytes());
 }
 
 #[cfg(unix)]
