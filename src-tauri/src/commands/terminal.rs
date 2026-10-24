@@ -288,6 +288,32 @@ pub async fn read_clipboard_text() -> Result<String, String> {
         .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn write_clipboard_text(
+    window: tauri::WebviewWindow,
+    text: String,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let owner = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        tokio::task::spawn_blocking(move || {
+            crate::screenshot::clipboard::copy_message(
+                windows::Win32::Foundation::HWND(owner as *mut _),
+                &text,
+                &[],
+                None,
+            )
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (window, text);
+        Err("文本复制需要 Windows 客户端".into())
+    }
+}
+
 /// 命令测试拼 AppState 用：不开终端
 #[cfg(test)]
 pub(crate) fn test_terminals() -> Arc<ncd_runtime::terminal::TerminalManager> {
