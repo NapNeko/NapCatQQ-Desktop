@@ -92,13 +92,13 @@ afterEach(() => {
 });
 
 describe('SnowLuma 登录探测快照恢复', () => {
-    it('页面晚于探测失败订阅时仍显示 WebUI 不可用', async () => {
+    it('页面晚于探测失败订阅时仍显示登录状态未确认', async () => {
         snapshotMock.mockResolvedValue(snapshot(true));
         unsubscribe = snowlumaStore.subscribe(() => {});
         await flushHydrate();
 
         expect(snowlumaStore.getSnapshot().byBot[BOT].probeUnavailable).toBe(true);
-        expect(sessionLabel()).toBe('WebUI 不可用');
+        expect(sessionLabel()).toBe('登录状态未确认');
     });
 
     it('重连接管的 hydrate 不把探测失败盖回探测登录', async () => {
@@ -113,7 +113,7 @@ describe('SnowLuma 登录探测快照恢复', () => {
         await flushHydrate();
 
         expect(snapshotMock).toHaveBeenCalledTimes(2);
-        expect(sessionLabel()).toBe('WebUI 不可用');
+        expect(sessionLabel()).toBe('登录状态未确认');
     });
 
     it('登录探测恢复后的快照清除失败标记', async () => {
