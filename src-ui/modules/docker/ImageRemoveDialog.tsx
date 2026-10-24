@@ -2,6 +2,7 @@
 // 关闭时先播退场动画，onExited 后再 onDismiss，避免镜像名先消失导致布局跳动。
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -79,7 +80,12 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
         <Dialog open={open} onOpenChange={(o) => !o && requestClose()}>
             <DialogContent size="md" onExited={handleExited}>
                 <DialogHeader>
-                    <DialogTitle>删除镜像</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">
+                        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-danger-soft text-danger">
+                            <Trash2 size={15} strokeWidth={2.2} aria-hidden />
+                        </span>
+                        删除镜像
+                    </DialogTitle>
                     <DialogDescription>
                         从当前主机移除该镜像。仍被容器引用时普通删除会失败。
                     </DialogDescription>

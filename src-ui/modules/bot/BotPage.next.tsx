@@ -5,7 +5,7 @@
 //
 // botTourBridge：入门引导可强制打开演示新建（不落盘）。
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '../../shared/ui';
 import { PageTransition } from '../../shared/ui/motion';
 import { RouteErrorBoundary } from '../../shared/ui/RouteErrorBoundary';
@@ -14,6 +14,20 @@ import {
     setBotTourBridge,
     subscribeBotTourBridge,
 } from '../../hooks/desktop/botTourBridge';
+import { requestDesktopConsent } from '../../hooks/desktop/desktopConsentHost';
+import {
+    consumePendingBotCreateRequest,
+    createDockerBotConfig,
+    dockerBotRuntimeTarget,
+    getPendingBotCreateRequest,
+    usePendingBotCreateRequest,
+} from '../../hooks/bot/botCreateNavigation';
+import { useServerManager } from '../../hooks/remote/useServerManager';
+import { featureTogglesStore } from '../../hooks/preferences/featureTogglesStore';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+import { errorText } from '../../core/domain/errors';
+import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPageNext } from './log/BotLogPage.next';
@@ -27,6 +41,13 @@ const VIEW_ORDER: ReadonlyArray<View> = ['list', 'config', 'log', 'metrics'];
 export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => void } = {}) {
     const [view, setView] = useState<View>('list');
     const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
+    const [initialConfig, setInitialConfig] = useState<BotConfig | null>(null);
+    const pendingCreate = usePendingBotCreateRequest();
+    const { servers, isLoading: serversLoading } = useServerManager();
+    const latestServers = useRef(servers);
+    latestServers.current = servers;
+    const handledCreate = useRef<number | null>(null);
+    const mounted = useRef(false);
 
     const [displayedView, setDisplayedView] = useState<View>('list');
     const [subVisible, setSubVisible] = useState(true);
@@ -38,10 +59,57 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
         getBotTourBridge,
     );
 
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!pendingCreate || serversLoading || botTour.demoMode) return;
+        if (handledCreate.current === pendingCreate.requestId) return;
+        handledCreate.current = pendingCreate.requestId;
+
+        const rejectUnavailable = (): boolean => {
+            const serverId = dockerBotRuntimeTarget(pendingCreate.hostId);
+            const framework = pendingCreate.flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
+            const reason = !serverId
+                ? 'Docker Bot 只能部署到具体的远程主机。'
+                : !latestServers.current.some((server) => server.id === serverId)
+                  ? '目标远程主机已不存在，请重新选择主机。'
+                  : !featureTogglesStore.getSnapshot()[pendingCreate.flavor]
+                    ? `请先在设置中启用 ${framework}。`
+                    : null;
+            if (!reason) return false;
+            if (consumePendingBotCreateRequest(pendingCreate.requestId)) {
+                pushInfoBar({ tone: 'warning', title: '无法新建 Docker Bot', content: reason });
+            }
+            return true;
+        };
+        if (rejectUnavailable()) return;
+
+        void requestDesktopConsent(() => {
+            if (!mounted.current) return;
+            if (getPendingBotCreateRequest()?.requestId !== pendingCreate.requestId) return;
+            if (getBotTourBridge().demoMode || rejectUnavailable()) return;
+            const config = createDockerBotConfig(pendingCreate);
+            if (!consumePendingBotCreateRequest(pendingCreate.requestId)) return;
+            setInitialConfig(config);
+            setSelectedBotId(null);
+            setView('config');
+        }).catch((error: unknown) => {
+            if (!mounted.current) return;
+            if (!consumePendingBotCreateRequest(pendingCreate.requestId)) return;
+            pushErrorBar({ title: '无法新建 Docker Bot', raw: errorText(error) });
+        });
+    }, [pendingCreate, serversLoading, botTour.demoMode]);
+
     // 入门引导：打开演示新建 / 回列表。
     // 同步切 displayedView，跳过 PageTransition 空窗，否则遮罩量不到配置页锚点。
     useEffect(() => {
         if (botTour.openCreate) {
+            setInitialConfig(null);
             setSelectedBotId(null);
             setView('config');
             setDisplayedView('config');
@@ -52,6 +120,7 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
 
     useEffect(() => {
         if (botTour.requestList) {
+            setInitialConfig(null);
             setView('list');
             setDisplayedView('list');
             setSubVisible(true);
@@ -77,11 +146,14 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
         setDisplayedView(view);
         if (view === 'list') {
             setSelectedBotId(null);
+            setInitialConfig(null);
         }
         setSubVisible(true);
     };
 
     const goList = () => {
+        const pending = getPendingBotCreateRequest();
+        if (pending) consumePendingBotCreateRequest(pending.requestId);
         setView('list');
     };
 
@@ -96,6 +168,7 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
                 <BotViewContent
                     view={displayedView}
                     selectedBotId={selectedBotId}
+                    initialConfig={initialConfig}
                     demoMode={
                         botTour.demoMode &&
                         (view === 'config' || displayedView === 'config') &&
@@ -103,6 +176,9 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
                     }
                     forceTab={botTour.forceTab}
                     onConfigureBot={(botId) => {
+                        const pending = getPendingBotCreateRequest();
+                        if (pending) consumePendingBotCreateRequest(pending.requestId);
+                        setInitialConfig(null);
                         setSelectedBotId(botId);
                         setView('config');
                     }}
@@ -115,7 +191,10 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
                         setView('metrics');
                     }}
                     onBack={goList}
-                    onSavedStay={(savedBotId) => setSelectedBotId(savedBotId)}
+                    onSavedStay={(savedBotId) => {
+                        setSelectedBotId(savedBotId);
+                        setInitialConfig(null);
+                    }}
                     onNavigate={onNavigate}
                 />
             </PageTransition>
@@ -126,6 +205,7 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
 function BotViewContent({
     view,
     selectedBotId,
+    initialConfig,
     demoMode,
     forceTab,
     onConfigureBot,
@@ -137,6 +217,7 @@ function BotViewContent({
 }: {
     view: View;
     selectedBotId: string | null;
+    initialConfig: BotConfig | null;
     demoMode: boolean;
     forceTab: 'identity' | 'connections' | 'advanced' | null;
     onConfigureBot: (botId: string | null) => void;
@@ -166,6 +247,7 @@ function BotViewContent({
                     onSavedStay={onSavedStay}
                     tourDemoMode={demoMode}
                     tourForceTab={forceTab}
+                    initialConfig={initialConfig}
                 />
             );
         case 'log':

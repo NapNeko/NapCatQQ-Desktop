@@ -2,6 +2,8 @@
 
 Docker 页按远端主机提供容器、镜像、网络、数据卷四个视图。管理操作只要求 daemon 可用；Compose 插件仅用于部署。缺少 Compose 时仍可以查看和操作资源。
 
+顶部「Docker 部署」携带当前主机跳到组件页的独立部署区。部署区负责安装或启动引擎、补全 Compose、准备框架镜像；「新建 Bot」预填主机、框架和 Docker 运行方式，容器在启动 Bot 时创建。返回 Docker 管理保留原主机。
+
 - 容器：搜索、状态筛选、启动、停止、重启、暂停、恢复、日志与详情。详情展示退出码、OOM、健康状态、重启策略、网络、端口和挂载；运行中按需读取 CPU、内存和 I/O。
 - 镜像：搜索、删除；没有 tag 的镜像按 ID 删除，避免误用仓库默认标签。
 - 网络与卷：搜索、查看名称/驱动/作用域、删除。内置网络隐藏删除入口。卷删除必须输入完整名称，由 Docker 拒绝仍被引用的资源。
@@ -25,4 +27,4 @@ Docker 页按远端主机提供容器、镜像、网络、数据卷四个视图�
 
 CLI 格式依据 [Docker inspect](https://docs.docker.com/reference/cli/docker/container/inspect/)、[stats](https://docs.docker.com/reference/cli/docker/container/stats/)、[network ls](https://docs.docker.com/reference/cli/docker/network/ls/) 和 [volume ls](https://docs.docker.com/reference/cli/docker/volume/ls/) 官方文档。
 
-开发预览：启动 `pnpm dev` 后打开 `/dev/docker-preview.html`，使用内存模拟的两台主机，不连接实际 Docker，也不写入服务器配置。
+开发预览：启动 `pnpm dev` 后打开 `/dev/docker-preview.html`，使用内存模拟的两台主机，支持管理、部署区和预填新建 Bot 的导航。不连接实际 Docker，也不写入服务器配置。可用 `?status=missing`、`stopped`、`no-compose` 查看未安装、未启动和缺少 Compose 的状态。

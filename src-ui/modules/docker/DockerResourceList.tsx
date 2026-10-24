@@ -17,7 +17,7 @@ export function DockerResourceList({
 }) {
     const Icon = kind === 'network' ? Network : HardDrive;
     return (
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2">
             {resources.map((resource) => {
                 const builtIn =
                     kind === 'network' && ['bridge', 'host', 'none'].includes(resource.name);

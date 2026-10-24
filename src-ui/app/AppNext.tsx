@@ -44,6 +44,9 @@ import { featureTogglesStore, useFeatures } from '../hooks/preferences/featureTo
 import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
 import { useAppScreenshotShortcut } from '../hooks/chat/useChatScreenshot';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
+import { registerComponentsNavigator } from '../hooks/components/componentsNavigation';
+import { registerDockerNavigator } from '../hooks/docker/dockerNavigation';
+import { registerBotCreateNavigator } from '../hooks/bot/botCreateNavigation';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -289,6 +292,9 @@ export const AppNext: React.FC = () => {
 
     // Bot 卡片「调试」按钮 / 右键「在调试台打开」经 debugNav 跳过来
     useEffect(() => registerDebugNavigator(() => navigate('debug')), [navigate]);
+    useEffect(() => registerComponentsNavigator(() => navigate('components')), [navigate]);
+    useEffect(() => registerDockerNavigator(() => navigate('docker')), [navigate]);
+    useEffect(() => registerBotCreateNavigator(() => navigate('bots')), [navigate]);
 
     const toggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
 
