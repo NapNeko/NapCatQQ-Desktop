@@ -1,5 +1,6 @@
 pub mod app_framework;
 pub mod app_settings;
+pub mod assistant;
 pub mod bot;
 pub mod bot_metrics;
 pub mod bot_migration;
@@ -266,9 +267,7 @@ mod tests {
     };
     use ncd_traits::{
         ConfigStore, SecretStore,
-        runtime_backend::{
-            BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
-        },
+        runtime_backend::{BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts},
     };
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -403,6 +402,7 @@ mod tests {
             root.to_path_buf(),
         ));
         let state = AppState {
+            assistant: crate::commands::assistant::test_assistant(root),
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
             event_bus: bus.clone(),

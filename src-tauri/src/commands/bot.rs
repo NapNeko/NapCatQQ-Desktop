@@ -399,9 +399,7 @@ mod tests {
     };
     use ncd_traits::{
         ConfigStore, SecretStore,
-        runtime_backend::{
-            BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
-        },
+        runtime_backend::{BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts},
     };
     use tempfile::tempdir;
 
@@ -532,6 +530,7 @@ mod tests {
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
         );
         let state = AppState {
+            assistant: crate::commands::assistant::test_assistant(root),
             chat: crate::commands::chat::test_chat(
                 root,
                 Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,

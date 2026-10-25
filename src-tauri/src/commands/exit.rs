@@ -60,6 +60,7 @@ pub(crate) fn exit_blocked_message(local_active: usize) -> String {
 /// 闸门放行之后的收尾。主菜单退出和托盘退出都走这一份：之前两边各抄一遍，托盘那份
 /// 漏了停应用端实例，退出后 Karin / AstrBot / MaiBot 进程就成了没人管的孤儿
 pub(crate) async fn shutdown_and_exit(app: &AppHandle, state: &AppState, origin: &str) {
+    state.assistant.shutdown().await;
     let result = state.bot_manager.exit_desktop().await;
     if !result.failed.is_empty() {
         tracing::warn!(
