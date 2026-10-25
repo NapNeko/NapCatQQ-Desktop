@@ -275,12 +275,13 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use ncd_domain::ids::BotId;
+    use ncd_runtime::DebugBotPort;
     use ncd_runtime::onebot_debug::{DebugBotView, DebugManager};
-    use ncd_runtime::{DebugBotPort, LocalOnlyHostResolver};
     use tokio::sync::Notify;
 
     use super::*;
     use crate::server::tests_support::test_server_ctx;
+    use crate::tests_support::NoHostResolver;
 
     struct BlockingBots {
         entered: Arc<Notify>,
@@ -317,14 +318,12 @@ mod tests {
         let entered = Arc::new(Notify::new());
         let dropped = Arc::new(AtomicBool::new(false));
         let mut ctx = test_server_ctx();
-        let local_host: Arc<dyn ncd_host::Host> =
-            Arc::new(ncd_host::local::LocalWindowsHost::new());
         Arc::get_mut(&mut ctx).unwrap().tools.debug = Arc::new(DebugManager::new(
             Arc::new(BlockingBots {
                 entered: entered.clone(),
                 dropped: dropped.clone(),
             }),
-            Arc::new(LocalOnlyHostResolver::new(local_host)),
+            Arc::new(NoHostResolver),
             tempfile::tempdir().unwrap().keep(),
         ));
         (ctx, entered, dropped)

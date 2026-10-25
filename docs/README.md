@@ -10,6 +10,8 @@
 | 安装应用端、导入项目与对接 Bot              | [应用端实例](user/app-instances.md)              |
 | 聊天、媒体、群文件、截图与账号托盘          | [聊天与截图](user/chat.md)                       |
 | 添加 SSH 主机、原生 / Docker 部署与远端排错 | [远端 Linux 管理](user/remote-linux.md)          |
+| 整套迁移 Bot 与关联应用到另一台服务器       | [服务器间 Bot 迁移](user/bot-migration.md)        |
+| 连接 AI 客户端、查询运维与调用 OneBot       | [MCP 接入](user/mcp.md)                          |
 | Desktop 退出后的监控与通知                  | [ncd-watch 远端值守](user/ncd-watch.md)          |
 | SnowLuma 扫码登录                           | [简化扫码登录](user/snowluma-remote-qr-login.md) |
 

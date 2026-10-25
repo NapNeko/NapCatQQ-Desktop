@@ -22,6 +22,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }
@@ -131,6 +132,7 @@ async fn test_validate_failure_blocks_upsert() {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     };
 

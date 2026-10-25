@@ -1,7 +1,7 @@
 //! Docker 部署与容器管理的数据契约
 //!
 //! 只放强类型 serde 结构和纯枚举, 给 ncd-deploy 的 DockerCli 和前端共用
-//! 容器不进 bot 列表, 类型独立于 BotConfig / BotActor, 自成 Docker 管理面数据模型
+//! 管理面容器列表独立于 BotActor；BotDockerConfig 保存托管 Bot 的容器设置。
 //!
 //! 端口 / 卷 / 环境变量都用强类型表达, 避免在命令层拼裸 dict
 //! WebUI 地址等回读结果走 DeployedContainer, 前端拿来直接渲染可点链接
@@ -11,6 +11,8 @@ use ts_rs::TS;
 
 mod management;
 pub use management::*;
+mod bot_config;
+pub use bot_config::{BotDockerConfig, DockerRestartPolicy};
 
 /// 目标主机上 Docker 的探测结果
 ///

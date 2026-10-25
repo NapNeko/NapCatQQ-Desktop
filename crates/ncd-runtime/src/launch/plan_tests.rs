@@ -19,6 +19,7 @@ fn config(backend: BackendType, mode: Option<SnowLumaStartMode>) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }

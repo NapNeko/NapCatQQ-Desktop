@@ -17,7 +17,7 @@
 
 use std::sync::OnceLock;
 
-use ncd_domain::{DockerDeploySpec, DockerFlavor};
+use ncd_domain::{BotDockerConfig, DockerDeploySpec, DockerFlavor};
 use ncd_template::TemplateEngine;
 use serde::Serialize;
 
@@ -149,6 +149,56 @@ fn engine() -> &'static TemplateEngine {
 /// uid / gid 写进对应的 *_UID / *_GID 环境变量(Linux 文件属主对齐)
 pub fn render_compose(spec: &DockerDeploySpec, secret: &str, uid: u32, gid: u32) -> String {
     render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid, None, None)
+}
+
+/// 将可编辑设置叠加到托管服务，保留镜像要求、凭据引用、指标和登录挂载。
+/// Compose 将 `$` 解释为插值，因此用户环境变量中的 `$` 作为字面量转义。
+pub fn apply_bot_docker_settings(
+    yaml: &str,
+    settings: Option<&BotDockerConfig>,
+) -> Result<String, String> {
+    let defaults = BotDockerConfig::default();
+    let settings = settings.unwrap_or(&defaults);
+    settings.validate()?;
+    let mut document: serde_yaml::Value =
+        serde_yaml::from_str(yaml).map_err(|e| format!("解析托管 Compose 失败: {e}"))?;
+    let services = document
+        .get_mut("services")
+        .and_then(serde_yaml::Value::as_mapping_mut)
+        .ok_or_else(|| "托管 Compose 缺少 services".to_string())?;
+    for service in services.values_mut() {
+        let service = service
+            .as_mapping_mut()
+            .ok_or_else(|| "托管 Compose 服务格式无效".to_string())?;
+        service.insert("restart".into(), settings.restart_policy.as_str().into());
+        let bind_address = if settings.publish_on_all_interfaces {
+            "0.0.0.0"
+        } else {
+            "127.0.0.1"
+        };
+        let ports = service
+            .get_mut(serde_yaml::Value::from("ports"))
+            .and_then(serde_yaml::Value::as_sequence_mut)
+            .ok_or_else(|| "托管 Compose 缺少端口映射".to_string())?;
+        for port in ports {
+            let mapping = port
+                .as_str()
+                .ok_or_else(|| "托管 Compose 端口格式无效".to_string())?;
+            *port = format!("{bind_address}:{mapping}").into();
+        }
+        if let Some(memory) = settings.memory_mb {
+            service.insert("mem_limit".into(), format!("{memory}m").into());
+        }
+        let environment = service
+            .entry(serde_yaml::Value::from("environment"))
+            .or_insert_with(|| serde_yaml::Value::Mapping(Default::default()))
+            .as_mapping_mut()
+            .ok_or_else(|| "托管 Compose 环境变量格式无效".to_string())?;
+        for (key, value) in &settings.environment {
+            environment.insert(key.clone().into(), value.replace('$', "$$").into());
+        }
+    }
+    serde_yaml::to_string(&document).map_err(|e| format!("渲染容器设置失败: {e}"))
 }
 
 /// 渲染引用同目录 .env 的 compose 文件文本
@@ -351,6 +401,82 @@ fn render_snowluma(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bot_settings_preserve_managed_compose_and_escape_literal_environment() {
+        for spec in [
+            DockerDeploySpec::napcat_default(),
+            DockerDeploySpec::snowluma_default(),
+        ] {
+            let base = render_compose(&spec, "managed-secret", 1000, 1000);
+            let settings = BotDockerConfig {
+                environment: [("CUSTOM_VALUE".into(), "${HOME}: # value\nnext".into())].into(),
+                restart_policy: ncd_domain::DockerRestartPolicy::OnFailure,
+                memory_mb: Some(512),
+                ..Default::default()
+            };
+            let rendered = apply_bot_docker_settings(&base, Some(&settings)).unwrap();
+            let before: serde_yaml::Value = serde_yaml::from_str(&base).unwrap();
+            let after: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
+            let key = match spec.flavor {
+                DockerFlavor::NapCat => "napcat",
+                DockerFlavor::SnowLuma => "snowluma",
+            };
+            let before = &before["services"][key];
+            let after = &after["services"][key];
+            for field in [
+                "image",
+                "container_name",
+                "volumes",
+                "shm_size",
+                "cap_add",
+                "security_opt",
+            ] {
+                assert_eq!(before[field], after[field], "{field}");
+            }
+            assert_eq!(after["restart"], "on-failure");
+            let expected_ports: Vec<_> = before["ports"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .map(|port| format!("127.0.0.1:{}", port.as_str().unwrap()))
+                .collect();
+            let actual_ports: Vec<_> = after["ports"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .map(|port| port.as_str().unwrap().to_string())
+                .collect();
+            assert_eq!(actual_ports, expected_ports);
+            assert_eq!(after["mem_limit"], "512m");
+            assert_eq!(
+                after["environment"]["CUSTOM_VALUE"],
+                "$${HOME}: # value\nnext"
+            );
+            for (key, value) in before["environment"].as_mapping().unwrap() {
+                assert_eq!(&after["environment"][key], value);
+            }
+            let default_yaml: serde_yaml::Value =
+                serde_yaml::from_str(&apply_bot_docker_settings(&base, None).unwrap()).unwrap();
+            for port in default_yaml["services"][key]["ports"]
+                .as_sequence()
+                .unwrap()
+            {
+                assert!(port.as_str().unwrap().starts_with("127.0.0.1:"));
+            }
+            let public_settings = BotDockerConfig {
+                publish_on_all_interfaces: true,
+                ..Default::default()
+            };
+            let public_yaml: serde_yaml::Value = serde_yaml::from_str(
+                &apply_bot_docker_settings(&base, Some(&public_settings)).unwrap(),
+            )
+            .unwrap();
+            for port in public_yaml["services"][key]["ports"].as_sequence().unwrap() {
+                assert!(port.as_str().unwrap().starts_with("0.0.0.0:"));
+            }
+        }
+    }
 
     #[test]
     fn napcat_compose_has_image_ports_token() {

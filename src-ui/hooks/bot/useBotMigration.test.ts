@@ -245,4 +245,37 @@ describe('useBotMigration', () => {
         expect(result.current.job?.id).toBe('migration-1');
         expect(result.current.job?.phase).toBe('awaiting_login');
     });
+
+    it('终态报告不自动对已迁移的目标重新预检', async () => {
+        service.get.mockResolvedValue(jobFor('completed'));
+        const { result } = mountMigration();
+        await waitFor(() => expect(result.current.job?.phase).toBe('completed'));
+        expect(service.preview).not.toHaveBeenCalled();
+    });
+
+    it('迟到的旧记录不能覆盖刚开始的回退并停止跟踪', async () => {
+        service.get.mockResolvedValueOnce(jobFor('completed'));
+        const { result } = mountMigration();
+        await waitFor(() => expect(result.current.job?.phase).toBe('completed'));
+
+        let finishOldRead!: (job: BotMigrationJob) => void;
+        service.get.mockImplementation(
+            () => new Promise<BotMigrationJob>((resolve) => (finishOldRead = resolve)),
+        );
+        let oldRead!: ReturnType<typeof result.current.jobQuery.refetch>;
+        act(() => {
+            oldRead = result.current.jobQuery.refetch();
+        });
+        await waitFor(() => expect(finishOldRead).toBeTypeOf('function'));
+        await act(async () => {
+            await result.current.rollbackMutation.mutateAsync(true);
+        });
+        await waitFor(() => expect(result.current.job?.phase).toBe('rolling_back'));
+        await act(async () => {
+            finishOldRead(jobFor('completed'));
+            await oldRead;
+        });
+        expect(result.current.job?.phase).toBe('rolling_back');
+        expect(result.current.running).toBe(true);
+    });
 });

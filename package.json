@@ -1,7 +1,7 @@
 {
   "name": "napcatqq-desktop-ui",
   "private": true,
-  "version": "3.5.4",
+  "version": "3.5.7",
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
@@ -12,7 +12,7 @@
     "test:ci": "node --test scripts/ci-gate.test.mjs scripts/ci-rust-cache.test.mjs",
     "test:coverage": "vitest run --config src-ui/vitest.config.ts --dir src-ui --coverage",
     "test:probe": "node --test \"src-tauri/resources/metrics/*.test.mjs\"",
-    "test:sl-login-helper": "python -B -m unittest discover -s crates/ncd-backend-snowluma/resources/login-helper -p atspi_login_test.py && python -B -m unittest discover -s crates/ncd-backend-snowluma/resources -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-component/resources -p \"*_test.py\"",
+    "test:sl-login-helper": "python -B -m unittest discover -s crates/ncd-backend-snowluma/resources/login-helper -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-backend-snowluma/resources -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-component/resources -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-runtime/src/metrics -p remote_assets_batch_test.py",
     "build:sl-login-helper": "node scripts/build-snowluma-login-helper.mjs",
     "build:remote-agent": "node scripts/build-remote-agent.mjs",
     "build": "tsc -p src-ui/tsconfig.json && vite build --config src-ui/vite.config.ts",

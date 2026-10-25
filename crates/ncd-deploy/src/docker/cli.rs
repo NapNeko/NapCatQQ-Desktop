@@ -666,6 +666,28 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
+    /// 把宿主机文件写入容器（运行中或已停止均可），沿用 daemon 探测出的提权方式。
+    pub async fn copy_to_container(
+        &self,
+        container: &str,
+        src: &str,
+        dest: &str,
+    ) -> Result<(), DockerCliError> {
+        let target = format!("{container}:{dest}");
+        let out = self
+            .host
+            .run_to_string(self.docker_cmd().arg("cp").arg(src).arg(&target))
+            .await?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: format!("docker cp {src} {target}"),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        Ok(())
+    }
+
     /// `docker exec <container> cat <path>`，返回文件文本。只对运行中的容器有效。
     /// 读凭据类文件（webui.json）用这个而不是 `docker cp`：走 stdout 不落临时文件，
     /// token 不会经过全局可读的 /tmp

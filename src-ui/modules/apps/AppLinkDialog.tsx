@@ -2,8 +2,7 @@
 //
 // 应用端页面预填实例、Bot 配置页预填 Bot；两处共用同一份对话框。
 // 同机直连；本机 Bot↔远端应用、远端 Bot↔本机应用经桌面 SSH；两台远端走主机常驻隧道。
-// 反向（Bot 连应用端）和正向（应用端连 Bot，框架 manifest 的首个 link_mode 是 forward_ws）组合一样，
-// 只是隧道方向相反；Docker 部署的 Bot 哪种都连不上，置灰。
+// Docker Bot 自动配置发布端口或网桥上的专用桥接；具体创建与检查由后端应用计划时执行。
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link2 } from 'lucide-react';
@@ -32,14 +31,13 @@ import {
     runtimeTargetDisplayLabel,
 } from '../../core/domain/bot/runtime-target';
 import { hostIdDisplayLabel } from './hostLabel';
+import { errorText } from '../../core/domain/errors';
 import {
-    DOCKER_BOT_NOTE,
     appLinkPairEnabled,
     appLinkPairNote,
+    appLinkTransportDescription,
     classifyAppLink,
-    isDesktopSshLink,
     isDockerBot,
-    isResidentLink,
 } from '../../core/domain/apps/appLinkTopology';
 import type {
     AppFrameworkManifest,
@@ -97,9 +95,12 @@ export function AppLinkDialog({
     const instance = instances.find((i) => i.id === instanceId) ?? null;
     const botConfig = botId ? (configs[botId] ?? null) : null;
     const botHost = botConfig ? botHostId(botConfig.bot.runtime_target) : null;
-    // Bot 配置页进来时 Bot 是预填的，选不了别的，只能在这里说清楚为什么对接不了
     const botIsDocker = isDockerBot(botConfig?.bot.deploymentType);
-    const { plan, previewing } = useAppLinkPlan(instanceId, botId, open && !botIsDocker);
+    const { plan, previewing, previewError, retryPreview } = useAppLinkPlan(
+        instanceId,
+        botId,
+        open && !!botConfig && !!instance,
+    );
     const applyLink = useApplyAppLink();
     const applying = applyLink.isPending;
 
@@ -108,14 +109,16 @@ export function AppLinkDialog({
             instances.map((i) => {
                 const installed = i.state !== 'not_installed' && i.state !== 'installing';
                 const allowed = appLinkPairEnabled(botHost, i.host_id);
-                const note = !installed ? '（未安装）' : appLinkPairNote(botHost, i.host_id);
+                const note = !installed
+                    ? '（未安装）'
+                    : appLinkPairNote(botHost, i.host_id, botConfig?.bot.deploymentType);
                 return {
                     value: i.id,
                     label: `${i.display_name} · ${hostIdDisplayLabel(i.host_id, servers)}${note}`,
                     disabled: !installed || !allowed,
                 };
             }),
-        [instances, botHost, servers],
+        [instances, botHost, servers, botConfig?.bot.deploymentType],
     );
     const instanceMode = linkModeOf(frameworks, instance?.framework_id);
 
@@ -128,16 +131,17 @@ export function AppLinkDialog({
                 const docker = isDockerBot(cfg?.bot.deploymentType);
                 const allowed =
                     !instance || !host ? true : appLinkPairEnabled(host, instance.host_id);
-                const note = docker
-                    ? DOCKER_BOT_NOTE
-                    : instance && host
-                      ? appLinkPairNote(host, instance.host_id)
-                      : '';
+                const note =
+                    instance && host
+                        ? appLinkPairNote(host, instance.host_id, cfg?.bot.deploymentType)
+                        : docker
+                          ? '（Docker）'
+                          : '';
                 const where = cfg ? runtimeTargetDisplayLabel(cfg.bot.runtime_target, servers) : '';
                 return {
                     value: s.bot_id,
                     label: `${name ? `${name} (${s.bot_id})` : s.bot_id}${where ? ` · ${where}` : ''}${note}`,
-                    disabled: docker || !allowed,
+                    disabled: !allowed,
                 };
             }),
         [snapshots, configs, instance, servers],
@@ -177,31 +181,41 @@ export function AppLinkDialog({
                             label="协议 Bot"
                             placeholder="选择 Bot"
                             items={botItems}
-                            value={botId || undefined}
+                            value={botId}
                             onValueChange={setBotId}
-                            disabled={!!presetBotId}
+                            disabled={!!presetBotId || applying}
                         />
                         <Select
                             label="应用实例"
                             placeholder="选择实例"
                             items={instanceItems}
-                            value={instanceId || undefined}
+                            value={instanceId}
                             onValueChange={setInstanceId}
-                            disabled={!!presetInstanceId}
+                            disabled={!!presetInstanceId || applying}
                         />
                     </div>
-
-                    <ExpandPresence visible={botIsDocker}>
-                        <p className="text-2xs text-warning">
-                            这个 Bot 是 Docker 部署的，它在容器里，容器里的 127.0.0.1
-                            不是宿主机，应用端连不上，暂不支持对接。
-                        </p>
-                    </ExpandPresence>
 
                     {previewing && (
                         <div className="flex items-center gap-2 text-sm text-text-secondary">
                             <Spinner size="sm" />
                             正在生成对接计划…
+                        </div>
+                    )}
+
+                    {previewError && (
+                        <div
+                            role="alert"
+                            className="rounded-md border border-danger/20 bg-danger/5 p-3"
+                        >
+                            <p className="text-xs text-danger">{previewError}</p>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => void retryPreview()}
+                            >
+                                重新生成计划
+                            </Button>
                         </div>
                     )}
 
@@ -211,9 +225,18 @@ export function AppLinkDialog({
                                 plan={plan}
                                 rebindingFrom={rebinding}
                                 topology={classifyAppLink(botHost, instance?.host_id ?? '')}
+                                docker={botIsDocker}
                             />
                         )}
                     </ExpandPresence>
+
+                    {applyLink.isError &&
+                        applyLink.variables?.botId === botId &&
+                        applyLink.variables.instanceId === instanceId && (
+                            <p role="alert" className="text-xs text-danger">
+                                {errorText(applyLink.error)}
+                            </p>
+                        )}
                 </div>
 
                 <DialogFooter>
@@ -248,26 +271,45 @@ function PlanPreview({
     plan,
     rebindingFrom,
     topology,
+    docker,
 }: {
     plan: OneBotLinkPlan;
     rebindingFrom: string | null;
     topology: ReturnType<typeof classifyAppLink>;
+    docker: boolean;
 }) {
     const c = plan.connection;
-    const tunnelNote = isDesktopSshLink(topology)
-        ? ' 经 SSH 隧道，需桌面端在线。'
-        : isResidentLink(topology)
-          ? ' 隧道留在应用所在机，桌面退出仍连。'
-          : '';
+    const transport = appLinkTransportDescription(topology, plan.mode, docker);
     // 跨机时应用端连的是自己机上的隧道口，那个口开隧道时才分，预览里只说经隧道
     const serverLine =
         c.kind === 'ws_server'
-            ? topology && topology !== 'same_host'
-                ? `Bot 所在机监听 ${c.host}:${c.port}，应用端经隧道连过来`
-                : `监听 ${c.host}:${c.port}，应用端连过来`
+            ? docker
+                ? `容器内监听 ${c.host}:${c.port}，应用端通过宿主机发布端口连接`
+                : topology && topology !== 'same_host'
+                  ? `Bot 所在机监听 ${c.host}:${c.port}，应用端经隧道连过来`
+                  : `监听 ${c.host}:${c.port}，应用端连过来`
             : null;
     return (
         <div className="flex flex-col gap-3 rounded-md border border-border-subtle bg-inset/40 p-3">
+            <div className="border-b border-border-subtle pb-3">
+                <p className="mb-1.5 text-2xs uppercase tracking-wide text-text-tertiary">
+                    连接方式
+                </p>
+                <p className="text-xs leading-relaxed text-text-secondary">{transport.route}</p>
+                {transport.availability && (
+                    <p className="mt-1 text-2xs leading-relaxed text-text-tertiary">
+                        {transport.availability}
+                    </p>
+                )}
+                {docker && plan.mode === 'forward_ws' && (
+                    <p className="mt-1 text-2xs text-text-tertiary">
+                        新增发布端口时会重建运行中的容器，连接短暂中断，数据卷保留。
+                    </p>
+                )}
+                <p className="mt-1 text-2xs text-text-tertiary">
+                    应用时创建并检查所需端口与隧道，失败时会显示具体原因。
+                </p>
+            </div>
             <div>
                 <p className="mb-1.5 text-2xs uppercase tracking-wide text-text-tertiary">
                     写入协议 Bot 的连接
@@ -286,7 +328,6 @@ function PlanPreview({
                 </p>
                 <p className="mt-0.5 text-2xs text-text-tertiary">
                     token 已生成；同名连接会被替换。
-                    {tunnelNote}
                 </p>
             </div>
             <div>

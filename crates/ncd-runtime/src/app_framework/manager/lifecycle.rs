@@ -699,9 +699,23 @@ impl AppManager {
     pub async fn reconcile_for_server(&self, server_id: &str) {
         let host_id = format!("{REMOTE_HOST_ID_PREFIX}{server_id}");
         for instance in self.store.list().await {
-            if instance.host_id != host_id {
+            let linked_host_matches = match &instance.link {
+                Some(link) => self
+                    .bot_manager
+                    .bot_config(&link.bot_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_some_and(|bot| {
+                        host_id_of_runtime_target(&bot.bot.runtime_target) == host_id
+                    }),
+                None => false,
+            };
+            if instance.host_id != host_id && !linked_host_matches {
                 continue;
             }
+            // SSH 连接代已变化，旧句柄即便还留着端口也不能继续复用。
+            self.drop_instance_tunnel(&instance.id).await;
             self.reconcile_one(&instance.id).await;
         }
     }
@@ -743,19 +757,31 @@ impl AppManager {
 
     pub async fn run_host_connection_recovered_listener(self: Arc<Self>) {
         let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        let mut last_reconciled: HashMap<String, Instant> = HashMap::new();
         while let Some(event) = subscription.next().await {
+            if let DomainEvent::BotStateChanged {
+                snapshot, reason, ..
+            } = &event
+                && reason.as_deref() == Some("config_docker_recreated")
+            {
+                self.reconcile_for_bot(&snapshot.bot_id).await;
+                continue;
+            }
             let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
                 continue;
             };
-            let now = Instant::now();
-            if let Some(prev) = last_reconciled.get(&server_id) {
-                if now.duration_since(*prev) < Duration::from_secs(30) {
-                    continue;
-                }
-            }
-            last_reconciled.insert(server_id.clone(), now);
             self.reconcile_for_server(&server_id).await;
+        }
+    }
+
+    pub(super) async fn reconcile_for_bot(&self, bot_id: &BotId) {
+        for instance in self.store.list().await {
+            if instance
+                .link
+                .as_ref()
+                .is_some_and(|link| &link.bot_id == bot_id)
+            {
+                self.reconcile_one(&instance.id).await;
+            }
         }
     }
 

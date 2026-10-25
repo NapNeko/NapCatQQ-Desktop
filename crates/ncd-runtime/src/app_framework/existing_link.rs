@@ -210,6 +210,7 @@ mod tests {
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }

@@ -179,10 +179,9 @@ pub(crate) fn contains_local_file(value: &Value) -> bool {
     match value {
         Value::String(text) => {
             let lower = text.to_ascii_lowercase();
+            // 字段和消息段白名单先约束文件能力；纯文本里的 /help 或 C:提示不是文件输入。
             lower.contains("ncd-local-file://")
                 || lower.contains("file://")
-                || text.starts_with(['/', '\\'])
-                || text.as_bytes().get(1) == Some(&b':')
                 || lower.contains("[cq:")
         }
         Value::Array(items) => items.iter().any(contains_local_file),

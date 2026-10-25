@@ -339,12 +339,13 @@ impl AppManager {
         if journal.source_was_running {
             self.bot_manager.migration_start_protocol(&bot_id).await?;
         }
-        self.migration_phase(
-            journal,
-            BotMigrationPhase::AwaitingLogin,
-            "已切到目标服务器，正在等待 QQ 在线；需要时请在 Bot 卡扫码登录",
-        )
-        .await?;
+        let awaiting_message = if journal.source_was_running {
+            "已切到目标服务器，正在等待 QQ 在线；需要时请在 Bot 卡扫码登录"
+        } else {
+            "已切到目标服务器，正在核实目标状态；原先停止的协议端保持停止"
+        };
+        self.migration_phase(journal, BotMigrationPhase::AwaitingLogin, awaiting_message)
+            .await?;
         Ok(())
     }
 
@@ -516,9 +517,17 @@ impl AppManager {
             return Ok(());
         }
         let id = BotId::new(&journal.job.bot_id);
-        if journal.source_was_running && !self.bot_manager.migration_protocol_online(&id).await? {
-            return Ok(());
+        if journal.source_was_running && !self.bot_manager.migration_protocol_running(&id).await? {
+            journal.job.error = Some("目标协议端进程已退出".into());
+            return self
+                .migration_phase(
+                    journal,
+                    BotMigrationPhase::RecoveryRequired,
+                    "目标协议端启动后退出，请查看日志或回退",
+                )
+                .await;
         }
+        let mut apps_ready = true;
         for movement in &journal.apps {
             if movement.source.state != AppInstanceState::Running {
                 continue;
@@ -551,8 +560,15 @@ impl AppManager {
                 .arg("import socket,sys; s=socket.socket(); s.settimeout(3); sys.exit(s.connect_ex(('127.0.0.1',int(sys.argv[1]))))")
                 .arg(port).timeout(Duration::from_secs(5))).await.map_err(|e| e.to_string())?;
             if !output.success() {
-                return Ok(());
+                apps_ready = false;
             }
+        }
+        // 等待 QQ 登录或某个监听口时，也继续核实其他目标进程，避免退出被掩盖。
+        if !apps_ready
+            || (journal.source_was_running
+                && !self.bot_manager.migration_protocol_online(&id).await?)
+        {
+            return Ok(());
         }
         let mut config = self
             .bot_manager

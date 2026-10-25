@@ -79,6 +79,7 @@ fn bot_with(qq_id: u64, backend: BackendType, target: RuntimeTarget) -> BotConfi
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }

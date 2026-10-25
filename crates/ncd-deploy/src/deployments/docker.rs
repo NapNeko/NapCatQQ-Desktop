@@ -29,7 +29,10 @@ use crate::deployment::{
 };
 use crate::docker::{
     DockerCli, DockerLoginOverlay, DockerMetricsOverlay,
-    compose::{render_compose_with_metrics, render_snowluma_compose_with_overlays},
+    compose::{
+        apply_bot_docker_settings, render_compose_with_metrics,
+        render_snowluma_compose_with_overlays,
+    },
 };
 
 /// Docker 部署实装
@@ -148,6 +151,7 @@ impl DockerDeployment {
         }
         .with_host_port_offset(qq);
         spec.container_name = Self::container_name(config);
+        spec.ports = config.effective_docker_ports();
         if config.bot.backend_type == BackendType::NapCat && qq != 0 {
             spec.qq_id = Some(qq);
         }
@@ -200,6 +204,69 @@ pub async fn docker_project_dir(host: &dyn Host, name: &str) -> Result<String, S
     ))
 }
 
+/// 自动重建前核对 Compose 所属目录，避免接管同名的外部容器。
+/// 两种历史命名都检查，因为部署清理会访问这两个候选名。
+pub async fn ensure_managed_bot_container(
+    host: &dyn Host,
+    config: &BotConfig,
+) -> Result<(), DeploymentError> {
+    let cli = DockerCli::new(host);
+    cli.ensure_daemon_ready()
+        .await
+        .map_err(|e| DeploymentError::ConfigInvalid(format!("检查容器归属失败: {e}")))?;
+    let containers = cli
+        .list_containers()
+        .await
+        .map_err(|e| DeploymentError::ConfigInvalid(format!("检查容器归属失败: {e}")))?;
+    for name in bot_docker_container_candidates(config.bot.backend_type, config.bot.qq_id) {
+        if !containers.iter().any(|c| c.name == name) {
+            continue;
+        }
+        let expected = docker_project_dir(host, &name)
+            .await
+            .map_err(DeploymentError::ConfigInvalid)?;
+        let output = host
+            .run_to_string(
+                cli.command()
+                    .arg("inspect")
+                    .arg("--type")
+                    .arg("container")
+                    .arg("--format")
+                    .arg("{{json .Config.Labels}}")
+                    .arg("--")
+                    .arg(&name)
+                    .timeout(std::time::Duration::from_secs(30)),
+            )
+            .await
+            .map_err(|e| {
+                DeploymentError::ConfigInvalid(format!("检查容器 {name} 的 Compose 归属失败: {e}"))
+            })?;
+        if !output.success() {
+            return Err(DeploymentError::ConfigInvalid(format!(
+                "检查容器 {name} 的 Compose 归属失败: {}",
+                output.stderr.trim()
+            )));
+        }
+        let labels: Option<std::collections::BTreeMap<String, String>> =
+            serde_json::from_str(output.stdout.trim()).map_err(|e| {
+                DeploymentError::ConfigInvalid(format!("读取容器 {name} 的 Compose 标签失败: {e}"))
+            })?;
+        let owned = labels
+            .as_ref()
+            .and_then(|labels| labels.get("com.docker.compose.project.working_dir"))
+            .is_some_and(|dir| {
+                ncd_domain::remote_paths::normalize_posix(dir)
+                    == ncd_domain::remote_paths::normalize_posix(&expected)
+            });
+        if !owned {
+            return Err(DeploymentError::ConfigInvalid(format!(
+                "容器 {name} 由外部 Compose 或其他方式创建，不能自动重建。请在原部署中调整端口，或先迁入 Desktop 托管。"
+            )));
+        }
+    }
+    Ok(())
+}
+
 async fn probe_home(host: &dyn Host) -> Result<String, String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
     match host.run_to_string(cmd).await {
@@ -244,6 +311,9 @@ impl Deployment for DockerDeployment {
         config: &BotConfig,
         progress: &dyn DeploymentProgressSink,
     ) -> Result<(), DeploymentError> {
+        config
+            .validate_docker()
+            .map_err(DeploymentError::ConfigInvalid)?;
         let backend = config.bot.backend_type;
         if !matches!(backend, BackendType::NapCat | BackendType::SnowLuma) {
             return Err(DeploymentError::UnsupportedFlavor {
@@ -311,6 +381,8 @@ impl Deployment for DockerDeployment {
         } else {
             render_compose_with_metrics(&spec, env_var, uid, gid, metrics)
         };
+        let yaml = apply_bot_docker_settings(&yaml, config.docker.as_ref())
+            .map_err(DeploymentError::ConfigInvalid)?;
         let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
         host.write_file(&compose_path, yaml.as_bytes())
             .await
@@ -635,6 +707,7 @@ mod tests {
     struct MockHost {
         home: Option<String>,
         require_elevated: bool,
+        inspect_labels: String,
         /// launch 幂等测试:docker ps 在 compose up 之前返回空,之后返回 running 容器
         compose_up_done: Arc<Mutex<bool>>,
         ps_json: Arc<Mutex<String>>,
@@ -648,6 +721,7 @@ mod tests {
             Self {
                 home: Some("/home/napcat".into()),
                 require_elevated: false,
+                inspect_labels: r#"{"com.docker.compose.project.working_dir":"/home/napcat/.napcat-bots/ncbot-10001"}"#.into(),
                 compose_up_done: Arc::new(Mutex::new(false)),
                 ps_json: Arc::new(Mutex::new(napcat_ps_json())),
                 commands: Arc::new(Mutex::new(Vec::new())),
@@ -774,7 +848,11 @@ mod tests {
                 && !cmd.elevated
                 && cmd.args.first().map(String::as_str) != Some("version")
             {
-                return Ok(output(1, "", "permission denied connecting to /var/run/docker.sock"));
+                return Ok(output(
+                    1,
+                    "",
+                    "permission denied connecting to /var/run/docker.sock",
+                ));
             }
             match cmd.args.first().map(String::as_str) {
                 Some("version") => Ok(output(0, "27.3.1\n", "")),
@@ -798,6 +876,7 @@ mod tests {
                 Some("rm") => Ok(output(0, "", "")),
                 Some("stop") => Ok(output(0, "ncbot-10001\n", "")),
                 Some("exec") => Ok(output(0, r#"{"token":"from-container"}"#, "")),
+                Some("inspect") => Ok(output(0, &self.inspect_labels, "")),
                 _ => Ok(output(0, "", "")),
             }
         }
@@ -839,6 +918,7 @@ mod tests {
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }
@@ -884,6 +964,46 @@ mod tests {
             bot_docker_container_candidates(BackendType::SnowLuma, "10001"),
             ["slbot-10001", "ncbot-10001"]
         );
+    }
+
+    #[tokio::test]
+    async fn managed_container_check_allows_absent_and_owned_containers() {
+        ensure_managed_bot_container(&MockHost::new(), &bot_config())
+            .await
+            .unwrap();
+        ensure_managed_bot_container(&MockHost::with_running_container(), &bot_config())
+            .await
+            .unwrap();
+        let mut host = MockHost::with_running_snowluma_container();
+        host.inspect_labels =
+            r#"{"com.docker.compose.project.working_dir":"/home/napcat/.napcat-bots/slbot-10001"}"#
+                .into();
+        let mut config = bot_config();
+        config.bot.backend_type = BackendType::SnowLuma;
+        ensure_managed_bot_container(&host, &config).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn managed_container_check_rejects_external_compose_or_missing_labels() {
+        for labels in [
+            "null",
+            "{}",
+            r#"{"com.docker.compose.project.working_dir":"/srv/external"}"#,
+        ] {
+            let mut host = MockHost::with_running_container();
+            host.inspect_labels = labels.into();
+            let error = ensure_managed_bot_container(&host, &bot_config())
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("外部 Compose"));
+            assert!(host.writes().is_empty());
+            assert!(
+                !host
+                    .docker_commands()
+                    .iter()
+                    .any(|cmd| matches!(cmd.args.first().map(String::as_str), Some("stop" | "rm")))
+            );
+        }
     }
 
     #[tokio::test]
@@ -1033,6 +1153,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn install_applies_custom_container_settings_for_both_backends() {
+        for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+            let host = MockHost::new();
+            let dep = match backend {
+                BackendType::NapCat => DockerDeployment::with_webui_token("test-token"),
+                BackendType::SnowLuma => {
+                    DockerDeployment::with_sl_secrets("test-vnc", "test-webui")
+                }
+            };
+            let mut config = bot_config();
+            config.bot.backend_type = backend;
+            config.docker = Some(ncd_domain::BotDockerConfig {
+                port_mappings: vec![ncd_domain::PortMapping::new(8500, 4500)],
+                environment: [("TZ".into(), "Asia/Shanghai".into())].into(),
+                memory_mb: Some(256),
+                ..Default::default()
+            });
+            dep.install(&host, &config, &crate::deployment::NullProgressSink)
+                .await
+                .unwrap();
+            let writes = host.writes();
+            let compose = writes
+                .iter()
+                .find(|w| w.path.ends_with("/docker-compose.yml"))
+                .unwrap();
+            let yaml: serde_yaml::Value = serde_yaml::from_str(&compose.text).unwrap();
+            let key = match backend {
+                BackendType::NapCat => "napcat",
+                BackendType::SnowLuma => "snowluma",
+            };
+            let service = &yaml["services"][key];
+            assert!(
+                service["ports"]
+                    .as_sequence()
+                    .unwrap()
+                    .iter()
+                    .any(|p| p.as_str() == Some("127.0.0.1:8500:4500"))
+            );
+            assert_eq!(service["environment"]["TZ"], "Asia/Shanghai");
+            assert_eq!(service["mem_limit"], "256m");
+            assert_eq!(service["restart"], "unless-stopped");
+        }
+    }
+
+    #[tokio::test]
+    async fn install_rejects_conflicting_ports_before_writing_any_files() {
+        let host = MockHost::new();
+        let mut config = bot_config();
+        config.docker = Some(ncd_domain::BotDockerConfig {
+            port_mappings: vec![ncd_domain::PortMapping::new(3001, 4500)],
+            ..Default::default()
+        });
+        let result = DockerDeployment::with_webui_token("test-token")
+            .install(&host, &config, &crate::deployment::NullProgressSink)
+            .await;
+        assert!(matches!(result, Err(DeploymentError::ConfigInvalid(_))));
+        assert!(host.writes().is_empty());
+        assert!(host.commands().is_empty());
+    }
+
+    #[tokio::test]
     async fn install_launch_observe_records_commands_compose_ports_volumes_and_token() {
         let host = MockHost::new();
         let dep = DockerDeployment::with_webui_token("formal-token-9x");
@@ -1057,13 +1238,19 @@ mod tests {
             .iter()
             .find(|w| w.path.ends_with("/docker-compose.yml"))
             .unwrap();
-        assert!(
-            compose
-                .text
-                .contains("WEBUI_TOKEN: \"${WEBUI_TOKEN:?WEBUI_TOKEN is required}\"")
+        let compose_yaml: serde_yaml::Value = serde_yaml::from_str(&compose.text).unwrap();
+        assert_eq!(
+            compose_yaml["services"]["napcat"]["environment"]["WEBUI_TOKEN"],
+            "${WEBUI_TOKEN:?WEBUI_TOKEN is required}"
         );
         // qq=10001 经 host_port_offset_for_qq 偏移 1,host 端口 6099→6100
-        assert!(compose.text.contains("\"6100:6099\""));
+        assert!(
+            compose_yaml["services"]["napcat"]["ports"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .any(|p| p.as_str() == Some("127.0.0.1:6100:6099"))
+        );
         assert!(compose.text.contains("./napcat/config:/app/napcat/config"));
         assert!(compose.text.contains("./ntqq:/app/.config/QQ"));
 

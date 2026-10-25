@@ -508,6 +508,10 @@ pub struct BotConfig {
     pub bot: BotBasicConfig,
     pub connect: ConnectConfig,
     pub advanced: AdvancedConfig,
+    /// Docker 容器设置；缺省时仅向宿主机回环发布监听端口，使用 unless-stopped 重启策略。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub docker: Option<crate::docker::BotDockerConfig>,
     /// SnowLuma onebot_<uin>.json 的 statusCommand;NapCat 不序列化
     #[serde(
         default,
@@ -522,6 +526,9 @@ impl BotConfig {
     pub fn validate(&self) -> Result<(), BotConfigError> {
         if self.bot.qq_id == 0 {
             return Err(BotConfigError::InvalidQqId(self.bot.qq_id));
+        }
+        if self.bot.deployment_type == DeploymentType::Docker {
+            self.validate_docker().map_err(BotConfigError::Docker)?;
         }
 
         let mut seen_names = HashMap::new();
@@ -581,7 +588,11 @@ impl BotConfig {
         let mut bindings = Vec::new();
         for (index, server) in self.connect.http_servers.iter().enumerate() {
             validate_snowluma_server(
-                &server.host,
+                snowluma_validation_host(
+                    &server.host,
+                    server.base.enable,
+                    self.bot.deployment_type,
+                ),
                 &server.path,
                 server.port,
                 server.base.enable,
@@ -591,7 +602,11 @@ impl BotConfig {
         }
         for (index, server) in self.connect.websocket_servers.iter().enumerate() {
             validate_snowluma_server(
-                &server.host,
+                snowluma_validation_host(
+                    &server.host,
+                    server.base.enable,
+                    self.bot.deployment_type,
+                ),
                 &server.path,
                 server.port,
                 server.base.enable,
@@ -633,6 +648,8 @@ impl BotConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BotConfigError {
+    #[error("Docker 容器配置无效: {0}")]
+    Docker(String),
     #[error("invalid QQID: {0}")]
     InvalidQqId(u64),
     #[error("unsupported runtime matrix: {0}")]
@@ -686,6 +703,21 @@ fn invalid_snowluma_network(field: String, reason: impl Into<String>) -> BotConf
     BotConfigError::InvalidSnowLumaNetwork {
         field,
         reason: reason.into(),
+    }
+}
+
+fn snowluma_validation_host(host: &str, enabled: bool, deployment: DeploymentType) -> &str {
+    // Docker 派生配置将启用的回环监听改成通配地址，冲突检查必须使用生效地址。
+    let value = host.trim();
+    if deployment == DeploymentType::Docker
+        && enabled
+        && (value.is_empty()
+            || value.eq_ignore_ascii_case("localhost")
+            || matches!(value, "127.0.0.1" | "::1" | "[::1]"))
+    {
+        "0.0.0.0"
+    } else {
+        host
     }
 }
 
@@ -1032,6 +1064,7 @@ mod runtime_matrix_tests {
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }

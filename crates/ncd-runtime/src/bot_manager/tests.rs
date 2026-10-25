@@ -2,6 +2,59 @@ use super::*;
 use crate::SecretStoreImpl;
 use crate::runtime_router::DockerSecretProvider;
 
+#[test]
+fn docker_recreation_detects_container_changes_and_keeps_protocol_hot_reload() {
+    use ncd_domain::docker::{BotDockerConfig, PortMapping};
+    use ncd_test_support::BotConfigBuilder;
+
+    for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+        let previous = BotConfigBuilder::new()
+            .qq_id(10001)
+            .runtime_target(RuntimeTarget::server("remote"))
+            .deployment_type(ncd_domain::DeploymentType::Docker)
+            .backend_type(backend)
+            .build();
+        let mut current = previous.clone();
+        current.docker = Some(BotDockerConfig::default());
+        assert!(!docker_container_config_changed(&previous, &current));
+        current.bot.name = "renamed".into();
+        assert!(!docker_container_config_changed(&previous, &current));
+
+        current.docker.as_mut().unwrap().port_mappings = previous
+            .effective_docker_ports()
+            .into_iter()
+            .rev()
+            .collect();
+        assert!(!docker_container_config_changed(&previous, &current));
+
+        current.docker.as_mut().unwrap().port_mappings = vec![PortMapping::new(8080, 3000)];
+        assert!(docker_container_config_changed(&previous, &current));
+        current.docker = Some(BotDockerConfig {
+            memory_mb: Some(512),
+            ..Default::default()
+        });
+        assert!(docker_container_config_changed(&previous, &current));
+
+        let mut raw = serde_json::to_value(&previous).unwrap();
+        raw["connect"]["httpServers"] = serde_json::json!([
+            {"name": "new-http", "host": "127.0.0.1", "port": 4000}
+        ]);
+        let with_listener: BotConfig = serde_json::from_value(raw).unwrap();
+        assert!(docker_container_config_changed(&previous, &with_listener));
+        let mut token_change = with_listener.clone();
+        token_change.connect.http_servers[0].base.token = "changed".into();
+        assert!(!docker_container_config_changed(
+            &with_listener,
+            &token_change
+        ));
+        token_change.bot.runtime_target = RuntimeTarget::server("different");
+        assert!(!docker_container_config_changed(
+            &with_listener,
+            &token_change
+        ));
+    }
+}
+
 fn temp_secret_store() -> (tempfile::TempDir, Arc<dyn SecretStore + Send + Sync>) {
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(SecretStoreImpl::new_with_force_fallback(dir.path(), true));

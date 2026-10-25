@@ -123,7 +123,7 @@ sudo loginctl enable-linger "$USER"
 `onebot`：`messengers` 是同机能用来发消息的 Bot，`targetType` 是 `private` 或 `group`，`targetIds` 是发给谁，`messageTemplate` 是消息模板，占位和 Webhook 一样。跨机的 Bot 不会被写进来。
 
 - 直接运行的 Bot：`baseUrl` 取它第一个监听在本机或 `0.0.0.0` 上的 HTTP 服务器。
-- Docker 部署的 Bot：只认监听在 `0.0.0.0` 上的 HTTP 服务器，容器里绑 `127.0.0.1` 的从宿主机连不进去。每一项多带 `containerName` 和 `containerPort`（容器内端口），ncd-watch 发送前用 `docker inspect` 查这个端口实际映射到宿主机哪里；查不到才用 `baseUrl`。端口没映射出来时 `baseUrl` 为空，这个 Bot 就发不了。
+- Docker 部署的 Bot：实际服务需要监听容器内 `0.0.0.0`，并发布 TCP 端口。Desktop 保存或启动托管容器时会自动补齐映射，将连接中的回环监听转换为 `0.0.0.0`；在「设置 → 通知」一键补齐 HTTP 时也会按此配置。每一项多带 `containerName` 和 `containerPort`（容器内端口），ncd-watch 发送前用 `docker inspect` 查实际的宿主机端口；查不到才用 `baseUrl`。可在「Bot 配置 → 容器」调整宿主机端口。
 - 掉线的 Bot 不会替自己发。只有一个 Bot 时 QQ 消息通知用不了，请配合 Webhook 或邮件。
 - 按顺序试，一个发送方完全发不出去就换下一个；已经有人收到的不会换发送方重发。
 

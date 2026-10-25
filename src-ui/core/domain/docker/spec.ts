@@ -36,9 +36,8 @@ export function defaultDeploySpec(flavor: DockerFlavor): DockerDeploySpec {
     };
 }
 
-/// 端口用途说明：容器端口 → 一句话用途。给部署对话框每行端口做标签，让用户
-/// 知道为什么要映射这个端口、冲突时该不该改。容器端口固定（镜像 EXPOSE 写死），
-/// 用户只改宿主机端口，所以按容器端口查表即可。
+/// 默认端口用途说明：按容器端口查表，宿主机端口调整不改变用途。
+/// 镜像 EXPOSE 不限制可发布端口；Bot 的额外监听由连接配置推导。
 ///
 /// 端口含义来自两个上游 docker 框架：
 ///   NapCat-Docker：3000 OneBot HTTP / 3001 OneBot WS / 6099 WebUI

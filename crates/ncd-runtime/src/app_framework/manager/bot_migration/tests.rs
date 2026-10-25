@@ -1,7 +1,7 @@
 use super::*;
 use ncd_appframework::AdoptedFile;
 use ncd_domain::{AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 const JOB_ID: &str = "9163c4e5-36b5-4c6e-9ff8-ae3aaab13452";
 
@@ -26,6 +26,8 @@ struct MemoryBots {
     config: tokio::sync::Mutex<BotConfig>,
     reservations: std::sync::Mutex<Vec<(String, bool)>>,
     writes: AtomicUsize,
+    running: AtomicBool,
+    online: AtomicBool,
 }
 
 #[async_trait::async_trait]
@@ -56,6 +58,14 @@ impl BotConfigPort for MemoryBots {
     async fn migration_upsert_protocol(&self, config: BotConfig) -> Result<(), String> {
         self.upsert_bot_config(config).await
     }
+
+    async fn migration_protocol_running(&self, _: &BotId) -> Result<bool, String> {
+        Ok(self.running.load(Ordering::SeqCst))
+    }
+
+    async fn migration_protocol_online(&self, _: &BotId) -> Result<bool, String> {
+        Ok(self.online.load(Ordering::SeqCst))
+    }
 }
 
 struct Fixture {
@@ -81,6 +91,7 @@ fn config() -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     };
     config.advanced.auto_start = true;
@@ -182,6 +193,8 @@ fn fixture() -> Fixture {
         config: tokio::sync::Mutex::new(config()),
         reservations: std::sync::Mutex::new(Vec::new()),
         writes: AtomicUsize::new(0),
+        running: AtomicBool::new(false),
+        online: AtomicBool::new(false),
     });
     let manager = Arc::new(AppManager::new(
         Arc::new(AppFrameworkRegistry::with_builtin()),
@@ -462,6 +475,63 @@ async fn rollback_after_target_start_requires_data_loss_acknowledgement_before_a
         f.manager.migration_load(JOB_ID).await.unwrap().job.phase,
         BotMigrationPhase::RecoveryRequired
     );
+    assert!(f.bots.reservations.lock().unwrap().is_empty());
+    assert_eq!(f.bots.writes.load(Ordering::SeqCst), 0);
+    assert_eq!(f.resolver.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn stopped_target_protocol_requires_recovery_instead_of_waiting_for_login() {
+    let f = fixture();
+    let mut pending = journal(BotMigrationPhase::AwaitingLogin);
+    pending.source_was_running = true;
+    pending.config_switched = true;
+    pending.apps.clear();
+    *f.bots.config.lock().await = pending.target.clone();
+
+    f.manager
+        .migration_finish_if_ready(&mut pending)
+        .await
+        .unwrap();
+
+    assert_eq!(pending.job.phase, BotMigrationPhase::RecoveryRequired);
+    assert!(
+        pending
+            .job
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("协议端进程已退出")
+    );
+    assert!(pending.job.rollback_available);
+    assert_eq!(
+        f.manager.migration_load(JOB_ID).await.unwrap().job.phase,
+        BotMigrationPhase::RecoveryRequired
+    );
+    assert!(!f.bots.config.lock().await.advanced.auto_start);
+    assert!(f.bots.reservations.lock().unwrap().is_empty());
+    assert_eq!(f.bots.writes.load(Ordering::SeqCst), 0);
+    assert_eq!(f.resolver.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn running_target_waits_for_qq_login_without_releasing_the_handoff() {
+    let f = fixture();
+    let mut pending = journal(BotMigrationPhase::AwaitingLogin);
+    pending.source_was_running = true;
+    pending.config_switched = true;
+    pending.apps.clear();
+    *f.bots.config.lock().await = pending.target.clone();
+    f.bots.running.store(true, Ordering::SeqCst);
+
+    f.manager
+        .migration_finish_if_ready(&mut pending)
+        .await
+        .unwrap();
+
+    assert_eq!(pending.job.phase, BotMigrationPhase::AwaitingLogin);
+    assert!(pending.job.error.is_none());
+    assert!(!f.bots.config.lock().await.advanced.auto_start);
     assert!(f.bots.reservations.lock().unwrap().is_empty());
     assert_eq!(f.bots.writes.load(Ordering::SeqCst), 0);
     assert_eq!(f.resolver.calls.load(Ordering::SeqCst), 0);

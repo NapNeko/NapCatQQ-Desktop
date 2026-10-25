@@ -3,7 +3,10 @@
 //! `-L`：本机听口经 russh direct-tcpip 连到远端 loopback（WebUI / P0 对接）。
 //! `-R`：远端听口经 tcpip-forward 连回本机 loopback（P1：远端 Bot → 本机应用）。
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use tokio::sync::Notify;
 
@@ -60,6 +63,7 @@ pub struct TunnelHandle {
     pub remote_listen_port: u16,
     /// 给 acceptor / 取消任务发关闭通知
     pub(crate) shutdown: Arc<Notify>,
+    pub(crate) closed: AtomicBool,
     /// 持有后台任务,Drop 时它会因 shutdown 唤醒退出
     pub(crate) _task: tokio::task::JoinHandle<()>,
 }
@@ -68,11 +72,16 @@ impl TunnelHandle {
     /// 不带后台转发任务的句柄：给自己不泵数据的主机实现用（上层编排的测试替身只需要记下口）。
     /// 要在 tokio 运行时里调用
     pub fn detached(local_port: u16, remote_listen_port: u16) -> Self {
+        let shutdown = Arc::new(Notify::new());
+        let shutdown_for_task = Arc::clone(&shutdown);
         Self {
             local_port,
             remote_listen_port,
-            shutdown: Arc::new(Notify::new()),
-            _task: tokio::spawn(async {}),
+            shutdown,
+            closed: AtomicBool::new(false),
+            _task: tokio::spawn(async move {
+                shutdown_for_task.notified().await;
+            }),
         }
     }
 
@@ -84,21 +93,70 @@ impl TunnelHandle {
         self.remote_listen_port
     }
 
+    /// 主动关闭立即可见；后台任务退出的隧道也不应继续用于连接计划。
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Acquire) || self._task.is_finished()
+    }
+
     /// 主动关闭隧道(也可以直接 drop)
     pub fn close(&self) {
+        self.closed.store(true, Ordering::Release);
         self.shutdown.notify_waiters();
+        // 任务可能尚未首次轮询，保留一个通知使稍后注册的等待者也能退出。
+        self.shutdown.notify_one();
     }
 }
 
 impl Drop for TunnelHandle {
     fn drop(&mut self) {
-        self.shutdown.notify_waiters();
+        self.close();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn detached_handle_stays_live_until_closed() {
+        let handle = TunnelHandle::detached(47099, 0);
+        tokio::task::yield_now().await;
+        assert!(!handle.is_closed());
+        handle.close();
+        assert!(handle.is_closed());
+    }
+
+    #[tokio::test]
+    async fn dropped_handle_shuts_down_even_before_task_starts() {
+        let handle = TunnelHandle::detached(47099, 0);
+        let task = handle._task.abort_handle();
+        drop(handle);
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while !task.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn finished_task_marks_handle_closed() {
+        let handle = TunnelHandle {
+            local_port: 47099,
+            remote_listen_port: 0,
+            shutdown: Arc::new(Notify::new()),
+            closed: AtomicBool::new(false),
+            _task: tokio::spawn(async {}),
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while !handle.is_closed() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
 
     #[test]
     fn local_to_remote_uses_loopback() {

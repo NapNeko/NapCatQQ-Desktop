@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import sqlite3
 import stat
+import subprocess
+import sys
 import tarfile
 import tempfile
 from types import SimpleNamespace
@@ -238,6 +240,29 @@ class MigrationTransferTests(unittest.TestCase):
             f"BOT_ROOT={self.target}\n",
         )
 
+    def test_path_rewrite_preserves_other_roots_and_uri_prefixes(self):
+        old_root = "/srv/old-bot"
+        content = (
+            f"ROOT={old_root}\n"
+            f"DATABASE=sqlite:///{old_root}/data/main.sqlite\n"
+            f"FILE=file://{old_root}/data/config.json\n"
+            f"BACKUP=/backup{old_root}/data/main.sqlite\n"
+            f"SIBLING={old_root}-backup/data/main.sqlite\n"
+            f"REMOTE=https://example.invalid{old_root}/data/main.sqlite\n"
+        )
+        self.write_source(".env", content)
+        self.pack_source()
+        self.restore(old_root=old_root)
+        self.assertEqual(
+            (self.target / ".env").read_text(encoding="utf-8"),
+            f"ROOT={self.target}\n"
+            f"DATABASE=sqlite:///{self.target}/data/main.sqlite\n"
+            f"FILE=file://{self.target}/data/config.json\n"
+            f"BACKUP=/backup{old_root}/data/main.sqlite\n"
+            f"SIBLING={old_root}-backup/data/main.sqlite\n"
+            f"REMOTE=https://example.invalid{old_root}/data/main.sqlite\n",
+        )
+
     def test_pack_rejects_project_symlinks(self):
         outside = self.workspace / "outside.txt"
         outside.write_text("outside project", encoding="utf-8")
@@ -315,6 +340,57 @@ class MigrationTransferTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.restore(target=outside_target)
         self.assertFalse(outside_target.exists())
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "Writer detection uses Linux /proc")
+class ProjectWriterTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="ncd-migration-writer-test-")
+        self.addCleanup(temporary.cleanup)
+        self.workspace = Path(temporary.name).resolve()
+        self.source = self.workspace / "source"
+        self.source.mkdir()
+        self.data = self.source / "business.sqlite"
+        self.data.write_bytes(b"fixture")
+
+    def process_with_open_file(self, path, mode, cwd):
+        process = subprocess.Popen(
+            [sys.executable, "-c",
+             "import sys; stream=open(sys.argv[1], sys.argv[2]); print('ready', flush=True); sys.stdin.read(1)",
+             str(path), mode],
+            cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True,
+        )
+        def cleanup():
+            process.terminate()
+            process.communicate(timeout=5)
+        self.addCleanup(cleanup)
+        self.assertEqual(process.stdout.readline().strip(), "ready")
+        return process
+
+    def test_external_working_directory_with_writable_project_file_blocks_snapshot(self):
+        for mode in ("a", "r+"):
+            with self.subTest(mode=mode):
+                process = self.process_with_open_file(self.data, mode, self.workspace)
+                with self.assertRaisesRegex(ValueError, str(process.pid)):
+                    TRANSFER.no_writers(self.source)
+                process.terminate()
+                process.communicate(timeout=5)
+
+    def test_readonly_project_file_does_not_block_snapshot(self):
+        self.process_with_open_file(self.data, "r", self.workspace)
+        TRANSFER.no_writers(self.source)
+
+    def test_writable_file_in_sibling_directory_does_not_block_snapshot(self):
+        sibling = self.workspace / "source-backup"
+        sibling.mkdir()
+        self.process_with_open_file(sibling / "business.sqlite", "a", self.workspace)
+        TRANSFER.no_writers(self.source)
+
+    def test_project_working_directory_still_blocks_without_a_writable_file(self):
+        process = self.process_with_open_file(self.data, "r", self.source)
+        with self.assertRaisesRegex(ValueError, str(process.pid)):
+            TRANSFER.no_writers(self.source)
 
 
 if __name__ == "__main__":

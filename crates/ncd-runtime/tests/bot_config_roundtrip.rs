@@ -21,6 +21,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
+        docker: None,
         status_command: None,
     }
 }

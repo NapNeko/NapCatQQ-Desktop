@@ -7,6 +7,7 @@ import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import type { DriftDecision } from '../../core/ipc/generated/DriftDecision';
 import { useDomainEvents } from '../events/useDomainEvents';
 import { botSnapshotsKey } from './useBotSnapshots';
+import { errorText } from '../../core/domain/errors';
 
 const botConfigKey = (botId: string | null) => ['botConfig', botId] as const;
 
@@ -32,6 +33,26 @@ export function useBotConfig(botId: string | null, cb: Callbacks = {}) {
     // 缓存当前 botId 对应的 reason，onSuccess 时取出来交给 onSaved 回调。
     const reasonRef = useRef<string | null>(null);
     const watchBotIdRef = useRef<string | null>(null);
+
+    const invalidateConfig = () => {
+        queryClient.invalidateQueries({ queryKey: botSnapshotsKey });
+        queryClient.invalidateQueries({ queryKey: ['botFlavors'] });
+        queryClient.invalidateQueries({ queryKey: ['botConfig'] });
+    };
+
+    // Docker 应用失败发生在配置已落盘之后，按「已保存、待应用」处理，
+    // 清理脏状态并回读实际 actor；普通保存失败仍保留草稿供重试。
+    const handleSaveError = (err: unknown, config: BotConfig) => {
+        const message = errorText(err);
+        watchBotIdRef.current = null;
+        if (message.startsWith('DOCKER_CONFIG_APPLY_FAILED:')) {
+            console.error('[bots] 配置已保存但 Docker 容器应用失败:', message);
+            invalidateConfig();
+            cb.onSaved?.(String(config.bot.QQID), 'config_saved_docker_apply_failed');
+            return;
+        }
+        cb.onError?.(`保存配置失败: ${message}`);
+    };
 
     useDomainEvents((event) => {
         if (event.kind !== 'bot_state_changed') return;
@@ -60,25 +81,18 @@ export function useBotConfig(botId: string | null, cb: Callbacks = {}) {
             // - botFlavors：backend_type 切换后 BotCard 徽章必须立即跟上
             // - botConfig:<id>：detail 缓存也要失效，重进配置页拿新值
             // - botConfigsMap 共用 botConfig 前缀，自动跟着失效
-            queryClient.invalidateQueries({ queryKey: botSnapshotsKey });
-            queryClient.invalidateQueries({ queryKey: ['botFlavors'] });
-            queryClient.invalidateQueries({ queryKey: ['botConfig'] });
+            invalidateConfig();
             const reason = reasonRef.current;
             watchBotIdRef.current = null;
             cb.onSaved?.(snapshot.bot_id, reason);
         },
-        onError: (err: any) => {
-            watchBotIdRef.current = null;
-            cb.onError?.(`保存配置失败: ${err.message || err}`);
-        },
+        onError: handleSaveError,
     });
 
     const deleteMutation = useMutation({
         mutationFn: botService.deleteConfig,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: botSnapshotsKey });
-            queryClient.invalidateQueries({ queryKey: ['botFlavors'] });
-            queryClient.invalidateQueries({ queryKey: ['botConfig'] });
+            invalidateConfig();
             cb.onDeleted?.();
         },
         onError: (err: any) => {
@@ -93,17 +107,12 @@ export function useBotConfig(botId: string | null, cb: Callbacks = {}) {
             return botService.upsertConfigWithDecisions(config, decisions);
         },
         onSuccess: (snapshot) => {
-            queryClient.invalidateQueries({ queryKey: botSnapshotsKey });
-            queryClient.invalidateQueries({ queryKey: ['botFlavors'] });
-            queryClient.invalidateQueries({ queryKey: ['botConfig'] });
+            invalidateConfig();
             const reason = reasonRef.current;
             watchBotIdRef.current = null;
             cb.onSaved?.(snapshot.bot_id, reason);
         },
-        onError: (err: any) => {
-            watchBotIdRef.current = null;
-            cb.onError?.(`保存配置失败: ${err.message || err}`);
-        },
+        onError: (err, variables) => handleSaveError(err, variables.config),
     });
 
     return {

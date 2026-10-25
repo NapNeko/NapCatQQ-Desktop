@@ -147,6 +147,62 @@ fn snowluma_keeps_disabled_or_distinct_server_bindings_available() {
 }
 
 #[test]
+fn snowluma_docker_checks_effective_bindings_after_listener_normalization() {
+    for (http_host, ws_host) in [
+        ("127.0.0.1", "::1"),
+        ("localhost", "10.0.0.1"),
+        ("", "[::1]"),
+        (" LOCALHOST ", "localhost"),
+    ] {
+        let mut config = bot_with_networks(json!({
+            "httpServers": [server("http", http_host, 3000, "/http", true)],
+            "websocketServers": [server("ws", ws_host, 3000, "/ws", true)],
+        }));
+        config.bot.deployment_type = ncd_domain::bot_config::DeploymentType::Docker;
+        // 端口映射按容器端口去重，不会发现容器内两个服务竞争同一监听口。
+        config.validate_docker().unwrap();
+        assert_invalid_field(&config, "connect.websocketServers[0]");
+        assert_eq!(config.connect.http_servers[0].host, http_host);
+        assert_eq!(config.connect.websocket_servers[0].host, ws_host);
+    }
+}
+
+#[test]
+fn snowluma_docker_accepts_only_enabled_hosts_that_derived_configuration_normalizes() {
+    for host in ["", " ", "[::1]", " localhost "] {
+        let mut config = bot_with_networks(json!({
+            "httpServers": [server("http", host, 3000, "/", true)],
+        }));
+        config.bot.deployment_type = ncd_domain::bot_config::DeploymentType::Docker;
+        config.validate_network_urls().unwrap();
+        assert_eq!(config.connect.http_servers[0].host, host);
+
+        config.connect.http_servers[0].base.enable = false;
+        assert_invalid_field(&config, "connect.httpServers[0].host");
+        config.connect.http_servers[0].base.enable = true;
+        config.bot.deployment_type = ncd_domain::bot_config::DeploymentType::Native;
+        assert_invalid_field(&config, "connect.httpServers[0].host");
+    }
+}
+
+#[test]
+fn snowluma_docker_preserves_disabled_bindings_and_native_distinct_addresses() {
+    let mut config = bot_with_networks(json!({
+        "httpServers": [server("http", "127.0.0.1", 3000, "/", true)],
+        "websocketServers": [server("ws", "::1", 3000, "/", true)],
+    }));
+    config.validate_network_urls().unwrap();
+    config.bot.deployment_type = ncd_domain::bot_config::DeploymentType::Docker;
+    config.connect.websocket_servers[0].base.enable = false;
+    config.validate_network_urls().unwrap();
+
+    config.connect.websocket_servers[0].base.enable = true;
+    config.connect.http_servers[0].host = "10.0.0.1".into();
+    config.connect.websocket_servers[0].host = "10.0.0.2".into();
+    config.validate_network_urls().unwrap();
+}
+
+#[test]
 fn snowluma_checks_node_timer_bounds_including_disabled_clients() {
     for enabled in [true, false] {
         for timeout in [0, 2_147_483_648_u32, u32::MAX] {

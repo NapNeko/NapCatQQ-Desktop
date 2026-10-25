@@ -1634,6 +1634,7 @@ impl RemoteLinuxHost {
             local_port: actual_port,
             remote_listen_port: 0,
             shutdown,
+            closed: Default::default(),
             _task: task,
         })
     }
@@ -1695,6 +1696,7 @@ impl RemoteLinuxHost {
             local_port: spec.local_port,
             remote_listen_port: remote_listen,
             shutdown,
+            closed: Default::default(),
             _task: task,
         })
     }

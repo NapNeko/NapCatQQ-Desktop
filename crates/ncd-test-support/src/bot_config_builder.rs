@@ -121,6 +121,7 @@ impl BotConfigBuilder {
             connect: self.connect,
             advanced: self.advanced,
             status_command: self.status_command,
+            docker: None,
         }
     }
 }

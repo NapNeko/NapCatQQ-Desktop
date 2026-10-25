@@ -602,7 +602,7 @@ async fn stopped_bot_reports_not_running_and_refuses_calls() {
     config.connect.http_servers = vec![http_server("main", "0.0.0.0", 3000, "")];
     let bot = h.bots.add(config, false);
     let mut docker = remote_bot(20_002, DeploymentType::Docker);
-    docker.connect.websocket_servers = vec![ws_server("odd", "0.0.0.0", 8080, WsRole::Api)];
+    docker.connect.websocket_servers = vec![ws_server("odd", "10.0.0.5", 8080, WsRole::Api)];
     let docker = h.bots.add(docker, false);
 
     let channels = h.manager.list_channels(bot.as_str()).await.unwrap();
@@ -616,7 +616,7 @@ async fn stopped_bot_reports_not_running_and_refuses_calls() {
     assert_eq!(
         channel(&h.manager, &docker, &ws_id("odd")).await.status,
         DebugChannelStatus::Unsupported {
-            reason: "容器没有映射 8080 端口".into()
+            reason: "服务只监听在 10.0.0.5，暂不支持远端直连".into()
         }
     );
 

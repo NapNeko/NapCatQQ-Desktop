@@ -10,9 +10,6 @@ use ncd_domain::RuntimeScenario;
 use ncd_domain::bot_config::{BotConfig, WsRole};
 use ncd_domain::onebot_debug::{DebugChannelId, mask_token};
 
-/// NapCat / SnowLuma 的 Docker 编排只把这两个容器端口映射到宿主机
-const DOCKER_ONEBOT_PORTS: [u16; 2] = [3000, 3001];
-
 /// 一条通道从桌面端怎么连过去
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Reach {
@@ -185,19 +182,15 @@ fn reach_for(
             }
         }
         Some(RuntimeScenario::RemoteDocker { .. }) => {
-            if !DOCKER_ONEBOT_PORTS.contains(&port) {
-                Reach::Unsupported {
-                    reason: format!("容器没有映射 {port} 端口"),
-                }
-            } else if is_loopback(host) {
-                // 容器里的回环只在容器内部可达，宿主机的端口映射转不进去
-                Reach::Unsupported {
-                    reason: "容器内只监听 127.0.0.1，映射出来也连不上".to_owned(),
-                }
-            } else if is_any(host) {
-                let remote_port = DockerDeployment::build_spec(config)
-                    .host_port_for_container(port)
-                    .unwrap_or(port);
+            // Docker 派生配置把回环监听改成通配地址，使用宿主机发布口连接。
+            if is_any_or_loopback(host) {
+                let Some(remote_port) =
+                    DockerDeployment::build_spec(config).host_port_for_container(port)
+                else {
+                    return Reach::Unsupported {
+                        reason: format!("容器没有映射 {port} 端口"),
+                    };
+                };
                 // 连的是宿主机上发布出来的端口，不是容器里的监听地址；发布默认覆盖宿主机回环
                 Reach::Tunnel {
                     remote_host: "127.0.0.1".to_owned(),
@@ -393,8 +386,6 @@ mod tests {
 
                 let docker = only_http(Where::Docker, host, port).reach;
                 let expected = match (host, port) {
-                    (_, 8080) => unsupported("容器没有映射 8080 端口"),
-                    ("127.0.0.1", _) => unsupported("容器内只监听 127.0.0.1，映射出来也连不上"),
                     ("10.0.0.5", _) => unsupported("服务只监听在 10.0.0.5，暂不支持远端直连"),
                     _ => Reach::Tunnel {
                         remote_host: "127.0.0.1".to_owned(),
@@ -420,10 +411,14 @@ mod tests {
         for host in ["10.0.0.5", "192.168.1.2", "fe80::1", "example.com"] {
             assert!(!is_any_or_loopback(host), "{host:?}");
         }
-        // Docker 里写 localhost / ::1 同样出不了容器
+        // Docker 派生配置会将回环监听改成通配地址，保留用户保存的输入。
         assert_eq!(
             only_http(Where::Docker, "localhost", 3000).reach,
-            unsupported("容器内只监听 127.0.0.1，映射出来也连不上")
+            Reach::Tunnel {
+                remote_host: "127.0.0.1".to_owned(),
+                remote_port: 3001,
+                path: "/".to_owned(),
+            }
         );
         assert_eq!(
             only_http(Where::Docker, "::", 3001).reach,
@@ -433,6 +428,27 @@ mod tests {
                 path: "/".to_owned()
             }
         );
+    }
+
+    #[test]
+    fn docker_debug_uses_custom_published_port_for_both_backends() {
+        for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+            let mut cfg = config(Where::Docker, 10001);
+            cfg.bot.backend_type = backend;
+            cfg.connect.http_servers.push(http("custom", "[::1]", 4567));
+            cfg.docker = Some(ncd_domain::docker::BotDockerConfig {
+                port_mappings: vec![ncd_domain::PortMapping::new(62000, 4567)],
+                ..Default::default()
+            });
+            assert_eq!(
+                plan_channels(&cfg)[1].reach,
+                Reach::Tunnel {
+                    remote_host: "127.0.0.1".into(),
+                    remote_port: 62000,
+                    path: "/".into(),
+                }
+            );
+        }
     }
 
     #[test]

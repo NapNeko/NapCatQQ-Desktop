@@ -13,6 +13,7 @@ import {
     createDefaultConnection,
     getKindMeta,
     isAppLinkConnectionName,
+    allowsExternalAccess,
     replaceAppLinkClients,
     summarizeConnection,
     validateConnection,
@@ -31,6 +32,27 @@ const httpServer = (over: Partial<HttpServerConfig> = {}): HttpServerConfig => (
     token: '',
     debug: false,
     ...over,
+});
+
+describe('监听地址的外部访问范围', () => {
+    it.each([
+        '127.0.0.1',
+        '127.10.20.30',
+        'localhost',
+        ' LOCALHOST ',
+        'app.localhost',
+        '::1',
+        '[::1]',
+        '0:0:0:0:0:0:0:1',
+        '::ffff:127.0.0.1',
+    ])('%s 仅供本机访问', (host) => {
+        expect(allowsExternalAccess(host)).toBe(false);
+    });
+
+    it.each(['', '0.0.0.0', '::', '192.168.1.10', '203.0.113.8', 'example.com'])(
+        '%s 需要明确开放主机外部访问',
+        (host) => expect(allowsExternalAccess(host)).toBe(true),
+    );
 });
 const sseServer = (over: Partial<HttpSseServerConfig> = {}): HttpSseServerConfig => ({
     host: '0.0.0.0',
@@ -132,8 +154,10 @@ describe('createDefaultConnection', () => {
 
     it('监听型走端口，外连型走空 URL 待用户填', () => {
         const hs = createDefaultConnection('httpServer');
-        expect([hs.host, hs.port, hs.path]).toEqual(['0.0.0.0', 3000, '/']);
+        expect([hs.host, hs.port, hs.path]).toEqual(['127.0.0.1', 3000, '/']);
         const wss = createDefaultConnection('websocketServer');
+        expect(wss.host).toBe('127.0.0.1');
+        expect(createDefaultConnection('httpSseServer').host).toBe('127.0.0.1');
         expect([wss.port, wss.role, wss.heartInterval]).toEqual([3001, 'Universal', 30000]);
         expect(createDefaultConnection('httpClient').url).toBe('');
         const wsc = createDefaultConnection('websocketClient');

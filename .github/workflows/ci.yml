@@ -118,6 +118,9 @@ jobs:
               - 'src-tauri/resources/**'
               - 'crates/ncd-backend-snowluma/resources/**'
               - 'crates/ncd-component/resources/**'
+              - 'crates/ncd-runtime/src/metrics/remote_assets_batch*.py'
+              - 'crates/ncd-runtime/src/app_framework/manager/migration_transfer.py'
+              - 'crates/ncd-runtime/tests/migration_transfer_test.py'
               - 'scripts/build-snowluma-login-helper.mjs'
               - '.github/workflows/ci.yml'
 
@@ -171,6 +174,9 @@ jobs:
 
       - name: Remote QQ and SnowLuma helper tests
         run: pnpm run test:sl-login-helper
+
+      - name: Bot migration archive tests
+        run: python -B -m unittest discover -s crates/ncd-runtime/tests -p migration_transfer_test.py
 
   rust-core:
     name: Rust core (Windows)

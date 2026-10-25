@@ -117,10 +117,10 @@ pub use deployment_task::{
     DeploymentTaskResource, DeploymentTaskSnapshot, DeploymentTaskStatus,
 };
 pub use docker::{
-    ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,
-    DockerFlavor, DockerImageReady, DockerInstallReport, DockerInstallStatus,
-    DockerPullLayerSnapshot, DockerPullSpec, DockerSpecError, DockerStatus, ImageInfo,
-    ImageRemoveOptions, PortMapping,
+    BotDockerConfig, ContainerAction, ContainerInfo, ContainerState, DeployedContainer,
+    DockerDeploySpec, DockerFlavor, DockerImageReady, DockerInstallReport, DockerInstallStatus,
+    DockerPullLayerSnapshot, DockerPullSpec, DockerRestartPolicy, DockerSpecError, DockerStatus,
+    ImageInfo, ImageRemoveOptions, PortMapping,
 };
 pub use domain_event::{DOMAIN_EVENT_ENVELOPE_VERSION, DomainEvent, DomainEventKind};
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};

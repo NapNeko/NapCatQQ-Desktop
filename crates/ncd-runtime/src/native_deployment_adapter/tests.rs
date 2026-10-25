@@ -51,6 +51,7 @@ struct DockerRuntimeMockHost {
     created_dirs: Mutex<Vec<String>>,
     fail_login_overlay: bool,
     fail_home_probe: bool,
+    fail_copy: bool,
 }
 
 impl DockerRuntimeMockHost {
@@ -62,6 +63,7 @@ impl DockerRuntimeMockHost {
             created_dirs: Mutex::new(Vec::new()),
             fail_login_overlay: false,
             fail_home_probe: false,
+            fail_copy: false,
         }
     }
 
@@ -189,6 +191,7 @@ impl Host for DockerRuntimeMockHost {
             return Ok(command_output(0, "", ""));
         }
         match cmd.args.first().map(String::as_str) {
+            Some("cp") if self.fail_copy => Ok(command_output(1, "", "copy failed")),
             Some("version" | "info") => Ok(command_output(0, "27.3.1\n", "")),
             Some("ps") => Ok(command_output(0, self.ps_json.clone(), "")),
             Some("logs") => Ok(command_output(0, "legacy-line-a\nlegacy-line-b\n", "")),
@@ -225,6 +228,123 @@ fn docker_config(backend: BackendType) -> BotConfig {
         .backend_type(backend)
         .deployment_type(DeploymentType::Docker)
         .build()
+}
+
+#[test]
+fn docker_listener_hosts_are_normalized_only_in_derived_configuration() {
+    for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+        let config = docker_config(backend);
+        let mut raw = serde_json::to_value(config).unwrap();
+        raw["connect"] = json!({
+            "httpServers": [{"name":"http", "host":"127.0.0.1", "port":4000}],
+            "httpSseServers": [{"name":"sse", "host":"[::1]", "port":4001}],
+            "websocketServers": [{"name":"ws", "host":"", "port":4002},
+                {"name":"off", "host":"localhost", "port":4003, "enable":false}],
+            "websocketClients": [{"name":"client", "url":"ws://127.0.0.1:4004"}]
+        });
+        let config: BotConfig = serde_json::from_value(raw).unwrap();
+        let derived = docker_helpers::config_with_docker_listener_hosts(&config);
+        assert_eq!(derived.connect.http_servers[0].host, "0.0.0.0");
+        assert_eq!(derived.connect.http_sse_servers[0].host, "0.0.0.0");
+        assert_eq!(derived.connect.websocket_servers[0].host, "0.0.0.0");
+        assert_eq!(derived.connect.websocket_servers[1].host, "localhost");
+        assert_eq!(
+            derived.connect.websocket_clients,
+            config.connect.websocket_clients
+        );
+        assert_eq!(config.connect.http_servers[0].host, "127.0.0.1");
+        let mut native = config;
+        native.bot.deployment_type = DeploymentType::Native;
+        assert_eq!(
+            docker_helpers::config_with_docker_listener_hosts(&native),
+            native
+        );
+    }
+}
+
+#[tokio::test]
+async fn snowluma_start_copies_named_volume_configuration_before_final_restart() {
+    let host = Arc::new(DockerRuntimeMockHost::new(""));
+    let backend = DockerDeploymentBackend::new(
+        Arc::new(DockerDeployment::with_sl_secrets("test-vnc", "test-webui")),
+        host.clone(),
+        "docker",
+        BotFlavor::SnowLuma,
+    );
+    let config = docker_config(BackendType::SnowLuma);
+    backend
+        .start(&BotStartCtx {
+            config: BotRuntimeConfig::default_path("/data", "10001").with_bot_config(&config),
+            bot_config: Some(config),
+        })
+        .await
+        .unwrap();
+    let commands = host.commands();
+    let copy = commands
+        .iter()
+        .position(|command| {
+            command.program == "docker" && command.args.first().map(String::as_str) == Some("cp")
+        })
+        .unwrap();
+    assert_eq!(
+        commands[copy].args,
+        [
+            "cp",
+            "/home/napcat/.napcat-bots/slbot-10001/snowluma-data/config/onebot_10001.json",
+            "slbot-10001:/app/snowluma-data/config/onebot_10001.json"
+        ]
+    );
+    let chown = commands
+        .iter()
+        .position(|command| command.args.iter().any(|arg| arg == "chown"))
+        .unwrap();
+    let chmod = commands
+        .iter()
+        .position(|command| command.args.iter().any(|arg| arg == "chmod"))
+        .unwrap();
+    let restart = commands
+        .iter()
+        .position(|command| command.args.first().map(String::as_str) == Some("restart"))
+        .unwrap();
+    assert!(copy < chown && chown < chmod && chmod < restart);
+    assert!(
+        commands[chown]
+            .args
+            .iter()
+            .any(|arg| arg == "/app/snowluma-data/config")
+    );
+}
+
+#[tokio::test]
+async fn snowluma_start_stops_container_when_copy_fails_so_retry_does_not_skip_configuration() {
+    let mut mock = DockerRuntimeMockHost::new("");
+    mock.fail_copy = true;
+    let host = Arc::new(mock);
+    let backend = DockerDeploymentBackend::new(
+        Arc::new(DockerDeployment::with_sl_secrets("test-vnc", "test-webui")),
+        host.clone(),
+        "docker",
+        BotFlavor::SnowLuma,
+    );
+    let config = docker_config(BackendType::SnowLuma);
+    let result = backend
+        .start(&BotStartCtx {
+            config: BotRuntimeConfig::default_path("/data", "10001").with_bot_config(&config),
+            bot_config: Some(config),
+        })
+        .await;
+    assert!(result.unwrap_err().to_string().contains("copy failed"));
+    assert!(
+        host.commands()
+            .iter()
+            .any(|command| command.args == ["stop", "--", "slbot-10001"])
+    );
+    assert!(
+        !host
+            .commands()
+            .iter()
+            .any(|command| command.args.first().map(String::as_str) == Some("restart"))
+    );
 }
 
 #[test]

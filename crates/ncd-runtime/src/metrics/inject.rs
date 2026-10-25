@@ -270,6 +270,7 @@ mod tests {
                 ..Default::default()
             },
             advanced: AdvancedConfig::default(),
+            docker: None,
             status_command: None,
         }
     }

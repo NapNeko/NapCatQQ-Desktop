@@ -161,6 +161,7 @@ mod tests {
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
             status_command: None,
+            docker: None,
         }
     }
 

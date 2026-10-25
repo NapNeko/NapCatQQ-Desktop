@@ -242,8 +242,8 @@ pub async fn list_onebot_messenger_candidates(
 /// 为 Bot 自动补齐/启用环回 HTTP 服务(本机 + 远端)
 ///
 /// 已有可用环回 HTTP 时直接返回;否则启用已有服务或新建 `desktop-offline-http`。
-/// 走 BotManager upsert:本机 Running 可热更;远端同样写 bot 配置并尽量热推。
-/// 只改配置里的 127.0.0.1 HTTP,不跨机打 OneBot。
+/// 走 BotManager upsert:原生部署热更，Docker 自动同步发布端口并应用容器配置。
+/// Docker 监听容器所有网卡，由同机 watch 经宿主机发布端口访问，不跨机打 OneBot。
 #[tauri::command]
 pub async fn ensure_onebot_messenger_http(
     state: State<'_, AppState>,
@@ -253,7 +253,6 @@ pub async fn ensure_onebot_messenger_http(
         BotId, EnsureOneBotMessengerHttpResult, HttpServerConfig, MessagePostFormat,
         NetworkBaseFields,
     };
-    use ncd_runtime::resolve_local_onebot_messenger;
     use std::collections::HashSet;
 
     let bot_id = BotId::new(bot_id.trim());
@@ -270,27 +269,14 @@ pub async fn ensure_onebot_messenger_http(
 
     let host_info = resolve_onebot_host_info(&state, &cfg).await?;
     let is_local = host_info.scope.is_local();
+    let is_docker = cfg.bot.deployment_type == ncd_domain::DeploymentType::Docker;
 
     let snap = state
         .bot_manager
         .get_snapshot(&bot_id)
         .await
         .map_err(|e| e.to_string())?;
-    let servers_before: Vec<ncd_runtime::LocalHttpServerCandidate> = cfg
-        .connect
-        .http_servers
-        .iter()
-        .map(|s| ncd_runtime::LocalHttpServerCandidate {
-            enable: s.base.enable,
-            host: s.host.clone(),
-            port: s.port,
-            token: s.base.token.clone(),
-        })
-        .collect();
-    if let Ok(ready) =
-        resolve_local_onebot_messenger(bot_id.as_str(), "__candidate__", true, &servers_before)
-    {
-        let port = parse_port_from_base_url(&ready.base_url).unwrap_or(0);
+    if let Some(port) = onebot_messenger_http_port(bot_id.as_str(), &cfg) {
         let candidate = build_onebot_candidate(bot_id.as_str(), &cfg, &snap.state, &host_info);
         return Ok(EnsureOneBotMessengerHttpResult {
             bot_id: bot_id.to_string(),
@@ -308,16 +294,18 @@ pub async fn ensure_onebot_messenger_http(
         if server.port == 0 {
             continue;
         }
-        let host = if server.host.trim().is_empty() || server.host == "0.0.0.0" {
-            "127.0.0.1"
-        } else {
-            server.host.trim()
-        };
-        if host != "127.0.0.1" && host != "localhost" {
+        let host = server.host.trim();
+        if !matches!(
+            host,
+            "" | "0.0.0.0" | "::" | "[::]" | "127.0.0.1" | "::1" | "[::1]"
+        ) && !host.eq_ignore_ascii_case("localhost")
+        {
             continue;
         }
         server.base.enable = true;
-        if server.host.trim().is_empty() {
+        if is_docker {
+            server.host = "0.0.0.0".to_string();
+        } else if server.host.trim().is_empty() {
             server.host = "127.0.0.1".to_string();
         }
         port = server.port;
@@ -332,6 +320,8 @@ pub async fn ensure_onebot_messenger_http(
                 used_ports.insert(server.port);
             }
         }
+        used_ports.extend(cfg.connect.websocket_servers.iter().map(|s| s.port));
+        used_ports.extend(cfg.connect.http_sse_servers.iter().map(|s| s.port));
         // 同 scope 内其它 Bot 的端口也避开:本机=全部本机;远端=同 server_id
         let this_server = cfg.bot.runtime_target.server_id().map(str::to_string);
         for other in state.bot_manager.list_snapshots().await {
@@ -373,7 +363,7 @@ pub async fn ensure_onebot_messenger_http(
                 token: String::new(),
                 debug: false,
             },
-            host: "127.0.0.1".to_string(),
+            host: if is_docker { "0.0.0.0" } else { "127.0.0.1" }.to_string(),
             port,
             enable_cors: true,
             enable_websocket: false,
@@ -395,6 +385,8 @@ pub async fn ensure_onebot_messenger_http(
         .await
         .map_err(|e| e.to_string())?;
     let candidate = build_onebot_candidate(bot_id.as_str(), &cfg, &snap.state, &host_info);
+    // 对 Docker 返回宿主机发布端口，与候选列表和 watch 的访问方式保持一致。
+    let port = onebot_messenger_http_port(bot_id.as_str(), &cfg).unwrap_or(port);
 
     Ok(EnsureOneBotMessengerHttpResult {
         bot_id: bot_id.to_string(),
@@ -531,29 +523,12 @@ fn build_onebot_candidate(
     host: &OneBotHostInfo,
 ) -> ncd_domain::OneBotMessengerCandidate {
     use ncd_domain::BotActorState;
-    use ncd_runtime::resolve_local_onebot_messenger;
-
-    let servers: Vec<ncd_runtime::LocalHttpServerCandidate> = cfg
-        .connect
-        .http_servers
-        .iter()
-        .map(|s| ncd_runtime::LocalHttpServerCandidate {
-            enable: s.base.enable,
-            host: s.host.clone(),
-            port: s.port,
-            token: s.base.token.clone(),
-        })
-        .collect();
 
     let is_running = *state == BotActorState::Running;
     let is_local = host.scope.is_local();
-    // 环回探测与是否本机无关:远端 watch 也是打该机 127.0.0.1
-    let resolved = resolve_local_onebot_messenger(bot_id, "__candidate__", true, &servers).ok();
-    let has_local_http = resolved.is_some();
-    let http_port = resolved
-        .as_ref()
-        .and_then(|m| parse_port_from_base_url(&m.base_url))
-        .unwrap_or(0);
+    let port = onebot_messenger_http_port(bot_id, cfg);
+    let has_local_http = port.is_some();
+    let http_port = port.unwrap_or(0);
     let state_label = match state {
         BotActorState::Stopped => "stopped",
         BotActorState::Starting => "starting",
@@ -583,6 +558,29 @@ fn build_onebot_candidate(
         server_id: host.server_id.clone(),
         server_label: host.server_label.clone(),
     }
+}
+
+/// 候选只描述已配置的访问方式；watch 投递前仍以 inspect 的实际端口为准。
+fn onebot_messenger_http_port(bot_id: &str, cfg: &ncd_domain::BotConfig) -> Option<u16> {
+    if cfg.bot.deployment_type == ncd_domain::DeploymentType::Docker {
+        let messenger = ncd_runtime::ncd_watch_sync::watch_onebot_messenger_from_bot(cfg)?;
+        return parse_port_from_base_url(&messenger.base_url);
+    }
+    let servers: Vec<ncd_runtime::LocalHttpServerCandidate> = cfg
+        .connect
+        .http_servers
+        .iter()
+        .map(|s| ncd_runtime::LocalHttpServerCandidate {
+            enable: s.base.enable,
+            host: s.host.clone(),
+            port: s.port,
+            token: s.base.token.clone(),
+        })
+        .collect();
+    let messenger =
+        ncd_runtime::resolve_local_onebot_messenger(bot_id, "__candidate__", true, &servers)
+            .ok()?;
+    parse_port_from_base_url(&messenger.base_url)
 }
 
 fn parse_port_from_base_url(base_url: &str) -> Option<u16> {
@@ -623,4 +621,63 @@ pub fn read_github_pat(data_root: &std::path::Path) -> Option<String> {
         .flatten()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+#[cfg(test)]
+mod onebot_http_candidate_tests {
+    use ncd_domain::{
+        BotActorState, BotDockerConfig, DeploymentType, HttpServerConfig, MessagePostFormat,
+        NetworkBaseFields, PortMapping,
+    };
+    use ncd_test_support::BotConfigBuilder;
+
+    use super::*;
+
+    fn bot_with_http(deployment: DeploymentType, host: &str) -> ncd_domain::BotConfig {
+        let mut cfg = BotConfigBuilder::new().deployment_type(deployment).build();
+        cfg.connect.http_servers.push(HttpServerConfig {
+            base: NetworkBaseFields {
+                enable: true,
+                name: "notify".into(),
+                message_post_format: MessagePostFormat::Array,
+                token: String::new(),
+                debug: false,
+            },
+            host: host.into(),
+            port: 3010,
+            path: "/".into(),
+            enable_cors: false,
+            enable_websocket: false,
+        });
+        cfg
+    }
+
+    #[test]
+    fn docker_candidate_uses_custom_host_mapping_for_nondefault_listener() {
+        let mut cfg = bot_with_http(DeploymentType::Docker, "0.0.0.0");
+        cfg.docker = Some(BotDockerConfig {
+            port_mappings: vec![PortMapping::new(18080, 3010)],
+            ..BotDockerConfig::default()
+        });
+        let host = OneBotHostInfo::remote("server".into(), "Linux".into());
+        let candidate = build_onebot_candidate("10001", &cfg, &BotActorState::Running, &host);
+        assert!(candidate.has_local_http);
+        assert_eq!(candidate.http_port, 18080);
+        assert!(!candidate.eligible, "远端通知由同机 watch 投递");
+        assert!(!candidate.can_enable_http);
+    }
+
+    #[test]
+    fn native_candidate_keeps_listener_port_and_disabled_http_is_not_ready() {
+        let mut cfg = bot_with_http(DeploymentType::Native, "127.0.0.1");
+        assert_eq!(onebot_messenger_http_port("10001", &cfg), Some(3010));
+        cfg.connect.http_servers[0].base.enable = false;
+        assert_eq!(onebot_messenger_http_port("10001", &cfg), None);
+    }
+
+    #[test]
+    fn docker_listener_on_specific_interface_is_not_a_watch_candidate() {
+        let cfg = bot_with_http(DeploymentType::Docker, "192.0.2.10");
+        assert_eq!(onebot_messenger_http_port("10001", &cfg), None);
+    }
 }

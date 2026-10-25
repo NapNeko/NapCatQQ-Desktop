@@ -3,6 +3,7 @@
 //! Desktop 不握这条隧道;钥匙只在应用机生成,公钥进 Bot 机 authorized_keys。
 //! 反向对接 `-R` 把应用口挂到 Bot 机回环上;正向对接(麦麦)`-L` 把 Bot 的服务口挂到应用机回环上
 
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use ncd_domain::{AppInstance, AppInstanceId};
@@ -22,6 +23,7 @@ pub const LINK_KEY_PUB: &str = "id_ed25519.pub";
 pub const LINK_KNOWN_HOSTS: &str = "known_hosts";
 pub const LINK_RUN_SH: &str = "run.sh";
 pub const LINK_LOG: &str = "run.log";
+const LINK_CONTROL: &str = "control.sock";
 
 const COMMENT_PREFIX: &str = "ncd-link:";
 
@@ -40,6 +42,11 @@ pub enum ResidentForward {
     ExposeApp { app_port: u16 },
     /// 正向 WS，应用端是客户端：`-L 127.0.0.1:<应用机听口>:127.0.0.1:<Bot 服务口>`
     ReachBot { bot_port: u16 },
+    /// Bot 宿主机自 SSH：只在 Docker 网桥上监听，连接宿主机回环目标。
+    BridgeLoopback {
+        listen_host: Ipv4Addr,
+        target_port: u16,
+    },
 }
 
 pub fn link_comment(instance_id: &AppInstanceId) -> String {
@@ -60,8 +67,9 @@ pub fn pubkey_type_and_blob(pubkey_line: &str) -> Result<(String, String), Strin
     Ok((kind, blob))
 }
 
-/// 钥匙只放行这条对接用得着的那一个方向、那一个口：反向只许在 Bot 机回环上听 `listen_port`，
-/// 正向只许连 Bot 机回环上的服务口（`-L` 的听口在应用机上，Bot 机管不着）
+/// 两个转发方向都限制到本次对接的同一回环端点，避免只限制一侧时另一侧任意转发。
+/// OpenSSH 的 per-key 选项不能单独禁用某个方向；不能用 `permitopen/listen="none"`，
+/// 它们会使整条公钥认证失败。`-L` 的客户端听口不受服务端 authorized_keys 控制。
 pub fn authorized_keys_line(
     pubkey_line: &str,
     instance_id: &AppInstanceId,
@@ -70,10 +78,19 @@ pub fn authorized_keys_line(
 ) -> Result<String, String> {
     let permit = match forward {
         ResidentForward::ExposeApp { .. } if listen_port != 0 => {
-            format!("permitlisten=\"127.0.0.1:{listen_port}\"")
+            format!(
+                "permitlisten=\"127.0.0.1:{listen_port}\",permitopen=\"127.0.0.1:{listen_port}\""
+            )
         }
         ResidentForward::ReachBot { bot_port } if bot_port != 0 && listen_port != 0 => {
-            format!("permitopen=\"127.0.0.1:{bot_port}\"")
+            format!("permitopen=\"127.0.0.1:{bot_port}\",permitlisten=\"127.0.0.1:{bot_port}\"")
+        }
+        ResidentForward::BridgeLoopback { target_port, .. }
+            if target_port != 0 && listen_port != 0 =>
+        {
+            format!(
+                "permitopen=\"127.0.0.1:{target_port}\",permitlisten=\"127.0.0.1:{target_port}\""
+            )
         }
         _ => return Err("常驻隧道听口无效".into()),
     };
@@ -141,7 +158,14 @@ pub fn render_run_sh(input: &ResidentLinkScriptInput<'_>) -> String {
         ResidentForward::ReachBot { bot_port } => {
             format!("-L 127.0.0.1:{listen}:127.0.0.1:{bot_port}")
         }
+        ResidentForward::BridgeLoopback {
+            listen_host,
+            target_port,
+        } => {
+            format!("-L {listen_host}:{listen}:127.0.0.1:{target_port}")
+        }
     };
+    let control = "-M -S \"$DIR/control.sock\" ";
     format!(
         "#!/bin/sh\n\
          DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n\
@@ -157,10 +181,11 @@ pub fn render_run_sh(input: &ResidentLinkScriptInput<'_>) -> String {
          }}\n\
          trap cleanup EXIT INT TERM\n\
          while [ ! -f \"$STOP\" ]; do\n\
-           ssh -i \"$KEY\" \\\n\
+           ssh {control}-i \"$KEY\" \\\n\
              -o IdentitiesOnly=yes \\\n\
              -o ExitOnForwardFailure=yes \\\n\
              -o ServerAliveInterval=30 \\\n\
+             -o ConnectTimeout=10 \\\n\
              -o ServerAliveCountMax=3 \\\n\
              -o StrictHostKeyChecking=yes \\\n\
              -o \"UserKnownHostsFile=\\\"$KNOWN\\\"\" \\\n\
@@ -203,7 +228,13 @@ pub async fn ensure_resident_link(
         Ok(port) => Ok(port),
         Err(e) => {
             if created_dir || wrote_auth {
-                let _ = teardown_resident_link(app_host, Some(bot_host), &spec.instance.id).await;
+                if let Err(cleanup) =
+                    teardown_resident_link(app_host, Some(bot_host), &spec.instance.id).await
+                {
+                    return Err(AppFrameworkError::Host(format!(
+                        "{e}；清理本次隧道失败：{cleanup}"
+                    )));
+                }
             }
             Err(e)
         }
@@ -226,6 +257,11 @@ async fn ensure_resident_link_inner(
                 "协议 Bot 的 WS 服务还没分配端口".into(),
             ));
         }
+        ResidentForward::BridgeLoopback { target_port: 0, .. } => {
+            return Err(AppFrameworkError::Validation(
+                "Docker 桥接目标端口无效".into(),
+            ));
+        }
         _ => {}
     }
     if app_host.os() != Os::Linux {
@@ -233,11 +269,14 @@ async fn ensure_resident_link_inner(
             "两台远端对接只支持 Linux 应用所在机".into(),
         ));
     }
-    let dial = bot_host.ssh_dial_target().ok_or_else(|| {
+    let mut dial = bot_host.ssh_dial_target().ok_or_else(|| {
         AppFrameworkError::Validation(
             "无法取得 Bot 所在机的 SSH 地址，请先验证该主机的 SSH 连接".into(),
         )
     })?;
+    if matches!(spec.forward, ResidentForward::BridgeLoopback { .. }) {
+        dial = bridge_dial(bot_host).await?;
+    }
     if !app_host.command_exists("ssh").await || !app_host.command_exists("ssh-keygen").await {
         return Err(AppFrameworkError::Validation(
             "先在应用所在机安装 OpenSSH 客户端".into(),
@@ -248,6 +287,7 @@ async fn ensure_resident_link_inner(
     let listen_host = match spec.forward {
         ResidentForward::ExposeApp { .. } => bot_host,
         ResidentForward::ReachBot { .. } => app_host,
+        ResidentForward::BridgeLoopback { .. } => app_host,
     };
     let fwd = allocate_forward_port(listen_host, spec.reuse_port, spec.taken_ports).await?;
 
@@ -285,6 +325,7 @@ async fn ensure_resident_link_inner(
 
     stop_resident_script(app_host, &link_dir).await?;
     start_resident_script(app_host, &link_dir).await?;
+    wait_resident_ready(app_host, bot_host, &link_dir, &dial, spec.forward, fwd).await?;
     Ok(fwd)
 }
 
@@ -296,17 +337,194 @@ pub async fn teardown_resident_link(
     if app_host.os() == Os::Windows {
         return windows::teardown(app_host, bot_host, instance_id).await;
     }
-    if let Ok(home) = remote_home(app_host).await {
-        let dir = remote_link_dir(&home, instance_id);
-        let _ = stop_resident_script(app_host, &dir).await;
-        if app_host.exists(&dir).await.unwrap_or(false) {
-            let _ = app_host.remove_dir_all(&dir).await;
+    let mut failures = Vec::new();
+    match remote_home(app_host).await {
+        Ok(home) => {
+            let dir = remote_link_dir(&home, instance_id);
+            if let Err(error) = stop_resident_script(app_host, &dir).await {
+                failures.push(format!("停止进程：{error}"));
+            }
+            match app_host.exists(&dir).await {
+                Ok(true) => {
+                    if let Err(error) = app_host.remove_dir_all(&dir).await {
+                        failures.push(format!("删除目录：{error}"));
+                    }
+                }
+                Ok(false) => {}
+                Err(error) => failures.push(format!("检查目录：{error}")),
+            }
         }
+        Err(error) => failures.push(format!("读取主目录：{error}")),
     }
     if let Some(bot) = bot_host {
-        let _ = strip_bot_authorized_key(bot, instance_id).await;
+        if let Err(error) = strip_bot_authorized_key(bot, instance_id).await {
+            failures.push(format!("撤销授权：{error}"));
+        }
+    }
+    if !failures.is_empty() {
+        return Err(AppFrameworkError::Host(format!(
+            "清理常驻隧道失败：{}",
+            failures.join("；")
+        )));
     }
     Ok(())
+}
+
+/// 认证完成后才会建立 ControlMaster socket；另查实际监听，不能只认重连脚本 PID。
+pub(super) async fn bridge_ready(
+    host: &dyn Host,
+    dir: &HostPath,
+    listen_host: Ipv4Addr,
+    port: u16,
+) -> Result<bool, AppFrameworkError> {
+    let dial = bridge_dial(host).await?;
+    let out = host
+        .run_to_string(bridge_probe_command(dir, &dial, listen_host, port))
+        .await
+        .map_err(host_err)?;
+    Ok(out.success())
+}
+
+async fn bridge_dial(host: &dyn Host) -> Result<SshDialTarget, AppFrameworkError> {
+    let mut dial = host
+        .ssh_dial_target()
+        .ok_or_else(|| AppFrameworkError::Validation("Docker 桥接缺少宿主机 SSH 地址".into()))?;
+    dial.host = "127.0.0.1".into();
+    let candidates = if dial.port == 22 {
+        vec![22]
+    } else {
+        vec![dial.port, 22]
+    };
+    for port in candidates {
+        let connect = shell_single_quote(&format!("exec 3<>/dev/tcp/127.0.0.1/{port}"));
+        let script = format!(
+            "if command -v bash >/dev/null 2>&1; then bash -c {connect}; \
+             elif command -v ss >/dev/null 2>&1; then \
+             ss -H -lnt | awk '$4 ~ /:{port}$/ {{ found=1 }} END {{ exit !found }}'; \
+             else exit 1; fi"
+        );
+        let out = host
+            .run_to_string(
+                HostCommand::new("sh")
+                    .arg("-c")
+                    .arg(script)
+                    .timeout(Duration::from_secs(3)),
+            )
+            .await
+            .map_err(host_err)?;
+        if out.success() {
+            dial.port = port;
+            return Ok(dial);
+        }
+    }
+    Err(AppFrameworkError::Host(
+        "宿主机回环上的 SSH 端口不可访问（已检查档案端口和 22）".into(),
+    ))
+}
+
+fn bridge_probe_command(
+    dir: &HostPath,
+    dial: &SshDialTarget,
+    listen_host: Ipv4Addr,
+    port: u16,
+) -> HostCommand {
+    let control = shell_single_quote(dir.join(LINK_CONTROL).as_posix());
+    let peer = shell_single_quote(&format!("{}@{}", dial.username, dial.host));
+    let endpoint = shell_single_quote(&format!("{listen_host}:{port}"));
+    let connect = shell_single_quote(&format!("exec 3<>/dev/tcp/{listen_host}/{port}"));
+    let script = format!(
+        "ssh -S {control} -O check -p {} -- {peer} >/dev/null 2>&1 || exit 1\n\
+         if command -v bash >/dev/null 2>&1; then\n\
+           bash -c {connect}\n\
+         elif command -v ss >/dev/null 2>&1; then\n\
+           ss -H -lnt | awk -v endpoint={endpoint} '$4 == endpoint {{ found=1 }} END {{ exit !found }}'\n\
+         else\n\
+           exit 1\n\
+         fi",
+        dial.port
+    );
+    HostCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(5))
+}
+
+async fn resident_transport_ready(
+    app_host: &dyn Host,
+    bot_host: &dyn Host,
+    dir: &HostPath,
+    dial: &SshDialTarget,
+    forward: ResidentForward,
+    port: u16,
+) -> Result<bool, AppFrameworkError> {
+    if let ResidentForward::ExposeApp { .. } = forward {
+        let master = HostCommand::new("ssh")
+            .arg("-S")
+            .arg(dir.join(LINK_CONTROL).as_posix())
+            .arg("-O")
+            .arg("check")
+            .arg("-p")
+            .arg(dial.port.to_string())
+            .arg("--")
+            .arg(format!("{}@{}", dial.username, dial.host))
+            .timeout(Duration::from_secs(5));
+        if !app_host
+            .run_to_string(master)
+            .await
+            .map_err(host_err)?
+            .success()
+        {
+            return Ok(false);
+        }
+        let connect = shell_single_quote(&format!("exec 3<>/dev/tcp/127.0.0.1/{port}"));
+        let probe = format!(
+            "if command -v bash >/dev/null 2>&1; then bash -c {connect}; \
+            elif command -v ss >/dev/null 2>&1; then \
+            ss -H -lnt | awk '$4 ~ /:{port}$/ {{ found=1 }} END {{ exit !found }}'; \
+            else exit 1; fi"
+        );
+        return Ok(bot_host
+            .run_to_string(
+                HostCommand::new("sh")
+                    .arg("-c")
+                    .arg(probe)
+                    .timeout(Duration::from_secs(5)),
+            )
+            .await
+            .map_err(host_err)?
+            .success());
+    }
+    let listen_host = match forward {
+        ResidentForward::BridgeLoopback { listen_host, .. } => listen_host,
+        _ => Ipv4Addr::LOCALHOST,
+    };
+    Ok(app_host
+        .run_to_string(bridge_probe_command(dir, dial, listen_host, port))
+        .await
+        .map_err(host_err)?
+        .success())
+}
+
+async fn wait_resident_ready(
+    app_host: &dyn Host,
+    bot_host: &dyn Host,
+    dir: &HostPath,
+    dial: &SshDialTarget,
+    forward: ResidentForward,
+    port: u16,
+) -> Result<(), AppFrameworkError> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        if resident_transport_ready(app_host, bot_host, dir, dial, forward, port).await? {
+            return Ok(());
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(AppFrameworkError::Host(format!(
+                "常驻 SSH 隧道未能完成认证并监听端口 {port}，请检查主机间 SSH 登录及转发权限"
+            )));
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
 }
 
 pub async fn reconcile_resident_link(
@@ -321,7 +539,25 @@ pub async fn reconcile_resident_link(
     }
     let home = remote_home(app_host).await?;
     let dir = remote_link_dir(&home, &instance.id);
-    if resident_pid_alive(app_host, &dir).await {
+    let mut dial = bot_host
+        .ssh_dial_target()
+        .ok_or_else(|| AppFrameworkError::Validation("无法取得常驻隧道的 SSH 地址".into()))?;
+    if matches!(forward, ResidentForward::BridgeLoopback { .. }) {
+        dial = bridge_dial(bot_host).await?;
+    }
+    let expected = render_run_sh(&ResidentLinkScriptInput {
+        forward,
+        listen_port: forward_port,
+        dial: &dial,
+    });
+    let same_target = match app_host.read_file(&dir.join(LINK_RUN_SH)).await {
+        Ok(bytes) => bytes.as_ref() == expected.as_bytes(),
+        Err(HostError::PathNotFound { .. }) => false,
+        Err(error) => return Err(host_err(error)),
+    };
+    if same_target
+        && resident_transport_ready(app_host, bot_host, &dir, &dial, forward, forward_port).await?
+    {
         return Ok(());
     }
     ensure_resident_link(
@@ -338,7 +574,7 @@ pub async fn reconcile_resident_link(
     Ok(())
 }
 
-async fn remote_home(host: &dyn Host) -> Result<String, AppFrameworkError> {
+pub(super) async fn remote_home(host: &dyn Host) -> Result<String, AppFrameworkError> {
     if host.os() == Os::Windows {
         return Ok(host.remote_windows_info().await.map_err(host_err)?.home_dir);
     }
@@ -530,10 +766,7 @@ async fn strip_bot_authorized_key(
             .await
             .map_err(host_err);
     }
-    let (path, existing) = match read_authorized_keys(bot_host).await {
-        Ok(v) => v,
-        Err(_) => return Ok(()),
-    };
+    let (path, existing) = read_authorized_keys(bot_host).await?;
     let next = remove_authorized_key(&existing, instance_id);
     if next == existing {
         return Ok(());
@@ -584,37 +817,55 @@ async fn write_authorized_keys(
     Ok(())
 }
 
+fn stop_resident_command(link_dir: &HostPath) -> HostCommand {
+    let dir = shell_single_quote(link_dir.as_posix());
+    let script = format!(
+        r#"stop={dir}/{stop}; pidf={dir}/{pid}; run={dir}/{run}
+owns_pid() {{
+  [ -r "/proc/$pid/cmdline" ] && tr '\000' '\n' < "/proc/$pid/cmdline" | awk -v expected="$run" '
+    NR == 1 {{ if ($0 != "sh" && $0 != "/bin/sh") exit 1 }}
+    NR == 2 {{ found = ($0 == expected); exit }}
+    END {{ exit !found }}'
+}}
+touch "$stop" || exit 1
+if [ -f "$pidf" ]; then
+  pid=$(tr -dc '0-9' < "$pidf")
+  if [ -n "$pid" ] && owns_pid; then
+    kill "$pid" 2>/dev/null || true
+    for i in 1 2 3 4 5 6 7 8 9 10; do owns_pid || break; sleep 0.3; done
+    if owns_pid; then kill -9 "$pid" || exit 1; fi
+  fi
+fi
+rm -f "$pidf" "$stop" {dir}/{control}
+"#,
+        stop = LINK_STOP_FILE,
+        pid = LINK_PID_FILE,
+        run = LINK_RUN_SH,
+        control = LINK_CONTROL
+    );
+    HostCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(15))
+}
+
 async fn stop_resident_script(
     app_host: &dyn Host,
     link_dir: &HostPath,
 ) -> Result<(), AppFrameworkError> {
-    if !app_host.exists(link_dir).await.unwrap_or(false) {
+    if !app_host.exists(link_dir).await.map_err(host_err)? {
         return Ok(());
     }
-    let dir = shell_single_quote(link_dir.as_posix());
-    let script = format!(
-        "stop={dir}/{stop}; pidf={dir}/{pid};\n\
-         touch \"$stop\" 2>/dev/null || true\n\
-         if [ -f \"$pidf\" ]; then\n\
-           pid=$(tr -dc '0-9' < \"$pidf\")\n\
-           if [ -n \"$pid\" ]; then\n\
-             kill \"$pid\" 2>/dev/null || true\n\
-             for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 \"$pid\" 2>/dev/null || break; sleep 0.3; done\n\
-             kill -9 \"$pid\" 2>/dev/null || true\n\
-           fi\n\
-         fi\n\
-         rm -f \"$pidf\" \"$stop\"\n",
-        stop = LINK_STOP_FILE,
-        pid = LINK_PID_FILE,
-    );
-    let _ = app_host
-        .run_to_string(
-            HostCommand::new("sh")
-                .arg("-c")
-                .arg(script)
-                .timeout(Duration::from_secs(15)),
-        )
-        .await;
+    let out = app_host
+        .run_to_string(stop_resident_command(link_dir))
+        .await
+        .map_err(host_err)?;
+    if !out.success() {
+        return Err(AppFrameworkError::Host(format!(
+            "停止常驻隧道失败：{}",
+            out.stderr.trim()
+        )));
+    }
     Ok(())
 }
 
@@ -662,28 +913,6 @@ async fn start_resident_script(
         )));
     }
     Ok(())
-}
-
-async fn resident_pid_alive(app_host: &dyn Host, link_dir: &HostPath) -> bool {
-    let dir = shell_single_quote(link_dir.as_posix());
-    let script = format!(
-        "pidf={dir}/{pid};\n\
-         [ -f \"$pidf\" ] || exit 1\n\
-         pid=$(tr -dc '0-9' < \"$pidf\")\n\
-         [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null\n",
-        pid = LINK_PID_FILE,
-    );
-    matches!(
-        app_host
-            .run_to_string(
-                HostCommand::new("sh")
-                    .arg("-c")
-                    .arg(script)
-                    .timeout(Duration::from_secs(8)),
-            )
-            .await,
-        Ok(out) if out.success()
-    )
 }
 
 fn host_err(e: HostError) -> AppFrameworkError {
@@ -781,7 +1010,7 @@ mod tests {
 
         let line = authorized_keys_line("ssh-ed25519 AAAa c", &id(), reach, 34567).unwrap();
         assert!(line.contains("permitopen=\"127.0.0.1:23456\""), "{line}");
-        assert!(!line.contains("permitlisten"), "{line}");
+        assert!(line.contains("permitlisten=\"127.0.0.1:23456\""), "{line}");
         assert!(line.contains("command=\"/bin/false\"") && line.ends_with("ncd-link:k1"));
         assert!(
             authorized_keys_line(
@@ -799,5 +1028,63 @@ mod tests {
         assert!(pubkey_type_and_blob("").is_err());
         assert!(pubkey_type_and_blob("not-a-key").is_err());
         assert!(authorized_keys_line("ssh-ed25519 blob c", &id(), EXPOSE, 0).is_err());
+    }
+
+    #[test]
+    fn docker_bridge_uses_local_forward_on_gateway_and_authenticated_control_probe() {
+        let dial = SshDialTarget {
+            host: "127.0.0.1".into(),
+            port: 2222,
+            username: "alice".into(),
+        };
+        let gateway = Ipv4Addr::new(172, 17, 0, 1);
+        let script = render_run_sh(&ResidentLinkScriptInput {
+            forward: ResidentForward::BridgeLoopback {
+                listen_host: gateway,
+                target_port: 28080,
+            },
+            listen_port: 28081,
+            dial: &dial,
+        });
+        assert!(script.contains("-L 172.17.0.1:28081:127.0.0.1:28080"));
+        assert!(script.contains("-M -S \"$DIR/control.sock\""));
+        assert!(!script.contains("-R "));
+        let probe = bridge_probe_command(
+            &HostPath::from_posix("/home/alice/ncd/links/app-docker-bridge"),
+            &dial,
+            gateway,
+            28081,
+        );
+        assert!(probe.args[1].contains("-O check"));
+        assert!(probe.args[1].contains("/dev/tcp/172.17.0.1/28081"));
+        assert!(probe.args[1].contains("ss -H -lnt"));
+        assert!(
+            !probe.args[1].contains("kill -0"),
+            "脚本 PID 不能代表端口就绪"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stop_ignores_a_stale_pid_reused_by_an_unrelated_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut unrelated = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid_file = dir.path().join(LINK_PID_FILE);
+        std::fs::write(&pid_file, unrelated.id().to_string()).unwrap();
+        let command = stop_resident_command(&HostPath::from_posix(dir.path().to_str().unwrap()));
+        let status = std::process::Command::new(&command.program)
+            .args(&command.args)
+            .status()
+            .unwrap();
+        let untouched = unrelated.try_wait().unwrap().is_none();
+        let removed = !pid_file.exists();
+        let _ = unrelated.kill();
+        let _ = unrelated.wait();
+        assert!(status.success());
+        assert!(untouched, "主机重启后的旧 PID 不能用于终止无关进程");
+        assert!(removed, "旧 PID 记录应清理，以便重新建立隧道");
     }
 }
