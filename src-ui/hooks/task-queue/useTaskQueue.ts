@@ -206,7 +206,14 @@ function taskToItem(
 function countActiveTasks(): number {
     let n = 0;
     for (const task of Object.values(deploymentTaskStore.getSnapshot().tasks)) {
-        if (isActiveStatus(taskToItem(task).status)) n += 1;
+        // 根组件的计数订阅不能重放每个任务的全部进度历史。
+        if (
+            task.status === 'queued' ||
+            task.status === 'running' ||
+            task.status === 'waiting_input'
+        ) {
+            n += 1;
+        }
     }
     return n;
 }
