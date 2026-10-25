@@ -232,7 +232,9 @@ impl LoginSession {
             if saved.start_time() != Some(start_time) {
                 return Ok(None);
             }
-            saved.renew_with_cancel(host, cancel.clone()).await?;
+            // recover 已部署并核验同一进程；重复部署和绑定会耗尽扫码请求的时限。
+            saved.session_id = format!("{:032x}", rand::random::<u128>());
+            saved.save(host).await?;
             return Ok((!cancel.is_cancelled()).then_some(saved));
         }
         if cancel.is_cancelled() {
@@ -924,6 +926,7 @@ mod tests {
         .unwrap();
         assert_eq!(first.start_time(), Some("881923"));
         assert_eq!(first.pid(), 19);
+        host.commands.lock().unwrap().clear();
         let second = LoginSession::attach_running(
             &host,
             &layout.paths,
@@ -937,14 +940,23 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_ne!(first.session_id, second.session_id);
-        assert!(
-            host.commands
-                .lock()
-                .unwrap()
+        let commands = host.commands.lock().unwrap();
+        assert_eq!(
+            commands
                 .iter()
-                .all(|command| command.stdin.is_none()
-                    || command.args.iter().any(|arg| arg == DEPLOY_HELPER))
+                .filter(|command| command.args.iter().any(|arg| arg == DEPLOY_HELPER))
+                .count(),
+            1
         );
+        assert_eq!(
+            commands
+                .iter()
+                .filter(|command| command.args.iter().any(|arg| arg == "--bind"))
+                .count(),
+            1
+        );
+        assert!(commands.iter().all(|command| command.stdin.is_none()
+            || command.args.iter().any(|arg| arg == DEPLOY_HELPER)));
     }
 
     #[tokio::test]

@@ -190,6 +190,76 @@ class ContractTests(unittest.TestCase):
         tree.invoke('扫码登录', lambda: None)
         self.assertEqual(tree.lib.called, [1])
 
+    def test_named_button_and_its_static_label_are_one_control(self):
+        class Library:
+            called = []
+            def actionable(self, obj): return True
+            def action(self, obj): return obj
+            def action_count(self, obj, error): return 1
+            def action_name(self, obj, index, error): return 'press'
+            def text(self, value): return value
+            def do(self, obj, index, error): self.called.append(obj); return 1
+            def unref(self, value): pass
+        tree = helper.Tree.__new__(helper.Tree)
+        tree.lib = Library(); tree.main_interface = False
+        tree.nodes = [{'name': '手机QQ扫码登录', 'role': 'label'},
+                      {'obj': 17, 'role': 'push button', 'name': '刷新'},
+                      {'obj': 18, 'role': 'static', 'name': '刷新'}]
+        tree.invoke('刷新', lambda: None)
+        tree.nodes.append({'obj': 19, 'role': 'push button', 'name': '刷新'})
+        with self.assertRaisesRegex(RuntimeError, 'ActionNotUnique'):
+            tree.invoke('刷新', lambda: None)
+        self.assertEqual(tree.lib.called, [17])
+
+    def test_expired_overlay_can_outlive_refresh_click(self):
+        expired = [{'name': '手机QQ扫码登录', 'role': 'label'},
+                   {'name': '当前二维码已过期', 'role': 'static'},
+                   {'name': '刷新', 'role': 'push button'}]
+        calls, closed = [], []
+        class Page:
+            main_interface = False
+            def __init__(self, nodes): self.nodes = nodes
+            def invoke(self, name, check): calls.append(name)
+            def close(self): closed.append(self)
+        initial, pending, fresh = Page(expired), Page(expired), Page(expired[:1])
+        pages = [initial, pending, fresh]
+        with mock.patch.object(helper.time, 'sleep'):
+            result = helper.reach_qr_page(lambda: pages.pop(0), lambda: None, True)
+        self.assertIs(result, fresh)
+        self.assertEqual(calls, ['刷新'])
+        self.assertEqual(closed, [initial, pending])
+
+    def test_refresh_wait_stops_on_phone_confirmation(self):
+        calls = []
+        class Page:
+            main_interface = False
+            def __init__(self, nodes): self.nodes = nodes
+            def invoke(self, name, check): calls.append(name)
+            def close(self): pass
+        pages = [Page([{'name': '手机QQ扫码登录', 'role': 'label'},
+                       {'name': '当前二维码已过期', 'role': 'static'},
+                       {'name': '刷新', 'role': 'push button'}]),
+                 Page([{'name': '请在手机上确认登录', 'role': 'static'}])]
+        with mock.patch.object(helper.time, 'sleep'):
+            result = helper.reach_qr_page(lambda: pages.pop(0), lambda: None, True)
+        self.assertEqual(helper.classify(result.nodes, False), 'scanned')
+        self.assertEqual(calls, ['刷新'])
+
+    def test_stuck_expired_overlay_respects_request_deadline(self):
+        class Page:
+            main_interface = False
+            nodes = [{'name': '手机QQ扫码登录', 'role': 'label'},
+                     {'name': '当前二维码已过期', 'role': 'static'},
+                     {'name': '刷新', 'role': 'push button'}]
+            def invoke(self, name, check): pass
+            def close(self): pass
+        checks = iter([None, None, TimeoutError('RequestTimeout')])
+        def check():
+            value = next(checks)
+            if value: raise value
+        with mock.patch.object(helper.time, 'sleep'), self.assertRaises(TimeoutError):
+            helper.reach_qr_page(Page, check, True)
+
     def test_account_selector_routes_through_other_methods_then_qr(self):
         pages = [
             [{'name': '其他登录方式', 'role': 'link'}, {'name': '登录', 'role': 'push button'}],

@@ -413,9 +413,7 @@ impl DockerLoginSession {
         Ok(Some(session))
     }
 
-    async fn container_id(&mut self, host: &dyn Host) -> Result<String, BotBackendError> {
-        let cli = DockerCli::new(host);
-        cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
+    async fn container_id(&mut self, cli: &DockerCli<'_>) -> Result<String, BotBackendError> {
         let container = cli
             .list_containers()
             .await
@@ -437,10 +435,9 @@ impl DockerLoginSession {
     async fn anchor(
         &mut self,
         host: &dyn Host,
+        cli: &DockerCli<'_>,
     ) -> Result<(String, ProcessAnchor), BotBackendError> {
-        let id = self.container_id(host).await?;
-        let cli = DockerCli::new(host);
-        cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
+        let id = self.container_id(cli).await?;
         let out = host
             .run_to_string(
                 cli.command()
@@ -486,18 +483,19 @@ impl DockerLoginSession {
         let Some(mut session) = Self::recover(host, bot_id).await? else {
             return Ok(None);
         };
-        let (_, anchor) = session.anchor(host).await?;
+        let cli = DockerCli::new(host);
+        cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
+        let (_, anchor) = session.anchor(host, &cli).await?;
         Ok(Some(anchor.pid))
     }
 
     async fn bind(
         &mut self,
         host: &dyn Host,
+        cli: &DockerCli<'_>,
         id: &str,
         anchor: &ProcessAnchor,
     ) -> Result<(), BotBackendError> {
-        let cli = DockerCli::new(host);
-        cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let out = host
             .run_to_string(
                 cli.command()
@@ -571,7 +569,11 @@ impl DockerLoginSession {
             self.login_detected = true;
             snapshot.state = SnowLumaQrLoginState::LoginDetected;
         }
-        if self.scanned || self.login_detected || snapshot.state.is_terminal() {
+        if self.scanned
+            || self.login_detected
+            || snapshot.state.is_terminal()
+            || snapshot.state == SnowLumaQrLoginState::Expired
+        {
             snapshot.qrcode_payload = None;
         }
         Ok(snapshot)
@@ -587,7 +589,10 @@ impl DockerLoginSession {
                 "此容器未准备可访问性扫码，请使用 VNC",
             ));
         };
-        let (id, anchor) = session.anchor(host).await?;
+        // 一轮采集复用已判定的 Docker 权限，避免慢 SSH 上重复探测占满请求期限。
+        let cli = DockerCli::new(host);
+        cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
+        let (id, anchor) = session.anchor(host, &cli).await?;
         if session
             .lease_started_at
             .is_some_and(|started| now().saturating_sub(started) >= LEASE_SECONDS)
@@ -613,7 +618,7 @@ impl DockerLoginSession {
             snapshot.qq_pid = Some(anchor.pid);
             return Ok(snapshot);
         }
-        session.bind(host, &id, &anchor).await?;
+        session.bind(host, &cli, &id, &anchor).await?;
         if session.lease_started_at.is_none() {
             session.lease_started_at = Some(now());
             session.session_id = format!("{:032x}", rand::random::<u128>());
@@ -642,8 +647,6 @@ impl DockerLoginSession {
             scanned: session.scanned,
             cancel_path: format!("{CONTAINER_ROOT}/cancelled"),
         };
-        let cli = DockerCli::new(host);
-        cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let out = host
             .run_to_string(
                 cli.command()
@@ -666,7 +669,7 @@ impl DockerLoginSession {
             return Err(unavailable());
         }
         // 采样后再次核验 PID 与启动时间，拒绝进程替换后的迟到图片。
-        session.anchor(host).await?;
+        session.anchor(host, &cli).await?;
         let snapshot = session.decode(out.stdout.as_bytes())?;
         session.save(host).await?;
         Ok(snapshot)
@@ -753,6 +756,10 @@ impl DockerLoginSession {
 }
 
 #[cfg(test)]
+#[path = "docker_login_tests.rs"]
+mod request_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -814,6 +821,8 @@ mod tests {
         assert!(session.decode(wrong_pid).is_err());
         let active = br#"{"session_id":"abc","v":1,"state":"waiting_for_qr","qq_pid":24,"qrcode_payload":null,"uin":null,"observer_removed":false,"message":null}"#;
         assert!(session.decode(active).is_err());
+        let expired = br#"{"session_id":"abc","v":1,"state":"expired","qq_pid":24,"qrcode_payload":"data:image/png;base64,secret","uin":null,"observer_removed":true,"message":null}"#;
+        assert!(session.decode(expired).unwrap().qrcode_payload.is_none());
         let scanned = br#"{"session_id":"abc","v":1,"state":"scanned","qq_pid":24,"qrcode_payload":"data:image/png;base64,secret","uin":null,"observer_removed":true,"message":null}"#;
         assert!(session.decode(scanned).unwrap().qrcode_payload.is_none());
         assert!(session.scanned);

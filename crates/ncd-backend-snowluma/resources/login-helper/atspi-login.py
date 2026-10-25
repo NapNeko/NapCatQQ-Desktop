@@ -159,6 +159,13 @@ def next_login_control(nodes, performed):
     return None
 
 
+def matching_controls(nodes, name):
+    matches = [node for node in nodes if node['name'] == name and node['role'] in CONTROL_ROLES]
+    # Chromium exposes the button name again on its static text child.
+    controls = [node for node in matches if node['role'] in {'push button', 'link'}]
+    return controls or matches
+
+
 class QrDialogObscured(RuntimeError):
     pass
 
@@ -201,7 +208,11 @@ def reach_qr_page(make_tree, check, refresh):
                                                for node in current.nodes)), None)
                 if refresh and refresh_control:
                     current.invoke(refresh_control, check)
-                    current.close(); time.sleep(0.15); current = make_tree()
+                    while True:
+                        current.close(); check(); time.sleep(0.15); current = make_tree()
+                        # QQ keeps the expired overlay while requesting the replacement code.
+                        if classify(current.nodes, current.main_interface) != 'expired':
+                            break
                 return current
             control = next_login_control(current.nodes, performed)
             if control is None:
@@ -412,7 +423,7 @@ class Tree:
             raise RuntimeError('ActionRejected')
         if name == '刷新' and not qr_page(self.nodes):
             raise RuntimeError('ActionRejected')
-        matches = [node for node in self.nodes if node['name'] == name and node['role'] in CONTROL_ROLES]
+        matches = matching_controls(self.nodes, name)
         if len(matches) != 1:
             raise RuntimeError('ActionNotUnique')
         node, target, action, ancestors = matches[0], matches[0]['obj'], None, []
