@@ -27,6 +27,12 @@ export interface RemoteQrLoginApi {
     closeQrLogin: (botId: string) => Promise<void>;
 }
 
+interface QrTransport {
+    request: Promise<void> | null;
+    closing: Promise<void> | null;
+    close: (retryFailed?: boolean) => Promise<boolean>;
+}
+
 const POLLING_STATES = new Set([
     'starting',
     'waiting_for_qr',
@@ -51,12 +57,14 @@ export function useRemoteSnowlumaQrLogin(
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [requesting, setRequesting] = useState(false);
+    const [recovering, setRecovering] = useState(false);
     const [visible, setVisible] = useState(isPageVisible);
     const [attempt, setAttempt] = useState(0);
     const epoch = useRef(0);
     const current = useRef({ botId, open });
     current.current = { botId, open };
     const requestRef = useRef<((refresh: boolean) => Promise<void>) | null>(null);
+    const transports = useRef(new Map<string, QrTransport>());
     const session = useRef({
         botId,
         open: false,
@@ -85,7 +93,16 @@ export function useRemoteSnowlumaQrLogin(
         let terminal = false;
         let refreshExpired = false;
         let expiredRefreshAttempts = 0;
-        let closeRequested = false;
+        let consecutiveFailures = 0;
+        let closePromise: Promise<boolean> | undefined;
+        let closeFailed = false;
+        let transportReady = false;
+        const transport: QrTransport = {
+            request: null,
+            closing: null,
+            close: (retryFailed) => close(retryFailed),
+        };
+        const reopening = open && session.current.botId === botId && !session.current.open;
         if (
             session.current.botId !== botId ||
             session.current.open !== open ||
@@ -113,31 +130,60 @@ export function useRemoteSnowlumaQrLogin(
         setError(null);
         setRefreshing(false);
         setRequesting(false);
+        setRecovering(false);
         if (!open || !visible) return;
 
-        const close = () => {
-            if (closeRequested) return;
-            closeRequested = true;
-            void api.closeQrLogin(botId).catch(() => {
-                if (active && generation === epoch.current) {
-                    setSnapshot({
-                        v: 1,
-                        state: 'cleanup_failed',
-                        qq_pid: null,
-                        qrcode_payload: null,
-                        uin: null,
-                        observer_removed: false,
-                        message: null,
+        const close = (retryFailed = false) => {
+            if (closePromise && (!retryFailed || !closeFailed)) return closePromise;
+            closeFailed = false;
+            closePromise = (async () => {
+                let closeTimer: ReturnType<typeof setTimeout> | undefined;
+                try {
+                    const closeRequest = api.closeQrLogin(botId);
+                    const settled = closeRequest.then(
+                        () => {},
+                        () => {},
+                    );
+                    transport.closing = transport.closing
+                        ? Promise.all([transport.closing, settled]).then(() => {})
+                        : settled;
+                    await Promise.race([
+                        closeRequest,
+                        new Promise<never>((_, reject) => {
+                            closeTimer = setTimeout(
+                                () => reject(new Error('qr_close_timeout')),
+                                SL_QR_REQUEST_TIMEOUT_MS,
+                            );
+                        }),
+                    ]);
+                    return true;
+                } catch {
+                    closeFailed = true;
+                    if (active && generation === epoch.current) {
+                        setSnapshot({
+                            v: 1,
+                            state: 'cleanup_failed',
+                            qq_pid: null,
+                            qrcode_payload: null,
+                            uin: null,
+                            observer_removed: false,
+                            message: null,
+                        });
+                        setError(null);
+                        setRecovering(false);
+                    }
+                    pushInfoBar({
+                        tone: 'warning',
+                        title: '扫码通道未确认关闭',
+                        content: `Bot ${botId}：请停止此 Bot 清理扫码会话`,
+                        autoDismissMs: 8000,
                     });
-                    setError(null);
+                    return false;
+                } finally {
+                    clearTimeout(closeTimer);
                 }
-                pushInfoBar({
-                    tone: 'warning',
-                    title: '扫码通道未确认关闭',
-                    content: `Bot ${botId}：请停止此 Bot 清理扫码会话`,
-                    autoDismissMs: 8000,
-                });
-            });
+            })();
+            return closePromise;
         };
 
         const expire = () => {
@@ -148,8 +194,9 @@ export function useRemoteSnowlumaQrLogin(
             setSnapshot(null);
             setRequesting(false);
             setRefreshing(false);
+            setRecovering(false);
             setError('扫码等待已超时，请重新打开扫码窗口或在 QQ 界面继续登录');
-            close();
+            if (transportReady) close();
         };
         const remaining = SL_QR_SESSION_TIMEOUT_MS - (Date.now() - session.current.startedAt);
         if (remaining <= 0) {
@@ -164,7 +211,6 @@ export function useRemoteSnowlumaQrLogin(
             if (!active || pending || terminal || !isPageVisible()) return;
             if (refresh && (session.current.scanned || session.current.loginDetected)) return;
             pending = true;
-            session.current.initialized = true;
             setRequesting(true);
             if (refresh) setRefreshing(true);
             if (refresh)
@@ -172,15 +218,56 @@ export function useRemoteSnowlumaQrLogin(
                     previous ? { ...previous, qrcode_payload: null } : null,
                 );
             clearTimeout(timer);
+            let timedOut = false;
+            let snapshotRequest: Promise<SnowLumaQrLoginSnapshot> | undefined;
             try {
+                if (!transportReady) {
+                    const previous = transports.current.get(botId);
+                    if (previous) {
+                        setRecovering(true);
+                        setError('正在等待旧扫码请求结束');
+                        const closed = await previous.close(reopening);
+                        if (!active || terminal || generation !== epoch.current) return;
+                        if (!closed) {
+                            terminal = true;
+                            clearTimeout(leaseTimer);
+                            setSnapshot({
+                                v: 1,
+                                state: 'cleanup_failed',
+                                qq_pid: null,
+                                qrcode_payload: null,
+                                uin: null,
+                                observer_removed: false,
+                                message: null,
+                            });
+                            setError(null);
+                            setRecovering(false);
+                            return;
+                        }
+                        await previous.request;
+                        await previous.closing;
+                        if (!active || terminal || generation !== epoch.current || !isPageVisible())
+                            return;
+                    }
+                    transports.current.set(botId, transport);
+                    transportReady = true;
+                    setRecovering(false);
+                    setError(null);
+                }
+                session.current.initialized = true;
+                snapshotRequest = api.qrLoginSnapshot(botId, refresh);
+                transport.request = snapshotRequest.then(
+                    () => {},
+                    () => {},
+                );
                 const next = await Promise.race([
-                    api.qrLoginSnapshot(botId, refresh),
+                    snapshotRequest,
                     new Promise<never>((_, reject) => {
                         cancelPending = () => reject(new Error('qr_request_cancelled'));
-                        requestTimer = setTimeout(
-                            () => reject(new Error('qr_request_timeout')),
-                            SL_QR_REQUEST_TIMEOUT_MS,
-                        );
+                        requestTimer = setTimeout(() => {
+                            timedOut = true;
+                            reject(new Error('qr_request_timeout'));
+                        }, SL_QR_REQUEST_TIMEOUT_MS);
                     }),
                 ]);
                 if (!active || terminal || generation !== epoch.current || !isPageVisible()) return;
@@ -217,17 +304,62 @@ export function useRemoteSnowlumaQrLogin(
                             : null,
                 });
                 setError(null);
+                consecutiveFailures = 0;
+                setRecovering(false);
                 if (terminal) {
                     clearTimeout(leaseTimer);
-                    if (!next.observer_removed && next.state !== 'cleanup_failed') close();
+                    if (next.state === 'cleanup_failed') {
+                        closePromise ??= Promise.resolve(false);
+                        closeFailed = true;
+                    } else if (next.observer_removed) {
+                        closePromise ??= Promise.resolve(true);
+                    } else {
+                        const closed = await close();
+                        if (closed && active && generation === epoch.current) {
+                            setSnapshot((previous) =>
+                                previous ? { ...previous, observer_removed: true } : previous,
+                            );
+                        }
+                    }
                 }
             } catch {
+                clearTimeout(requestTimer);
                 if (active && !terminal && generation === epoch.current && isPageVisible()) {
-                    terminal = true;
-                    setSnapshot(null);
-                    setError('扫码通道未响应，请重新打开扫码窗口或在 QQ 界面继续登录');
-                    clearTimeout(leaseTimer);
-                    close();
+                    consecutiveFailures += 1;
+                    refreshExpired = false;
+                    setSnapshot((previous) =>
+                        previous ? { ...previous, qrcode_payload: null } : null,
+                    );
+                    if (!timedOut && consecutiveFailures <= 2) {
+                        // 已结束的请求可只读重查，不能重放可能已经点过的刷新动作。
+                        setError('扫码通道暂时中断，正在重试');
+                        setRecovering(true);
+                    } else {
+                        terminal = true;
+                        clearTimeout(leaseTimer);
+                        setSnapshot(null);
+                        setError('扫码通道未响应，正在结束旧请求');
+                        setRecovering(true);
+                        setRequesting(false);
+                        setRefreshing(false);
+                        const closed = await close();
+                        if (!closed || !active || generation !== epoch.current) return;
+                        setRecovering(false);
+                        setError('扫码通道未响应，旧请求仍在结束，可在 QQ 界面继续登录');
+                        // IPC 超时不会取消 Rust 请求；旧请求结束且关闭确认后才允许重开。
+                        await snapshotRequest?.catch(() => {});
+                        if (!active || generation !== epoch.current || !isPageVisible()) return;
+                        setSnapshot({
+                            v: 1,
+                            state: 'unavailable',
+                            qq_pid: session.current.qqPid,
+                            qrcode_payload: null,
+                            uin: null,
+                            observer_removed: true,
+                            message: null,
+                        });
+                        setError('扫码通道未响应，请重新获取二维码或在 QQ 界面继续登录');
+                    }
                 }
             } finally {
                 clearTimeout(requestTimer);
@@ -238,9 +370,11 @@ export function useRemoteSnowlumaQrLogin(
                     setRequesting(false);
                     if (!terminal && isPageVisible()) {
                         // QQ 换码尚未完成时退避，避免反复点击；有效二维码只做状态查询。
-                        const delay = refreshExpired
-                            ? Math.min(1000 * 2 ** expiredRefreshAttempts, 30000)
-                            : 1000;
+                        const delay = consecutiveFailures
+                            ? Math.min(1000 * 2 ** consecutiveFailures, 8000)
+                            : refreshExpired
+                              ? Math.min(1000 * 2 ** expiredRefreshAttempts, 30000)
+                              : 1000;
                         timer = setTimeout(() => void request(refreshExpired), delay);
                     }
                 }
@@ -265,7 +399,13 @@ export function useRemoteSnowlumaQrLogin(
             // eslint-disable-next-line react-hooks/exhaustive-deps -- 此处需要读取最新会话代次。
             const isCurrent = () => epoch.current === generation;
             queueMicrotask(() => {
-                if (isCurrent() || !current.current.open || current.current.botId !== botId) {
+                if (
+                    transportReady &&
+                    (isCurrent() ||
+                        !current.current.open ||
+                        current.current.botId !== botId ||
+                        !isPageVisible())
+                ) {
                     close();
                 }
             });
@@ -288,6 +428,7 @@ export function useRemoteSnowlumaQrLogin(
         error: open ? error : null,
         refreshing,
         requesting,
+        recovering,
         paused: open && !visible,
         refresh,
         canRetry,

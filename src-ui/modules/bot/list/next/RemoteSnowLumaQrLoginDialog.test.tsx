@@ -2,7 +2,10 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RemoteSnowLumaQrLoginDialog } from './RemoteSnowLumaQrLoginDialog';
-import type { RemoteQrLoginApi } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
+import {
+    SL_QR_REQUEST_TIMEOUT_MS,
+    type RemoteQrLoginApi,
+} from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
 import type { SnowLumaQrLoginSnapshot } from '../../../../core/ipc/generated/domain/SnowLumaQrLoginSnapshot';
 
 const imageMocks = vi.hoisted(() => ({ decode: vi.fn(), render: vi.fn() }));
@@ -206,6 +209,75 @@ describe('SL QR dialog status', () => {
         await waitFor(() => expect(api.qrLoginSnapshot).toHaveBeenLastCalledWith('123456', true));
         expect(onOpenChange).not.toHaveBeenCalled();
         expect(api.closeQrLogin).not.toHaveBeenCalled();
+        unmount();
+    });
+
+    it('shows reconnection while a temporary channel failure is retried', async () => {
+        vi.useFakeTimers();
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockRejectedValueOnce(new Error('temporary tunnel failure'))
+                .mockResolvedValue(material),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={vi.fn()}
+                onOpenVnc={vi.fn()}
+                api={api}
+            />,
+        );
+        await act(async () => {});
+        expect(screen.getByRole('status').textContent).toBe('扫码通道暂时中断，正在重试');
+        expect(
+            (screen.getByRole('button', { name: '正在重连' }) as HTMLButtonElement).disabled,
+        ).toBe(true);
+        expect(screen.getByRole('button', { name: '打开 QQ 界面' })).toBeTruthy();
+        await act(async () => vi.advanceTimersByTimeAsync(2000));
+        expect(screen.getByRole('img', { name: 'QQ 登录二维码' })).toBeTruthy();
+        unmount();
+    });
+
+    it('offers in-place recovery after a timed-out request ends and is closed', async () => {
+        vi.useFakeTimers();
+        let finishOld!: (value: SnowLumaQrLoginSnapshot) => void;
+        const api: RemoteQrLoginApi = {
+            qrLoginSnapshot: vi
+                .fn()
+                .mockImplementationOnce(
+                    () =>
+                        new Promise<SnowLumaQrLoginSnapshot>((resolve) => {
+                            finishOld = resolve;
+                        }),
+                )
+                .mockResolvedValue(material),
+            closeQrLogin: vi.fn(async () => {}),
+        };
+        const onOpenChange = vi.fn();
+        const { unmount } = render(
+            <RemoteSnowLumaQrLoginDialog
+                botId="123456"
+                open
+                isOnline={false}
+                onOpenChange={onOpenChange}
+                onOpenVnc={vi.fn()}
+                api={api}
+            />,
+        );
+        await act(async () => {});
+        await act(async () => vi.advanceTimersByTimeAsync(SL_QR_REQUEST_TIMEOUT_MS));
+        expect(screen.queryByRole('button', { name: '重新获取' })).toBeNull();
+        await act(async () => finishOld(material));
+        expect(screen.queryByRole('img')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '重新获取' }));
+        await act(async () => {});
+        expect(api.qrLoginSnapshot).toHaveBeenLastCalledWith('123456', true);
+        expect(screen.getByRole('img', { name: 'QQ 登录二维码' })).toBeTruthy();
+        expect(onOpenChange).not.toHaveBeenCalled();
         unmount();
     });
 

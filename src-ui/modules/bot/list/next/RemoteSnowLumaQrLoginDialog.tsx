@@ -100,17 +100,27 @@ export function RemoteSnowLumaQrLoginDialog({
 }: Props) {
     const [imageUnavailable, setImageUnavailable] = useState(false);
     const imageError = useCallback(() => setImageUnavailable(true), []);
-    const { snapshot, error, refreshing, requesting, paused, refresh, canRetry, retry } =
-        useRemoteSnowlumaQrLogin(botId, open && !isOnline, api, initialRefresh);
+    const {
+        snapshot,
+        error,
+        refreshing,
+        requesting,
+        recovering,
+        paused,
+        refresh,
+        canRetry,
+        retry,
+    } = useRemoteSnowlumaQrLogin(botId, open && !isOnline, api, initialRefresh);
     useEffect(() => {
         if (open && isOnline) onOpenChange(false);
     }, [isOnline, open, onOpenChange]);
     useEffect(() => setImageUnavailable(false), [snapshot?.qrcode_payload]);
     const state = snapshot?.state;
-    const canRefresh = !paused && (canRetry || state === 'waiting_for_qr' || state === 'expired');
+    const canRefresh =
+        !paused && !recovering && (canRetry || state === 'waiting_for_qr' || state === 'expired');
     const completed = isOnline || state === 'logged_in';
     const fallbackOnly =
-        Boolean(error) ||
+        (Boolean(error) && !recovering) ||
         state === 'disabled' ||
         state === 'unavailable' ||
         state === 'cancelled' ||
@@ -147,13 +157,15 @@ export function RemoteSnowLumaQrLoginDialog({
 
     const statusTone: QrStageTone = completed
         ? 'success'
-        : state === 'cleanup_failed' || state === 'account_mismatch' || Boolean(error)
-          ? 'danger'
-          : state === 'expired' || imageUnavailable || fallbackOnly
-            ? 'warning'
-            : showQrImage || state === 'scanned' || state === 'login_detected'
-              ? 'brand'
-              : 'neutral';
+        : recovering
+          ? 'warning'
+          : state === 'cleanup_failed' || state === 'account_mismatch' || Boolean(error)
+            ? 'danger'
+            : state === 'expired' || imageUnavailable || fallbackOnly
+              ? 'warning'
+              : showQrImage || state === 'scanned' || state === 'login_detected'
+                ? 'brand'
+                : 'neutral';
 
     const placeholder: { variant: QrPlaceholderVariant; title: string; hint?: string } = (() => {
         if (completed) {
@@ -162,6 +174,9 @@ export function RemoteSnowLumaQrLoginDialog({
                 title: '登录成功',
                 hint: '二维码已安全移除，即将进入在线状态',
             };
+        }
+        if (recovering) {
+            return { variant: 'loading', title: status };
         }
         if (state === 'scanned') {
             return {
@@ -207,7 +222,7 @@ export function RemoteSnowLumaQrLoginDialog({
             botId={botId}
             flavorLabel="SnowLuma"
             hasQrCode={showQrImage}
-            ariaBusy={requesting}
+            ariaBusy={requesting || recovering}
             viewport={
                 showQrImage && snapshot?.qrcode_payload ? (
                     <LoginQrImage
@@ -229,7 +244,7 @@ export function RemoteSnowLumaQrLoginDialog({
                 <>
                     {onOpenVnc && !completed ? (
                         <Button
-                            variant={fallbackOnly ? 'primary' : 'ghost'}
+                            variant={fallbackOnly && !canRetry ? 'primary' : 'ghost'}
                             size="sm"
                             onClick={() => {
                                 onOpenChange(false);
@@ -256,7 +271,7 @@ export function RemoteSnowLumaQrLoginDialog({
                         </Button>
                     ) : (
                         <Button
-                            variant={state === 'expired' ? 'primary' : 'secondary'}
+                            variant={state === 'expired' || canRetry ? 'primary' : 'secondary'}
                             size="sm"
                             className="ml-auto min-w-24"
                             disabled={!canRefresh || refreshing || requesting}
@@ -267,7 +282,13 @@ export function RemoteSnowLumaQrLoginDialog({
                                 className={refreshing ? 'animate-spin' : undefined}
                                 aria-hidden
                             />
-                            {refreshing ? '正在刷新' : canRetry ? '重新获取' : '刷新二维码'}
+                            {recovering
+                                ? '正在重连'
+                                : refreshing
+                                  ? '正在刷新'
+                                  : canRetry
+                                    ? '重新获取'
+                                    : '刷新二维码'}
                         </Button>
                     )}
                 </>
