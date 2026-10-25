@@ -157,7 +157,7 @@ fn can_retry_qr_snapshot(snapshot: &SnowLumaQrLoginSnapshot) -> bool {
 
 use super::layout::SnowLumaRemotePaths;
 use super::login_helper::{self, LoginSession};
-use super::orchestrator::{bot_cold_start_with_login, remember_remote_bot_pid};
+use super::orchestrator::remember_remote_bot_pid;
 use super::tunnel::RemoteSnowLumaTunnelRegistry;
 use crate::snowluma::log_noise::prepare_snowluma_bot_history_lines;
 use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
@@ -328,7 +328,10 @@ impl RemoteSnowLumaBackend {
             return cancelled(tracked.pid);
         }
         let mut relogin_bound = false;
-        if refresh || activity.refresh_pending.load(Ordering::SeqCst) {
+        if refresh
+            || (activity.refresh_pending.load(Ordering::SeqCst)
+                && !activity.recovery_started.load(Ordering::SeqCst))
+        {
             let prepared = self
                 .prepare_qr_relogin(bot_id, &tracked, &activity, request_close_revision)
                 .await;
@@ -415,6 +418,18 @@ impl RemoteSnowLumaBackend {
         let Some(client) = self.login_clients.lock().await.get(bot_id).cloned() else {
             return blank(SnowLumaQrLoginState::Starting);
         };
+        if relogin_bound {
+            if !self
+                .qr_request_current(bot_id, &activity, &client, &tracked)
+                .await
+            {
+                return blank(SnowLumaQrLoginState::Cancelled);
+            }
+            // 恢复绑定和采集分轮，避免叠加远端请求超时；下一轮仍需刷新 QQ 的旧码。
+            let mut snapshot = blank(SnowLumaQrLoginState::Starting);
+            snapshot.message = Some("扫码通道已恢复，正在获取二维码".into());
+            return snapshot;
+        }
         let before = match client.list_processes().await {
             Ok(processes) => processes,
             Err(_) => return blank(SnowLumaQrLoginState::Starting),
@@ -438,6 +453,11 @@ impl RemoteSnowLumaBackend {
             {
                 gated.state = SnowLumaQrLoginState::LoginDetected;
             }
+            if gated.state == SnowLumaQrLoginState::Starting
+                && activity.refresh_pending.load(Ordering::SeqCst)
+            {
+                activity.recovery_started.store(false, Ordering::SeqCst);
+            }
             if matches!(
                 gated.state,
                 SnowLumaQrLoginState::LoggedIn | SnowLumaQrLoginState::AccountMismatch
@@ -454,7 +474,7 @@ impl RemoteSnowLumaBackend {
             return blank(SnowLumaQrLoginState::LoginDetected);
         }
         let scanned = activity.scanned.load(Ordering::SeqCst);
-        let mut session = self
+        let session = self
             .login_sessions
             .lock()
             .await
@@ -517,8 +537,17 @@ impl RemoteSnowLumaBackend {
             self.login_sessions
                 .lock()
                 .await
-                .insert(bot_id.clone(), restored.clone());
-            session = Some(restored);
+                .insert(bot_id.clone(), restored);
+            if !self
+                .qr_request_current(bot_id, &activity, &client, &tracked)
+                .await
+            {
+                return blank(SnowLumaQrLoginState::Cancelled);
+            }
+            activity.recovery_started.store(true, Ordering::SeqCst);
+            let mut snapshot = blank(SnowLumaQrLoginState::Starting);
+            snapshot.message = Some("扫码通道已就绪，正在获取二维码".into());
+            return snapshot;
         }
         let Some(session) = session.filter(|session| {
             session.pid() == pid && session.start_time() == Some(tracked.start_time.as_str())
@@ -531,10 +560,11 @@ impl RemoteSnowLumaBackend {
         {
             return blank(SnowLumaQrLoginState::Cancelled);
         }
+        let request_refresh = activity.refresh_pending.swap(false, Ordering::SeqCst) && !scanned;
         let mut snapshot = match session
             .request_with_cancel(
                 host.as_ref(),
-                if activity.refresh_pending.swap(false, Ordering::SeqCst) && !scanned {
+                if request_refresh {
                     "refresh"
                 } else {
                     "snapshot"
@@ -544,7 +574,12 @@ impl RemoteSnowLumaBackend {
             )
             .await
         {
-            Ok(snapshot) => snapshot,
+            Ok(reply) => {
+                if reply.refresh_deferred {
+                    activity.refresh_pending.store(true, Ordering::SeqCst);
+                }
+                reply.snapshot
+            }
             Err(_) => {
                 return SnowLumaQrLoginSnapshot::unavailable("扫码通道不可用，请打开 QQ 界面");
             }

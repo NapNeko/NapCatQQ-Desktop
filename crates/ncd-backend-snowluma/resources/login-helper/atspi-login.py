@@ -19,7 +19,8 @@ from urllib.parse import unquote
 P, I, U, W = C.c_void_p, C.c_int, C.c_uint, C.c_ulong
 ALLOWED_ACTIONS = {'snapshot', 'refresh', 'close'}
 ALLOWED_BUTTONS = {'其他登录方式', '账密登录', '扫码登录', '刷新二维码', '刷新'}
-CONTROL_ROLES = {'push button', 'link', 'static'}
+BUTTON_ROLES = {'button', 'push button'}
+CONTROL_ROLES = BUTTON_ROLES | {'link', 'static'}
 MAX_PAYLOAD = 128 * 1024
 
 
@@ -141,7 +142,7 @@ def qr_page(nodes):
 
 
 def navigation_ancestor(role, name, box, label, label_box):
-    return (role in {'section', 'panel', 'push button', 'link'} and name in {'', label}
+    return (role in BUTTON_ROLES | {'section', 'panel', 'link'} and name in {'', label}
             and box is not None and label_box is not None
             and 0 < box[2] <= 256 and 0 < box[3] <= 64
             and box[0] <= label_box[0] and box[1] <= label_box[1]
@@ -162,7 +163,7 @@ def next_login_control(nodes, performed):
 def matching_controls(nodes, name):
     matches = [node for node in nodes if node['name'] == name and node['role'] in CONTROL_ROLES]
     # Chromium exposes the button name again on its static text child.
-    controls = [node for node in matches if node['role'] in {'push button', 'link'}]
+    controls = [node for node in matches if node['role'] in BUTTON_ROLES | {'link'}]
     return controls or matches
 
 
@@ -177,7 +178,7 @@ def notice_close_control(nodes):
     contents = [node for node in nodes if node.get('dialog') == dialogs[0]]
     if not any(node['name'] == '下线通知' and node['role'] == 'static' for node in contents):
         raise QrDialogObscured()
-    buttons = [node['obj'] for node in contents if node['name'] == '关闭' and node['role'] == 'push button']
+    buttons = [node['obj'] for node in contents if node['name'] == '关闭' and node['role'] in BUTTON_ROLES]
     if len(buttons) != 1:
         raise QrDialogObscured()
     return buttons[0]
@@ -724,6 +725,10 @@ def capture_reply(request):
                    if str(error) == 'QrWindowObscured' else
                    '正在重新获取扫码窗口' if state == 'starting' else
                    '扫码控件或窗口不可用，请重试或打开 QQ 界面')
+    if state == 'waiting_for_qr' and not payload:
+        state, payload = 'starting', None
+        diagnostic = 'QrImageUnavailable'
+        message = '正在重新获取二维码'
     return {'session_id': request['session_id'], 'v': 1, 'state': state,
             'qq_pid': request['binding']['pid'], 'qrcode_payload': payload,
             'uin': None, 'observer_removed': True, 'message': message, 'diagnostic': diagnostic}

@@ -33,7 +33,10 @@ pub async fn remote_qq_running_pid_with_hint(
     allow_single_main_fallback: bool,
 ) -> Result<Option<u32>, BotBackendError> {
     let script = linux_qq_running_pid_script(qq_id, pid_file, qq_bin, allow_single_main_fallback);
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
+    let cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(8));
     let out = host
         .run_to_string(cmd)
         .await

@@ -159,13 +159,15 @@ async fn cold_start_reuses_the_verified_pid_without_reading_a_pidfile_or_spawnin
         qq_bin: "/opt/QQ/qq".into(),
         qq_install_base: "/".into(),
     };
-    let pid = super::super::super::orchestrator::bot_cold_start_with_login(
+    let pid = super::super::super::orchestrator::bot_cold_start_cancellable(
         host.as_ref(),
         &layout,
         "10001",
         "10001",
         None,
         Some(42),
+        None,
+        None,
     )
     .await
     .unwrap();

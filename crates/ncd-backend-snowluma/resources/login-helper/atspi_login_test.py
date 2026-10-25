@@ -11,6 +11,29 @@ spec.loader.exec_module(helper)
 
 
 class ContractTests(unittest.TestCase):
+    def test_missing_qr_image_is_retryable_instead_of_waiting_for_scan(self):
+        for payload in (None, ''):
+            with self.subTest(payload=payload), mock.patch.object(
+                    helper, 'request_snapshot', return_value=('waiting_for_qr', payload)):
+                result = helper.capture_reply(self.request())
+                self.assertEqual(result['state'], 'starting')
+                self.assertEqual(result['diagnostic'], 'QrImageUnavailable')
+                self.assertEqual(result['message'], '正在重新获取二维码')
+                self.assertIsNone(result['qrcode_payload'])
+                self.assertTrue(result['observer_removed'])
+
+    def test_current_qr_image_and_explicit_login_states_are_preserved(self):
+        payload = 'data:image/png;base64,current-code'
+        for state, image in [('waiting_for_qr', payload), ('scanned', None),
+                             ('expired', None), ('login_detected', None)]:
+            with self.subTest(state=state), mock.patch.object(
+                    helper, 'request_snapshot', return_value=(state, image)):
+                result = helper.capture_reply(self.request())
+                self.assertEqual(result['state'], state)
+                self.assertEqual(result['qrcode_payload'], image)
+                self.assertIsNone(result['diagnostic'])
+                self.assertIsNone(result['message'])
+
     def test_window_change_is_retryable_and_never_returns_stale_material(self):
         for error in [RuntimeError('OwnedWindowNotUnique'), RuntimeError('FrameUnavailable'),
                       TimeoutError(), BlockingIOError()]:
@@ -200,16 +223,64 @@ class ContractTests(unittest.TestCase):
             def text(self, value): return value
             def do(self, obj, index, error): self.called.append(obj); return 1
             def unref(self, value): pass
-        tree = helper.Tree.__new__(helper.Tree)
-        tree.lib = Library(); tree.main_interface = False
-        tree.nodes = [{'name': '手机QQ扫码登录', 'role': 'label'},
-                      {'obj': 17, 'role': 'push button', 'name': '刷新'},
-                      {'obj': 18, 'role': 'static', 'name': '刷新'}]
-        tree.invoke('刷新', lambda: None)
-        tree.nodes.append({'obj': 19, 'role': 'push button', 'name': '刷新'})
-        with self.assertRaisesRegex(RuntimeError, 'ActionNotUnique'):
-            tree.invoke('刷新', lambda: None)
-        self.assertEqual(tree.lib.called, [17])
+        for role in ('button', 'push button'):
+            with self.subTest(role=role):
+                tree = helper.Tree.__new__(helper.Tree)
+                tree.lib = Library(); tree.lib.called = []; tree.main_interface = False
+                tree.nodes = [{'name': '手机QQ扫码登录', 'role': 'label'},
+                              {'obj': 17, 'role': role, 'name': '刷新'},
+                              {'obj': 18, 'role': 'static', 'name': '刷新'}]
+                tree.invoke('刷新', lambda: None)
+                tree.nodes.append({'obj': 19, 'role': 'button', 'name': '刷新'})
+                with self.assertRaisesRegex(RuntimeError, 'ActionNotUnique'):
+                    tree.invoke('刷新', lambda: None)
+                self.assertEqual(tree.lib.called, [17])
+
+    def test_real_qq_button_roles_refresh_the_expired_code_once(self):
+        class Library:
+            def __init__(self): self.called = []
+            def actionable(self, obj): return True
+            def action(self, obj): return obj
+            def action_count(self, obj, error): return 1
+            def action_name(self, obj, index, error): return 'press'
+            def text(self, value): return value
+            def do(self, obj, index, error): self.called.append((obj, index)); return 1
+            def unref(self, value): pass
+        lib = Library()
+        def page(nodes):
+            value = helper.Tree.__new__(helper.Tree)
+            value.lib = lib; value.pid = 19; value.refs = []; value.main_interface = False
+            value.nodes = nodes
+            return value
+        title = {'name': '手机QQ扫码登录', 'role': 'static'}
+        image = {'name': '二维码', 'role': 'image'}
+        alternate = {'obj': 20, 'name': '账密登录', 'role': 'button'}
+        expired = page([title, image, alternate,
+                        {'name': '当前二维码已过期', 'role': 'static'},
+                        {'obj': 17, 'name': '刷新二维码', 'role': 'button'},
+                        {'obj': 18, 'name': '刷新', 'role': 'button'}])
+        fresh = page([title, image, alternate])
+        pages = [expired, fresh]
+        with mock.patch.object(helper.time, 'sleep'):
+            result = helper.reach_qr_page(lambda: pages.pop(0), lambda: None, True)
+        self.assertIs(result, fresh)
+        self.assertEqual(lib.called, [(17, 0)])
+
+    def test_real_button_roles_preserve_navigation_and_notice_scopes(self):
+        self.assertEqual(helper.next_login_control(
+            [{'name': '账密登录', 'role': 'button'}], set()), '账密登录')
+        self.assertIsNone(helper.next_login_control(
+            [{'name': '登录', 'role': 'button'}, {'name': '账号管理', 'role': 'button'}], set()))
+        small, label = [399, 235, 81, 30], [407, 240, 65, 19]
+        self.assertTrue(helper.navigation_ancestor('button', '', small, '账密登录', label))
+        self.assertFalse(helper.navigation_ancestor('button', '登录', small, '账密登录', label))
+        self.assertFalse(helper.navigation_ancestor('button', '', [300, 140, 680, 440], '账密登录', label))
+        nodes = self.notice_nodes()
+        nodes[2]['role'] = nodes[3]['role'] = 'button'
+        self.assertEqual(helper.notice_close_control(nodes), 3)
+        nodes.append({'obj': 5, 'role': 'push button', 'name': '关闭', 'dialog': 1})
+        with self.assertRaises(helper.QrDialogObscured):
+            helper.notice_close_control(nodes)
 
     def test_expired_overlay_can_outlive_refresh_click(self):
         expired = [{'name': '手机QQ扫码登录', 'role': 'label'},
