@@ -11,6 +11,7 @@ import {
     Shield,
     SquareTerminal,
     Trash2,
+    TriangleAlert,
     Wifi,
 } from 'lucide-react';
 import {
@@ -38,7 +39,7 @@ import { BotManageCard } from '../bot/list/next/BotManageCard';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
 import { inventorySummary } from '../../core/domain/remote-host/inventory-labels';
-import { serverLifecycleBadge } from './serverCardPresentation';
+import { serverConnectionNote, serverLifecycleBadge } from './serverCardPresentation';
 import { WindowsRemoteStatus } from './WindowsRemoteDialog';
 
 export { serverCardGridClass } from './serverCardGrid';
@@ -88,18 +89,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
 
     const authLabel = server.authMethod === 'key' ? 'SSH 密钥' : '密码登录';
 
-    const healthLine = (() => {
-        const h = server.health;
-        if (!h) return null;
-        const fails = h.consecutiveFailures ?? 0;
-        if (server.state === 'failed' || fails > 0) {
-            const parts: string[] = [];
-            if (server.state === 'failed') parts.push('连接中断');
-            if (fails > 0) parts.push(`连续失败 ${fails} 次`);
-            return parts.join(' · ');
-        }
-        return null;
-    })();
+    const connectionNote = serverConnectionNote(server);
 
     const stop = (fn: () => void) => (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -208,17 +198,18 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                         {sshEndpoint}
                                     </p>
                                     <WindowsRemoteStatus server={server} />
-                                    {healthLine && (
+                                    {connectionNote && (
                                         <p
-                                            className={cn(
-                                                'truncate text-[10px] leading-tight',
-                                                server.state === 'failed'
-                                                    ? 'text-danger'
-                                                    : 'text-warning',
-                                            )}
-                                            title={healthLine}
+                                            className="flex min-w-0 items-center gap-1 text-[10px] leading-tight text-text-tertiary"
+                                            title={connectionNote.title}
                                         >
-                                            {healthLine}
+                                            <TriangleAlert
+                                                size={10}
+                                                strokeWidth={2.4}
+                                                aria-hidden
+                                                className="shrink-0 text-danger/80"
+                                            />
+                                            <span className="truncate">{connectionNote.text}</span>
                                         </p>
                                     )}
                                 </div>
