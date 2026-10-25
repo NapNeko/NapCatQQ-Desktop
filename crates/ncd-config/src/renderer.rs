@@ -411,6 +411,93 @@ mod tests {
         assert_eq!(ws["role"], "Universal");
     }
 
+    fn assert_snowluma_adapter_names_unique(networks: &serde_json::Value) {
+        let mut names = std::collections::HashSet::new();
+        for adapters in networks.as_object().unwrap().values() {
+            for adapter in adapters.as_array().unwrap() {
+                let name = adapter["name"].as_str().unwrap();
+                assert!(names.insert(name), "重复的 SnowLuma 适配器名称：{name}");
+            }
+        }
+    }
+
+    #[test]
+    fn snowluma_fallback_names_avoid_http_and_ws_client_names() {
+        use serde_json::json;
+
+        let renderer = SnowLumaConfigRenderer::new("/tmp/snowluma");
+        let bot_id = make_bot_id();
+        for (http_name, ws_name) in [
+            ("http-default", "ws-default"),
+            ("ws-default", "http-default"),
+        ] {
+            let mut config = make_full_config();
+            config.bot.backend_type = BackendType::SnowLuma;
+            config.connect = serde_json::from_value(json!({
+                "httpClients": [{ "name": http_name, "url": "http://127.0.0.1:8080" }],
+                "websocketClients": [{ "name": ws_name, "url": "ws://127.0.0.1:8081" }]
+            }))
+            .unwrap();
+            config.validate().unwrap();
+
+            let payload = renderer
+                .render(&bot_id, &config)
+                .unwrap()
+                .writes
+                .remove(0)
+                .payload;
+            let networks = &payload["networks"];
+            assert_snowluma_adapter_names_unique(networks);
+            assert_eq!(networks["httpServers"][0]["name"], "http-default-2");
+            assert_eq!(networks["wsServers"][0]["name"], "ws-default-2");
+            assert_eq!(networks["httpClients"][0]["name"], http_name);
+            assert_eq!(networks["wsClients"][0]["name"], ws_name);
+
+            let docker = render_snowluma_docker_config_payloads(
+                &bot_id,
+                &config,
+                &std::collections::HashMap::new(),
+            );
+            assert_eq!(docker[0].payload, payload);
+        }
+    }
+
+    #[test]
+    fn snowluma_fallback_names_skip_occupied_suffixes() {
+        use serde_json::json;
+
+        let renderer = SnowLumaConfigRenderer::new("/tmp/snowluma");
+        let bot_id = make_bot_id();
+        let mut config = make_full_config();
+        config.bot.backend_type = BackendType::SnowLuma;
+        config.connect = serde_json::from_value(json!({
+            "httpClients": [
+                { "name": "http-default", "url": "http://127.0.0.1:8080" },
+                { "name": "ws-default-2", "url": "http://127.0.0.1:8080", "enable": false },
+                { "name": "http-default-3", "url": "http://127.0.0.1:8080" }
+            ],
+            "websocketClients": [
+                { "name": "ws-default", "url": "ws://127.0.0.1:8081" },
+                { "name": "http-default-2", "url": "ws://127.0.0.1:8081", "enable": false },
+                { "name": "ws-default-3", "url": "ws://127.0.0.1:8081" }
+            ]
+        }))
+        .unwrap();
+        config.validate().unwrap();
+
+        for reverse in [false, true] {
+            if reverse {
+                config.connect.http_clients.reverse();
+                config.connect.websocket_clients.reverse();
+            }
+            let txn = renderer.render(&bot_id, &config).unwrap();
+            let networks = &txn.writes[0].payload["networks"];
+            assert_snowluma_adapter_names_unique(networks);
+            assert_eq!(networks["httpServers"][0]["name"], "http-default-4");
+            assert_eq!(networks["wsServers"][0]["name"], "ws-default-4");
+        }
+    }
+
     #[tokio::test]
     async fn snowluma_render_output_is_drift_clean_for_empty_connect() {
         let dir = tempfile::tempdir().unwrap();

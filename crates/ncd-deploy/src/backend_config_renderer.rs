@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
@@ -577,10 +577,52 @@ impl SnowLumaConfigRenderer {
         })
     }
 
-    fn build_fallback_networks() -> Value {
+    fn fallback_network_name(base: &str, used_names: &HashSet<&str>) -> String {
+        let mut name = base.to_owned();
+        let mut suffix = 2;
+        while used_names.contains(name.as_str()) {
+            name = format!("{base}-{suffix}");
+            suffix += 1;
+        }
+        name
+    }
+
+    fn build_fallback_networks(connect: &ConnectConfig) -> Value {
+        // 上游账号内所有适配器共用名称空间，补默认监听时也必须避开客户端名称。
+        let used_names = connect
+            .http_servers
+            .iter()
+            .map(|server| server.base.name.trim())
+            .chain(
+                connect
+                    .http_sse_servers
+                    .iter()
+                    .map(|server| server.base.name.trim()),
+            )
+            .chain(
+                connect
+                    .http_clients
+                    .iter()
+                    .map(|client| client.base.name.trim()),
+            )
+            .chain(
+                connect
+                    .websocket_servers
+                    .iter()
+                    .map(|server| server.base.name.trim()),
+            )
+            .chain(
+                connect
+                    .websocket_clients
+                    .iter()
+                    .map(|client| client.base.name.trim()),
+            )
+            .collect();
+        let http_name = Self::fallback_network_name("http-default", &used_names);
+        let ws_name = Self::fallback_network_name("ws-default", &used_names);
         json!({
             "httpServers": [{
-                "name": "http-default",
+                "name": http_name,
                 "enabled": true,
                 "messageFormat": "array",
                 "accessToken": "",
@@ -590,7 +632,7 @@ impl SnowLumaConfigRenderer {
                 "path": "/",
             }],
             "wsServers": [{
-                "name": "ws-default",
+                "name": ws_name,
                 "enabled": true,
                 "messageFormat": "array",
                 "accessToken": "",
@@ -609,7 +651,7 @@ impl SnowLumaConfigRenderer {
         let no_servers = connect.http_servers.is_empty() && connect.websocket_servers.is_empty();
 
         if no_servers {
-            let mut networks = Self::build_fallback_networks();
+            let mut networks = Self::build_fallback_networks(connect);
             let Some(obj) = networks.as_object_mut() else {
                 return networks;
             };
