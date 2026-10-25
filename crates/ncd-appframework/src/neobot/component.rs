@@ -90,7 +90,9 @@ impl NeoBotComponent {
     }
 
     pub fn with_pypi_index(mut self, index: Option<String>) -> Self {
-        self.pypi_index = index.filter(|s| !s.trim().is_empty());
+        self.pypi_index = index
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         self
     }
 
@@ -192,31 +194,8 @@ impl NeoBotComponent {
             message: name.to_string(),
         })
         .await;
-        let cmd = cmd
-            .timeout(LONG_STEP_TIMEOUT)
-            .cancel_token(ctx.cancel_token())
-            .env("UV_NO_PROGRESS", "1")
-            .env("PYTHONUTF8", "1");
-        let log_ctx = ctx.clone();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let drain = tokio::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                log_ctx.info(line).await;
-            }
-        });
-        let out = host
-            .run_streaming(
-                cmd,
-                Box::new(move |_src, line| {
-                    let trimmed = line.trim_end();
-                    if !trimmed.is_empty() {
-                        let _ = tx.send(trimmed.to_string());
-                    }
-                }),
-            )
-            .await;
-        drain.abort();
-        let out = out.map_err(|e| ActionError::install_step(name, e.to_string()))?;
+        let out =
+            crate::uv_tooling::run_uv_logged(host, ctx, step, name, cmd, LONG_STEP_TIMEOUT).await?;
         if !out.success() {
             ctx.emit(ProgressKind::StepEnd { step, ok: false }).await;
             let hint = if name.contains("Python") {

@@ -54,6 +54,7 @@ pub struct MaiBotComponent {
     /// WebUI 口 = 实例 `port`
     pub webui_port: u16,
     pub uv_bin: Option<HostPath>,
+    pub pypi_index: Option<String>,
 }
 
 /// 下好、解开、还没挪进实例目录的一份源码
@@ -69,12 +70,33 @@ impl MaiBotComponent {
             install_dir,
             webui_port,
             uv_bin: None,
+            pypi_index: None,
         }
     }
 
     pub fn with_uv_bin(mut self, uv_bin: Option<HostPath>) -> Self {
         self.uv_bin = uv_bin;
         self
+    }
+
+    pub fn with_pypi_index(mut self, index: Option<String>) -> Self {
+        self.pypi_index = index
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        self
+    }
+
+    fn sync_command(&self, uv: &HostPath) -> HostCommand {
+        // 改默认索引会使 uv 要求重写锁文件；安装必须保留上游验证过的依赖源。
+        HostCommand::new(uv.as_posix())
+            .arg("sync")
+            .arg("--locked")
+            .arg("--no-dev")
+            .arg("--no-install-project")
+            .arg("--python")
+            .arg(MAIBOT_PYTHON_REQUIRES)
+            .working_dir(self.install_dir.clone())
+            .env("UV_PROJECT_ENVIRONMENT", ".venv")
     }
 
     pub fn venv_python(&self, os: Os) -> HostPath {
@@ -304,31 +326,8 @@ impl MaiBotComponent {
             message: name.to_string(),
         })
         .await;
-        let cmd = cmd
-            .timeout(SYNC_TIMEOUT)
-            .cancel_token(ctx.cancel_token())
-            .env("UV_NO_PROGRESS", "1")
-            .env("PYTHONUTF8", "1");
-        let log_ctx = ctx.clone();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let drain = tokio::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                log_ctx.info(line).await;
-            }
-        });
-        let out = host
-            .run_streaming(
-                cmd,
-                Box::new(move |_src, line| {
-                    let trimmed = line.trim_end();
-                    if !trimmed.is_empty() {
-                        let _ = tx.send(trimmed.to_string());
-                    }
-                }),
-            )
-            .await;
-        drain.abort();
-        let out = out.map_err(|e| ActionError::install_step(name, e.to_string()))?;
+        let out =
+            crate::uv_tooling::run_uv_logged(host, ctx, step, name, cmd, SYNC_TIMEOUT).await?;
         if !out.success() {
             ctx.emit(ProgressKind::StepEnd { step, ok: false }).await;
             return Err(ActionError::install_step(
@@ -444,15 +443,10 @@ impl MaiBotComponent {
         .await?;
         end(ctx, 5).await;
 
-        let sync = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("sync")
-            .arg("--locked")
-            .arg("--no-dev")
-            .arg("--no-install-project")
-            .arg("--python")
-            .arg(MAIBOT_PYTHON_REQUIRES)
-            .working_dir(self.install_dir.clone())
-            .env("UV_PROJECT_ENVIRONMENT", ".venv");
+        if self.pypi_index.is_some() {
+            ctx.info("MaiBot 按上游锁文件安装，保留锁定的依赖源").await;
+        }
+        let sync = self.sync_command(&uv.uv_bin);
         self.run_step(
             host,
             ctx,
@@ -810,6 +804,20 @@ async fn remove_existing(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_source_keeps_upstream_lock_and_registry_unchanged() {
+        let comp = MaiBotComponent::new(HostPath::from_posix("/apps/m1"), 23001)
+            .with_pypi_index(Some("https://pypi.example/simple".into()));
+        let uv = HostPath::from_posix("/tools/uv");
+        let cmd = comp.sync_command(&uv);
+        let default =
+            MaiBotComponent::new(HostPath::from_posix("/apps/m1"), 23001).sync_command(&uv);
+        assert_eq!(cmd.args, default.args);
+        assert!(cmd.args.iter().any(|arg| arg == "--locked"));
+        assert!(!cmd.args.iter().any(|arg| arg == "--default-index"));
+        assert!(!cmd.args.iter().any(|arg| arg == "--no-sources"));
+    }
 
     #[test]
     fn config_version_is_read_like_upstream() {

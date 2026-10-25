@@ -36,6 +36,7 @@ pub struct AstrBotComponent {
     pub port: u16,
     pub instance_id: String,
     pub uv_bin: Option<HostPath>,
+    pub pypi_index: Option<String>,
     pub adopt_existing: bool,
     /// Created 首启前种进 `dashboard` 的账号；None 交给 AstrBot 首启自生成
     pub webui_username: Option<String>,
@@ -49,6 +50,7 @@ impl AstrBotComponent {
             port,
             instance_id: instance_id.into(),
             uv_bin: None,
+            pypi_index: None,
             adopt_existing: false,
             webui_username: None,
             webui_password: None,
@@ -57,6 +59,13 @@ impl AstrBotComponent {
 
     pub fn with_uv_bin(mut self, uv_bin: Option<HostPath>) -> Self {
         self.uv_bin = uv_bin;
+        self
+    }
+
+    pub fn with_pypi_index(mut self, index: Option<String>) -> Self {
+        self.pypi_index = index
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         self
     }
 
@@ -120,6 +129,23 @@ impl AstrBotComponent {
         args.apply_to(cmd)
     }
 
+    fn pip_install_command(&self, uv: &HostPath, upgrade: bool) -> HostCommand {
+        let mut cmd = HostCommand::new(uv.as_posix())
+            .arg("pip")
+            .arg("install")
+            .arg("--python")
+            .arg(".venv")
+            .arg(PYPI_ASTRBOT)
+            .working_dir(self.install_dir.clone());
+        if upgrade {
+            cmd = cmd.arg("--upgrade");
+        }
+        if let Some(index) = &self.pypi_index {
+            cmd = cmd.arg("--default-index").arg(index);
+        }
+        cmd
+    }
+
     async fn run_step(
         &self,
         host: &dyn Host,
@@ -136,31 +162,8 @@ impl AstrBotComponent {
             message: name.to_string(),
         })
         .await;
-        let cmd = cmd
-            .timeout(LONG_STEP_TIMEOUT)
-            .cancel_token(ctx.cancel_token())
-            .env("UV_NO_PROGRESS", "1")
-            .env("PYTHONUTF8", "1");
-        let log_ctx = ctx.clone();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let drain = tokio::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                log_ctx.info(line).await;
-            }
-        });
-        let out = host
-            .run_streaming(
-                cmd,
-                Box::new(move |_src, line| {
-                    let trimmed = line.trim_end();
-                    if !trimmed.is_empty() {
-                        let _ = tx.send(trimmed.to_string());
-                    }
-                }),
-            )
-            .await;
-        drain.abort();
-        let out = out.map_err(|e| ActionError::install_step(name, e.to_string()))?;
+        let out =
+            crate::uv_tooling::run_uv_logged(host, ctx, step, name, cmd, LONG_STEP_TIMEOUT).await?;
         if !out.success() {
             ctx.emit(ProgressKind::StepEnd { step, ok: false }).await;
             let hint = if name.contains("venv") || name.contains("3.12") {
@@ -222,13 +225,7 @@ impl AstrBotComponent {
         )
         .await?;
 
-        let pip = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("pip")
-            .arg("install")
-            .arg("--python")
-            .arg(".venv")
-            .arg(PYPI_ASTRBOT)
-            .working_dir(self.install_dir.clone());
+        let pip = self.pip_install_command(&uv.uv_bin, false);
         self.run_step(host, ctx, 3, "安装 astrbot", pip).await?;
 
         let init = HostCommand::new(self.astrbot_bin(host.os()).as_posix())
@@ -290,14 +287,7 @@ impl AstrBotComponent {
             ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
         }
 
-        let pip = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("pip")
-            .arg("install")
-            .arg("--upgrade")
-            .arg("--python")
-            .arg(".venv")
-            .arg(PYPI_ASTRBOT)
-            .working_dir(self.install_dir.clone());
+        let pip = self.pip_install_command(&uv.uv_bin, true);
         self.run_step(host, ctx, 3, "升级 astrbot", pip).await?;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -339,13 +329,7 @@ impl AstrBotComponent {
             ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
         }
 
-        let pip = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("pip")
-            .arg("install")
-            .arg("--python")
-            .arg(".venv")
-            .arg(PYPI_ASTRBOT)
-            .working_dir(self.install_dir.clone());
+        let pip = self.pip_install_command(&uv.uv_bin, false);
         self.run_step(host, ctx, 3, "同步 astrbot 到实例环境", pip)
             .await?;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -516,6 +500,45 @@ impl Component for AstrBotComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adapter_source_reaches_fresh_and_upgrade_installs() {
+        let spec = crate::adapter::AppComponentSpec {
+            install_dir: HostPath::from_posix("/apps/a1"),
+            port: 6199,
+            node_bin: None,
+            uv_bin: None,
+            git_bin: None,
+            redis_bin: None,
+            npm_registry: None,
+            pypi_index: Some(" https://pypi.example/simple ".into()),
+            install_version: None,
+            install_renderer: false,
+            adopt_existing: false,
+            instance_id: "a1".into(),
+            webui_username: None,
+            webui_password: None,
+        };
+        let comp = super::super::AstrBotAdapter::component_for(&spec);
+        for upgrade in [false, true] {
+            let cmd = comp.pip_install_command(&HostPath::from_posix("/tools/uv"), upgrade);
+            assert!(
+                cmd.args
+                    .windows(2)
+                    .any(|args| args == ["--default-index", "https://pypi.example/simple"])
+            );
+            assert_eq!(cmd.args.iter().any(|arg| arg == "--upgrade"), upgrade);
+            assert_eq!(cmd.working_dir, Some(spec.install_dir.clone()));
+        }
+    }
+
+    #[test]
+    fn empty_source_preserves_uv_configuration() {
+        let comp = AstrBotComponent::new(HostPath::from_posix("/apps/a1"), 6199, "a1")
+            .with_pypi_index(Some("  ".into()));
+        let cmd = comp.pip_install_command(&HostPath::from_posix("uv"), false);
+        assert!(!cmd.args.iter().any(|arg| arg == "--default-index"));
+    }
 
     #[test]
     fn requirements_pin_uv() {

@@ -103,6 +103,7 @@ impl AstrBotAdapter {
             spec.instance_id.clone(),
         )
         .with_uv_bin(spec.uv_bin.clone())
+        .with_pypi_index(spec.pypi_index.clone())
         .with_adopt_existing(spec.adopt_existing)
         .with_webui_account(spec.webui_username.clone(), spec.webui_password.clone())
     }

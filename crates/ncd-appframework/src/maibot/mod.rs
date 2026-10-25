@@ -119,7 +119,9 @@ impl MaiBotAdapter {
     }
 
     fn component_for(spec: &AppComponentSpec) -> MaiBotComponent {
-        MaiBotComponent::new(spec.install_dir.clone(), spec.port).with_uv_bin(spec.uv_bin.clone())
+        MaiBotComponent::new(spec.install_dir.clone(), spec.port)
+            .with_uv_bin(spec.uv_bin.clone())
+            .with_pypi_index(spec.pypi_index.clone())
     }
 
     fn adapter_config_path(instance: &AppInstance) -> HostPath {
