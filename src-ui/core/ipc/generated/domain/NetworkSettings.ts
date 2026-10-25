@@ -2,4 +2,4 @@
 import type { DownloadSourceMode } from "./DownloadSourceMode";
 import type { ProxyMode } from "./ProxyMode";
 
-export type NetworkSettings = { proxyMode: ProxyMode, proxyUrl: string, proxyUsername: string, proxyBypass: string, githubDownloadMode: DownloadSourceMode, githubMirror: string, nodeDownloadMode: DownloadSourceMode, nodeMirror: string, };
+export type NetworkSettings = { proxyMode: ProxyMode, proxyUrl: string, proxyUsername: string, proxyBypass: string, githubDownloadMode: DownloadSourceMode, githubMirror: string, nodeDownloadMode: DownloadSourceMode, nodeMirror: string, pypiIndex: string, };

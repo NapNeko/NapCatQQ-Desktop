@@ -41,6 +41,11 @@ pub fn validate_network_settings(settings: &NetworkSettings) -> Result<(), Netwo
             })?;
         }
     }
+    if !settings.pypi_index.trim().is_empty()
+        && !validate_mirror_url(&settings.pypi_index).is_ok_and(|url| url.scheme() == "https")
+    {
+        return invalid("Python 包源必须是无用户名、密码、查询参数和片段的 HTTPS 地址");
+    }
     Ok(())
 }
 
@@ -88,8 +93,14 @@ pub(crate) fn validate_mirror_url(raw: &str) -> Result<Url, NetworkError> {
     }
     let url =
         Url::parse(raw).map_err(|_| NetworkError::InvalidArgument("无效的镜像地址".into()))?;
+    let has_userinfo = raw.split_once("://").is_some_and(|(_, rest)| {
+        rest.split('/')
+            .next()
+            .is_some_and(|authority| authority.contains('@'))
+    });
     if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
+        || has_userinfo
         || !url.username().is_empty()
         || url.password().is_some()
         || url.query().is_some()
@@ -191,6 +202,38 @@ mod tests {
         settings.github_download_mode = DownloadSourceMode::Auto;
         settings.proxy_mode = ProxyMode::Manual;
         assert!(validate_network_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn python_index_allows_uv_defaults_and_clean_https_sources() {
+        for index in [
+            "",
+            "https://pypi.org/simple",
+            "https://pypi.example/simple/",
+        ] {
+            let settings = NetworkSettings {
+                pypi_index: index.into(),
+                ..Default::default()
+            };
+            assert!(validate_network_settings(&settings).is_ok(), "{index}");
+        }
+        for index in [
+            "http://pypi.example/simple",
+            "file:///pypi/simple",
+            "https://user:secret@pypi.example/simple",
+            "https://@pypi.example/simple",
+            "https://pypi.example/simple?token=secret",
+            "https://pypi.example/simple#secret",
+        ] {
+            let settings = NetworkSettings {
+                pypi_index: index.into(),
+                ..Default::default()
+            };
+            let error = validate_network_settings(&settings)
+                .unwrap_err()
+                .to_string();
+            assert!(!error.contains("secret"));
+        }
     }
 
     #[test]

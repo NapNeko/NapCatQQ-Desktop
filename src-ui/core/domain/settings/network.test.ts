@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultNetworkSettings, validateNetworkSettings } from './network';
+import { defaultNetworkSettings, networkSettingsEqual, validateNetworkSettings } from './network';
 
 describe('network form validation', () => {
     it.each([
@@ -68,6 +68,34 @@ describe('network form validation', () => {
                 nodeMirror: 'https://user:secret@mirror.example.com/node',
             }),
         ).toHaveProperty('nodeMirror');
+    });
+
+    it('keeps uv defaults until a Python index is selected and compares that selection', () => {
+        const settings = defaultNetworkSettings();
+        expect(settings.pypiIndex).toBe('');
+        expect(
+            networkSettingsEqual(settings, { ...settings, pypiIndex: 'https://pypi.org/simple' }),
+        ).toBe(false);
+    });
+
+    it.each(['', 'https://pypi.org/simple', 'https://pypi.tuna.tsinghua.edu.cn/simple/'])(
+        'accepts Python package source %s',
+        (pypiIndex) => {
+            expect(validateNetworkSettings({ ...defaultNetworkSettings(), pypiIndex })).toEqual({});
+        },
+    );
+
+    it.each([
+        'http://pypi.example/simple',
+        'file:///pypi/simple',
+        'https://user:secret@pypi.example/simple',
+        'https://@pypi.example/simple',
+        'https://pypi.example/simple?token=secret',
+        'https://pypi.example/simple#secret',
+    ])('rejects unsafe Python package source %s', (pypiIndex) => {
+        expect(validateNetworkSettings({ ...defaultNetworkSettings(), pypiIndex })).toHaveProperty(
+            'pypiIndex',
+        );
     });
 
     it('validates separate credentials and byte limits', () => {

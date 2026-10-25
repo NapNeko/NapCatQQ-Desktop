@@ -16,6 +16,7 @@ export function defaultNetworkSettings(): NetworkSettings {
         githubMirror: 'https://gh-proxy.com',
         nodeDownloadMode: 'auto',
         nodeMirror: 'https://registry.npmmirror.com/-/binary/node',
+        pypiIndex: '',
     };
 }
 
@@ -134,6 +135,12 @@ export function validateNetworkSettings(settings: NetworkSettings, proxyPassword
     if (settings.nodeDownloadMode === 'mirror' || settings.nodeMirror.trim()) {
         const error = validateUrl(settings.nodeMirror, false);
         if (error) errors.nodeMirror = error;
+    }
+    if (settings.pypiIndex.trim()) {
+        const error = validateUrl(settings.pypiIndex, false);
+        if (error) errors.pypiIndex = error;
+        else if (new URL(settings.pypiIndex.trim()).protocol !== 'https:')
+            errors.pypiIndex = 'Python 包源仅支持 HTTPS';
     }
     return errors;
 }

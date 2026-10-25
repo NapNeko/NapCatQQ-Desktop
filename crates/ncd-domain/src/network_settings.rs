@@ -35,6 +35,7 @@ pub struct NetworkSettings {
     pub github_mirror: String,
     pub node_download_mode: DownloadSourceMode,
     pub node_mirror: String,
+    pub pypi_index: String,
 }
 
 impl Default for NetworkSettings {
@@ -48,6 +49,7 @@ impl Default for NetworkSettings {
             github_mirror: "https://gh-proxy.com".to_string(),
             node_download_mode: DownloadSourceMode::Auto,
             node_mirror: "https://registry.npmmirror.com/-/binary/node".to_string(),
+            pypi_index: String::new(),
         }
     }
 }
@@ -59,6 +61,7 @@ impl NetworkSettings {
         self.proxy_bypass = self.proxy_bypass.trim().to_string();
         self.github_mirror = self.github_mirror.trim().to_string();
         self.node_mirror = self.node_mirror.trim().to_string();
+        self.pypi_index = self.pypi_index.trim().to_string();
     }
 }
 
@@ -96,15 +99,17 @@ mod tests {
         assert_eq!(partial.github_download_mode, DownloadSourceMode::Auto);
         assert_eq!(partial.node_download_mode, DownloadSourceMode::Auto);
         assert_eq!(partial.proxy_bypass, "localhost,127.0.0.1,::1");
+        assert!(partial.pypi_index.is_empty());
     }
 
     #[test]
     fn manual_proxy_and_selected_sources_round_trip() {
-        let canonical = r#"{"proxyMode":"manual","proxyUrl":"socks5h://127.0.0.1:1080","proxyUsername":"alice","proxyBypass":"localhost,192.168.0.0/16","githubDownloadMode":"mirror","githubMirror":"https://mirror.example","nodeDownloadMode":"direct","nodeMirror":"https://node.example/dist"}"#;
+        let canonical = r#"{"proxyMode":"manual","proxyUrl":"socks5h://127.0.0.1:1080","proxyUsername":"alice","proxyBypass":"localhost,192.168.0.0/16","githubDownloadMode":"mirror","githubMirror":"https://mirror.example","nodeDownloadMode":"direct","nodeMirror":"https://node.example/dist","pypiIndex":"https://pypi.org/simple"}"#;
         let settings: NetworkSettings = serde_json::from_str(canonical).unwrap();
         assert_eq!(settings.proxy_mode, ProxyMode::Manual);
         assert_eq!(settings.github_download_mode, DownloadSourceMode::Mirror);
         assert_eq!(settings.node_download_mode, DownloadSourceMode::Direct);
+        assert_eq!(settings.pypi_index, "https://pypi.org/simple");
         assert_eq!(serde_json::to_string(&settings).unwrap(), canonical);
     }
 
@@ -116,6 +121,7 @@ mod tests {
             proxy_bypass: " localhost,127.0.0.1 ".into(),
             github_mirror: " https://mirror.example/ ".into(),
             node_mirror: " https://node.example/dist/ ".into(),
+            pypi_index: " https://pypi.example/simple/ ".into(),
             ..NetworkSettings::default()
         };
         settings.normalize();
@@ -124,5 +130,6 @@ mod tests {
         assert_eq!(settings.proxy_bypass, "localhost,127.0.0.1");
         assert_eq!(settings.github_mirror, "https://mirror.example/");
         assert_eq!(settings.node_mirror, "https://node.example/dist/");
+        assert_eq!(settings.pypi_index, "https://pypi.example/simple/");
     }
 }
