@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkTab } from './NetworkTab';
 import { draftFromBackendAndPrefs, type SettingsDraft } from '../settings-draft';
 import { mockBackendSettings } from '../../../core/ipc/mock/settings.mock';
@@ -55,9 +56,48 @@ beforeEach(() => {
         },
     ]);
 });
+beforeAll(() => {
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+});
+
 afterEach(cleanup);
 
 describe('network settings tab', () => {
+    it('edits a Python package source and can restore the uv configuration', async () => {
+        const user = userEvent.setup();
+        render(<Form />);
+        const source = screen.getByRole('combobox', { name: 'Python 包源' });
+        expect(source).toHaveTextContent('跟随 uv 配置');
+        await user.click(source);
+        await user.click(screen.getByRole('option', { name: '自定义地址' }));
+        fireEvent.change(screen.getByLabelText('Python 自定义包源地址'), {
+            target: { value: 'http://pypi.example/simple' },
+        });
+        expect(screen.getByText('Python 包源仅支持 HTTPS')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '测试连接' })).toBeDisabled();
+        fireEvent.change(screen.getByLabelText('Python 自定义包源地址'), {
+            target: { value: 'https://pypi.example/simple' },
+        });
+        await user.click(screen.getByRole('button', { name: '测试连接' }));
+        await waitFor(() =>
+            expect(service.test).toHaveBeenLastCalledWith(
+                expect.objectContaining({ pypiIndex: 'https://pypi.example/simple' }),
+                'draft-secret',
+            ),
+        );
+        await user.click(source);
+        await user.click(screen.getByRole('option', { name: '跟随 uv 配置' }));
+        await user.click(screen.getByRole('button', { name: '测试连接' }));
+        await waitFor(() =>
+            expect(service.test).toHaveBeenLastCalledWith(
+                expect.objectContaining({ pypiIndex: '' }),
+                'draft-secret',
+            ),
+        );
+    });
+
     it('validates editable URLs, reveals passwords, and tests the unsaved draft', async () => {
         render(<Form />);
         expect(screen.getByLabelText('代理密码')).toHaveAttribute('type', 'password');
