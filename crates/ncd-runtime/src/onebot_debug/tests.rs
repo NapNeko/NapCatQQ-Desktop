@@ -1105,6 +1105,58 @@ async fn test_channel_probes_and_records_the_status() {
 }
 
 #[tokio::test]
+async fn snowluma_probe_requires_the_target_account_not_just_the_global_action_catalog() {
+    let h = harness();
+    let bot = h.bots.add(local_bot(20_002, BackendType::SnowLuma), true);
+    let webui = MockServer::start().await;
+    h.bots.set_snowluma(&bot, port_of(&webui));
+    Mock::given(method("POST"))
+        .and(path("/api/login"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"success": true, "token": "t"})),
+        )
+        .mount(&webui)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/debug/actions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "actions": [], "categories": []
+        })))
+        .mount(&webui)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/debug/invoke"))
+        .and(body_partial_json(
+            json!({"uin": "20002", "action": "get_login_info"}),
+        ))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "message": "账号不在线"
+        })))
+        .expect(1)
+        .mount(&webui)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/connections"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list": [
+            {"uin": "20002", "databaseMigration": {"phase": "failed", "usable": false}}
+        ]})))
+        .mount(&webui)
+        .await;
+
+    let info = h
+        .manager
+        .test_channel(bot.as_str(), DebugChannelId::Internal)
+        .await
+        .expect("probe result");
+    assert!(
+        matches!(info.status, DebugChannelStatus::Unreachable { ref reason }
+        if reason.contains("初始化失败")),
+        "{:?}",
+        info.status
+    );
+}
+
+#[tokio::test]
 async fn test_channel_internal_detects_an_old_upstream() {
     let h = harness();
     let bot = h.bots.add(local_bot(10_001, BackendType::NapCat), true);

@@ -155,6 +155,7 @@ pub(super) struct Upstream {
     /// 已经结束的 WS 连接数（不管是哪头关的）
     ws_closed: Arc<AtomicUsize>,
     paths: Arc<StdMutex<Vec<String>>>,
+    onebot_ready: Arc<AtomicBool>,
 }
 
 impl Upstream {
@@ -165,11 +166,13 @@ impl Upstream {
         let streams = Arc::new(AtomicUsize::new(0));
         let ws_closed = Arc::new(AtomicUsize::new(0));
         let paths = Arc::new(StdMutex::new(Vec::new()));
-        let (tx, count, closed, seen) = (
+        let onebot_ready = Arc::new(AtomicBool::new(true));
+        let (tx, count, closed, seen, ready) = (
             push.clone(),
             Arc::clone(&streams),
             Arc::clone(&ws_closed),
             Arc::clone(&paths),
+            Arc::clone(&onebot_ready),
         );
         tokio::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
@@ -179,6 +182,7 @@ impl Upstream {
                     Arc::clone(&count),
                     Arc::clone(&closed),
                     Arc::clone(&seen),
+                    Arc::clone(&ready),
                 ));
             }
         });
@@ -188,6 +192,7 @@ impl Upstream {
             streams,
             ws_closed,
             paths,
+            onebot_ready,
         }
     }
 
@@ -210,12 +215,17 @@ impl Upstream {
     fn paths(&self) -> Vec<String> {
         self.paths.lock().unwrap().clone()
     }
+
+    fn set_onebot_ready(&self, ready: bool) {
+        self.onebot_ready.store(ready, Ordering::SeqCst);
+    }
 }
 
 struct RequestHead {
     method: String,
     path: String,
     headers: HashMap<String, String>,
+    body: Option<Value>,
 }
 
 async fn read_head(stream: &mut TcpStream) -> Option<RequestHead> {
@@ -251,12 +261,14 @@ async fn read_head(stream: &mut TcpStream) -> Option<RequestHead> {
         if n == 0 {
             break;
         }
+        buf.extend_from_slice(&chunk[..n]);
         have += n;
     }
     Some(RequestHead {
         method,
         path,
         headers,
+        body: serde_json::from_slice(&buf[end + 4..]).ok(),
     })
 }
 
@@ -276,6 +288,7 @@ async fn serve(
     streams: Arc<AtomicUsize>,
     ws_closed: Arc<AtomicUsize>,
     paths: Arc<StdMutex<Vec<String>>>,
+    onebot_ready: Arc<AtomicBool>,
 ) {
     let Some(head) = read_head(&mut stream).await else {
         return;
@@ -329,6 +342,30 @@ async fn serve(
                 json!({"success": true, "token": "t"}),
             )
             .await;
+        }
+        ("POST", "/api/debug/invoke") => {
+            let uin = head
+                .body
+                .as_ref()
+                .and_then(|body| body.get("uin"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if onebot_ready.load(Ordering::SeqCst) {
+                reply_json(
+                    &mut stream,
+                    "200 OK",
+                    json!({"status": "ok", "retcode": 0,
+                           "data": {"user_id": uin, "nickname": "test"}}),
+                )
+                .await;
+            } else {
+                reply_json(
+                    &mut stream,
+                    "404 Not Found",
+                    json!({"status": "failed", "message": "账号不在线"}),
+                )
+                .await;
+            }
         }
         ("GET", "/api/debug/stream") => {
             let mut rx = push.subscribe();
@@ -645,6 +682,16 @@ async fn snowluma_stream_keeps_this_account_and_skips_our_own_calls() {
         )
         .mount(&webui)
         .await;
+    Mock::given(method("POST"))
+        .and(path("/api/debug/invoke"))
+        .and(body_partial_json(
+            json!({"uin": "20002", "action": "get_login_info"}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "status": "ok", "retcode": 0, "data": {"user_id": 20002}
+        })))
+        .mount(&webui)
+        .await;
     let frames = [
         json!({"kind": "ready"}),
         json!({"kind": "event", "uin": "20002", "event": group_message(1)}),
@@ -761,6 +808,46 @@ async fn snowluma_login_reconnects_the_stream_without_a_gap() {
     wait_until("新连接上的事件", || sink.ob11().len() == 1).await;
     tokio::time::sleep(Duration::from_millis(150)).await;
     assert_eq!(sink.ob11().len(), 1, "旧连接已经断开，事件只到一次");
+}
+
+#[tokio::test]
+async fn snowluma_waits_for_onebot_after_qq_login_and_recovers_without_another_login_event() {
+    let h = harness();
+    let up = Upstream::start().await;
+    up.set_onebot_ready(false);
+    let bot = h.bots.add(local_bot(20_002, BackendType::SnowLuma), true);
+    h.bots.set_snowluma(&bot, up.port);
+    let (sink, subscription) = subscribe(&h, &bot, DebugChannelId::Internal).await;
+
+    h.manager
+        .on_bot_event(&DomainEvent::SnowLumaLoginStateChanged {
+            bot_id: bot.clone(),
+            state: SnowLumaLoginState::LoggedIn,
+        })
+        .await;
+    wait_until("QQ 已登录但 OneBot 未就绪时等待重试", || {
+        sink.states()
+            .iter()
+            .any(|state| matches!(state, DebugReceiverState::Reconnecting { .. }))
+    })
+    .await;
+    assert_eq!(sink.connected_count(), 0, "QQ 登录不能作为事件通道就绪");
+    assert_eq!(up.streams(), 0, "未就绪时不能留下只收心跳的空 SSE");
+
+    // 上游完成数据库准备后没有第二次 QQ 登录事件，接收器仍应自行恢复。
+    up.set_onebot_ready(true);
+    wait_until("OneBot 就绪后自动建立事件通道", || {
+        sink.connected_count() == 1 && up.streams() == 1
+    })
+    .await;
+    up.push(json!({"kind": "event", "uin": "20002", "event": group_message(1)}));
+    wait_until("就绪后收到目标账号消息", || {
+        sink.ob11().len() == 1
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    assert_eq!(sink.ob11().len(), 1, "就绪重试不能重复接收消息");
+    h.manager.unsubscribe(&subscription.subscription_id).await;
 }
 
 // ─── NapCat 调试适配器 ───────────────────────────────────────────────────────

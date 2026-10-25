@@ -209,6 +209,7 @@ pub(crate) fn from_snowluma(err: SnowLumaDebugError, timeout: Duration) -> Failu
         SnowLumaDebugError::NotOnline => {
             Failure::with_status(DebugError::NotLoggedIn, DebugChannelStatus::NotLoggedIn)
         }
+        error @ SnowLumaDebugError::SessionNotReady(_) => Failure::unreachable(error.to_string()),
         SnowLumaDebugError::Timeout => Failure::timeout(timeout),
         e @ SnowLumaDebugError::Http(_) => {
             let message = e.to_string();
@@ -358,6 +359,18 @@ mod tests {
             from_snowluma(SnowLumaDebugError::NotOnline, T),
             Failure::with_status(DebugError::NotLoggedIn, DebugChannelStatus::NotLoggedIn)
         );
+        let not_ready = from_snowluma(
+            SnowLumaDebugError::SessionNotReady("账号数据库仍在准备".into()),
+            T,
+        );
+        assert!(
+            matches!(not_ready.error, DebugError::ChannelUnavailable { ref reason }
+            if reason.contains("OneBot 会话未就绪"))
+        );
+        assert!(matches!(
+            not_ready.status,
+            Some(DebugChannelStatus::Unreachable { .. })
+        ));
         for e in [
             SnowLumaDebugError::LoginBlocked("密码错误".into()),
             SnowLumaDebugError::NeedsConsent,

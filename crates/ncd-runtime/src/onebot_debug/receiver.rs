@@ -1309,11 +1309,17 @@ async fn connect_internal(manager: &DebugManager, view: &DebugBotView, epoch: &E
             })
         }
         InternalClient::SnowLuma(client) => {
+            let uin = view.config.bot.qq_id.to_string();
+            // QQ 登录可能早于 OneBot 初始化；过早打开 SSE 只会订阅到空的账号快照。
+            client
+                .ensure_account_ready(&uin, PROBE_TIMEOUT)
+                .await
+                .map_err(snowluma_failure)?;
             let response = client.open_stream().await.map_err(snowluma_failure)?;
             Ok(Conn::Sse {
                 body: response.bytes_stream().boxed(),
                 parser: SseParser::new(),
-                uin: view.config.bot.qq_id.to_string(),
+                uin,
             })
         }
     }

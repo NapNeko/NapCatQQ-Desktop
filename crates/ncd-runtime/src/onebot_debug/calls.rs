@@ -553,11 +553,17 @@ impl DebugManager {
         Ok(())
     }
 
-    /// 内部通道的探测就是取一次动作目录：接口在不在一试便知，取到的目录顺手缓存
+    /// 目录只能证明接口存在，SnowLuma 还需确认目标账号已经初始化。
     async fn probe_internal(&self, view: &DebugBotView, epoch: &Epoch) -> Result<(), Failure> {
         let client = self.ensure_internal(view, epoch).await?;
         let data = self.fetch_catalog_data(&client).await?;
         self.cache_live_catalog(view, &data, epoch).await;
+        if let InternalClient::SnowLuma(client) = client {
+            client
+                .ensure_account_ready(&view.config.bot.qq_id.to_string(), PROBE_TIMEOUT)
+                .await
+                .map_err(|error| from_snowluma(error, PROBE_TIMEOUT))?;
+        }
         Ok(())
     }
 

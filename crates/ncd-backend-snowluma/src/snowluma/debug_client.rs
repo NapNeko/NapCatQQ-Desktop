@@ -6,13 +6,15 @@
 //! 与 NapCat 不同，SnowLuma 用真实 HTTP 状态码表达失败，成功时回包是裸 JSON（没有信封）。
 
 use std::sync::Mutex as StdMutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ncd_onebot::client::{BodyError, MAX_BODY_BYTES, RawCall, read_text_limited};
 use reqwest::header::{ACCEPT, ACCEPT_ENCODING};
 use reqwest::{Method, RequestBuilder, Response};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
+
+mod account_state;
 
 /// 优先 127.0.0.1（不经过名字解析），连不上再退回 localhost：
 /// 少数机器上 WebUI 只监听在 localhost 解析出的那个地址族
@@ -38,6 +40,8 @@ pub enum SnowLumaDebugError {
     NeedsConsent,
     #[error("账号不在线")]
     NotOnline,
+    #[error("SnowLuma OneBot 会话未就绪：{0}")]
+    SessionNotReady(String),
     #[error("请求超时")]
     Timeout,
     #[error("连接 SnowLuma WebUI 失败：{0}")]
@@ -123,6 +127,7 @@ impl SnowLumaDebugClient {
         params: &Value,
         timeout: Duration,
     ) -> Result<RawCall, SnowLumaDebugError> {
+        let started = Instant::now();
         let body = json!({ "uin": uin, "action": action, "params": params });
         let resp = self
             .authed(
@@ -143,12 +148,33 @@ impl SnowLumaDebugClient {
             // 路由存在但账号没上线，与路由根本不存在（老版本）都是 404，
             // 靠回包里的 message 区分：老版本回的是框架默认的非 JSON / 其它文案
             return Err(if is_account_offline_body(&text) {
-                SnowLumaDebugError::NotOnline
+                self.account_unavailable(uin, timeout.saturating_sub(started.elapsed()))
+                    .await
             } else {
                 SnowLumaDebugError::TooOld
             });
         }
         Err(classify_failure(status.as_u16(), &text))
+    }
+
+    /// SSE 只挂接建立连接时已有的实例，必须先确认目标账号能处理动作。
+    pub async fn ensure_account_ready(
+        &self,
+        uin: &str,
+        timeout: Duration,
+    ) -> Result<(), SnowLumaDebugError> {
+        let reply = self
+            .invoke(uin, "get_login_info", &json!({}), timeout)
+            .await?;
+        if reply.value.get("status").and_then(Value::as_str) == Some("ok")
+            && reply.value.get("retcode").and_then(Value::as_i64) == Some(0)
+        {
+            Ok(())
+        } else {
+            Err(SnowLumaDebugError::SessionNotReady(
+                "账号登录信息读取失败，请检查 SnowLuma 控制台日志".into(),
+            ))
+        }
     }
 
     /// `GET /api/debug/stream`：打开 SSE 长连接，把响应交给调用方按流读。
@@ -198,7 +224,7 @@ impl SnowLumaDebugClient {
             // 与 invoke 同一套区分：账号没上线和路由根本不存在（老版本，没有这个路由）都是 404
             let text = read_text(resp).await.unwrap_or_default();
             return Err(if is_account_offline_body(&text) {
-                SnowLumaDebugError::NotOnline
+                self.account_unavailable(uin, Duration::from_secs(2)).await
             } else {
                 SnowLumaDebugError::TooOld
             });
@@ -738,6 +764,164 @@ mod tests {
             .await
             .expect_err("offline");
         assert!(matches!(err, SnowLumaDebugError::NotOnline), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn account_readiness_rejects_a_failed_onebot_reply() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke"))
+            .and(body_partial_json(
+                json!({"uin": "10001", "action": "get_login_info"}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "failed", "retcode": 200, "message": "initializing"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let error = client_for(&server)
+            .ensure_account_ready("10001", Duration::from_secs(5))
+            .await
+            .expect_err("HTTP 200 does not mean the account is ready");
+        assert!(matches!(error, SnowLumaDebugError::SessionNotReady(_)));
+    }
+
+    #[tokio::test]
+    async fn missing_onebot_reports_initialization_failure_without_upstream_secrets() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+                "status": "failed", "message": "账号不在线"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/connections"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list": [
+                {"uin": "10001", "databaseMigration": {"phase": "failed", "usable": false,
+                 "error": "ws://example.invalid/?access_token=do-not-display"}}
+            ]})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let error = client_for(&server)
+            .ensure_account_ready("10001", Duration::from_secs(5))
+            .await
+            .expect_err("failed startup");
+        assert!(matches!(error, SnowLumaDebugError::SessionNotReady(_)));
+        assert!(error.to_string().contains("初始化失败"));
+        assert!(!error.to_string().contains("do-not-display"));
+    }
+
+    #[tokio::test]
+    async fn logged_in_qq_without_onebot_has_a_distinct_error_for_invoke_and_stream() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        for endpoint in ["/api/debug/invoke", "/api/debug/invoke-stream"] {
+            Mock::given(method("POST"))
+                .and(path(endpoint))
+                .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+                    "status": "failed", "message": "账号不在线"
+                })))
+                .mount(&server)
+                .await;
+        }
+        Mock::given(method("GET"))
+            .and(path("/api/connections"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list": []})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/processes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list": [
+                {"uin": "10001", "status": "online", "loggedIn": true}
+            ]})))
+            .mount(&server)
+            .await;
+
+        let client = client_for(&server);
+        let call_error = client
+            .ensure_account_ready("10001", Duration::from_secs(5))
+            .await
+            .expect_err("OneBot is missing");
+        let stream_error = client
+            .invoke_stream("10001", "upload_file_stream", &json!({}))
+            .await
+            .expect_err("OneBot is missing");
+        for error in [call_error, stream_error] {
+            assert!(matches!(error, SnowLumaDebugError::SessionNotReady(_)));
+            assert!(error.to_string().contains("QQ 已登录"));
+        }
+    }
+
+    #[tokio::test]
+    async fn another_accounts_online_state_cannot_hide_a_logged_out_target() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+                "status": "failed", "message": "账号不在线"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/connections"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list": [
+                {"uin": "20002", "databaseMigration": {"phase": "failed", "usable": false}}
+            ]})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/processes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"list": [
+                {"uin": "20002", "status": "online", "loggedIn": true}
+            ]})))
+            .mount(&server)
+            .await;
+
+        let error = client_for(&server)
+            .ensure_account_ready("10001", Duration::from_secs(5))
+            .await
+            .expect_err("target is not online");
+        assert!(matches!(error, SnowLumaDebugError::NotOnline));
+    }
+
+    #[tokio::test]
+    async fn offline_diagnostics_stay_within_the_original_call_budget() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+                "message": "账号不在线"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/connections"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(Duration::from_secs(1))
+                    .set_body_json(json!({"list": []})),
+            )
+            .mount(&server)
+            .await;
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(500),
+            client_for(&server).ensure_account_ready("10001", Duration::from_millis(100)),
+        )
+        .await
+        .expect("diagnostics must not add a separate two-second wait");
+        assert!(matches!(result, Err(SnowLumaDebugError::NotOnline)));
     }
 
     #[tokio::test]
