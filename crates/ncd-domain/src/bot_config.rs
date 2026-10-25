@@ -559,7 +559,7 @@ impl BotConfig {
         Ok(())
     }
 
-    /// 保存和启动时校验外连地址；读盘仍允许修正旧版本保存的畸形地址。
+    /// 保存和启动时校验网络配置；读盘仍允许修正旧版本保存的畸形配置。
     pub fn validate_network_urls(&self) -> Result<(), BotConfigError> {
         for client in &self.connect.http_clients {
             if client.base.enable {
@@ -569,6 +569,54 @@ impl BotConfig {
         for client in &self.connect.websocket_clients {
             if client.base.enable {
                 validate_client_url(&client.url, &["ws", "wss"])?;
+            }
+        }
+        if self.bot.backend_type == BackendType::SnowLuma {
+            self.validate_snowluma_networks()?;
+        }
+        Ok(())
+    }
+
+    fn validate_snowluma_networks(&self) -> Result<(), BotConfigError> {
+        let mut bindings = Vec::new();
+        for (index, server) in self.connect.http_servers.iter().enumerate() {
+            validate_snowluma_server(
+                &server.host,
+                &server.path,
+                server.port,
+                server.base.enable,
+                &format!("connect.httpServers[{index}]"),
+                &mut bindings,
+            )?;
+        }
+        for (index, server) in self.connect.websocket_servers.iter().enumerate() {
+            validate_snowluma_server(
+                &server.host,
+                &server.path,
+                server.port,
+                server.base.enable,
+                &format!("connect.websocketServers[{index}]"),
+                &mut bindings,
+            )?;
+        }
+        // 上游即使禁用条目也校验 timer；重连间隔的下限由渲染器补齐。
+        for (index, client) in self.connect.http_clients.iter().enumerate() {
+            if client
+                .timeout_ms
+                .is_some_and(|value| value == 0 || value > SNOWLUMA_NODE_TIMER_MAX_MS)
+            {
+                return Err(invalid_snowluma_network(
+                    format!("connect.httpClients[{index}].timeoutMs"),
+                    "必须在 1 到 2147483647 毫秒之间",
+                ));
+            }
+        }
+        for (index, client) in self.connect.websocket_clients.iter().enumerate() {
+            if client.reconnect_interval > SNOWLUMA_NODE_TIMER_MAX_MS {
+                return Err(invalid_snowluma_network(
+                    format!("connect.websocketClients[{index}].reconnectInterval"),
+                    "不能超过 2147483647 毫秒",
+                ));
             }
         }
         Ok(())
@@ -599,6 +647,8 @@ pub enum BotConfigError {
     InvalidPort(u16),
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
+    #[error("SnowLuma 配置 {field} 无效：{reason}")]
+    InvalidSnowLumaNetwork { field: String, reason: String },
     #[error("invalid cron expression: {0}")]
     InvalidCron(String),
     #[error("bot config migration failed: {0}")]
@@ -628,6 +678,105 @@ impl From<serde_json::Error> for BotConfigError {
     fn from(error: serde_json::Error) -> Self {
         Self::Json(error.to_string())
     }
+}
+
+const SNOWLUMA_NODE_TIMER_MAX_MS: u32 = 2_147_483_647;
+
+fn invalid_snowluma_network(field: String, reason: impl Into<String>) -> BotConfigError {
+    BotConfigError::InvalidSnowLumaNetwork {
+        field,
+        reason: reason.into(),
+    }
+}
+
+fn validate_snowluma_server<'a>(
+    host: &'a str,
+    path: &str,
+    port: u16,
+    enabled: bool,
+    field: &str,
+    bindings: &mut Vec<(&'a str, u16, String)>,
+) -> Result<(), BotConfigError> {
+    if !valid_snowluma_bind_host(host) {
+        return Err(invalid_snowluma_network(
+            format!("{field}.host"),
+            "必须是有效的 IP 地址或主机名，且不能包含空白或 URL 路径",
+        ));
+    }
+    let effective_path = if path.is_empty() { "/" } else { path };
+    let normalized = path == path.trim()
+        && effective_path.starts_with('/')
+        && !effective_path.contains(['?', '#'])
+        && url::Url::parse(&format!("http://127.0.0.1{effective_path}"))
+            .is_ok_and(|url| url.path() == effective_path);
+    if !normalized {
+        return Err(invalid_snowluma_network(
+            format!("{field}.path"),
+            "必须为空或以 / 开头的规范路径，不能包含查询参数或片段",
+        ));
+    }
+    // 上游校验禁用服务的 host/path，但只检查启用服务之间的监听冲突。
+    if enabled {
+        if let Some((_, _, previous)) = bindings.iter().find(|(other_host, other_port, _)| {
+            *other_port == port
+                && (host.eq_ignore_ascii_case(other_host)
+                    || snowluma_wildcard_host(host)
+                    || snowluma_wildcard_host(other_host))
+        }) {
+            return Err(invalid_snowluma_network(
+                field.to_owned(),
+                format!("监听地址与 {previous} 冲突"),
+            ));
+        }
+        bindings.push((host, port, field.to_owned()));
+    }
+    Ok(())
+}
+
+fn snowluma_wildcard_host(host: &str) -> bool {
+    matches!(host, "0.0.0.0" | "::" | "[::]")
+}
+
+fn valid_snowluma_bind_host(host: &str) -> bool {
+    if host.is_empty()
+        || host.len() > 253
+        || host
+            .chars()
+            .any(|ch| ch.is_whitespace() || matches!(ch, '/' | '?' | '#' | '@'))
+    {
+        return false;
+    }
+    if host.contains(':') {
+        let address = match host.split_once('%') {
+            Some((address, zone)) => {
+                if zone.is_empty()
+                    || !zone
+                        .bytes()
+                        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, b'-' | b'.' | b':'))
+                {
+                    return false;
+                }
+                address
+            }
+            None => host,
+        };
+        return address.parse::<std::net::Ipv6Addr>().is_ok();
+    }
+    if host.bytes().all(|ch| ch.is_ascii_digit() || ch == b'.') {
+        return host.parse::<std::net::Ipv4Addr>().is_ok();
+    }
+    host.strip_suffix('.')
+        .unwrap_or(host)
+        .split('.')
+        .all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
+        })
 }
 
 fn validate_client_url(raw: &str, schemes: &[&str]) -> Result<(), BotConfigError> {
