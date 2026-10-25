@@ -39,22 +39,32 @@ const LABELS: Record<SnowLumaQrLoginState, string> = {
 };
 
 function LoginQrImage({ payload, onError }: { payload: string; onError: () => void }) {
-    const [src, setSrc] = useState<string | null>(null);
+    const [image, setImage] = useState<{ src: string; capture?: string } | null>(null);
     const { foreground, background } = useThemeTokens(QR_TOKEN_SPEC);
     useEffect(() => {
         let active = true;
         const controller = new AbortController();
-        setSrc(null);
+        setImage(null);
         void resolveLoginQrPayload(payload, controller.signal)
-            .then(async (content) => {
+            .then(async (material) => {
                 if (!active) return;
-                const image = await QRCode.toDataURL(content, {
-                    width: QR_PIXEL_SIZE,
-                    margin: 4,
-                    errorCorrectionLevel: 'M',
-                    color: { dark: foreground, light: background },
-                });
-                if (active) setSrc(image);
+                if (material.kind === 'capture') {
+                    setImage({ src: material.src, capture: material.src });
+                    return;
+                }
+                let src: string;
+                try {
+                    src = await QRCode.toDataURL(material.content, {
+                        width: QR_PIXEL_SIZE,
+                        margin: 4,
+                        errorCorrectionLevel: 'M',
+                        color: { dark: foreground, light: background },
+                    });
+                } catch (error) {
+                    if (!material.capture) throw error;
+                    src = material.capture;
+                }
+                if (active) setImage({ src, capture: material.capture });
             })
             .catch(() => {
                 if (active) onError();
@@ -64,15 +74,23 @@ function LoginQrImage({ payload, onError }: { payload: string; onError: () => vo
             controller.abort();
         };
     }, [background, foreground, onError, payload]);
-    return src ? (
+    return image ? (
         <img
-            src={src}
+            src={image.src}
             alt="QQ 登录二维码"
             width={QR_PIXEL_SIZE}
             height={QR_PIXEL_SIZE}
             className="h-full w-full select-none rounded-sm object-contain"
+            style={{
+                imageRendering: 'pixelated',
+                ...(image.src === image.capture ? { background: '#ffffff', padding: 16 } : {}),
+            }}
             draggable={false}
-            onError={onError}
+            onError={() => {
+                if (image.capture && image.src !== image.capture) {
+                    setImage({ src: image.capture, capture: image.capture });
+                } else onError();
+            }}
         />
     ) : (
         <QrStagePlaceholder variant="loading" title="正在渲染二维码…" />
