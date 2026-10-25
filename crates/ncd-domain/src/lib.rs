@@ -8,6 +8,7 @@ mod macros;
 
 pub mod app_config;
 pub mod app_framework;
+pub mod assistant;
 pub mod bootstrap;
 pub mod bot_actor;
 pub mod bot_config;

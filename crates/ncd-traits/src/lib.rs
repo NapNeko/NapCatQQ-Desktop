@@ -7,6 +7,7 @@
 //! 引入,避免反向依赖
 
 pub mod app_framework;
+pub mod assistant;
 pub mod backend_config_renderer;
 pub mod bot_config_repo;
 pub mod config_store;
