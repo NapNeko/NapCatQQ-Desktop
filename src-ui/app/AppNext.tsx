@@ -44,6 +44,7 @@ import { featureTogglesStore, useFeatures } from '../hooks/preferences/featureTo
 import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
 import { useAppScreenshotShortcut } from '../hooks/chat/useChatScreenshot';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
+import { registerAssistantNavigator } from '../hooks/assistant/assistantNav';
 import { registerComponentsNavigator } from '../hooks/components/componentsNavigation';
 import { registerDockerNavigator } from '../hooks/docker/dockerNavigation';
 import { registerBotCreateNavigator } from '../hooks/bot/botCreateNavigation';
@@ -75,6 +76,7 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'chat',
     'apps',
     'debug',
+    'assistant',
     'components',
     'docker',
     'remote',
@@ -83,7 +85,7 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 ];
 
 // 这些页面不受 1280px 的宽度上限：调试台是三栏工作台，宽屏上越宽越好用
-const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug', 'chat']);
+const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug', 'chat', 'assistant']);
 // 聊天自己贴着窗口边排版，不吃页面内边距。
 const FLUSH_ROUTES: ReadonlySet<AppRoute> = new Set(['chat']);
 
@@ -96,6 +98,8 @@ const loadChatPage = () =>
     import('../modules/chat/ChatPage').then((m) => ({ default: m.ChatPage }));
 const loadDebugPage = () =>
     import('../modules/debug/DebugConsolePage').then((m) => ({ default: m.DebugConsolePage }));
+const loadAssistantPage = () =>
+    import('../modules/assistant/AssistantPage').then((m) => ({ default: m.AssistantPage }));
 const loadComponentsPage = () =>
     import('../modules/components/ComponentsPage.next').then((m) => ({
         default: m.ComponentsPageNext,
@@ -119,6 +123,7 @@ const BotPageNext = lazy(loadBotPage);
 const AppsPageNext = lazy(loadAppsPage);
 const ChatPage = lazy(loadChatPage);
 const DebugConsolePage = lazy(loadDebugPage);
+const AssistantPage = lazy(loadAssistantPage);
 const ComponentsPageNext = lazy(loadComponentsPage);
 const DockerPageNext = lazy(loadDockerPage);
 const RemoteHostPanelNext = lazy(loadRemotePage);
@@ -134,6 +139,7 @@ const ROUTE_PRELOAD: Partial<Record<AppRoute, () => Promise<unknown>>> = {
     apps: loadAppsPage,
     chat: loadChatPage,
     debug: loadDebugPage,
+    assistant: loadAssistantPage,
     components: loadComponentsPage,
     docker: loadDockerPage,
     remote: loadRemotePage,
@@ -292,6 +298,7 @@ export const AppNext: React.FC = () => {
 
     // Bot 卡片「调试」按钮 / 右键「在调试台打开」经 debugNav 跳过来
     useEffect(() => registerDebugNavigator(() => navigate('debug')), [navigate]);
+    useEffect(() => registerAssistantNavigator(() => navigate('assistant')), [navigate]);
     useEffect(() => registerComponentsNavigator(() => navigate('components')), [navigate]);
     useEffect(() => registerDockerNavigator(() => navigate('docker')), [navigate]);
     useEffect(() => registerBotCreateNavigator(() => navigate('bots')), [navigate]);
@@ -557,6 +564,9 @@ const RouteContent = memo(function RouteContent({
             break;
         case 'debug':
             body = <DebugConsolePage onNavigate={onNavigate} />;
+            break;
+        case 'assistant':
+            body = <AssistantPage onNavigate={onNavigate} />;
             break;
         case 'chat':
             body = <ChatPage onNavigate={onNavigate} />;

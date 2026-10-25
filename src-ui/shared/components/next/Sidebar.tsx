@@ -21,6 +21,7 @@ import {
     Package,
     Server,
     Settings,
+    Stethoscope,
 } from 'lucide-react';
 import gsap from 'gsap';
 import { cn } from '../../utils/cn';
@@ -58,6 +59,7 @@ const MAIN_NAV: NavItem[] = [
     { id: 'chat', label: '聊天', icon: MessagesSquare },
     { id: 'apps', label: '应用端', icon: Blocks },
     { id: 'debug', label: '调试台', icon: FlaskConical },
+    { id: 'assistant', label: '诊断助手', icon: Stethoscope },
     { id: 'components', label: '组件', icon: Package },
     { id: 'docker', label: '容器', icon: Container },
     { id: 'remote', label: '远端', icon: Server },
@@ -315,7 +317,9 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect, on
             >
                 <MotionIcon
                     icon={Icon}
-                    motion={isActive ? NAV_ROUTE_MOTION[item.id] : 'none'}
+                    motion={
+                        isActive && item.id !== 'assistant' ? NAV_ROUTE_MOTION[item.id] : 'none'
+                    }
                     playEnter={isActive}
                     enterKey={isActive ? item.id : undefined}
                     size={iconSize}
@@ -387,7 +391,11 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
                         <MotionIcon
                             key="tasks-idle"
                             icon={Icon}
-                            motion={isActive ? NAV_ROUTE_MOTION[item.id] : 'none'}
+                            motion={
+                                isActive && item.id !== 'assistant'
+                                    ? NAV_ROUTE_MOTION[item.id]
+                                    : 'none'
+                            }
                             playEnter={isActive}
                             enterKey={isActive ? item.id : undefined}
                             size={iconSize}

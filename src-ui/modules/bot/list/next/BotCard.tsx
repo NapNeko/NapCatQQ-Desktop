@@ -18,6 +18,7 @@ import {
     Settings,
     Square,
     SquareTerminal,
+    Stethoscope,
     WifiOff,
 } from 'lucide-react';
 import {
@@ -64,6 +65,7 @@ import { openTerminal } from '../../../../hooks/terminal/terminalStore';
 import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesStore';
 import { useDebugConsoleEnabled } from '../../../../hooks/debug/useDebugConsoleEnabled';
 import { openDebugConsole } from '../../../../hooks/debug/debugNav';
+import { openAssistant } from '../../../../hooks/assistant/assistantNav';
 import { QrCodeDialog } from './QrCodeDialog';
 import { RemoteSnowLumaQrLoginDialog } from './RemoteSnowLumaQrLoginDialog';
 import { useRemoteSnowlumaQrEnabled } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
@@ -685,6 +687,19 @@ export function BotCard({
                                                         <span>扫码登录</span>
                                                     </button>
                                                 ) : null}
+                                                <button
+                                                    type="button"
+                                                    className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
+                                                    onClick={stopAction(() =>
+                                                        openAssistant(bot.bot_id),
+                                                    )}
+                                                >
+                                                    <Stethoscope
+                                                        size={13}
+                                                        className="text-text-tertiary"
+                                                    />
+                                                    <span>诊断助手</span>
+                                                </button>
                                                 {debugEnabled && bot.state === 'running' ? (
                                                     <button
                                                         type="button"
@@ -813,6 +828,10 @@ export function BotCard({
                 <ContextMenuItem onClick={() => onViewMetrics(bot.bot_id)}>
                     <Monitor size={13} />
                     <span>运行监控</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => openAssistant(bot.bot_id)}>
+                    <Stethoscope size={13} />
+                    <span>使用诊断助手</span>
                 </ContextMenuItem>
                 {debugEnabled && (
                     <ContextMenuItem onClick={() => openDebugConsole(bot.bot_id)}>

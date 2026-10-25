@@ -5,6 +5,7 @@ import { Button, NumberField, Select, Switch } from '../../../shared/ui';
 import { useLocalNodeCandidates } from '../../../hooks/settings/useLocalNodeCandidates';
 import type { SettingsDraft } from '../settings-draft';
 import { McpSection } from './McpSection';
+import { AgentSection } from '../../assistant';
 import {
     FieldRow,
     RemoteHostHealthProbeIntervalSlider,
@@ -50,6 +51,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
     return (
         <SettingsTabSections>
             <McpSection draft={draft} patchDraft={patchDraft} />
+            <AgentSection />
             <SettingsSection title="Bot 与登录">
                 <FieldRow
                     label="登录检查间隔"
