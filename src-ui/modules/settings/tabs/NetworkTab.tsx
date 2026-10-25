@@ -18,6 +18,7 @@ import { validateNetworkSettings } from '../../../core/domain/settings/network';
 import { useNetworkSettings } from '../../../hooks/settings/useNetworkSettings';
 import type { SettingsDraft } from '../settings-draft';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
+import { PythonPackageSource } from './PythonPackageSource';
 
 interface Props {
     draft: SettingsDraft | null;
@@ -262,6 +263,17 @@ export function NetworkTab({ draft, patchDraft, saving = false }: Props) {
                             内置线路加载失败，可手动填写镜像地址：{probe.mirrorError}
                         </p>
                     )}
+                </SettingsSection>
+
+                <SettingsSection
+                    title="Python 框架安装"
+                    description="保存后用于新安装任务。远端 uv 使用服务器自身的网络；上游锁文件与显式指定的包源保持原有语义。"
+                >
+                    <PythonPackageSource
+                        value={network.pypiIndex}
+                        error={errors.pypiIndex}
+                        onChange={(pypiIndex) => patchNetwork({ pypiIndex })}
+                    />
                 </SettingsSection>
 
                 <SettingsSection title="GitHub API">
