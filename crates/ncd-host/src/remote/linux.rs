@@ -819,9 +819,14 @@ impl Host for RemoteLinuxHost {
     ) -> Result<CommandOutput, HostError> {
         use crate::host::StreamSource;
 
+        let deadline = tokio::time::Instant::now() + cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
+        let cancel = cmd.cancel.clone();
         let inner_line = build_remote_command_line(&self.shell, &cmd);
         let (line, stdin) = if cmd.elevated {
-            let password = self.elevation_password.lock().await.clone();
+            let password = streaming_with_deadline(deadline, cancel.as_ref(), async {
+                self.elevation_password.lock().await.clone()
+            })
+            .await?;
             let has_pw = password.is_some();
             (
                 wrap_with_sudo(&inner_line, &self.shell, has_pw),
@@ -830,24 +835,34 @@ impl Host for RemoteLinuxHost {
         } else {
             (inner_line, cmd.stdin)
         };
-        let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
+        let mut channel =
+            streaming_with_deadline(deadline, cancel.as_ref(), self.open_session_channel())
+                .await??;
 
-        // channel 开启和 stdin 写入在 timeout 外做(通常很快),主循环套 timeout
-        let mut channel = self.open_session_channel().await?;
-
-        if let Err(e) = channel.exec(true, line.as_bytes()).await {
-            self.invalidate_connection().await;
-            return Err(HostError::remote_disconnected(format!("exec: {e}")));
-        }
-
-        if let Some(data) = stdin {
-            if let Err(e) = channel.data(&data[..]).await {
+        // exec 可能已经送达；准备阶段中断也必须收掉远端进程，不能只丢弃 future。
+        let prepare = async {
+            if let Err(e) = channel.exec(true, line.as_bytes()).await {
                 self.invalidate_connection().await;
-                return Err(HostError::remote_disconnected(format!("stdin write: {e}")));
+                return Err(HostError::remote_disconnected(format!("exec: {e}")));
             }
-            if let Err(e) = channel.eof().await {
-                self.invalidate_connection().await;
-                return Err(HostError::remote_disconnected(format!("stdin eof: {e}")));
+
+            if let Some(data) = stdin {
+                if let Err(e) = channel.data(&data[..]).await {
+                    self.invalidate_connection().await;
+                    return Err(HostError::remote_disconnected(format!("stdin write: {e}")));
+                }
+                if let Err(e) = channel.eof().await {
+                    self.invalidate_connection().await;
+                    return Err(HostError::remote_disconnected(format!("stdin eof: {e}")));
+                }
+            }
+            Ok(())
+        };
+        match streaming_with_deadline(deadline, cancel.as_ref(), prepare).await {
+            Ok(result) => result?,
+            Err(error) => {
+                force_kill_remote_channel(&channel).await;
+                return Err(error);
             }
         }
 
@@ -858,28 +873,8 @@ impl Host for RemoteLinuxHost {
         let mut stderr_lines = Vec::<String>::new();
         let mut exit_code: Option<i32> = None;
 
-        let deadline = tokio::time::Instant::now() + timeout;
-        let cancel = cmd.cancel.clone();
         loop {
-            if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
-                // 必须限时强杀:裸 close 在 docker pull 等长任务上可能一直不返回
-                force_kill_remote_channel(&channel).await;
-                return Err(HostError::Cancelled);
-            }
-
-            let wait_msg = async {
-                if let Some(token) = cancel.as_ref() {
-                    tokio::select! {
-                        biased;
-                        _ = token.cancelled() => None,
-                        msg = channel.wait() => msg,
-                    }
-                } else {
-                    channel.wait().await
-                }
-            };
-
-            match tokio::time::timeout_at(deadline, wait_msg).await {
+            match streaming_with_deadline(deadline, cancel.as_ref(), channel.wait()).await {
                 Ok(Some(msg)) => match msg {
                     ChannelMsg::Data { ref data } => {
                         crate::stream_chunk::feed_stream_chunk(&mut stdout_buf, data, |s| {
@@ -900,18 +895,10 @@ impl Host for RemoteLinuxHost {
                     ChannelMsg::Close => break,
                     _ => {}
                 },
-                Ok(None) => {
-                    if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
-                        force_kill_remote_channel(&channel).await;
-                        return Err(HostError::Cancelled);
-                    }
-                    break;
-                }
-                Err(_) => {
+                Ok(None) => break,
+                Err(error) => {
                     force_kill_remote_channel(&channel).await;
-                    return Err(HostError::Timeout {
-                        operation: "remote_run_streaming",
-                    });
+                    return Err(error);
                 }
             }
         }
@@ -1294,6 +1281,27 @@ impl Host for RemoteLinuxHost {
 }
 
 // 辅助: 命令拼接 + SFTP 打开 + 错误映射
+
+async fn streaming_with_deadline<T>(
+    deadline: tokio::time::Instant,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+    future: impl std::future::Future<Output = T>,
+) -> Result<T, HostError> {
+    let cancelled = async {
+        match cancel {
+            Some(token) => token.cancelled().await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        biased;
+        _ = cancelled => Err(HostError::Cancelled),
+        _ = tokio::time::sleep_until(deadline) => Err(HostError::Timeout {
+            operation: "remote_run_streaming",
+        }),
+        output = future => Ok(output),
+    }
+}
 
 /// 远端 exec 强杀:SSH SIGKILL + 限时 close。
 /// 只 close 时,部分 OpenSSH/docker pull 场景 channel.close 会一直等进程结束,
