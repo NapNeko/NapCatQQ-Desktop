@@ -36,6 +36,7 @@ struct ReloginHost {
     candidate: u32,
     close_on_bind: StdMutex<Option<Arc<QrActivity>>>,
     captures: AtomicUsize,
+    capture_actions: StdMutex<Vec<String>>,
     webui_port: AtomicU32,
 }
 
@@ -58,6 +59,7 @@ impl ReloginHost {
             candidate,
             close_on_bind: StdMutex::new(None),
             captures: AtomicUsize::new(0),
+            capture_actions: StdMutex::new(vec![]),
             webui_port: AtomicU32::new(0),
         }
     }
@@ -204,6 +206,7 @@ impl Host for ReloginHost {
                 }
                 assert!(script.contains("allow_single='0'"));
                 assert!(script.contains("pidfile=''"));
+                assert_eq!(command.timeout, Some(Duration::from_secs(8)));
                 format!("{}\n", self.candidate)
             }
             "readlink" => {
@@ -260,6 +263,23 @@ impl Host for ReloginHost {
                 if command
                     .args
                     .iter()
+                    .any(|arg| arg == super::login_helper::SAVE_SESSION) =>
+            {
+                use base64::Engine;
+                assert_eq!(command.timeout, Some(Duration::from_secs(8)));
+                let request: serde_json::Value =
+                    serde_json::from_slice(command.stdin.as_ref().unwrap()).unwrap();
+                let body = base64::engine::general_purpose::STANDARD
+                    .decode(request["body"].as_str().unwrap())
+                    .unwrap();
+                let path = format!("{}/session.json", request["directory"].as_str().unwrap());
+                self.files.lock().unwrap().insert(path, body);
+                r#"{"v":1,"saved":true}"#.into()
+            }
+            "/usr/bin/python3"
+                if command
+                    .args
+                    .iter()
                     .any(|arg| arg == super::login_helper::DEPLOY_HELPER) =>
             {
                 use base64::Engine;
@@ -301,6 +321,10 @@ impl Host for ReloginHost {
                     request["action"].as_str(),
                     Some("refresh" | "snapshot")
                 ));
+                self.capture_actions
+                    .lock()
+                    .unwrap()
+                    .push(request["action"].as_str().unwrap().into());
                 serde_json::json!({
                     "session_id": request["session_id"], "v": 1, "state": "waiting_for_qr",
                     "qq_pid": request["binding"]["pid"],
@@ -683,7 +707,7 @@ async fn namespaced_qq_relogin_closed_during_binding_keeps_the_old_client_and_pi
 }
 
 #[tokio::test]
-async fn opening_qr_after_phone_logout_recovers_the_new_process_and_captures_a_code() {
+async fn opening_qr_after_phone_logout_separates_injection_binding_and_capture() {
     let value = fixture(NEW_PID, BOT, false, false).await;
     let bot = BotId::new(BOT);
     let pending = value.backend.qr_login_snapshot(&bot, true).await;
@@ -695,6 +719,20 @@ async fn opening_qr_after_phone_logout_recovers_the_new_process_and_captures_a_c
         value.backend.login_pids.lock().await.get(&bot).unwrap().pid,
         OLD_PID
     );
+    let bound = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(bound.state, SnowLumaQrLoginState::Starting);
+    assert_eq!(bound.qq_pid, Some(NEW_PID));
+    assert!(bound.qrcode_payload.is_none());
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 0);
+    let activity = value
+        .backend
+        .qr_activity
+        .lock()
+        .await
+        .get(&bot)
+        .cloned()
+        .unwrap();
+    assert!(activity.refresh_pending.load(Ordering::SeqCst));
     let snapshot = value.backend.qr_login_snapshot(&bot, false).await;
     assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
     assert_eq!(snapshot.qq_pid, Some(NEW_PID));
@@ -705,11 +743,161 @@ async fn opening_qr_after_phone_logout_recovers_the_new_process_and_captures_a_c
             .is_some_and(|payload| { payload.starts_with("data:image/png;base64,") })
     );
     assert_eq!(*value.client.loads.lock().unwrap(), vec![NEW_PID]);
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 1);
+    assert_eq!(*value.host.capture_actions.lock().unwrap(), vec!["refresh"]);
+    assert!(!activity.refresh_pending.load(Ordering::SeqCst));
     assert_eq!(
         value.backend.login_pids.lock().await.get(&bot).unwrap().pid,
         NEW_PID
     );
     assert!(!value.other_activity.cancel.is_cancelled());
+    value.backend.detach_login_pollers().await;
+}
+
+#[tokio::test]
+async fn missing_helper_restoration_defers_refresh_once_then_resumes_read_only_capture() {
+    let value = fixture(NEW_PID, BOT, false, false).await;
+    let bot = BotId::new(BOT);
+    value.backend.qr_login_snapshot(&bot, true).await;
+    let bound = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(bound.state, SnowLumaQrLoginState::Starting);
+    assert_eq!(bound.qq_pid, Some(NEW_PID));
+    let activity = value
+        .backend
+        .qr_activity
+        .lock()
+        .await
+        .get(&bot)
+        .cloned()
+        .unwrap();
+    let helper_path = format!(
+        "{}/login-assist/{BOT}/atspi-login.py",
+        value.backend.daemon.paths().runtime_dir
+    );
+    assert!(
+        value
+            .host
+            .files
+            .lock()
+            .unwrap()
+            .remove(&helper_path)
+            .is_some()
+    );
+
+    let restored = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(restored.state, SnowLumaQrLoginState::Starting);
+    assert!(restored.qrcode_payload.is_none());
+    assert!(activity.refresh_pending.load(Ordering::SeqCst));
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 0);
+
+    let snapshot = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
+    assert!(snapshot.qrcode_payload.is_some());
+    assert!(!activity.refresh_pending.load(Ordering::SeqCst));
+    assert_eq!(*value.host.capture_actions.lock().unwrap(), vec!["refresh"]);
+
+    let next = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(next.state, SnowLumaQrLoginState::WaitingForQr);
+    assert_eq!(
+        *value.host.capture_actions.lock().unwrap(),
+        vec!["refresh", "snapshot"]
+    );
+    assert_eq!(*value.client.loads.lock().unwrap(), vec![NEW_PID]);
+    value.backend.detach_login_pollers().await;
+}
+
+#[tokio::test]
+async fn restoring_a_running_qq_binding_returns_before_capture_and_preserves_refresh() {
+    let value = fixture(OLD_PID, BOT, false, false).await;
+    let bot = BotId::new(BOT);
+    value.client.load_process(OLD_PID).await.unwrap();
+    value.client.loads.lock().unwrap().clear();
+    let activity = Arc::new(QrActivity::new());
+    value
+        .backend
+        .qr_activity
+        .lock()
+        .await
+        .insert(bot.clone(), activity.clone());
+    value.backend.login_sessions.lock().await.remove(&bot);
+
+    let bound = value.backend.qr_login_snapshot(&bot, true).await;
+    assert_eq!(bound.state, SnowLumaQrLoginState::Starting);
+    assert_eq!(bound.qq_pid, Some(OLD_PID));
+    assert!(bound.qrcode_payload.is_none());
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 0);
+    assert!(activity.refresh_pending.load(Ordering::SeqCst));
+    assert!(activity.recovery_started.load(Ordering::SeqCst));
+    assert!(value.backend.login_sessions.lock().await.contains_key(&bot));
+
+    let snapshot = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
+    assert!(snapshot.qrcode_payload.is_some());
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 1);
+    assert_eq!(*value.host.capture_actions.lock().unwrap(), vec!["refresh"]);
+    assert!(!activity.refresh_pending.load(Ordering::SeqCst));
+    assert!(value.client.loads.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn closing_after_relogin_binding_prevents_the_next_round_from_capturing() {
+    let value = fixture(NEW_PID, BOT, false, false).await;
+    let bot = BotId::new(BOT);
+    assert_eq!(
+        value.backend.qr_login_snapshot(&bot, true).await.state,
+        SnowLumaQrLoginState::Starting
+    );
+    let bound = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(bound.state, SnowLumaQrLoginState::Starting);
+    assert_eq!(bound.qq_pid, Some(NEW_PID));
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 0);
+
+    value.backend.close_qr_login(&bot).await.unwrap();
+    let snapshot = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(snapshot.state, SnowLumaQrLoginState::Cancelled);
+    assert!(snapshot.qrcode_payload.is_none());
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 0);
+    assert_eq!(*value.client.loads.lock().unwrap(), vec![NEW_PID]);
+    assert!(!value.other_activity.cancel.is_cancelled());
+    value.backend.detach_login_pollers().await;
+}
+
+#[tokio::test]
+async fn missing_process_evidence_after_binding_allows_recovery_in_the_following_round() {
+    let value = fixture(NEW_PID, BOT, false, false).await;
+    let bot = BotId::new(BOT);
+    value.backend.qr_login_snapshot(&bot, true).await;
+    let bound = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(bound.state, SnowLumaQrLoginState::Starting);
+    assert_eq!(bound.qq_pid, Some(NEW_PID));
+    let activity = value
+        .backend
+        .qr_activity
+        .lock()
+        .await
+        .get(&bot)
+        .cloned()
+        .unwrap();
+    let processes = value.client.processes.lock().unwrap().clone();
+    value
+        .client
+        .processes
+        .lock()
+        .unwrap()
+        .retain(|process| process.pid != NEW_PID);
+
+    let waiting = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(waiting.state, SnowLumaQrLoginState::Starting);
+    assert!(activity.refresh_pending.load(Ordering::SeqCst));
+    assert!(!activity.recovery_started.load(Ordering::SeqCst));
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 0);
+
+    *value.client.processes.lock().unwrap() = processes;
+    let snapshot = value.backend.qr_login_snapshot(&bot, false).await;
+    assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
+    assert!(snapshot.qrcode_payload.is_some());
+    assert_eq!(value.host.captures.load(Ordering::SeqCst), 1);
+    assert_eq!(*value.client.loads.lock().unwrap(), vec![NEW_PID]);
     value.backend.detach_login_pollers().await;
 }
 

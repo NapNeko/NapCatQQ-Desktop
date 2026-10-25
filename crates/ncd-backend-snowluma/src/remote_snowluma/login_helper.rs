@@ -5,12 +5,16 @@ use ncd_domain::{BotId, SnowLumaQrLoginSnapshot, SnowLumaQrLoginState};
 use ncd_host::{Host, HostCommand, HostPath, Os};
 use ncd_traits::runtime_backend::BotBackendError;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 use tokio_util::sync::CancellationToken;
 
 const HELPER: &[u8] = include_bytes!("../../resources/login-helper/atspi-login.py");
 pub(super) const DEPLOY_HELPER: &str =
     include_str!("../../resources/login-helper/deploy-helper.py");
+pub(super) const SAVE_SESSION: &str = include_str!("../../resources/login-helper/save-session.py");
 pub(crate) const DESKTOP_SESSION_UNAVAILABLE: &str = "QQ 桌面会话已失效，请重新启动此 Bot";
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 struct ProcessBinding {
@@ -85,6 +89,19 @@ pub(crate) struct PreparedLogin {
     pub session: LoginSession,
     pub environment: BTreeMap<String, String>,
 }
+pub(crate) struct LoginReply {
+    pub snapshot: SnowLumaQrLoginSnapshot,
+    pub refresh_deferred: bool,
+}
+
+impl From<SnowLumaQrLoginSnapshot> for LoginReply {
+    fn from(snapshot: SnowLumaQrLoginSnapshot) -> Self {
+        Self {
+            snapshot,
+            refresh_deferred: false,
+        }
+    }
+}
 #[derive(Deserialize)]
 struct WireReply {
     session_id: String,
@@ -95,6 +112,37 @@ struct WireReply {
 }
 fn io_error() -> BotBackendError {
     BotBackendError::Io("远端扫码控件不可用，请打开 VNC".into())
+}
+
+struct HelperStage {
+    pid: u32,
+    name: &'static str,
+    started: Instant,
+}
+
+impl HelperStage {
+    fn new(pid: u32, name: &'static str) -> Self {
+        Self {
+            pid,
+            name,
+            started: Instant::now(),
+        }
+    }
+}
+
+impl Drop for HelperStage {
+    fn drop(&mut self) {
+        let elapsed = self.started.elapsed();
+        if elapsed >= Duration::from_secs(2) {
+            // 桌面日志不保留所有结构化字段，阶段和耗时须进入消息正文。
+            tracing::info!(
+                pid = self.pid,
+                "SL 扫码辅助阶段「{}」耗时 {}ms",
+                self.name,
+                elapsed.as_millis()
+            );
+        }
+    }
 }
 fn directory(paths: &SnowLumaRemotePaths, bot_id: &BotId) -> Result<String, BotBackendError> {
     if bot_id.as_str().is_empty() || !bot_id.as_str().bytes().all(|b| b.is_ascii_digit()) {
@@ -261,6 +309,7 @@ impl LoginSession {
             .timeout(Duration::from_secs(8))
     }
     async fn deploy(&mut self, host: &dyn Host) -> Result<(), BotBackendError> {
+        let _stage = HelperStage::new(self.qq_pid, "部署辅助程序");
         if self.cancel.is_cancelled() {
             return Err(io_error());
         }
@@ -296,6 +345,7 @@ impl LoginSession {
         Ok(())
     }
     async fn inspect(&self, host: &dyn Host, pid: u32) -> Result<ProcessBinding, BotBackendError> {
+        let _stage = HelperStage::new(pid, "核验 QQ 桌面会话");
         if pid == 0 {
             return Err(io_error());
         }
@@ -355,24 +405,38 @@ impl LoginSession {
         self.save(host).await
     }
     async fn save(&self, host: &dyn Host) -> Result<(), BotBackendError> {
+        let _stage = HelperStage::new(self.qq_pid, "保存扫码会话");
         if self.cancel.is_cancelled() {
             return Err(io_error());
         }
-        let path = format!("{}/session.json", self.directory);
         let bytes = serde_json::to_vec(self).map_err(|_| io_error())?;
-        host.write_file(&HostPath::from_posix(&path), &bytes)
-            .await
-            .map_err(|_| io_error())?;
+        let request = serde_json::to_vec(&serde_json::json!({
+            "v": 1,
+            "directory": self.directory,
+            "body": base64::engine::general_purpose::STANDARD.encode(bytes),
+        }))
+        .map_err(|_| io_error())?;
         let out = host
             .run_to_string(
-                HostCommand::new("chmod")
-                    .args(["600", "--", &path])
-                    .timeout(Duration::from_secs(3))
+                HostCommand::new(&self.python_bin)
+                    .args(["-I", "-B", "-c", SAVE_SESSION])
+                    .stdin(request)
+                    .timeout(Duration::from_secs(8))
                     .cancel_token(self.cancel.clone()),
             )
             .await
             .map_err(|_| io_error())?;
-        if !out.success() {
+        #[derive(Deserialize)]
+        struct SaveReply {
+            v: u32,
+            saved: bool,
+        }
+        if !out.success()
+            || out.stdout.len() > 1024
+            || self.cancel.is_cancelled()
+            || !serde_json::from_str::<SaveReply>(&out.stdout)
+                .is_ok_and(|reply| reply.v == 1 && reply.saved)
+        {
             return Err(io_error());
         }
         Ok(())
@@ -463,7 +527,7 @@ impl LoginSession {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b == b'_')
         }) {
-            tracing::debug!(pid = self.qq_pid, %reason, "扫码窗口采集暂未完成");
+            tracing::warn!(pid = self.qq_pid, "扫码窗口采集暂未完成：{reason}");
         }
         // AT-SPI 主界面只阻止继续取图，账号及成功状态由 SL owner 判断。
         if snapshot.state == SnowLumaQrLoginState::LoggedIn {
@@ -494,6 +558,7 @@ impl LoginSession {
     ) -> Result<SnowLumaQrLoginSnapshot, BotBackendError> {
         self.request_with_cancel(host, action, self.cancel.clone(), false)
             .await
+            .map(|reply| reply.snapshot)
     }
     pub async fn request_with_cancel(
         &self,
@@ -501,7 +566,7 @@ impl LoginSession {
         action: &str,
         cancel: CancellationToken,
         scanned: bool,
-    ) -> Result<SnowLumaQrLoginSnapshot, BotBackendError> {
+    ) -> Result<LoginReply, BotBackendError> {
         if !matches!(action, "snapshot" | "refresh" | "close") {
             return Err(io_error());
         }
@@ -510,8 +575,16 @@ impl LoginSession {
             let mut result = SnowLumaQrLoginSnapshot::unavailable("扫码已关闭");
             result.state = SnowLumaQrLoginState::Cancelled;
             result.qq_pid = Some(self.qq_pid);
-            return Ok(result);
+            return Ok(result.into());
         }
+        let _stage = HelperStage::new(
+            self.qq_pid,
+            if action == "refresh" {
+                "刷新二维码"
+            } else {
+                "读取二维码"
+            },
+        );
         let binding = self.binding.as_ref().ok_or_else(io_error)?;
         let helper_path = HostPath::from_posix(format!("{}/atspi-login.py", self.directory));
         if !host.exists(&helper_path).await.map_err(|_| io_error())? {
@@ -521,6 +594,14 @@ impl LoginSession {
             if restored.inspect(host, self.qq_pid).await? != *binding {
                 return Err(io_error());
             }
+            let mut snapshot =
+                SnowLumaQrLoginSnapshot::unavailable("扫码辅助程序已恢复，正在获取二维码");
+            snapshot.state = SnowLumaQrLoginState::Starting;
+            snapshot.qq_pid = Some(self.qq_pid);
+            return Ok(LoginReply {
+                snapshot,
+                refresh_deferred: action == "refresh",
+            });
         }
         let input=serde_json::to_vec(&serde_json::json!({"v":1,"session_id":self.session_id,"action":action,"binding":binding,"scanned":scanned})).map_err(|_|io_error())?;
         match host
@@ -528,7 +609,7 @@ impl LoginSession {
             .await
         {
             Ok(out) if out.success() && out.stdout.len() <= 192 * 1024 => {
-                self.decode(out.stdout.as_bytes())
+                self.decode(out.stdout.as_bytes()).map(Into::into)
             }
             Ok(out) => {
                 let reason = if out.stderr.contains("X Error") {
@@ -548,7 +629,7 @@ impl LoginSession {
                     SnowLumaQrLoginState::CleanupFailed
                 };
                 result.qq_pid = Some(self.qq_pid);
-                Ok(result)
+                Ok(result.into())
             }
             _ => {
                 let mut result =
@@ -556,7 +637,7 @@ impl LoginSession {
                 result.state = SnowLumaQrLoginState::CleanupFailed;
                 result.observer_removed = false;
                 result.qq_pid = Some(self.qq_pid);
-                Ok(result)
+                Ok(result.into())
             }
         }
     }
@@ -612,6 +693,7 @@ mod tests {
         bind_error: Option<&'static str>,
         cancel_on_bind: Option<CancellationToken>,
         capture_exit: Option<i32>,
+        save_exit: i32,
     }
     impl BindingHost {
         fn new() -> Self {
@@ -624,6 +706,7 @@ mod tests {
                 bind_error: None,
                 cancel_on_bind: None,
                 capture_exit: None,
+                save_exit: 0,
             }
         }
     }
@@ -711,6 +794,20 @@ mod tests {
             }
             let (code, stdout) = if command.program == "chmod" {
                 (0, String::new())
+            } else if command.args.iter().any(|arg| arg == SAVE_SESSION) {
+                assert!(!command.elevated);
+                let request: serde_json::Value =
+                    serde_json::from_slice(command.stdin.as_ref().unwrap()).unwrap();
+                if self.save_exit == 0 {
+                    let body = base64::engine::general_purpose::STANDARD
+                        .decode(request["body"].as_str().unwrap())
+                        .unwrap();
+                    self.files.lock().unwrap().insert(
+                        format!("{}/session.json", request["directory"].as_str().unwrap()),
+                        body,
+                    );
+                }
+                (self.save_exit, "{\"v\":1,\"saved\":true}".into())
             } else if command.args.iter().any(|arg| arg == DEPLOY_HELPER) {
                 assert!(!command.elevated);
                 assert_eq!(command.args, ["-I", "-B", "-c", DEPLOY_HELPER]);
@@ -801,24 +898,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_helper_is_restored_for_the_same_process_before_capture() {
+    async fn missing_helper_is_restored_in_a_separate_round_before_capture() {
         let mut host = BindingHost::new();
         host.capture_exit = Some(0);
         let session = bound_session();
         let result = session.request(&host, "snapshot").await.unwrap();
-        assert_eq!(result.state, SnowLumaQrLoginState::WaitingForQr);
+        assert_eq!(result.state, SnowLumaQrLoginState::Starting);
+        assert!(result.qrcode_payload.is_none());
         assert!(
             host.files
                 .lock()
                 .unwrap()
                 .contains_key("/tmp/runtime/login-assist/123456/atspi-login.py")
         );
+        let result = session.request(&host, "snapshot").await.unwrap();
+        assert_eq!(result.state, SnowLumaQrLoginState::WaitingForQr);
     }
 
     #[tokio::test]
     async fn completed_helper_crash_is_retryable_without_stale_payload() {
         let mut host = BindingHost::new();
         host.capture_exit = Some(1);
+        host.files.lock().unwrap().insert(
+            "/tmp/runtime/login-assist/123456/atspi-login.py".into(),
+            HELPER.to_vec(),
+        );
         let result = bound_session().request(&host, "snapshot").await.unwrap();
         assert_eq!(result.state, SnowLumaQrLoginState::Starting);
         assert!(result.observer_removed);
@@ -955,8 +1059,48 @@ mod tests {
                 .count(),
             1
         );
-        assert!(commands.iter().all(|command| command.stdin.is_none()
-            || command.args.iter().any(|arg| arg == DEPLOY_HELPER)));
+        assert!(commands.iter().all(|command| {
+            command.stdin.is_none()
+                || command
+                    .args
+                    .iter()
+                    .any(|arg| arg == DEPLOY_HELPER || arg == SAVE_SESSION)
+        }));
+    }
+
+    #[tokio::test]
+    async fn session_save_is_one_bounded_unprivileged_exec_without_sftp() {
+        let host = BindingHost::new();
+        let session = bound_session();
+        session.save(&host).await.unwrap();
+        let commands = host.commands.lock().unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].args, ["-I", "-B", "-c", SAVE_SESSION]);
+        assert_eq!(commands[0].timeout, Some(Duration::from_secs(8)));
+        assert!(!commands[0].elevated);
+        assert_eq!(host.writes.load(Ordering::SeqCst), 0);
+        let saved: LoginSession = serde_json::from_slice(
+            host.files
+                .lock()
+                .unwrap()
+                .get("/tmp/runtime/login-assist/123456/session.json")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(saved.session_id, session.session_id);
+    }
+
+    #[tokio::test]
+    async fn failed_session_save_never_claims_success_or_changes_previous_metadata() {
+        let mut host = BindingHost::new();
+        host.save_exit = 2;
+        let path = "/tmp/runtime/login-assist/123456/session.json";
+        host.files
+            .lock()
+            .unwrap()
+            .insert(path.into(), b"previous".to_vec());
+        assert!(bound_session().save(&host).await.is_err());
+        assert_eq!(host.files.lock().unwrap().get(path).unwrap(), b"previous");
     }
 
     #[tokio::test]
