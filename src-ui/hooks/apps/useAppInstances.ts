@@ -33,7 +33,10 @@ export const APP_FRAMEWORKS_KEY = ['appFrameworks'] as const;
 export function useAppFrameworks() {
     const features = useFeatures();
     const select = useCallback(
-        (list: AppFrameworkManifest[]) => list.filter((m) => isAppFrameworkVisible(features, m.id)),
+        (list: AppFrameworkManifest[]) =>
+            list
+                .filter((m) => isAppFrameworkVisible(features, m.id))
+                .sort((a, b) => Number(b.id === 'neobot') - Number(a.id === 'neobot')),
         [features],
     );
     return useQuery<AppFrameworkManifest[], Error, AppFrameworkManifest[]>({
