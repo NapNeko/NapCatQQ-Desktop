@@ -3559,6 +3559,7 @@ dependencies = [
  "ncd-domain",
  "ncd-host",
  "ncd-runtime",
+ "ncd-test-support",
  "ncd-traits",
  "rand 0.8.6",
  "regex",

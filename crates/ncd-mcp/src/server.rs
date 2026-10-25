@@ -28,10 +28,20 @@ const MAX_CONNECTIONS: usize = 64;
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(120);
 
 // HTTP 中间件看不到尚未读完 header 的连接，必须在 accept 和 IO 层限制它们。
-struct LimitedListener {
+pub(crate) struct LimitedListener {
     listener: TcpListener,
     slots: Arc<Semaphore>,
     cancel: CancellationToken,
+}
+
+impl LimitedListener {
+    pub(crate) fn new(listener: TcpListener, cancel: CancellationToken) -> Self {
+        Self {
+            listener,
+            slots: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+            cancel,
+        }
+    }
 }
 
 impl axum::serve::Listener for LimitedListener {
@@ -62,7 +72,7 @@ impl axum::serve::Listener for LimitedListener {
     }
 }
 
-struct LimitedConnection {
+pub(crate) struct LimitedConnection {
     socket: TcpStream,
     _permit: OwnedSemaphorePermit,
     deadline: Pin<Box<Sleep>>,
