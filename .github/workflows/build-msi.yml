@@ -92,6 +92,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Assert no diagnostic-agent source
+        run: node scripts/assert-no-diagnostic-agent.mjs source
+
       - name: Exclude build dirs from Defender scan
         shell: pwsh
         run: |

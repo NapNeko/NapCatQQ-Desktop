@@ -1,7 +1,7 @@
 {
   "name": "napcatqq-desktop-ui",
   "private": true,
-  "version": "3.5.8",
+  "version": "3.5.9",
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
@@ -15,7 +15,7 @@
     "test:sl-login-helper": "python -B -m unittest discover -s crates/ncd-backend-snowluma/resources/login-helper -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-backend-snowluma/resources -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-component/resources -p \"*_test.py\" && python -B -m unittest discover -s crates/ncd-runtime/src/metrics -p remote_assets_batch_test.py",
     "build:sl-login-helper": "node scripts/build-snowluma-login-helper.mjs",
     "build:remote-agent": "node scripts/build-remote-agent.mjs",
-    "build": "tsc -p src-ui/tsconfig.json && vite build --config src-ui/vite.config.ts",
+    "build": "tsc -p src-ui/tsconfig.json && vite build --config src-ui/vite.config.ts && node scripts/assert-no-diagnostic-agent.mjs dist",
     "check:versions": "node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')); const meta=fs.readFileSync('src-ui/core/domain/app-meta.ts','utf8'); const app=meta.match(/APP_VERSION = '([^']+)'/); const label=meta.match(/APP_VERSION_LABEL = 'v([^']+)'/); const mismatches=[]; if(pkg.version!==tauri.version)mismatches.push('package.json != tauri.conf.json'); if(!app||pkg.version!==app[1])mismatches.push('package.json != APP_VERSION'); if(!label||pkg.version!==label[1])mismatches.push('package.json != APP_VERSION_LABEL'); if(mismatches.length){console.error(mismatches.join('\\n')); process.exit(1)} console.log('version metadata is consistent:', pkg.version)\"",
     "typecheck": "tsc -p src-ui/tsconfig.json --noEmit",
     "lint": "eslint src-ui",
