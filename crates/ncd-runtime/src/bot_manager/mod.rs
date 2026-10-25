@@ -55,10 +55,7 @@ pub mod runtime_gate;
 mod stop;
 mod watch_relogin;
 mod webui;
-use helpers::{
-    docker_container_config_changed, is_remote_transport_error, is_shared_napcat_json,
-    set_value_at_dot_path,
-};
+use helpers::{docker_container_config_changed, is_shared_napcat_json, set_value_at_dot_path};
 pub(crate) use migration::migration_protocol_scope;
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 

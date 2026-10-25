@@ -169,20 +169,6 @@ pub(crate) async fn remote_qq_main_running(
     }
 }
 
-pub fn parse_webui_port_from_runtime_json(bytes: &[u8]) -> Option<u16> {
-    let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    let n = v.get("webuiPort")?;
-    let port = if let Some(u) = n.as_u64() {
-        u
-    } else if let Some(s) = n.as_str() {
-        s.trim().parse().ok()?
-    } else {
-        return None;
-    };
-    let port = u16::try_from(port).ok()?;
-    (port > 0).then_some(port)
-}
-
 pub fn parse_port_lines(out: &str) -> Vec<u16> {
     let mut ports = Vec::new();
     for line in out.lines() {
@@ -717,24 +703,6 @@ mod tests {
             "imported/full packages log to framework logs/, not workspace/log/daemon.log"
         );
         assert!(script.contains("/logs"));
-    }
-
-    #[test]
-    fn parse_runtime_json_number() {
-        let bytes = br#"{ "webuiPort": 5103 }"#;
-        assert_eq!(parse_webui_port_from_runtime_json(bytes), Some(5103));
-    }
-
-    #[test]
-    fn parse_runtime_json_string() {
-        let bytes = br#"{ "webuiPort": "6111" }"#;
-        assert_eq!(parse_webui_port_from_runtime_json(bytes), Some(6111));
-    }
-
-    #[test]
-    fn parse_runtime_json_rejects_zero() {
-        let bytes = br#"{ "webuiPort": 0 }"#;
-        assert_eq!(parse_webui_port_from_runtime_json(bytes), None);
     }
 
     #[test]

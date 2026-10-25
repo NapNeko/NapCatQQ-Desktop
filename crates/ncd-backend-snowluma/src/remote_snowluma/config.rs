@@ -23,15 +23,6 @@ pub(crate) struct WebuiCredentialSync {
     pub wrote: bool,
 }
 
-pub(crate) async fn ensure_remote_daemon_prereqs(
-    host: &dyn Host,
-    home: &str,
-    paths: &SnowLumaRemotePaths,
-    qq_bin: &str,
-) -> Result<WebuiCredentialSync, BotBackendError> {
-    ensure_remote_daemon_prereqs_cancellable(host, home, paths, qq_bin, None).await
-}
-
 pub(crate) async fn ensure_remote_daemon_prereqs_cancellable(
     host: &dyn Host,
     home: &str,
