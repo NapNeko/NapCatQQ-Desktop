@@ -1,5 +1,6 @@
 //! uv 安装的流式诊断、等待状态和命令收尾。
 
+use std::collections::VecDeque;
 use std::future::Future;
 use std::time::Duration;
 
@@ -13,6 +14,27 @@ struct MonitorPolicy {
     heartbeat: Duration,
     quiet_warning: Duration,
     timeout: Duration,
+    flush_interval: Duration,
+}
+
+struct OutputRelay {
+    tx: mpsc::Sender<String>,
+    overflowed: bool,
+}
+
+impl OutputRelay {
+    fn send(&mut self, line: String) {
+        // 在 tracing、任务快照和 IPC 之前过滤，隐藏 UI 文本不能减少这些开销。
+        if !visible_line(&line) {
+            return;
+        }
+        if let Err(mpsc::error::TrySendError::Full(_)) = self.tx.try_send(line) {
+            if !self.overflowed {
+                self.overflowed = true;
+                tracing::warn!("安装输出过多，省略未能及时回传的行");
+            }
+        }
+    }
 }
 
 pub(crate) async fn run_uv_logged(
@@ -28,18 +50,14 @@ pub(crate) async fn run_uv_logged(
     }
     let cmd = prepare_command(cmd, ctx, timeout);
     let (tx, rx) = mpsc::channel(1024);
-    let mut overflowed = false;
+    let mut relay = OutputRelay {
+        tx,
+        overflowed: false,
+    };
     let run = host.run_streaming(
         cmd,
         Box::new(move |_source, line| {
-            if !line.trim().is_empty() {
-                if let Err(mpsc::error::TrySendError::Full(_)) = tx.try_send(line) {
-                    if !overflowed {
-                        overflowed = true;
-                        tracing::warn!("安装诊断日志过多，省略未能及时回传的行");
-                    }
-                }
-            }
+            relay.send(line);
         }),
     );
     monitor_output(
@@ -52,6 +70,7 @@ pub(crate) async fn run_uv_logged(
             heartbeat: Duration::from_secs(15),
             quiet_warning: Duration::from_secs(120),
             timeout,
+            flush_interval: Duration::from_millis(250),
         },
     )
     .await
@@ -60,8 +79,7 @@ pub(crate) async fn run_uv_logged(
 fn prepare_command(mut cmd: HostCommand, ctx: &ActionCtx, timeout: Duration) -> HostCommand {
     let binary = cmd.program.rsplit(['/', '\\']).next().unwrap_or_default();
     if binary.eq_ignore_ascii_case("uv") || binary.eq_ignore_ascii_case("uv.exe") {
-        // 非终端下的进度条不可用；详细日志仍能报告解析、下载和等待锁。
-        cmd.args.insert(0, "--verbose".to_string());
+        // 非终端下的进度条不可用，等待状态由监测器定时报告。
         cmd = cmd
             .env("UV_NO_PROGRESS", "1")
             .env("UV_HTTP_CONNECT_TIMEOUT", "10")
@@ -79,30 +97,84 @@ struct StepMonitor<'a> {
     phase: &'static str,
     last_output: Instant,
     warned: bool,
+    phase_dirty: bool,
+    pending_lines: VecDeque<String>,
+    omitted_lines: usize,
+    error_header: Option<String>,
+    warning_header: Option<String>,
 }
 
 impl<'a> StepMonitor<'a> {
     fn new(name: &'a str) -> Self {
         Self {
             name,
-            phase: "准备运行",
+            phase: "等待安装输出",
             last_output: Instant::now(),
             warned: false,
+            phase_dirty: false,
+            pending_lines: VecDeque::new(),
+            omitted_lines: 0,
+            error_header: None,
+            warning_header: None,
         }
     }
 
-    async fn line(&mut self, ctx: &ActionCtx, step: u32, line: &str) {
+    fn line(&mut self, line: &str) {
+        if !visible_line(line) {
+            return;
+        }
         self.last_output = Instant::now();
         self.warned = false;
-        let line = redact_line(line.trim_end());
+        let mut line = redact_line(line.trim_end());
         if let Some(phase) = phase_of(&line) {
             if phase != self.phase {
                 self.phase = phase;
-                self.progress(ctx, step, format!("{} · {phase}", self.name))
-                    .await;
+                self.phase_dirty = true;
             }
         }
-        ctx.info(line).await;
+        if line.len() > 1024 {
+            let mut end = 1024;
+            while !line.is_char_boundary(end) {
+                end -= 1;
+            }
+            line.truncate(end);
+            line.push('…');
+        }
+        if self.error_header.is_none() && is_error_header(&line) {
+            self.error_header = Some(line.clone());
+        }
+        if self.warning_header.is_none() && is_warning_header(&line) {
+            self.warning_header = Some(line.clone());
+        }
+        if self.pending_lines.len() == 8 {
+            self.pending_lines.pop_front();
+            self.omitted_lines += 1;
+        }
+        self.pending_lines.push_back(line);
+    }
+
+    async fn flush(&mut self, ctx: &ActionCtx, step: u32) {
+        if self.phase_dirty {
+            self.phase_dirty = false;
+            self.progress(ctx, step, format!("{} · {}", self.name, self.phase))
+                .await;
+        }
+        if !self.pending_lines.is_empty() {
+            let mut message = self.pending_lines.drain(..).collect::<Vec<_>>().join("\n");
+            for header in [self.warning_header.take(), self.error_header.take()]
+                .into_iter()
+                .flatten()
+            {
+                if !message.lines().any(|line| line == header) {
+                    message = format!("{header}\n{message}");
+                }
+            }
+            if self.omitted_lines > 0 {
+                message = format!("省略 {} 行中间输出\n{message}", self.omitted_lines);
+                self.omitted_lines = 0;
+            }
+            ctx.info(message).await;
+        }
     }
 
     async fn tick(&mut self, ctx: &ActionCtx, step: u32, policy: MonitorPolicy) {
@@ -140,6 +212,84 @@ impl<'a> StepMonitor<'a> {
     }
 }
 
+fn trim_ansi_prefix(mut line: &str) -> &str {
+    loop {
+        line = line.trim_start();
+        let Some(escape) = line.strip_prefix("\x1b[") else {
+            return line;
+        };
+        let Some(end) = escape.find('m') else {
+            return line;
+        };
+        line = &escape[end + 1..];
+    }
+}
+
+fn is_diagnostic_line(line: &str) -> bool {
+    let line = trim_ansi_prefix(line);
+    let (first, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
+    let token = if first.bytes().next().is_some_and(|c| c.is_ascii_digit()) && first.contains(':') {
+        trim_ansi_prefix(rest)
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+    } else {
+        first
+    };
+    ["DEBUG", "TRACE", "[DEBUG]", "[TRACE]"]
+        .iter()
+        .any(|level| {
+            token
+                .strip_prefix(*level)
+                .is_some_and(|tail| tail.is_empty() || tail.starts_with("\x1b["))
+        })
+}
+
+fn is_package_listing(line: &str) -> bool {
+    let line = trim_ansi_prefix(line);
+    let Some(package) = line
+        .strip_prefix("+ ")
+        .or_else(|| line.strip_prefix("- "))
+        .or_else(|| line.strip_prefix("~ "))
+    else {
+        return false;
+    };
+    let Some((name, _)) = package
+        .split_once("==")
+        .or_else(|| package.split_once(" @ "))
+    else {
+        return false;
+    };
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
+}
+
+fn visible_line(line: &str) -> bool {
+    !line.trim().is_empty() && !is_diagnostic_line(line) && !is_package_listing(line)
+}
+
+fn is_error_header(line: &str) -> bool {
+    let lower = trim_ansi_prefix(line).to_ascii_lowercase();
+    lower.starts_with("error:") || lower.starts_with("fatal:") || lower.starts_with("error ")
+}
+
+fn is_warning_header(line: &str) -> bool {
+    let lower = trim_ansi_prefix(line).to_ascii_lowercase();
+    ["warning:", "warn:", "warning ", "warn "]
+        .iter()
+        .any(|prefix| lower.starts_with(*prefix))
+}
+
+fn clean_output(text: &str) -> String {
+    text.lines()
+        .filter(|line| visible_line(line))
+        .map(redact_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 async fn monitor_output(
     ctx: &ActionCtx,
     step: u32,
@@ -173,8 +323,8 @@ async fn monitor_output(
     };
     match result {
         Ok(mut output) => {
-            output.stdout = redact_line(&output.stdout);
-            output.stderr = redact_line(&output.stderr);
+            output.stdout = clean_output(&output.stdout);
+            output.stderr = clean_output(&output.stderr);
             Ok(output)
         }
         Err(HostError::Cancelled) => Err(ActionError::Cancelled),
@@ -203,16 +353,23 @@ async fn report_output(
 ) {
     let mut tick = tokio::time::interval_at(Instant::now() + policy.heartbeat, policy.heartbeat);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut flush = tokio::time::interval_at(
+        Instant::now() + policy.flush_interval,
+        policy.flush_interval,
+    );
+    flush.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             _ = &mut completion => {
                 rx.close();
                 while let Some(line) = rx.recv().await {
-                    monitor.line(ctx, step, &line).await;
+                    monitor.line(&line);
                 }
+                monitor.flush(ctx, step).await;
                 return;
             },
-            Some(line) = rx.recv() => monitor.line(ctx, step, &line).await,
+            Some(line) = rx.recv() => monitor.line(&line),
+            _ = flush.tick() => monitor.flush(ctx, step).await,
             _ = tick.tick() => monitor.tick(ctx, step, policy).await,
         }
     }
