@@ -75,6 +75,7 @@ impl NoneBot2Adapter {
     fn component_for(spec: &AppComponentSpec) -> NoneBot2Component {
         NoneBot2Component::new(spec.install_dir.clone(), spec.port)
             .with_uv_bin(spec.uv_bin.clone())
+            .with_pypi_index(spec.pypi_index.clone())
             .with_adopt_existing(spec.adopt_existing)
     }
 

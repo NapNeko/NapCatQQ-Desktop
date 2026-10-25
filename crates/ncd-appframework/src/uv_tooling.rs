@@ -9,6 +9,9 @@ use std::time::Duration;
 use ncd_component::{ActionCtx, ActionError, DownloadHelper, UvComponent};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os, shell_single_quote};
 
+mod step;
+pub(crate) use step::run_uv_logged;
+
 /// 实例目录下记录「安装时用的 uv」的标记文件
 pub const UV_MARKER_FILE: &str = ".ncd-uv";
 
@@ -253,9 +256,18 @@ pub async fn ensure_python(
     }
     ctx.info(format!("主机上没有 Python {request}，先装一个 uv 托管的"))
         .await;
-    let direct = host
-        .run_to_string(uv_cmd(&["python", "install", request]).timeout(PYTHON_DIRECT_TIMEOUT))
-        .await;
+    if ctx.is_cancelled() {
+        return Err(ActionError::Cancelled);
+    }
+    let direct = run_uv_logged(
+        host,
+        ctx,
+        step,
+        &format!("安装 Python {request}"),
+        uv_cmd(&["python", "install", request]),
+        PYTHON_DIRECT_TIMEOUT,
+    )
+    .await;
     let direct_err = match direct {
         Ok(out) if out.success() => return Ok(()),
         Ok(out) => out
@@ -265,6 +277,7 @@ pub async fn ensure_python(
             .last()
             .unwrap_or_default()
             .to_string(),
+        Err(ActionError::Cancelled) => return Err(ActionError::Cancelled),
         Err(e) => e.to_string(),
     };
     if host.locality() != Locality::Remote {
@@ -312,13 +325,15 @@ pub async fn ensure_python(
         scratch.as_posix().to_string()
     };
     mirror.set_path(&mirror_path);
-    let installed = host
-        .run_to_string(
-            uv_cmd(&["python", "install", request])
-                .env("UV_PYTHON_INSTALL_MIRROR", mirror.as_str())
-                .timeout(PYTHON_DIRECT_TIMEOUT),
-        )
-        .await;
+    let installed = run_uv_logged(
+        host,
+        ctx,
+        step,
+        &format!("安装 Python {request}"),
+        uv_cmd(&["python", "install", request]).env("UV_PYTHON_INSTALL_MIRROR", mirror.as_str()),
+        PYTHON_DIRECT_TIMEOUT,
+    )
+    .await;
     let _ = host.remove_dir_all(scratch).await;
     let out = installed?;
     if out.success() {

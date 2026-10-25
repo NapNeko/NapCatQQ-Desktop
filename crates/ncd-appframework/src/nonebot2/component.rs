@@ -83,8 +83,21 @@ impl NoneBot2Component {
     }
 
     pub fn with_pypi_index(mut self, index: Option<String>) -> Self {
-        self.pypi_index = index.filter(|s| !s.trim().is_empty());
+        self.pypi_index = index
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         self
+    }
+
+    fn sync_command(&self, uv: &HostPath) -> HostCommand {
+        let mut cmd = HostCommand::new(uv.as_posix())
+            .arg("sync")
+            .working_dir(self.install_dir.clone())
+            .env("UV_PROJECT_ENVIRONMENT", ".venv");
+        if let Some(index) = &self.pypi_index {
+            cmd = cmd.arg("--default-index").arg(index);
+        }
+        cmd
     }
 
     pub fn pyproject(&self) -> HostPath {
@@ -181,31 +194,8 @@ impl NoneBot2Component {
             message: name.to_string(),
         })
         .await;
-        let cmd = cmd
-            .timeout(LONG_STEP_TIMEOUT)
-            .cancel_token(ctx.cancel_token())
-            .env("UV_NO_PROGRESS", "1")
-            .env("PYTHONUTF8", "1");
-        let log_ctx = ctx.clone();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let drain = tokio::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                log_ctx.info(line).await;
-            }
-        });
-        let out = host
-            .run_streaming(
-                cmd,
-                Box::new(move |_src, line| {
-                    let trimmed = line.trim_end();
-                    if !trimmed.is_empty() {
-                        let _ = tx.send(trimmed.to_string());
-                    }
-                }),
-            )
-            .await;
-        drain.abort();
-        let out = out.map_err(|e| ActionError::install_step(name, e.to_string()))?;
+        let out =
+            crate::uv_tooling::run_uv_logged(host, ctx, step, name, cmd, LONG_STEP_TIMEOUT).await?;
         if !out.success() {
             ctx.emit(ProgressKind::StepEnd { step, ok: false }).await;
             return Err(ActionError::install_step(
@@ -251,13 +241,7 @@ impl NoneBot2Component {
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
         // 3. uv sync：托管 Python + .venv + 依赖，一步到位
-        let mut sync = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("sync")
-            .working_dir(self.install_dir.clone())
-            .env("UV_PROJECT_ENVIRONMENT", ".venv");
-        if let Some(index) = &self.pypi_index {
-            sync = sync.arg("--default-index").arg(index);
-        }
+        let sync = self.sync_command(&uv.uv_bin);
         self.run_step(host, ctx, 3, "同步 Python 依赖（uv sync）", sync)
             .await?;
 
@@ -292,13 +276,7 @@ impl NoneBot2Component {
         write_uv_marker(host, &self.install_dir, &uv).await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        let mut sync = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("sync")
-            .working_dir(self.install_dir.clone())
-            .env("UV_PROJECT_ENVIRONMENT", ".venv");
-        if let Some(index) = &self.pypi_index {
-            sync = sync.arg("--default-index").arg(index);
-        }
+        let sync = self.sync_command(&uv.uv_bin);
         self.run_step(host, ctx, 2, "同步 Python 依赖（uv sync）", sync)
             .await?;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -601,6 +579,47 @@ impl Component for NoneBot2Component {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adapter_source_reaches_sync_without_rewriting_named_sources() {
+        let spec = crate::adapter::AppComponentSpec {
+            install_dir: HostPath::from_posix("/apps/n1"),
+            port: 8080,
+            node_bin: None,
+            uv_bin: None,
+            git_bin: None,
+            redis_bin: None,
+            npm_registry: None,
+            pypi_index: Some(" https://pypi.example/simple ".into()),
+            install_version: None,
+            install_renderer: false,
+            adopt_existing: true,
+            instance_id: "n1".into(),
+            webui_username: None,
+            webui_password: None,
+        };
+        let comp = super::super::NoneBot2Adapter::component_for(&spec);
+        let cmd = comp.sync_command(&HostPath::from_posix("/tools/uv"));
+        assert_eq!(
+            cmd.args,
+            ["sync", "--default-index", "https://pypi.example/simple"]
+        );
+        assert_eq!(
+            cmd.environment
+                .get("UV_PROJECT_ENVIRONMENT")
+                .map(String::as_str),
+            Some(".venv")
+        );
+        assert!(comp.adopt_existing);
+    }
+
+    #[test]
+    fn empty_source_keeps_sync_on_uv_configuration() {
+        let comp = NoneBot2Component::new(HostPath::from_posix("/apps/n1"), 8080)
+            .with_pypi_index(Some("  ".into()));
+        let cmd = comp.sync_command(&HostPath::from_posix("uv"));
+        assert_eq!(cmd.args, ["sync"]);
+    }
 
     #[test]
     fn requirements_pin_uv_not_node() {
