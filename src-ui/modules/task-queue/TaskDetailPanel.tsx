@@ -27,7 +27,7 @@ import {
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
-import { Copy, Loader2, Trash2, XCircle } from 'lucide-react';
+import { CircleAlert, Copy, Loader2, Trash2, XCircle } from 'lucide-react';
 import { MotionIcon } from '../../shared/ui/motion';
 import {
     ProgressLine,
@@ -353,6 +353,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const canCancel = canCancelTaskItem(item);
     const running = isRunningTaskItem(item);
     const canDelete = isTerminalTaskStatus(item.status);
+    // 失败/取消已经由顶部提示或状态徽标说清，进度区不再重复一行「失败 · 详见顶部提示」。
+    const hideProgress = item.status === 'failed' || item.status === 'cancelled';
 
     const { cancelTask, deleteTask } = useTaskQueueActions();
     const [cancelBusy, setCancelBusy] = React.useState(false);
@@ -510,14 +512,33 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                         </div>
 
                         {failure && (
-                            <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
-                                {failure}
+                            <div
+                                role="alert"
+                                className="mt-3 flex items-start gap-2 rounded-md border border-danger/25 bg-danger-soft/30 px-3 py-2 text-[12px] leading-relaxed text-danger"
+                            >
+                                <CircleAlert
+                                    size={13}
+                                    strokeWidth={2.2}
+                                    aria-hidden
+                                    className="mt-[2px] shrink-0 opacity-80"
+                                />
+                                <p className="line-clamp-2 min-w-0 break-words" title={failure}>
+                                    {failure}
+                                </p>
                             </div>
                         )}
 
                         {cancelError && (
-                            <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
-                                停止失败，详情见日志
+                            <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/25 bg-danger-soft/30 px-3 py-2 text-[12px] leading-relaxed text-danger">
+                                <CircleAlert
+                                    size={13}
+                                    strokeWidth={2.2}
+                                    aria-hidden
+                                    className="mt-[2px] shrink-0 opacity-80"
+                                />
+                                <p className="line-clamp-2 min-w-0 break-words" title={cancelError}>
+                                    停止失败：{cancelError}
+                                </p>
                             </div>
                         )}
 
@@ -533,7 +554,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                             </div>
                         )}
 
-                        {progress && !dockerPullExpanded && (
+                        {progress && !dockerPullExpanded && !hideProgress && (
                             <div className="mt-3 overflow-hidden rounded-md border border-border-subtle/80 bg-surface/60 px-3 pb-3 pt-2">
                                 {item.kind === 'docker_deploy' ? (
                                     <DockerDeployProgressBlock item={item} progress={progress} />
@@ -554,7 +575,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                         )}
                     </div>
 
-                    {dockerPullExpanded && progress && (
+                    {dockerPullExpanded && progress && !hideProgress && (
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
                             <div
                                 className={cn(

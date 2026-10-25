@@ -45,7 +45,7 @@ export const ProgressLine: React.FC<{
                     className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isCancelled ? 'bg-warning' : 'bg-danger'}`}
                 />
                 <span className={`min-w-0 truncate text-[12px] text-text-tertiary`}>
-                    {isCancelled ? '已取消' : '失败 · 详见顶部提示'}
+                    {isCancelled ? '已取消' : '任务失败'}
                 </span>
             </>,
         );
@@ -116,38 +116,60 @@ export const ProgressLine: React.FC<{
         .filter(Boolean)
         .join(' · ');
 
+    // message 可能只含阶段；单位匹配仅用于去重，实际数值仍来自结构化字段。
+    const message = progress.message.trim();
+    const messageHasBytes =
+        /(?:^|[\s·])\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B(?=$|[\s·]|\/\s*\d)/i.test(message);
+    const messageHasTrailingMetric =
+        progress.speedBps != null
+            ? /\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B\/s\b/i.test(message)
+            : Boolean(trailingMetric && message.includes(trailingMetric));
+    const primaryMessage = [message || stageLabel, messageHasBytes ? null : bytesText]
+        .filter(Boolean)
+        .join(' · ');
+
+    if (compact) {
+        return (
+            <div
+                className={cn('mt-1 min-w-0 max-w-full text-[11.5px]', className)}
+                role="group"
+                title={downloadDetails}
+                aria-label={downloadDetails}
+            >
+                <div className="flex min-w-0 items-center gap-2">
+                    <StageIcon stage={progress.downloadStage} />
+                    <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
+                    {trailingMetric && (
+                        <span className="shrink-0 font-mono tabular-nums text-brand">
+                            {trailingMetric}
+                        </span>
+                    )}
+                    <span className="ml-auto shrink-0 font-mono tabular-nums text-text-secondary">
+                        {indeterminate ? '—' : `${progress.percent}%`}
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div
-            className={cn('mt-1 min-w-0 max-w-full text-[11.5px]', className)}
-            role={compact ? 'group' : undefined}
-            title={compact ? downloadDetails : undefined}
-            aria-label={compact ? downloadDetails : undefined}
-        >
-            <div className="flex min-w-0 items-center gap-2">
-                <StageIcon stage={progress.downloadStage} />
-                <span className="min-w-0 truncate text-text-secondary">{stageLabel}</span>
-                {bytesText && !compact && (
-                    <span className="min-w-0 truncate font-mono tabular-nums text-text-tertiary">
-                        {bytesText}
-                    </span>
-                )}
-                {trailingMetric && (
-                    <span className="shrink-0 font-mono tabular-nums text-brand">
-                        {trailingMetric}
-                    </span>
-                )}
-                <span className="ml-auto shrink-0 font-mono tabular-nums text-text-secondary">
-                    {indeterminate ? '—' : `${progress.percent}%`}
-                </span>
-            </div>
-            {!compact && progress.message.trim() && (
-                <div
-                    className="mt-0.5 truncate text-[11px] text-text-tertiary"
-                    title={progress.message}
-                >
-                    {progress.message}
-                </div>
+            className={cn(
+                'mt-1 flex min-w-0 max-w-full items-center gap-2 text-[11.5px]',
+                className,
             )}
+            title={downloadDetails}
+        >
+            <StageIcon stage={progress.downloadStage} />
+            <span className="min-w-0 flex-1 truncate text-text-secondary">
+                {primaryMessage}
+            </span>
+            {!messageHasTrailingMetric && trailingMetric && (
+                <span className="shrink-0 font-mono tabular-nums text-brand">{trailingMetric}</span>
+            )}
+            <span className="ml-auto shrink-0 font-mono tabular-nums text-text-secondary">
+                {indeterminate ? '—' : `${progress.percent}%`}
+            </span>
         </div>
     );
 };

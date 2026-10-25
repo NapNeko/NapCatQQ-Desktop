@@ -191,10 +191,33 @@ export function formatElapsedCompact(
     return `${h}h${m}m`;
 }
 
+// finished / step_end 合成出来的收尾文案（「失败」「任务失败」）没有信息量：
+// 详情页顶部横幅原本直接取 progress.message，失败时它就等于「失败」，于是出现
+// 「顶部只写失败、下面提示详见顶部」的死循环。
+const GENERIC_OUTCOME_MESSAGES = new Set(['失败', '任务失败', '完成', '任务完成']);
+
+function isGenericOutcomeMessage(message: string): boolean {
+    return GENERIC_OUTCOME_MESSAGES.has(message.trim());
+}
+
+/**
+ * 失败原因：优先取最后一条 error 日志（后端真正报出来的那句），跳过收尾文案；
+ * 没有日志时回退到进度主文案 / 安装提示。
+ */
 export function failureHint(item: TaskQueueItem): string | null {
     if (item.status !== 'failed') return null;
-    const msg = item.progress?.message?.trim();
-    if (msg) return msg;
-    const lastLog = item.progress?.logs[item.progress.logs.length - 1]?.message?.trim();
-    return lastLog || '任务失败，请查看日志或到组件页重试。';
+    const progress = item.progress;
+    if (progress) {
+        for (let i = progress.logs.length - 1; i >= 0; i--) {
+            const log = progress.logs[i];
+            if (log.level !== 'error') continue;
+            const message = log.message.trim();
+            if (message && !isGenericOutcomeMessage(message)) return message;
+        }
+        const message = progress.message.trim();
+        if (message && !isGenericOutcomeMessage(message)) return message;
+    }
+    const hint = item.logHint?.trim();
+    if (hint) return hint;
+    return '任务失败，展开步骤日志查看原因。';
 }
