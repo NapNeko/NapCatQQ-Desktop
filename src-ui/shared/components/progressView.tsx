@@ -118,8 +118,9 @@ export const ProgressLine: React.FC<{
 
     // message 可能只含阶段；单位匹配仅用于去重，实际数值仍来自结构化字段。
     const message = progress.message.trim();
-    const messageHasBytes =
-        /(?:^|[\s·])\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B(?=$|[\s·]|\/\s*\d)/i.test(message);
+    const messageHasBytes = /(?:^|[\s·])\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B(?=$|[\s·]|\/\s*\d)/i.test(
+        message,
+    );
     const messageHasTrailingMetric =
         progress.speedBps != null
             ? /\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B\/s\b/i.test(message)
@@ -161,9 +162,7 @@ export const ProgressLine: React.FC<{
             title={downloadDetails}
         >
             <StageIcon stage={progress.downloadStage} />
-            <span className="min-w-0 flex-1 truncate text-text-secondary">
-                {primaryMessage}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-text-secondary">{primaryMessage}</span>
             {!messageHasTrailingMetric && trailingMetric && (
                 <span className="shrink-0 font-mono tabular-nums text-brand">{trailingMetric}</span>
             )}
