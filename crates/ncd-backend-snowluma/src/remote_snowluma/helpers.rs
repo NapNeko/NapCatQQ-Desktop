@@ -3,13 +3,6 @@
 use ncd_host::{Host, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 
-pub(crate) async fn host_file_nonempty(host: &dyn Host, path: &str) -> bool {
-    match host.read_file(&HostPath::from_posix(path)).await {
-        Ok(b) => !b.is_empty(),
-        Err(_) => false,
-    }
-}
-
 pub(crate) async fn read_remote_log_tail(
     host: &dyn Host,
     path: &str,

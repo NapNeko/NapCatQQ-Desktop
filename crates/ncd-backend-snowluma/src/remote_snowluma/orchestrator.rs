@@ -206,46 +206,6 @@ getcap "$node" 2>/dev/null || true
     let _ = host.run_to_string(set).await;
 }
 
-pub(crate) fn bot_pid_if_running_script(pidfile: &str, qq_id: &str) -> String {
-    let pidfile = shell_single_quote(pidfile);
-    let qid = shell_single_quote(qq_id);
-    format!(
-        r#"pidfile={pidfile}
-qid={qid}
-if [ -f "$pidfile" ]; then
-  existing=$(cat "$pidfile" 2>/dev/null || echo "")
-  if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
-    cmd=$(tr '\0' ' ' < /proc/$existing/cmdline 2>/dev/null || true)
-    case "$cmd" in
-      *"-q $qid"*|*-q"$qid"*|*"--qq $qid"*|*"--qq=$qid"*|*"--qq-id=$qid"*)
-        echo "$existing"
-        exit 0
-        ;;
-    esac
-  fi
-  rm -f "$pidfile"
-fi
-"#
-    )
-}
-
-pub(crate) async fn bot_pid_if_running(
-    host: &dyn Host,
-    paths: &SnowLumaRemotePaths,
-    qq_id: &str,
-) -> Result<Option<u32>, BotBackendError> {
-    let script = bot_pid_if_running_script(&paths.pid_bot_path(qq_id), qq_id);
-    let out = run_remote_bash(host, &script).await?;
-    let line = out.lines().last().unwrap_or("").trim();
-    if line.is_empty() {
-        return Ok(None);
-    }
-    match line.parse::<u32>() {
-        Ok(n) => Ok(Some(n)),
-        Err(_) => Ok(None),
-    }
-}
-
 /// 冷启 QQ 的远端脚本。ptrace / libgcc 已在 spawn 前的 host 侧做过，这里不再重复。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bot_cold_start_script(
@@ -288,27 +248,6 @@ fi
 echo "$pid"
 "#
     )
-}
-
-pub(crate) async fn bot_cold_start_with_login(
-    host: &dyn Host,
-    layout: &RemoteSnowLumaLayout,
-    qq_id: &str,
-    uin: &str,
-    login: Option<&super::login_helper::PreparedLogin>,
-    verified_running_pid: Option<u32>,
-) -> Result<u32, BotBackendError> {
-    bot_cold_start_cancellable(
-        host,
-        layout,
-        qq_id,
-        uin,
-        login,
-        verified_running_pid,
-        None,
-        None,
-    )
-    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -583,23 +522,6 @@ mod tests {
         assert!(!node_already_has_sys_ptrace(
             "/usr/bin/node cap_net_bind_service=ep"
         ));
-    }
-
-    #[test]
-    fn bot_pid_if_running_script_does_not_trust_kill_zero_alone() {
-        let script = bot_pid_if_running_script("/ws/runtime/pid_bot_2707600964", "2707600964");
-        assert!(
-            script.contains("kill -0"),
-            "dead pidfile still needs liveness"
-        );
-        assert!(
-            script.contains("-q $qid") || script.contains("-q\"$qid\""),
-            "stale pidfile must match qq id before reuse"
-        );
-        assert!(
-            script.contains("rm -f \"$pidfile\""),
-            "unmatched pidfile must be dropped so cold start can spawn"
-        );
     }
 
     #[test]

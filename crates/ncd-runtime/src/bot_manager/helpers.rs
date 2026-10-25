@@ -1,9 +1,7 @@
-// BotManager 纯函数 helpers：drift 路径写入 + 远端传输错误判定
+// BotManager 配置差异比较与路径写入。
 
 use std::ffi::OsStr;
 use std::path::Path;
-
-use ncd_traits::runtime_backend::BotBackendError;
 
 /// Docker 的发布端口、资源和环境由容器创建参数决定，不能靠协议 WebUI 热更新。
 /// 只处理同一部署目标；切换主机 / backend 的生命周期由调用方分别处理。
@@ -100,24 +98,5 @@ pub(crate) fn set_value_at_dot_path(
             }
         }
         _ => Err(format!("路径 '{dot_path}' 的父级不是 object / array")),
-    }
-}
-
-// stop/start 失败时区分「远端传输层挂了」与业务错误，便于 UI 提示重连而非假崩溃。
-// Io 变体只能字符串启发式（历史错误未全量结构化）。
-pub(crate) fn is_remote_transport_error(err: &BotBackendError) -> bool {
-    match err {
-        BotBackendError::RemoteHostTransport(_) => true,
-        BotBackendError::Io(msg) => {
-            let m = msg.to_ascii_lowercase();
-            m.contains("disconnected")
-                || m.contains("remote_disconnected")
-                || m.contains("ssh")
-                || m.contains("connection")
-                || m.contains("poisoned")
-                || m.contains("broken pipe")
-                || m.contains("transport")
-        }
-        _ => false,
     }
 }

@@ -26,7 +26,13 @@ async fn prerequisite_files_begin_concurrently_and_failed_read_cannot_generate_c
         .insert(expected[0].clone(), ReadFailure::Denied);
     let result = tokio::time::timeout(
         Duration::from_secs(1),
-        ensure_remote_daemon_prereqs(&host, "/home/fixture", &paths, "/opt/QQ/qq"),
+        ensure_remote_daemon_prereqs_cancellable(
+            &host,
+            "/home/fixture",
+            &paths,
+            "/opt/QQ/qq",
+            None,
+        ),
     )
     .await
     .unwrap();
@@ -48,9 +54,15 @@ async fn unreadable_prerequisite_is_never_treated_as_missing() {
             let host = FileHost::new();
             host.failures.lock().unwrap().insert(path, failure);
             assert!(
-                ensure_remote_daemon_prereqs(&host, "/home/fixture", &paths, "/opt/QQ/qq")
-                    .await
-                    .is_err()
+                ensure_remote_daemon_prereqs_cancellable(
+                    &host,
+                    "/home/fixture",
+                    &paths,
+                    "/opt/QQ/qq",
+                    None,
+                )
+                .await
+                .is_err()
             );
             assert!(host.writes.lock().unwrap().is_empty());
             assert_eq!(host.directories.load(Ordering::SeqCst), 0);
