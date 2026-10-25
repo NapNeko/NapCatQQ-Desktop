@@ -25,6 +25,8 @@ enum SessionPolicy {
     Normal,
     RejectSecond,
     LimitFour,
+    HoldOpen,
+    HoldExec,
 }
 
 #[derive(Default)]
@@ -35,6 +37,10 @@ struct SessionStats {
     rejected: AtomicUsize,
     executions: AtomicUsize,
     file_reads: AtomicUsize,
+    kills: AtomicUsize,
+    open_requested: Notify,
+    release_open: Notify,
+    kill_seen: Notify,
     first_exec: Notify,
     release_exec: Notify,
 }
@@ -81,6 +87,10 @@ impl server::Handler for MockSession {
         _: &mut Session,
     ) -> Result<bool, Self::Error> {
         let ordinal = self.stats.opened.fetch_add(1, Ordering::SeqCst) + 1;
+        if matches!(self.policy, SessionPolicy::HoldOpen) {
+            self.stats.open_requested.notify_one();
+            self.stats.release_open.notified().await;
+        }
         if (matches!(self.policy, SessionPolicy::RejectSecond) && ordinal == 2)
             || (matches!(self.policy, SessionPolicy::LimitFour)
                 && self.stats.active.load(Ordering::SeqCst) >= 4)
@@ -121,6 +131,10 @@ impl server::Handler for MockSession {
     ) -> Result<(), Self::Error> {
         session.channel_success(channel);
         let first = self.stats.executions.fetch_add(1, Ordering::SeqCst) == 0;
+        if matches!(self.policy, SessionPolicy::HoldExec) {
+            self.stats.first_exec.notify_one();
+            return Ok(());
+        }
         if matches!(self.policy, SessionPolicy::LimitFour)
             || (matches!(self.policy, SessionPolicy::RejectSecond) && first)
         {
@@ -149,6 +163,20 @@ impl server::Handler for MockSession {
         session.eof(channel);
         session.close(channel);
         self.stats.active.fetch_sub(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn signal(
+        &mut self,
+        channel: ChannelId,
+        signal: Sig,
+        session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        if matches!(signal, Sig::KILL) {
+            self.stats.kills.fetch_add(1, Ordering::SeqCst);
+            self.stats.kill_seen.notify_one();
+            session.close(channel);
+        }
         Ok(())
     }
 
@@ -510,5 +538,117 @@ async fn sixteen_mixed_short_execs_respect_session_capacity_without_failures() {
     assert_eq!(fixture.stats.executions.load(Ordering::SeqCst), 16);
     assert_eq!(fixture.stats.rejected.load(Ordering::SeqCst), 0);
     assert!(fixture.stats.peak.load(Ordering::SeqCst) <= 4);
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn streaming_precancelled_command_never_opens_a_session() {
+    let fixture = MockSsh::connect(SftpBehavior::HoldMetadata).await;
+    let cancel = tokio_util::sync::CancellationToken::new();
+    cancel.cancel();
+    let result = fixture
+        .host
+        .run_streaming(
+            HostCommand::new("must-not-run").cancel_token(cancel),
+            Box::new(|_, _| {}),
+        )
+        .await;
+    assert!(matches!(result, Err(HostError::Cancelled)));
+    assert_eq!(fixture.stats.opened.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.stats.executions.load(Ordering::SeqCst), 0);
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn streaming_timeout_includes_waiting_for_channel_open_confirmation() {
+    let fixture =
+        MockSsh::connect_with_policy(SftpBehavior::HoldMetadata, SessionPolicy::HoldOpen).await;
+    let host = Arc::clone(&fixture.host);
+    let running = tokio::spawn(async move {
+        host.run_streaming(
+            HostCommand::new("must-not-run").timeout(Duration::from_secs(1)),
+            Box::new(|_, _| {}),
+        )
+        .await
+    });
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        fixture.stats.open_requested.notified(),
+    )
+    .await
+    .unwrap();
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(2)).await;
+    let result = tokio::time::timeout(Duration::from_secs(1), running).await;
+    tokio::time::resume();
+    assert!(matches!(
+        result.unwrap().unwrap(),
+        Err(HostError::Timeout { .. })
+    ));
+    assert_eq!(fixture.stats.executions.load(Ordering::SeqCst), 0);
+    fixture.stats.release_open.notify_one();
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn streaming_cancel_during_channel_open_never_submits_exec() {
+    let fixture =
+        MockSsh::connect_with_policy(SftpBehavior::HoldMetadata, SessionPolicy::HoldOpen).await;
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let command_cancel = cancel.clone();
+    let host = Arc::clone(&fixture.host);
+    let running = tokio::spawn(async move {
+        host.run_streaming(
+            HostCommand::new("must-not-run")
+                .timeout(Duration::from_secs(60))
+                .cancel_token(command_cancel),
+            Box::new(|_, _| {}),
+        )
+        .await
+    });
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        fixture.stats.open_requested.notified(),
+    )
+    .await
+    .unwrap();
+    cancel.cancel();
+    let result = tokio::time::timeout(Duration::from_secs(2), running)
+        .await
+        .expect("cancellation was blocked behind channel confirmation")
+        .unwrap();
+    assert!(matches!(result, Err(HostError::Cancelled)));
+    assert_eq!(fixture.stats.executions.load(Ordering::SeqCst), 0);
+    fixture.stats.release_open.notify_one();
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn streaming_cancel_after_exec_signals_the_remote_process() {
+    let fixture =
+        MockSsh::connect_with_policy(SftpBehavior::HoldMetadata, SessionPolicy::HoldExec).await;
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let command_cancel = cancel.clone();
+    let host = Arc::clone(&fixture.host);
+    let running = tokio::spawn(async move {
+        host.run_streaming(
+            HostCommand::new("fixture-held-exec").cancel_token(command_cancel),
+            Box::new(|_, _| {}),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(2), fixture.stats.first_exec.notified())
+        .await
+        .unwrap();
+    cancel.cancel();
+    let result = tokio::time::timeout(Duration::from_secs(2), running)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(result, Err(HostError::Cancelled)));
+    tokio::time::timeout(Duration::from_secs(2), fixture.stats.kill_seen.notified())
+        .await
+        .expect("the remote command was abandoned without SIGKILL");
+    assert_eq!(fixture.stats.kills.load(Ordering::SeqCst), 1);
     fixture.close().await;
 }
