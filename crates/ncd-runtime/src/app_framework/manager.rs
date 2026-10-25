@@ -567,7 +567,10 @@ impl AppManager {
             install_dir: HostPath::from_posix(&instance.install_dir),
             port: instance.port,
             npm_registry: self.npm_registry.clone(),
-            pypi_index: self.pypi_index.clone(),
+            pypi_index: self.pypi_index.clone().or_else(|| {
+                let configured = ncd_network::client::network_snapshot().settings.pypi_index;
+                (!configured.is_empty()).then_some(configured)
+            }),
             install_version: install_version.filter(|v| !v.trim().is_empty()),
             install_renderer: instance.install_renderer,
             adopt_existing: instance.origin.is_imported(),
