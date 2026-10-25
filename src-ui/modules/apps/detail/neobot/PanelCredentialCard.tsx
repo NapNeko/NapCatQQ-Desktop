@@ -1,96 +1,143 @@
-// 面板凭据：告诉用户「面板现在缺什么」，把密码存进本机密钥库，并**当场验证能不能登录**。
-//
-// 三条实测出来的教训（都不是想当然能想对的）：
-//   1. 面板没设密码时 /api/* 一律 403，回环也不放行——所以不能只说「请填密码」，
-//      得先探 /api/auth/status 分清「还没设密码」与「已设密码等你填」。
-//   2. 登录接口本身是 1.2.4a1 才有的。更老的版本（例如 1.2.3）桌面端**代不了登录**，
-//      这时要说清楚「这个版本不支持」，而不是让用户对着一个永远失败的输入框反复试。
-//   3. 存完必须验一次并把结果说出来。上一版存了就走，密码错了也没有任何反馈——
-//      用户只会在别的页看到「先填面板密码」，却不知道自己已经填过（实测反馈）。
+// 面板凭据只保留在当前实例的表单中，写入密钥库后验证登录。
 
-import { useState } from 'react';
-import { Button, TextField } from '../../../../shared/ui';
+import { useRef, useState } from 'react';
+import { Badge, Button, TextField } from '../../../../shared/ui';
 import {
     useNeoBotPanelCredential,
     type VerifyOutcome,
 } from '../../../../hooks/apps/useNeoBotPanelCredential';
 import type { AppInstance } from '../../../../core/ipc/types';
 import { versionRequirementText } from '../../../../core/domain/apps/neobotCapabilities';
+import { ConfirmAction, InlineNote, PanelSection } from './workspaceParts';
 
-export const PanelCredentialCard: React.FC<{
+const OUTCOME_TONE = {
+    ok: 'success',
+    bad: 'danger',
+    unknown: 'info',
+} as const;
+
+interface CredentialProps {
     instance: AppInstance;
     onOpenWebUi: () => void;
-}> = ({ instance, onOpenWebUi }) => {
+}
+
+export function PanelCredentialCard(props: CredentialProps) {
+    return <CredentialForm key={props.instance.id} {...props} />;
+}
+
+function CredentialForm({ instance, onOpenWebUi }: CredentialProps) {
     const [password, setPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');
     const [outcome, setOutcome] = useState<VerifyOutcome | null>(null);
-    const { state, auth, loginSupported, save, setup } = useNeoBotPanelCredential(instance);
+    const { state, auth, loginSupported, save, setup, verify } = useNeoBotPanelCredential(instance);
+    const actionLock = useRef(false);
+    const busy = save.isPending || setup.isPending || verify.isPending;
 
-    // 三个入口（回车 / 保存 / 清除）共用的结果处理；成功才清空密码框
-    const saveAndReport = (value: string) =>
-        save.mutate(value, {
-            onSuccess: (result) => {
-                setOutcome(result);
-                if (result.state === 'ok') setPassword('');
-            },
-            onError: (err) =>
-                setOutcome({
-                    state: 'unknown',
-                    text: '保存失败：' + (err instanceof Error ? err.message : String(err)),
-                }),
+    // 同一轮按键和点击也不能并发，避免旧验证覆盖新凭据的结果。
+    const run = (start: (done: () => void) => void) => {
+        if (busy || actionLock.current) return;
+        actionLock.current = true;
+        setOutcome(null);
+        start(() => {
+            actionLock.current = false;
         });
+    };
+
+    // 四个入口（回车 / 保存 / 清除 / 验证）共用同一块结果区
+    const report = (result: VerifyOutcome) => setOutcome(result);
+    const saveAndReport = (value: string) =>
+        run((done) =>
+            save.mutate(value, {
+                onSuccess: (result) => {
+                    report(result);
+                    setPassword('');
+                },
+                onError: (err) =>
+                    report({
+                        state: 'unknown',
+                        text: '保存失败：' + (err instanceof Error ? err.message : String(err)),
+                    }),
+                onSettled: done,
+            }),
+        );
 
     const remembered = state.data === true;
     const status = auth.data?.kind === 'ok' ? auth.data.data : null;
     const needsSetup = loginSupported && status !== null && !status.configured;
 
-    const outcomeColor =
-        outcome?.state === 'ok'
-            ? 'text-brand'
-            : outcome?.state === 'bad'
-              ? 'text-danger'
-              : 'text-text-secondary';
+    const badgeTone = !loginSupported
+        ? 'neutral'
+        : needsSetup
+          ? 'warning'
+          : remembered
+            ? 'success'
+            : 'warning';
+    const badgeText = !loginSupported
+        ? '不支持桌面端登录'
+        : needsSetup
+          ? '待首次设置'
+          : state.isLoading
+            ? '读取中'
+            : remembered
+              ? '已记住'
+              : '未保存';
 
     return (
-        <section className="rounded-md border border-border-subtle bg-surface px-4 py-3">
-            <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-text">面板凭据</h3>
-                <span className={remembered ? 'text-2xs text-brand' : 'text-2xs text-warning'}>
-                    {state.isLoading ? '读取中…' : remembered ? '已记住' : '未设置'}
+        <PanelSection
+            title={
+                <span className="flex flex-wrap items-center gap-2">
+                    面板凭据
+                    <Badge tone={badgeTone}>{badgeText}</Badge>
                 </span>
-            </div>
-
-            {!loginSupported ? (
-                // 1.2.4a1 之前没有登录接口，桌面端代不了——这一点必须说清楚
-                <div className="mt-1 flex flex-col gap-2">
-                    <p className="text-xs leading-relaxed text-text-secondary">
-                        这个 NeoBot 版本的面板不支持桌面端登录：
-                        {versionRequirementText(instance.installed_version, 'panelLogin')}
-                        。桌面端因此读不到需要登录的面板数据（概览、模型、提示词等页会提示未授权）。
-                    </p>
-                    <p className="text-xs leading-relaxed text-text-secondary">
-                        两条路：升级 NeoBot 之后回到本页填一次密码；或者现在就用「打开控制台」
-                        在浏览器里直接使用面板——面板自己不受影响。
-                    </p>
-                    <div>
-                        <Button size="sm" variant="primary" onClick={onOpenWebUi}>
-                            打开控制台
-                        </Button>
-                    </div>
-                </div>
-            ) : needsSetup ? (
-                <div className="mt-1 flex flex-col gap-2">
-                    <p className="text-xs leading-relaxed text-text-secondary">
-                        首次设置后，密码由 NeoBot 存成哈希，桌面端保存在本机密钥库。
-                    </p>
-                    {status?.setupAllowed ? (
+            }
+            meta={loginSupported ? '密码仅保存在本机密钥库' : undefined}
+            actions={
+                loginSupported && remembered ? (
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() =>
+                            run((done) =>
+                                verify.mutate(undefined, {
+                                    onSuccess: report,
+                                    onError: (err) =>
+                                        report({ state: 'unknown', text: err.message }),
+                                    onSettled: done,
+                                }),
+                            )
+                        }
+                    >
+                        {verify.isPending ? '验证中…' : '验证已存密码'}
+                    </Button>
+                ) : undefined
+            }
+        >
+            <div className="flex max-w-xl flex-col gap-3">
+                {!loginSupported ? (
+                    <>
+                        <InlineNote tone="warning">
+                            {versionRequirementText(instance.installed_version, 'panelLogin')}
+                            。可通过浏览器使用面板。
+                        </InlineNote>
+                        <div>
+                            <Button size="sm" variant="primary" onClick={onOpenWebUi}>
+                                打开控制台
+                            </Button>
+                        </div>
+                    </>
+                ) : needsSetup ? (
+                    status?.setupAllowed ? (
                         <>
+                            <p className="text-xs leading-relaxed text-text-secondary">
+                                首次设置会同时写入 NeoBot 和本机密钥库。
+                            </p>
                             <TextField
                                 label="新面板密码"
                                 type="password"
                                 autoComplete="new-password"
                                 value={password}
-                                disabled={setup.isPending}
+                                disabled={busy}
                                 onValueChange={setPassword}
                             />
                             <TextField
@@ -98,81 +145,102 @@ export const PanelCredentialCard: React.FC<{
                                 type="password"
                                 autoComplete="new-password"
                                 value={confirmation}
-                                disabled={setup.isPending}
+                                disabled={busy}
+                                error={
+                                    confirmation && password !== confirmation
+                                        ? '两次输入的密码不一致'
+                                        : undefined
+                                }
                                 onValueChange={setConfirmation}
+                            />
+                            <div>
+                                <Button
+                                    size="sm"
+                                    variant="primary"
+                                    disabled={busy || !password.trim() || password !== confirmation}
+                                    onClick={() =>
+                                        run((done) =>
+                                            setup.mutate(password, {
+                                                onSuccess: (result) => {
+                                                    setPassword('');
+                                                    setConfirmation('');
+                                                    report(result);
+                                                },
+                                                onError: (error) =>
+                                                    report({ state: 'bad', text: error.message }),
+                                                onSettled: done,
+                                            }),
+                                        )
+                                    }
+                                >
+                                    {setup.isPending ? '设置中…' : '设置并记住'}
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <InlineNote tone="info">
+                            需先在 NeoBot 所在主机完成首次设置，再回到这里保存密码。
+                        </InlineNote>
+                    )
+                ) : (
+                    <>
+                        <div className="flex flex-wrap items-end gap-2">
+                            <TextField
+                                className="w-[18rem] max-w-full"
+                                type="password"
+                                label="面板密码"
+                                placeholder="与面板登录时输入的一致"
+                                value={password}
+                                autoComplete="off"
+                                disabled={busy}
+                                onValueChange={setPassword}
+                                onKeyDown={(e) => {
+                                    if (
+                                        e.key === 'Enter' &&
+                                        !e.nativeEvent.isComposing &&
+                                        password.trim()
+                                    )
+                                        saveAndReport(password);
+                                }}
                             />
                             <Button
                                 size="sm"
                                 variant="primary"
-                                disabled={setup.isPending || !password || password !== confirmation}
-                                onClick={() =>
-                                    setup.mutate(password, {
-                                        onSuccess: (result) => {
-                                            setPassword('');
-                                            setConfirmation('');
-                                            setOutcome(result);
-                                        },
-                                        onError: (error) =>
-                                            setOutcome({ state: 'bad', text: error.message }),
-                                    })
-                                }
+                                disabled={busy || !password.trim()}
+                                onClick={() => saveAndReport(password)}
                             >
-                                {setup.isPending ? '设置中…' : '设置并记住密码'}
+                                {save.isPending ? '验证中…' : '保存并验证'}
                             </Button>
-                        </>
-                    ) : (
-                        <p className="text-xs leading-relaxed text-text-secondary">
-                            只能在 NeoBot 所在的那台机器上设（面板只允许本机完成首次设置）。
-                            设好之后回到这里把密码填进来。
-                        </p>
-                    )}
-                </div>
-            ) : (
-                <>
-                    <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                        面板接口要登录才能读。桌面端只把这个密码存进本机密钥库，用来调面板接口——
-                        不写回 NeoBot，也不参与登录接管。保存时会立刻用它登录一次，把结果告诉你。
-                    </p>
-                    <div className="mt-3 flex items-end gap-2">
-                        <TextField
-                            className="flex-1"
-                            type="password"
-                            label="面板密码"
-                            placeholder="与你在面板登录时输入的一致"
-                            value={password}
-                            autoComplete="off"
-                            disabled={save.isPending}
-                            onValueChange={setPassword}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && password.trim()) saveAndReport(password);
-                            }}
-                        />
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            disabled={save.isPending || !password.trim()}
-                            onClick={() => saveAndReport(password)}
-                        >
-                            {save.isPending ? '验证中…' : '保存并验证'}
-                        </Button>
-                        {remembered && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={save.isPending}
-                                onClick={() => saveAndReport('')}
-                            >
-                                清除
-                            </Button>
+                            {remembered && (
+                                <ConfirmAction
+                                    label="清除已存密码"
+                                    description="仅清除本机保存的凭据，不修改 NeoBot 面板密码。再次读取面板时需要重新填写。"
+                                    disabled={busy}
+                                    onConfirm={() => saveAndReport('')}
+                                />
+                            )}
+                        </div>
+                        {outcome && (
+                            <InlineNote tone={OUTCOME_TONE[outcome.state]}>
+                                {outcome.text}
+                            </InlineNote>
                         )}
-                    </div>
-                </>
-            )}
+                        {!outcome && remembered && (
+                            <p className="text-2xs leading-relaxed text-text-tertiary">
+                                面板密码变更后需在此更新。
+                            </p>
+                        )}
+                    </>
+                )}
 
-            {outcome && <p className={'mt-2 text-2xs ' + outcomeColor}>{outcome.text}</p>}
-            {state.isError && (
-                <p className="mt-2 text-2xs text-danger">读取失败：{state.error.message}</p>
-            )}
-        </section>
+                {loginSupported && needsSetup && outcome && (
+                    <InlineNote tone={OUTCOME_TONE[outcome.state]}>{outcome.text}</InlineNote>
+                )}
+
+                {state.isError && (
+                    <InlineNote tone="danger">读取失败：{state.error.message}</InlineNote>
+                )}
+            </div>
+        </PanelSection>
     );
-};
+}

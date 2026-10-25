@@ -14,12 +14,15 @@ import {
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
 import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
+import { panelQueryState } from '../../../../core/domain/apps/neobotPanelState';
+import { PanelSectionState } from './PanelStateView';
 import {
     ConfirmAction,
     FullText,
+    InlineNote,
     PanelPage,
     PanelSection,
-    RecordTable,
+    PanelTable,
     type NeoBotPageProps,
 } from './workspaceParts';
 
@@ -58,6 +61,7 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
     return (
         <PanelSection
             title={`${table} / ${itemKey}`}
+            meta={dirty ? '有未保存的修改' : base.editable === true ? '可编辑' : '只读'}
             actions={
                 <>
                     <ConfirmAction
@@ -78,6 +82,7 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
                     />
                     <ConfirmAction
                         label="删除档案"
+                        variant="danger"
                         description="永久删除该档案，无法恢复。"
                         disabled={!props.canDelete || action.isPending}
                         onConfirm={() =>
@@ -95,7 +100,11 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
                 </>
             }
         >
-            {base.note ? <p className="mb-3 text-xs text-warning">{text(base.note)}</p> : null}
+            {base.note ? (
+                <div className="mb-4">
+                    <InlineNote tone="warning">{text(base.note)}</InlineNote>
+                </div>
+            ) : null}
             <TextAreaField
                 label="完整内容"
                 value={value}
@@ -157,37 +166,51 @@ function ItemEditor({ doc, ...props }: ArchiveProps & { doc: PanelObject }) {
             </div>
             {Object.keys(current).length > 0 && (
                 <div className="mt-4">
-                    <p className="mb-2 text-xs text-warning">
-                        服务器版本已变化。你的草稿仍保留，可先对照最新内容。
-                    </p>
+                    <div className="mb-3">
+                        <InlineNote tone="warning">
+                            服务器版本已变化，草稿已保留，可先对照最新内容
+                        </InlineNote>
+                    </div>
                     <FullText label="冲突时服务器内容" value={text(current.value)} />
                 </div>
             )}
             <ExpandPresence visible={showHistory}>
                 <div className="mt-4">
-                    <PanelPage query={snapshots} onGoTab={props.onGoTab}>
-                        {(data) => (
-                            <RecordTable
-                                items={records(data.items)}
-                                columns={[
-                                    ['id', '快照'],
-                                    ['created_at', '时间'],
-                                    ['chars_before', '压缩前字数'],
-                                    ['chars_after', '压缩后字数'],
-                                ]}
-                                onSelect={(s) => setSnapshotId(text(s.id))}
-                            />
-                        )}
-                    </PanelPage>
+                    {snapshots.data?.kind === 'ok' ? (
+                        <PanelTable
+                            rows={records(snapshots.data.data.items)}
+                            columns={[
+                                { key: 'id', label: '快照', mono: true },
+                                { key: 'created_at', label: '时间' },
+                                { key: 'chars_before', label: '压缩前字数', align: 'right' },
+                                { key: 'chars_after', label: '压缩后字数', align: 'right' },
+                            ]}
+                            selectedKey={snapshotId}
+                            rowKey={(s) => text(s.id)}
+                            onRowClick={(s) => setSnapshotId(text(s.id))}
+                            empty="还没有压缩快照，首次压缩后会保留一份"
+                        />
+                    ) : (
+                        <PanelSectionState
+                            state={panelQueryState(snapshots)}
+                            onRetry={() => void snapshots.refetch()}
+                        />
+                    )}
                 </div>
             </ExpandPresence>
             {snapshotId && (
                 <div className="mt-4">
-                    <PanelPage query={snapshot} onGoTab={props.onGoTab}>
-                        {(data) => (
-                            <FullText label="快照全文" value={record(data.snapshot).value} />
-                        )}
-                    </PanelPage>
+                    {snapshot.data?.kind === 'ok' ? (
+                        <FullText
+                            label="快照全文"
+                            value={record(snapshot.data.data.snapshot).value}
+                        />
+                    ) : (
+                        <PanelSectionState
+                            state={panelQueryState(snapshot)}
+                            onRetry={() => void snapshot.refetch()}
+                        />
+                    )}
                 </div>
             )}
         </PanelSection>
@@ -199,7 +222,13 @@ export function ArchiveEditor(props: ArchiveProps) {
     const query = usePanelJson(props.instanceId, path, path, asRecord);
     return (
         <PanelPage query={query} onGoTab={props.onGoTab}>
-            {(doc) => <ItemEditor {...props} doc={doc} />}
+            {(doc) => (
+                <ItemEditor
+                    key={`${props.instanceId}:${props.table}:${props.itemKey}`}
+                    {...props}
+                    doc={doc}
+                />
+            )}
         </PanelPage>
     );
 }

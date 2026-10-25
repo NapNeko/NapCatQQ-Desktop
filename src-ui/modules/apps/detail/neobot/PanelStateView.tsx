@@ -1,72 +1,276 @@
-// 面板页的共用外壳：把七种状态（加载中 / 不支持 / 没凭据 / 打不通 / 接口不存在 / 面板报错 / 形状不认识）
-// 统一成一块提示，
-// 只把成功状态交给各页渲染。
-//
-// 为什么值得共用：每一态都对应一句**能照做的话**，而凭据卡片在「Web 控制台」页——
-// 提示里必须说清去哪、并给一个直接跳过去的按钮，而不是让用户自己在侧栏找。
+// 区分整页不可用和局部读取失败，提供对应的恢复入口。
 
 import type { ReactNode } from 'react';
-import { Button } from '../../../../shared/ui';
-import type { PanelState } from '../../../../hooks/apps/useNeoBotPanel';
+import { AlertCircle, Box, KeyRound, RotateCw, Unplug } from 'lucide-react';
+import { Button, PagePlaceholder, Spinner } from '../../../../shared/ui';
+import { versionRequirementText } from '../../../../core/domain/apps/neobotCapabilities';
+import type { PanelPageGate, PanelState } from '../../../../core/domain/apps/neobotPanelState';
+import { useNeoBotPanelAccess } from '../../../../hooks/apps/neoBotPanelContext';
 
-interface BlockedHint {
+interface GateAction {
+    label: string;
+    action: 'goTab' | 'retry' | 'webui';
+    tab?: string;
+}
+
+interface GateLook {
+    icon: typeof KeyRound;
+    well: string;
+    title: string;
+    body: ReactNode;
+    primary?: GateAction;
+    secondary?: GateAction;
+}
+
+function gateLook(gate: PanelPageGate, access: ReturnType<typeof useNeoBotPanelAccess>): GateLook {
+    switch (gate.kind) {
+        case 'unauthorized': {
+            if (access && !access.loginSupported) {
+                return {
+                    icon: KeyRound,
+                    well: 'bg-warning-soft text-warning',
+                    title: '当前版本不支持桌面端登录',
+                    body:
+                        versionRequirementText(access.instance.installed_version, 'panelLogin') +
+                        '。可通过浏览器使用面板。',
+                    primary: { label: '打开控制台', action: 'webui' },
+                    secondary: { label: '查看面板凭据', action: 'goTab', tab: 'console' },
+                };
+            }
+            if (access?.passwordRemembered) {
+                return {
+                    icon: KeyRound,
+                    well: 'bg-warning-soft text-warning',
+                    title: '面板密码已失效',
+                    body: '已保存的密码未通过验证，请重新填写当前面板密码。',
+                    primary: { label: '更新面板密码', action: 'goTab', tab: 'console' },
+                    secondary: { label: '打开控制台', action: 'webui' },
+                };
+            }
+            return {
+                icon: KeyRound,
+                well: 'bg-warning-soft text-warning',
+                title: '需要面板密码',
+                body: '保存面板密码后即可读取数据，密码仅保存在本机密钥库。',
+                primary: { label: '填写面板密码', action: 'goTab', tab: 'console' },
+                secondary: { label: '打开控制台', action: 'webui' },
+            };
+        }
+        case 'unreachable':
+            return {
+                icon: Unplug,
+                well: 'bg-inset text-text-tertiary',
+                title: '面板没有响应',
+                body: '确认实例已启动，面板就绪后重试。',
+                primary: { label: '刷新', action: 'retry' },
+                secondary: { label: '打开控制台', action: 'webui' },
+            };
+        case 'unsupported':
+            return {
+                icon: Box,
+                well: 'bg-inset text-text-tertiary',
+                title: '当前实例不支持面板读取',
+                body: '可通过浏览器打开控制台。',
+                primary: { label: '打开控制台', action: 'webui' },
+            };
+        default:
+            return {
+                icon: AlertCircle,
+                well: 'bg-danger-soft text-danger',
+                title: '无法读取面板',
+                body: gate.message || '重试或打开控制台查看运行状态。',
+                primary: { label: '刷新', action: 'retry' },
+                secondary: { label: '打开控制台', action: 'webui' },
+            };
+    }
+}
+
+export function PanelGateView({
+    gate,
+    onRetry,
+    onGoTab,
+}: {
+    gate: PanelPageGate;
+    onRetry: () => void;
+    onGoTab?: (tab: string) => void;
+}) {
+    const access = useNeoBotPanelAccess();
+
+    if (gate.kind === 'loading') {
+        return (
+            <PagePlaceholder className="gap-2.5 py-12">
+                <Spinner size="sm" tone="muted" />
+                <p className="text-xs text-text-tertiary">正在读取面板…</p>
+            </PagePlaceholder>
+        );
+    }
+
+    const look = gateLook(gate, access);
+    const Icon = look.icon;
+
+    const run = (action: GateAction) => {
+        if (action.action === 'retry') return onRetry;
+        if (action.action === 'webui') return access ? access.onOpenWebUi : undefined;
+        const navigate = access?.onGoTab ?? onGoTab;
+        return navigate && action.tab ? () => navigate(action.tab!) : undefined;
+    };
+    const primaryRun = look.primary ? run(look.primary) : undefined;
+    const secondaryRun = look.secondary ? run(look.secondary) : undefined;
+    const canShow = !!(look.primary && primaryRun) || !!(look.secondary && secondaryRun);
+
+    return (
+        <PagePlaceholder className="gap-4 py-12">
+            <span
+                className={`flex h-11 w-11 items-center justify-center rounded-lg ${look.well}`}
+                aria-hidden
+            >
+                <Icon size={20} strokeWidth={1.8} />
+            </span>
+            <div className="flex flex-col gap-1.5">
+                <p className="text-sm font-medium text-text">{look.title}</p>
+                <p className="max-w-[23rem] text-xs leading-relaxed text-text-tertiary">
+                    {look.body}
+                </p>
+            </div>
+            {canShow && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                    {look.primary && primaryRun && (
+                        <Button size="sm" variant="primary" onClick={primaryRun}>
+                            {look.primary.action === 'retry' && (
+                                <RotateCw size={13} strokeWidth={2.1} />
+                            )}
+                            {look.primary.label}
+                        </Button>
+                    )}
+                    {look.secondary && secondaryRun && (
+                        <Button size="sm" variant="ghost" onClick={secondaryRun}>
+                            {look.secondary.label}
+                        </Button>
+                    )}
+                </div>
+            )}
+        </PagePlaceholder>
+    );
+}
+
+interface SectionHint {
+    tone: 'warning' | 'danger' | 'neutral';
     title: string;
     body: string;
-    /** 有的话给一个跳转按钮（例如「去填面板密码」） */
     action?: { label: string; tab: string };
 }
 
-/**
- * 面板没给可用数据时，按状态给一句能照做的话。
- *
- * `notFoundHint` 由调用方给：它最清楚这个接口是哪个能力、要求哪版，
- * 说出来比「面板返回 404」有用得多。
- */
-export function blockedHint(state: PanelState<unknown>, notFoundHint?: string): BlockedHint | null {
+function sectionHint(state: PanelState<unknown>, notFoundHint?: string): SectionHint | null {
     switch (state.kind) {
-        case 'unsupported':
-            return {
-                title: '该框架不支持面板转发',
-                body: '这个框架没有可由桌面端读取的控制台接口，或用的是另一套对接方式。',
-            };
         case 'unauthorized':
             return {
-                title: '先填面板密码',
-                // 凭据卡片在「Web 控制台」页，不在本页——指路，别说「上面」
-                body: '到「面板凭据」设置或填写面板密码，保存并验证后即可使用。',
-                action: { label: '去填面板密码', tab: 'console' },
+                tone: 'warning',
+                title: '需要面板密码',
+                body: '登录后可读取此项数据。',
+                action: { label: '填写密码', tab: 'console' },
             };
         case 'unreachable':
-            return {
-                title: '面板打不通',
-                body: '实例可能没在运行，或面板端口与桌面端读到的不一致。先确认实例是运行中，再点刷新。',
-            };
+            return { tone: 'neutral', title: '面板没有响应', body: '确认实例在运行后重试。' };
         case 'notFound':
             return {
-                title: '这个版本的面板没有这个接口',
-                body:
-                    notFoundHint ||
-                    state.message ||
-                    '桌面端读的这个接口在当前 NeoBot 版本里还不存在——升级 NeoBot 之后再来。',
+                tone: 'neutral',
+                title: '当前版本不支持此项数据',
+                body: notFoundHint || state.message || '更新 NeoBot 后重试。',
             };
-        case 'failed':
-            return { title: '面板返回了错误', body: state.message || '面板拒绝了这次请求。' };
         case 'malformed':
             return {
-                title: '面板的返回不认识',
-                body: '面板答了，但结构不是桌面端预期的样子——多半是面板改版了，桌面端这边要跟着更新。',
+                tone: 'neutral',
+                title: '无法解析面板数据',
+                body: '面板返回格式与当前桌面端不兼容。',
             };
+        case 'failed':
+            return {
+                tone: 'danger',
+                title: '面板返回了错误',
+                body: state.message || '重试或打开控制台查看详情。',
+            };
+        case 'unsupported':
+            return { tone: 'neutral', title: '不支持此项数据', body: '可在上游控制台查看。' };
         default:
             return null;
     }
 }
 
-const Hint: React.FC<{ title: string; children: ReactNode }> = ({ title, children }) => (
-    <section className="rounded-md border border-border-subtle bg-surface px-4 py-3">
-        <h3 className="text-sm font-semibold text-text">{title}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-text-secondary">{children}</p>
-    </section>
-);
+const HINT_TONE: Record<SectionHint['tone'], string> = {
+    warning: 'border-warning/20 bg-warning-soft/40',
+    danger: 'border-danger/20 bg-danger-soft/40',
+    neutral: 'border-border-subtle bg-inset/50',
+};
+
+const HINT_ICON: Record<SectionHint['tone'], string> = {
+    warning: 'text-warning',
+    danger: 'text-danger',
+    neutral: 'text-text-tertiary',
+};
+
+export function PanelSectionState({
+    state,
+    onRetry,
+    notFoundHint,
+    bare,
+}: {
+    state: PanelState<unknown> | undefined;
+    onRetry?: () => void;
+    notFoundHint?: string;
+    /** 不要外框（已经在别的提示里） */
+    bare?: boolean;
+}) {
+    const access = useNeoBotPanelAccess();
+    if (!state) {
+        return (
+            <div className="flex items-center gap-2 py-0.5 text-xs text-text-tertiary">
+                <Spinner size="xs" tone="muted" />
+                正在读取…
+            </div>
+        );
+    }
+    if (state.kind === 'ok') return null;
+    const hint = sectionHint(state, notFoundHint);
+    if (!hint) return null;
+    const goTab = hint.action && access ? () => access.onGoTab(hint.action!.tab) : undefined;
+
+    return (
+        <div
+            className={
+                bare
+                    ? 'flex items-start gap-2 py-0.5'
+                    : `flex items-start gap-2 rounded-sm border px-3 py-2 ${HINT_TONE[hint.tone]}`
+            }
+        >
+            <AlertCircle
+                size={13}
+                strokeWidth={2}
+                className={`mt-0.5 shrink-0 ${HINT_ICON[hint.tone]}`}
+            />
+            <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-text">{hint.title}</p>
+                <p className="mt-0.5 text-2xs leading-relaxed text-text-tertiary">{hint.body}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+                {goTab && hint.action && (
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-2xs" onClick={goTab}>
+                        {hint.action.label}
+                    </Button>
+                )}
+                {onRetry && (
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-2xs"
+                        onClick={onRetry}
+                    >
+                        重试
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
 
 interface PanelStateViewProps<T> {
     state: PanelState<T> | undefined;
@@ -79,7 +283,6 @@ interface PanelStateViewProps<T> {
     children: (data: T) => ReactNode;
 }
 
-/** 把上面那六种状态渲染掉；成功时把数据交给 children */
 export function PanelStateView<T>({
     state,
     isError,
@@ -89,37 +292,42 @@ export function PanelStateView<T>({
     notFoundHint,
     children,
 }: PanelStateViewProps<T>) {
+    if (state?.kind === 'ok') return <>{children(state.data)}</>;
     if (isError) {
         return (
-            <Hint title="读取失败">
-                {errorMessage}
-                <Button className="ml-2" size="sm" variant="secondary" onClick={onRetry}>
-                    重试
-                </Button>
-            </Hint>
+            <PanelSectionState
+                state={{ kind: 'failed', message: errorMessage ?? '读取失败' }}
+                onRetry={onRetry}
+            />
         );
     }
-    if (!state) return <p className="text-xs text-text-tertiary">正在读取面板…</p>;
-    if (state.kind === 'ok') return <>{children(state.data)}</>;
+    if (!state)
+        return (
+            <PanelGateView
+                gate={{ kind: 'loading', message: '', blocked: 0, total: 1 }}
+                onRetry={onRetry}
+                onGoTab={onGoTab}
+            />
+        );
 
-    const hint = blockedHint(state as PanelState<unknown>, notFoundHint);
-    if (!hint) return null;
+    if (state.kind === 'notFound') {
+        return <PanelSectionState state={state} onRetry={onRetry} notFoundHint={notFoundHint} />;
+    }
     return (
-        <Hint title={hint.title}>
-            {hint.body}
-            {hint.action && (
-                <Button
-                    className="ml-2"
-                    size="sm"
-                    variant="primary"
-                    onClick={() => onGoTab(hint.action!.tab)}
-                >
-                    {hint.action.label}
-                </Button>
-            )}
-            <Button className="ml-2" size="sm" variant="secondary" onClick={onRetry}>
-                刷新
-            </Button>
-        </Hint>
+        <PanelGateView
+            gate={{
+                kind:
+                    state.kind === 'unsupported' ||
+                    state.kind === 'unauthorized' ||
+                    state.kind === 'unreachable'
+                        ? state.kind
+                        : 'unavailable',
+                message: 'message' in state ? state.message : '',
+                blocked: 1,
+                total: 1,
+            }}
+            onRetry={onRetry}
+            onGoTab={onGoTab}
+        />
     );
 }

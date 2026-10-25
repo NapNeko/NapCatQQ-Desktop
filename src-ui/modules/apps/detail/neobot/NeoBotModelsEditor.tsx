@@ -14,7 +14,14 @@ import {
 import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
 import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
 import { JsonDraftField, NeoBotSchemaFields } from './NeoBotSchemaFields';
-import { ConfirmAction, ObjectView, PanelSection, type NeoBotPageProps } from './workspaceParts';
+import {
+    ConfirmAction,
+    FieldList,
+    InlineNote,
+    PanelEmpty,
+    PanelSection,
+    type NeoBotPageProps,
+} from './workspaceParts';
 
 export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { doc: PanelObject }) {
     const action = useNeoBotAction(instanceId);
@@ -24,21 +31,29 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
         modelAssignments(doc.assignments),
     );
     const [entry, setEntry] = useNeoBotDraftState<PanelObject | null>('models:entry', null);
-    const [invalid, setInvalid] = useState<Set<string>>(new Set());
+    const [invalid, setInvalid] = useNeoBotDraftState<Set<string>>('models:invalid', new Set());
+    const [generation, setGeneration] = useNeoBotDraftState('models:generation', 0);
     const [probe, setProbe] = useState<PanelObject | null>(null);
     const [providerModels, setProviderModels] = useState<string[]>([]);
     const [pulledProvider, setPulledProvider] = useState('');
     const fields = parseFields(base.entry_schema);
     const library = records(base.library);
     const roles = records(base.roles_meta);
-    const writable = base.can_manage !== false;
+    const writable = base.can_manage !== false && base.editable !== false && base.readonly !== true;
     const busy = action.isPending;
     const roleDirty = json(assignments) !== json(modelAssignments(base.assignments));
-    const refresh = async (resetRoles = false) => {
+    const refresh = async (resetRoles = false, resetEntry = false) => {
         const next = await action.run({ path: '/api/config/models', method: 'GET', quiet: true });
         if (next) {
             setBase(next);
-            if (resetRoles) setAssignments(modelAssignments(next.assignments));
+            if (resetRoles) {
+                setAssignments(modelAssignments(next.assignments));
+            }
+            if (resetEntry) {
+                setEntry(null);
+                setInvalid(new Set());
+                setGeneration((n) => n + 1);
+            }
         }
     };
     const saveEntry = async () => {
@@ -49,6 +64,7 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
         if (result) {
             setEntry(null);
             setInvalid(new Set());
+            setGeneration((n) => n + 1);
             await refresh();
         }
     };
@@ -60,8 +76,10 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
         .filter((m) => m.value);
     return (
         <div className="flex flex-col gap-4">
+            {!writable && <InlineNote tone="warning">当前会话只有查看权限</InlineNote>}
             <PanelSection
                 title="模型分配"
+                meta={roleDirty ? '有未保存的分配' : `已配置 ${library.length} 个模型`}
                 actions={
                     <>
                         <Button size="sm" variant="ghost" onClick={() => onGoTab('env')}>
@@ -69,7 +87,7 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                         </Button>
                         <Button
                             size="sm"
-                            variant="primary"
+                            variant={entry ? 'secondary' : 'primary'}
                             disabled={!writable || busy || !roleDirty}
                             onClick={() =>
                                 void action
@@ -95,32 +113,33 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                     {roles.map((role) => {
                         const key = text(role.role);
                         return role.multi ? (
-                            <div key={key} className="flex flex-col gap-2">
-                                <span className="text-xs text-text-secondary">
+                            <fieldset
+                                key={key}
+                                className="flex min-w-0 flex-col gap-3 sm:col-span-2"
+                            >
+                                <legend className="mb-3 text-xs font-medium text-text-secondary">
                                     {text(role.label) || key}
-                                </span>
-                                {models.map((m) => (
-                                    <Checkbox
-                                        key={m.value}
-                                        label={m.label}
-                                        checked={strings(assignments.creator_image_models).includes(
-                                            m.value,
-                                        )}
-                                        disabled={!writable || busy}
-                                        onCheckedChange={(checked) => {
-                                            const current = strings(
-                                                assignments.creator_image_models,
-                                            );
-                                            setAssignments({
-                                                ...assignments,
-                                                creator_image_models: checked
-                                                    ? [...current, m.value]
-                                                    : current.filter((x) => x !== m.value),
-                                            });
-                                        }}
-                                    />
-                                ))}
-                            </div>
+                                </legend>
+                                <div className="flex flex-wrap gap-x-5 gap-y-3">
+                                    {models.map((m) => (
+                                        <Checkbox
+                                            key={m.value}
+                                            label={m.label}
+                                            checked={strings(assignments[key]).includes(m.value)}
+                                            disabled={!writable || busy}
+                                            onCheckedChange={(checked) => {
+                                                const current = strings(assignments[key]);
+                                                setAssignments({
+                                                    ...assignments,
+                                                    [key]: checked
+                                                        ? [...current, m.value]
+                                                        : current.filter((x) => x !== m.value),
+                                                });
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            </fieldset>
                         ) : (
                             <Select
                                 key={key}
@@ -138,9 +157,15 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                         );
                     })}
                 </div>
+                {!library.length && (
+                    <div className="mt-4">
+                        <PanelEmpty>先在模型库添加模型，再分配给各个角色</PanelEmpty>
+                    </div>
+                )}
             </PanelSection>
             <PanelSection
-                title={`模型库 · ${library.length}`}
+                title="模型库"
+                meta={`共 ${library.length} 个`}
                 actions={
                     <>
                         <ConfirmAction
@@ -148,17 +173,16 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                             description="放弃当前模型与分配草稿？"
                             disabled={busy}
                             onConfirm={() => {
-                                setEntry(null);
-                                setInvalid(new Set());
-                                void refresh(true);
+                                void refresh(true, true);
                             }}
                         />
                         <Button
                             size="sm"
-                            variant="primary"
+                            variant="secondary"
                             disabled={!writable || busy || entry !== null}
                             onClick={() => {
                                 setEntry(defaultsFor(fields));
+                                setGeneration((n) => n + 1);
                                 setProviderModels([]);
                             }}
                         >
@@ -167,18 +191,15 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                     </>
                 }
             >
-                <div className="flex flex-col gap-3">
+                <div className="divide-y divide-border-subtle">
                     {library.map((m) => (
-                        <div
-                            key={text(m.model_ref)}
-                            className="rounded-sm border border-border-subtle p-3"
-                        >
+                        <div key={text(m.model_ref)} className="py-3 first:pt-0 last:pb-0">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <p className="text-xs font-medium text-text">
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-medium text-text">
                                         {text(m.display_name) || text(m.model_ref)}
                                     </p>
-                                    <p className="mt-1 text-2xs text-text-tertiary">
+                                    <p className="mt-1 break-words text-2xs text-text-tertiary">
                                         {text(m.provider)} · {text(m.model_name)} ·{' '}
                                         {text(m.type_label) || text(m.model_type)}
                                     </p>
@@ -187,9 +208,10 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                                     <Button
                                         size="sm"
                                         variant="secondary"
-                                        disabled={busy || entry !== null}
+                                        disabled={!writable || busy || entry !== null}
                                         onClick={() => {
                                             setEntry(structuredClone(record(m.entry ?? m)));
+                                            setGeneration((n) => n + 1);
                                             setProviderModels([]);
                                         }}
                                     >
@@ -214,6 +236,7 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                                     </Button>
                                     <ConfirmAction
                                         label="删除模型"
+                                        variant="danger"
                                         description={`删除 ${text(m.model_ref)}？仍有角色引用时会拒绝删除。`}
                                         disabled={!writable || busy || entry !== null}
                                         onConfirm={() =>
@@ -240,10 +263,14 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                         </div>
                     ))}
                 </div>
+                {!library.length && (
+                    <PanelEmpty>还没有模型，点击“添加模型”建立第一个模型</PanelEmpty>
+                )}
             </PanelSection>
             {entry && (
                 <PanelSection
                     title={text(entry.model_ref) ? `编辑 ${text(entry.model_ref)}` : '新模型'}
+                    meta="保存后重载模型配置"
                     actions={
                         <Button
                             size="sm"
@@ -252,6 +279,7 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                             onClick={() => {
                                 setEntry(null);
                                 setInvalid(new Set());
+                                setGeneration((n) => n + 1);
                             }}
                         >
                             取消编辑
@@ -307,6 +335,7 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                         <Select
                             className="mb-4"
                             label="供应商可用模型"
+                            disabled={!writable || busy}
                             value={text(entry.model_name)}
                             items={providerModels
                                 .filter(Boolean)
@@ -316,6 +345,8 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                     )}
                     {fields.length ? (
                         <NeoBotSchemaFields
+                            key={generation}
+                            draftScope={`models:${generation}`}
                             fields={fields.filter((f) => f.name !== 'model_ref')}
                             value={entry}
                             disabled={!writable || busy}
@@ -331,8 +362,11 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
                         />
                     ) : (
                         <JsonDraftField
+                            key={generation}
+                            draftKey={`models:${generation}:entry`}
                             label="模型配置"
                             value={entry}
+                            disabled={!writable || busy}
                             onChange={(next) => setEntry(record(next))}
                             onValidity={(valid) =>
                                 setInvalid(valid ? new Set() : new Set(['entry']))
@@ -352,7 +386,20 @@ export function ModelsEditor({ instanceId, doc, onGoTab }: NeoBotPageProps & { d
             )}
             {probe && (
                 <PanelSection title="探测结果">
-                    <ObjectView data={probe} />
+                    <FieldList
+                        data={probe}
+                        columns={2}
+                        labels={{
+                            success: '连接成功',
+                            message: '结果',
+                            error: '错误',
+                            latency_ms: '延迟（毫秒）',
+                            model: '模型',
+                            provider: '供应商',
+                            models: '可用模型',
+                            status: '状态',
+                        }}
+                    />
                 </PanelSection>
             )}
         </div>

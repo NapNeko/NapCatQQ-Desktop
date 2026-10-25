@@ -11,18 +11,20 @@ import {
 } from '../../../../core/domain/apps/neobotWorkspace';
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
+import { panelPageGate, panelQueryState } from '../../../../core/domain/apps/neobotPanelState';
+import { PanelGateView } from './PanelStateView';
 import {
     ConfirmAction,
     FullText,
-    ObjectView,
-    PanelPage,
-    PanelSection,
-    RecordTable,
+    FieldList,
+    PanelEmpty,
+    PanelQuerySection,
+    PanelTable,
     type NeoBotPageProps,
 } from './workspaceParts';
 import { PanelDisclosure } from './PanelDisclosure';
 
-export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
+export function NeoBotFlowsTab({ instanceId }: NeoBotPageProps) {
     const flows = usePanelJson(instanceId, 'flows', '/api/chat-flows', asRecord, true, 5000);
     const action = useNeoBotAction(instanceId);
     const [pipeline, setPipeline] = useState('');
@@ -53,50 +55,86 @@ export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
         if (before.split('\n').length * after.split('\n').length > 1_000_000) return null;
         return lineDiff(before, after);
     }, [currentEntry, previousEntry]);
+    const queries = [
+        flows,
+        history,
+        ...(pipeline ? [flow] : []),
+        ...(activeSeq ? [prompt] : []),
+        ...(compareSeq ? [comparison] : []),
+    ];
+    const gate = panelPageGate(queries.map(panelQueryState));
+    const retryAll = () => queries.forEach((query) => void query.refetch());
+    if (gate) return <PanelGateView gate={gate} onRetry={retryAll} />;
     return (
         <div className="flex flex-col gap-4">
-            <PanelPage query={flows} onGoTab={onGoTab}>
-                {(data) => (
-                    <PanelSection
-                        title="对话流"
-                        actions={
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                    setPipeline('');
-                                    setSeq('__latest');
-                                    setCompareSeq('');
-                                }}
-                            >
-                                全部对话流
-                            </Button>
-                        }
+            <PanelQuerySection
+                query={flows}
+                title="对话流"
+                meta="每 5 秒刷新"
+                actions={
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                            setPipeline('');
+                            setSeq('__latest');
+                            setCompareSeq('');
+                        }}
                     >
-                        <RecordTable
-                            items={records(data.items)}
-                            columns={[
-                                ['display_name', '会话'],
-                                ['pipeline_key', '标识'],
-                                ['model', '模型'],
-                                ['iterations', '轮次'],
-                                ['prompt_chars', '提示词字数'],
-                                ['stale', '过期'],
-                            ]}
-                            onSelect={(item) => {
-                                setPipeline(text(item.pipeline_key));
-                                setSeq('__latest');
-                                setCompareSeq('');
-                            }}
-                        />
-                    </PanelSection>
+                        全部对话流
+                    </Button>
+                }
+            >
+                {(data) => (
+                    <PanelTable
+                        rows={records(data.items)}
+                        rowKey={(row) => text(row.pipeline_key)}
+                        selectedKey={pipeline}
+                        columns={[
+                            {
+                                key: 'display_name',
+                                label: '会话',
+                                render: (row) => (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                            setPipeline(text(row.pipeline_key));
+                                            setSeq('__latest');
+                                            setCompareSeq('');
+                                        }}
+                                    >
+                                        {text(row.display_name) || text(row.pipeline_key)}
+                                    </Button>
+                                ),
+                            },
+                            { key: 'model', label: '模型' },
+                            { key: 'iterations', label: '轮次', align: 'right' },
+                            { key: 'prompt_chars', label: '提示词字数', align: 'right' },
+                            {
+                                key: 'stale',
+                                label: '状态',
+                                render: (row) => (row.stale === true ? '已过期' : '当前'),
+                            },
+                        ]}
+                        empty="还没有对话流，在 QQ 中向机器人发送消息后查看。"
+                    />
                 )}
-            </PanelPage>
+            </PanelQuerySection>
             {pipeline && (
-                <PanelPage query={flow} onGoTab={onGoTab}>
+                <PanelQuerySection query={flow} title="最近请求">
                     {(data) => (
-                        <PanelSection title={`最近请求 · ${text(data.display_name) || pipeline}`}>
-                            <ObjectView
+                        <>
+                            <FieldList
+                                columns={2}
+                                labels={{
+                                    model: '模型',
+                                    active: '正在处理',
+                                    iterations: '轮次',
+                                    message_count: '消息数',
+                                    stale: '已过期',
+                                    background_tasks: '后台任务',
+                                }}
                                 data={{
                                     model: data.model,
                                     active: data.active,
@@ -113,46 +151,55 @@ export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                 {records(data.messages).map((message, i) => (
                                     <li key={i} className="border-l-2 border-brand/40 pl-3">
                                         <p className="mb-2 text-xs font-medium text-text">
-                                            {text(message.role)} #{i + 1}
+                                            {(
+                                                {
+                                                    system: '系统',
+                                                    user: '用户',
+                                                    assistant: '助手',
+                                                    tool: '工具',
+                                                } as Record<string, string>
+                                            )[text(message.role)] ?? text(message.role)}{' '}
+                                            #{i + 1}
                                             {message.truncated === true ? ' · 上游快照已截断' : ''}
                                         </p>
                                         <FullText value={message.content} />
                                         {Array.isArray(message.tool_calls) && (
-                                            <ObjectView data={{ tool_calls: message.tool_calls }} />
+                                            <PanelDisclosure label="工具调用">
+                                                <FullText value={message.tool_calls} />
+                                            </PanelDisclosure>
                                         )}
                                     </li>
                                 ))}
                             </ol>
-                        </PanelSection>
+                        </>
                     )}
-                </PanelPage>
+                </PanelQuerySection>
             )}
-            <PanelPage query={history} onGoTab={onGoTab}>
-                {(data) => (
-                    <PanelSection
-                        title="完整提示词历史"
-                        actions={
-                            <ConfirmAction
-                                label="清空历史"
-                                description="清空全部会话的内存提示词历史，无法恢复。"
-                                disabled={action.isPending}
-                                onConfirm={() =>
-                                    void action
-                                        .run({ path: '/api/chat-flows/prompts/clear' })
-                                        .then((next) => {
-                                            if (next) {
-                                                setSeq('__latest');
-                                                setCompareSeq('');
-                                            }
-                                        })
-                                }
-                            />
+            <PanelQuerySection
+                query={history}
+                title="完整提示词历史"
+                meta="重启 NeoBot 后清空"
+                actions={
+                    <ConfirmAction
+                        label="清空历史"
+                        variant="danger"
+                        description="清空全部会话的内存提示词历史，无法恢复。"
+                        disabled={action.isPending || metas.length === 0}
+                        onConfirm={() =>
+                            void action
+                                .run({ path: '/api/chat-flows/prompts/clear' })
+                                .then((next) => {
+                                    if (next) {
+                                        setSeq('__latest');
+                                        setCompareSeq('');
+                                    }
+                                })
                         }
-                    >
-                        <p className="mb-3 text-xs text-text-tertiary">
-                            历史在 NeoBot 内存中保存，重启后清空。驻留{' '}
-                            {text(data.storage_bytes) || '0'} 字节。
-                        </p>
+                    />
+                }
+            >
+                {() => (
+                    <>
                         {metas.length > 0 ? (
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <Select
@@ -181,16 +228,18 @@ export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                 />
                             </div>
                         ) : (
-                            <p className="text-xs text-text-tertiary">暂无记录</p>
+                            <PanelEmpty>还没有提示词记录，先向机器人发送一条消息。</PanelEmpty>
                         )}
-                    </PanelSection>
+                    </>
                 )}
-            </PanelPage>
+            </PanelQuerySection>
             {activeSeq && (
-                <PanelPage query={prompt} onGoTab={onGoTab}>
+                <PanelQuerySection query={prompt} title={`完整请求 #${activeSeq}`}>
                     {(data) => (
-                        <PanelSection title={`完整请求 #${activeSeq}`}>
-                            <ObjectView
+                        <>
+                            <FieldList
+                                columns={2}
+                                labels={{ model: '模型', recorded_at: '记录时间', usage: '用量' }}
                                 data={{
                                     model: record(data.entry).model,
                                     recorded_at: record(data.entry).recorded_at,
@@ -200,14 +249,14 @@ export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                             <div className="mt-3">
                                 <FullText label="完整模型请求" value={data.entry} />
                             </div>
-                        </PanelSection>
+                        </>
                     )}
-                </PanelPage>
+                </PanelQuerySection>
             )}
             {compareSeq && (
-                <PanelPage query={comparison} onGoTab={onGoTab}>
+                <PanelQuerySection query={comparison} title={`对比 #${compareSeq} → #${activeSeq}`}>
                     {(data) => (
-                        <PanelSection title={`对比 #${compareSeq} → #${activeSeq}`}>
+                        <>
                             {diff ? (
                                 <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-sm bg-inset p-3 font-mono text-xs">
                                     {diff.map((line, i) => (
@@ -233,9 +282,9 @@ export function NeoBotFlowsTab({ instanceId, onGoTab }: NeoBotPageProps) {
                             ) : (
                                 <FullText label="对比记录全文" value={data.entry} />
                             )}
-                        </PanelSection>
+                        </>
                     )}
-                </PanelPage>
+                </PanelQuerySection>
             )}
         </div>
     );

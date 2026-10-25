@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
 import { Button, Checkbox, Select, TextAreaField, TextField } from '../../../../shared/ui';
 import { asRecord } from '../../../../core/domain/apps/neobotPanel';
@@ -11,7 +10,13 @@ import {
 import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
 import { JsonDraftField } from './NeoBotSchemaFields';
-import { ConfirmAction, PanelPage, PanelSection, type NeoBotPageProps } from './workspaceParts';
+import {
+    ConfirmAction,
+    PanelPage,
+    PanelSection,
+    PanelTable,
+    type NeoBotPageProps,
+} from './workspaceParts';
 import { PanelDisclosure } from './PanelDisclosure';
 
 export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
@@ -23,9 +28,28 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
     );
     const action = useNeoBotAction(instanceId);
     const [draft, setDraft] = useNeoBotDraftState<PanelObject | null>('scheduled:draft', null);
-    const [valid, setValid] = useState(true);
+    const [valid, setValid] = useNeoBotDraftState('scheduled:valid', true);
+    const [generation, setGeneration] = useNeoBotDraftState('scheduled:generation', 0);
+    const replaceDraft = (next: PanelObject | null) => {
+        setDraft(next);
+        setValid(true);
+        setGeneration((current) => current + 1);
+    };
     const patch = (next: PanelObject) => setDraft((prev) => ({ ...prev, ...next }));
     const run = (body: PanelObject) => action.run({ path: '/api/scheduled-tasks/action', body });
+    const editTask = (task: PanelObject) => {
+        replaceDraft({
+            task_uuid: task.task_id,
+            title: task.title,
+            detail: task.detail ?? '',
+            recurrence: task.recurrence,
+            start_at: task.start_at_local ?? '',
+            end_at: task.end_at_local ?? '',
+            bindings: task.bindings ?? [],
+            metadata: task.metadata ?? {},
+            one_shot_notification: task.one_shot_notification !== false,
+        });
+    };
     return (
         <PanelPage query={query} onGoTab={onGoTab}>
             {(data) => {
@@ -49,10 +73,10 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                     </Button>
                                     <Button
                                         size="sm"
-                                        variant="primary"
+                                        variant={draft ? 'secondary' : 'primary'}
                                         disabled={!editable || action.isPending || draft !== null}
                                         onClick={() => {
-                                            setDraft({
+                                            replaceDraft({
                                                 title: '',
                                                 detail: '',
                                                 recurrence: 'once',
@@ -62,7 +86,6 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                                 one_shot_notification: true,
                                                 metadata: {},
                                             });
-                                            setValid(true);
                                         }}
                                     >
                                         新建任务
@@ -73,104 +96,132 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                             {text(data.error) && (
                                 <p className="mb-3 text-xs text-warning">{text(data.error)}</p>
                             )}
-                            <div className="flex flex-col gap-3">
-                                {records(data.tasks).map((task) => (
-                                    <div
-                                        key={text(task.task_id)}
-                                        className="rounded-sm border border-border-subtle p-3"
-                                    >
-                                        <div className="flex items-baseline justify-between gap-3">
-                                            <h4 className="text-xs font-medium text-text">
-                                                {text(task.title)}
-                                            </h4>
-                                            <span className="text-2xs text-text-tertiary">
-                                                {text(task.state)}
-                                            </span>
-                                        </div>
-                                        <p className="mt-2 text-xs text-text-secondary">
-                                            {text(task.detail)}
-                                        </p>
-                                        <p className="mt-2 text-2xs text-text-tertiary">
-                                            {text(task.recurrence)} · 下次{' '}
-                                            {text(task.next_run) || '—'} ·{' '}
-                                            {records(task.bindings)
+                            <PanelTable
+                                rows={records(data.tasks)}
+                                rowKey={(task) => text(task.task_id)}
+                                empty="还没有定时任务，点击「新建任务」添加。"
+                                columns={[
+                                    {
+                                        key: 'title',
+                                        label: '任务',
+                                        render: (task) => (
+                                            <div className="flex flex-col gap-1">
+                                                <span className="font-medium text-text">
+                                                    {text(task.title)}
+                                                </span>
+                                                <span
+                                                    className="max-w-64 truncate text-2xs text-text-tertiary"
+                                                    title={text(task.detail)}
+                                                >
+                                                    {text(task.detail)}
+                                                </span>
+                                            </div>
+                                        ),
+                                    },
+                                    {
+                                        key: 'state',
+                                        label: '状态',
+                                        render: (task) => (task.enabled ? '启用' : '停用'),
+                                    },
+                                    {
+                                        key: 'next_run',
+                                        label: '下次执行',
+                                        render: (task) => (
+                                            <div className="tabular-nums">
+                                                {text(task.next_run) || '—'}
+                                                <p className="text-2xs text-text-tertiary">
+                                                    {(
+                                                        {
+                                                            once: '一次',
+                                                            daily: '每天',
+                                                            weekly: '每周',
+                                                            monthly: '每月',
+                                                            yearly: '每年',
+                                                        } as Record<string, string>
+                                                    )[text(task.recurrence)] ??
+                                                        text(task.recurrence)}
+                                                </p>
+                                            </div>
+                                        ),
+                                    },
+                                    {
+                                        key: 'bindings',
+                                        label: '通知对象',
+                                        render: (task) =>
+                                            records(task.bindings)
                                                 .map(
-                                                    (b) =>
-                                                        `${b.kind === 'group' ? '群' : '私聊'} ${text(b.id)}`,
+                                                    (binding) =>
+                                                        `${binding.kind === 'group' ? '群' : '私聊'} ${text(binding.id)}`,
                                                 )
-                                                .join('、')}
-                                        </p>
-                                        <div className="mt-3 flex flex-wrap gap-2">
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                disabled={
-                                                    !editable || action.isPending || draft !== null
-                                                }
-                                                onClick={() => {
-                                                    setDraft({
-                                                        task_uuid: task.task_id,
-                                                        title: task.title,
-                                                        detail: task.detail ?? '',
-                                                        recurrence: task.recurrence,
-                                                        start_at: task.start_at_local ?? '',
-                                                        end_at: task.end_at_local ?? '',
-                                                        bindings: task.bindings ?? [],
-                                                        metadata: task.metadata ?? {},
-                                                        one_shot_notification:
-                                                            task.one_shot_notification !== false,
-                                                    });
-                                                    setValid(true);
-                                                }}
-                                            >
-                                                编辑
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                disabled={!editable || action.isPending}
-                                                onClick={() =>
-                                                    void run({
-                                                        action: 'set_state',
-                                                        task_uuid: task.task_id,
-                                                        state: task.enabled ? 'disabled' : 'active',
-                                                    })
-                                                }
-                                            >
-                                                {task.enabled ? '停用' : '启用'}
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                disabled={!editable || action.isPending}
-                                                onClick={() =>
-                                                    void run({
-                                                        action: 'set_notification_policy',
-                                                        task_uuid: task.task_id,
-                                                        one_shot_notification:
-                                                            task.one_shot_notification !== true,
-                                                    })
-                                                }
-                                            >
-                                                {task.one_shot_notification
-                                                    ? '切为持续通知'
-                                                    : '切为单次通知'}
-                                            </Button>
-                                            <ConfirmAction
-                                                label="删除任务"
-                                                description={`删除「${text(task.title)}」后不再执行。`}
-                                                disabled={!editable || action.isPending}
-                                                onConfirm={() =>
-                                                    void run({
-                                                        action: 'delete',
-                                                        task_uuid: task.task_id,
-                                                    })
-                                                }
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                                                .join('、') || '—',
+                                    },
+                                    {
+                                        key: 'actions',
+                                        label: '操作',
+                                        render: (task) => (
+                                            <div className="flex flex-wrap gap-1">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    disabled={
+                                                        !editable ||
+                                                        action.isPending ||
+                                                        draft !== null
+                                                    }
+                                                    onClick={() => editTask(task)}
+                                                >
+                                                    编辑
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    disabled={!editable || action.isPending}
+                                                    onClick={() =>
+                                                        void run({
+                                                            action: 'set_state',
+                                                            task_uuid: task.task_id,
+                                                            state: task.enabled
+                                                                ? 'disabled'
+                                                                : 'active',
+                                                        })
+                                                    }
+                                                >
+                                                    {task.enabled ? '停用' : '启用'}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    disabled={!editable || action.isPending}
+                                                    onClick={() =>
+                                                        void run({
+                                                            action: 'set_notification_policy',
+                                                            task_uuid: task.task_id,
+                                                            one_shot_notification:
+                                                                task.one_shot_notification !== true,
+                                                        })
+                                                    }
+                                                >
+                                                    {task.one_shot_notification
+                                                        ? '持续通知'
+                                                        : '单次通知'}
+                                                </Button>
+                                                <ConfirmAction
+                                                    label="删除"
+                                                    variant="danger"
+                                                    description={`删除「${text(task.title)}」后不再执行。`}
+                                                    disabled={!editable || action.isPending}
+                                                    onConfirm={() =>
+                                                        void run({
+                                                            action: 'delete',
+                                                            task_uuid: task.task_id,
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                        ),
+                                    },
+                                ]}
+                            />
                         </PanelSection>
                         {draft && (
                             <PanelSection title={draft.task_uuid ? '编辑任务' : '新建任务'}>
@@ -290,6 +341,8 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                     />
                                     <PanelDisclosure label="高级元数据">
                                         <JsonDraftField
+                                            key={generation}
+                                            draftKey={`scheduled:${generation}:metadata`}
                                             label="元数据"
                                             value={record(draft.metadata)}
                                             disabled={action.isPending}
@@ -319,7 +372,7 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                                     text(b.id).trim(),
                                                 ),
                                             }).then((next) => {
-                                                if (next) setDraft(null);
+                                                if (next) replaceDraft(null);
                                             })
                                         }
                                     >
@@ -329,7 +382,7 @@ export function NeoBotScheduledTab({ instanceId, onGoTab }: NeoBotPageProps) {
                                         size="sm"
                                         variant="ghost"
                                         disabled={action.isPending}
-                                        onClick={() => setDraft(null)}
+                                        onClick={() => replaceDraft(null)}
                                     >
                                         取消
                                     </Button>

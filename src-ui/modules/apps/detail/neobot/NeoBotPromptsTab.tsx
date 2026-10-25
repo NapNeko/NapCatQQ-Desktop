@@ -8,10 +8,13 @@ import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState'
 import {
     ConfirmAction,
     FullText,
+    InlineNote,
+    PanelEmpty,
     PanelPage,
     PanelSection,
     type NeoBotPageProps,
 } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
 function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPrompts }) {
     const action = useNeoBotAction(instanceId);
@@ -23,7 +26,8 @@ function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPr
     const [values, setValues] = useState<Record<string, string>>({});
     const [preview, setPreview] = useState<PanelObject | null>(null);
     const current = items.find((k) => k.id === selection) ?? items[0];
-    if (!current) return <p className="text-xs text-text-tertiary">暂无提示词模板</p>;
+    if (!current)
+        return <PanelEmpty>当前版本没有提供提示词模板，可打开 WebUI 检查提示词配置</PanelEmpty>;
     const draft = edits[current.id] ?? current.value;
     const dirty = draft !== current.value;
     const target = { section: current.section, path: current.path };
@@ -36,6 +40,13 @@ function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPr
     return (
         <PanelSection
             title="提示词模板"
+            meta={
+                dirty
+                    ? '当前模板有未保存的修改'
+                    : current.overridden
+                      ? '当前模板已自定义'
+                      : '使用默认模板'
+            }
             actions={
                 <>
                     <Button
@@ -48,6 +59,7 @@ function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPr
                     </Button>
                     <ConfirmAction
                         label="恢复默认"
+                        variant="danger"
                         description="删除当前模板的自定义覆盖？"
                         disabled={!data.editable || action.isPending}
                         onConfirm={() =>
@@ -94,7 +106,11 @@ function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPr
                     setPreview(null);
                 }}
             />
-            {!data.editable && <p className="mt-3 text-xs text-warning">当前会话只有查看权限</p>}
+            {!data.editable && (
+                <div className="mt-4">
+                    <InlineNote tone="warning">当前会话只有查看权限</InlineNote>
+                </div>
+            )}
             <TextAreaField
                 className="mt-4"
                 label="模板内容"
@@ -108,46 +124,57 @@ function PromptEditor({ instanceId, data }: { instanceId: string; data: NeoBotPr
                     setPreview(null);
                 }}
             />
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {current.placeholders.map((key) => (
-                    <TextField
-                        key={key}
-                        label={`预览变量：${key}`}
-                        value={values[key] ?? ''}
-                        onValueChange={(value) => {
-                            setValues({ ...values, [key]: value });
-                            setPreview(null);
-                        }}
-                    />
-                ))}
+            <div className="mt-2 text-right text-2xs tabular-nums text-text-tertiary">
+                {draft.length.toLocaleString()} 字
             </div>
-            <Button
-                className="mt-4"
-                size="sm"
-                variant="secondary"
-                disabled={action.isPending}
-                onClick={() =>
-                    void action
-                        .run({
-                            path: '/api/prompts/preview',
-                            body: { ...target, template: draft, values },
-                            quiet: true,
-                        })
-                        .then(setPreview)
-                }
+            <PanelDisclosure
+                label="变量与渲染预览"
+                className="mt-4 border-t border-border-subtle pt-3"
             >
-                预览渲染
-            </Button>
-            {preview && (
-                <div className="mt-4">
-                    <FullText label="渲染结果" value={text(preview.rendered)} />
-                    {strings(preview.unresolved).length > 0 && (
-                        <p className="mt-2 text-xs text-warning">
-                            未替换：{strings(preview.unresolved).join('、')}
-                        </p>
-                    )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {current.placeholders.map((key) => (
+                        <TextField
+                            key={key}
+                            label={key}
+                            value={values[key] ?? ''}
+                            disabled={action.isPending}
+                            onValueChange={(value) => {
+                                setValues({ ...values, [key]: value });
+                                setPreview(null);
+                            }}
+                        />
+                    ))}
                 </div>
-            )}
+                <Button
+                    className="mt-4"
+                    size="sm"
+                    variant="secondary"
+                    disabled={action.isPending}
+                    onClick={() =>
+                        void action
+                            .run({
+                                path: '/api/prompts/preview',
+                                body: { ...target, template: draft, values },
+                                quiet: true,
+                            })
+                            .then(setPreview)
+                    }
+                >
+                    预览渲染
+                </Button>
+                {preview && (
+                    <div className="mt-4">
+                        <FullText label="渲染结果" value={text(preview.rendered)} />
+                        {strings(preview.unresolved).length > 0 && (
+                            <div className="mt-3">
+                                <InlineNote tone="warning">
+                                    未替换：{strings(preview.unresolved).join('、')}
+                                </InlineNote>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </PanelDisclosure>
         </PanelSection>
     );
 }

@@ -1,6 +1,7 @@
 // NeoBot 部署缺项与 OneBot 对接；具体字段由配置、模型和供应商页面编辑。
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, Circle, Eye, EyeOff } from 'lucide-react';
 import { Button, Spinner } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import { useBotSnapshots } from '../../../../hooks/bot/useBotSnapshots';
@@ -14,33 +15,74 @@ import { versionRequirementText } from '../../../../core/domain/apps/neobotCapab
 import { isBotAccountUnset, missingRequiredSteps } from '../../../../core/domain/apps/neobotDeploy';
 import { PanelStateView } from './PanelStateView';
 import { useNeoBotDeploy } from '../../../../hooks/apps/useNeoBotDeploy';
+import { useClipboardText } from '../../../../hooks/ui/useClipboardText';
+import { ConfirmAction, InlineNote, PanelSection } from './workspaceParts';
+import { PanelDisclosure } from './PanelDisclosure';
 
-/** 一行「标签 + 值 + 复制」——地址与 token 都要能整段复制走 */
-const CopyRow: React.FC<{ label: string; value: string; hint?: string }> = ({
+const CopyRow: React.FC<{ label: string; value: string; hint?: string; sensitive?: boolean }> = ({
     label,
     value,
     hint,
+    sensitive = false,
 }) => {
     const [copied, setCopied] = useState(false);
+    const [visible, setVisible] = useState(false);
+    const [error, setError] = useState('');
+    const writeText = useClipboardText();
+    const generation = useRef(0);
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        generation.current += 1;
+        setCopied(false);
+        setVisible(false);
+        setError('');
+        return () => {
+            generation.current += 1;
+            if (timer.current) clearTimeout(timer.current);
+        };
+    }, [value]);
     const copy = async () => {
+        const current = ++generation.current;
+        if (timer.current) clearTimeout(timer.current);
         try {
-            await navigator.clipboard.writeText(value);
+            await writeText(value);
+            if (current !== generation.current) return;
+            setError('');
             setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
-        } catch {
+            timer.current = setTimeout(() => setCopied(false), 1500);
+        } catch (cause) {
+            if (current !== generation.current) return;
             setCopied(false);
+            setError(cause instanceof Error ? cause.message : '复制失败，请重试');
         }
     };
     return (
-        <div className="flex items-baseline gap-2 rounded-sm border border-border-subtle bg-inset/40 px-3 py-2">
-            <span className="w-20 shrink-0 text-2xs text-text-tertiary">{label}</span>
-            <span className="min-w-0 flex-1 break-all font-mono text-2xs text-text">
-                {value || '—'}
-            </span>
-            {hint && <span className="shrink-0 text-2xs text-text-tertiary">{hint}</span>}
-            <Button size="sm" variant="ghost" disabled={!value} onClick={copy}>
-                {copied ? '已复制' : '复制'}
-            </Button>
+        <div>
+            <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle py-2">
+                <span className="w-20 shrink-0 text-2xs text-text-tertiary">{label}</span>
+                <span className="min-w-0 flex-1 break-all font-mono-strict text-xs text-text">
+                    {value ? (sensitive && !visible ? '••••••••••••' : value) : '—'}
+                </span>
+                {sensitive && value && (
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={visible ? '隐藏令牌' : '显示令牌'}
+                        onClick={() => setVisible(!visible)}
+                    >
+                        {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </Button>
+                )}
+                <Button size="sm" variant="ghost" disabled={!value} onClick={copy}>
+                    {copied ? '已复制' : '复制'}
+                </Button>
+            </div>
+            {hint && <p className="mt-1 text-2xs text-text-tertiary">{hint}</p>}
+            {error && (
+                <p role="alert" className="mt-1 text-xs text-danger">
+                    复制失败：{error}
+                </p>
+            )}
         </div>
     );
 };
@@ -87,22 +129,17 @@ export const NeoBotDeployTab: React.FC<{
     // 版本不够就整页换成说明：不去打那个不存在的接口
     if (!deploySupported) {
         return (
-            <section className="rounded-md border border-border-subtle bg-surface px-4 py-3">
-                <h3 className="text-sm font-semibold text-text">这个 NeoBot 版本没有快捷部署</h3>
-                <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+            <PanelSection title="当前版本不支持快捷部署">
+                <p className="text-xs leading-relaxed text-text-secondary">
                     {versionRequirementText(instance.installed_version, 'deployApi')}
-                    。旧版面板没有这个菜单，桌面端也就读不到「还差哪几项」与 OneBot 的监听信息。
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                    现在能做的：升级 NeoBot 之后回到本页；或先在「Web 控制台」打开面板、按面板自己的
-                    说明配好，再点下面的「直接建立对接」——对接本身不依赖这个菜单。
+                    。可以升级 NeoBot，或在控制台完成配置后直接建立对接。
                 </p>
                 <div className="mt-3 flex items-center gap-2">
                     <Button size="sm" variant="primary" onClick={() => setDialogOpen(true)}>
                         直接建立对接
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => onGoTab('console')}>
-                        打开面板
+                        面板凭据
                     </Button>
                 </div>
                 <AppLinkDialog
@@ -110,7 +147,7 @@ export const NeoBotDeployTab: React.FC<{
                     onOpenChange={setDialogOpen}
                     instanceId={instanceId}
                 />
-            </section>
+            </PanelSection>
         );
     }
 
@@ -128,20 +165,30 @@ export const NeoBotDeployTab: React.FC<{
                     const onebot = data.onebot;
                     return (
                         <div className="flex flex-col gap-4">
-                            <section className="rounded-md border border-border-subtle bg-surface px-4 py-3">
-                                <div className="flex items-baseline justify-between gap-2">
-                                    <h3 className="text-sm font-semibold text-text">部署进度</h3>
-                                    <span
-                                        className={cn(
-                                            'text-2xs',
-                                            data.ready ? 'text-brand' : 'text-warning',
-                                        )}
-                                    >
-                                        {data.ready
-                                            ? '必填项已就绪'
-                                            : '还差 ' + missing.length + ' 项'}
-                                    </span>
-                                </div>
+                            <PanelSection
+                                title="部署检查"
+                                actions={
+                                    <div className="flex items-center gap-2">
+                                        <span
+                                            className={cn(
+                                                'text-2xs',
+                                                data.ready ? 'text-brand' : 'text-warning',
+                                            )}
+                                        >
+                                            {data.ready
+                                                ? '必填项已就绪'
+                                                : '还差 ' + missing.length + ' 项'}
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => void query.refetch()}
+                                        >
+                                            刷新
+                                        </Button>
+                                    </div>
+                                }
+                            >
                                 <ul className="mt-2 flex flex-col gap-1.5">
                                     {data.steps.map((s) => (
                                         <li key={s.key} className="flex items-baseline gap-2">
@@ -151,7 +198,11 @@ export const NeoBotDeployTab: React.FC<{
                                                     s.done ? 'text-brand' : 'text-text-tertiary',
                                                 )}
                                             >
-                                                {s.done ? '✓' : '○'}
+                                                {s.done ? (
+                                                    <CheckCircle2 size={14} aria-label="已完成" />
+                                                ) : (
+                                                    <Circle size={14} aria-label="待完成" />
+                                                )}
                                             </span>
                                             <span className="shrink-0 text-xs text-text">
                                                 {s.label}
@@ -168,7 +219,6 @@ export const NeoBotDeployTab: React.FC<{
                                     ))}
                                 </ul>
                                 <p className="mt-2 text-2xs text-text-tertiary">
-                                    设置机器人身份、人设和平台密钥：
                                     <button
                                         type="button"
                                         className="ml-1 text-brand hover:underline"
@@ -184,40 +234,36 @@ export const NeoBotDeployTab: React.FC<{
                                         供应商与密钥
                                     </button>
                                 </p>
-                            </section>
+                            </PanelSection>
 
-                            <section className="flex flex-col gap-2">
-                                <div className="flex items-baseline justify-between gap-2">
-                                    <h3 className="text-sm font-semibold text-text">
-                                        OneBot 连接（NapCat 侧要填的）
-                                    </h3>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        disabled={generateToken.isPending}
-                                        onClick={() => generateToken.mutate()}
-                                    >
-                                        {generateToken.isPending
-                                            ? '生成中…'
-                                            : onebot.tokenEnabled
-                                              ? '重新生成 access token'
-                                              : '生成 access token'}
-                                    </Button>
-                                </div>
-                                <p className="text-xs leading-relaxed text-text-secondary">
-                                    NeoBot 是反向 WS 服务端，由 NapCat 连过来。路径由 NapCat
-                                    侧自己配， 服务端不限制（面板给的惯例是{' '}
-                                    {onebot.pathHint || '/onebot'}）。 下面三行里，两个地址按 NapCat
-                                    在哪台机器<span className="text-text-secondary">二选一</span>，
-                                    再加一个 access token——NapCat 的「反向 WS」就这两个字段。
-                                </p>
-                                <p className="text-2xs leading-snug text-text-tertiary">
-                                    下面「一键连上 QQ」会把这些写进 NeoBot 的 [adapter]：面板里
-                                    token 为空时它会生成一个并写回，已有则
-                                    <span className="text-text-secondary">沿用</span>
-                                    （所以先生成过 token
-                                    的话不会被换掉）；端口按实例口写回，通常与上面一致。
-                                </p>
+                            <PanelSection
+                                title="OneBot 连接"
+                                actions={
+                                    onebot.tokenEnabled ? (
+                                        <ConfirmAction
+                                            label={
+                                                generateToken.isPending ? '生成中…' : '重新生成令牌'
+                                            }
+                                            description="会替换当前令牌。已有协议 Bot 需要重新建立对接才能同步。"
+                                            disabled={
+                                                generateToken.isPending || applyLink.isPending
+                                            }
+                                            onConfirm={() => generateToken.mutate()}
+                                        />
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            disabled={
+                                                generateToken.isPending || applyLink.isPending
+                                            }
+                                            onClick={() => generateToken.mutate()}
+                                        >
+                                            {generateToken.isPending ? '生成中…' : '生成令牌'}
+                                        </Button>
+                                    )
+                                }
+                            >
                                 {onebot.warning && (
                                     <p className="text-2xs text-warning">{onebot.warning}</p>
                                 )}
@@ -232,8 +278,9 @@ export const NeoBotDeployTab: React.FC<{
                                     hint="NapCat 在另一台机器"
                                 />
                                 <CopyRow
-                                    label="Access Token"
+                                    label="访问令牌"
                                     value={onebot.token}
+                                    sensitive
                                     hint={onebot.tokenEnabled ? undefined : '为空：不校验握手'}
                                 />
                                 {generateToken.isError && (
@@ -244,22 +291,23 @@ export const NeoBotDeployTab: React.FC<{
                                             : String(generateToken.error)}
                                     </p>
                                 )}
-                                <p className="text-2xs text-text-tertiary">
-                                    重新生成后，已经对接过的 NapCat 侧还是旧
-                                    token——要在下面重新建立一次对接才会同步。
-                                </p>
-                            </section>
+                                <PanelDisclosure label="手动连接说明" className="mt-3">
+                                    <p className="text-xs leading-relaxed text-text-secondary">
+                                        在协议 Bot 的反向 WebSocket
+                                        中填写同机或局域网地址，以及访问令牌。路径可使用{' '}
+                                        {onebot.pathHint || '/onebot'}。
+                                        下方建立对接会同时写入双方配置，沿用已有令牌；未设置时自动生成。
+                                    </p>
+                                </PanelDisclosure>
+                            </PanelSection>
 
-                            <section className="flex flex-col gap-2 rounded-md border border-border-subtle bg-surface px-4 py-3">
-                                <h3 className="text-sm font-semibold text-text">一键连上 QQ</h3>
+                            <PanelSection title="连接协议 Bot">
                                 {matchedBotId ? (
                                     <>
                                         <p className="text-xs leading-relaxed text-text-secondary">
-                                            面板的快捷部署里填的机器人 QQ 是{' '}
+                                            机器人 QQ：{' '}
                                             <span className="font-mono text-text">{deployQq}</span>
-                                            ，桌面端已加载的 Bot
-                                            里有它。点下面的按钮会把连接建到两边： 桌面端这边建一条
-                                            OneBot 连接，NeoBot 那边写进 [adapter] 的 端口与 token。
+                                            。建立对接会同步双方的连接地址与令牌。
                                         </p>
                                         {previewing && (
                                             <p className="flex items-center gap-2 text-xs text-text-secondary">
@@ -282,7 +330,10 @@ export const NeoBotDeployTab: React.FC<{
                                                 variant="primary"
                                                 size="sm"
                                                 disabled={
-                                                    !plan || previewing || applyLink.isPending
+                                                    !plan ||
+                                                    previewing ||
+                                                    applyLink.isPending ||
+                                                    generateToken.isPending
                                                 }
                                                 onClick={link}
                                             >
@@ -293,6 +344,9 @@ export const NeoBotDeployTab: React.FC<{
                                             <Button
                                                 size="sm"
                                                 variant="ghost"
+                                                disabled={
+                                                    applyLink.isPending || generateToken.isPending
+                                                }
                                                 onClick={() => setDialogOpen(true)}
                                             >
                                                 手动选择 Bot
@@ -303,17 +357,8 @@ export const NeoBotDeployTab: React.FC<{
                                     <>
                                         <p className="text-xs leading-relaxed text-text-secondary">
                                             {qqUnset
-                                                ? '面板的快捷部署还没填机器人 QQ，所以桌面端不知道该连哪个 Bot。'
-                                                : '面板里填的 QQ 是 ' +
-                                                  deployQq +
-                                                  '，但桌面端还没有这个 Bot，所以没法一键建立对接。'}
-                                        </p>
-                                        <p className="text-xs leading-relaxed text-text-secondary">
-                                            {qqUnset
-                                                ? '先在面板的快捷部署里填上机器人 QQ，回来就能一键连；也可以现在就新建或选一个已有的 Bot。'
-                                                : '两种做法：到桌面端「机器人」页新建一个 QQ 为 ' +
-                                                  deployQq +
-                                                  ' 的协议 Bot，回来就能一键连；或者直接手动选一个已有的 Bot。'}
+                                                ? '尚未指定机器人 QQ。先在本体配置中填写，或直接选择已有 Bot。'
+                                                : `没有找到可直接对接的 QQ ${deployQq}。可以新建机器人，或手动选择已有 Bot。`}
                                         </p>
                                         <div className="flex items-center gap-2">
                                             {onNavigate && (
@@ -336,7 +381,7 @@ export const NeoBotDeployTab: React.FC<{
                                     </>
                                 )}
                                 {applyLink.isError && (
-                                    <p className="text-2xs text-danger">
+                                    <p role="alert" className="mt-3 text-xs text-danger">
                                         建立失败：
                                         {applyLink.error instanceof Error
                                             ? applyLink.error.message
@@ -344,11 +389,13 @@ export const NeoBotDeployTab: React.FC<{
                                     </p>
                                 )}
                                 {applyLink.isSuccess && (
-                                    <p className="text-2xs text-brand">
-                                        已建立。两边配置都写好了，NapCat 侧的连接可以直接用。
-                                    </p>
+                                    <div className="mt-3">
+                                        <InlineNote tone="success">
+                                            对接已建立，双方配置已同步。
+                                        </InlineNote>
+                                    </div>
                                 )}
-                            </section>
+                            </PanelSection>
                         </div>
                     );
                 }}

@@ -15,10 +15,14 @@ import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
 import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
 import { NeoBotConfigEditor } from './NeoBotConfigTab';
+import { panelPageGate, panelQueryState } from '../../../../core/domain/apps/neobotPanelState';
+import { PanelGateView, PanelSectionState } from './PanelStateView';
 import {
     ConfirmAction,
-    ObjectView,
+    FieldList,
+    PanelEmpty,
     PanelPage,
+    PanelQuerySection,
     PanelSection,
     type NeoBotPageProps,
 } from './workspaceParts';
@@ -52,8 +56,6 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
     const [result, setResult] = useState<PanelObject | null>(null);
     const [configName, setConfigName] = useNeoBotDraftState('plugins:configName', '');
     const [proxy, setProxy] = useNeoBotDraftState<PanelObject | null>('plugins:proxy', null);
-    const extensions = usePanelJson(props.instanceId, 'extensions', '/api/extensions', asRecord);
-    const { openWebUi } = useAppInstances();
     const busy = action.isPending;
     const manageable = doc.manage_enabled === true;
     const installable = manageable && doc.installer !== false;
@@ -71,9 +73,21 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
         }
     };
     const proxyDraft = proxy ?? record(doc.proxy);
-    return (
+    const customProxy = text(proxyDraft.mode) === 'custom';
+    const proxyPort = Number(proxyDraft.port);
+    const validProxy =
+        !customProxy ||
+        (!!text(proxyDraft.host).trim() &&
+            Number.isInteger(proxyPort) &&
+            proxyPort >= 1 &&
+            proxyPort <= 65535);
+    const managementTools = (
         <div className="flex flex-col gap-4">
-            <PanelSection title="安装第三方插件">
+            <PanelDisclosure
+                label="安装第三方插件"
+                className="rounded-md border border-border-subtle bg-surface p-4"
+                triggerClassName="font-medium text-text"
+            >
                 <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
                     <TextField
                         label="GitHub 仓库地址"
@@ -108,7 +122,7 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                 </div>
                 {Object.keys(conflict).length > 0 && (
                     <div className="mt-3">
-                        <ObjectView data={conflict} />
+                        <FieldList data={conflict} columns={2} />
                         {conflict.reserved !== true &&
                             record(conflict.existing).official !== true && (
                                 <ConfirmAction
@@ -141,8 +155,12 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                         </Button>
                     </div>
                 </PanelDisclosure>
-            </PanelSection>
-            <PanelSection title="下载代理">
+            </PanelDisclosure>
+            <PanelDisclosure
+                label="下载代理"
+                className="rounded-md border border-border-subtle bg-surface p-4"
+                triggerClassName="font-medium text-text"
+            >
                 <div className="grid gap-3 sm:grid-cols-3">
                     <Select
                         label="代理模式"
@@ -158,22 +176,24 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                     <TextField
                         label="代理主机"
                         value={text(proxyDraft.host)}
-                        disabled={busy || !manageable}
+                        disabled={busy || !manageable || !customProxy}
                         onValueChange={(host) => setProxy({ ...proxyDraft, host })}
                     />
                     <TextField
                         label="代理端口"
                         type="number"
+                        min={1}
+                        max={65535}
                         value={text(proxyDraft.port)}
-                        disabled={busy || !manageable}
+                        disabled={busy || !manageable || !customProxy}
                         onValueChange={(port) => setProxy({ ...proxyDraft, port: Number(port) })}
                     />
                 </div>
                 <Button
                     className="mt-3"
                     size="sm"
-                    variant="primary"
-                    disabled={busy || !manageable || !proxy}
+                    variant="secondary"
+                    disabled={busy || !manageable || !proxy || !validProxy}
                     onClick={() =>
                         void action
                             .run({ path: '/api/plugins/proxy', body: proxyDraft })
@@ -184,7 +204,11 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                 >
                     保存代理
                 </Button>
-            </PanelSection>
+            </PanelDisclosure>
+        </div>
+    );
+    return (
+        <div className="flex flex-col gap-4">
             <PanelSection
                 title={`已安装 · ${records(doc.items).length}`}
                 actions={
@@ -211,14 +235,17 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                         插件管理已关闭，可在 dashboard 插件配置中开启。
                     </p>
                 )}
-                <div className="flex flex-col gap-3">
+                {records(doc.items).length === 0 && (
+                    <PanelEmpty>还没有插件，展开下方「安装第三方插件」添加仓库。</PanelEmpty>
+                )}
+                <div className="flex flex-col divide-y divide-border-subtle">
                     {records(doc.items).map((p) => {
                         const name = text(p.id) || text(p.name);
                         const root = `/api/plugins/${encodeURIComponent(name)}`;
                         const isConsole = name === text(doc.console_plugin);
                         const writable = manageable && p.manageable !== false && !isConsole;
                         return (
-                            <div key={name} className="rounded-sm border border-border-subtle p-3">
+                            <div key={name} className="py-3 first:pt-0 last:pb-0">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <h4 className="text-xs font-medium text-text">
                                         {text(p.name)} · {text(p.version)}{' '}
@@ -230,7 +257,10 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                                     </span>
                                 </div>
                                 {p.description ? (
-                                    <p className="mt-2 text-xs text-text-secondary">
+                                    <p
+                                        className="mt-1 truncate text-xs text-text-secondary"
+                                        title={text(p.description)}
+                                    >
                                         {text(p.description)}
                                     </p>
                                 ) : null}
@@ -276,6 +306,7 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                                     {!p.official && (
                                         <ConfirmAction
                                             label="卸载"
+                                            variant="danger"
                                             description={`移除 ${name} 的插件目录，依赖它的插件可能被停用。`}
                                             disabled={busy || !writable}
                                             onConfirm={() =>
@@ -302,13 +333,50 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                     })}
                 </div>
             </PanelSection>
+            {managementTools}
             {result && (
                 <PanelSection title="检查结果">
-                    <ObjectView data={result} />
+                    <FieldList data={result} columns={2} />
                 </PanelSection>
             )}
-            {configName && <PluginConfig {...props} name={configName} />}
-            <PanelPage query={extensions} onGoTab={props.onGoTab}>
+            {configName && (
+                <div className="flex flex-col gap-2">
+                    <div className="flex justify-end">
+                        <Button size="sm" variant="ghost" onClick={() => setConfigName('')}>
+                            收起插件配置
+                        </Button>
+                    </div>
+                    <PluginConfig {...props} name={configName} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+export function NeoBotPluginsTab(props: NeoBotPageProps) {
+    const query = usePanelJson(props.instanceId, 'plugins', '/api/plugins', asRecord);
+    const extensions = usePanelJson(props.instanceId, 'extensions', '/api/extensions', asRecord);
+    const { openWebUi } = useAppInstances();
+    const gate = panelPageGate([query, extensions].map(panelQueryState));
+    const state = panelQueryState(query);
+    if (gate)
+        return (
+            <PanelGateView
+                gate={gate}
+                onRetry={() => {
+                    void query.refetch();
+                    void extensions.refetch();
+                }}
+            />
+        );
+    return (
+        <div className="flex flex-col gap-4">
+            {state?.kind === 'ok' ? (
+                <PluginsManager key={props.instanceId} {...props} doc={state.data} />
+            ) : (
+                <PanelSectionState state={state} onRetry={() => void query.refetch()} />
+            )}
+            <PanelQuerySection query={extensions} title="插件页面">
                 {(data) => {
                     const pages = records(data.items).filter((extension) => {
                         const path = text(record(extension.panel).path);
@@ -321,8 +389,8 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                             )
                         );
                     });
-                    return pages.length > 0 ? (
-                        <PanelSection title="插件自定义页面">
+                    return pages.length ? (
+                        <div className="flex flex-wrap gap-2">
                             {pages.map((extension) => {
                                 const panel = record(extension.panel);
                                 return (
@@ -338,19 +406,12 @@ function PluginsManager({ doc, ...props }: NeoBotPageProps & { doc: PanelObject 
                                     </Button>
                                 );
                             })}
-                        </PanelSection>
-                    ) : null;
+                        </div>
+                    ) : (
+                        <PanelEmpty>已安装插件没有提供独立页面，可在上方编辑插件配置。</PanelEmpty>
+                    );
                 }}
-            </PanelPage>
+            </PanelQuerySection>
         </div>
-    );
-}
-
-export function NeoBotPluginsTab(props: NeoBotPageProps) {
-    const query = usePanelJson(props.instanceId, 'plugins', '/api/plugins', asRecord);
-    return (
-        <PanelPage query={query} onGoTab={props.onGoTab}>
-            {(doc) => <PluginsManager key={props.instanceId} {...props} doc={doc} />}
-        </PanelPage>
     );
 }

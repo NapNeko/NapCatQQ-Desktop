@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { NeoBotDraftContext } from '../../../../hooks/apps/neoBotDraftContext';
+import { NeoBotPanelContext } from '../../../../hooks/apps/neoBotPanelContext';
+import { useNeoBotPanelCredential } from '../../../../hooks/apps/useNeoBotPanelCredential';
 import { NeoBotConsoleTab } from './NeoBotConsoleTab';
 import { NeoBotDeployTab } from './NeoBotDeployTab';
 import { NeoBotMemoryTab } from './NeoBotMemoryTab';
@@ -76,54 +78,72 @@ function NeoBotFrameworkDetail({
         () => ({ instanceId, values: new Map<string, unknown>() }),
         [instanceId],
     );
+    // 提示与凭据页共享同一查询缓存。
+    const credential = useNeoBotPanelCredential(instance);
+    const access = useMemo(
+        () => ({
+            instance,
+            loginSupported: credential.loginSupported,
+            passwordRemembered: credential.state.data === true,
+            onGoTab,
+            onOpenWebUi,
+        }),
+        [instance, credential.loginSupported, credential.state.data, onGoTab, onOpenWebUi],
+    );
     return (
-        <NeoBotDraftContext.Provider value={drafts}>
-            <TabsContent value="deploy" className={PANE}>
-                <NeoBotDeployTab instance={instance} onGoTab={onGoTab} onNavigate={onNavigate} />
-            </TabsContent>
-            <TabsContent value="overview" className={PANE}>
-                <NeoBotOverviewTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="models" className={PANE}>
-                <NeoBotModelsTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="prompts" className={PANE}>
-                <NeoBotPromptsTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="memory" className={PANE}>
-                <NeoBotMemoryTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="plugins" className={PANE}>
-                <NeoBotPluginsTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="console" className={PANE}>
-                <NeoBotConsoleTab instance={instance} onOpenWebUi={onOpenWebUi} />
-            </TabsContent>
-            <TabsContent value="config" className={PANE}>
-                <NeoBotConfigTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="env" className={PANE}>
-                <NeoBotEnvTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="runtime" className={PANE}>
-                <NeoBotRuntimeTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="scheduled" className={PANE}>
-                <NeoBotScheduledTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="statistics" className={PANE}>
-                <NeoBotStatisticsTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="billing" className={PANE}>
-                <NeoBotBillingTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="flows" className={PANE}>
-                <NeoBotFlowsTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-            <TabsContent value="analysis" className={PANE}>
-                <NeoBotAnalysisTab instanceId={instanceId} onGoTab={onGoTab} />
-            </TabsContent>
-        </NeoBotDraftContext.Provider>
+        <NeoBotPanelContext.Provider value={access}>
+            <NeoBotDraftContext.Provider value={drafts}>
+                <TabsContent value="deploy" className={PANE}>
+                    <NeoBotDeployTab
+                        instance={instance}
+                        onGoTab={onGoTab}
+                        onNavigate={onNavigate}
+                    />
+                </TabsContent>
+                <TabsContent value="overview" className={PANE}>
+                    <NeoBotOverviewTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="models" className={PANE}>
+                    <NeoBotModelsTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="prompts" className={PANE}>
+                    <NeoBotPromptsTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="memory" className={PANE}>
+                    <NeoBotMemoryTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="plugins" className={PANE}>
+                    <NeoBotPluginsTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="console" className={PANE}>
+                    <NeoBotConsoleTab instance={instance} onOpenWebUi={onOpenWebUi} />
+                </TabsContent>
+                <TabsContent value="config" className={PANE}>
+                    <NeoBotConfigTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="env" className={PANE}>
+                    <NeoBotEnvTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="runtime" className={PANE}>
+                    <NeoBotRuntimeTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="scheduled" className={PANE}>
+                    <NeoBotScheduledTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="statistics" className={PANE}>
+                    <NeoBotStatisticsTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="billing" className={PANE}>
+                    <NeoBotBillingTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="flows" className={PANE}>
+                    <NeoBotFlowsTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+                <TabsContent value="analysis" className={PANE}>
+                    <NeoBotAnalysisTab instanceId={instanceId} onGoTab={onGoTab} />
+                </TabsContent>
+            </NeoBotDraftContext.Provider>
+        </NeoBotPanelContext.Provider>
     );
 }
 

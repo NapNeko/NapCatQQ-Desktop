@@ -14,7 +14,13 @@ import { usePanelJson } from '../../../../hooks/apps/useNeoBotPanel';
 import { useNeoBotAction } from '../../../../hooks/apps/useNeoBotAction';
 import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
 import { NeoBotSchemaFields } from './NeoBotSchemaFields';
-import { ConfirmAction, PanelPage, PanelSection, type NeoBotPageProps } from './workspaceParts';
+import {
+    ConfirmAction,
+    InlineNote,
+    PanelPage,
+    PanelSection,
+    type NeoBotPageProps,
+} from './workspaceParts';
 
 export function NeoBotConfigEditor({
     instanceId,
@@ -33,11 +39,12 @@ export function NeoBotConfigEditor({
     const [source, setSource] = useNeoBotDraftState(`${path}:source`, text(doc.source));
     const [mode, setMode] = useNeoBotDraftState(
         `${path}:mode`,
-        doc.form_supported === false ? 'toml' : 'form',
+        doc.form_supported === false || !parseFields(doc.schema).length ? 'toml' : 'form',
     );
-    const [generation, setGeneration] = useState(0);
-    const [invalid, setInvalid] = useState<Set<string>>(new Set());
+    const [generation, setGeneration] = useNeoBotDraftState(`${path}:generation`, 0);
+    const [invalid, setInvalid] = useNeoBotDraftState<Set<string>>(`${path}:invalid`, new Set());
     const [errors, setErrors] = useState('');
+    const [validationFailed, setValidationFailed] = useState(false);
     const [history, setHistory] = useState<PanelObject[]>([]);
     const fields = parseFields(base.schema);
     const dirty =
@@ -68,19 +75,34 @@ export function NeoBotConfigEditor({
         }
     };
     const validate = async () => {
-        const next = await action.run({ path: '/api/config/validate', body, quiet: true });
-        if (next) setErrors(fieldErrors(next) || '校验通过');
+        const next = await action.run({
+            path: '/api/config/validate',
+            body,
+            quiet: true,
+            allowNegative: true,
+        });
+        if (next) {
+            const message =
+                fieldErrors(next) ||
+                (next.ok === false
+                    ? text(next.error) || text(next.message) || '配置校验未通过'
+                    : '');
+            setValidationFailed(Boolean(message));
+            setErrors(message || '校验通过');
+        }
     };
     const switchMode = (next: string) => {
         setMode(next);
         setDraft(record(base.config));
         setSource(text(base.source));
         setInvalid(new Set());
+        setErrors('');
     };
     const writable = base.editable !== false && base.readonly !== true && base.can_manage !== false;
     return (
         <PanelSection
             title={title}
+            meta={dirty ? '有未保存的修改' : !writable ? '只读' : undefined}
             actions={
                 <>
                     <ConfirmAction
@@ -100,7 +122,7 @@ export function NeoBotConfigEditor({
                 </>
             }
         >
-            <div className="mb-4 flex flex-wrap items-end gap-3">
+            <div className="mb-4 flex flex-wrap items-end gap-3 border-b border-border-subtle pb-4">
                 <Select
                     label="编辑方式"
                     value={mode}
@@ -149,26 +171,31 @@ export function NeoBotConfigEditor({
                     />
                 )}
             </div>
-            {dirty && (
-                <p className="mb-3 text-xs text-warning">
-                    有未保存的修改，撤销或保存后可切换编辑方式。
-                </p>
+            {!writable && (
+                <div className="mb-4">
+                    <InlineNote tone="warning">当前配置只有查看权限</InlineNote>
+                </div>
             )}
             {mode === 'form' ? (
                 <NeoBotSchemaFields
                     key={`${text(base.revision)}:${generation}`}
+                    draftScope={`${path}:${text(base.revision)}:${generation}`}
                     fields={fields}
                     value={draft}
                     disabled={!writable || action.isPending}
-                    onChange={setDraft}
-                    onValidity={(key, valid) =>
+                    onChange={(next) => {
+                        setDraft(next);
+                        setErrors('');
+                    }}
+                    onValidity={(key, valid) => {
+                        setErrors('');
                         setInvalid((prev) => {
                             const next = new Set(prev);
                             if (valid) next.delete(key);
                             else next.add(key);
                             return next;
-                        })
-                    }
+                        });
+                    }}
                 />
             ) : (
                 <TextAreaField
@@ -178,15 +205,18 @@ export function NeoBotConfigEditor({
                     minRows={16}
                     maxRows={30}
                     mono
-                    onValueChange={setSource}
+                    onValueChange={(next) => {
+                        setSource(next);
+                        setErrors('');
+                    }}
                 />
             )}
             {errors && (
-                <p role="status" className="mt-3 whitespace-pre-wrap text-xs text-text-secondary">
-                    {errors}
-                </p>
+                <div role="status" className="mt-4 whitespace-pre-wrap">
+                    <InlineNote tone={validationFailed ? 'danger' : 'success'}>{errors}</InlineNote>
+                </div>
             )}
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-4">
                 {path === '/api/config' && (
                     <Button
                         size="sm"
@@ -217,7 +247,7 @@ export function NeoBotConfigEditor({
                     <Button
                         size="sm"
                         variant="ghost"
-                        disabled={action.isPending}
+                        disabled={!writable || action.isPending}
                         onClick={() => void action.run({ path: '/api/config/reload' })}
                     >
                         重载已保存配置

@@ -1,29 +1,15 @@
-// 面板数据查询的统一入口。
-//
-// 把「框架不支持 / 没填密码 / 面板没起来 / 面板改版了」都收成显式状态，页面按状态给不同的话——
-// 混成一个 error 的话，用户看到「加载失败」既不知道去填密码也不知道去看实例状态。
+// 面板查询区分鉴权、连接与数据格式错误。
 
 import { useQuery } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
-// TODO: 解析器待下沉 core/domain/apps/neobot/，届时消掉这条 hooks→modules 跨层（同 useBackendSettings 旧账）
 import {
     asRecord,
     parseNeoBotOverview,
     type NeoBotOverview,
 } from '../../core/domain/apps/neobotPanel';
+import type { PanelState } from '../../core/domain/apps/neobotPanelState';
 
-export type PanelState<T> =
-    | { kind: 'ok'; data: T }
-    /** 该框架不提供面板转发（panelCall 返回 null） */
-    | { kind: 'unsupported' }
-    /** 没填面板密码，或密码不对 */
-    | { kind: 'unauthorized'; message: string }
-    | { kind: 'unreachable'; message: string }
-    /** 面板没有这个接口（404）：实例的 NeoBot 版本低于该接口要求的版本 */
-    | { kind: 'notFound'; message: string }
-    | { kind: 'failed'; message: string }
-    /** 面板答了但形状不认识（多半是面板改版） */
-    | { kind: 'malformed' };
+export type { PanelState };
 
 export const neobotPanelKey = (instanceId: string, what: string) =>
     ['neobotPanel', instanceId, what] as const;

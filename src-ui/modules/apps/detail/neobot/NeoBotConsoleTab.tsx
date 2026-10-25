@@ -11,15 +11,16 @@ export function NeoBotConsoleTab({
 }) {
     return (
         <div className="flex flex-col gap-4">
-            <PanelCredentialCard instance={instance} onOpenWebUi={onOpenWebUi} />
+            <PanelCredentialCard key={instance.id} instance={instance} onOpenWebUi={onOpenWebUi} />
             <div>
                 <Button
                     size="sm"
                     variant="secondary"
-                    disabled={instance.state === 'installing'}
+                    disabled={instance.state !== 'running'}
+                    title={instance.state !== 'running' ? '启动实例后可打开控制台' : undefined}
                     onClick={onOpenWebUi}
                 >
-                    打开上游 WebUI
+                    打开控制台
                 </Button>
             </div>
         </div>

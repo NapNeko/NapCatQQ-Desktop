@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Checkbox, Select, TextAreaField, TextField } from '../../../../shared/ui';
+import { useNeoBotDraftState } from '../../../../hooks/apps/useNeoBotDraftState';
 import {
     json,
     modelParamApplies,
@@ -12,21 +13,34 @@ import {
 } from '../../../../core/domain/apps/neobotWorkspace';
 import { PanelDisclosure } from './PanelDisclosure';
 
+function useRestoredInvalid(error: string, onValidity?: (valid: boolean) => void) {
+    const report = useRef(onValidity);
+    report.current = onValidity;
+    useEffect(() => {
+        if (error) report.current?.(false);
+    }, [error]);
+}
+
 export function JsonDraftField({
     label,
     value,
     onChange,
     onValidity,
     disabled,
+    draftKey,
 }: {
     label: string;
     value: unknown;
     onChange: (value: unknown) => void;
     onValidity?: (valid: boolean) => void;
     disabled?: boolean;
+    draftKey?: string;
 }) {
-    const [edit, setEdit] = useState<string | null>(null);
-    const [error, setError] = useState('');
+    const localKey = useId();
+    const scope = draftKey ?? localKey;
+    const [edit, setEdit] = useNeoBotDraftState<string | null>(`${scope}:json`, null);
+    const [error, setError] = useNeoBotDraftState(`${scope}:error`, '');
+    useRestoredInvalid(error, onValidity);
     return (
         <TextAreaField
             label={label}
@@ -59,6 +73,7 @@ function NumericField({
     disabled,
     onChange,
     onValidity,
+    draftKey,
 }: {
     field: NeoBotField;
     label: ReactNode;
@@ -66,9 +81,13 @@ function NumericField({
     disabled?: boolean;
     onChange: (value: number) => void;
     onValidity: (valid: boolean) => void;
+    draftKey?: string;
 }) {
-    const [draft, setDraft] = useState<string | null>(null);
-    const [error, setError] = useState('');
+    const localKey = useId();
+    const scope = draftKey ?? localKey;
+    const [draft, setDraft] = useNeoBotDraftState<string | null>(`${scope}:number`, null);
+    const [error, setError] = useNeoBotDraftState(`${scope}:error`, '');
+    useRestoredInvalid(error, onValidity);
     return (
         <TextField
             label={label}
@@ -104,6 +123,7 @@ function ModelParamsField({
     disabled,
     onChange,
     onValidity,
+    draftScope,
 }: {
     field: NeoBotField;
     settings: PanelObject;
@@ -112,6 +132,7 @@ function ModelParamsField({
     disabled?: boolean;
     onChange: (value: PanelObject) => void;
     onValidity?: (path: string, valid: boolean) => void;
+    draftScope?: string;
 }) {
     const current = modelParamsValue(field, settings);
     const enabled = strings(current.enabled_params);
@@ -119,6 +140,7 @@ function ModelParamsField({
     if (!field.catalog.length) {
         return (
             <JsonDraftField
+                draftKey={draftScope && `${draftScope}:${prefix}`}
                 label={field.label}
                 value={current}
                 disabled={disabled}
@@ -129,11 +151,11 @@ function ModelParamsField({
     }
     const selected = field.catalog.filter((item) => enabled.includes(item.name));
     return (
-        <div className="flex flex-col gap-3 rounded-sm border border-border-subtle p-3">
+        <div className="flex min-w-0 flex-col gap-3 border-t border-border-subtle pt-4 sm:col-span-2">
             <span className="text-xs font-medium text-text" title={field.description}>
                 {field.label}
             </span>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-x-5 gap-y-3 rounded-sm bg-inset px-3 py-3">
                 {field.catalog
                     .filter(
                         (item) => enabled.includes(item.name) || modelParamApplies(item, context),
@@ -169,10 +191,12 @@ function ModelParamsField({
                 value={values}
                 disabled={disabled}
                 prefix={`${prefix}.values`}
+                draftScope={draftScope}
                 onValidity={onValidity}
                 onChange={(next) => onChange({ ...current, values: next })}
             />
             <JsonDraftField
+                draftKey={draftScope && `${draftScope}:${prefix}:extra`}
                 label="自定义请求参数"
                 value={current.extra_body}
                 disabled={disabled}
@@ -191,6 +215,7 @@ export function NeoBotSchemaFields({
     disabled,
     prefix = '',
     modelContext = {},
+    draftScope,
 }: {
     fields: NeoBotField[];
     value: PanelObject;
@@ -199,6 +224,7 @@ export function NeoBotSchemaFields({
     disabled?: boolean;
     prefix?: string;
     modelContext?: PanelObject;
+    draftScope?: string;
 }) {
     const context = {
         ...modelContext,
@@ -206,7 +232,7 @@ export function NeoBotSchemaFields({
         ...(typeof value.model_type === 'string' ? { model_type: value.model_type } : {}),
     };
     return (
-        <div className="flex flex-col gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
             {fields.map((f) => {
                 const current = value[f.name] ?? f.value ?? f.defaultValue;
                 const path = prefix ? `${prefix}.${f.name}` : f.name;
@@ -219,8 +245,7 @@ export function NeoBotSchemaFields({
                             key={f.name}
                             defaultOpen
                             label={f.label}
-                            description={f.description}
-                            className="rounded-sm border border-border-subtle p-3"
+                            className="min-w-0 border-t border-border-subtle pt-3 sm:col-span-2"
                             triggerClassName="font-medium text-text"
                         >
                             <NeoBotSchemaFields
@@ -229,6 +254,7 @@ export function NeoBotSchemaFields({
                                 disabled={blocked}
                                 prefix={path}
                                 modelContext={context}
+                                draftScope={draftScope}
                                 onValidity={onValidity}
                                 onChange={set}
                             />
@@ -245,6 +271,7 @@ export function NeoBotSchemaFields({
                             disabled={blocked}
                             onChange={set}
                             onValidity={onValidity}
+                            draftScope={draftScope}
                         />
                     );
                 if (typeof current === 'boolean' || f.type === 'bool')
@@ -275,6 +302,7 @@ export function NeoBotSchemaFields({
                     return (
                         <JsonDraftField
                             key={f.name}
+                            draftKey={draftScope && `${draftScope}:${path}`}
                             label={f.label}
                             value={current}
                             disabled={blocked}
@@ -286,6 +314,7 @@ export function NeoBotSchemaFields({
                     return (
                         <NumericField
                             key={f.name}
+                            draftKey={draftScope && `${draftScope}:${path}`}
                             field={f}
                             label={label}
                             value={current}
@@ -294,10 +323,12 @@ export function NeoBotSchemaFields({
                             onValidity={(valid) => onValidity?.(path, valid)}
                         />
                     );
-                return text(current).includes('\n') ||
-                    /prompt|persona|data|description/.test(f.name) ? (
+                return !f.sensitive &&
+                    (text(current).includes('\n') ||
+                        /prompt|persona|data|description/.test(f.name)) ? (
                     <TextAreaField
                         key={f.name}
+                        className="sm:col-span-2"
                         label={label}
                         value={text(current)}
                         disabled={blocked}

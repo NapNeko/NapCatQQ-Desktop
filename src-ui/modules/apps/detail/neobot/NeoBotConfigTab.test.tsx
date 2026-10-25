@@ -102,6 +102,37 @@ it('空数字、越界和无效 JSON 会阻止保存，撤销清理字段错误'
     expect(call).not.toHaveBeenCalled();
 });
 
+it('切换页面后保留无效数字和 JSON 原文，继续阻止保存', () => {
+    const view = mount();
+    fireEvent.change(screen.getByLabelText('重试次数'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('高级参数'), { target: { value: '{unfinished' } });
+    view.rerender(view.tree(false));
+    view.rerender(view.tree(true));
+    expect(screen.getByLabelText('重试次数')).toHaveValue(null);
+    expect(screen.getByLabelText('高级参数')).toHaveValue('{unfinished');
+    expect(screen.getByRole('button', { name: '保存并重载' })).toBeDisabled();
+    expect(screen.getByText('JSON 格式不正确')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '撤销草稿' }));
+    expect(screen.getByLabelText('重试次数')).toHaveValue(3);
+    expect(screen.getByLabelText('高级参数')).toHaveValue(
+        JSON.stringify(doc.config.options, null, 2),
+    );
+    expect(screen.queryByText('JSON 格式不正确')).not.toBeInTheDocument();
+    expect(call).not.toHaveBeenCalled();
+});
+
+it('校验未通过时在表单内显示具体字段错误', async () => {
+    call.mockResolvedValue({
+        kind: 'ok',
+        data: { ok: false, errors: [{ path: 'retries', message: '不能超过 5 次' }] },
+    });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: '校验' }));
+    expect(await screen.findByText('retries：不能超过 5 次')).toBeInTheDocument();
+    expect(screen.queryByText('校验通过')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+});
+
 it('模型参数目录显示已有值，新增参数随表单保存并保留未来字段', async () => {
     const configDoc = {
         revision: 'model-r1',
