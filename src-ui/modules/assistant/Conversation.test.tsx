@@ -57,6 +57,29 @@ afterEach(() => {
 });
 
 describe('诊断会话交互边界', () => {
+    it('浏览历史后发送消息会重新跟随最新内容', () => {
+        render(
+            <Conversation
+                session={session()}
+                drafts={{ 'session-1': '继续检查' }}
+                pending={[]}
+                onNew={vi.fn()}
+            />,
+        );
+        const timeline = screen.getByRole('region', { name: '诊断对话' });
+        Object.defineProperties(timeline, {
+            scrollHeight: { configurable: true, value: 1000 },
+            clientHeight: { configurable: true, value: 300 },
+        });
+        timeline.scrollTop = 100;
+        fireEvent.scroll(timeline);
+        expect(screen.getByRole('button', { name: '滚动到最新消息' })).toBeVisible();
+        fireEvent.click(screen.getByRole('button', { name: '发送' }));
+        expect(actions.send).toHaveBeenCalledWith('session-1', '继续检查');
+        expect(timeline.scrollTop).toBe(1000);
+        expect(screen.queryByRole('button', { name: '滚动到最新消息' })).not.toBeInTheDocument();
+    });
+
     it.each(['failed', 'disconnected'] as const)(
         '%s 由用户发送新消息恢复同一会话，不自动重放旧问题',
         (state) => {

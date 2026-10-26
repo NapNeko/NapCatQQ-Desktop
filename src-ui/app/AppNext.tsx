@@ -87,7 +87,7 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 // 这些页面不受 1280px 的宽度上限：调试台是三栏工作台，宽屏上越宽越好用
 const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug', 'chat', 'assistant']);
 // 聊天自己贴着窗口边排版，不吃页面内边距。
-const FLUSH_ROUTES: ReadonlySet<AppRoute> = new Set(['chat']);
+const FLUSH_ROUTES: ReadonlySet<AppRoute> = new Set(['chat', 'assistant']);
 
 // 与 lazy 共用同一 import 工厂，侧栏预取与首点加载同一 chunk。
 const loadBotPage = () =>

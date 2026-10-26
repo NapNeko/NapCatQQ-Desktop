@@ -62,6 +62,15 @@ describe('诊断助手页面与 browser mock 集成', () => {
         expect(
             await screen.findByText('当前为浏览器界面演示，不会调用真实模型或操作 Bot。'),
         ).toBeVisible();
+        const openSessions = screen.getByRole('button', { name: '显示诊断会话列表' });
+        fireEvent.click(openSessions);
+        expect(screen.getByRole('button', { name: '收起会话列表' })).toHaveFocus();
+        expect(openSessions.closest('section')).toHaveAttribute('inert');
+        fireEvent.keyDown(screen.getByRole('button', { name: '收起会话列表' }), {
+            key: 'Escape',
+        });
+        expect(openSessions).toHaveFocus();
+        expect(openSessions.closest('section')).not.toHaveAttribute('inert');
         const create = await screen.findByRole('button', { name: '开始诊断' });
         expect(create).toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: '配置模型' }));

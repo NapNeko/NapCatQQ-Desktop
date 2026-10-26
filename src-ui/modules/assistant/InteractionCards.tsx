@@ -18,12 +18,12 @@ interface PermissionProps {
 export function PermissionCard({ request, pending, onRespond }: PermissionProps) {
     return (
         <section
-            className="space-y-3 rounded-lg border border-warning/30 bg-warning-soft/50 p-4"
+            className="max-w-2xl space-y-3 rounded-lg border border-warning/30 bg-warning-soft/50 p-4"
             aria-label="操作审批"
         >
             <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-text">
-                <ShieldCheck size={16} className="text-warning" />
-                <h3>{request.title}</h3>
+                <ShieldCheck size={16} className="shrink-0 text-warning" />
+                <h3 className="min-w-0 break-words">{request.title}</h3>
                 <Badge tone="warning">
                     {request.source === 'ncdOperation' ? 'NCD 操作审批' : 'Agent 权限请求'}
                 </Badge>
@@ -80,7 +80,7 @@ export function QuestionCard({ question, pending, draft, onDraft, onRespond }: Q
     const valid = question.fields.every((field) => !field.required || values[field.name]?.trim());
     return (
         <form
-            className="space-y-3 rounded-lg border border-brand/20 bg-brand-soft/40 p-4"
+            className="max-w-2xl space-y-3 rounded-lg border border-brand/20 bg-brand-soft/40 p-4"
             aria-label="补充信息"
             onSubmit={(event) => {
                 event.preventDefault();
@@ -88,9 +88,9 @@ export function QuestionCard({ question, pending, draft, onDraft, onRespond }: Q
                 if (valid) onRespond({ cancelled: false, values });
             }}
         >
-            <div className="flex items-center gap-2 text-sm font-semibold text-text">
-                <HelpCircle size={16} className="text-brand" />
-                <h3>{question.title}</h3>
+            <div className="flex items-start gap-2 text-sm font-semibold text-text">
+                <HelpCircle size={16} className="mt-0.5 shrink-0 text-brand" />
+                <h3 className="min-w-0 break-words">{question.title}</h3>
             </div>
             {question.fields.map((field) => {
                 const choices = field.options.length ? field.options : ['true', 'false'];
