@@ -56,6 +56,8 @@ pub struct AssistantSettings {
 #[serde(default, rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AssistantBuiltinSettings {
+    pub provider_preset: AssistantModelPreset,
+    pub api_format: AssistantApiFormat,
     pub base_url: String,
     pub model: String,
     pub max_steps: u32,
@@ -66,6 +68,8 @@ pub struct AssistantBuiltinSettings {
 impl Default for AssistantBuiltinSettings {
     fn default() -> Self {
         Self {
+            provider_preset: AssistantModelPreset::Custom,
+            api_format: AssistantApiFormat::OpenAiChatCompletions,
             base_url: String::new(),
             model: String::new(),
             max_steps: 6,
@@ -73,6 +77,34 @@ impl Default for AssistantBuiltinSettings {
             request_timeout_secs: 90,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AssistantModelPreset {
+    #[default]
+    Custom,
+    OpenAi,
+    Anthropic,
+    Gemini,
+    DeepSeek,
+    MiniMax,
+    Moonshot,
+    DashScope,
+    OpenRouter,
+    Ollama,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AssistantApiFormat {
+    #[default]
+    OpenAiChatCompletions,
+    OpenAiResponses,
+    AnthropicMessages,
+    GeminiGenerateContent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -306,4 +338,55 @@ pub struct AssistantEvent {
     pub session_id: String,
     pub sequence: u32,
     pub update: AssistantUpdate,
+}
+
+#[cfg(test)]
+mod model_settings_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_model_configuration_keeps_its_endpoint_and_chat_protocol() {
+        let settings: AssistantBuiltinSettings = serde_json::from_str(
+            r#"{"baseUrl":"https://gateway.invalid/custom/chat","model":"custom-model","maxSteps":4}"#,
+        ).unwrap();
+        assert_eq!(settings.provider_preset, AssistantModelPreset::Custom);
+        assert_eq!(
+            settings.api_format,
+            AssistantApiFormat::OpenAiChatCompletions
+        );
+        assert_eq!(settings.base_url, "https://gateway.invalid/custom/chat");
+        assert_eq!(settings.model, "custom-model");
+        assert_eq!(settings.max_steps, 4);
+    }
+
+    #[test]
+    fn model_api_formats_round_trip_with_stable_ipc_names() {
+        for (format, expected) in [
+            (
+                AssistantApiFormat::OpenAiChatCompletions,
+                "openAiChatCompletions",
+            ),
+            (AssistantApiFormat::OpenAiResponses, "openAiResponses"),
+            (AssistantApiFormat::AnthropicMessages, "anthropicMessages"),
+            (
+                AssistantApiFormat::GeminiGenerateContent,
+                "geminiGenerateContent",
+            ),
+        ] {
+            let value = serde_json::to_value(format).unwrap();
+            assert_eq!(value, expected);
+            assert_eq!(
+                serde_json::from_value::<AssistantApiFormat>(value).unwrap(),
+                format
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_model_api_format_cannot_silently_fall_back() {
+        assert!(
+            serde_json::from_str::<AssistantBuiltinSettings>(r#"{"apiFormat":"automatic"}"#,)
+                .is_err()
+        );
+    }
 }

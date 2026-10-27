@@ -18,4 +18,6 @@ export type { AssistantUpdate } from '../../ipc/generated/domain/AssistantUpdate
 export type { AssistantEvent } from '../../ipc/generated/domain/AssistantEvent';
 export type { AssistantLoginPlan } from '../../ipc/generated/domain/AssistantLoginPlan';
 export type { AssistantBuiltinSettings } from '../../ipc/generated/domain/AssistantBuiltinSettings';
+export type { AssistantModelPreset } from '../../ipc/generated/domain/AssistantModelPreset';
+export type { AssistantApiFormat } from '../../ipc/generated/domain/AssistantApiFormat';
 export type { AssistantModelStatus } from '../../ipc/generated/domain/AssistantModelStatus';
