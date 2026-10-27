@@ -6,17 +6,32 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
     AssistantModelStatus,
+    AssistantBuiltinSettings,
     AssistantProvider,
     AssistantSettings,
 } from '../../core/domain/assistant/types';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { NewSession } from './NewSession';
 
-const onCreate = vi.fn();
+vi.mock('./settings/ModelSetup', () => ({
+    ModelSetup: ({ onMore }: { onMore: () => void }) => (
+        <section aria-label="连接模型">
+            <button type="button" onClick={onMore}>
+                更多设置
+            </button>
+        </section>
+    ),
+}));
+
+const onStart = vi.fn();
 const onSettings = vi.fn();
+const onDiscover = vi.fn();
+const onBots = vi.fn();
 const settings: AssistantSettings = {
     defaultProvider: 'builtin',
     builtin: {
+        providerPreset: 'custom',
+        apiFormat: 'openAiChatCompletions',
         baseUrl: 'https://models.example/v1',
         model: 'chosen-model',
         maxSteps: 6,
@@ -34,18 +49,34 @@ const settings: AssistantSettings = {
 function Form({
     status = { hasApiKey: true, configured: true, error: null },
     noProviders = false,
+    noBots = false,
+    dshInstalled = true,
+    creating = false,
+    builtin,
 }: {
     status?: AssistantModelStatus;
     noProviders?: boolean;
+    noBots?: boolean;
+    dshInstalled?: boolean;
+    creating?: boolean;
+    builtin?: Partial<AssistantBuiltinSettings>;
 }) {
     const [provider, setProvider] = useState<AssistantProvider | null>(null);
-    const [externalOpen, setExternalOpen] = useState(false);
+    const [draft, setDraft] = useState('');
+    const [botId, setBotId] = useState('10001');
     return (
         <NewSession
-            bots={[{ id: '10001', name: '测试 Bot' }]}
-            botId="10001"
+            bots={
+                noBots
+                    ? []
+                    : [
+                          { id: '10001', name: '测试 Bot' },
+                          { id: '10002', name: '备用 Bot' },
+                      ]
+            }
+            botId={botId}
             provider={provider}
-            settings={settings}
+            settings={{ ...settings, builtin: { ...settings.builtin, ...builtin } }}
             providers={
                 noProviders
                     ? []
@@ -53,7 +84,7 @@ function Form({
                           {
                               provider: 'dsh',
                               label: 'DSH',
-                              installed: true,
+                              installed: dshInstalled,
                               enabled: true,
                               executablePath: null,
                               version: '1',
@@ -73,17 +104,17 @@ function Form({
                       ]
             }
             modelStatus={status}
-            modelError={null}
             loading={false}
             providersLoading={noProviders}
-            creating={false}
-            externalOpen={externalOpen}
-            onExternalOpen={setExternalOpen}
-            onBot={vi.fn()}
+            creating={creating}
+            draft={draft}
+            onDraft={setDraft}
+            onDiscover={onDiscover}
+            onBot={setBotId}
             onProvider={setProvider}
-            onCreate={onCreate}
+            onStart={onStart}
             onSettings={onSettings}
-            onBots={vi.fn()}
+            onBots={onBots}
         />
     );
 }
@@ -93,8 +124,7 @@ beforeAll(() => {
     Element.prototype.scrollIntoView ??= () => {};
 });
 beforeEach(() => {
-    onCreate.mockReset();
-    onSettings.mockReset();
+    [onStart, onSettings, onDiscover, onBots].forEach((mock) => mock.mockReset());
     act(() => {
         preferencesStore.reset();
         preferencesStore.setMotionEnabled(false);
@@ -106,39 +136,99 @@ afterEach(() => {
 });
 
 describe('内置助手默认入口', () => {
-    it('已配置时直接创建Builtin会话，外部CLI尚未发现也不阻塞', () => {
+    it('已配置的本机 Ollama 无 Key 也能开始，其他服务仍保留 Key 门控', () => {
+        const page = render(
+            <Form
+                status={{ configured: true, hasApiKey: false, error: null }}
+                builtin={{ providerPreset: 'ollama', baseUrl: 'http://localhost:11434/v1' }}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: '帮我检查当前运行状态' }));
+        expect(onStart).toHaveBeenCalledWith('builtin', '10001', '帮我检查当前运行状态');
+        page.rerender(
+            <Form
+                status={{ configured: true, hasApiKey: false, error: null }}
+                builtin={{ providerPreset: 'ollama', baseUrl: 'https://ollama.example/v1' }}
+            />,
+        );
+        expect(screen.getByRole('region', { name: '连接模型' })).toBeVisible();
+    });
+    it('输入问题后创建并发送，外部 CLI 尚未发现也不阻塞内置助手', () => {
         render(<Form noProviders />);
-        expect(screen.getByText('内置助手')).toBeVisible();
-        expect(screen.queryByRole('combobox', { name: '外部 Agent' })).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '开始诊断' }));
-        expect(onCreate).toHaveBeenCalledWith('builtin', '10001');
-    });
-    it('缺Key时保持明确的模型设置入口，不会误创建会话', () => {
-        render(<Form status={{ hasApiKey: false, configured: false, error: null }} />);
         expect(screen.getByRole('button', { name: '开始诊断' })).toBeDisabled();
-        fireEvent.click(screen.getByRole('button', { name: '配置模型' }));
-        expect(onSettings).toHaveBeenCalledOnce();
-        expect(onCreate).not.toHaveBeenCalled();
+        expect(onDiscover).not.toHaveBeenCalled();
+        fireEvent.change(screen.getByRole('textbox', { name: '描述问题' }), {
+            target: { value: '  检查消息连接  ' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: '开始诊断' }));
+        expect(onStart).toHaveBeenCalledWith('builtin', '10001', '检查消息连接');
+        expect(onDiscover).not.toHaveBeenCalled();
     });
-    it('外部Agent按用户选择展开，可再切回默认内置助手', async () => {
+    it('快捷问题直接创建并发送，不要求先填输入框', () => {
+        render(<Form />);
+        fireEvent.click(screen.getByRole('button', { name: '帮我检查当前运行状态' }));
+        expect(onStart).toHaveBeenCalledWith('builtin', '10001', '帮我检查当前运行状态');
+    });
+    it('缺 Key 时展示首次配置，不会误创建会话', () => {
+        render(<Form status={{ hasApiKey: false, configured: false, error: null }} />);
+        expect(screen.getByRole('region', { name: '连接模型' })).toBeVisible();
+        expect(screen.queryByRole('textbox', { name: '描述问题' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '更多设置' }));
+        expect(onSettings).toHaveBeenCalledOnce();
+        expect(onStart).not.toHaveBeenCalled();
+    });
+    it('助手下拉按用户选择切换，保留当前问题和目标 Bot', async () => {
         const user = userEvent.setup();
         render(<Form />);
-        fireEvent.click(screen.getByRole('button', { name: '使用外部 Agent' }));
-        await user.click(screen.getByRole('combobox', { name: '外部 Agent' }));
-        await user.click(screen.getByRole('option', { name: 'DSH' }));
+        fireEvent.change(screen.getByRole('textbox', { name: '描述问题' }), {
+            target: { value: '检查当前状态' },
+        });
+        await user.click(screen.getByRole('button', { name: '目标 Bot：测试 Bot' }));
+        await user.click(screen.getByRole('menuitemradio', { name: /备用 Bot/ }));
+        await user.click(screen.getByRole('button', { name: '助手：内置 · chosen-model' }));
+        expect(onDiscover).toHaveBeenCalledOnce();
+        await user.click(screen.getByRole('menuitemradio', { name: 'DSH' }));
         fireEvent.click(screen.getByRole('button', { name: '开始诊断' }));
-        expect(onCreate).toHaveBeenLastCalledWith('dsh', '10001');
-        fireEvent.click(screen.getByRole('button', { name: '改用内置助手' }));
+        expect(onStart).toHaveBeenLastCalledWith('dsh', '10002', '检查当前状态');
+        await user.click(screen.getByRole('button', { name: '助手：DSH' }));
+        await user.click(screen.getByRole('menuitemradio', { name: /内置助手/ }));
         fireEvent.click(screen.getByRole('button', { name: '开始诊断' }));
-        expect(onCreate).toHaveBeenLastCalledWith('builtin', '10001');
+        expect(onStart).toHaveBeenLastCalledWith('builtin', '10002', '检查当前状态');
     });
     it('自定义外部Agent仍需显式允许其内建工具', async () => {
         const user = userEvent.setup();
         render(<Form />);
-        fireEvent.click(screen.getByRole('button', { name: '使用外部 Agent' }));
-        await user.click(screen.getByRole('combobox', { name: '外部 Agent' }));
-        await user.click(screen.getByRole('option', { name: '自定义 ACP Agent' }));
+        await user.click(screen.getByRole('button', { name: '助手：内置 · chosen-model' }));
+        await user.click(screen.getByRole('menuitemradio', { name: '自定义 ACP Agent' }));
+        fireEvent.change(screen.getByRole('textbox', { name: '描述问题' }), {
+            target: { value: '检查状态' },
+        });
         expect(screen.getByRole('button', { name: '开始诊断' })).toBeDisabled();
         expect(screen.getByText('此 Agent 需要在设置中允许内建工具后使用。')).toBeVisible();
+        fireEvent.keyDown(screen.getByRole('textbox', { name: '描述问题' }), { key: 'Enter' });
+        expect(onStart).not.toHaveBeenCalled();
+    });
+    it('未安装的外部 Agent 可查看原因并进入设置，不能发送', async () => {
+        const user = userEvent.setup();
+        render(<Form dshInstalled={false} />);
+        await user.click(screen.getByRole('button', { name: '助手：内置 · chosen-model' }));
+        await user.click(screen.getByRole('menuitemradio', { name: /DSH/ }));
+        expect(
+            screen.getByText('未检测到此 Agent，请在设置中检查安装或可执行文件路径。'),
+        ).toBeVisible();
+        expect(screen.getByRole('button', { name: '开始诊断' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: '打开设置' }));
+        expect(onSettings).toHaveBeenCalledOnce();
+        expect(onStart).not.toHaveBeenCalled();
+    });
+    it('无 Bot 时提供添加入口，创建期间禁用重复发送与选择器', () => {
+        const page = render(<Form noBots />);
+        fireEvent.click(screen.getByRole('button', { name: '前往机器人' }));
+        expect(onBots).toHaveBeenCalledOnce();
+        page.rerender(<Form creating />);
+        expect(screen.getByRole('textbox', { name: '描述问题' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: '目标 Bot：测试 Bot' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: '开始诊断' })).toBeDisabled();
+        expect(onStart).not.toHaveBeenCalled();
     });
 });

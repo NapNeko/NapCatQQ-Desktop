@@ -57,6 +57,27 @@ afterEach(() => {
 });
 
 describe('诊断会话交互边界', () => {
+    it('新一轮开始后，上轮中断的工具不会重新显示为执行中', () => {
+        const current = session('running');
+        current.messages.push(
+            { id: 'first', role: 'user', text: '第一轮', createdAtMs: 101 },
+            { id: 'next', role: 'user', text: '继续检查', createdAtMs: 201 },
+        );
+        current.tools.push(
+            { id: 'old', title: '旧检查', status: 'in_progress', details: '', createdAtMs: 102 },
+            {
+                id: 'active',
+                title: '本轮检查',
+                status: 'in_progress',
+                details: '',
+                createdAtMs: 202,
+            },
+        );
+        render(<Conversation session={current} drafts={{}} pending={[]} onNew={vi.fn()} />);
+        expect(screen.getByText('已中断')).toBeVisible();
+        expect(screen.getByText('执行中')).toBeVisible();
+    });
+
     it('浏览历史后发送消息会重新跟随最新内容', () => {
         render(
             <Conversation

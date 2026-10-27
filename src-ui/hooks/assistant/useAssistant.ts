@@ -38,7 +38,8 @@ export function useAssistantSettings(options: { discoverProviders?: boolean } = 
     });
     const save = useMutation({
         mutationFn: (value: AssistantSettings) => assistantService.saveSettings(value),
-        onSuccess: async () => {
+        onSuccess: async (_data, saved) => {
+            client.setQueryData(['assistantSettings'], saved);
             await Promise.all([
                 client.invalidateQueries({ queryKey: ['assistantSettings'] }),
                 client.invalidateQueries({ queryKey: ['assistantProviders'] }),

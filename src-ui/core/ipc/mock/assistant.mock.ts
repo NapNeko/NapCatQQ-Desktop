@@ -10,7 +10,11 @@ import type {
     AssistantSettings,
     AssistantUpdate,
 } from '../../domain/assistant/types';
-import { modelOrigin, validateBuiltinSettings } from '../../domain/assistant/model';
+import {
+    modelOrigin,
+    requiresBuiltinApiKey,
+    validateBuiltinSettings,
+} from '../../domain/assistant/model';
 
 const labels: Record<AssistantProvider, string> = {
     builtin: '内置助手',
@@ -25,7 +29,15 @@ const labels: Record<AssistantProvider, string> = {
 };
 let config: AssistantSettings = {
     defaultProvider: 'builtin',
-    builtin: { baseUrl: '', model: '', maxSteps: 6, maxOutputTokens: 2048, requestTimeoutSecs: 90 },
+    builtin: {
+        providerPreset: 'custom',
+        apiFormat: 'openAiChatCompletions',
+        baseUrl: '',
+        model: '',
+        maxSteps: 6,
+        maxOutputTokens: 2048,
+        requestTimeoutSecs: 90,
+    },
     providers: (Object.keys(labels) as AssistantProvider[])
         .filter((provider) => provider !== 'builtin')
         .map((provider) => ({
@@ -100,14 +112,16 @@ export const assistantMock = {
         return {
             hasApiKey,
             configured:
-                hasApiKey &&
+                (hasApiKey || !requiresBuiltinApiKey(config.builtin)) &&
                 !!config.builtin.model.trim() &&
                 Object.keys(validateBuiltinSettings(config.builtin)).length === 0,
             error: null,
         };
     },
-    async setApiKey(apiKey: string): Promise<AssistantModelStatus> {
+    async setApiKey(apiKey: string, expectedOrigin: string): Promise<AssistantModelStatus> {
         const origin = modelOrigin(config.builtin.baseUrl);
+        if (!expectedOrigin || origin !== expectedOrigin)
+            throw new Error('服务地址已更改，请重新输入 API Key。');
         if (!origin || validateBuiltinSettings(config.builtin).baseUrl || !apiKey.trim())
             throw new Error('请先保存服务地址，再输入 API Key。');
         for (const session of sessions.values()) {
@@ -119,7 +133,9 @@ export const assistantMock = {
         keyOrigin = origin;
         return this.modelStatus();
     },
-    async clearApiKey(): Promise<AssistantModelStatus> {
+    async clearApiKey(expectedOrigin: string): Promise<AssistantModelStatus> {
+        if (!expectedOrigin || modelOrigin(config.builtin.baseUrl) !== expectedOrigin)
+            throw new Error('服务地址已更改，请重新确认后清除 Key。');
         for (const session of sessions.values()) {
             if (session.info.provider === 'builtin' && session.info.state !== 'closed') {
                 await this.cancel(session.info.id);

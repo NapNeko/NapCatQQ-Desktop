@@ -142,6 +142,44 @@ describe('诊断会话快照补偿', () => {
 });
 
 describe('诊断会话操作', () => {
+    it('发送期间新写的草稿不会被成功回调清空', async () => {
+        const request = deferred<void>();
+        service.sendMessage.mockReturnValueOnce(request.promise);
+        store.draft('session-1', '当前问题');
+        const sending = store.send('session-1', '当前问题');
+        store.draft('session-1', '下一条问题');
+        request.resolve();
+        expect(await sending).toBe(true);
+        expect(store.getSnapshot().drafts['session-1']).toBe('下一条问题');
+    });
+
+    it('发送快捷问题不会清空输入框中另一个未发送的问题', async () => {
+        store.draft('session-1', '我还想检查应用端');
+        expect(await store.send('session-1', '帮我检查当前运行状态')).toBe(true);
+        expect(store.getSnapshot().drafts['session-1']).toBe('我还想检查应用端');
+    });
+
+    it('创建后的补读失败也能在新会话中找回首条问题，且不自动发送', async () => {
+        service.createSession.mockResolvedValueOnce(session('new-session-1'));
+        service.getSession.mockRejectedValueOnce(new Error('读取记录失败'));
+        store.draft('new-session', '请检查连接');
+        expect(await store.start('builtin', '10001', '请检查连接')).toBe(false);
+        expect(store.getSnapshot().selectedId).toBe('new-session-1');
+        expect(store.getSnapshot().drafts['new-session-1']).toBe('请检查连接');
+        expect(service.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('首条发送失败保留问题，下一次发送复用已创建的会话', async () => {
+        service.createSession.mockResolvedValueOnce(session('new-session-1'));
+        service.sendMessage.mockRejectedValueOnce(new Error('发送失败'));
+        store.draft('new-session', '请检查连接');
+        expect(await store.start('builtin', '10001', '请检查连接')).toBe(false);
+        expect(store.getSnapshot().drafts['new-session-1']).toBe('请检查连接');
+        expect(store.getSnapshot().drafts['new-session']).toBe('');
+        expect(await store.send('new-session-1', '请检查连接')).toBe(true);
+        expect(service.createSession).toHaveBeenCalledTimes(1);
+    });
+
     it('切换会话不会串草稿，发送失败保留原文，成功只清除发送会话草稿', async () => {
         store.draft('session-1', '原始问题');
         store.draft('session-2', '另一条问题');

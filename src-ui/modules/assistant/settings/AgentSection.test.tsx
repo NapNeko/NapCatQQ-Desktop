@@ -23,6 +23,8 @@ function settings(): AssistantSettings {
     return {
         defaultProvider: 'dsh',
         builtin: {
+            providerPreset: 'custom',
+            apiFormat: 'openAiChatCompletions',
             baseUrl: '',
             model: '',
             maxSteps: 6,
@@ -183,6 +185,25 @@ describe('Agent 高级设置', () => {
         expect(service.saveSettings.mock.calls[1]?.[0].providers[0].executablePath).toBe(
             'C:\\draft\\agent.cmd',
         );
+    });
+
+    it('保存期间禁用外部Agent的可编辑字段，完成后恢复输入', async () => {
+        let finish!: () => void;
+        const saving = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        service.saveSettings.mockReturnValueOnce(saving);
+        mount();
+        const path = await expand();
+        fireEvent.change(path, { target: { value: 'C:\\saved\\agent.cmd' } });
+        fireEvent.click(screen.getByRole('button', { name: '保存助手设置' }));
+        expect(path).toBeDisabled();
+        expect(screen.getByRole('textbox', { name: '附加参数（每行一个）' })).toBeDisabled();
+        expect(screen.getByRole('combobox', { name: '默认助手' })).toBeDisabled();
+        expect(screen.getByRole('switch', { name: '启用 DSH' })).toBeDisabled();
+        expect(screen.getByRole('switch', { name: '允许 Agent 内建工具' })).toBeDisabled();
+        await act(async () => finish());
+        await waitFor(() => expect(path).toBeEnabled());
     });
 
     it('内建工具默认关闭，明确开启后才随配置写入', async () => {

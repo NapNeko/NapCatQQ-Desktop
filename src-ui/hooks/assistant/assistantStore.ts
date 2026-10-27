@@ -186,6 +186,37 @@ async function ensure(): Promise<void> {
     return initialized;
 }
 
+// 新建页的草稿与会话草稿同表；会话编号是 UUID，不会撞名。
+export const NEW_SESSION_DRAFT = 'new-session';
+
+async function createSession(
+    provider: AssistantProvider,
+    botId: string,
+    initialDraft?: string,
+): Promise<AssistantSession | null> {
+    let created: AssistantSession | null = null;
+    const ok = await action('create', async () => {
+        const session = await assistantService.createSession(provider, botId);
+        removed.delete(session.info.id);
+        sequences.set(
+            session.info.id,
+            Math.max(sequences.get(session.info.id) ?? 0, session.sequence),
+        );
+        const current = store.getSnapshot();
+        patch({
+            infos: putInfo(current.infos, session.info),
+            sessions: { ...current.sessions, [session.info.id]: session },
+            selectedId: session.info.id,
+            ...(initialDraft !== undefined
+                ? { drafts: { ...current.drafts, [session.info.id]: initialDraft } }
+                : {}),
+        });
+        created = session;
+        await refreshSession(session.info.id);
+    });
+    return ok ? created : null;
+}
+
 async function action(key: string, run: () => Promise<void>): Promise<boolean> {
     if (store.getSnapshot().pending.includes(key)) return false;
     patch({ pending: [...store.getSnapshot().pending, key], error: null });
@@ -222,26 +253,29 @@ export const assistantStore = {
     clearError(): void {
         patch({ error: null });
     },
-    create: (provider: AssistantProvider, botId: string) =>
-        action('create', async () => {
-            const session = await assistantService.createSession(provider, botId);
-            removed.delete(session.info.id);
-            sequences.set(
-                session.info.id,
-                Math.max(sequences.get(session.info.id) ?? 0, session.sequence),
-            );
-            const current = store.getSnapshot();
-            patch({
-                infos: putInfo(current.infos, session.info),
-                sessions: { ...current.sessions, [session.info.id]: session },
-                selectedId: session.info.id,
-            });
-            await refreshSession(session.info.id);
-        }),
+    create: async (provider: AssistantProvider, botId: string) =>
+        (await createSession(provider, botId)) !== null,
+    async start(provider: AssistantProvider, botId: string, text: string): Promise<boolean> {
+        const originalDraft = store.getSnapshot().drafts[NEW_SESSION_DRAFT];
+        // 问题随创建响应一起落入会话，后续补读失败时仍能在当前输入框找回。
+        const session = await createSession(provider, botId, text);
+        if (!session) return false;
+        const id = session.info.id;
+        if (store.getSnapshot().drafts[NEW_SESSION_DRAFT] === originalDraft)
+            assistantStore.draft(NEW_SESSION_DRAFT, '');
+        const state = store.getSnapshot().sessions[id]?.info.state ?? session.info.state;
+        if (state === 'failed' || state === 'closed') return true;
+        return assistantStore.send(id, text);
+    },
     send: (sessionId: string, text: string) =>
         action(`send:${sessionId}`, async () => {
+            const originalDraft = store.getSnapshot().drafts[sessionId];
             await assistantService.sendMessage(sessionId, text);
-            assistantStore.draft(sessionId, '');
+            if (
+                originalDraft?.trim() === text.trim() &&
+                store.getSnapshot().drafts[sessionId] === originalDraft
+            )
+                assistantStore.draft(sessionId, '');
             await refreshSession(sessionId);
         }),
     cancel: (sessionId: string) =>

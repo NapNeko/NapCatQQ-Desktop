@@ -20,6 +20,12 @@ export const assistantStateLabel: Record<AssistantSessionState, string> = {
     failed: '连接失败',
 };
 
+export const assistantStarterPrompts = [
+    '帮我检查当前运行状态',
+    '为什么收不到消息？',
+    '最近有没有报错？',
+] as const;
+
 export function isAssistantBusy(state: AssistantSessionState): boolean {
     return state === 'starting' || state === 'running' || state === 'waitingForInput';
 }
@@ -64,6 +70,25 @@ export type AssistantTimelineItem =
     | { kind: 'tool'; value: AssistantToolCall }
     | { kind: 'permission'; value: AssistantPermissionRequest }
     | { kind: 'question'; value: AssistantQuestion };
+
+export type AssistantTimelineBlock =
+    | Exclude<AssistantTimelineItem, { kind: 'tool' }>
+    | { kind: 'tools'; value: AssistantToolCall[] };
+
+// 连续的工具调用折成一组，避免一轮诊断刷出一长串工具卡片。
+export function groupAssistantTimeline(items: AssistantTimelineItem[]): AssistantTimelineBlock[] {
+    const blocks: AssistantTimelineBlock[] = [];
+    for (const item of items) {
+        if (item.kind !== 'tool') {
+            blocks.push(item);
+            continue;
+        }
+        const last = blocks[blocks.length - 1];
+        if (last?.kind === 'tools') last.value.push(item.value);
+        else blocks.push({ kind: 'tools', value: [item.value] });
+    }
+    return blocks;
+}
 
 export function assistantTimeline(session: AssistantSession): AssistantTimelineItem[] {
     return [

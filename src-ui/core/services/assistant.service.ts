@@ -24,10 +24,14 @@ export const assistantService = {
             : assistantMock.saveSettings(settings),
     modelStatus: (): Promise<AssistantModelStatus> =>
         isTauri ? invoke('assistant_model_status') : assistantMock.modelStatus(),
-    setApiKey: (apiKey: string): Promise<AssistantModelStatus> =>
-        isTauri ? invoke('assistant_set_api_key', { apiKey }) : assistantMock.setApiKey(apiKey),
-    clearApiKey: (): Promise<AssistantModelStatus> =>
-        isTauri ? invoke('assistant_clear_api_key') : assistantMock.clearApiKey(),
+    setApiKey: (apiKey: string, expectedOrigin: string): Promise<AssistantModelStatus> =>
+        isTauri
+            ? invoke('assistant_set_api_key', { apiKey, expectedOrigin })
+            : assistantMock.setApiKey(apiKey, expectedOrigin),
+    clearApiKey: (expectedOrigin: string): Promise<AssistantModelStatus> =>
+        isTauri
+            ? invoke('assistant_clear_api_key', { expectedOrigin })
+            : assistantMock.clearApiKey(expectedOrigin),
     providers: (): Promise<AssistantProviderStatus[]> =>
         isTauri ? invoke('assistant_providers') : assistantMock.providers(),
     listSessions: (): Promise<AssistantSessionList> =>

@@ -77,6 +77,18 @@ export {
     ContextMenuRadioGroup,
     type ContextMenuItemProps,
 } from './ContextMenu';
+export {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuGroup,
+    type DropdownMenuItemProps,
+} from './DropdownMenu';
 export { GlobalTitleTooltip } from './GlobalTitleTooltip';
 export {
     SyntaxTextEditor,
