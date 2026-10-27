@@ -251,6 +251,18 @@ async fn snowluma_dir_is_install(host: &dyn Host, dir: &str) -> bool {
     if !host.exists(&entry).await.unwrap_or(false) {
         return false;
     }
+    // 首次启动前没有运行配置，先按发布包自带的身份识别安装。
+    let package = HostPath::from_posix(format!("{dir}/package.json"));
+    if let Ok(bytes) = host.read_file(&package).await {
+        if serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()
+            .is_some_and(|package| {
+                package.get("name").and_then(serde_json::Value::as_str) == Some("@snowluma/runtime")
+            })
+        {
+            return true;
+        }
+    }
     let webui = HostPath::from_posix(format!("{dir}/config/webui.json"));
     if host.exists(&webui).await.unwrap_or(false) {
         return true;
@@ -261,6 +273,10 @@ async fn snowluma_dir_is_install(host: &dyn Host, dir: &str) -> bool {
     };
     String::from_utf8_lossy(&bytes).contains("webuiPort")
 }
+
+#[cfg(test)]
+#[path = "layout_probe_tests.rs"]
+mod probe_tests;
 
 /// 用库存选中路径构造布局；缺项带上实际 home / source 线索
 pub fn layout_from_selected(
