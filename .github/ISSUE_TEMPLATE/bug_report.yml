@@ -1,17 +1,15 @@
 name: Bug 反馈
-description: 报告一个可复现的 Desktop / 相关组件问题
+description: 反馈桌面端、Bot、应用端、聊天或远端管理中的问题
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈。请尽量填全，方便定位。
-        提交前请先在 [Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue) 搜一下有没有重复的。
+        提交前请先搜索 [已有 Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue)，并尽量使用 [最新正式版](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest) 复现。无法升级时，请说明原因。
 
-        > **当前主线是 V3（`3.0.0+`）**。请优先用 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 最新正式 MSI 复现后再反馈。
-        > 旧 Python / 2.x 已归档（分支 `v1`），一般不再作为主线修复目标；若仍卡在旧版，请在版本与渠道里写清楚。
-        > 名字带 `watch-v` 的是远端监控小工具，不是桌面安装包。
+        日志、截图和配置片段请先隐藏 token、密码、API Key 与私人消息，不要上传完整配置备份包。
+        使用问题可先查阅 [用户文档](https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/README.md)。
 
   - type: checkboxes
     id: preflight
@@ -24,15 +22,13 @@ body:
           required: true
         - label: 我已尽量用最新正式版复现（或说明为何不能升级）
           required: true
-        - label: 我知道空白 / 不选模板的 issue 会被关闭
-          required: true
 
   - type: input
     id: desktop-version
     attributes:
       label: NapCatQQ Desktop 版本
-      description: 设置页 / 关于里的版本号；源码运行请写 commit 短 hash。ncd-watch 问题请写 `watch-v*` tag
-      placeholder: "例如 3.0.0 / 3.0.1 / abc1234 / watch-v0.2.1"
+      description: 在「设置 → 关于」查看；源码运行请同时写 commit 短 hash。仅反馈 ncd-watch 时可填其 watch-v* 版本。
+      placeholder: "Desktop 版本 / commit；ncd-watch 问题请注明 watch-v*"
     validations:
       required: true
 
@@ -44,6 +40,7 @@ body:
         - 正式 MSI（GitHub Releases）
         - 应用内更新到的正式版
         - 源码运行（pnpm tauri:dev / 本地 build）
+        - 浏览器预览（pnpm dev）
         - 自打 / 内测 MSI
         - 旧版 2.x / Python（归档）
         - 其他 / 不确定
@@ -53,8 +50,9 @@ body:
   - type: input
     id: os
     attributes:
-      label: 操作系统
-      placeholder: "例如 Windows 11 23H2"
+      label: 桌面客户端操作系统
+      description: 远端系统请填到下方「相关版本与环境」。
+      placeholder: "例如 Windows 11 24H2 x64 / Windows Server 2022；仅 ncd-watch 问题可填不适用"
     validations:
       required: true
 
@@ -62,19 +60,28 @@ body:
     id: area
     attributes:
       label: 出问题的范围
-      description: 可多选
+      description: 可多选，选择实际出问题的功能。
       multiple: true
       options:
-        - 安装 / 升级 / MSI
-        - 启动 / 崩溃 / 托盘
+        - 安装 / 升级 / 自更新 / 卸载
+        - 启动 / 崩溃 / 性能 / 轻量模式
         - Bot · NapCat
         - Bot · SnowLuma
-        - 远端 SSH / 部署
-        - Docker
-        - 组件页（Node / QQ / 框架等）
-        - 设置 / 通知 / Webhook
-        - ncd-watch（远端监控）
-        - 界面 / 主题
+        - 应用端 / 配置 / 模型 / 插件 / 对接
+        - 聊天 / 消息 / 联系人 / 媒体 / 群文件
+        - 截图 / 长截图 / 剪贴板
+        - OneBot 调试台 / 接口 / 事件
+        - 远端主机 / SSH / Windows 远程代理
+        - Docker / 容器 / 镜像 / 网络 / 数据卷
+        - 组件 / 下载 / 运行时依赖 / 任务进度
+        - 内嵌终端 / 文件传输
+        - Bot 迁移 / 数据目录 / 备份恢复
+        - MCP 接入
+        - 诊断助手 / Agent / 模型调用
+        - 监控 / 自动重启 / 通知 / ncd-watch
+        - 网络 / 代理 / 下载线路
+        - 界面 / 主题 / 窗口 / 托盘 / 快捷键
+        - 文档
         - 其他 / 不确定
     validations:
       required: true
@@ -83,19 +90,52 @@ body:
     id: runtime
     attributes:
       label: 运行位置
+      description: 按 Bot、应用端或组件所在位置多选；仅桌面界面问题可选「不适用」。
+      multiple: true
       options:
-        - 仅本机
-        - 仅远端
-        - 本机 + 远端都有
+        - 本机 Windows · 原生
+        - 远端 Linux · 原生
+        - 远端 Linux · Docker
+        - 远端 Windows · 远程代理（ncd-agent）
         - 不适用
+        - 不确定
     validations:
       required: true
+
+  - type: dropdown
+    id: app-framework
+    attributes:
+      label: 涉及的应用端框架（可选）
+      multiple: true
+      options:
+        - NeoBot
+        - Karin
+        - NoneBot2
+        - AstrBot
+        - MaiBot（麦麦）
+        - Koishi
+        - TRSS-Yunzai（云崽）
+        - 其他 / 不确定
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 相关版本与环境（按需填写）
+      description: 只填与问题有关的项，不需要的可留空。跨主机对接请说明 Bot 和应用端各自的位置。
+      placeholder: |
+        协议端 / QQ / 应用端 / 插件 / ncd-watch / 远程代理版本：
+        远端系统与架构、原生或 Docker：
+        对接方式：例如本机 NapCat → 远端 NeoBot，反向 WebSocket
+        下载问题：任务名称、卡住的阶段、代理与下载线路
+        终端问题：打开的目标与 shell；截图问题：显示器数量与缩放比例
+        MCP / 诊断助手问题：客户端、内置模型或外部 Agent、接口类型与模型名（不要填密钥）
 
   - type: textarea
     id: description
     attributes:
       label: 问题描述
-      description: 发生了什么，简要说明
+      description: 说明在哪个页面、执行什么操作后出现什么异常；偶发问题请说明频率。
+      placeholder: "例如：应用端 → NeoBot → 模型，保存后一直显示加载中；重开页面后仍如此。"
     validations:
       required: true
 
@@ -103,7 +143,7 @@ body:
     id: reproduce
     attributes:
       label: 复现步骤
-      description: 按顺序写，别人照着做应能复现
+      description: 从能正常使用的状态开始，写出触发问题的操作。无法稳定复现时，请说明已尝试的步骤。
       placeholder: |
         1. 打开 …
         2. 点 …
@@ -119,25 +159,16 @@ body:
       required: true
 
   - type: textarea
-    id: actual
-    attributes:
-      label: 实际行为
-    validations:
-      required: true
-
-  - type: textarea
     id: logs
     attributes:
-      label: 日志 / 报错
+      label: 日志 / 报错（可选）
       description: |
-        有堆栈、控制台、应用日志请贴出来（可脱敏 token / 密码 / 私聊内容）。
-        没有日志时请说明「没有日志 / 界面直接闪退」等。
+        请贴出问题发生前后的相关片段，保留错误码与时间。安装失败可附任务详情，Bot / 应用端问题可附各自日志。
+        无法获取日志时，请在问题描述中说明；截图放到下一栏。
       render: shell
-    validations:
-      required: true
 
   - type: textarea
     id: extra
     attributes:
-      label: 补充信息
-      description: 截图、相关 Issue / PR、配置片段（脱敏）等
+      label: 截图与补充信息（可选）
+      description: 可拖入截图或录屏，也可补充相关 Issue / PR、脱敏配置片段，以及升级前是否正常。
