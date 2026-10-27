@@ -7,10 +7,13 @@
 use std::time::Duration;
 
 use ncd_component::{ActionCtx, ActionError, DownloadHelper, UvComponent};
-use ncd_host::{Host, HostCommand, HostPath, Locality, Os, shell_single_quote};
+use ncd_host::{Host, HostCommand, HostError, HostPath, Locality, Os, shell_single_quote};
 
 mod step;
 pub(crate) use step::run_uv_logged;
+
+#[cfg(test)]
+mod python_tests;
 
 /// 实例目录下记录「安装时用的 uv」的标记文件
 pub const UV_MARKER_FILE: &str = ".ncd-uv";
@@ -270,18 +273,24 @@ pub async fn ensure_python(
     .await;
     let direct_err = match direct {
         Ok(out) if out.success() => return Ok(()),
-        Ok(out) => out
-            .stderr
-            .trim()
-            .lines()
-            .last()
-            .unwrap_or_default()
-            .to_string(),
+        Ok(out) => out.stderr,
         Err(ActionError::Cancelled) => return Err(ActionError::Cancelled),
         Err(e) => e.to_string(),
     };
+    if recover_python_link_failure(
+        host,
+        uv_cmd(&["python", "find", request]),
+        request,
+        &direct_err,
+        ctx,
+    )
+    .await?
+    {
+        return Ok(());
+    }
+    let direct_err = direct_err.trim().lines().last().unwrap_or_default();
     if host.locality() != Locality::Remote {
-        return Err(python_install_failed(request, &direct_err));
+        return Err(python_install_failed(request, direct_err));
     }
     ctx.warn(format!(
         "主机自己下载解释器失败（{direct_err}），改由桌面端下载后传上去"
@@ -339,9 +348,65 @@ pub async fn ensure_python(
     if out.success() {
         return Ok(());
     }
+    if recover_python_link_failure(
+        host,
+        uv_cmd(&["python", "find", request]),
+        request,
+        &out.stderr,
+        ctx,
+    )
+    .await?
+    {
+        return Ok(());
+    }
     Err(python_install_failed(
         request,
         out.stderr.trim().lines().last().unwrap_or_default(),
+    ))
+}
+
+async fn recover_python_link_failure(
+    host: &dyn Host,
+    find: HostCommand,
+    request: &str,
+    detail: &str,
+    ctx: &ActionCtx,
+) -> Result<bool, ActionError> {
+    if host.os() != Os::Windows || !detail.contains("(os error 448)") {
+        return Ok(false);
+    }
+    if ctx.is_cancelled() {
+        return Err(ActionError::Cancelled);
+    }
+    // uv 在解释器落盘后才创建小版本 junction；链接失败时解释器仍可能可用。
+    ctx.info("Windows 拒绝访问 Python 版本链接（错误 448），正在复查解释器")
+        .await;
+    let found = host
+        .run_to_string(find.timeout(Duration::from_secs(30)))
+        .await;
+    if ctx.is_cancelled() || matches!(&found, Err(HostError::Cancelled)) {
+        return Err(ActionError::Cancelled);
+    }
+    if found.is_ok_and(|out| out.success()) {
+        ctx.warn(format!(
+            "Python {request} 已可用，继续安装（版本链接错误 448）"
+        ))
+        .await;
+        return Ok(true);
+    }
+    let restart = if host.locality() == Locality::Remote {
+        "重启远端安装会话或服务后重试"
+    } else {
+        "从托盘彻底退出 NapCatQQ Desktop 后重新打开并重试"
+    };
+    Err(ActionError::install_step(
+        "python",
+        format!(
+            "装不上 Python {request}：Windows 拒绝访问版本链接（os error 448），复查后仍未找到可用的解释器。\n\
+             请在安装主机的 PowerShell 执行以下命令，将当前用户的 uv Python 安装目录改到本地目录：\n\
+             setx UV_PYTHON_INSTALL_DIR \"$env:LOCALAPPDATA\\uv\\python\"\n\
+             执行后{restart}。若仍失败，请用 Python 官方 Windows 安装器手动安装 Python {request}，勾选加入 PATH 后重试。"
+        ),
     ))
 }
 
