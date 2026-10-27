@@ -302,6 +302,10 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     const refreshing = refreshingId === i.id;
     const busy = pendingId === i.id || installing;
     const installed = isInstalled(i);
+    const canOpenDirectory =
+        (installed || i.origin === 'imported') &&
+        i.host_id === 'local' &&
+        i.placement === 'local_native';
     const running = i.state === 'running';
     const terminalEnabled = useFeatureEnabled('terminal');
     const accent = i.last_error ? 'danger' : running || installing ? 'brand' : 'none';
@@ -470,7 +474,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                             <ActionMotionIcon icon={ScrollText} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
-                    {i.host_id === 'local' && i.placement === 'local_native' && (
+                    {canOpenDirectory && (
                         <FooterIcon label="打开目录" onClick={() => onOpenDirectory(i.id)}>
                             <ActionMotionIcon icon={FolderOpen} size={15} strokeWidth={2.2} />
                         </FooterIcon>
