@@ -1,6 +1,6 @@
 // 诊断助手工作区：会话列表、目标与对话。
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquare, Plus, RefreshCw, Settings2, Trash2, X } from 'lucide-react';
 import type { AssistantProvider } from '../../core/domain/assistant/types';
 import type { AppRoute } from '../../core/domain/ui/route';
@@ -35,6 +35,10 @@ export function AssistantPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
     const [provider, setProvider] = useState<AssistantProvider | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [showSessions, setShowSessions] = useState(false);
+    const sessionsRef = useRef<HTMLElement>(null);
+    const openSessionsRef = useRef<HTMLButtonElement>(null);
+    const closeSessionsRef = useRef<HTMLButtonElement>(null);
+    const sessionsWereOpen = useRef(false);
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [externalOpen, setExternalOpen] = useState(false);
     const info = assistant.infos.find((item) => item.id === assistant.selectedId);
@@ -44,6 +48,25 @@ export function AssistantPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
         (provider !== null && provider !== 'builtin') ||
         (!!info && info.provider !== 'builtin');
     const preferences = useAssistantSettings({ discoverProviders });
+    useEffect(() => {
+        if (showSessions) {
+            sessionsWereOpen.current = true;
+            closeSessionsRef.current?.focus();
+        } else if (sessionsWereOpen.current) {
+            sessionsWereOpen.current = false;
+            openSessionsRef.current?.focus();
+        }
+    }, [showSessions]);
+    useEffect(() => {
+        if (!window.matchMedia) return;
+        const desktop = window.matchMedia('(min-width: 768px)');
+        if (!desktop?.addEventListener) return;
+        const onChange = () => {
+            if (desktop.matches) setShowSessions(false);
+        };
+        desktop.addEventListener('change', onChange);
+        return () => desktop.removeEventListener('change', onChange);
+    }, []);
     useEffect(() => {
         if (
             provider === null &&
@@ -93,98 +116,84 @@ export function AssistantPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
                 : String(queryError)
             : null);
     return (
-        <div className="relative flex min-h-0 flex-1 flex-col gap-3">
-            <div className="flex shrink-0 items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        className="md:hidden"
-                        aria-label="显示诊断会话列表"
-                        onClick={() => setShowSessions(!showSessions)}
-                    >
-                        <MessageSquare size={17} />
-                    </Button>
-                    <h1 className="truncate font-display text-xl font-semibold tracking-tight text-text">
-                        诊断助手
-                    </h1>
-                    {assistant.preview && <Badge tone="warning">界面预览</Badge>}
-                </div>
-                <div className="flex shrink-0 gap-1">
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label="刷新诊断会话"
-                        disabled={assistant.loading}
-                        onClick={() => {
-                            void assistant.actions.refresh();
-                            void preferences.modelStatus.refetch();
-                            if (discoverProviders) void preferences.providers.refetch();
-                        }}
-                    >
-                        <RefreshCw
-                            size={16}
-                            className={assistant.loading ? 'animate-spin' : undefined}
-                        />
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label="助手设置"
-                        onClick={() => setSettingsOpen(true)}
-                    >
-                        <Settings2 size={15} />
-                        <span className="hidden sm:inline">助手设置</span>
-                    </Button>
-                </div>
-            </div>
-            {assistant.preview && (
-                <p className="shrink-0 text-xs text-text-tertiary">
-                    当前为浏览器界面演示，不会调用真实模型或操作 Bot。
-                </p>
-            )}
-            {(error || assistant.notices.length > 0) && (
-                <div className="shrink-0 space-y-2 rounded-lg border border-warning/20 bg-warning-soft/50 px-3 py-2 text-xs leading-5">
-                    {error && (
-                        <div className="flex items-start gap-3 text-danger">
-                            <p role="alert" className="min-w-0 flex-1 break-words">
-                                {error}
-                            </p>
-                            <Button
-                                size="sm"
-                                onClick={() => {
-                                    void assistant.actions.refresh();
-                                    void botQuery.refetch();
-                                    void preferences.settings.refetch();
-                                    void preferences.modelStatus.refetch();
-                                    if (discoverProviders) void preferences.providers.refetch();
-                                }}
-                            >
-                                重试
-                            </Button>
-                        </div>
-                    )}
-                    {assistant.notices.map((notice, index) => (
-                        <p key={index} className="break-words text-text-secondary">
-                            {notice}
-                        </p>
-                    ))}
-                </div>
-            )}
-            <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-card">
+        <div
+            className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+            style={{ marginBottom: 'var(--terminal-dock-inset, 0px)' }}
+        >
+            <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
                 <aside
+                    ref={sessionsRef}
+                    id="assistant-sessions"
                     aria-label="诊断会话列表"
+                    onKeyDown={(event) => {
+                        if (!showSessions) return;
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setShowSessions(false);
+                        } else if (event.key === 'Tab') {
+                            const buttons = Array.from(
+                                sessionsRef.current?.querySelectorAll<HTMLButtonElement>(
+                                    'button:not(:disabled)',
+                                ) ?? [],
+                            ).filter((button) => button.getClientRects().length > 0);
+                            const first = buttons[0];
+                            const last = buttons[buttons.length - 1];
+                            if (event.shiftKey && document.activeElement === first && last) {
+                                event.preventDefault();
+                                last.focus();
+                            } else if (
+                                !event.shiftKey &&
+                                document.activeElement === last &&
+                                first
+                            ) {
+                                event.preventDefault();
+                                first.focus();
+                            }
+                        }
+                    }}
                     className={cn(
-                        'absolute inset-0 z-20 flex-col border-r border-border-subtle bg-surface md:static md:z-auto md:w-56 md:shrink-0 lg:w-64',
-                        showSessions ? 'flex' : 'hidden md:flex',
+                        'absolute inset-0 z-20 flex-col bg-canvas px-3 pb-3 pt-1 md:static md:z-auto md:flex md:w-[260px] md:shrink-0 md:bg-transparent',
+                        showSessions ? 'flex' : 'hidden',
                     )}
                 >
-                    <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-3">
+                    <div className="flex h-10 shrink-0 items-center gap-1 px-1">
+                        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-text">
+                            诊断助手
+                        </h1>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            aria-label="刷新诊断会话"
+                            disabled={assistant.loading}
+                            onClick={() => {
+                                void assistant.actions.refresh();
+                                void preferences.modelStatus.refetch();
+                                if (discoverProviders) void preferences.providers.refetch();
+                            }}
+                        >
+                            <RefreshCw
+                                size={15}
+                                className={assistant.loading ? 'animate-spin' : undefined}
+                            />
+                        </Button>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            aria-label="助手设置"
+                            onClick={() => setSettingsOpen(true)}
+                        >
+                            <Settings2 size={15} />
+                        </Button>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 pb-3 pt-1">
                         <Button size="sm" className="flex-1" onClick={newSession}>
-                            <Plus size={14} />
+                            <Plus size={15} />
                             新建会话
                         </Button>
                         <Button
+                            ref={closeSessionsRef}
                             size="icon"
                             variant="ghost"
                             className="h-7 w-7 md:hidden"
@@ -194,8 +203,12 @@ export function AssistantPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
                             <X size={15} />
                         </Button>
                     </div>
+                    <div className="flex shrink-0 items-center justify-between px-5 pb-2 pt-1 text-2xs font-medium text-text-tertiary">
+                        <span>诊断记录</span>
+                        {assistant.infos.length > 0 && <span>{assistant.infos.length}</span>}
+                    </div>
                     <nav
-                        className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2"
+                        className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2.5 pb-3"
                         aria-label="选择会话"
                     >
                         {assistant.infos.length === 0 && (
@@ -215,35 +228,110 @@ export function AssistantPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
                                 className={cn(
                                     'w-full space-y-2 rounded-lg px-3 py-3 text-left transition-colors focus-visible:outline-brand',
                                     item.id === assistant.selectedId
-                                        ? 'bg-brand-soft'
-                                        : 'hover:bg-inset',
+                                        ? 'bg-inset'
+                                        : 'hover:bg-inset/60',
                                 )}
                             >
-                                <div className="truncate text-sm font-medium text-text">
-                                    {item.title || '新诊断'}
-                                </div>
-                                <div className="flex min-w-0 items-center gap-2 text-2xs text-text-tertiary">
-                                    <span className="truncate">{item.botName}</span>
-                                    <span className="ml-auto shrink-0">
-                                        {assistantStateLabel[item.state]}
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">
+                                        {item.title || '新诊断'}
                                     </span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2 text-2xs text-text-tertiary">
-                                    <span className="truncate">{providerLabel(item.provider)}</span>
-                                    <time dateTime={new Date(item.updatedAtMs).toISOString()}>
+                                    <time
+                                        className="shrink-0 text-2xs text-text-tertiary"
+                                        dateTime={new Date(item.updatedAtMs).toISOString()}
+                                    >
                                         {new Date(item.updatedAtMs).toLocaleDateString('zh-CN', {
                                             month: 'numeric',
                                             day: 'numeric',
                                         })}
                                     </time>
                                 </div>
+                                <div className="flex min-w-0 items-center gap-2 text-2xs text-text-tertiary">
+                                    <span className="min-w-0 flex-1 truncate">
+                                        {item.botName} · {providerLabel(item.provider)}
+                                    </span>
+                                    <span className="shrink-0">
+                                        {assistantStateLabel[item.state]}
+                                    </span>
+                                </div>
                             </button>
                         ))}
                     </nav>
+                    {assistant.preview && (
+                        <p className="border-t border-border-subtle px-1 pt-3 text-2xs leading-5 text-text-tertiary">
+                            当前为浏览器界面演示，不会调用真实模型或操作 Bot。
+                        </p>
+                    )}
                 </aside>
-                <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <section
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-tl-md border-l border-t border-border-subtle bg-surface"
+                    {...(showSessions ? { inert: '' } : {})}
+                >
+                    {!info && (
+                        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border-subtle px-3 md:hidden">
+                            <Button
+                                ref={openSessionsRef}
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                aria-label="显示诊断会话列表"
+                                aria-expanded={showSessions}
+                                aria-controls="assistant-sessions"
+                                onClick={() => setShowSessions(true)}
+                            >
+                                <MessageSquare size={17} />
+                            </Button>
+                            <span className="text-sm font-medium text-text">诊断助手</span>
+                        </div>
+                    )}
+                    {assistant.preview && (
+                        <p className="border-b border-border-subtle px-4 py-2 text-2xs text-text-tertiary md:hidden">
+                            浏览器预览，不会调用真实模型或操作 Bot。
+                        </p>
+                    )}
+                    {(error || assistant.notices.length > 0) && (
+                        <div className="shrink-0 space-y-2 border-b border-warning/20 bg-warning-soft/50 px-4 py-2 text-xs leading-5">
+                            {error && (
+                                <div className="flex items-start gap-3 text-danger">
+                                    <p role="alert" className="min-w-0 flex-1 break-words">
+                                        {error}
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        onClick={() => {
+                                            void assistant.actions.refresh();
+                                            void botQuery.refetch();
+                                            void preferences.settings.refetch();
+                                            void preferences.modelStatus.refetch();
+                                            if (discoverProviders)
+                                                void preferences.providers.refetch();
+                                        }}
+                                    >
+                                        重试
+                                    </Button>
+                                </div>
+                            )}
+                            {assistant.notices.map((notice, index) => (
+                                <p key={index} className="break-words text-text-secondary">
+                                    {notice}
+                                </p>
+                            ))}
+                        </div>
+                    )}
                     {info && (
-                        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4 py-3 sm:px-6">
+                        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4 py-3.5 sm:px-6">
+                            <Button
+                                ref={openSessionsRef}
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 shrink-0 md:hidden"
+                                aria-label="显示诊断会话列表"
+                                aria-expanded={showSessions}
+                                aria-controls="assistant-sessions"
+                                onClick={() => setShowSessions(true)}
+                            >
+                                <MessageSquare size={17} />
+                            </Button>
                             <div className="min-w-0 space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h2 className="truncate text-sm font-semibold text-text">

@@ -33,26 +33,28 @@ export function BuiltinModelFields({
     return (
         <div className="space-y-4">
             <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-text">内置助手</h3>
+                <h3 className="text-sm font-medium text-text">内置助手</h3>
                 <Badge tone={status?.configured ? 'success' : 'neutral'}>
                     {status?.configured ? '已配置' : '待配置'}
                 </Badge>
             </div>
-            <TextField
-                label="服务地址"
-                value={value.baseUrl}
-                placeholder="https://…/v1"
-                disabled={disabled}
-                error={errors.baseUrl}
-                onValueChange={(baseUrl) => onChange({ baseUrl })}
-            />
-            <TextField
-                label="模型名称"
-                value={value.model}
-                placeholder="填写服务提供方的模型 ID"
-                disabled={disabled}
-                onValueChange={(model) => onChange({ model })}
-            />
+            <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                    label="服务地址"
+                    value={value.baseUrl}
+                    placeholder="https://…/v1"
+                    disabled={disabled}
+                    error={errors.baseUrl}
+                    onValueChange={(baseUrl) => onChange({ baseUrl })}
+                />
+                <TextField
+                    label="模型名称"
+                    value={value.model}
+                    placeholder="填写服务提供方的模型 ID"
+                    disabled={disabled}
+                    onValueChange={(model) => onChange({ model })}
+                />
+            </div>
             <ModelKeyField
                 key={savedBaseUrl}
                 savedBaseUrl={savedBaseUrl}
@@ -64,11 +66,14 @@ export function BuiltinModelFields({
             />
             <button
                 type="button"
-                className="flex items-center gap-2 text-xs text-text-secondary hover:text-text focus-visible:outline-brand"
+                className="inline-flex items-center gap-2 rounded-xs py-1 text-xs text-text-secondary transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 aria-expanded={limitsOpen}
                 onClick={() => setLimitsOpen(!limitsOpen)}
             >
-                <ChevronDown size={13} className={limitsOpen ? 'rotate-180' : ''} />
+                <ChevronDown
+                    size={13}
+                    className={`transition-transform ${limitsOpen ? 'rotate-180' : ''}`}
+                />
                 处理限制
             </button>
             <ExpandPresence visible={limitsOpen} keepMounted>
