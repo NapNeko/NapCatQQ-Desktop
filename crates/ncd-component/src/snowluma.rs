@@ -332,7 +332,19 @@ impl SnowLumaComponent {
         if !host.exists(&entry).await? {
             return Ok(None);
         }
-        if require_fingerprint {
+        let pkg = dir.join("package.json");
+        let package_read = host.read_file(&pkg).await;
+        let package = package_read
+            .as_ref()
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(bytes).ok());
+        let has_package_identity = package
+            .as_ref()
+            .and_then(|json| json.get("name"))
+            .and_then(|name| name.as_str())
+            == Some("@snowluma/runtime");
+        // 首次启动才生成 config；发布包名称即可识别新安装，旧包仍兼容配置指纹。
+        if require_fingerprint && !has_package_identity {
             let has_webui = host
                 .exists(&dir.join("config").join("webui.json"))
                 .await
@@ -351,21 +363,22 @@ impl SnowLumaComponent {
                 return Ok(None);
             }
         }
-
-        let pkg = dir.join("package.json");
-        match host.read_file(&pkg).await {
-            Ok(bytes) => {
-                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                    if let Some(version) = json.get("version").and_then(|v| v.as_str()) {
-                        return Ok(Some(DetectedVersion {
-                            version: version.to_string(),
-                            source: format!("{pkg}"),
-                        }));
-                    }
-                }
+        if let Err(error) = package_read {
+            match error {
+                HostError::PathNotFound { .. } => {}
+                error => return Err(ActionError::Host(error)),
             }
-            Err(HostError::PathNotFound { .. }) => {}
-            Err(error) => return Err(ActionError::Host(error)),
+        }
+
+        if let Some(version) = package
+            .as_ref()
+            .and_then(|json| json.get("version"))
+            .and_then(|version| version.as_str())
+        {
+            return Ok(Some(DetectedVersion {
+                version: version.to_string(),
+                source: format!("{pkg}"),
+            }));
         }
 
         Ok(Some(DetectedVersion {
@@ -1141,6 +1154,238 @@ mod tests {
         let c = comp().with_extra_detect_dir(HostPath::from_posix("/opt/snowluma"));
         assert_eq!(c.extra_detect_dirs.len(), 1);
         assert_eq!(c.extra_detect_dirs[0].as_posix(), "/opt/snowluma");
+    }
+
+    mod linux_detection {
+        use super::*;
+        use bytes::Bytes;
+        use ncd_host::{
+            Arch, ArchiveKind, CommandOutput, DirEntry, HostProcess, HostShell, shell::BashShell,
+        };
+        use std::collections::HashMap;
+        use std::path::Path;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct DetectHost {
+            files: HashMap<&'static str, &'static [u8]>,
+            denied_package: Option<&'static str>,
+            package_reads: AtomicUsize,
+            config_checks: AtomicUsize,
+        }
+
+        impl DetectHost {
+            fn new(files: &[(&'static str, &'static [u8])]) -> Self {
+                Self {
+                    files: files.iter().copied().collect(),
+                    denied_package: None,
+                    package_reads: AtomicUsize::new(0),
+                    config_checks: AtomicUsize::new(0),
+                }
+            }
+        }
+
+        #[async_trait]
+        impl Host for DetectHost {
+            fn os(&self) -> Os {
+                Os::Linux
+            }
+            fn arch(&self) -> Arch {
+                Arch::X86_64
+            }
+            fn locality(&self) -> Locality {
+                Locality::Remote
+            }
+            fn id(&self) -> &str {
+                "snowluma-detect-test"
+            }
+            fn shell(&self) -> &dyn HostShell {
+                &BashShell
+            }
+            async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
+                if path.as_posix().contains("/config/") {
+                    self.config_checks.fetch_add(1, Ordering::SeqCst);
+                }
+                Ok(self.files.contains_key(path.as_posix()))
+            }
+            async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+                if path.as_posix().ends_with("/package.json") {
+                    self.package_reads.fetch_add(1, Ordering::SeqCst);
+                }
+                if self.denied_package == Some(path.as_posix()) {
+                    return Err(HostError::PermissionDenied {
+                        path: path.clone(),
+                        operation: "read",
+                    });
+                }
+                self.files
+                    .get(path.as_posix())
+                    .map(|contents| Bytes::from_static(contents))
+                    .ok_or_else(|| HostError::PathNotFound { path: path.clone() })
+            }
+            async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn create_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {
+                unreachable!()
+            }
+            async fn remove_file(&self, _: &HostPath) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn remove_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn upload(&self, _: &Path, _: &HostPath) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn download(&self, _: &HostPath, _: &Path) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn extract_archive(
+                &self,
+                _: &HostPath,
+                _: &HostPath,
+                _: ArchiveKind,
+            ) -> Result<(), HostError> {
+                unreachable!()
+            }
+            async fn run_to_string(&self, _: HostCommand) -> Result<CommandOutput, HostError> {
+                unreachable!()
+            }
+            async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+                unreachable!()
+            }
+        }
+
+        fn component() -> SnowLumaComponent {
+            comp().with_extra_detect_dir(HostPath::from_posix("/opt/snowluma"))
+        }
+
+        #[tokio::test]
+        async fn extra_directory_detects_fresh_package_without_runtime_config() {
+            let host = DetectHost::new(&[
+                ("/opt/snowluma/index.mjs", b"entry"),
+                (
+                    "/opt/snowluma/package.json",
+                    br#"{"name":"@snowluma/runtime","version":"2.2.5"}"#,
+                ),
+            ]);
+            let detected = component().detect(&host).await.unwrap().unwrap();
+            assert_eq!(detected.version, "2.2.5");
+            assert_eq!(detected.source, "/opt/snowluma/package.json");
+            assert_eq!(host.package_reads.load(Ordering::SeqCst), 1);
+            assert_eq!(host.config_checks.load(Ordering::SeqCst), 0);
+        }
+
+        #[tokio::test]
+        async fn extra_directory_requires_entry_even_with_package_and_config() {
+            let host = DetectHost::new(&[
+                (
+                    "/opt/snowluma/package.json",
+                    br#"{"name":"@snowluma/runtime","version":"2.2.5"}"#,
+                ),
+                ("/opt/snowluma/config/webui.json", b"{}"),
+            ]);
+            assert!(component().detect(&host).await.unwrap().is_none());
+            assert_eq!(host.package_reads.load(Ordering::SeqCst), 0);
+        }
+
+        #[tokio::test]
+        async fn extra_directory_rejects_unrelated_and_invalid_packages_without_config() {
+            for package in [
+                br#"{"name":"other-runtime","version":"2.2.5"}"#.as_slice(),
+                br#"{"name":"@snowluma/runtime-tools","version":"2.2.5"}"#.as_slice(),
+                br#"{"description":"@snowluma/runtime"}"#.as_slice(),
+                b"invalid-json".as_slice(),
+                b"{}".as_slice(),
+            ] {
+                let host = DetectHost::new(&[
+                    ("/opt/snowluma/index.mjs", b"entry"),
+                    ("/opt/snowluma/package.json", package),
+                ]);
+                assert!(component().detect(&host).await.unwrap().is_none());
+            }
+            let host = DetectHost::new(&[("/opt/snowluma/index.mjs", b"entry")]);
+            assert!(component().detect(&host).await.unwrap().is_none());
+        }
+
+        #[tokio::test]
+        async fn extra_directory_keeps_version_fallback_for_identified_package() {
+            let host = DetectHost::new(&[
+                ("/opt/snowluma/index.mjs", b"entry"),
+                (
+                    "/opt/snowluma/package.json",
+                    br#"{"name":"@snowluma/runtime"}"#,
+                ),
+            ]);
+            let detected = component().detect(&host).await.unwrap().unwrap();
+            assert_eq!(detected.version, "installed");
+            assert_eq!(detected.source, "/opt/snowluma/index.mjs");
+        }
+
+        #[tokio::test]
+        async fn extra_directory_skips_unidentified_unreadable_package_before_valid_candidate() {
+            let mut host = DetectHost::new(&[
+                ("/custom/unrelated/index.mjs", b"entry"),
+                ("/opt/snowluma/index.mjs", b"entry"),
+                (
+                    "/opt/snowluma/package.json",
+                    br#"{"name":"@snowluma/runtime","version":"2.2.5"}"#,
+                ),
+            ]);
+            host.denied_package = Some("/custom/unrelated/package.json");
+            let component = comp()
+                .with_extra_detect_dir(HostPath::from_posix("/custom/unrelated"))
+                .with_extra_detect_dir(HostPath::from_posix("/opt/snowluma"));
+            assert_eq!(
+                component.detect(&host).await.unwrap().unwrap().source,
+                "/opt/snowluma/package.json"
+            );
+        }
+
+        #[tokio::test]
+        async fn extra_directory_propagates_package_error_after_legacy_fingerprint_matches() {
+            let mut host = DetectHost::new(&[
+                ("/opt/snowluma/index.mjs", b"entry"),
+                ("/opt/snowluma/config/webui.json", b"{}"),
+            ]);
+            host.denied_package = Some("/opt/snowluma/package.json");
+            assert!(matches!(
+                component().detect(&host).await,
+                Err(ActionError::Host(HostError::PermissionDenied { .. }))
+            ));
+        }
+
+        #[tokio::test]
+        async fn extra_directory_accepts_legacy_webui_config_without_package() {
+            let host = DetectHost::new(&[
+                ("/opt/snowluma/index.mjs", b"entry"),
+                ("/opt/snowluma/config/webui.json", b"{}"),
+            ]);
+            assert_eq!(
+                component().detect(&host).await.unwrap().unwrap().version,
+                "installed"
+            );
+        }
+
+        #[tokio::test]
+        async fn extra_directory_accepts_legacy_runtime_config_and_reads_package_once() {
+            let host = DetectHost::new(&[
+                ("/opt/snowluma/index.mjs", b"entry"),
+                ("/opt/snowluma/package.json", br#"{"version":"1.7.5"}"#),
+                (
+                    "/opt/snowluma/config/runtime.json",
+                    br#"{"webuiPort":15123}"#,
+                ),
+            ]);
+            assert_eq!(
+                component().detect(&host).await.unwrap().unwrap().version,
+                "1.7.5"
+            );
+            assert_eq!(host.package_reads.load(Ordering::SeqCst), 1);
+        }
     }
 
     #[test]

@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use base64::Engine as _;
 use ncd_domain::{
     BackendType, DeploymentType, DiscoveredRemoteBot, DiscoveredRemoteBotSource,
     REMOTE_INVENTORY_VERSION, RemoteInventory, RemoteInventoryItem, RemoteInventoryKind,
@@ -26,19 +27,15 @@ use crate::components::action_policy::{RemoteHostProbe, RemoteLayout};
 #[path = "inventory_windows.rs"]
 mod windows;
 
+#[cfg(test)]
+#[path = "inventory_snowluma_script_tests.rs"]
+mod snowluma_script_tests;
+
 /// 探测命令超时
 pub const INVENTORY_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 /// 组件页打开时库存超过此时长则重探
 pub const INVENTORY_STALE_AFTER: Duration = Duration::from_secs(6 * 3600);
-
-/// SnowLuma 指纹：index.mjs 且（runtime.json 含 webuiPort 或存在 webui.json）
-pub fn snowluma_fingerprint_ok(
-    has_index_mjs: bool,
-    runtime_json_has_webui_port: bool,
-    has_webui_json: bool,
-) -> bool {
-    has_index_mjs && (runtime_json_has_webui_port || has_webui_json)
-}
+const SNOWLUMA_MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
 pub fn layout_from_selected(selected: &RemoteSelectedPaths) -> RemoteLayout {
     if selected.needs_sudo {
@@ -224,6 +221,7 @@ fn parse_hit_line(rest: &str) -> Option<RemoteInventoryItem> {
     let mut runtime_json = None;
     let mut node_bin = None;
     let mut docker_name = None;
+    let mut package_json_base64 = None;
 
     for token in rest.split_whitespace() {
         let Some((k, v)) = token.split_once('=') else {
@@ -241,11 +239,15 @@ fn parse_hit_line(rest: &str) -> Option<RemoteInventoryItem> {
             "runtimeJson" => runtime_json = Some(normalize_posix_path(v)),
             "nodeBin" => node_bin = Some(normalize_posix_path(v)),
             "dockerName" => docker_name = Some(v.to_string()),
+            "packageJsonBase64" => package_json_base64 = Some(v),
             _ => {}
         }
     }
     let kind = kind?;
     let source = source?;
+    if package_json_base64.is_some_and(|value| !snowluma_package_marker_valid(value)) {
+        return None;
+    }
     if root.is_empty() {
         return None;
     }
@@ -262,6 +264,23 @@ fn parse_hit_line(rest: &str) -> Option<RemoteInventoryItem> {
         node_bin,
         docker_name,
     })
+}
+
+fn snowluma_package_marker_valid(encoded: &str) -> bool {
+    #[derive(serde::Deserialize)]
+    struct PackageIdentity {
+        name: String,
+    }
+
+    if encoded.len() > SNOWLUMA_MANIFEST_MAX_BYTES.div_ceil(3) * 4 {
+        return false;
+    }
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded) else {
+        return false;
+    };
+    bytes.len() <= SNOWLUMA_MANIFEST_MAX_BYTES
+        && serde_json::from_slice::<PackageIdentity>(&bytes)
+            .is_ok_and(|package| package.name == "@snowluma/runtime")
 }
 
 fn parse_kind(v: &str) -> Option<RemoteInventoryKind> {
@@ -493,17 +512,27 @@ emit_qq() {
 
 emit_sl() {
   dir="$1"; src="$2"
-  if [ -f "$dir/index.mjs" ] && { [ -f "$dir/config/webui.json" ] || grep -q webuiPort "$dir/config/runtime.json" 2>/dev/null; }; then
-    rt=""
-    [ -f "$dir/config/runtime.json" ] && rt=" runtimeJson=$dir/config/runtime.json"
-    echo "HIT kind=snowluma source=$src verified=1 root=$dir indexMjs=$dir/index.mjs$rt"
-    if [ -f "$dir/node" ] && [ -x "$dir/node" ]; then
-      emit_node "$dir/node" desktopOwned
-    elif [ -x "$dir/node/bin/node" ]; then
-      emit_node "$dir/node/bin/node" desktopOwned
-    fi
-    emit_sl_bots "$dir"
+  [ -f "$dir/index.mjs" ] || return 0
+  legacy=0; package=""
+  if [ -f "$dir/config/webui.json" ] || grep -q webuiPort "$dir/config/runtime.json" 2>/dev/null; then
+    legacy=1
+  elif [ -f "$dir/package.json" ]; then
+    # Rust validates the bounded manifest before selecting this directory or its Node.
+    manifest=$(head -c 65537 "$dir/package.json" | base64 | tr -d '\r\n')
+    [ -n "$manifest" ] || return 0
+    package=" packageJsonBase64=$manifest"
+  else
+    return 0
   fi
+  rt=""
+  [ -f "$dir/config/runtime.json" ] && rt=" runtimeJson=$dir/config/runtime.json"
+  echo "HIT kind=snowluma source=$src verified=1 root=$dir indexMjs=$dir/index.mjs$rt$package"
+  if [ -f "$dir/node" ] && [ -x "$dir/node" ]; then
+    emit_node "$dir/node" desktopOwned "$package"
+  elif [ -x "$dir/node/bin/node" ]; then
+    emit_node "$dir/node/bin/node" desktopOwned "$package"
+  fi
+  [ "$legacy" = 1 ] && emit_sl_bots "$dir"
 }
 
 emit_nc_bots() {
@@ -562,7 +591,7 @@ emit_sl_bots() {
 emit_node() {
   bin="$1"; src="$2"
   if [ -x "$bin" ]; then
-    echo "HIT kind=nodejs source=$src verified=1 root=$bin nodeBin=$bin"
+    echo "HIT kind=nodejs source=$src verified=1 root=$bin nodeBin=$bin${3:-}"
   fi
 }
 
@@ -1057,14 +1086,6 @@ mod tests {
             qq_install_base_from_qq_bin("/home/u/Napcat/opt/QQ/qq").as_deref(),
             Some("/home/u/Napcat")
         );
-    }
-
-    #[test]
-    fn snowluma_fingerprint_requires_config() {
-        assert!(!snowluma_fingerprint_ok(true, false, false));
-        assert!(snowluma_fingerprint_ok(true, true, false));
-        assert!(snowluma_fingerprint_ok(true, false, true));
-        assert!(!snowluma_fingerprint_ok(false, true, true));
     }
 
     #[test]
