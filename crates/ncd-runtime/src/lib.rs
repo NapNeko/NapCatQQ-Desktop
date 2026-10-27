@@ -1,5 +1,4 @@
 pub mod app_framework;
-pub mod assistant;
 pub mod bot_actor;
 pub mod bot_manager;
 pub mod chat;

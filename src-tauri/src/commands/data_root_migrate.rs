@@ -129,7 +129,6 @@ pub async fn start_migrate_data_root(
 
     state.migrate_gate.in_progress.store(true, Ordering::SeqCst);
     state.migrate_gate.cancel.store(false, Ordering::SeqCst);
-    state.assistant.suspend_all().await;
 
     emit_progress(
         &app,

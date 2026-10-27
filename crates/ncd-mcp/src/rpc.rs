@@ -21,7 +21,7 @@ const INVALID_PARAMS: i64 = -32602;
 const TOOL_TIMEOUT: Duration = Duration::from_secs(75);
 const MAX_REQUEST_ID_BYTES: usize = 256;
 
-pub(crate) fn error_frame(id: Value, code: i64, message: &str) -> Value {
+fn error_frame(id: Value, code: i64, message: &str) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -29,7 +29,7 @@ pub(crate) fn error_frame(id: Value, code: i64, message: &str) -> Value {
     })
 }
 
-pub(crate) fn result_frame(id: Value, result: Value) -> Value {
+fn result_frame(id: Value, result: Value) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -38,7 +38,7 @@ pub(crate) fn result_frame(id: Value, result: Value) -> Value {
 }
 
 /// 工具结果包装：text 里放 JSON 字符串（老客户端只看 content），structuredContent 给新客户端
-pub(crate) fn tool_ok_frame(id: Value, value: Value) -> Value {
+fn tool_ok_frame(id: Value, value: Value) -> Value {
     let value = crate::security::sanitize_output(value);
     let value = if value.is_object() {
         value
@@ -55,7 +55,7 @@ pub(crate) fn tool_ok_frame(id: Value, value: Value) -> Value {
     )
 }
 
-pub(crate) fn tool_err_frame(id: Value, error: ToolError) -> Value {
+fn tool_err_frame(id: Value, error: ToolError) -> Value {
     let mut result = json!({
         "content": [{ "type": "text", "text": crate::security::sanitize_text(&error.message) }],
         "isError": true,
@@ -173,7 +173,7 @@ pub(crate) async fn handle_body(ctx: &ServerCtx, body: &Value) -> Option<Value> 
     handle_frame(ctx, body).await
 }
 
-pub(crate) fn initialize(id: Value, params: &Value) -> Value {
+fn initialize(id: Value, params: &Value) -> Value {
     let Some(requested) = params.get("protocolVersion").and_then(Value::as_str) else {
         return error_frame(id, INVALID_PARAMS, "initialize 缺少 protocolVersion");
     };

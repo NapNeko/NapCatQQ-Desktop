@@ -94,7 +94,6 @@ pub struct AppState {
     pub(crate) chat: Arc<ncd_runtime::chat::ChatManager>,
     /// 调试台对外（本机 agent）的 MCP 服务；默认关，随设置的 `mcp.enabled` 起停
     pub(crate) mcp: Arc<ncd_mcp::McpServer>,
-    pub(crate) assistant: Arc<ncd_runtime::assistant::AssistantManager>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -440,33 +439,17 @@ pub fn run() {
     let app_manager_host_recovery = Arc::clone(&app_manager);
     let app_manager_migration_monitor = Arc::clone(&app_manager);
 
-    let mcp_inspection = Arc::new(ncd_mcp::McpInspection::new(
-        Arc::clone(&bot_manager),
-        Arc::clone(&app_manager),
-        Arc::clone(&server_manager),
-        Arc::clone(&components),
-    ));
-    let migrate_gate = Arc::new(commands::data_root_migrate::DataRootMigrateGate::default());
-    let assistant_root = data_root.clone();
-    let assistant_migrate_gate = Arc::clone(&migrate_gate);
-    let assistant_host = Arc::new(
-        ncd_mcp::AssistantMcpHost::new(Arc::clone(&onebot_debug), Arc::clone(&mcp_inspection))
-            .with_operation_gate(Arc::new(move || {
-                assistant_migrate_gate.ensure_idle()?;
-                desktop_consent::ensure_accepted(&assistant_root)
-                    .map_err(|error| error.to_command_string())
-            })),
-    );
-    let assistant = Arc::new(
-        ncd_runtime::assistant::AssistantManager::new(data_root.clone(), assistant_host)
-            .with_secret_store(Arc::new(ncd_runtime::SystemSecretStore)),
-    );
     let mcp = Arc::new(
         ncd_mcp::McpServer::new(
             Arc::clone(&onebot_debug),
             Arc::new(ncd_runtime::SystemSecretStore),
         )
-        .with_inspection(mcp_inspection),
+        .with_inspection(Arc::new(ncd_mcp::McpInspection::new(
+            Arc::clone(&bot_manager),
+            Arc::clone(&app_manager),
+            Arc::clone(&server_manager),
+            Arc::clone(&components),
+        ))),
     );
     tauri::async_runtime::block_on(commands::mcp::apply_mcp_settings(
         &mcp,
@@ -530,13 +513,12 @@ pub fn run() {
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(Mutex::new(None)),
             metrics_collector: metrics_collector.clone(),
-            migrate_gate,
+            migrate_gate: Arc::new(commands::data_root_migrate::DataRootMigrateGate::default()),
             app_manager: app_manager.clone(),
             terminals,
             onebot_debug,
             chat,
             mcp,
-            assistant,
         })
         // 页面开始（重新）加载时，旧页面的调试台事件订阅已经没人收了，但 Channel 还能 send 成功、探不出来，
         // 在这里按窗口摘掉，否则接收器一直算「有人在看」，空闲停不下来
@@ -554,9 +536,6 @@ pub fn run() {
                 state
                     .chat
                     .page_loading(webview.label(), std::time::Instant::now());
-                if webview.label() == "main" {
-                    state.assistant.page_loading();
-                }
                 let chat = Arc::clone(&state.chat);
                 let page = webview.label().to_owned();
                 let before = std::time::Instant::now();
@@ -933,23 +912,6 @@ pub fn run() {
             commands::mcp::mcp_status,
             commands::mcp::mcp_connection_config,
             commands::mcp::mcp_rotate_token,
-            commands::assistant::assistant_settings,
-            commands::assistant::assistant_save_settings,
-            commands::assistant::assistant_model_status,
-            commands::assistant::assistant_set_api_key,
-            commands::assistant::assistant_clear_api_key,
-            commands::assistant::assistant_providers,
-            commands::assistant::assistant_list_sessions,
-            commands::assistant::assistant_get_session,
-            commands::assistant::assistant_create_session,
-            commands::assistant::assistant_send_message,
-            commands::assistant::assistant_cancel_session,
-            commands::assistant::assistant_close_session,
-            commands::assistant::assistant_delete_session,
-            commands::assistant::assistant_respond_permission,
-            commands::assistant::assistant_respond_question,
-            commands::assistant::assistant_subscribe,
-            commands::assistant::assistant_login_plan,
             commands::system_metrics::get_system_resource_snapshot,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,

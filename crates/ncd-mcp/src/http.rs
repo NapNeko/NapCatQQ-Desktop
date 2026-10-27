@@ -166,13 +166,13 @@ fn tokens_equal(provided: &str, expected: &str) -> bool {
     bool::from(a.ct_eq(b))
 }
 
-pub(crate) fn single_header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+fn single_header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     let mut values = headers.get_all(name).iter();
     let first = values.next()?.to_str().ok()?;
     values.next().is_none().then_some(first)
 }
 
-pub(crate) fn authorized(headers: &HeaderMap, expected: &str) -> bool {
+fn authorized(headers: &HeaderMap, expected: &str) -> bool {
     let Some(value) = single_header(headers, header::AUTHORIZATION.as_str()) else {
         return false;
     };
@@ -181,7 +181,7 @@ pub(crate) fn authorized(headers: &HeaderMap, expected: &str) -> bool {
     scheme.eq_ignore_ascii_case("bearer") && tokens_equal(provided, expected)
 }
 
-pub(crate) fn authority_allowed(value: &str, port: u16) -> bool {
+fn authority_allowed(value: &str, port: u16) -> bool {
     let Ok(authority) = value.parse::<Authority>() else {
         return false;
     };
@@ -195,12 +195,12 @@ pub(crate) fn authority_allowed(value: &str, port: u16) -> bool {
         && requested_port == Some(port)
 }
 
-pub(crate) fn host_allowed(headers: &HeaderMap, port: u16) -> bool {
+fn host_allowed(headers: &HeaderMap, port: u16) -> bool {
     single_header(headers, header::HOST.as_str()).is_some_and(|host| authority_allowed(host, port))
 }
 
 /// 无 Origin 的原生客户端仍须通过 Host 和 Bearer；有 Origin 时只接受同端口回环源。
-pub(crate) fn origin_allowed(headers: &HeaderMap, port: u16) -> bool {
+fn origin_allowed(headers: &HeaderMap, port: u16) -> bool {
     if !headers.contains_key(header::ORIGIN) {
         return true;
     }
@@ -216,7 +216,7 @@ pub(crate) fn origin_allowed(headers: &HeaderMap, port: u16) -> bool {
         })
 }
 
-pub(crate) fn content_type_is_json(headers: &HeaderMap) -> bool {
+fn content_type_is_json(headers: &HeaderMap) -> bool {
     single_header(headers, header::CONTENT_TYPE.as_str())
         .and_then(|value| value.split(';').next())
         .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json"))

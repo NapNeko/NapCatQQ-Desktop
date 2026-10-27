@@ -6,7 +6,6 @@ export type AppRoute =
     | 'chat'
     | 'apps'
     | 'debug'
-    | 'assistant'
     | 'components'
     | 'docker'
     | 'remote'

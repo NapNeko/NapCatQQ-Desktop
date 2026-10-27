@@ -412,7 +412,6 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | mock | `src-ui/core/ipc/mock/onebot-debug*.mock.ts`（三个假 Bot，浏览器预览走通整条链路；`callStream` 假拍几拍进度）、`onebot-debug.mock.ts` 的 `pickLocalFile` 假路径 |
 | 共用件 | `src-ui/shared/ui/{JsonCodeEditor,JsonTree,DataTable}.tsx` |
 | MCP 安全复核 | [mcp-security-review.md](mcp-security-review.md)：动作与参数白名单、请求撤销、连接预算、只读存储和验证记录。MCP 凭据独立使用 `ncd-config/src/system_secret_store.rs`，不降级到文件存储 |
-| 内置 Agent 诊断助手 | [assistant.md](assistant.md)：`ncd-domain/src/assistant.rs` / `ncd-traits/src/assistant.rs` 契约；`ncd-runtime/src/assistant{.rs,/}` 管理会话，`builtin/` 实现默认模型流、私有工具历史与循环，`credentials.rs` 使用系统 SecretStore，外部 ACP 保留可选；`ncd-mcp/src/assistant{.rs,/}` 提供每会话、单 Bot 的受限 MCP 和桌面逐次审批；`commands/assistant.rs` 接线；`src-ui/modules/assistant`、`hooks/assistant` 与设置 `AgentSection`。入口为侧栏及 Bot 卡片 |
 
 铁律：调试台只读 Bot 配置，从不改 Bot 的 OneBot 配置；token 不明文展示，也不写进历史和收藏；内部通道（NapCat WebUI 适配器 / SnowLuma 调试接口）按上游能力探测，太老的版本报 `UpstreamTooOld` 并让「自动」避开；调用没拿到回包是数据（`DebugCallResponse.result` 里的 `DebugError`），不是命令失败；分块传输只走内部通道（NapCat 走适配器 WS 取中间帧，SnowLuma 走 `/api/debug/invoke-stream` SSE），点名的用户 HTTP / WS 通道报「该通道不支持流式」，不硬发；本机文件参数是 `ncd-local-file://<路径>` 占位，发送时后端先传到 Bot 一侧（SnowLuma 走 `/api/debug/upload` 原始字节，NapCat 走 `upload_file_stream` 分块）再替换调目标动作；功能开关 `features.apiDebug` 启动与设置保存两处按落盘值调 `set_enabled`（MCP 的 OneBot 调用同样受限，运维检查与安全策略查询仍可使用）；MCP 服务只读 Bot 配置，bearer token 在专用系统凭据存储中，不进任何工具输出。
 
