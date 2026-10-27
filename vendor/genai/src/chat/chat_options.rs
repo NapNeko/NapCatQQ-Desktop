@@ -1,0 +1,886 @@
+use crate::Headers;
+use crate::chat::chat_req_response_format::ChatResponseFormat;
+use crate::chat::chat_req_tool_choice::ToolChoice;
+use crate::chat::frame_sink::{ChatFrameSink, FnSink, FrameCtx, RawFrameRef};
+use crate::chat::{CacheControl, ChatStreamGuard};
+use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use serde_with::skip_serializing_none;
+use std::ops::Deref;
+use std::sync::Arc;
+
+// Some model names have the reasoning effort suffix as their names.
+// For now, needs to be full model name
+const PROTECTED_MODEL_NAMES: &[&str] = &[
+	"deepseek-r1-zero",
+	"qwen3.8-max",
+	"qwen3p8-max",
+	"accounts/fireworks/models/qwen3p8-max",
+];
+
+/// Options considered by all `Client::exec_*` chat calls.
+///
+/// A default can be set on the `Client` during builder configuration.
+/// Per-call options take precedence over client defaults.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChatOptions {
+	/// Sampling temperature (if supported by the provider).
+	pub temperature: Option<f64>,
+
+	/// Maximum tokens to generate (if supported).
+	pub max_tokens: Option<u32>,
+
+	/// Nucleus sampling (top-p), if supported.
+	pub top_p: Option<f64>,
+
+	/// Sequences that halt generation when encountered.
+	#[serde(default)]
+	pub stop_sequences: Vec<String>,
+
+	// -- Stream Options
+	/// Maximum wait for streaming HTTP response headers, including connection setup.
+	/// Defaults to no additional limit. Per-call values override client defaults.
+	/// This transport setting is never sent to the provider.
+	#[serde(skip)]
+	pub stream_header_timeout: Option<std::time::Duration>,
+
+	/// Maximum wait for each raw streaming body chunk, including error bodies.
+	/// Heartbeats and partial frames reset this wait before event parsing.
+	/// This is not an overall response deadline. Defaults to no additional limit.
+	#[serde(skip)]
+	pub stream_read_timeout: Option<std::time::Duration>,
+
+	/// Application limits and validation for the raw streaming transport.
+	#[serde(skip)]
+	pub stream_guard: Option<Arc<dyn ChatStreamGuard>>,
+
+	/// (streaming) Capture usage metadata; available in `StreamEnd.captured_usage`.
+	pub capture_usage: Option<bool>,
+
+	/// (streaming) Concatenate content chunks; available in `StreamEnd.captured_content`.
+	pub capture_content: Option<bool>,
+
+	/// (streaming) Concatenate reasoning chunks; available in `StreamEnd.captured_reasoning_content`.
+	pub capture_reasoning_content: Option<bool>,
+
+	/// (streaming) Collect tool calls; available in `StreamEnd.captured_tool_calls`.
+	pub capture_tool_calls: Option<bool>,
+
+	/// Capture the raw HTTP body (primarily for debugging/inspection).
+	/// Non-streaming only; available in ChatResponse::captured_raw_body.
+	/// For streaming, use [`ChatOptions::raw_frame_sink`]
+	pub capture_raw_body: Option<bool>,
+
+	/// Receives every raw provider frame as it is decoded (see [`ChatFrameSink`]).
+	///
+	/// This is the streaming counterpart of `capture_raw_body`, and the escape hatch for
+	/// provider data the normalized events do not model (e.g. Gemini `groundingMetadata`).
+	#[serde(skip)]
+	pub raw_frame_sink: Option<Arc<dyn ChatFrameSink>>,
+
+	/// Desired response format (e.g., `ChatResponseFormat::JsonMode` for OpenAI-style JSON mode).
+	///
+	/// Note: Additional formats may be added in the future.
+	pub response_format: Option<ChatResponseFormat>,
+
+	/// Tool selection preference, when the provider supports function/tool calling.
+	pub tool_choice: Option<ToolChoice>,
+
+	// -- Reasoning options
+	/// Extract reasoning blocks such as `<think>...</think>` into the response reasoning content.
+	pub normalize_reasoning_content: Option<bool>,
+
+	/// Preferred reasoning effort, when supported by the provider.
+	pub reasoning_effort: Option<ReasoningEffort>,
+
+	/// Verbosity (for OpenAI gpt-5),
+	pub verbosity: Option<Verbosity>,
+
+	/// Seed for repeatability, if supported.
+	pub seed: Option<u64>,
+
+	/// Service tier preference (OpenAI-specific, for flex processing).
+	pub service_tier: Option<ServiceTier>,
+
+	/// Additional HTTP headers to include with the request.
+	pub extra_headers: Option<Headers>,
+
+	// -- Prompt cache options
+	/// Request-level cache control preference.
+	pub cache_control: Option<CacheControl>,
+
+	/// OpenAI prompt cache key.
+	pub prompt_cache_key: Option<String>,
+
+	/// Provider-specific extra request payload merged by the adapter.
+	///
+	/// This is primarily useful for OpenAI-compatible providers that expose
+	/// non-standard request fields.
+	pub extra_body: Option<Value>,
+}
+
+/// Chainable Setters
+impl ChatOptions {
+	/// Sets a fallible guard before streaming data reaches provider adapters.
+	pub fn with_stream_guard(mut self, guard: Arc<dyn ChatStreamGuard>) -> Self {
+		self.stream_guard = Some(guard);
+		self
+	}
+
+	/// Sets the streaming response-header wait, independently of body reads.
+	pub fn with_stream_header_timeout(mut self, value: std::time::Duration) -> Self {
+		self.stream_header_timeout = Some(value);
+		self
+	}
+
+	/// Sets the maximum wait for each raw streaming response body chunk.
+	pub fn with_stream_read_timeout(mut self, value: std::time::Duration) -> Self {
+		self.stream_read_timeout = Some(value);
+		self
+	}
+
+	/// Sets the sampling temperature.
+	pub fn with_temperature(mut self, value: f64) -> Self {
+		self.temperature = Some(value);
+		self
+	}
+
+	/// Sets the maximum number of output tokens.
+	pub fn with_max_tokens(mut self, value: u32) -> Self {
+		self.max_tokens = Some(value);
+		self
+	}
+
+	/// Sets nucleus sampling (top-p).
+	pub fn with_top_p(mut self, value: f64) -> Self {
+		self.top_p = Some(value);
+		self
+	}
+
+	/// Enables or disables capturing usage in streaming mode.
+	pub fn with_capture_usage(mut self, value: bool) -> Self {
+		self.capture_usage = Some(value);
+		self
+	}
+
+	/// Enables or disables capturing concatenated content in streaming mode.
+	pub fn with_capture_content(mut self, value: bool) -> Self {
+		self.capture_content = Some(value);
+		self
+	}
+
+	/// Enables or disables capturing concatenated reasoning content in streaming mode.
+	///
+	/// This also gates capture of the thought signatures that accompany reasoning, because a
+	/// signature signs the reasoning text it belongs to and is unusable without it. To replay a
+	/// signed assistant turn back to a provider that requires it (Anthropic extended thinking with
+	/// tool use), enable this alongside `with_capture_tool_calls`.
+	pub fn with_capture_reasoning_content(mut self, value: bool) -> Self {
+		self.capture_reasoning_content = Some(value);
+		self
+	}
+
+	/// Enables or disables capturing tool calls in streaming mode.
+	pub fn with_capture_tool_calls(mut self, value: bool) -> Self {
+		self.capture_tool_calls = Some(value);
+		self
+	}
+
+	/// Enables or disables capturing the raw HTTP body (non-streaming).
+	pub fn with_capture_raw_body(mut self, value: bool) -> Self {
+		self.capture_raw_body = Some(value);
+		self
+	}
+
+	/// Sets the raw frame sink (streaming only), taking ownership of it.
+	///
+	/// To keep a handle on an accumulating sink, use `with_raw_frame_sink_arc` instead.
+	pub fn with_raw_frame_sink(mut self, sink: impl ChatFrameSink + 'static) -> Self {
+		self.raw_frame_sink = Some(Arc::new(sink));
+		self
+	}
+
+	/// Sets the raw frame sink from a shared handle, so the caller can read what it
+	/// accumulated once the call completes.
+	pub fn with_raw_frame_sink_arc(mut self, sink: Arc<dyn ChatFrameSink>) -> Self {
+		self.raw_frame_sink = Some(sink);
+		self
+	}
+
+	/// Sets a per-frame closure as the raw frame sink (streaming only).
+	pub fn with_raw_frame_fn<F>(self, f: F) -> Self
+	where
+		F: Fn(&FrameCtx, RawFrameRef<'_>) + Send + Sync + 'static,
+	{
+		self.with_raw_frame_sink(FnSink::new(f))
+	}
+
+	/// Sets the stop sequences.
+	pub fn with_stop_sequences(mut self, values: Vec<String>) -> Self {
+		self.stop_sequences = values;
+		self
+	}
+
+	/// Appends one stop sequence.
+	pub fn with_stop_sequence(mut self, value: impl Into<String>) -> Self {
+		self.stop_sequences.push(value.into());
+		self
+	}
+
+	/// Enables or disables normalization of reasoning content (e.g., `<think>...</think>`).
+	pub fn with_normalize_reasoning_content(mut self, value: bool) -> Self {
+		self.normalize_reasoning_content = Some(value);
+		self
+	}
+
+	/// Sets the response format.
+	pub fn with_response_format(mut self, res_format: impl Into<ChatResponseFormat>) -> Self {
+		self.response_format = Some(res_format.into());
+		self
+	}
+
+	/// Sets the tool selection preference.
+	pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+		self.tool_choice = Some(tool_choice);
+		self
+	}
+
+	/// Sets the reasoning effort hint.
+	pub fn with_reasoning_effort(mut self, value: ReasoningEffort) -> Self {
+		self.reasoning_effort = Some(value);
+		self
+	}
+
+	/// Sets the verbosity hint.
+	pub fn with_verbosity(mut self, value: Verbosity) -> Self {
+		self.verbosity = Some(value);
+		self
+	}
+
+	/// Sets the deterministic seed.
+	pub fn with_seed(mut self, value: u64) -> Self {
+		self.seed = Some(value);
+		self
+	}
+
+	/// Sets the service tier preference (OpenAI-specific).
+	pub fn with_service_tier(mut self, value: ServiceTier) -> Self {
+		self.service_tier = Some(value);
+		self
+	}
+
+	/// Adds extra HTTP headers.
+	pub fn with_extra_headers(mut self, headers: impl Into<Headers>) -> Self {
+		self.extra_headers = Some(headers.into());
+		self
+	}
+
+	/// Sets the request-level cache control preference.
+	pub fn with_cache_control(mut self, value: CacheControl) -> Self {
+		self.cache_control = Some(value);
+		self
+	}
+
+	/// Sets the OpenAI prompt cache key.
+	pub fn with_prompt_cache_key(mut self, key: impl Into<String>) -> Self {
+		self.prompt_cache_key = Some(key.into());
+		self
+	}
+
+	/// Sets provider-specific extra body fields.
+	pub fn with_extra_body(mut self, value: Value) -> Self {
+		self.extra_body = Some(value);
+		self
+	}
+
+	// -- Deprecated
+
+	/// Deprecated: use `with_response_format(ChatResponseFormat::JsonMode)`.
+	///
+	/// When using JSON mode, you should still instruct the model to produce JSON in your prompt
+	/// for broad provider compatibility (e.g., mention "json" in system/user messages).
+	#[deprecated(note = "Use with_response_format(ChatResponseFormat::JsonMode)")]
+	pub fn with_json_mode(mut self, value: bool) -> Self {
+		if value {
+			self.response_format = Some(ChatResponseFormat::JsonMode);
+		}
+		self
+	}
+}
+
+// region:    --- ReasoningEffort
+
+/// Provider-specific hint for reasoning intensity/budget.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ReasoningEffort {
+	/// Explicitly request no reasoning.
+	///
+	/// This differs from leaving `ChatOptions::reasoning_effort` unset, which expresses no
+	/// preference. `"none"` is accepted as a backward-compatible alias for `"zero"`.
+	#[serde(alias = "None")]
+	Zero,
+	Low,
+	Medium,
+	High,
+	/// Extra-high effort. Adapters may treat this as an alias for [`Self::Max`].
+	XHigh,
+	/// Maximum effort. Adapters may treat this as an alias for [`Self::XHigh`].
+	Max,
+	/// Provider-specific reasoning token budget.
+	Budget(u32),
+
+	// Legacy reasoning for <= gpt-5
+	/// Legacy minimal effort used by older GPT-5 models.
+	Minimal,
+}
+
+impl ReasoningEffort {
+	/// Returns the lowercase variant name.
+	pub fn variant_name(&self) -> &'static str {
+		match self {
+			ReasoningEffort::Zero => "zero",
+			ReasoningEffort::Low => "low",
+			ReasoningEffort::Medium => "medium",
+			ReasoningEffort::High => "high",
+			ReasoningEffort::XHigh => "xhigh",
+			ReasoningEffort::Max => "max",
+			ReasoningEffort::Budget(_) => "budget",
+			// Legacy
+			ReasoningEffort::Minimal => "minimal",
+		}
+	}
+
+	/// Returns a keyword for non-`Budget` variants; `None` for `Budget(_)`.
+	pub fn as_keyword(&self) -> Option<&'static str> {
+		match self {
+			ReasoningEffort::Zero => Some("zero"),
+			ReasoningEffort::Low => Some("low"),
+			ReasoningEffort::Medium => Some("medium"),
+			ReasoningEffort::High => Some("high"),
+			ReasoningEffort::XHigh => Some("xhigh"),
+			ReasoningEffort::Max => Some("max"),
+			ReasoningEffort::Budget(_) => None,
+			// Legacy
+			ReasoningEffort::Minimal => Some("minimal"),
+		}
+	}
+
+	/// Parses a reasoning effort keyword.
+	pub fn from_keyword(name: &str) -> Option<Self> {
+		match name {
+			"zero" => Some(ReasoningEffort::Zero),
+			"none" => Some(ReasoningEffort::Zero), // backward-compat alias (this is openai name as well)
+			"low" => Some(ReasoningEffort::Low),
+			"medium" => Some(ReasoningEffort::Medium),
+			"high" => Some(ReasoningEffort::High),
+			"xhigh" => Some(ReasoningEffort::XHigh),
+			"max" => Some(ReasoningEffort::Max),
+			// openai legacy
+			"minimal" => Some(ReasoningEffort::Minimal),
+			_ => None,
+		}
+	}
+
+	/// Parses a trailing effort keyword from a model name and returns the trimmed name.
+	///
+	/// Known model names whose suffix is part of the actual name are left unchanged.
+	pub fn from_model_name(model_name: &str) -> (Option<Self>, &str) {
+		if let Some((prefix, last)) = model_name.rsplit_once('-')
+			&& let Some(effort) = ReasoningEffort::from_keyword(last)
+			&& !PROTECTED_MODEL_NAMES.contains(&model_name)
+		{
+			return (Some(effort), prefix);
+		}
+		(None, model_name)
+	}
+}
+
+impl std::fmt::Display for ReasoningEffort {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			ReasoningEffort::Zero => write!(f, "zero"),
+			ReasoningEffort::Low => write!(f, "low"),
+			ReasoningEffort::Medium => write!(f, "medium"),
+			ReasoningEffort::High => write!(f, "high"),
+			ReasoningEffort::XHigh => write!(f, "xhigh"),
+			ReasoningEffort::Max => write!(f, "max"),
+			ReasoningEffort::Budget(n) => write!(f, "{n}"),
+			// Legacy
+			ReasoningEffort::Minimal => write!(f, "minimal"),
+		}
+	}
+}
+
+impl std::str::FromStr for ReasoningEffort {
+	type Err = Error;
+
+	/// Parses a reasoning effort keyword or numeric token budget.
+	fn from_str(s: &str) -> Result<Self> {
+		Self::from_keyword(s)
+			.or_else(|| s.parse::<u32>().ok().map(Self::Budget))
+			.ok_or(Error::ReasoningParsingError { actual: s.to_string() })
+	}
+}
+
+// endregion: --- ReasoningEffort
+
+// region:    --- Verbosity
+
+/// Provider-specific hint for verbosity intensity/budget.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Verbosity {
+	Low,
+	Medium,
+	High,
+}
+
+impl Verbosity {
+	/// Returns the lowercase variant name.
+	pub fn variant_name(&self) -> &'static str {
+		match self {
+			Verbosity::Low => "low",
+			Verbosity::Medium => "medium",
+			Verbosity::High => "high",
+		}
+	}
+
+	/// Returns the verbosity keyword.
+	pub fn as_keyword(&self) -> Option<&'static str> {
+		match self {
+			Verbosity::Low => Some("low"),
+			Verbosity::Medium => Some("medium"),
+			Verbosity::High => Some("high"),
+		}
+	}
+
+	/// Parses a keyword into a non-`Budget` variant.
+	pub fn from_keyword(name: &str) -> Option<Self> {
+		match name {
+			"low" => Some(Verbosity::Low),
+			"medium" => Some(Verbosity::Medium),
+			"high" => Some(Verbosity::High),
+			_ => None,
+		}
+	}
+
+	/// Parses a trailing verbosity keyword from a model name and returns the trimmed name.
+	pub fn from_model_name(model_name: &str) -> (Option<Self>, &str) {
+		if let Some((prefix, last)) = model_name.rsplit_once('-')
+			&& let Some(effort) = Verbosity::from_keyword(last)
+		{
+			return (Some(effort), prefix);
+		}
+		(None, model_name)
+	}
+}
+
+impl std::fmt::Display for Verbosity {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Verbosity::Low => write!(f, "low"),
+			Verbosity::Medium => write!(f, "medium"),
+			Verbosity::High => write!(f, "high"),
+		}
+	}
+}
+
+impl std::str::FromStr for Verbosity {
+	type Err = Error;
+
+	/// Parses a verbosity keyword.
+	fn from_str(s: &str) -> Result<Self> {
+		Self::from_keyword(s).ok_or(Error::VerbosityParsing { actual: s.to_string() })
+	}
+}
+
+// endregion: --- Verbosity
+
+// region:    --- ServiceTier
+
+/// OpenAI service tier preference for flex processing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ServiceTier {
+	/// Flex processing - lower costs, slower response times
+	Flex,
+	/// Auto - standard processing (default)
+	Auto,
+	/// Default - standard processing
+	Default,
+}
+
+impl ServiceTier {
+	/// Returns the lowercase variant name.
+	pub fn variant_name(&self) -> &'static str {
+		match self {
+			ServiceTier::Flex => "flex",
+			ServiceTier::Auto => "auto",
+			ServiceTier::Default => "default",
+		}
+	}
+
+	/// Returns the keyword for API usage.
+	pub fn as_keyword(&self) -> Option<&'static str> {
+		match self {
+			ServiceTier::Flex => Some("flex"),
+			ServiceTier::Auto => Some("auto"),
+			ServiceTier::Default => Some("default"),
+		}
+	}
+
+	/// Parses a service tier keyword.
+	pub fn from_keyword(name: &str) -> Option<Self> {
+		match name {
+			"flex" => Some(ServiceTier::Flex),
+			"auto" => Some(ServiceTier::Auto),
+			"default" => Some(ServiceTier::Default),
+			_ => None,
+		}
+	}
+}
+
+impl std::fmt::Display for ServiceTier {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			ServiceTier::Flex => write!(f, "flex"),
+			ServiceTier::Auto => write!(f, "auto"),
+			ServiceTier::Default => write!(f, "default"),
+		}
+	}
+}
+
+impl std::str::FromStr for ServiceTier {
+	type Err = Error;
+
+	/// Parses a service tier keyword.
+	fn from_str(s: &str) -> Result<Self> {
+		Self::from_keyword(s).ok_or(Error::ServiceTierParsing { actual: s.to_string() })
+	}
+}
+
+// endregion: --- ServiceTier
+
+// region:    --- ChatOptionsSet
+
+/// This is an internal crate struct to resolve the ChatOptions value in a cascading manner.
+/// First, it attempts to get the value at the chat level (ChatOptions from the exec_chat...(...) argument).
+/// If a value for the property is not found, it looks at the client default one.
+#[derive(Default, Clone)]
+pub(crate) struct ChatOptionsSet<'a, 'b> {
+	client: Option<&'a ChatOptions>,
+	chat: Option<&'b ChatOptions>,
+}
+
+impl<'a, 'b> ChatOptionsSet<'a, 'b> {
+	pub fn with_client_options(mut self, options: Option<&'a ChatOptions>) -> Self {
+		self.client = options;
+		self
+	}
+	pub fn with_chat_options(mut self, options: Option<&'b ChatOptions>) -> Self {
+		self.chat = options;
+		self
+	}
+}
+
+impl ChatOptionsSet<'_, '_> {
+	pub fn temperature(&self) -> Option<f64> {
+		self.chat
+			.and_then(|chat| chat.temperature)
+			.or_else(|| self.client.and_then(|client| client.temperature))
+	}
+
+	pub fn max_tokens(&self) -> Option<u32> {
+		self.chat
+			.and_then(|chat| chat.max_tokens)
+			.or_else(|| self.client.and_then(|client| client.max_tokens))
+	}
+
+	pub fn top_p(&self) -> Option<f64> {
+		self.chat
+			.and_then(|chat| chat.top_p)
+			.or_else(|| self.client.and_then(|client| client.top_p))
+	}
+
+	pub fn stop_sequences(&self) -> &[String] {
+		self.chat
+			.map(|chat| chat.stop_sequences.deref())
+			.or_else(|| self.client.map(|client| client.stop_sequences.deref()))
+			.unwrap_or(&[])
+	}
+
+	pub fn capture_usage(&self) -> Option<bool> {
+		self.chat
+			.and_then(|chat| chat.capture_usage)
+			.or_else(|| self.client.and_then(|client| client.capture_usage))
+	}
+
+	pub fn capture_content(&self) -> Option<bool> {
+		self.chat
+			.and_then(|chat| chat.capture_content)
+			.or_else(|| self.client.and_then(|client| client.capture_content))
+	}
+
+	pub fn capture_reasoning_content(&self) -> Option<bool> {
+		self.chat
+			.and_then(|chat| chat.capture_reasoning_content)
+			.or_else(|| self.client.and_then(|client| client.capture_reasoning_content))
+	}
+
+	pub fn capture_tool_calls(&self) -> Option<bool> {
+		self.chat
+			.and_then(|chat| chat.capture_tool_calls)
+			.or_else(|| self.client.and_then(|client| client.capture_tool_calls))
+	}
+
+	pub fn capture_raw_body(&self) -> Option<bool> {
+		self.chat
+			.and_then(|chat| chat.capture_raw_body)
+			.or_else(|| self.client.and_then(|client| client.capture_raw_body))
+	}
+
+	pub fn raw_frame_sink(&self) -> Option<Arc<dyn ChatFrameSink>> {
+		self.chat
+			.and_then(|chat| chat.raw_frame_sink.clone())
+			.or_else(|| self.client.and_then(|client| client.raw_frame_sink.clone()))
+	}
+
+	pub fn response_format(&self) -> Option<&ChatResponseFormat> {
+		self.chat
+			.and_then(|chat| chat.response_format.as_ref())
+			.or_else(|| self.client.and_then(|client| client.response_format.as_ref()))
+	}
+
+	pub fn tool_choice(&self) -> Option<&ToolChoice> {
+		self.chat
+			.and_then(|chat| chat.tool_choice.as_ref())
+			.or_else(|| self.client.and_then(|client| client.tool_choice.as_ref()))
+	}
+
+	pub fn normalize_reasoning_content(&self) -> Option<bool> {
+		self.chat
+			.and_then(|chat| chat.normalize_reasoning_content)
+			.or_else(|| self.client.and_then(|client| client.normalize_reasoning_content))
+	}
+
+	pub fn reasoning_effort(&self) -> Option<&ReasoningEffort> {
+		self.chat
+			.and_then(|chat| chat.reasoning_effort.as_ref())
+			.or_else(|| self.client.and_then(|client| client.reasoning_effort.as_ref()))
+	}
+
+	pub fn verbosity(&self) -> Option<&Verbosity> {
+		self.chat
+			.and_then(|chat| chat.verbosity.as_ref())
+			.or_else(|| self.client.and_then(|client| client.verbosity.as_ref()))
+	}
+
+	pub fn seed(&self) -> Option<u64> {
+		self.chat
+			.and_then(|chat| chat.seed)
+			.or_else(|| self.client.and_then(|client| client.seed))
+	}
+
+	pub fn service_tier(&self) -> Option<&ServiceTier> {
+		self.chat
+			.and_then(|chat| chat.service_tier.as_ref())
+			.or_else(|| self.client.and_then(|client| client.service_tier.as_ref()))
+	}
+
+	#[allow(unused)]
+	pub fn extra_headers(&self) -> Option<&Headers> {
+		self.chat
+			.and_then(|chat| chat.extra_headers.as_ref())
+			.or_else(|| self.client.and_then(|client| client.extra_headers.as_ref()))
+	}
+
+	pub fn prompt_cache_key(&self) -> Option<&str> {
+		self.chat
+			.and_then(|chat| chat.prompt_cache_key.as_deref())
+			.or_else(|| self.client.and_then(|client| client.prompt_cache_key.as_deref()))
+	}
+
+	pub fn extra_body(&self) -> Option<&Value> {
+		self.chat
+			.and_then(|chat| chat.extra_body.as_ref())
+			.or_else(|| self.client.and_then(|client| client.extra_body.as_ref()))
+	}
+
+	pub fn cache_control(&self) -> Option<&CacheControl> {
+		self.chat
+			.and_then(|chat| chat.cache_control.as_ref())
+			.or_else(|| self.client.and_then(|client| client.cache_control.as_ref()))
+	}
+
+	/// Returns true only if there is a ChatResponseFormat::JsonMode
+	#[deprecated(note = "Use .response_format()")]
+	#[allow(unused)]
+	pub fn json_mode(&self) -> Option<bool> {
+		match self.response_format() {
+			Some(ChatResponseFormat::JsonMode) => Some(true),
+			None => None,
+			_ => Some(false),
+		}
+	}
+}
+
+// endregion: --- ChatOptionsSet
+
+// region:    --- Tests
+
+#[cfg(test)]
+mod tests {
+	type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>; // For tests.
+
+	use super::*;
+
+	// -- Keyword surface tests
+
+	#[test]
+	fn test_chat_options_reasoning_effort_as_keyword_zero() -> Result<()> {
+		// -- Setup & Fixtures
+		let effort = ReasoningEffort::Zero;
+		// -- Exec
+		let keyword = effort.as_keyword();
+		// -- Check
+		assert_eq!(keyword, Some("zero"));
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_reasoning_effort_display_zero() -> Result<()> {
+		// -- Setup & Fixtures
+		let effort = ReasoningEffort::Zero;
+		// -- Exec
+		let displayed = format!("{effort}");
+		// -- Check
+		assert_eq!(displayed, "zero");
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_reasoning_effort_from_keyword_zero() -> Result<()> {
+		// -- Exec
+		let parsed = ReasoningEffort::from_keyword("zero");
+		// -- Check
+		assert!(matches!(parsed, Some(ReasoningEffort::Zero)));
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_reasoning_effort_from_keyword_none_alias() -> Result<()> {
+		// -- Exec
+		let parsed = ReasoningEffort::from_keyword("none");
+		// -- Check
+		assert!(matches!(parsed, Some(ReasoningEffort::Zero)));
+		Ok(())
+	}
+
+	// -- Model-name suffix tests
+
+	#[test]
+	fn test_chat_options_from_model_name_protected_zero() -> Result<()> {
+		// -- Setup & Fixtures
+		let protected_name = "deepseek-r1-zero";
+		// -- Exec
+		let (effort, trimmed) = ReasoningEffort::from_model_name(protected_name);
+		// -- Check
+		assert!(effort.is_none(), "protected model should not strip suffix");
+		assert_eq!(trimmed, protected_name);
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_from_model_name_protected_qwen_max() -> Result<()> {
+		// -- Setup & Fixtures
+		let protected_name = "qwen3.8-max";
+		// -- Exec
+		let (effort, trimmed) = ReasoningEffort::from_model_name(protected_name);
+		// -- Check
+		assert!(effort.is_none(), "protected model should not strip max suffix");
+		assert_eq!(trimmed, protected_name);
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_from_model_name_qwen_max_low_suffix() -> Result<()> {
+		// -- Setup & Fixtures
+		let model_with_low = "qwen3.8-max-low";
+		// -- Exec
+		let (effort, trimmed) = ReasoningEffort::from_model_name(model_with_low);
+		// -- Check
+		assert!(matches!(effort, Some(ReasoningEffort::Low)));
+		assert_eq!(trimmed, "qwen3.8-max");
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_from_model_name_qwen_max_zero_suffix() -> Result<()> {
+		// -- Setup & Fixtures
+		let model_with_zero = "qwen3.8-max-zero";
+		// -- Exec
+		let (effort, trimmed) = ReasoningEffort::from_model_name(model_with_zero);
+		// -- Check
+		assert!(matches!(effort, Some(ReasoningEffort::Zero)));
+		assert_eq!(trimmed, "qwen3.8-max");
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_from_model_name_zero_suffix() -> Result<()> {
+		// -- Setup & Fixtures
+		let model_with_zero = "some-model-zero";
+		// -- Exec
+		let (effort, trimmed) = ReasoningEffort::from_model_name(model_with_zero);
+		// -- Check
+		assert!(matches!(effort, Some(ReasoningEffort::Zero)));
+		assert_eq!(trimmed, "some-model");
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_from_model_name_none_suffix_alias() -> Result<()> {
+		// -- Setup & Fixtures
+		let model_with_none = "some-model-none";
+		// -- Exec
+		let (effort, trimmed) = ReasoningEffort::from_model_name(model_with_none);
+		// -- Check
+		assert!(matches!(effort, Some(ReasoningEffort::Zero)));
+		assert_eq!(trimmed, "some-model");
+		Ok(())
+	}
+
+	// -- Deserialization surface tests
+
+	#[test]
+	fn test_chat_options_deser_partial_without_stop_sequences() -> Result<()> {
+		// -- Setup & Fixtures
+		let json = serde_json::json!({"temperature": 0.4});
+
+		// -- Exec
+		let options: ChatOptions = serde_json::from_value(json)?;
+
+		// -- Check
+		assert_eq!(options.temperature, Some(0.4));
+		assert!(options.stop_sequences.is_empty());
+		assert_eq!(options.max_tokens, None);
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_chat_options_deser_empty_object() -> Result<()> {
+		// -- Setup & Fixtures
+		let json = serde_json::json!({});
+
+		// -- Exec
+		let options: ChatOptions = serde_json::from_value(json)?;
+
+		// -- Check
+		assert!(options.stop_sequences.is_empty());
+
+		Ok(())
+	}
+}
+
+// endregion: --- Tests

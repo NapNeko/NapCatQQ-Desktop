@@ -1,0 +1,49 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use serde_with::skip_serializing_none;
+
+/// The tool call function name and arguments sent back by the LLM.
+/// Represents a single function/tool invocation emitted by the model.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+	/// Stable identifier for this tool call (used to correlate tool responses).
+	pub call_id: String,
+
+	/// Name of the function to invoke.
+	pub fn_name: String,
+
+	/// JSON arguments payload as provided by the model.
+	/// Kept as `serde_json::Value` so callers can deserialize into their own types.
+	pub fn_arguments: Value,
+
+	/// Thought signatures associated with this tool call.
+	///
+	/// `ChatMessage::from(Vec<ToolCall>)` preserves these on each call so adapters can
+	/// serialize them with the corresponding tool invocation. For turn-level signatures
+	/// that should precede all calls as `ContentPart::ThoughtSignature` values, use
+	/// `ChatMessage::assistant_tool_calls_with_thoughts`.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub thought_signatures: Option<Vec<String>>,
+}
+
+/// Computed accessors
+impl ToolCall {
+	/// Returns an approximate in-memory size of this `ToolCall`, in bytes,
+	/// computed as the sum of the UTF-8 lengths of:
+	/// - `call_id`
+	/// - `fn_name`
+	/// - JSON-serialized `fn_arguments`
+	/// - all `thought_signatures` strings (if any)
+	pub fn size(&self) -> usize {
+		let mut size = self.call_id.len();
+		size += self.fn_name.len();
+		size += serde_json::to_string(&self.fn_arguments).map(|j| j.len()).unwrap_or_default();
+		size += self
+			.thought_signatures
+			.as_ref()
+			.map(|sigs| sigs.iter().map(|s| s.len()).sum::<usize>())
+			.unwrap_or_default();
+		size
+	}
+}

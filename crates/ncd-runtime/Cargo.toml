@@ -25,6 +25,10 @@ async-trait = "0.1"
 # 内嵌终端的输出块（和 ncd-host 的 PtySession 同一个类型）
 bytes = "1"
 futures-util = "0.3"
+genai = { version = "=0.7.1", path = "../../vendor/genai", default-features = false, features = ["rustls-tls-no-provider", "system-proxy"] }
+reqwest-model = { package = "reqwest", version = "0.13", default-features = false, features = ["json", "stream", "rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

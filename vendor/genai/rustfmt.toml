@@ -1,0 +1,6 @@
+hard_tabs = true
+edition = "2024"
+max_width = 120
+attr_fn_like_width = 110
+chain_width = 80
+array_width = 80

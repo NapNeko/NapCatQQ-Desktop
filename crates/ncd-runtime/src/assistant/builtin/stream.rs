@@ -1,4 +1,4 @@
-//! 有界 SSE 分帧与完整 Chat Completions 工具调用校验。
+//! 完整 Chat Completions 帧与工具调用校验。
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -12,9 +12,12 @@ use super::model::{
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
 const MAX_SSE_LINE_BYTES: usize = 256 * 1024;
+#[cfg(test)]
 const MAX_SSE_EVENT_BYTES: usize = 256 * 1024;
 
+#[cfg(test)]
 #[derive(Default)]
 pub(super) struct SseDecoder {
     line: Vec<u8>,
@@ -24,6 +27,7 @@ pub(super) struct SseDecoder {
     seen_line: bool,
 }
 
+#[cfg(test)]
 impl SseDecoder {
     pub(super) fn push(
         &mut self,
@@ -110,14 +114,18 @@ struct PendingTool {
 }
 
 #[derive(Default)]
-struct ThinkFilter {
+pub(super) struct ThinkFilter {
     pending: String,
     depth: usize,
     visible_bytes: usize,
 }
 
 impl ThinkFilter {
-    fn push(&mut self, text: &str, on_text: &dyn Fn(&str)) {
+    pub(super) fn has_visible_text(&self) -> bool {
+        self.visible_bytes > 0
+    }
+
+    pub(super) fn push(&mut self, text: &str, on_text: &dyn Fn(&str)) {
         let mut visible = String::new();
         for ch in text.chars() {
             self.pending.push(ch);
@@ -154,7 +162,7 @@ impl ThinkFilter {
         }
     }
 
-    fn finish(&mut self, on_text: &dyn Fn(&str)) {
+    pub(super) fn finish(&mut self, on_text: &dyn Fn(&str)) {
         if self.depth == 0 && !self.pending.is_empty() {
             self.visible_bytes += self.pending.len();
             on_text(&self.pending);
@@ -350,9 +358,11 @@ impl CompletionParser {
             reasoning_content: self.reasoning_content,
             tool_calls: calls,
             finish_reason,
+            protocol: None,
         })
     }
 
+    #[cfg(test)]
     pub(super) fn json(bytes: &[u8], on_text: &dyn Fn(&str)) -> Result<ModelReply, ModelError> {
         let value: Value =
             serde_json::from_slice(bytes).map_err(|_| ModelError::InvalidResponse)?;

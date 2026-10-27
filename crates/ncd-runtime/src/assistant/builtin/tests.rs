@@ -121,7 +121,28 @@ impl Respond for ModelResponder {
                     reply["synthetic_sse"].as_str().unwrap(),
                     "text/event-stream",
                 ),
-            Some(reply) => ResponseTemplate::new(200).set_body_json(reply),
+            Some(reply) => {
+                let mut streaming = reply.clone();
+                if let Some(choices) = streaming["choices"].as_array_mut() {
+                    for choice in choices {
+                        if let Some(message) = choice
+                            .as_object_mut()
+                            .and_then(|choice| choice.remove("message"))
+                        {
+                            choice["delta"] = message;
+                            if let Some(calls) = choice["delta"]["tool_calls"].as_array_mut() {
+                                for (index, call) in calls.iter_mut().enumerate() {
+                                    call["index"] = json!(index);
+                                }
+                            }
+                        }
+                    }
+                }
+                ResponseTemplate::new(200).set_body_raw(
+                    format!("data: {streaming}\n\ndata: [DONE]\n\n"),
+                    "text/event-stream",
+                )
+            }
             None => ResponseTemplate::new(503).set_body_string("synthetic upstream failure"),
         }
     }
@@ -184,6 +205,7 @@ impl Fixture {
                 max_steps: 6,
                 max_output_tokens: 256,
                 request_timeout_secs: 2,
+                ..Default::default()
             },
             api_key: MODEL_KEY.into(),
             connection: AssistantToolConnection {
@@ -611,6 +633,7 @@ async fn cancellation_during_open_sse_discards_pending_credential_prefix() {
             max_steps: 6,
             max_output_tokens: 256,
             request_timeout_secs: 2,
+            ..Default::default()
         },
         api_key: MODEL_KEY.into(),
         connection: AssistantToolConnection {

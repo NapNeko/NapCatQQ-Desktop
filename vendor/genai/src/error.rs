@@ -1,0 +1,374 @@
+use crate::adapter::AdapterKind;
+use crate::chat::ChatRole;
+use crate::{ModelIden, resolver, webc};
+use derive_more::{Display, From};
+use reqwest::StatusCode;
+use reqwest::header::HeaderMap;
+use value_ext::JsonValueExtError;
+
+/// Type alias for boxed errors that are Send + Sync
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// GenAI main Result type alias (with genai::Error)
+pub type Result<T> = core::result::Result<T, Error>;
+
+/// Main GenAI error
+#[derive(Debug, From, Display)]
+#[allow(missing_docs)]
+pub enum Error {
+	#[display("Model stream rejected: {reason}")]
+	StreamGuardRejected { reason: &'static str },
+
+	// -- Chat Input
+	#[display("Chat Request has no messages. (for model {model_iden}")]
+	ChatReqHasNoMessages { model_iden: ModelIden },
+
+	#[display("Last chat request message is not of Role 'user' (Actual role '{actual_role}') for model '{model_iden}'")]
+	LastChatMessageIsNotUser {
+		model_iden: ModelIden,
+		actual_role: ChatRole,
+	},
+
+	#[display("Role '{role}' not supported for model '{model_iden}'")]
+	MessageRoleNotSupported { model_iden: ModelIden, role: ChatRole },
+
+	#[display("Content type not supported for model '{model_iden}'.\nCause: {cause}")]
+	MessageContentTypeNotSupported { model_iden: ModelIden, cause: &'static str },
+
+	#[display("JSON mode requested but no instruction/prompt provided.")]
+	JsonModeWithoutInstruction,
+
+	#[display("Failed to parse verbosity. Actual: '{actual}'")]
+	VerbosityParsing { actual: String },
+
+	#[display("Failed to parse reasoning. Actual: '{actual}'")]
+	ReasoningParsingError { actual: String },
+
+	#[display("Failed to parse service tier. Actual: '{actual}'")]
+	ServiceTierParsing { actual: String },
+
+	#[display("Failed to parse prompt cache retention. Actual: '{actual}'")]
+	PromptCacheRetentionParsing { actual: String },
+
+	// -- Chat Output
+	#[display("No chat response from model '{model_iden}'")]
+	NoChatResponse { model_iden: ModelIden },
+
+	#[display("Invalid JSON response element: {info}")]
+	InvalidJsonResponseElement { info: &'static str },
+
+	// -- Auth
+	#[display("Model '{model_iden}' requires an API key.")]
+	RequiresApiKey { model_iden: ModelIden },
+
+	#[display("No authentication resolver found for model '{model_iden}'.")]
+	NoAuthResolver { model_iden: ModelIden },
+
+	#[display("No authentication data available for model '{model_iden}'.")]
+	NoAuthData { model_iden: ModelIden },
+
+	// -- ModelMapper
+	#[display("Model mapping failed for '{model_iden}'.\nCause: {cause}")]
+	ModelMapperFailed {
+		model_iden: ModelIden,
+		cause: resolver::Error,
+	},
+
+	// -- Web Call error
+	#[display("Web call failed for adapter '{adapter_kind}'.\nCause: {webc_error}")]
+	WebAdapterCall {
+		adapter_kind: AdapterKind,
+		webc_error: webc::Error,
+	},
+
+	#[display("Web call failed for model '{model_iden}'.\nCause: {webc_error}")]
+	WebModelCall {
+		model_iden: ModelIden,
+		webc_error: webc::Error,
+	},
+
+	#[display(
+		"Error while generating a ChatResponse from a ChatRequest. (for Model: '{model_iden}')
+Request Payload:\n{request_payload:#}
+Response Body:\n{response_body:#}
+Cause:\n{cause}
+"
+	)]
+	ChatResponseGeneration {
+		model_iden: ModelIden,
+		request_payload: Box<serde_json::Value>,
+		/// Require ChatOptions::default().with_capture_raw_body(true); otherwise "null"
+		response_body: Box<serde_json::Value>,
+		cause: String,
+	},
+
+	#[display("Error event in stream for model '{model_iden}'. Body: {body}")]
+	ChatResponse {
+		model_iden: ModelIden,
+		body: serde_json::Value,
+	},
+
+	// -- Chat Stream
+	#[display("Failed to parse stream data for model '{model_iden}'.\nCause: {serde_error}")]
+	StreamParse {
+		model_iden: ModelIden,
+		serde_error: serde_json::Error,
+	},
+
+	#[display("Web stream error for model '{model_iden}'.\nCause: {cause}")]
+	WebStream {
+		model_iden: ModelIden,
+		cause: String,
+		error: BoxError,
+	},
+
+	#[display("HTTP error.\nStatus: {status} {canonical_reason}\nBody: {body}")]
+	HttpError {
+		status: StatusCode,
+		canonical_reason: String,
+		body: String,
+		/// Response headers of the failed HTTP call (e.g., `retry-after`, `retry-after-ms`, `x-should-retry`),
+		/// so that downstream retry layers can honor provider-requested retry delays.
+		headers: Box<HeaderMap>,
+	},
+
+	// -- Modules
+	#[display("Resolver error for model '{model_iden}'.\nCause: {resolver_error}")]
+	Resolver {
+		model_iden: ModelIden,
+		resolver_error: resolver::Error,
+	},
+
+	// -- Adapter Support
+	#[display("Adapter '{adapter_kind}' does not support feature '{feature}'")]
+	AdapterNotSupported { adapter_kind: AdapterKind, feature: String },
+
+	#[display("Cache breakpoint requested for model '{model_iden}', but {scope} has no eligible OpenAI content block.")]
+	CacheBreakpointNoEligibleContent { model_iden: ModelIden, scope: &'static str },
+
+	#[display(
+		"Client is bound to adapter '{bound}' but model '{model}' resolved to adapter '{requested}'. \
+A Client configured with `with_adapter_kind` targets a single provider — its \
+AuthResolver and ServiceTargetResolver are gated on that adapter, so routing \
+through a different one would silently drop auth and the configured endpoint. \
+Drop the `::` namespace prefix or `ModelSpec::Iden`, or build a Client without \
+`with_adapter_kind` for per-call routing."
+	)]
+	AdapterKindMismatch {
+		bound: AdapterKind,
+		requested: AdapterKind,
+		model: String,
+	},
+
+	#[display("Internal error: {_0}")]
+	Internal(String),
+
+	// -- Client Error
+	#[display("Failed to build client.\nCause: {cause}")]
+	ClientBuildFail { cause: String },
+
+	// -- Externals
+	#[display("JSON value extension error: {_0}")]
+	#[from]
+	JsonValueExt(JsonValueExtError),
+
+	#[display("Serde JSON error: {_0}")]
+	#[from]
+	SerdeJson(serde_json::Error),
+}
+
+/// Accessors
+impl Error {
+	/// The HTTP status the provider responded with, when the failure came
+	/// from an HTTP response.
+	///
+	/// The status is already carried by the error, but reaching it means
+	/// knowing that a failed chat call arrives as
+	/// `WebModelCall { webc_error: webc::Error::ResponseFailedStatus { .. } }`,
+	/// that adapter-level calls use `WebAdapterCall` instead, and that
+	/// `HttpError` is a third, separate shape. Callers that want to branch
+	/// on 429 or 5xx should not have to know any of that.
+	///
+	/// Returns `None` for failures with no HTTP response behind them:
+	/// connection and timeout errors, resolver failures, request
+	/// validation, stream parsing.
+	///
+	/// Retry policy stays with the caller — this only reports what the
+	/// provider said.
+	pub fn status(&self) -> Option<StatusCode> {
+		match self {
+			Error::HttpError { status, .. } => Some(*status),
+			Error::WebModelCall { webc_error, .. } | Error::WebAdapterCall { webc_error, .. } => webc_error.status(),
+			_ => None,
+		}
+	}
+
+	/// Response headers returned with a failed HTTP status, when available.
+	///
+	/// This is the companion to [`Error::status`]. It lets callers implement
+	/// their own retry policy while honoring provider headers such as
+	/// `retry-after`, `retry-after-ms`, and `x-should-retry` without matching
+	/// internal error variants.
+	pub fn headers(&self) -> Option<&HeaderMap> {
+		match self {
+			Error::HttpError { headers, .. } => Some(headers),
+			Error::WebModelCall { webc_error, .. } | Error::WebAdapterCall { webc_error, .. } => webc_error.headers(),
+			_ => None,
+		}
+	}
+}
+
+// region:    --- Error Boilerplate
+
+// The Display trait is now derived via derive_more::Display
+// impl core::fmt::Display for Error {
+// 	fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
+// 		write!(fmt, "{self:?}")
+// 	}
+// }
+
+impl std::error::Error for Error {}
+
+// endregion: --- Error Boilerplate
+
+// region:    --- Tests
+
+#[cfg(test)]
+mod tests {
+	type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>; // For tests.
+
+	use super::*;
+	use reqwest::header::{HeaderMap, HeaderValue, RETRY_AFTER};
+
+	fn webc_status_error(status: u16) -> webc::Error {
+		webc::Error::ResponseFailedStatus {
+			status: StatusCode::from_u16(status).expect("valid status code"),
+			body: "body".to_string(),
+			headers: Box::new(HeaderMap::new()),
+		}
+	}
+
+	#[test]
+	fn test_error_status_from_web_model_call() -> Result<()> {
+		// -- Setup & Fixtures
+		let error = Error::WebModelCall {
+			model_iden: ModelIden::new(AdapterKind::OpenAI, "gpt-4o"),
+			webc_error: webc_status_error(429),
+		};
+
+		// -- Exec & Check
+		assert_eq!(error.status(), Some(StatusCode::TOO_MANY_REQUESTS));
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_error_status_from_web_adapter_call() -> Result<()> {
+		// -- Setup & Fixtures
+		let error = Error::WebAdapterCall {
+			adapter_kind: AdapterKind::OpenAI,
+			webc_error: webc_status_error(503),
+		};
+
+		// -- Exec & Check
+		assert_eq!(error.status(), Some(StatusCode::SERVICE_UNAVAILABLE));
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_error_status_from_http_error() -> Result<()> {
+		// -- Setup & Fixtures
+		let error = Error::HttpError {
+			status: StatusCode::BAD_GATEWAY,
+			canonical_reason: "Bad Gateway".to_string(),
+			body: "body".to_string(),
+			headers: Box::new(HeaderMap::new()),
+		};
+
+		// -- Exec & Check
+		assert_eq!(error.status(), Some(StatusCode::BAD_GATEWAY));
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_error_status_none_without_a_response() -> Result<()> {
+		// -- Setup & Fixtures
+		let error = Error::NoAuthData {
+			model_iden: ModelIden::new(AdapterKind::OpenAI, "gpt-4o"),
+		};
+
+		// -- Exec & Check
+		assert_eq!(error.status(), None);
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_webc_error_status_none_for_non_status_failures() -> Result<()> {
+		// -- Setup & Fixtures
+		let error = webc::Error::ResponseFailedNotJson {
+			content_type: "text/html".to_string(),
+			body: "<html></html>".to_string(),
+		};
+
+		// -- Exec & Check
+		assert_eq!(error.status(), None);
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_error_headers_from_web_model_call() -> Result<()> {
+		let mut headers = HeaderMap::new();
+		headers.insert(RETRY_AFTER, HeaderValue::from_static("7"));
+		let error = Error::WebModelCall {
+			model_iden: ModelIden::new(AdapterKind::OpenAI, "gpt-4o"),
+			webc_error: webc::Error::ResponseFailedStatus {
+				status: StatusCode::TOO_MANY_REQUESTS,
+				body: "body".to_string(),
+				headers: Box::new(headers),
+			},
+		};
+
+		assert_eq!(
+			error.headers().and_then(|headers| headers.get(RETRY_AFTER)),
+			Some(&HeaderValue::from_static("7"))
+		);
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_error_headers_from_http_error() -> Result<()> {
+		let mut headers = HeaderMap::new();
+		headers.insert(RETRY_AFTER, HeaderValue::from_static("11"));
+		let error = Error::HttpError {
+			status: StatusCode::SERVICE_UNAVAILABLE,
+			canonical_reason: "Service Unavailable".to_string(),
+			body: "body".to_string(),
+			headers: Box::new(headers),
+		};
+
+		assert_eq!(
+			error.headers().and_then(|headers| headers.get(RETRY_AFTER)),
+			Some(&HeaderValue::from_static("11"))
+		);
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_error_headers_none_without_a_response() -> Result<()> {
+		let error = Error::NoAuthData {
+			model_iden: ModelIden::new(AdapterKind::OpenAI, "gpt-4o"),
+		};
+
+		assert!(error.headers().is_none());
+
+		Ok(())
+	}
+}
+
+// endregion: --- Tests

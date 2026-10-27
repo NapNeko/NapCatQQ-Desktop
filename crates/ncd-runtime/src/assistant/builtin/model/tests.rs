@@ -146,6 +146,7 @@ async fn assistant_tool_history_serializes_in_openai_format_without_losing_call_
     let server = mounted(200, response_wire(), "text/event-stream").await;
     let mut messages = messages();
     messages.push(ChatMessage::Assistant {
+        protocol: None,
         content: "<think>TEST_PRIVATE_CONTENT</think>".into(),
         reasoning_content: Some("原始推理\nTEST_PRIVATE_REASONING \\ \"内容\"".into()),
         tool_calls: vec![ToolCall {
@@ -348,6 +349,7 @@ async fn oversized_response_is_rejected_before_unbounded_buffering() {
 async fn invalid_outgoing_tool_history_is_rejected_without_any_http_request() {
     let server = MockServer::start().await;
     let messages = vec![ChatMessage::Assistant {
+        protocol: None,
         content: String::new(),
         reasoning_content: None,
         tool_calls: vec![ToolCall {
@@ -415,6 +417,7 @@ fn optional_reasoning_is_omitted_for_legacy_history_and_has_an_outgoing_budget()
             .is_none()
     );
     let oversized = ChatMessage::Assistant {
+        protocol: None,
         content: "answer".into(),
         reasoning_content: Some("x".repeat(MAX_REASONING_BYTES + 1)),
         tool_calls: Vec::new(),

@@ -32,11 +32,7 @@ impl AssistantManager {
         check_turn(self, session, generation)?;
         let profile = self.settings().await?.builtin;
         super::credentials::validate_profile(&profile, true)?;
-        let key = self
-            .credentials
-            .read(&profile)
-            .await?
-            .ok_or("请先保存模型 API Key")?;
+        let key = self.credentials.read_for_model(&profile).await?;
         session.remember_model_secret(&key);
         session.state(AssistantSessionState::Starting, None);
         let epoch = session.advance_epoch();
@@ -82,12 +78,10 @@ impl AssistantManager {
         check_turn(self, session, generation)?;
         let prepared: Result<(_, String), String> = async {
             let profile = self.settings().await?.builtin;
-            let key = self.credentials.read(&profile).await?;
-            if let Some(key) = &key {
-                session.remember_model_secret(key);
-            }
+            let key = self.credentials.read_for_model(&profile).await?;
+            session.remember_model_secret(&key);
             super::credentials::validate_profile(&profile, true)?;
-            Ok((profile, key.ok_or("请先保存模型 API Key")?))
+            Ok((profile, key))
         }
         .await;
         let connected = if prepared.is_ok() {

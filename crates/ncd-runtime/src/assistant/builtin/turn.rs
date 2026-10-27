@@ -111,11 +111,9 @@ async fn run_inner(
     let mcp = McpClient::new(&context.connection)?;
     let mut tools = mcp.discover(&context.cancelled).await?;
     tools.push(question_spec());
-    let client = ModelClient::new(
-        &context.profile.base_url,
-        &context.profile.model,
+    let client = ModelClient::new_with_settings(
+        &context.profile,
         &context.api_key,
-        context.profile.max_output_tokens,
         Duration::from_secs(context.profile.request_timeout_secs as u64),
     )
     .map_err(|error| error.to_string())?;
@@ -197,10 +195,15 @@ async fn run_inner(
         if consumed > RUN_BYTE_LIMIT {
             return Err("本轮诊断达到字节预算，工具尚未执行".into());
         }
-        history.append_assistant(
+        let mut protocol = reply.protocol;
+        if let Some(protocol) = &mut protocol {
+            protocol.sanitize(|text| clean_protocol(secrets, text))?;
+        }
+        history.append_assistant_with_protocol(
             text,
             reasoning_content,
             prepared.iter().map(|call| call.history.clone()).collect(),
+            protocol,
         )?;
         *partial.lock().unwrap_or_else(PoisonError::into_inner) = StreamingText::default();
         sink.checkpoint(history).await?;

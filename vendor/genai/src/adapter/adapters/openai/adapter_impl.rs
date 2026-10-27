@@ -1,0 +1,446 @@
+use super::OpenAIStreamer;
+use crate::adapter::{Adapter, AdapterKind, ServiceType, WebRequestData};
+use crate::chat::{
+	ChatOptionsSet, ChatRequest, ChatResponse, ChatStream, ChatStreamResponse, ContentPart, MessageContent, StopReason,
+	ToolCall,
+};
+use crate::resolver::{AuthData, Endpoint};
+use crate::webc::StreamRequest as RequestBuilder;
+use crate::webc::{EventSourceStream, WebClient, WebResponse};
+use crate::{Error, Result};
+use crate::{ModelIden, ServiceTarget};
+use serde::Deserialize;
+use serde_json::Value;
+use value_ext::JsonValueExt;
+
+pub struct OpenAIAdapter;
+
+impl OpenAIAdapter {
+	pub const API_KEY_DEFAULT_ENV_NAME: &str = "OPENAI_API_KEY";
+}
+
+impl Adapter for OpenAIAdapter {
+	const DEFAULT_API_KEY_ENV_NAME: Option<&'static str> = Some(Self::API_KEY_DEFAULT_ENV_NAME);
+
+	fn default_auth(_kind: AdapterKind) -> AuthData {
+		match Self::DEFAULT_API_KEY_ENV_NAME {
+			Some(env_name) => AuthData::from_env(env_name),
+			None => AuthData::None,
+		}
+	}
+
+	fn default_endpoint(_kind: AdapterKind) -> Endpoint {
+		const BASE_URL: &str = "https://api.openai.com/v1/";
+		Endpoint::from_static(BASE_URL)
+	}
+
+	/// Note: Currently returns the common models (see above)
+	async fn all_model_names(
+		kind: AdapterKind,
+		endpoint: Endpoint,
+		auth: AuthData,
+		web_client: &WebClient,
+	) -> Result<Vec<String>> {
+		OpenAIAdapter::list_model_names_for_end_target(kind, endpoint, auth, web_client).await
+	}
+
+	fn get_service_url(model: &ModelIden, service_type: ServiceType, endpoint: Endpoint) -> Result<String> {
+		Self::util_get_service_url(model, service_type, endpoint)
+	}
+
+	fn to_web_request_data(
+		target: ServiceTarget,
+		service_type: ServiceType,
+		chat_req: ChatRequest,
+		chat_options: ChatOptionsSet<'_, '_>,
+	) -> Result<WebRequestData> {
+		OpenAIAdapter::util_to_web_request_data(target, service_type, chat_req, chat_options, None)
+	}
+
+	fn to_chat_response(
+		model_iden: ModelIden,
+		web_response: WebResponse,
+		options_set: ChatOptionsSet<'_, '_>,
+	) -> Result<ChatResponse> {
+		let WebResponse { mut body, .. } = web_response;
+
+		// -- Capture the provider_model_iden
+		let provider_model_name: Option<String> = body.x_remove("model").ok();
+		let provider_model_iden = model_iden.from_optional_name(provider_model_name);
+
+		// -- Capture the usage
+		let usage = body
+			.x_take("usage")
+			.map(|value| OpenAIAdapter::into_usage(model_iden.adapter_kind, value))
+			.unwrap_or_default();
+
+		// -- Capture the content
+		let mut content: MessageContent = MessageContent::default();
+		let mut reasoning_content: Option<String> = None;
+		let mut stop_reason: Option<StopReason> = None;
+
+		if let Ok(Some(mut first_choice)) = body.x_take::<Option<Value>>("/choices/0") {
+			stop_reason = first_choice
+				.x_take::<Option<String>>("finish_reason")
+				.ok()
+				.flatten()
+				.map(StopReason::from);
+
+			// Check if reasoning is present
+			// Can be in two places:
+			// - /message/reasoning
+			// - /message/reasoning_content
+			// Extracted before content as some model can return reasoning without content
+			reasoning_content = first_choice
+				.x_take::<Option<String>>("/message/reasoning")
+				.ok()
+				.unwrap_or_else(|| {
+					first_choice
+						.x_take::<Option<String>>("/message/reasoning_content")
+						.ok()
+						.flatten()
+				})
+				.map(|s| s.trim().to_string());
+
+			// -- Capture reasoning_details as Custom parts, verbatim (OpenRouter)
+			// OpenRouter returns the provider's own reasoning blocks — signed text
+			// (Anthropic), encrypted content (OpenAI), summaries — as a `reasoning_details`
+			// array beside the plaintext `reasoning`, and requires that array back
+			// verbatim and in order for a multi-turn tool round trip to keep the
+			// model's continuity token. Each entry is carried as a `Custom` part, the
+			// same way an unrecognised Anthropic block is, so nothing in it is lost;
+			// the request side echoes them into `reasoning_details` again. They lead
+			// the content, ahead of the text and tool calls, which is the order they
+			// were produced in.
+			if let Ok(Some(details)) = first_choice.x_take::<Option<Vec<Value>>>("/message/reasoning_details") {
+				for detail in details.into_iter().filter(|detail| detail.is_object()) {
+					content.push(ContentPart::from_custom(detail, Some(model_iden.clone())));
+				}
+			}
+
+			// Mistral reasoning models return `content` as typed chunks, with the
+			// reasoning in `thinking` chunks
+			if let Some(content_value) = first_choice.pointer_mut("/message/content")
+				&& let Value::Array(chunks) = content_value
+			{
+				let (text, reasoning) = super::adapter_shared::split_content_chunks(chunks);
+				if reasoning_content.is_none() {
+					reasoning_content = reasoning.map(|r| r.trim().to_string());
+				}
+				*content_value = text.map(Value::String).unwrap_or(Value::Null);
+			}
+
+			// -- Push eventual text message
+			if let Ok(Some(mut text_content)) = first_choice.x_take::<Option<String>>("/message/content") {
+				text_content = text_content.trim().to_string();
+				// If not reasoning_content, but
+				if reasoning_content.is_none() && options_set.normalize_reasoning_content().unwrap_or_default() {
+					let (content_tmp, reasoning_content_tmp) = extract_think(text_content);
+					reasoning_content = reasoning_content_tmp;
+					text_content = content_tmp;
+				}
+
+				// After extracting reasoning_content, sometimes the content is empty.
+				if !text_content.is_empty() {
+					content.push(text_content);
+				}
+			}
+
+			// -- Push eventual ToolCalls
+			if let Some(tool_calls) = first_choice
+				.x_take("/message/tool_calls")
+				.ok()
+				.map(parse_tool_calls)
+				.transpose()?
+				.map(MessageContent::from_tool_calls)
+			{
+				content.extend(tool_calls);
+			}
+		}
+
+		Ok(ChatResponse {
+			content,
+			reasoning_content,
+			model_iden,
+			provider_model_iden,
+			stop_reason,
+			usage,
+			captured_raw_body: None, // Set by the client exec_chat
+			response_id: None,
+		})
+	}
+
+	fn to_chat_stream(
+		model_iden: ModelIden,
+		reqwest_builder: RequestBuilder,
+		options_sets: ChatOptionsSet<'_, '_>,
+	) -> Result<ChatStreamResponse> {
+		let event_source = EventSourceStream::new(reqwest_builder);
+		let openai_stream = OpenAIStreamer::new(event_source, model_iden.clone(), options_sets);
+		let frame_tap = openai_stream.frame_tap();
+		let chat_stream = ChatStream::from_inter_stream(openai_stream).with_frame_tap(frame_tap);
+
+		Ok(ChatStreamResponse {
+			model_iden,
+			stream: chat_stream,
+		})
+	}
+
+	fn to_embed_request_data(
+		service_target: ServiceTarget,
+		embed_req: crate::embed::EmbedRequest,
+		options_set: crate::embed::EmbedOptionsSet<'_, '_>,
+	) -> Result<WebRequestData> {
+		super::embed::to_embed_request_data(service_target, embed_req, options_set)
+	}
+
+	fn to_embed_response(
+		model_iden: ModelIden,
+		web_response: WebResponse,
+		options_set: crate::embed::EmbedOptionsSet<'_, '_>,
+	) -> Result<crate::embed::EmbedResponse> {
+		super::embed::to_embed_response(model_iden, web_response, options_set)
+	}
+}
+
+// region:    --- Support
+
+fn extract_think(content: String) -> (String, Option<String>) {
+	let start_tag = "<think>";
+	let end_tag = "</think>";
+
+	if let Some(start) = content.find(start_tag)
+		&& let Some(end) = content[start + start_tag.len()..].find(end_tag)
+	{
+		let start_pos = start;
+		let end_pos = start + start_tag.len() + end;
+
+		let think_content = &content[start_pos + start_tag.len()..end_pos];
+		let think_content = think_content.trim();
+
+		// Extract parts of the original content without cloning until necessary
+		let before_think = &content[..start_pos];
+		let after_think = &content[end_pos + end_tag.len()..];
+
+		// Remove a leading newline in `after_think` if it starts with '\n'
+		let after_think = after_think.trim_start();
+
+		// Construct the final cleaned content in one allocation
+		let cleaned_content = format!("{before_think}{after_think}");
+
+		return (cleaned_content, Some(think_content.to_string()));
+	}
+
+	(content, None)
+}
+
+fn parse_tool_calls(raw_tool_calls: Value) -> Result<Vec<ToolCall>> {
+	// Some backends (like sglang) return null if no tool calls are present.
+	if raw_tool_calls.is_null() {
+		return Ok(vec![]);
+	}
+
+	let Value::Array(raw_tool_calls) = raw_tool_calls else {
+		return Err(Error::InvalidJsonResponseElement {
+			info: "tool calls is not an array",
+		});
+	};
+
+	let tool_calls = raw_tool_calls.into_iter().map(parse_tool_call).collect::<Result<Vec<_>>>()?;
+
+	Ok(tool_calls)
+}
+
+fn parse_tool_call(raw_tool_call: Value) -> Result<ToolCall> {
+	// Define a helper struct to match the original JSON structure.
+	#[derive(Deserialize)]
+	struct IterimToolFnCall {
+		id: String,
+		#[allow(unused)]
+		#[serde(rename = "type")]
+		r#type: String,
+		function: IterimFunction,
+	}
+
+	#[derive(Deserialize)]
+	struct IterimFunction {
+		name: String,
+		arguments: Value,
+	}
+
+	let iterim = serde_json::from_value::<IterimToolFnCall>(raw_tool_call)?;
+
+	let fn_name = iterim.function.name;
+
+	// For now, support Object only, and parse the eventual string as a json value.
+	// Eventually, we might check pricing
+	let fn_arguments = match iterim.function.arguments {
+		Value::Object(obj) => Value::Object(obj),
+		Value::String(txt) => serde_json::from_str(&txt)?,
+		_ => {
+			return Err(Error::InvalidJsonResponseElement {
+				info: "tool call arguments is not an object",
+			});
+		}
+	};
+
+	// Then, map the fields of the helper struct to the flat structure.
+	Ok(ToolCall {
+		call_id: iterim.id,
+		fn_name,
+		fn_arguments,
+		thought_signatures: None,
+	})
+}
+
+// endregion: --- Support
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::adapter::AdapterKind;
+	use reqwest::StatusCode;
+
+	fn test_model() -> ModelIden {
+		ModelIden::new(AdapterKind::OpenAI, "gpt-4o-mini")
+	}
+
+	#[test]
+	fn test_to_chat_response_captures_finish_reason_as_stop_reason() {
+		let web_response = WebResponse {
+			status: StatusCode::OK,
+			body: serde_json::json!({
+				"id": "chatcmpl-test",
+				"model": "gpt-4o-mini-2024-07-18",
+				"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+				"choices": [{
+					"finish_reason": "stop",
+					"message": {"role": "assistant", "content": "hello"}
+				}]
+			}),
+		};
+
+		let response = OpenAIAdapter::to_chat_response(test_model(), web_response, ChatOptionsSet::default())
+			.expect("chat response");
+
+		assert_eq!(response.stop_reason, Some(StopReason::Completed("stop".to_string())));
+		assert_eq!(response.first_text(), Some("hello"));
+	}
+
+	#[test]
+	fn test_to_chat_response_stop_reason_none_when_missing() {
+		let web_response = WebResponse {
+			status: StatusCode::OK,
+			body: serde_json::json!({
+				"id": "chatcmpl-test",
+				"model": "gpt-4o-mini-2024-07-18",
+				"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+				"choices": [{
+					"message": {"role": "assistant", "content": "hello"}
+				}]
+			}),
+		};
+
+		let response = OpenAIAdapter::to_chat_response(test_model(), web_response, ChatOptionsSet::default())
+			.expect("chat response");
+
+		assert_eq!(response.stop_reason, None);
+	}
+
+	/// Mistral's reasoning models answer with `content` as typed chunks (shape
+	/// captured from a live `mistral-large-4` response). The text must still come
+	/// through, and the `thinking` chunk becomes `reasoning_content`.
+	#[test]
+	fn test_to_chat_response_splits_mistral_thinking_chunks() {
+		let web_response = WebResponse {
+			status: StatusCode::OK,
+			body: serde_json::json!({
+				"id": "7043ccd4",
+				"model": "mistral-large-4",
+				"usage": {"prompt_tokens": 10, "completion_tokens": 554, "total_tokens": 564, "prompt_tokens_details": {"cached_tokens": 0}},
+				"choices": [{
+					"finish_reason": "stop",
+					"message": {
+						"role": "assistant",
+						"tool_calls": null,
+						"content": [
+							{"type": "thinking", "thinking": [{"type": "text", "text": "17 x 23 = 391."}], "closed": true},
+							{"type": "text", "text": "No, 391 = 17 x 23."}
+						]
+					}
+				}]
+			}),
+		};
+		let model = ModelIden::new(AdapterKind::Mistral, "mistral-large-4");
+
+		let response =
+			OpenAIAdapter::to_chat_response(model, web_response, ChatOptionsSet::default()).expect("chat response");
+
+		assert_eq!(response.first_text(), Some("No, 391 = 17 x 23."));
+		assert_eq!(response.reasoning_content.as_deref(), Some("17 x 23 = 391."));
+	}
+
+	/// OpenRouter returns the provider's own reasoning blocks — signed text,
+	/// encrypted content, summaries — as `reasoning_details` beside the
+	/// plaintext `reasoning`, and needs them back verbatim on the next turn.
+	/// Each entry becomes a `Custom` part, ahead of the text and tool calls,
+	/// tagged with the model; the plaintext still lands in `reasoning_content`.
+	#[test]
+	fn test_to_chat_response_captures_reasoning_details_as_custom_parts() {
+		// -- Setup & Fixtures
+		let web_response = WebResponse {
+			status: StatusCode::OK,
+			body: serde_json::json!({
+				"id": "gen-test",
+				"model": "anthropic/claude-sonnet-4-6",
+				"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+				"choices": [{
+					"finish_reason": "tool_calls",
+					"message": {
+						"role": "assistant",
+						"content": "",
+						"reasoning": "Read the file first.",
+						"reasoning_details": [
+							{"type": "reasoning.text", "text": "Read the file first.", "signature": "sig-1", "format": "anthropic-claude-v1", "index": 0},
+							{"type": "reasoning.encrypted", "data": "opaque-bytes", "format": "openai-responses-v1", "index": 1}
+						],
+						"tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"/runbook\"}"}}]
+					}
+				}]
+			}),
+		};
+		let model = ModelIden::new(AdapterKind::OpenRouter, "anthropic/claude-sonnet-4-6");
+
+		// -- Exec
+		let response =
+			OpenAIAdapter::to_chat_response(model, web_response, ChatOptionsSet::default()).expect("chat response");
+
+		// -- Check
+		assert_eq!(response.reasoning_content.as_deref(), Some("Read the file first."));
+		let parts = response.content.parts();
+		let kinds: Vec<&str> = parts
+			.iter()
+			.map(|part| match part {
+				ContentPart::Custom(custom) => custom.typ().unwrap_or("custom"),
+				ContentPart::ToolCall(_) => "tool_call",
+				ContentPart::Text(_) => "text",
+				_ => "other",
+			})
+			.collect();
+		assert_eq!(
+			kinds,
+			["reasoning.text", "reasoning.encrypted", "tool_call"],
+			"every entry, in order, ahead of the tool call; an empty content string adds no text part"
+		);
+		let ContentPart::Custom(signed) = &parts[0] else {
+			panic!("first part is the signed block");
+		};
+		assert_eq!(signed.data()["signature"], "sig-1");
+		assert_eq!(signed.data()["format"], "anthropic-claude-v1");
+		assert_eq!(
+			signed.model_iden.as_ref().map(|m| m.model_name.to_string()).as_deref(),
+			Some("anthropic/claude-sonnet-4-6"),
+			"tagged with the model that produced it"
+		);
+	}
+}

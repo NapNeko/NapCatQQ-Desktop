@@ -24,6 +24,7 @@ members = [
     "crates/ncd-agent",
 ]
 resolver = "3"
+exclude = ["vendor/genai"]
 
 [workspace.package]
 edition = "2024"

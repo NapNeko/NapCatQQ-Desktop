@@ -1,0 +1,177 @@
+use crate::adapter::AdapterKind;
+use crate::chat::ChatOptions;
+use crate::resolver::{
+	AuthResolver, IntoAuthResolverFn, IntoModelMapperFn, IntoServiceTargetResolverFn, ModelMapper, ProviderConfig,
+	ServiceTargetResolver,
+};
+use crate::webc::WebClient;
+use crate::{Client, ClientConfig, WebConfig};
+use crate::{Error, Result};
+use std::sync::Arc;
+
+/// Builder for `Client`.
+///
+/// Create via:
+/// - `ClientBuilder::default()`
+/// - `Client::builder()`
+#[derive(Debug, Default)]
+pub struct ClientBuilder {
+	web_client: Option<WebClient>,
+	config: Option<ClientConfig>,
+}
+
+/// Builder methods
+impl ClientBuilder {
+	/// Use a custom `reqwest::Client`.
+	pub fn with_reqwest(mut self, reqwest_client: reqwest::Client) -> Self {
+		self.web_client = Some(WebClient::from_reqwest_client(reqwest_client));
+		self
+	}
+
+	/// Set a `ClientConfig`.
+	pub fn with_config(mut self, config: ClientConfig) -> Self {
+		self.config = Some(config);
+		self
+	}
+
+	/// Set `WebConfig` used to build the internal `reqwest::Client` (creates `ClientConfig` if absent).
+	pub fn with_web_config(mut self, req_options: WebConfig) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		client_config.web_config = Some(req_options);
+		self
+	}
+}
+
+/// Builder ClientConfig passthrough convenient setters.
+/// The goal of these functions is to set nested values such as Client Config and ChatOptions for the client.
+impl ClientBuilder {
+	/// Set `ChatOptions` on `ClientConfig` (creates it if absent).
+	pub fn with_chat_options(mut self, options: ChatOptions) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		client_config.chat_options = Some(options);
+		self
+	}
+
+	/// Set `AuthResolver` on `ClientConfig` (creates it if absent).
+	pub fn with_auth_resolver(mut self, auth_resolver: AuthResolver) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		client_config.auth_resolver = Some(auth_resolver);
+		self
+	}
+
+	/// Set `AuthResolver` from a resolver function (creates `ClientConfig` if absent).
+	pub fn with_auth_resolver_fn(mut self, auth_resolver_fn: impl IntoAuthResolverFn) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		let auth_resolver = AuthResolver::from_resolver_fn(auth_resolver_fn);
+		client_config.auth_resolver = Some(auth_resolver);
+		self
+	}
+
+	/// Set `ServiceTargetResolver` on `ClientConfig` (creates it if absent).
+	pub fn with_service_target_resolver(mut self, target_resolver: ServiceTargetResolver) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		client_config.service_target_resolver = Some(target_resolver);
+		self
+	}
+
+	/// Set `ServiceTargetResolver` from a resolver function (creates `ClientConfig` if absent).
+	pub fn with_service_target_resolver_fn(mut self, target_resolver_fn: impl IntoServiceTargetResolverFn) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		let target_resolver = ServiceTargetResolver::from_resolver_fn(target_resolver_fn);
+		client_config.service_target_resolver = Some(target_resolver);
+		self
+	}
+
+	/// Set `ModelMapper` on `ClientConfig` (creates it if absent).
+	pub fn with_model_mapper(mut self, model_mapper: ModelMapper) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		client_config.model_mapper = Some(model_mapper);
+		self
+	}
+
+	/// Set `ModelMapper` from a mapper function (creates `ClientConfig` if absent).
+	pub fn with_model_mapper_fn(mut self, model_mapper_fn: impl IntoModelMapperFn) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		let model_mapper = ModelMapper::from_mapper_fn(model_mapper_fn);
+		client_config.model_mapper = Some(model_mapper);
+		self
+	}
+
+	/// Bind the Client to a single [`AdapterKind`] (creates `ClientConfig` if absent).
+	///
+	/// See [`ClientConfig::with_adapter_kind`] for semantics. Short version:
+	/// a Client whose `AuthResolver` / `ServiceTargetResolver` are gated on an
+	/// adapter is already physically single-provider; this makes that
+	/// constraint explicit and drives routing directly instead of inferring
+	/// the adapter from the model name on every call.
+	pub fn with_adapter_kind(mut self, adapter_kind: AdapterKind) -> Self {
+		let client_config = self.config.get_or_insert_with(ClientConfig::default);
+		client_config.adapter_kind = Some(adapter_kind);
+		self
+	}
+
+	/// Append the endpoint and/or auth for one adapter kind.
+	///
+	/// Call once per provider this Client should reach; each call adds to
+	/// the list rather than replacing it:
+	///
+	/// ```rust
+	/// # use genai::Client;
+	/// # use genai::adapter::AdapterKind;
+	/// # use genai::resolver::{AuthData, Endpoint};
+	/// let client = Client::builder()
+	///     .append_provider_config(
+	///         AdapterKind::OpenAI,
+	///         (Endpoint::from_static("https://gateway.internal/v1/"), AuthData::from_env("GATEWAY_KEY")),
+	///     )
+	///     .append_provider_config(AdapterKind::Ollama, Endpoint::from_static("http://localhost:11434/v1/"))
+	///     .build();
+	/// ```
+	///
+	/// Precedence, lowest to highest: the adapter's built-in default, then
+	/// this configuration, then the resolvers.
+	pub fn append_provider_config(
+		mut self,
+		adapter_kind: AdapterKind,
+		provider_config: impl Into<ProviderConfig>,
+	) -> Self {
+		let config = self.config.take().unwrap_or_default();
+		self.config = Some(config.append_provider_config(adapter_kind, provider_config));
+		self
+	}
+}
+
+impl ClientBuilder {
+	/// Build a `Client`.
+	pub fn build(self) -> Result<Client> {
+		let config = self.config.unwrap_or_default();
+
+		// Create WebClient based on configuration
+		let web_client = if let Some(web_client) = self.web_client {
+			// Use explicitly provided WebClient
+			web_client
+		} else if let Some(req_config) = config.web_config() {
+			// Create WebClient with reqwest configuration
+			let mut reqwest_builder = reqwest::Client::builder();
+			reqwest_builder = req_config.apply_to_builder(reqwest_builder);
+			WebClient::from_reqwest_client(build_reqwest(reqwest_builder)?)
+		} else {
+			// Use default WebClient with performance optimizations
+			let default_config = super::web_config::WebConfig::default();
+			let mut reqwest_builder = reqwest::Client::builder();
+			reqwest_builder = default_config.apply_to_builder(reqwest_builder);
+			WebClient::from_reqwest_client(build_reqwest(reqwest_builder)?)
+		};
+
+		let inner = super::ClientInner { web_client, config };
+
+		Ok(Client { inner: Arc::new(inner) })
+	}
+}
+
+fn build_reqwest(reqwest_builder: reqwest::ClientBuilder) -> Result<reqwest::Client> {
+	let reqwest_client = reqwest_builder
+		.build()
+		.map_err(|e| Error::ClientBuildFail { cause: e.to_string() })?;
+	Ok(reqwest_client)
+}

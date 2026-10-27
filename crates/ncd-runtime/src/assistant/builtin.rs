@@ -18,7 +18,7 @@ use ncd_traits::assistant::AssistantToolConnection;
 use tokio_util::sync::CancellationToken;
 
 pub(super) use history::History;
-pub(super) use model::endpoint_url;
+pub(super) use model::endpoint_url_for_format;
 
 pub(super) struct BuiltinRunContext {
     pub profile: AssistantBuiltinSettings,

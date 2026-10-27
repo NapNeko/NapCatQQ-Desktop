@@ -444,6 +444,7 @@ async fn run() -> Result<(), &'static str> {
                 max_steps: 3,
                 max_output_tokens: 4096,
                 request_timeout_secs: 90,
+                ..Default::default()
             },
             ..Default::default()
         };

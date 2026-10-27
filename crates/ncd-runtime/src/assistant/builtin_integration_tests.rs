@@ -132,7 +132,13 @@ async fn builtin_manager_discovers_tools_only_on_user_task_and_persists_full_red
             full.store(value["messages"].as_array().unwrap().iter().any(|message| message["role"] == "tool" && message["tool_call_id"] == "call-environment" && message["content"].as_str().is_some_and(|content| content.contains(&"X".repeat(4000)))), Ordering::SeqCst);
             json!({"index":0,"message":{"role":"assistant","content":"环境检查完成，工具信息完整。"},"finish_reason":"stop"})
         };
-        ResponseTemplate::new(200).set_body_json(json!({"choices":[choice]}))
+        let mut choice = choice;
+        let message = choice.as_object_mut().unwrap().remove("message").unwrap();
+        choice["delta"] = message;
+        if let Some(calls) = choice["delta"]["tool_calls"].as_array_mut() {
+            for (index, call) in calls.iter_mut().enumerate() { call["index"] = json!(index); }
+        }
+        ResponseTemplate::new(200).set_body_raw(format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[choice]})), "text/event-stream")
     }).expect(2).mount(&server).await;
     let (_root, manager) = manager(&server).await;
     let created = manager

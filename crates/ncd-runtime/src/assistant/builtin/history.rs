@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use super::model::{ChatMessage, ToolCall};
+use super::model::{ChatMessage, ProtocolContent, ToolCall};
 
 pub(super) const HISTORY_LIMIT: usize = 192 * 1024;
 pub(super) const TOOL_RESULT_RESERVE: usize = 34 * 1024;
@@ -43,6 +43,7 @@ impl History {
                 ChatMessage::Assistant {
                     reasoning_content,
                     tool_calls,
+                    protocol,
                     ..
                 } => {
                     if let Some(reasoning) = reasoning_content {
@@ -52,6 +53,9 @@ impl History {
                         call.id = redact(&call.id);
                         call.name = redact(&call.name);
                         call.arguments = redact_json_text(&call.arguments, &redact, 0);
+                    }
+                    if let Some(protocol) = protocol {
+                        protocol.sanitize(&redact)?;
                     }
                 }
                 ChatMessage::Tool { tool_call_id, .. } => *tool_call_id = redact(tool_call_id),
@@ -104,6 +108,16 @@ impl History {
         reasoning_content: Option<String>,
         tool_calls: Vec<ToolCall>,
     ) -> Result<(), String> {
+        self.append_assistant_with_protocol(content, reasoning_content, tool_calls, None)
+    }
+
+    pub(super) fn append_assistant_with_protocol(
+        &mut self,
+        content: String,
+        reasoning_content: Option<String>,
+        tool_calls: Vec<ToolCall>,
+        protocol: Option<ProtocolContent>,
+    ) -> Result<(), String> {
         if !self.pending().is_empty() {
             return Err("会话中仍有未结算的工具调用".into());
         }
@@ -115,10 +129,16 @@ impl History {
             return Err("内置助手协议消息超过限制".into());
         }
         let reserve = tool_calls.len().saturating_mul(TOOL_RESULT_RESERVE);
+        if let Some(protocol) = &protocol {
+            protocol
+                .validate(&tool_calls)
+                .map_err(|_| "内置助手私有协议历史无效")?;
+        }
         let message = ChatMessage::Assistant {
             content,
             reasoning_content,
             tool_calls,
+            protocol,
         };
         let current = self.turns.last().ok_or("诊断轮次尚未开始")?;
         let size = encoded_size(current)?.saturating_add(encoded_size(&message)?);
@@ -219,7 +239,13 @@ impl History {
                         content,
                         reasoning_content,
                         tool_calls,
+                        protocol,
                     } if pending.is_empty() => {
+                        if let Some(protocol) = protocol {
+                            protocol
+                                .validate(tool_calls)
+                                .map_err(|_| "内置助手私有协议历史无效")?;
+                        }
                         if content.len() > 128 * 1024
                             || reasoning_content
                                 .as_ref()

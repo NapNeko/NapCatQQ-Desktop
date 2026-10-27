@@ -1,0 +1,831 @@
+//! AWS event-stream frame parser for Bedrock ConverseStream.
+//!
+//! ConverseStream uses `application/vnd.amazon.eventstream` framing, not SSE. Each message has:
+//!
+//!   [0..4)   total_len (big-endian u32)
+//!   [4..8)   headers_len (big-endian u32)
+//!   [8..12)  prelude_crc (CRC32 of bytes 0..8)
+//!   [12..12+headers_len)  headers
+//!   [12+headers_len..total_len-4)  payload
+//!   [total_len-4..total_len)  message_crc (CRC32 of bytes 0..total_len-4)
+//!
+//! Headers are a series of { name_len u8, name utf8, value_type u8, value_len u16, value bytes }.
+//! We only care about `:event-type` (string, type=7) to dispatch, and `:message-type` (also
+//! string) to detect errors.
+//!
+//! See: https://docs.aws.amazon.com/transcribe/latest/dg/event-stream.html
+
+use crate::adapter::adapters::bedrock::converse::parse_usage;
+use crate::adapter::adapters::support::{StreamerCapturedData, StreamerOptions, new_frame_tap};
+use crate::adapter::inter_stream::{InterStreamEnd, InterStreamEvent, InterStreamThoughtBlock};
+use crate::chat::{ChatOptionsSet, StopReason, ToolCall};
+use crate::webc::FrameTap;
+use crate::{Error, ModelIden, Result};
+use bytes::{Buf, BytesMut};
+use futures::Stream;
+use serde_json::{Map, Value};
+use std::collections::VecDeque;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use value_ext::JsonValueExt;
+
+/// A streaming parser that pulls raw bytes from a [`WebStream`] and yields decoded
+/// `InterStreamEvent`s by parsing AWS event-stream frames and the Converse payloads inside them.
+pub(super) struct BedrockStreamer {
+	// We reuse WebStream with a custom mode that hands us raw bytes. To keep the hotfix small,
+	// we instead hold a boxed byte stream directly.
+	inner: Pin<Box<dyn Stream<Item = std::result::Result<bytes::Bytes, crate::error::BoxError>> + Send>>,
+	buf: BytesMut,
+	options: StreamerOptions,
+	captured_data: StreamerCapturedData,
+	pending_events: VecDeque<InterStreamEvent>,
+	done: bool,
+	emitted_start: bool,
+	in_progress_tool: Option<ToolCallAccumulator>,
+	in_progress_reasoning: Option<ReasoningAccumulator>,
+	captured_thought_blocks: Vec<InterStreamThoughtBlock>,
+	// Feeds the user `ChatFrameSink`, when one is configured. Bedrock decodes its own
+	// event-stream framing, so the tap lives here rather than in a shared transport.
+	frame_tap: Option<FrameTap>,
+}
+
+struct ToolCallAccumulator {
+	call_id: String,
+	fn_name: String,
+	input: String,
+}
+
+/// One `reasoningContent` content block. Claude streams `text` deltas then a `signature`;
+/// redacted reasoning (Claude `redacted_thinking`, OpenAI encrypted reasoning) arrives as
+/// `redactedContent`. Kept regardless of capture options: the blocks are what lets the caller
+/// replay a thinking + tool-use turn.
+#[derive(Default)]
+struct ReasoningAccumulator {
+	text: String,
+	signature: String,
+	redacted: String,
+}
+
+impl ReasoningAccumulator {
+	/// A signed or redacted block, or `None` for unsigned reasoning (it can't be replayed).
+	fn into_thought_block(self) -> Option<InterStreamThoughtBlock> {
+		if !self.redacted.is_empty() {
+			Some(InterStreamThoughtBlock::Signed {
+				reasoning_content: None,
+				signature: self.redacted,
+			})
+		} else if !self.signature.is_empty() {
+			Some(InterStreamThoughtBlock::Signed {
+				reasoning_content: Some(self.text),
+				signature: self.signature,
+			})
+		} else {
+			None
+		}
+	}
+}
+
+impl BedrockStreamer {
+	pub(super) fn new(
+		bytes_stream: Pin<Box<dyn Stream<Item = std::result::Result<bytes::Bytes, crate::error::BoxError>> + Send>>,
+		model_iden: ModelIden,
+		options_set: ChatOptionsSet<'_, '_>,
+	) -> Self {
+		let frame_tap = new_frame_tap(&model_iden, &options_set);
+
+		Self {
+			inner: bytes_stream,
+			buf: BytesMut::with_capacity(8 * 1024),
+			options: StreamerOptions::new(model_iden, options_set),
+			captured_data: StreamerCapturedData::default(),
+			pending_events: VecDeque::new(),
+			done: false,
+			emitted_start: false,
+			in_progress_tool: None,
+			in_progress_reasoning: None,
+			captured_thought_blocks: Vec::new(),
+			frame_tap,
+		}
+	}
+
+	/// Clones the frame tap (if any), so `ChatStream` can fire the terminal sink hooks.
+	pub(super) fn frame_tap(&self) -> Option<FrameTap> {
+		self.frame_tap.clone()
+	}
+
+	/// Try to pull one complete event-stream frame from `self.buf` and return its
+	/// decoded payload (event-type + JSON), or None if the buffer doesn't yet contain a full frame.
+	fn try_parse_frame(&mut self) -> Result<Option<DecodedFrame>> {
+		// -- Check prelude buffer length
+		if self.buf.len() < 12 {
+			return Ok(None);
+		}
+
+		// -- Parse frame lengths
+		let total_len = u32::from_be_bytes(
+			self.buf
+				.get(0..4)
+				.and_then(|s| <[u8; 4]>::try_from(s).ok())
+				.ok_or_else(|| self.frame_err("failed to read frame total_len".into()))?,
+		) as usize;
+
+		let headers_len = u32::from_be_bytes(
+			self.buf
+				.get(4..8)
+				.and_then(|s| <[u8; 4]>::try_from(s).ok())
+				.ok_or_else(|| self.frame_err("failed to read frame headers_len".into()))?,
+		) as usize;
+
+		// -- Validate lengths and buffer bounds
+		if !(16..=16 * 1024 * 1024).contains(&total_len) {
+			return Err(self.frame_err(format!("invalid event-stream total_len: {total_len}")));
+		}
+
+		if headers_len > total_len.saturating_sub(16) {
+			return Err(self.frame_err(format!(
+				"invalid event-stream headers_len: {headers_len} exceeds maximum allowed for total_len {total_len}"
+			)));
+		}
+
+		if self.buf.len() < total_len {
+			return Ok(None);
+		}
+
+		// -- Validate prelude CRC
+		let prelude_crc = u32::from_be_bytes(
+			self.buf
+				.get(8..12)
+				.and_then(|s| <[u8; 4]>::try_from(s).ok())
+				.ok_or_else(|| self.frame_err("failed to read prelude CRC".into()))?,
+		);
+
+		let prelude_slice = self
+			.buf
+			.get(0..8)
+			.ok_or_else(|| self.frame_err("failed to read prelude slice for CRC".into()))?;
+		let prelude_actual = crc32(prelude_slice);
+		if prelude_crc != prelude_actual {
+			return Err(self.frame_err(format!("prelude CRC mismatch: {prelude_crc} != {prelude_actual}")));
+		}
+
+		// -- Validate message CRC
+		let msg_crc_start = total_len.saturating_sub(4);
+		let msg_crc = u32::from_be_bytes(
+			self.buf
+				.get(msg_crc_start..total_len)
+				.and_then(|s| <[u8; 4]>::try_from(s).ok())
+				.ok_or_else(|| self.frame_err("failed to read message CRC".into()))?,
+		);
+		let msg_slice = self
+			.buf
+			.get(0..msg_crc_start)
+			.ok_or_else(|| self.frame_err("failed to read message slice for CRC".into()))?;
+		let msg_actual = crc32(msg_slice);
+		if msg_crc != msg_actual {
+			return Err(self.frame_err(format!("message CRC mismatch: {msg_crc} != {msg_actual}")));
+		}
+
+		// -- Extract headers and payload
+		let headers_start = 12;
+		let headers_end = headers_start + headers_len;
+		let payload_end = total_len - 4;
+
+		let headers_slice = self
+			.buf
+			.get(headers_start..headers_end)
+			.ok_or_else(|| self.frame_err("failed to slice frame headers".into()))?;
+		let payload_slice = self
+			.buf
+			.get(headers_end..payload_end)
+			.ok_or_else(|| self.frame_err("failed to slice frame payload".into()))?;
+
+		let headers = parse_headers(headers_slice).map_err(|e| self.frame_err(format!("header parse: {e}")))?;
+		let payload = payload_slice.to_vec();
+
+		// -- Advance buffer past frame
+		self.buf.advance(total_len);
+
+		Ok(Some(DecodedFrame { headers, payload }))
+	}
+
+	fn frame_err(&self, msg: String) -> Error {
+		Error::ChatResponse {
+			model_iden: self.options.model_iden.clone(),
+			body: serde_json::json!({ "error": msg }),
+		}
+	}
+
+	/// Dispatch a decoded frame into zero or more InterStreamEvents.
+	fn handle_frame(&mut self, frame: DecodedFrame) -> Result<Vec<InterStreamEvent>> {
+		let event_type = frame.headers.get(":event-type").cloned().unwrap_or_default();
+
+		if let Some(frame_tap) = self.frame_tap.as_mut() {
+			let data = String::from_utf8_lossy(&frame.payload);
+			frame_tap.on_frame(Some(&event_type), &data);
+		}
+
+		let message_type = frame.headers.get(":message-type").cloned().unwrap_or_default();
+
+		if message_type == "exception" || message_type == "error" {
+			let body: Value = serde_json::from_slice(&frame.payload).unwrap_or(Value::Null);
+			return Err(Error::ChatResponse {
+				model_iden: self.options.model_iden.clone(),
+				body,
+			});
+		}
+
+		let mut payload: Value = if frame.payload.is_empty() {
+			Value::Null
+		} else {
+			serde_json::from_slice(&frame.payload).map_err(|serde_error| Error::StreamParse {
+				model_iden: self.options.model_iden.clone(),
+				serde_error,
+			})?
+		};
+
+		let mut events: Vec<InterStreamEvent> = Vec::new();
+
+		if !self.emitted_start {
+			self.emitted_start = true;
+			events.push(InterStreamEvent::Start);
+		}
+
+		match event_type.as_str() {
+			"messageStart" => {
+				// No-op: genai already emitted Start above.
+			}
+			"contentBlockStart" => {
+				// { start: { toolUse: { toolUseId, name } }, contentBlockIndex }
+				if let Ok(mut tool_use) = payload.x_take::<Value>("/start/toolUse") {
+					let call_id: String = tool_use.x_take("toolUseId").unwrap_or_default();
+					let fn_name: String = tool_use.x_take("name").unwrap_or_default();
+
+					let tc = ToolCall {
+						call_id: call_id.clone(),
+						fn_name: fn_name.clone(),
+						fn_arguments: Value::String(String::new()),
+						thought_signatures: None,
+					};
+					self.in_progress_tool = Some(ToolCallAccumulator {
+						call_id,
+						fn_name,
+						input: String::new(),
+					});
+					events.push(InterStreamEvent::ToolCallChunk(tc));
+				}
+			}
+			"contentBlockDelta" => {
+				// { delta: { text? | toolUse { input }? | reasoningContent { text | signature } }, contentBlockIndex }
+				if let Ok(text) = payload.x_take::<String>("/delta/text") {
+					if self.options.capture_content {
+						match self.captured_data.content {
+							Some(ref mut c) => c.push_str(&text),
+							None => self.captured_data.content = Some(text.clone()),
+						}
+					}
+					events.push(InterStreamEvent::Chunk(text));
+				} else if let Ok(partial) = payload.x_take::<String>("/delta/toolUse/input") {
+					if let Some(acc) = self.in_progress_tool.as_mut() {
+						acc.input.push_str(&partial);
+						events.push(InterStreamEvent::ToolCallChunk(ToolCall {
+							call_id: acc.call_id.clone(),
+							fn_name: acc.fn_name.clone(),
+							fn_arguments: Value::String(acc.input.clone()),
+							thought_signatures: None,
+						}));
+					}
+				} else if let Ok(reasoning) = payload.x_take::<String>("/delta/reasoningContent/text") {
+					self.in_progress_reasoning.get_or_insert_default().text.push_str(&reasoning);
+					if self.options.capture_reasoning_content {
+						match self.captured_data.reasoning_content {
+							Some(ref mut r) => r.push_str(&reasoning),
+							None => self.captured_data.reasoning_content = Some(reasoning.clone()),
+						}
+					}
+					events.push(InterStreamEvent::ReasoningChunk(reasoning));
+				} else if let Ok(signature) = payload.x_take::<String>("/delta/reasoningContent/signature") {
+					self.in_progress_reasoning
+						.get_or_insert_default()
+						.signature
+						.push_str(&signature);
+					events.push(InterStreamEvent::ThoughtSignatureChunk(signature));
+				} else if let Ok(redacted) = payload.x_take::<String>("/delta/reasoningContent/redactedContent") {
+					self.in_progress_reasoning.get_or_insert_default().redacted.push_str(&redacted);
+					events.push(InterStreamEvent::ThoughtSignatureChunk(redacted));
+				}
+			}
+			"contentBlockStop" => {
+				self.flush_reasoning();
+				if let Some(acc) = self.in_progress_tool.take()
+					&& self.options.capture_tool_calls
+				{
+					let fn_arguments = if acc.input.is_empty() {
+						Value::Object(Map::new())
+					} else {
+						serde_json::from_str(&acc.input).unwrap_or(Value::Object(Map::new()))
+					};
+					let tc = ToolCall {
+						call_id: acc.call_id,
+						fn_name: acc.fn_name,
+						fn_arguments,
+						thought_signatures: None,
+					};
+					match self.captured_data.tool_calls {
+						Some(ref mut t) => t.push(tc),
+						None => self.captured_data.tool_calls = Some(vec![tc]),
+					}
+				}
+			}
+			"messageStop" => {
+				if let Ok(reason) = payload.x_take::<String>("stopReason") {
+					self.captured_data.stop_reason = Some(reason);
+				}
+			}
+			"metadata" => {
+				if self.options.capture_usage
+					&& let Ok(usage_value) = payload.x_take::<Value>("usage")
+				{
+					self.captured_data.usage = Some(parse_usage(usage_value));
+				}
+			}
+			other => {
+				tracing::debug!("Bedrock stream: unhandled event type {other}");
+			}
+		}
+
+		Ok(events)
+	}
+
+	fn flush_reasoning(&mut self) {
+		if let Some(block) = self
+			.in_progress_reasoning
+			.take()
+			.and_then(ReasoningAccumulator::into_thought_block)
+		{
+			self.captured_thought_blocks.push(block);
+		}
+	}
+
+	fn finalize_end(&mut self) -> InterStreamEvent {
+		self.flush_reasoning();
+		let captured_usage = if self.options.capture_usage {
+			self.captured_data.usage.take()
+		} else {
+			None
+		};
+		let end = InterStreamEnd {
+			captured_usage,
+			captured_stop_reason: self.captured_data.stop_reason.take().map(StopReason::from),
+			captured_text_content: self.captured_data.content.take(),
+			captured_reasoning_content: self.captured_data.reasoning_content.take(),
+			captured_tool_calls: self.captured_data.tool_calls.take(),
+			captured_thought_signatures: None,
+			captured_thought_blocks: (!self.captured_thought_blocks.is_empty())
+				.then(|| std::mem::take(&mut self.captured_thought_blocks)),
+			captured_response_id: None,
+		};
+		InterStreamEvent::End(end)
+	}
+}
+
+impl Stream for BedrockStreamer {
+	type Item = Result<InterStreamEvent>;
+
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+		if let Some(event) = self.pending_events.pop_front() {
+			return Poll::Ready(Some(Ok(event)));
+		}
+
+		if self.done {
+			return Poll::Ready(None);
+		}
+
+		loop {
+			// Try to parse a complete frame from the buffer first.
+			match self.try_parse_frame() {
+				Ok(Some(frame)) => {
+					// Detect the terminal event BEFORE handling so we can emit End after. ConverseStream
+					// sends `messageStop` (stop reason) and then `metadata` (usage), so End waits for
+					// `metadata`; a stream that closes without it is finalized at EOF below.
+					let is_metadata = frame.headers.get(":event-type").map(|s| s.as_str()) == Some("metadata");
+					let events = self.handle_frame(frame)?;
+					self.pending_events.extend(events);
+					if is_metadata {
+						self.done = true;
+						let end = self.finalize_end();
+						self.pending_events.push_back(end);
+					}
+					if let Some(event) = self.pending_events.pop_front() {
+						return Poll::Ready(Some(Ok(event)));
+					}
+					// No events produced; loop to parse more frames or pull more bytes.
+					continue;
+				}
+				Ok(None) => {
+					// Need more bytes.
+				}
+				Err(err) => return Poll::Ready(Some(Err(err))),
+			}
+
+			// Pull more bytes.
+			match Pin::new(&mut self.inner).poll_next(cx) {
+				Poll::Ready(Some(Ok(bytes))) => {
+					self.buf.extend_from_slice(&bytes);
+					continue;
+				}
+				Poll::Ready(Some(Err(err))) => {
+					return Poll::Ready(Some(Err(Error::WebStream {
+						model_iden: self.options.model_iden.clone(),
+						cause: err.to_string(),
+						error: err,
+					})));
+				}
+				Poll::Ready(None) => {
+					self.done = true;
+					if self.emitted_start {
+						return Poll::Ready(Some(Ok(self.finalize_end())));
+					}
+					return Poll::Ready(None);
+				}
+				Poll::Pending => return Poll::Pending,
+			}
+		}
+	}
+}
+
+struct DecodedFrame {
+	headers: std::collections::HashMap<String, String>,
+	payload: Vec<u8>,
+}
+
+/// CRC32 (IEEE 802.3, poly 0xEDB88320) used by AWS event-stream framing.
+///
+/// Hand-rolled to avoid pulling in `crc32fast` for the `bedrock-api` feature. Table is computed
+/// once at first use. This runs on small byte ranges (prelude: 8 bytes; message: up to the
+/// frame size), so the per-byte loop is fine.
+fn crc32(bytes: &[u8]) -> u32 {
+	use std::sync::OnceLock;
+	static TABLE: OnceLock<[u32; 256]> = OnceLock::new();
+	let table = TABLE.get_or_init(|| {
+		let mut t = [0u32; 256];
+		for (i, slot) in t.iter_mut().enumerate() {
+			let mut c = i as u32;
+			for _ in 0..8 {
+				c = if c & 1 != 0 { 0xEDB88320 ^ (c >> 1) } else { c >> 1 };
+			}
+			*slot = c;
+		}
+		t
+	});
+	let mut c: u32 = 0xFFFF_FFFF;
+	for &b in bytes {
+		let idx = ((c ^ b as u32) & 0xFF) as usize;
+		let entry = table.get(idx).copied().unwrap_or_default();
+		c = entry ^ (c >> 8);
+	}
+	c ^ 0xFFFF_FFFF
+}
+
+fn parse_headers(mut raw: &[u8]) -> std::result::Result<std::collections::HashMap<String, String>, String> {
+	let mut out = std::collections::HashMap::new();
+	while !raw.is_empty() {
+		if raw.is_empty() {
+			break;
+		}
+
+		// -- Parse header name
+		let name_len = *raw.first().ok_or("header name length missing")? as usize;
+		let after_name_len = raw.get(1..).ok_or("header name truncated")?;
+		raw = after_name_len;
+		if raw.len() < name_len + 1 {
+			return Err("header name truncated".into());
+		}
+		let name_slice = raw.get(..name_len).ok_or("header name slice truncated")?;
+		let name = std::str::from_utf8(name_slice)
+			.map_err(|e| format!("header name utf8: {e}"))?
+			.to_string();
+		let after_name = raw.get(name_len..).ok_or("header value missing")?;
+		raw = after_name;
+
+		// -- Parse header value type
+		let value_type = *raw.first().ok_or("header value type missing")?;
+		let after_type = raw.get(1..).ok_or("header value payload missing")?;
+		raw = after_type;
+
+		// -- Parse header value
+		// type 7 = string (value_len u16 + bytes). Others we skip.
+		if value_type == 7 {
+			if raw.len() < 2 {
+				return Err("header value length truncated".into());
+			}
+			let value_len_bytes = raw
+				.get(0..2)
+				.and_then(|s| <[u8; 2]>::try_from(s).ok())
+				.ok_or("header value length truncated")?;
+			let value_len = u16::from_be_bytes(value_len_bytes) as usize;
+			let after_val_len = raw.get(2..).ok_or("header value truncated")?;
+			raw = after_val_len;
+			if raw.len() < value_len {
+				return Err("header value truncated".into());
+			}
+			let value_slice = raw.get(..value_len).ok_or("header value slice truncated")?;
+			let value = std::str::from_utf8(value_slice)
+				.map_err(|e| format!("header value utf8: {e}"))?
+				.to_string();
+			let after_val = raw.get(value_len..).ok_or("header payload advance failed")?;
+			raw = after_val;
+			out.insert(name, value);
+		} else {
+			// For simplicity, skip non-string headers by consuming the rest (not strictly correct
+			// but Bedrock only emits string headers for the fields we care about).
+			break;
+		}
+	}
+	Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+	type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>; // For tests.
+
+	use super::*;
+	use futures::StreamExt;
+
+	/// Test only needs a valid ModelIden; the AdapterKind doesn't affect parser behavior.
+	fn test_model_iden() -> crate::ModelIden {
+		crate::ModelIden::new(crate::adapter::AdapterKind::BedrockApi, "anthropic.claude-test")
+	}
+
+	/// Build a minimal valid event-stream frame with the given headers and payload.
+	fn build_frame(event_type: &str, payload: &[u8]) -> Vec<u8> {
+		// -- Build headers
+		// Headers: :event-type (string type 7) = event_type
+		// Format per header: name_len u8 | name | type u8 | value_len u16 | value
+		let mut headers = Vec::new();
+		let name = ":event-type";
+		headers.push(name.len() as u8);
+		headers.extend_from_slice(name.as_bytes());
+		headers.push(7);
+		headers.extend_from_slice(&(event_type.len() as u16).to_be_bytes());
+		headers.extend_from_slice(event_type.as_bytes());
+
+		let headers_len = headers.len() as u32;
+		let total_len = 12 + headers_len + payload.len() as u32 + 4;
+
+		// -- Build frame
+		let mut frame = Vec::new();
+		frame.extend_from_slice(&total_len.to_be_bytes());
+		frame.extend_from_slice(&headers_len.to_be_bytes());
+		let prelude_crc = super::crc32(frame.get(..8).unwrap_or_default());
+		frame.extend_from_slice(&prelude_crc.to_be_bytes());
+		frame.extend_from_slice(&headers);
+		frame.extend_from_slice(payload);
+		let msg_crc = super::crc32(&frame);
+		frame.extend_from_slice(&msg_crc.to_be_bytes());
+		frame
+	}
+
+	#[test]
+	fn parses_single_delta_frame() -> Result<()> {
+		// -- Setup & Fixtures
+		let payload = br#"{"delta":{"text":"hello"},"contentBlockIndex":0}"#;
+		let frame = build_frame("contentBlockDelta", payload);
+
+		let model_iden = test_model_iden();
+		// Empty stream for inner — we just exercise the header + payload decoding by injecting bytes.
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> = Box::pin(futures::stream::empty());
+		let mut streamer = BedrockStreamer::new(inner, model_iden, Default::default());
+		streamer.buf.extend_from_slice(&frame);
+
+		// -- Exec
+		let decoded = streamer.try_parse_frame()?.ok_or("frame present")?;
+
+		// -- Check
+		assert_eq!(
+			decoded.headers.get(":event-type").map(String::as_str),
+			Some("contentBlockDelta")
+		);
+		assert_eq!(decoded.payload, payload);
+		Ok(())
+	}
+
+	#[test]
+	fn partial_frame_returns_none() -> Result<()> {
+		// -- Setup & Fixtures
+		let model_iden = test_model_iden();
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> = Box::pin(futures::stream::empty());
+		let mut streamer = BedrockStreamer::new(inner, model_iden, Default::default());
+		streamer.buf.extend_from_slice(&[0u8; 10]); // <12, not enough for prelude
+
+		// -- Exec & Check
+		assert!(streamer.try_parse_frame()?.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn invalid_headers_len_returns_error() -> Result<()> {
+		// -- Setup & Fixtures
+		let mut frame = Vec::new();
+		frame.extend_from_slice(&20u32.to_be_bytes());
+		frame.extend_from_slice(&10u32.to_be_bytes());
+		let prelude_crc = super::crc32(frame.get(..8).unwrap_or_default());
+		frame.extend_from_slice(&prelude_crc.to_be_bytes());
+		frame.extend_from_slice(&[0u8; 8]);
+
+		let model_iden = test_model_iden();
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> = Box::pin(futures::stream::empty());
+		let mut streamer = BedrockStreamer::new(inner, model_iden, Default::default());
+		streamer.buf.extend_from_slice(&frame);
+
+		// -- Exec & Check
+		assert!(streamer.try_parse_frame().is_err());
+		Ok(())
+	}
+
+	#[tokio::test]
+	async fn emits_text_delta_after_start_from_same_frame() -> Result<()> {
+		// -- Setup & Fixtures
+		let frame = build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"text":"hello"},"contentBlockIndex":0}"#,
+		);
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> =
+			Box::pin(futures::stream::iter(vec![Ok(bytes::Bytes::from(frame))]));
+
+		// -- Exec
+		let events = BedrockStreamer::new(inner, test_model_iden(), Default::default())
+			.collect::<Vec<_>>()
+			.await;
+
+		// -- Check
+		assert!(matches!(events.first(), Some(Ok(InterStreamEvent::Start))));
+		assert!(matches!(events.get(1), Some(Ok(InterStreamEvent::Chunk(text))) if text == "hello"));
+		assert!(matches!(events.get(2), Some(Ok(InterStreamEvent::End(_)))));
+		assert_eq!(events.len(), 3);
+		Ok(())
+	}
+
+	#[tokio::test]
+	async fn emits_tool_call_after_start_from_same_frame() -> Result<()> {
+		// -- Setup & Fixtures
+		let frame = build_frame(
+			"contentBlockStart",
+			br#"{"start":{"toolUse":{"toolUseId":"call_1","name":"weather"}},"contentBlockIndex":0}"#,
+		);
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> =
+			Box::pin(futures::stream::iter(vec![Ok(bytes::Bytes::from(frame))]));
+
+		// -- Exec
+		let events = BedrockStreamer::new(inner, test_model_iden(), Default::default())
+			.collect::<Vec<_>>()
+			.await;
+
+		// -- Check
+		assert!(matches!(events.first(), Some(Ok(InterStreamEvent::Start))));
+		assert!(matches!(
+			events.get(1),
+			Some(Ok(InterStreamEvent::ToolCallChunk(ToolCall { call_id, fn_name, .. })))
+				if call_id == "call_1" && fn_name == "weather"
+		));
+		assert!(matches!(events.get(2), Some(Ok(InterStreamEvent::End(_)))));
+		assert_eq!(events.len(), 3);
+		Ok(())
+	}
+
+	#[tokio::test]
+	async fn end_carries_usage_from_metadata_after_message_stop() -> Result<()> {
+		// -- Setup & Fixtures
+		// ConverseStream order: the stop reason comes in `messageStop`, the usage after it in `metadata`.
+		let mut bytes = Vec::new();
+		bytes.extend(build_frame("messageStart", br#"{"role":"assistant"}"#));
+		bytes.extend(build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"text":"hello"},"contentBlockIndex":0}"#,
+		));
+		bytes.extend(build_frame("contentBlockStop", br#"{"contentBlockIndex":0}"#));
+		bytes.extend(build_frame("messageStop", br#"{"stopReason":"end_turn"}"#));
+		bytes.extend(build_frame(
+			"metadata",
+			br#"{"usage":{"inputTokens":10,"outputTokens":5,"totalTokens":15,"cacheReadInputTokens":7,"cacheWriteInputTokens":3},"metrics":{"latencyMs":1}}"#,
+		));
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> =
+			Box::pin(futures::stream::iter(vec![Ok(bytes::Bytes::from(bytes))]));
+		let options = crate::chat::ChatOptions::default().with_capture_usage(true);
+		let options_set = ChatOptionsSet::default().with_chat_options(Some(&options));
+
+		// -- Exec
+		let events = BedrockStreamer::new(inner, test_model_iden(), options_set)
+			.collect::<Vec<_>>()
+			.await;
+
+		// -- Check
+		let ends: Vec<_> = events
+			.iter()
+			.filter_map(|event| match event {
+				Ok(InterStreamEvent::End(end)) => Some(end),
+				_ => None,
+			})
+			.collect();
+		assert_eq!(ends.len(), 1, "Should emit exactly one End");
+		let end = ends[0];
+		assert!(matches!(events.last(), Some(Ok(InterStreamEvent::End(_)))));
+		assert_eq!(end.captured_stop_reason, Some(StopReason::from("end_turn".to_string())));
+		let usage = end.captured_usage.as_ref().ok_or("Should have usage")?;
+		assert_eq!(usage.prompt_tokens, Some(10));
+		assert_eq!(usage.completion_tokens, Some(5));
+		assert_eq!(usage.total_tokens, Some(15));
+		let details = usage.prompt_tokens_details.as_ref().ok_or("Should have cache details")?;
+		assert_eq!(details.cached_tokens, Some(7));
+		assert_eq!(details.cache_creation_tokens, Some(3));
+		Ok(())
+	}
+
+	#[tokio::test]
+	async fn end_is_emitted_at_eof_without_metadata() -> Result<()> {
+		// -- Setup & Fixtures
+		let mut bytes = Vec::new();
+		bytes.extend(build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"text":"hello"},"contentBlockIndex":0}"#,
+		));
+		bytes.extend(build_frame("messageStop", br#"{"stopReason":"end_turn"}"#));
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> =
+			Box::pin(futures::stream::iter(vec![Ok(bytes::Bytes::from(bytes))]));
+
+		// -- Exec
+		let events = BedrockStreamer::new(inner, test_model_iden(), Default::default())
+			.collect::<Vec<_>>()
+			.await;
+
+		// -- Check
+		assert!(matches!(
+			events.last(),
+			Some(Ok(InterStreamEvent::End(end))) if end.captured_stop_reason == Some(StopReason::from("end_turn".to_string()))
+		));
+		Ok(())
+	}
+
+	#[tokio::test]
+	async fn end_carries_signed_and_redacted_thought_blocks() -> Result<()> {
+		// -- Setup & Fixtures
+		let mut bytes = Vec::new();
+		bytes.extend(build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"reasoningContent":{"text":"thin"}},"contentBlockIndex":0}"#,
+		));
+		bytes.extend(build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"reasoningContent":{"text":"king"}},"contentBlockIndex":0}"#,
+		));
+		bytes.extend(build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"reasoningContent":{"signature":"sig-1"}},"contentBlockIndex":0}"#,
+		));
+		bytes.extend(build_frame("contentBlockStop", br#"{"contentBlockIndex":0}"#));
+		bytes.extend(build_frame(
+			"contentBlockDelta",
+			br#"{"delta":{"reasoningContent":{"redactedContent":"blob"}},"contentBlockIndex":1}"#,
+		));
+		bytes.extend(build_frame("contentBlockStop", br#"{"contentBlockIndex":1}"#));
+		bytes.extend(build_frame(
+			"contentBlockStart",
+			br#"{"start":{"toolUse":{"toolUseId":"call_1","name":"weather"}},"contentBlockIndex":2}"#,
+		));
+		bytes.extend(build_frame("contentBlockStop", br#"{"contentBlockIndex":2}"#));
+		bytes.extend(build_frame("messageStop", br#"{"stopReason":"tool_use"}"#));
+		bytes.extend(build_frame(
+			"metadata",
+			br#"{"usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}"#,
+		));
+		let inner: Pin<Box<dyn Stream<Item = _> + Send>> =
+			Box::pin(futures::stream::iter(vec![Ok(bytes::Bytes::from(bytes))]));
+		// Blocks are kept even without `capture_reasoning_content`: they're needed for replay.
+		let options = crate::chat::ChatOptions::default().with_capture_tool_calls(true);
+		let options_set = ChatOptionsSet::default().with_chat_options(Some(&options));
+
+		// -- Exec
+		let events = BedrockStreamer::new(inner, test_model_iden(), options_set)
+			.collect::<Vec<_>>()
+			.await;
+
+		// -- Check
+		let Some(Ok(InterStreamEvent::End(end))) = events.last() else {
+			return Err("Should end with End".into());
+		};
+		let blocks: Vec<(Option<&str>, &str)> = end
+			.captured_thought_blocks
+			.as_ref()
+			.ok_or("Should have thought blocks")?
+			.iter()
+			.filter_map(|block| match block {
+				InterStreamThoughtBlock::Signed {
+					reasoning_content,
+					signature,
+				} => Some((reasoning_content.as_deref(), signature.as_str())),
+				InterStreamThoughtBlock::Custom(_) => None,
+			})
+			.collect();
+		assert_eq!(blocks, [(Some("thinking"), "sig-1"), (None, "blob")]);
+		Ok(())
+	}
+}

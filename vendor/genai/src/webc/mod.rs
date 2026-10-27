@@ -1,0 +1,27 @@
+//! The GenAI web client construct that uses reqwest. Only `webc::Error` is exposed as the public interface.
+
+// region:    --- Modules
+
+mod error;
+mod event_source_stream;
+mod frame_tap;
+mod stream_budget;
+mod stream_transport;
+mod web_client;
+mod web_stream;
+
+pub(crate) use error::Result;
+pub(crate) use event_source_stream::*;
+pub(crate) use frame_tap::*;
+pub use stream_transport::StreamTimeout;
+pub(crate) use stream_transport::{StreamRequest, StreamResponse};
+pub(crate) use web_client::*;
+pub(crate) use web_stream::*;
+
+// Only public for external use
+pub use error::Error;
+
+#[cfg(test)]
+mod stream_guard_tests;
+
+// endregion: --- Modules

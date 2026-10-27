@@ -97,6 +97,131 @@ fn older_settings_gain_builtin_defaults_without_losing_explicit_external_choice(
 }
 
 #[tokio::test]
+async fn local_ollama_can_be_configured_without_credentials_or_a_secret_store() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = Arc::new(AssistantManager::new(
+        root.path().to_owned(),
+        Arc::new(Host),
+    ));
+    let mut settings = manager.settings().await.unwrap();
+    settings.builtin.provider_preset = AssistantModelPreset::Ollama;
+    settings.builtin.base_url = "http://localhost:11434/v1".into();
+    settings.builtin.model = "local-model".into();
+    manager.save_settings(settings.clone()).await.unwrap();
+    let status = manager.model_status().await.unwrap();
+    assert!(status.configured);
+    assert!(!status.has_api_key);
+    assert!(status.error.is_none());
+    assert_eq!(
+        manager
+            .credentials
+            .read_for_model(&settings.builtin)
+            .await
+            .unwrap(),
+        ""
+    );
+    let session = manager
+        .create_session(AssistantProvider::Builtin, "test-bot".into())
+        .await
+        .unwrap();
+    assert_eq!(session.info.state, AssistantSessionState::Ready);
+    manager.shutdown().await;
+}
+
+#[test]
+fn optional_ollama_key_is_limited_to_explicit_local_presets() {
+    for base_url in [
+        "http://localhost:11434/v1",
+        "http://127.0.0.1:11434",
+        "https://[::1]/v1",
+    ] {
+        let mut profile = AssistantBuiltinSettings {
+            provider_preset: AssistantModelPreset::Ollama,
+            base_url: base_url.into(),
+            ..Default::default()
+        };
+        assert!(!requires_api_key(&profile));
+        profile.provider_preset = AssistantModelPreset::Custom;
+        assert!(requires_api_key(&profile));
+    }
+    let remote = AssistantBuiltinSettings {
+        provider_preset: AssistantModelPreset::Ollama,
+        base_url: "https://ollama.example/v1".into(),
+        ..Default::default()
+    };
+    assert!(requires_api_key(&remote));
+}
+
+#[tokio::test]
+async fn switching_api_format_retains_the_same_origins_credential() {
+    let (_root, manager, secrets) = fixture().await;
+    manager.set_api_key("same-origin-key".into()).await.unwrap();
+    for format in [
+        ncd_domain::assistant::AssistantApiFormat::OpenAiResponses,
+        ncd_domain::assistant::AssistantApiFormat::AnthropicMessages,
+        ncd_domain::assistant::AssistantApiFormat::GeminiGenerateContent,
+    ] {
+        let mut settings = manager.settings().await.unwrap();
+        settings.builtin.api_format = format;
+        manager.save_settings(settings).await.unwrap();
+        assert!(manager.model_status().await.unwrap().configured);
+        assert_eq!(lock(&secrets.values).len(), 1);
+    }
+}
+
+#[tokio::test]
+async fn stale_credential_form_cannot_write_or_clear_another_origins_key() {
+    let (_root, manager, secrets) = fixture().await;
+    manager
+        .set_api_key("existing-origin-a-key".into())
+        .await
+        .unwrap();
+    let session = manager
+        .create_session(AssistantProvider::Builtin, "test-bot".into())
+        .await
+        .unwrap();
+    let mut settings = manager.settings().await.unwrap();
+    settings.builtin.base_url = "https://provider-b.invalid/v1".into();
+    manager.save_settings(settings).await.unwrap();
+    let error = manager
+        .set_api_key_for_origin(
+            "new-key-from-stale-form".into(),
+            "https://provider-a.invalid".into(),
+        )
+        .await
+        .unwrap_err();
+    assert!(!error.contains("new-key-from-stale-form"));
+    assert!(
+        manager
+            .clear_api_key_for_origin("https://provider-a.invalid".into())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        lock(&secrets.values).values().cloned().collect::<Vec<_>>(),
+        vec!["existing-origin-a-key"]
+    );
+    assert_eq!(
+        manager
+            .get_session(&session.info.id)
+            .await
+            .unwrap()
+            .info
+            .state,
+        AssistantSessionState::Ready
+    );
+    manager
+        .set_api_key_for_origin(
+            "origin-b-key".into(),
+            "https://provider-b.invalid:443".into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(lock(&secrets.values).len(), 2);
+    manager.shutdown().await;
+}
+
+#[tokio::test]
 async fn credential_is_bound_to_origin_and_never_serialized_in_settings_or_sessions() {
     let (root, manager, secrets) = fixture().await;
     let value = "fixture-private-model-key";
