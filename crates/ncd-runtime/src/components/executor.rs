@@ -98,6 +98,75 @@ impl ComponentBuildInputs {
         )
     }
 
+    /// 目录沿用组件安装路径与工具链探测，避免把版本文件当作目录打开。
+    pub async fn local_component_directory(
+        &self,
+        id: ComponentId,
+        host: &dyn Host,
+    ) -> Result<PathBuf, String> {
+        use ncd_component::DetectOutcome;
+        use ncd_host::HostPath;
+
+        if host.locality() != Locality::Local {
+            return Err("只能打开本机目录".into());
+        }
+        let paths = crate::DataPaths::new(&self.data_root);
+        let directory = match id {
+            ComponentId::NapCat => paths.napcat_install_dir(),
+            ComponentId::SnowLuma => paths.snowluma_install_dir(),
+            ComponentId::Qq => {
+                crate::launch::plan::resolve_qq_install_path(&paths.components_dir())
+                    .map_err(|error| error.to_string())?
+            }
+            ComponentId::NodeJs
+            | ComponentId::Uv
+            | ComponentId::Git
+            | ComponentId::Redis
+            | ComponentId::DesktopSelf => {
+                let source = match self
+                    .build(id, host)?
+                    .detect_outcome(host)
+                    .await
+                    .map_err(|error| error.to_string())?
+                {
+                    DetectOutcome::Installed(value) => value.source,
+                    DetectOutcome::Unusable(value) => value.source,
+                    DetectOutcome::NotInstalled => return Err("尚未安装，无法打开目录".into()),
+                };
+                let source = if let Some(command) = source.strip_prefix("$PATH/") {
+                    host.which(command)
+                        .await
+                        .map_err(|error| error.to_string())?
+                        .ok_or_else(|| format!("找不到 {command}"))?
+                } else {
+                    source
+                };
+                let path = if host.os() == Os::Windows {
+                    HostPath::from_windows(&source)
+                } else {
+                    HostPath::from_posix(source)
+                };
+                let mut binary = PathBuf::from(path.render_for(host.os()));
+                if !binary.is_absolute() || !binary.is_file() {
+                    return Err(format!("程序文件不存在: {}", binary.display()));
+                }
+                binary.pop();
+                // MinGit 的可执行文件在 cmd/ 内，打开托管安装根。
+                let managed_git = paths.components_dir().join("Git");
+                if id == ComponentId::Git && binary.starts_with(&managed_git) {
+                    managed_git
+                } else {
+                    binary
+                }
+            }
+            _ => return Err("没有可直接打开的本机目录".into()),
+        };
+        if !directory.is_absolute() || !directory.is_dir() {
+            return Err(format!("目录不存在: {}", directory.display()));
+        }
+        Ok(directory)
+    }
+
     /// 任务去重 / 资源的实例作用域：只有应用端组件带
     fn scope_for(&self, id: ComponentId) -> Option<&str> {
         if id.is_app_framework() {

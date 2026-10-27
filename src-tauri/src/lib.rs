@@ -959,6 +959,7 @@ pub fn run() {
             commands::components::list_components,
             commands::components::local_qq_source,
             commands::components::detect_component,
+            commands::components::open_component_directory,
             commands::components::probe_local_node_candidates,
             commands::components::probe_node_binary_version,
             commands::components::qq_deps::detect_qq_dependencies,

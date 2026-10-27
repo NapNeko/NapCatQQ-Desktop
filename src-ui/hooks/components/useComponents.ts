@@ -33,11 +33,22 @@ import {
 } from '../../core/domain/components/types';
 import { errorText } from '../../core/domain/errors';
 import { mockHosts } from '../../core/domain/components/mockHosts';
-import type { Os, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
+import type { Os, ComponentId, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 import { RUNTIME_READINESS_QUERY_KEY } from './useRuntimeReadiness';
 import { refreshComponentQueries } from './refreshComponentQueries';
+import { pushErrorBar } from '../ui/pushErrorBar';
+
+export function openComponentDirectory(componentId: ComponentId): void {
+    void componentService.openDirectory(componentId, 'local').catch((error) => {
+        pushErrorBar({
+            key: `open-component-directory:${componentId}`,
+            title: '无法打开目录',
+            raw: errorText(error),
+        });
+    });
+}
 
 type DetectQuery = UseQueryResult<ComponentDetectResult, Error>;
 

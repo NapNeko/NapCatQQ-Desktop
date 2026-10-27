@@ -491,7 +491,9 @@ pub fn local_qq_source(components_dir: &Path) -> ncd_domain::LocalQqSource {
 }
 
 /// 侧装 components/QQ 的 current 优先;没有才用用户自己装的系统 QQ
-fn resolve_qq_install_path(components_dir: &Path) -> Result<PathBuf, RuntimeLaunchPlanError> {
+pub(crate) fn resolve_qq_install_path(
+    components_dir: &Path,
+) -> Result<PathBuf, RuntimeLaunchPlanError> {
     if let Some(dir) =
         ncd_component::managed_qq_current_dir(&ncd_component::managed_qq_root(components_dir))
     {
