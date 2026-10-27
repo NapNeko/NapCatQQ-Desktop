@@ -9,7 +9,8 @@
 | IPC 模型 | `crates/ncd-domain/src/assistant.rs`，ts-rs 生成 `Assistant*.ts` |
 | 宿主契约 | `crates/ncd-traits/src/assistant.rs` |
 | 会话管理 | `crates/ncd-runtime/src/assistant.rs` 与 `assistant/` |
-| 内置模型与循环 | `assistant/builtin/{model,stream,turn,history,mcp}.rs`，`builtin_connection.rs` 接入现有会话 |
+| 内置模型与循环 | `assistant/builtin/{model,stream,turn,history,mcp}.rs`，`model/sdk/` 接 rust-genai，`builtin_connection.rs` 接入现有会话 |
+| 模型 SDK | `vendor/genai/` 固定 0.7.1，升级和传输校验补丁见其 `UPSTREAM.md` |
 | 模型配置与密钥 | `assistant/settings.rs`、`credentials.rs`；系统 SecretStore，不写入设置或档案 |
 | 会话 MCP | `crates/ncd-mcp/src/assistant.rs` 与 `assistant/` |
 | 桌面接线 | `src-tauri/src/commands/assistant.rs`、AppState、退出与数据根迁移收尾 |
@@ -31,17 +32,23 @@ flowchart LR
 
 ## 内置模式
 
-模型设置包含 Base URL、模型标识和步骤 / 输出 / 超时预算。接口根地址按 OpenAI-compatible Chat Completions 约定补 `/v1/chat/completions`；显式 `/v1` 地址追加 `/chat/completions`，其他完整路径保持原样。仅接受 HTTPS 或本机 HTTP，不接受 URL 账号、查询参数或片段。保存、读取状态和创建会话不调用模型，不请求模型列表。
+模型设置包含服务商预设、API 格式、Base URL、模型标识和步骤 / 输出 / 超时预算。支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages、Gemini GenerateContent，协议由 `apiFormat` 明确指定，不按模型名猜测。
 
-API Key 由主窗口单次提交到系统凭据存储，按规范化接口 origin（scheme、host、port）分开保存。设置、会话档案、前端共享草稿、缓存和事件不包含 Key。界面只返回已配置状态；不提供读回 Key 的命令，不使用文件降级存储。保存或清除 Key 时先停止内置会话、等待取消结算和持久化，再更新凭据，保留可恢复历史。
+预设涵盖自定义、OpenAI、Anthropic、Gemini、DeepSeek、MiniMax、Moonshot/Kimi、阿里云百炼、OpenRouter 和本机 Ollama。选择预设会带出推荐协议，空地址或前一个预设的默认地址随之替换；手填地址和模型保留。模型示例需用户主动选择，不请求模型列表。旧配置缺少新字段时默认自定义 Chat Completions，保留地址、模型和现有凭据。
+
+服务根地址按所选格式补路径；Chat、Responses、Anthropic 的 `/v1` 前缀分别追加 `/chat/completions`、`/responses`、`/messages`，Gemini 使用模型资源和 `alt=sse`。在界面明确切换格式时，原格式的标准终点随之替换，自定义路径前缀保留；其他完整路径不猜测或改写。仅接受 HTTPS 或本机 HTTP，不接受 URL 账号、查询参数或片段。保存、读取状态和创建会话不调用模型。
+
+API Key 由主窗口单次提交到系统凭据存储，按规范化接口 origin（scheme、host、port）分开保存。输入时绑定来源，跨来源切换清空未提交 Key；写入或清除时后端在设置锁内核对 `expectedOrigin`，拒绝旧面板修改新来源的凭据。设置、会话档案、前端共享草稿、缓存和事件不包含 Key。界面只返回已配置状态；不提供读回 Key 的命令，不使用文件降级存储。保存或清除 Key 时先停止内置会话、等待取消结算和持久化，再更新凭据，保留可恢复历史。本机 Ollama 预设且地址为回环时可不填 Key；远端地址仍需 Key。
 
 内置循环串行执行已完整校验的工具调用，保存完整调用 ID、参数与结果，不使用界面截断后的工具详情当作模型历史。历史按完整旧轮次裁剪，工具提交前和每项结果后等待 checkpoint。取消、预算用尽或请求错误时，为未完成调用补上明确的未知 / 未执行结果；不会自动重放操作。
 
-模型请求不自动重试、不跟随重定向，不在失败后切换地址、协议或模型。SSE 需明确结束，工具参数按 index 汇总并在完整 JSON、调用 ID、工具名和参数约束校验后执行。仅展示正常回答，不展示模型推理原文。文本、工具参数、目录、响应、步骤与时间均有上限；已知模型 Key 和会话 Bearer 在流式显示及私有历史中脱敏。
+模型请求不自动重试、不跟随重定向，不在失败后切换地址、协议或模型。接口需支持 SSE 流式响应；忽略流式参数而返回普通 JSON 时明确失败，不再次发起请求兜底。SSE 需明确结束，工具参数按 index 汇总并在完整 JSON、调用 ID、工具名和参数约束校验后执行。仅展示正常回答，不展示模型推理原文。文本、工具参数、目录、响应、步骤与时间均有上限；已知模型 Key 和会话 Bearer 在流式显示及私有历史中脱敏。
 
 `minimax-m3.1-flash` 使用拆分思考、低思考预算与 `max_completion_tokens`。工具续轮所需的 `reasoning_content` 和原始 assistant content 仅保留在私有协议历史中，精确脱敏凭据后完整回传；不进入 IPC、工具详情或日志。旧档案缺少该字段时保持兼容。
 
-第一版使用 OpenAI-compatible Chat Completions。`ask_user` 复用桌面追问，拒绝索取密码、密钥和令牌；其他工具沿用下文 MCP 范围，内置模式不会扩大文件、终端、QQ 或 SSH 权限。
+rust-genai 仅替换协议编解码。四种格式的工具调用仍先完整校验，再由原来的循环调用会话 MCP；协议专属推理、签名和原生响应项仅进入脱敏的私有历史，不回传 UI。切换协议时，旧协议的调用和结果转为普通历史文本，私有推理与签名不进入新协议；当前协议的新调用继续保留原生续轮信息。`ask_user` 复用桌面追问，拒绝索取密码、密钥和令牌；其他工具沿用下文 MCP 范围，内置模式不会扩大文件、终端、QQ 或 SSH 权限。
+
+模型 HTTP client 单独配置既有 ring 与平台证书验证，通过 SDK 的 `rustls-tls-no-provider` feature 接入；不依赖 AWS-LC 本机构建，也不安装进程默认 provider。预配置 TLS 显式保留 HTTP/2 和 HTTP/1.1 的 ALPN。
 
 ## 外部 Agent 入口与工具权限
 
@@ -57,6 +64,8 @@ MiniMax 受限配置需要独立 data-dir，认证信息不会从用户全局目
 
 ## 会话与交互
 
+- 新建页选择 Bot 与助手后直接发送首条问题；内置模型尚未配置时，可在页内一次保存地址、模型与 Key。外部 Agent 从助手菜单按需检测，完整配置放在助手设置中。
+- 连续工具调用折叠展示；仅当前轮次的工具显示运行状态。发送期间允许继续写草稿，发送完成、失败或创建后补读失败都不会丢失尚未发送的问题。
 - 每轮问题前加入固定诊断说明和现场；用户文本不会作为 CLI 斜杠命令执行。
 - 页面切换和轻量模式不结束 Agent；停止会撤销本轮交互与 MCP，回收进程，并保留可恢复的会话。
 - 按 Agent 协商结果使用 `session/resume` / `session/load`；不支持或原会话不可恢复时，新建 Agent 会话并补充有界可见历史。
@@ -85,6 +94,14 @@ MiniMax 受限配置需要独立 data-dir，认证信息不会从用户全局目
 内置模型的验证使用本地假 HTTP / SSE 与真实 Manager 集成测试，覆盖完整工具历史、权限和参数、取消、Key 更新、失败不重试和无探测。真实接口仅在本地检查结束后运行“了解当前环境”任务，接口不可用即停止，不使用 `hi` 或其他测活提示。
 
 内置真实任务入口：`cargo run -p ncd-mcp --example assistant_builtin_environment`。从 `NCD_ASSISTANT_TEST_BASE_URL`、`NCD_ASSISTANT_TEST_MODEL`、`NCD_ASSISTANT_TEST_API_KEY` 读取临时配置，Key 仅在内存 SecretStore，档案在临时目录；只提供读取真实开发环境元数据的 `diagnose_bot`，不接真实 Bot。不会自动发现模型或重试接口请求。
+
+### rust-genai 与模型配置本地验证记录（2026-10-27）
+
+- 169 项 runtime、9 项 MCP 和 3 项 domain 兼容测试通过；全项目 652 项绑定导出通过，含 25 项 Assistant 类型。包含四种协议、完整结束门控、工具续轮、跨协议历史降级、Gemini 无 ID 工具跨轮 / 跨帧唯一性、取消及凭据来源竞态。
+- SDK 的 24 项本地 webc 测试通过，覆盖缓冲前的总量 / 帧体积限制、截断流、失败 HTTP 不保留正文、敏感 Header 和拆分 CRLF。
+- 前端 12 个文件、115 项相关测试，类型检查、范围内 lint / 格式检查与生产构建通过；`node scripts/build-remote-agent.mjs`、`cargo check --workspace --all-targets` 通过。改动 Rust 和 vendor 全部格式检查通过；全库 `cargo fmt --all -- --check` 仍有 Karin、终端、截图等未改动文件的存量格式差异。
+- 桌面浏览器 mock 完成十种预设、四种格式、地址联动、换源清空未提交 Key、本机 Ollama 免 Key、一次保存和重新打开设置的走查。未测试窄屏，未调用真实模型或操作真实 Bot。界面无 console error；从概览导航时出现其既有 GSAP rotate 重置警告。
+- Windows 实际开发启动补充：默认 `target` 的 Low 完整性标签使构建脚本、测试和桌面程序无法写普通 Temp / 日志，复现 `LNK1104` 与访问拒绝。同一批新测试二进制复制到普通完整性目录后，169 runtime、9 MCP、28 domain / Assistant 绑定全部通过。`tauri:dev` 现通过 `scripts/tauri-dev.mjs` 自动选择工作区外的独立缓存；3 项入口测试和原 CLI 参数转发检查通过。原命令热启动的远程 Agent 构建 1.49 秒、桌面构建 21.15 秒，原生 AX 确认真正的 Tauri 概览完成加载；未做像素验收或真实模型调用。
 
 ### 内置模式本地验证记录（2026-10-25）
 
