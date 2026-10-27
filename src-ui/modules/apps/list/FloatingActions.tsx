@@ -141,6 +141,7 @@ function CircleButton({
                     type="button"
                     onClick={onClick}
                     disabled={disabled}
+                    aria-label={tooltip}
                     className={cn(
                         'pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-full',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
