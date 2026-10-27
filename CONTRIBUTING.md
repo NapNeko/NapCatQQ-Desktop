@@ -24,6 +24,8 @@ pnpm.cmd run tauri:dev
 
 Windows 下使用 `pnpm.cmd` 可避免 PowerShell 脚本执行策略影响。启动开发应用前，留意本机已配置的 Bot、自动启动和通知设置。
 
+Windows 的 `tauri:dev` 自动使用 `%LOCALAPPDATA%\NapCatQQ Desktop\cargo-targets\<工作区标识>`，避免可执行产物继承沙盒工作区的低完整性标签。每个工作区独立缓存，已有 `CARGO_TARGET_DIR` 时沿用它；实际路径会显示在启动日志中。首次切换目录需要重建。直接执行 Cargo 命令时可使用日志中的同一产物目录。
+
 ## 浏览器预览
 
 ```powershell

@@ -29,7 +29,7 @@
     "rust:check": "pnpm run build:remote-agent && cargo check --workspace --all-targets",
     "rust:test": "pnpm run build:remote-agent && cargo test --workspace",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "node scripts/tauri-dev.mjs",
     "tauri:build": "tauri build",
     "tauri:build:msi": "tauri build --bundles msi",
     "icons:gen": "python scripts/generate_app_icons.py",
