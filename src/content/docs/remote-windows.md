@@ -5,7 +5,7 @@ section: 远端与部署
 order: 110
 ---
 
-除了 Linux，Desktop 也能管另一台 Windows 机器上的 Bot，方式是「SSH + Windows 远程代理」。和 Linux 最大的不同在于，Windows 上的 QQ 必须跑在一个已经登录的用户桌面里。只连上 SSH、只开着后台服务都不够，得真的有个用户登录进了桌面。
+Desktop 通过「SSH + Windows 远程代理」管理另一台 Windows 机器上的 Bot。Windows 上的 QQ 必须运行在已登录的用户桌面会话中，仅连接 SSH 或启动后台服务还不够。
 
 这部分功能还比较新，建议先用一个 Bot 跑通，确认没问题了，再把其他实例迁过来。
 
@@ -15,7 +15,7 @@ order: 110
 
 第一次安装远程代理时，要用目标机上的管理员 SSH 账户。之后就一直用安装时绑定的那个 Windows 用户。这里认的是用户的 SID，所以就算用户名一样，SID 不同也会被当成另一个用户。
 
-如果目标机还没开 SSH，在那台机器上用管理员身份打开 PowerShell，运行：
+如果目标机尚未启用 SSH，请在目标机上以管理员身份打开 PowerShell，运行：
 
 ```powershell
 Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
@@ -26,7 +26,7 @@ Get-NetFirewallRule -Name OpenSSH-Server-In-TCP
 
 最后一条命令用来查看安装时自动创建的防火墙规则，按你的网络情况调整允许的范围和端口。中间隔着 NAT 的话，还要保证路由能通。Windows 家庭版也能装 OpenSSH，用 SSH 管理也不需要 RDP。
 
-如果公司或学校的策略不允许安装可选功能、执行脚本或者启动服务，这一步就得找目标机的管理员帮忙了，可以参考 [Microsoft OpenSSH 安装说明](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse)。
+如果公司或学校的策略禁止安装可选功能、执行脚本或启动服务，请联系目标机管理员。可参考 [Microsoft OpenSSH 安装说明](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse)。
 
 ## 2. 在 Desktop 添加主机
 
@@ -49,7 +49,7 @@ ssh-keygen.exe -lf (Join-Path $env:ProgramData 'ssh\ssh_host_ed25519_key.pub')
 
 1. 连接成功后，在远端卡片上打开「Windows · 管理」。
 2. 点「启用托管」。也可以去「组件」切到这台主机，安装「Windows 远程代理」。进度在任务队列里看。
-3. 记下管理页上显示的 SSH 账户，然后用这个账户登录目标机的 Windows 桌面。安装过程会给这个用户注册一个登录启动任务，所以 SSH 会话代替不了桌面登录，必须真的登进桌面。
+3. 记下管理页显示的 SSH 账户，用这个账户登录目标机的 Windows 桌面。安装过程会为该用户注册登录启动任务，SSH 会话不能代替桌面登录。
 4. 回到「Windows · 管理」刷新。托管服务应该显示「运行中」，QQ 会话应该显示「工作进程已就绪」。
 5. 如果还一直在等待，用管理页给出的用户会话绑定命令修复一下，再刷新。
 
@@ -77,11 +77,11 @@ Windows 原生部署用不到 Linux 那套 Xvfb、VNC 或 systemd。扫码之前
 
 在这台 Windows 上装应用实例：到「组件」选中这台主机，在框架卡片上点「新建实例」。已经有的项目，从「应用端 → 导入已有项目」进去，在向导里选这台主机。应用需要的运行时，同样要装在这台 Windows 上。
 
-如果要导入的应用已经被别的终端或启动器跑起来了，先在原来的地方把它停掉，再从 Desktop 启动，这样 Desktop 才能真正托管它。Desktop 不会因为看到了一个进程 PID，就擅自去接管或者结束它。
+如果要导入的应用已由其他终端或启动器运行，先停止它，再从 Desktop 启动。Desktop 不会仅凭进程 PID 接管或结束它。
 
-从主机或 Bot 的终端入口打开的，是目标机上的 PowerShell，命令和环境变量都是那台机器的。关掉终端窗口，里面跑着的前台命令不会自动变成托管任务。
+从主机或 Bot 入口打开的终端是目标机上的 PowerShell，使用目标机的命令和环境变量。关闭终端窗口不会将正在运行的前台命令变成托管任务。
 
-原生 Bot 的定时重启由目标用户的工作进程负责执行，Cron 按目标 Windows 的本地时区来算。Desktop 退出了，计划照样会执行；但如果目标用户注销了，就要等他重新登录后才会继续。
+原生 Bot 的定时重启由目标用户的工作进程执行，Cron 使用目标 Windows 的本地时区。Desktop 退出后计划仍会执行；目标用户注销后，需等重新登录才会继续。
 
 需要后台通知的话，在组件页给这台主机启用 ncd-watch，再去配 [远端值守](/docs/watch/)。Windows 上的值守由远程代理来承载，但 QQ 登录和二维码这些，依然离不开桌面会话。
 
@@ -98,4 +98,4 @@ Windows 原生部署用不到 Linux 那套 Xvfb、VNC 或 systemd。扫码之前
 
 **服务在运行，QQ 一直等会话：** 确认登录桌面的用户和 SSH 用户是同一个 SID，没有注销，也没有残留多个会话。用另一个管理员账户登录桌面是不行的，必须是绑定的那个用户。
 
-**重连后状态看起来不对：** 先刷新主机和 Bot 的状态，看日志确认原来的进程还归谁管。状态没搞清楚之前，别手动再启动一份同账号的 Bot 或者同一个应用。
+**重连后状态看起来不对：** 先刷新主机和 Bot 状态，通过日志确认原进程的归属。确认前不要手动再启动同账号的 Bot 或同一个应用。
