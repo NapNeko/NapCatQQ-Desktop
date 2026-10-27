@@ -186,6 +186,11 @@ export function useAppInstances() {
         onError: (err, id) => fail('解除对接失败', `app-unlink:${id}`)(err),
     });
 
+    const openDirectoryMutation = useMutation({
+        mutationFn: appFrameworkService.openDirectory,
+        onError: (err, id) => fail('无法打开目录', `app-directory:${id}`)(err),
+    });
+
     const openWebUi = useCallback(
         async (id: string, path?: string) => {
             try {
@@ -253,6 +258,7 @@ export function useAppInstances() {
         remove: deleteMutation.mutateAsync,
         isRemoving: deleteMutation.isPending,
         unlink: unlinkMutation.mutate,
+        openDirectory: openDirectoryMutation.mutate,
         openWebUi,
 
         /** 只有「重新探测」在跑的实例：刷新图标自己转，不再另挂一个转圈 */

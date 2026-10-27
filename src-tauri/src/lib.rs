@@ -971,6 +971,7 @@ pub fn run() {
             commands::components::resolve_runtime_readiness,
             commands::app_framework::list_app_frameworks,
             commands::app_framework::list_app_instances,
+            commands::app_framework::open_app_instance_directory,
             commands::app_framework::create_app_instance,
             commands::app_framework::probe_app_project,
             commands::app_framework::list_app_framework_versions,

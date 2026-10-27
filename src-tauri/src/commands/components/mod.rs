@@ -49,8 +49,7 @@ pub async fn open_component_directory(
         .await
         .local_component_directory(component_id, host.as_ref())
         .await?;
-    tauri_plugin_opener::open_path(&directory, None::<&str>)
-        .map_err(|error| format!("无法打开目录: {error}"))
+    super::open_local_directory(&directory)
 }
 
 #[tauri::command]
