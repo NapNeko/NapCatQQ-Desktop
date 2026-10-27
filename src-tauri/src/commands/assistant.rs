@@ -56,20 +56,28 @@ pub async fn assistant_set_api_key(
     window: WebviewWindow,
     state: State<'_, AppState>,
     api_key: String,
+    expected_origin: String,
 ) -> Result<AssistantModelStatus, String> {
     require_main(&window, &state)?;
     super::bot::ensure_desktop_consent(&state)?;
-    state.assistant.set_api_key(api_key).await
+    state
+        .assistant
+        .set_api_key_for_origin(api_key, expected_origin)
+        .await
 }
 
 #[tauri::command]
 pub async fn assistant_clear_api_key(
     window: WebviewWindow,
     state: State<'_, AppState>,
+    expected_origin: String,
 ) -> Result<AssistantModelStatus, String> {
     require_main(&window, &state)?;
     super::bot::ensure_desktop_consent(&state)?;
-    state.assistant.clear_api_key().await
+    state
+        .assistant
+        .clear_api_key_for_origin(expected_origin)
+        .await
 }
 
 #[tauri::command]
