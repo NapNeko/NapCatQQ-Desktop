@@ -3,12 +3,13 @@
 import type { ComponentProps } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initialActionProgress } from '../../core/domain/components/progress';
 import { LOCAL_QQ_SOURCE_QUERY_KEY } from '../../hooks/components/useLocalQqSource';
 import { MachineComponentRowView } from './MachineComponentRow';
 
-const service = vi.hoisted(() => ({ localQqSource: vi.fn() }));
+const service = vi.hoisted(() => ({ localQqSource: vi.fn(), openDirectory: vi.fn() }));
 vi.mock('../../core/services/component.service', () => ({ componentService: service }));
 
 const clients: QueryClient[] = [];
@@ -49,6 +50,32 @@ function renderCard(overrides: Partial<ComponentProps<typeof MachineComponentRow
 
 beforeEach(() => {
     service.localQqSource.mockReset().mockResolvedValue('system');
+    service.openDirectory.mockReset().mockResolvedValue(undefined);
+});
+
+describe('component directory context menu', () => {
+    async function openMenu() {
+        const user = userEvent.setup();
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('QQ') });
+        await screen.findByRole('menu');
+        return user;
+    }
+
+    it('opens the selected local component without changing its installation', async () => {
+        const { onAction } = renderCard({ lifecycleBlockedReason: 'Bot 正在运行' });
+        const user = await openMenu();
+        await user.click(screen.getByRole('menuitem', { name: '打开本地目录' }));
+        expect(service.openDirectory).toHaveBeenCalledTimes(1);
+        expect(service.openDirectory).toHaveBeenCalledWith('qq', 'local');
+        expect(onAction).not.toHaveBeenCalled();
+    });
+
+    it('does not offer a local file manager for a remote component', async () => {
+        renderCard({ hostId: 'remote:production' });
+        await openMenu();
+        expect(screen.queryByRole('menuitem', { name: '打开本地目录' })).not.toBeInTheDocument();
+        expect(service.openDirectory).not.toHaveBeenCalled();
+    });
 });
 
 afterEach(() => {

@@ -226,6 +226,14 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+fn open_local_directory(path: &Path) -> Result<(), String> {
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(format!("目录不存在: {}", path.display()));
+    }
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|error| format!("无法打开目录: {error}"))
+}
+
 fn open_in_file_manager(path: &Path) -> Result<(), String> {
     let mut command = if cfg!(target_os = "windows") {
         let mut cmd = Command::new("explorer");

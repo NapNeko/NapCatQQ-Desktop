@@ -31,6 +31,11 @@ import {
 import { withMockDelay } from '../ipc/mock/bootstrap.mock';
 
 export const componentService = {
+    openDirectory: async (componentId: ComponentId, hostId: string): Promise<void> => {
+        if (!isTauri) throw new Error('只能在桌面客户端中打开本地目录');
+        await invoke<void>('open_component_directory', { componentId, hostId });
+    },
+
     listComponents: async (): Promise<ComponentInfo[]> => {
         if (isTauri) return invoke<ComponentInfo[]>('list_components');
         return withMockDelay(mockComponentCatalog, 200);

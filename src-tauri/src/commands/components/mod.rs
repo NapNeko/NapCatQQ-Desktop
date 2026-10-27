@@ -34,6 +34,25 @@ pub async fn local_qq_source(state: State<'_, AppState>) -> Result<LocalQqSource
 }
 
 #[tauri::command]
+pub async fn open_component_directory(
+    component_id: ComponentId,
+    host_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if host_id != "local" {
+        return Err("只能打开本机目录".into());
+    }
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+    let directory = state
+        .components
+        .inputs_for(&host_id, host.as_ref(), None)
+        .await
+        .local_component_directory(component_id, host.as_ref())
+        .await?;
+    super::open_local_directory(&directory)
+}
+
+#[tauri::command]
 pub async fn detect_component(
     component_id: ComponentId,
     host_id: String,

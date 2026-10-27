@@ -58,6 +58,11 @@ export const appFrameworkService = {
         return invoke<AppInstance[]>('list_app_instances');
     },
 
+    openDirectory: async (instanceId: string): Promise<void> => {
+        if (!isTauri) throw new Error('只能在桌面客户端中打开目录');
+        await invoke<void>('open_app_instance_directory', { instanceId });
+    },
+
     create: async (request: CreateAppInstanceRequest): Promise<AppInstance> => {
         if (!isTauri) return mockAppFrameworkApi.create(request);
         return invoke<AppInstance>('create_app_instance', { request });
