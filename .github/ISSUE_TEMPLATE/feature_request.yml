@@ -6,9 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢建议。提交前请先在 [Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue) 搜一下有没有类似提案。
-
-        > 当前主线是 **V3（Rust + Tauri + React，`3.0.0+`）**。提案默认按 V3 能力与架构评估；旧 Python / 2.x 不再作为新功能目标。
+        提交前请先搜索 [已有 Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue)，也可查阅 [功能与使用说明](https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/README.md)。
+        请说明实际使用场景和希望改善的操作流程；应用端、聊天、截图和远端管理等现有功能的改进也可以在这里提出。
 
   - type: checkboxes
     id: preflight
@@ -19,34 +18,64 @@ body:
           required: true
         - label: 标题已改成能看懂的一句话（不要只留 `[Feature]` 前缀）
           required: true
-        - label: 我知道空白 / 不选模板的 issue 会被关闭
-          required: true
 
   - type: dropdown
     id: scope
     attributes:
       label: 涉及范围
+      description: 可多选。
       multiple: true
       options:
+        - 安装 / 升级 / 自更新 / 卸载
+        - 启动 / 崩溃 / 性能 / 轻量模式
         - Bot · NapCat
         - Bot · SnowLuma
-        - 远端 / SSH / 部署
-        - Docker
-        - 组件安装
-        - 设置 / 通知 / 自更新
-        - ncd-watch
-        - 界面 / 交互
-        - 安装 / 升级 / MSI
+        - 应用端 / 配置 / 模型 / 插件 / 对接
+        - 聊天 / 消息 / 联系人 / 媒体 / 群文件
+        - 截图 / 长截图 / 剪贴板
+        - OneBot 调试台 / 接口 / 事件
+        - 远端主机 / SSH / Windows 远程代理
+        - Docker / 容器 / 镜像 / 网络 / 数据卷
+        - 组件 / 下载 / 运行时依赖 / 任务进度
+        - 内嵌终端 / 文件传输
+        - Bot 迁移 / 数据目录 / 备份恢复
+        - MCP 接入
+        - 诊断助手 / Agent / 模型调用
+        - 监控 / 自动重启 / 通知 / ncd-watch
+        - 网络 / 代理 / 下载线路
+        - 界面 / 主题 / 窗口 / 托盘 / 快捷键
         - 文档
-        - 其他
+        - 其他 / 不确定
     validations:
       required: true
+
+  - type: dropdown
+    id: app-framework
+    attributes:
+      label: 涉及的应用端框架（可选）
+      multiple: true
+      options:
+        - NeoBot
+        - Karin
+        - NoneBot2
+        - AstrBot
+        - MaiBot（麦麦）
+        - Koishi
+        - TRSS-Yunzai（云崽）
+        - 其他 / 不确定
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 使用环境（可选）
+      description: 涉及 Bot、应用端、跨主机对接或 AI 接入时，补充相关版本、运行位置和接入方式。
+      placeholder: "例如：本机 SnowLuma 对接远端 Linux 上的 AstrBot；希望从应用端页面完成此操作。"
 
   - type: textarea
     id: problem
     attributes:
       label: 需求场景 / 当前痛点
-      description: 这个功能要解决什么问题？现在怎么凑合的？
+      description: 现在想完成什么事，在哪一步不方便？目前如何处理？
     validations:
       required: true
 
@@ -54,31 +83,30 @@ body:
     id: proposal
     attributes:
       label: 期望方案
-      description: 希望它怎么工作？有界面或流程的话可以简述
+      description: 希望从哪个入口、经过哪些操作得到什么结果？不确定实现方式也可以只描述目标。
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: 已考虑的替代方案
-      description: 还想过哪些路，为什么不用
+      label: 已考虑的替代方案（可选）
+      description: 其他操作方式或工具为什么无法满足需求？
 
   - type: textarea
     id: references
     attributes:
-      label: 参考链接
-      description: 相关 Issue / PR、其它产品截图说明等
+      label: 参考链接与截图（可选）
+      description: 相关 Issue / PR、其他产品的操作流程、截图或草图；请隐藏凭据与私人信息。
       placeholder: |
         - 相关讨论: #xxx
 
   - type: dropdown
     id: willingness
     attributes:
-      label: 你是否愿意提交 PR 来实现？
+      label: 你是否愿意参与实现或验证？（可选）
       options:
         - 愿意，但需要先讨论方案
         - 愿意，已有大致思路
+        - 可以协助测试和反馈
         - 暂时只提建议
-    validations:
-      required: true
