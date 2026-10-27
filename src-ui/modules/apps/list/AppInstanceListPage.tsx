@@ -6,6 +6,7 @@ import {
     Boxes,
     Download,
     ExternalLink,
+    FolderOpen,
     Import,
     Link2,
     ListChecks,
@@ -152,6 +153,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({
                         onLink={(i) => setLinkInstanceId(i.id)}
                         onUnlink={(i) => apps.unlink(i.id)}
                         onOpenWebUi={(i) => void apps.openWebUi(i.id)}
+                        onOpenDirectory={apps.openDirectory}
                         onOpen={(i, tab) => onOpenInstance(i.id, tab)}
                         onDelete={setDeleteInstance}
                     />
@@ -247,6 +249,7 @@ interface InstanceListProps {
     onLink: (i: AppInstance) => void;
     onUnlink: (i: AppInstance) => void;
     onOpenWebUi: (i: AppInstance) => void;
+    onOpenDirectory: (id: string) => void;
     onOpen: (i: AppInstance, tab?: DetailTabHint) => void;
     onDelete: (i: AppInstance) => void;
 }
@@ -289,6 +292,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     onLink,
     onUnlink,
     onOpenWebUi,
+    onOpenDirectory,
     onOpen,
     onDelete,
 }) => {
@@ -298,6 +302,10 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     const refreshing = refreshingId === i.id;
     const busy = pendingId === i.id || installing;
     const installed = isInstalled(i);
+    const canOpenDirectory =
+        (installed || i.origin === 'imported') &&
+        i.host_id === 'local' &&
+        i.placement === 'local_native';
     const running = i.state === 'running';
     const terminalEnabled = useFeatureEnabled('terminal');
     const accent = i.last_error ? 'danger' : running || installing ? 'brand' : 'none';
@@ -464,6 +472,11 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     {installed && (
                         <FooterIcon label="查看日志" onClick={() => onOpen(i, 'log')}>
                             <ActionMotionIcon icon={ScrollText} size={15} strokeWidth={2.2} />
+                        </FooterIcon>
+                    )}
+                    {canOpenDirectory && (
+                        <FooterIcon label="打开目录" onClick={() => onOpenDirectory(i.id)}>
+                            <ActionMotionIcon icon={FolderOpen} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {installed && terminalEnabled && (

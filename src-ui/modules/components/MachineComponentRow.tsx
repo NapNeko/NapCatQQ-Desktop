@@ -5,6 +5,7 @@ import {
     Copy,
     Download,
     ExternalLink,
+    FolderOpen,
     MessageCircle,
     RefreshCw,
     ScrollText,
@@ -23,6 +24,7 @@ import {
 } from '../../shared/ui';
 import { openSystemUninstallOrReport, useOpenExternal } from '../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { openComponentDirectory } from '../../hooks/components/useComponents';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ComponentActionProgress } from '../../hooks/components/useComponentAction';
@@ -96,6 +98,12 @@ export const MachineComponentRowView: React.FC<Props> = ({
 }) => {
     const { info, status } = row;
     const openExternal = useOpenExternal();
+    const canOpenDirectory =
+        hostId === 'local' &&
+        (status.state === 'installed' || status.state === 'unusable') &&
+        ['napcat', 'snowluma', 'qq', 'nodejs', 'uv', 'git', 'redis', 'desktop_self'].includes(
+            info.id,
+        );
     const isLocalQq = info.id === 'qq' && hostId === 'local';
     const qqSource = useLocalQqSource(isLocalQq);
     const usesSystemQq = isLocalQq && qqSource === 'system' && status.state === 'installed';
@@ -370,6 +378,13 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     >
                         <RefreshCw size={13} />
                         <span>重新探测</span>
+                    </ContextMenuItem>
+                )}
+
+                {canOpenDirectory && (
+                    <ContextMenuItem onSelect={() => openComponentDirectory(info.id)}>
+                        <FolderOpen size={13} />
+                        <span>打开本地目录</span>
                     </ContextMenuItem>
                 )}
 

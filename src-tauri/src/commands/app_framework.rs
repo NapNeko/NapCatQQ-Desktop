@@ -44,6 +44,24 @@ pub async fn list_app_instances(state: State<'_, AppState>) -> Result<Vec<AppIns
 }
 
 #[tauri::command]
+pub async fn open_app_instance_directory(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let instance = state
+        .app_manager
+        .get_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|error| error.to_string())?;
+    if instance.host_id != "local" || instance.placement != ncd_domain::AppPlacement::LocalNative {
+        return Err("只能打开本机目录".into());
+    }
+    let host = super::host_resolve::local_host()?;
+    let directory = ncd_host::HostPath::from_posix(&instance.install_dir).render_for(host.os());
+    super::open_local_directory(std::path::Path::new(&directory))
+}
+
+#[tauri::command]
 pub async fn create_app_instance(
     request: CreateAppInstanceRequest,
     state: State<'_, AppState>,
