@@ -52,7 +52,7 @@ pub async fn connect_remote_host_with_platform(
             reason: "远端平台必须为auto/windows/linux".into(),
         });
     }
-    let transport = RemoteLinuxHost::connect(id, config).await?;
+    let mut transport = RemoteLinuxHost::connect_transport(id, config).await?;
     let probe = HostCommand::new("platform_probe").timeout(PROBE_TIMEOUT);
     let windows = transport
         .run_raw(
@@ -80,6 +80,7 @@ pub async fn connect_remote_host_with_platform(
                 reason: "目标是Linux，与档案指定的Windows不符".into(),
             });
         }
+        transport.detect_linux_architecture().await?;
         return Ok(Arc::new(transport));
     }
     Err(HostError::Unsupported {
@@ -92,7 +93,7 @@ impl RemoteWindowsHost {
         id: impl Into<String>,
         config: ConnectionConfig,
     ) -> Result<Self, HostError> {
-        let transport = RemoteLinuxHost::connect(id, config).await?;
+        let transport = RemoteLinuxHost::connect_transport(id, config).await?;
         let cmd = HostCommand::new("windows_probe").timeout(PROBE_TIMEOUT);
         let output = transport
             .run_raw(

@@ -126,10 +126,17 @@ impl server::Handler for MockSession {
     async fn exec_request(
         &mut self,
         channel: ChannelId,
-        _: &[u8],
+        command: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
         session.channel_success(channel);
+        if command == b"uname -m" {
+            session.data(channel, CryptoVec::from_slice(b"aarch64\n"));
+            session.exit_status_request(channel, 0);
+            session.eof(channel);
+            session.close(channel);
+            return Ok(());
+        }
         let first = self.stats.executions.fetch_add(1, Ordering::SeqCst) == 0;
         if matches!(self.policy, SessionPolicy::HoldExec) {
             self.stats.first_exec.notify_one();
@@ -309,7 +316,7 @@ impl MockSsh {
         .with_connect_timeout(Duration::from_secs(5))
         .with_keepalive(None);
         let host = Arc::new(
-            RemoteLinuxHost::connect("transport-test", connection)
+            RemoteLinuxHost::connect_transport("transport-test", connection)
                 .await
                 .unwrap(),
         );
@@ -650,5 +657,14 @@ async fn streaming_cancel_after_exec_signals_the_remote_process() {
         .await
         .expect("the remote command was abandoned without SIGKILL");
     assert_eq!(fixture.stats.kills.load(Ordering::SeqCst), 1);
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn linux_architecture_probe_caches_the_ssh_target_architecture() {
+    let mut fixture = MockSsh::connect(SftpBehavior::HoldHandshake).await;
+    let host = Arc::get_mut(&mut fixture.host).unwrap();
+    host.detect_linux_architecture().await.unwrap();
+    assert_eq!(host.arch(), Arch::Aarch64);
     fixture.close().await;
 }

@@ -190,6 +190,7 @@ pub enum SudoAccess {
 /// 远端 Linux 主机
 pub struct RemoteLinuxHost {
     id: String,
+    architecture: Arch,
     shell: BashShell,
     /// 普通通道共享读锁；仅反向转发的可变 API 与连接失效需要写锁。
     handle: Arc<RwLock<Option<ClientHandle<ClientCallback>>>>,
@@ -203,8 +204,8 @@ pub struct RemoteLinuxHost {
     sftp: Arc<Mutex<Option<Arc<russh_sftp::client::SftpSession>>>>,
     /// 提权密码,这台主机所有 elevated 命令共用connect 后由 ServerManager 从
     /// keyring 注入(密码登录机器有登录密码,密钥登录机器可能有挪存的 sudo 密码),
-    /// docker 弹框拿到新密码时覆盖有密码 → elevated 走 sudo -S 喂 stdin;None →
-    /// 退回 sudo -n(root / 免密直接过,真要密码立刻失败而非挂起)
+    /// docker 弹框拿到新密码时覆盖。有密码时 shell 读取密码帧，单独 sudo -S -v
+    /// 校验后 sudo -n 执行目标；无密码直接 sudo -n，避免密码混入目标 stdin。
     /// 用 Mutex 包,因为 set_elevation_password 是 &self 异步方法(trait 约束),
     /// 且密码可能在连接生命周期内被 docker 弹框更新
     elevation_password: Arc<Mutex<Option<String>>>,
@@ -217,8 +218,34 @@ pub struct RemoteLinuxHost {
 }
 
 impl RemoteLinuxHost {
-    /// 建立 SSH 连接并完成认证
+    /// 建立 Linux SSH 连接并缓存实际 CPU 架构。
     pub async fn connect(
+        id: impl Into<String>,
+        config: ConnectionConfig,
+    ) -> Result<Self, HostError> {
+        let mut host = Self::connect_transport(id, config).await?;
+        host.detect_linux_architecture().await?;
+        Ok(host)
+    }
+
+    pub(super) async fn detect_linux_architecture(&mut self) -> Result<(), HostError> {
+        let probe = HostCommand::new("uname")
+            .arg("-m")
+            .timeout(super::raw_exec::PROBE_TIMEOUT);
+        let output = self.run_raw("uname -m", &probe, None, 4096).await?;
+        if !output.success() {
+            return Err(HostError::command_failed(
+                "uname",
+                output.exit_code,
+                output.stderr,
+            ));
+        }
+        self.architecture = parse_linux_architecture(output.stdout.trim())?;
+        Ok(())
+    }
+
+    /// 原始 SSH transport 还供 Windows 平台识别复用，架构在识别平台后确定。
+    pub(super) async fn connect_transport(
         id: impl Into<String>,
         config: ConnectionConfig,
     ) -> Result<Self, HostError> {
@@ -317,6 +344,7 @@ impl RemoteLinuxHost {
 
         Ok(Self {
             id: id_str,
+            architecture: Arch::X86_64,
             shell: BashShell,
             handle: Arc::new(RwLock::new(Some(handle))),
             short_exec: Semaphore::new(4),
@@ -640,9 +668,7 @@ impl Host for RemoteLinuxHost {
     }
 
     fn arch(&self) -> Arch {
-        // 远端架构应在 connect 时探测一次缓存,这里简化:默认 X86_64,
-        // 实际部署逻辑会在 ncd-component 自己跑 uname -m 决策
-        Arch::X86_64
+        self.architecture
     }
 
     fn locality(&self) -> Locality {
@@ -712,10 +738,8 @@ impl Host for RemoteLinuxHost {
 
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
         let inner_line = build_remote_command_line(&self.shell, &cmd);
-        // elevated 时由 host 注入提权密码(set_elevation_password 存的那份):有密码走
-        // sudo -S,把 密码\n 拼在真实 stdin 前面一起喂过去——sudo -S 读首行当密码,
-        // 余下字节透传给内层命令(如 tee 收文件内容)没密码退回 sudo -n
-        // 非 elevated 路径行为不变:line 是内层命令,stdin 原样透传
+        // 包装 shell 先消费密码帧，校验密码后只把余下 stdin 交给目标命令。
+        // NOPASSWD 或 sudo 缓存命中时，也不会把密码透传给 tee / 安装脚本。
         let (line, stdin) = if cmd.elevated {
             let password = self.elevation_password.lock().await.clone();
             let has_pw = password.is_some();
@@ -1334,27 +1358,30 @@ fn build_remote_command_line(shell: &dyn HostShell, cmd: &HostCommand) -> String
     format!("{prefix}{body}")
 }
 
-/// 把内层命令行包成 sudo 提权命令inner_line 可能含 cd && 这类 shell 语法,
-/// 所以整体丢给 sh -c <inner> 跑,而不是让 sudo 直接 exec 单个程序
-/// has_password 决定喂密码的方式:
-///   true  → sudo -S -p '' sh -c <inner>,-S 从 stdin 读密码,-p '' 清空提示符
-///           避免提示文字混进 stderr 干扰输出解析(密码字节另由调用方走 stdin 送)
-///   false → sudo -n -p '' sh -c <inner>,-n 非交互:免密(NOPASSWD/root)直接过,
-///           真要密码时立刻失败而不是挂起等输入
-/// inner 用 shell.escape 转义成单个 token,内部空格 / 分号 / 引号都被安全包裹
+/// 密码帧由 shell 消费；sudo 校验只读独立管道，目标只接收剩余原始 stdin。
+/// 校验和执行由同一 shell 启动，保留无 TTY SSH 会话的 PPID timestamp 作用域。
 fn wrap_with_sudo(inner_line: &str, shell: &dyn HostShell, has_password: bool) -> String {
-    let mode = if has_password { "-S" } else { "-n" };
     let inner = shell.escape(inner_line);
-    format!("sudo {mode} -p '' sh -c {inner}")
+    if !has_password {
+        return format!("sudo -n -p '' sh -c {inner}");
+    }
+    format!(
+        r#"IFS= read -r ncd_sudo_password || exit 1
+printf '%s\n' "$ncd_sudo_password" | sudo -S -p '' -v || exit $?
+unset ncd_sudo_password
+sudo -n -p '' sh -c {inner}
+ncd_sudo_status=$?
+exit "$ncd_sudo_status""#
+    )
 }
 
-/// sudo -S 读的密码必须以换行结尾调用方已带 \n 就不重复加,否则补一个
 /// `lock_acquired`: 是否在短超时内拿到 session 锁。
 /// 拿不到锁说明有命令正在用这条 SSH，视为活着；拿到锁则看句柄是否还在。
 fn session_lock_means_healthy(lock_acquired: bool, handle_present: bool) -> bool {
     if lock_acquired { handle_present } else { true }
 }
 
+/// 密码帧以换行结束，由包装 shell 的 read 消费。
 fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
     if pw.last() == Some(&b'\n') {
         pw.to_vec()
@@ -1366,9 +1393,8 @@ fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
     }
 }
 
-/// 拼 elevated 命令喂给 SSH channel 的 stdin有提权密码时 密码\n 打头(sudo -S
-/// 读首行当密码),后面接命令本身的 stdin(如 tee 收的文件内容)透传给内层命令;
-/// 没密码时(免密/root,走 sudo -n)原样返回命令 stdin
+/// 有密码时首行是包装 shell 消费的密码帧，后续保留命令的原始二进制 stdin。
+/// 没有密码时不增加帧，直接交给 sudo -n 执行的目标命令。
 fn build_elevated_stdin(password: Option<&str>, cmd_stdin: Option<Vec<u8>>) -> Option<Vec<u8>> {
     match password {
         Some(pw) => {
@@ -1713,9 +1739,91 @@ impl RemoteLinuxHost {
 // 单测: sudo 命令拼接是纯逻辑,从 async 方法里抽出来直接断言
 // 真正的 SSH 往返不在这测(需要活的远端),只锁定命令行字符串形状
 
+fn parse_linux_architecture(raw: &str) -> Result<Arch, HostError> {
+    match raw.to_ascii_lowercase().as_str() {
+        "x86_64" | "amd64" => Ok(Arch::X86_64),
+        "aarch64" | "arm64" => Ok(Arch::Aarch64),
+        "armv7l" | "armv7" => Ok(Arch::Armv7),
+        "i386" | "i486" | "i586" | "i686" | "x86" => Ok(Arch::X86),
+        _ => Err(HostError::InvalidArgument {
+            reason: format!("不支持的 Linux CPU 架构：{raw}"),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sudo_password_frame_never_reaches_target_stdin() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let sudo = workspace.path().join("sudo");
+        std::fs::write(
+            &sudo,
+            r#"#!/bin/sh
+mode=$1
+shift
+if [ "$1" = '-p' ]; then shift 2; fi
+if [ "$1" = '-v' ]; then
+    if [ "$NCD_SUDO_MODE" = 'password' ]; then
+        IFS= read -r password || exit 31
+        [ "$password" = "$NCD_EXPECT_PASSWORD" ] || exit 32
+    fi
+    printf '%s' "$PPID" > "$NCD_SUDO_STAMP"
+    exit 0
+fi
+if [ "$mode" = '-S' ] && [ "$NCD_SUDO_MODE" = 'password' ]; then
+    IFS= read -r password || exit 33
+fi
+if [ "$mode" = '-n' ] && [ "$NCD_SUDO_MODE" = 'password' ]; then
+    [ "$(cat "$NCD_SUDO_STAMP")" = "$PPID" ] || exit 34
+fi
+"$@"
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&sudo, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let path = std::env::join_paths(
+            std::iter::once(workspace.path().to_path_buf())
+                .chain(std::env::split_paths(&inherited)),
+        )
+        .unwrap();
+        let password = r#"fixture with \ and '"#;
+        let payload = b"configuration body\nwith binary\0tail";
+        for mode in ["password", "cached", "nopasswd"] {
+            let line = wrap_with_sudo("cat; exit 7", &BashShell, true);
+            let mut child = tokio::process::Command::new("sh")
+                .args(["-c", &line])
+                .env("PATH", &path)
+                .env("NCD_SUDO_MODE", mode)
+                .env("NCD_EXPECT_PASSWORD", password)
+                .env("NCD_SUDO_STAMP", workspace.path().join("timestamp"))
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()
+                .unwrap();
+            let stdin = build_elevated_stdin(Some(password), Some(payload.to_vec())).unwrap();
+            child.stdin.take().unwrap().write_all(&stdin).await.unwrap();
+            let output = tokio::time::timeout(Duration::from_secs(3), child.wait_with_output())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(7),
+                "mode={mode}, stderr={}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(output.stdout, payload, "mode={mode}");
+        }
+    }
 
     #[test]
     fn wrap_with_password_uses_dash_s_and_sh_c() {
@@ -1743,8 +1851,8 @@ mod tests {
         let line = wrap_with_sudo(inner, &BashShell, true);
         let escaped = BashShell.escape(inner);
         assert!(
-            line.ends_with(&escaped),
-            "内层应原样 escape 追加在末尾: {line}"
+            line.contains(&format!("sudo -n -p '' sh -c {escaped}")),
+            "内层应原样 escape 交给非交互 sudo: {line}"
         );
         assert!(
             escaped.starts_with('\''),
@@ -1776,7 +1884,7 @@ mod tests {
     #[test]
     fn elevated_stdin_prefixes_password_then_passes_through_inner_stdin() {
         // 有密码 + 命令本身有 stdin(如 tee 收文件内容):密码\n 打头,后接文件内容
-        // sudo -S 吃掉首行密码,余下字节正好透传给内层 tee
+        // 包装 shell 消费首行密码，余下字节正好透传给内层 tee
         let out = build_elevated_stdin(Some("hunter2"), Some(b"file body".to_vec()));
         assert_eq!(out.unwrap(), b"hunter2\nfile body");
     }
