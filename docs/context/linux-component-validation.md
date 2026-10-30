@@ -116,3 +116,52 @@ NapCat 与 SnowLuma 支持 Linux 本机 Docker 和 Linux 远端 Docker。Windows
 Linux 启动中的 `libayatana-appindicator` 弃用提示来自当前 Tauri 托盘依赖使用的系统库，见 [tray-icon 上游问题 #260](https://github.com/tauri-apps/tray-icon/issues/260)。它与 Rust 编译警告分开处理，保留系统诊断输出；单独一条弃用提示不能作为应用崩溃证据。
 
 隔离图形检查禁用了 DBus 服务自动激活，因此会出现测试环境的 AT-SPI 服务缺失提示；该环境的 GitHub 版本请求也曾失败，保留了相应网络诊断。以上没有计作已解决的产品警告，也没有影响本次窗口渲染与进程存活检查。
+
+## 原生托盘补充验证（2026-10-30）
+
+Linux 使用 GTK / Cairo / Pango 承载共用托盘视图。XEmbed 兼容后端支持右键直出面板；系统菜单回退保留「打开托盘面板」，账号托盘保留「账号面板」和「未读预览」。面板显式拿焦点，通过 Escape / 失焦收起。Tauri 自带的 Linux 托盘不提供鼠标事件，兼容后端单独接收 GTK 信号，见 [Tauri 托盘 API](https://v2.tauri.app/reference/javascript/api/namespacetray/)。X11 面板按事件位置与工作区定位，纯 Wayland 面板由合成器安排位置。
+
+当前 Ubuntu GNOME 的 AppIndicator 扩展直接在 Shell 内切换右键系统菜单，不向应用发送右键请求，因此现有接入无法把右键直接替换为自绘面板，见[扩展实现](https://github.com/ubuntu/gnome-shell-extension-appindicator/blob/master/indicatorStatusIcon.js)。[菜单实现](https://github.com/ubuntu/gnome-shell-extension-appindicator/blob/master/dbusMenu.js)中的 `AboutToShow` 是菜单布局更新通知，也可能在初始绑定时发生，不能用来取消系统菜单或当作右键事件；未加入此类会产生误弹和双菜单的钩子。
+
+- `cargo check -p ncd-tauri --all-targets --locked --offline` 和 Linux debug 构建通过，无 Rust 编译警告；本次涉及的主题、图标路径、头像缓存、聊天托盘和退出请求既有测试共 17 项通过。
+- 直接引用当前绘制源码的离屏检查覆盖 100% / 125% / 150%：中文、省略、圆角透明、头像预乘及采样正常，透明字体使用灰度抗锯齿。
+- GTK 宿主检查通过 125% / 150% 实际尺寸及鼠标坐标换算、点击/键盘回调重入布局、Escape / 失焦收起、隐藏停止动画、销毁解除持有环及重新创建。
+- 实际程序在隔离 X11 / D-Bus / StatusNotifierWatcher 中完成托盘注册、原生菜单读取；释放主界面后 WebKitWebProcess 退出，再从托盘打开自绘面板时未重建主窗口或 WebKitWebProcess。框架的 WebKitNetworkProcess 仍保留，不能宣称退出全部 WebKit 进程。隔离进程均已清理。
+
+完整严格 Clippy 检查仍受项目既有告警阻挡，例如日志输出、截图实现中的 `expect` 和旧类型复杂度；未添加全局 lint 屏蔽。Wayland 桌面上的实际定位/焦点体验及真实 QQ 账号未读流程仍需实机确认。
+
+## Linux 启动窗口尺寸补充（2026-10-30）
+
+`commands/window.rs` 按显示器可用工作区的逻辑尺寸设置主窗，宽 80% / 高 85%，基准 1280×800；每侧至少留出 24 个逻辑像素，小屏同步降低最小尺寸。系统 DPI 只换算一次，保持用户选择的 WebView 界面倍率。启动与轻量模式重建共用该入口，普通恢复已有窗口不改用户调整过的尺寸。几何请求在首次显示前提交，居中使用目标尺寸，避免 GTK 异步配置回读旧尺寸。
+
+- 两项几何回归通过，覆盖高分辨率、系统 200% 缩放、负坐标显示器及小工作区的最小尺寸与定位。
+- Linux debug 构建通过，无 Rust 编译警告；本次未改前端渲染代码。
+- 隔离 Xvfb / D-Bus 中启动实际新版程序：2560×1600 得到 2048×1360 窗口、1366×768 得到 1280×720 窗口、3840×2160 且系统 200% 缩放时得到 3072×1836 物理窗口（1536×918 逻辑尺寸）。三组均可见、居中且等待配置稳定后尺寸保持一致，测试进程与数据根均独立于用户会话。未据此声称已完成真实 Wayland 合成器的定位验收。
+- 大屏场景额外等待 15 秒，确认完整首页与 CPU / RAM 图表正常渲染，先设置几何再显示未阻塞 WebKitGTK 的页面启动。隔离测试进程已清理。
+
+## 托盘右键直出面板的社区调查（2026-10-31）
+
+现有 AppIndicator 接入的限制只适用于该托盘后端。社区项目会按后端能力分流：[Telegram](https://github.com/telegramdesktop/tdesktop/blob/dev/Telegram/SourceFiles/platform/linux/tray_linux.cpp) 同时保留系统菜单和自绘菜单，收到 Context / 旧 X11 右键事件时打开自绘菜单；[Electron](https://www.electronjs.org/docs/latest/api/tray/) 的 Linux 托盘优先使用 SNI，但 `right-click` 事件仍只标注 Windows / macOS 支持，换用 Electron 本身不会消除这一限制。
+
+Ubuntu GNOME 扩展另外提供 [XEmbed 托盘宿主](https://github.com/ubuntu/gnome-shell-extension-appindicator/blob/master/trayIconsManager.js)。本机 GNOME Wayland 会话已启用 legacy tray 且存在 XWayland；临时 GTK 探针确认图标真实嵌入，同进程的默认 display 和后建窗口仍保持 Wayland。做法是在 GTK 主线程打开 X11 display，仅在同步创建图标期间临时切换默认 display，然后立即恢复。依据 [GTK StatusIcon 源码](https://github.com/GNOME/gtk/blob/gtk-3-24/gtk/deprecated/gtkstatusicon.c)，单纯在 Wayland 上创建图标后再 `set_screen` 不能补建底层 X11 图标。
+
+已在 `src-tauri/src/linux_tray.rs` 接入 XEmbed 兼容后端。GTK `embedded` 通知决定可见图标：成功嵌入后隐藏 SNI 图标，未嵌入或宿主消失时恢复 SNI 系统菜单；没有 X11 display 时直接保留原有行为。宿主在运行中出现时同样自动切换，无需轮询。主托盘和账号托盘同步更新图标、tooltip 及未读闪烁帧，账号关闭时移除对应 GTK 图标。各图标使用独立 WM_CLASS，避免 GNOME 将同进程的主图标与账号图标相互替换。
+
+鼠标按下时阻止 GTK 的默认激活，在松开时派发一次点击，使用事件根坐标定位；键盘仍可激活图标和上下文菜单。`native_panel/window_linux.rs` 持久保存托盘 display，覆盖异步业务入口，并让原生面板单独使用 X11 screen、RGBA visual 与工作区；主应用默认 display 不变。Linux 账号菜单增加「未读预览」行，避免隐藏 SNI 后丢失原有入口。
+
+图标创建作用域通过 RAII 临时选择 X11 display 和独立 `program_class`，随后恢复主应用设置。GTK 在构造 GtkWindow 时复制该类名，因此首次映射即使用正确 WM_CLASS；不在已实现的 GtkPlug 上调用 `set_name` 重新创建窗口，避免重复 dock 和 GDK 更新计数断言。GTK StatusIcon 已弃用，作为有条件的兼容路径使用，见 [GTK 文档](https://docs.gtk.org/gtk3/class.StatusIcon.html)。没有强制整个应用使用 X11，没有修改用户桌面设置，没有增加后台轮询或新的依赖。
+
+最终 Linux debug 构建通过，无 Rust 编译警告。隔离 Xvfb / D-Bus 下实际产品在 `G_DEBUG=fatal-criticals` 中通过完整流程：无宿主时系统菜单正常；宿主出现后仅一次 dock，实际 WM_CLASS 第二项为 `main-tray`，SNI 切为 Passive；真实右键直出原生面板，Escape / 失焦收起；轻量模式下不重建主窗口或 WebKitWebProcess；宿主消失后 SNI 恢复 Active，系统菜单可重建主窗。最终日志无 GTK / GDK Critical。
+
+相关既有 Rust 测试 17 项通过，未新增永久测试；Clippy 仍保留项目既有告警，未增加全局屏蔽。真实 GNOME Wayland 的完整用户点击与定位体验及真实 QQ 账号流程仍需实机确认；此前的 Wayland / X11 同进程探针只证明显示器共存。隔离测试进程均已清理。
+
+## Linux Dock 图标与应用身份（2026-10-31）
+
+Linux Dock 通过桌面入口解析应用图标，Wayland 下不能只依赖窗口 PNG。`window_icon.rs::prepare_application_identity` 在 GTK 初始化前将 GLib 程序名设为配置 identifier；正式配置启用 GTK App ID，使 Wayland `app_id` 和 GTK 应用 ID 均与 `com.napcatqq.desktop` 对齐。生成的可见桌面入口使用同值的 `StartupWMClass`；deb / AppImage 另包含隐藏的 `com.napcatqq.desktop.desktop` 兼容入口，图标沿用包内 hicolor 资源，保持一个可见启动项。
+
+`pnpm run tauri:dev` 在用户 XDG 应用目录准备 `com.napcatqq.desktop.Development.desktop`，使用仓库内 PNG 的绝对路径，避免依赖已安装的正式包。开发配置关闭 GTK App ID，通过 `NCD_DEV_DESKTOP_ID` 向早期初始化提供独立开发身份；bundle identifier、单实例身份和数据根保持不变。入口标记 `NoDisplay=true`，不额外占用应用菜单，仍可供 Dock 解析；其 Exec 可重新启动原开发脚本，保留 CLI 参数转发与信号收尾。
+
+- 开发脚本 5 项检查通过，其中 2 项覆盖 Linux 入口隔离、XDG 目录及 Exec 特殊字符；Linux 专用检查在其它系统跳过。私有 GIO 启动检查确认空格、引号、反斜杠、美元符号、百分号及反引号路径按原样解码。
+- 开发模式实际 Wayland 协议确认 `app_id=com.napcatqq.desktop.Development`，X11 WM_CLASS 实例同值，窗口 `_NET_WM_ICON` 为 256×256。GIO 可解析开发入口及绝对 PNG 图标。
+- 正式模式实际 Wayland 协议确认 `app_id` 与 GTK Application ID 均为 `com.napcatqq.desktop`；X11 WM_CLASS 实例同值，窗口图标为 256×256。检查通过后已清理隔离进程，未以协议检查代替 Dock 视觉截图验收。
+- 最终 Linux debug DEB 构建通过，无 Rust 编译警告；包内桌面入口与图标文件经过校验。AppImage 配置复用相同桌面模板与兼容入口；未重跑完整 AppImage 打包，宿主桌面集成仍由安装器或集成器负责。

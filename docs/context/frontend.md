@@ -44,7 +44,7 @@ flowchart TB
 - 应用端：`app-framework`（实例、配置、商店、AstrBot / 麦麦运行期接口）/ `maibot-chat` / `maibot-memory` / `maibot-resources`
 - 事件：`event-stream.service.ts`（`DOMAIN_EVENT_NAMES` 是事件名单一来源）+ `domain-event-hub.ts`（全应用只 listen 一份再分发，业务侧一律 `subscribeDomainEvents`）
 
-跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口是待换成生成类型的旧账，别再加新的；有生成类型的直接从 `generated/**` 引（`SnowLumaAgreementsPayload` / `QQProcessInfo` 已换）。还剩 `settings.service.ts` 的 `BackendSettings` / `AfterCloseUiBehavior` / `UiModeOnStartup`：那是设置页拍平过的形状（全 number、snake_case 枚举），生成的 `AppSettings` 和 PascalCase 枚举对不上，要换得先动映射。
+跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口是待换成生成类型的旧账，别再加新的；有生成类型的直接从 `generated/**` 引（`SnowLumaAgreementsPayload` / `QQProcessInfo` 已换）。设置页拍平的 `BackendSettings` / `AfterCloseUiBehavior` / `UiModeOnStartup` 位于 `core/domain/settings/backendSettings.ts`，由 service 负责与生成的 `AppSettings` 映射。
 
 `core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `debug/`（调试台的目录整理与命令面板排序、事件流 reduce 与聊天文案、参数表单与校验、收藏整理、历史重放、安全分级 / 错误 / 通道文案、三栏宽度规则）/ `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
 
@@ -58,7 +58,7 @@ flowchart TB
 
 分层禁令在 `eslint.config.mjs` 是机器门禁：modules/shared/app、hooks、core/domain、core/services 各一块 `no-restricted-imports: error`，新违规直接红。白名单文件按文件降 warn（可见不拦截），收掉一个删一个 override，`pnpm run lint` 即清单本身。
 
-- modules 直连 services（override warn）：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`（botService/componentService/snowlumaAppService 调用多、夹着各自的状态流，得单独拆 hook）；`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（同上）；`settings/settings-draft.ts` 只引 `settings.service` 的类型和 `clientPrefsFromBackend`，没有对应的生成类型，见上面手写载荷那条。chat/apps/debug/shared/app 闭包已清零，保持住。
+- modules 直连 services（override warn）：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`（botService/componentService/snowlumaAppService 调用多、夹着各自的状态流，得单独拆 hook）；`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（同上）。chat/apps/debug/shared/app 闭包已清零，保持住。
 - hooks 引 transport 的 shell 薄封装（override warn）：`useAppInstances`、`useOpenExternal`、`usePickDirectory`、`useOpenSnowlumaNovnc`、`useOpenWebui`、`ui/useTauriFileDrop`——外链打开、目录选择、原生拖放没有 services 等价物，直连 transport 的三个纯 shell 函数；`isTauri` 已下沉 `core/domain/runtime/env.ts` 不再是理由。
 - `hooks/preferences/useBackendSettings.ts` ↔ `modules/settings/settings-draft` 双向纠缠（override warn）：settings 草稿体系重构前维持，重构时一起拆。
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。动态 import 不受 `no-restricted-imports` 约束，靠 review 盯着。
@@ -77,6 +77,11 @@ flowchart TB
   - 字段显隐 / 折叠 → `shared/ui/motion/ExpandPresence.tsx`。保持组件挂载，用 `visible` 驱动收放；收起时自动禁止交互并保留退出内容。内部间距放进动画容器，编辑器用 `keepMounted` 懒挂载并保留草稿，整节高级字段用 `FormSection.contentVisible` 同时收起引导线和间距。虚拟列表和分屏保留现有测量节点，在节点自身过渡高度或 flex 比例。
   - 动态布局按正文容器宽度分列；卡片底栏用 `ProgressLine compact`，完整下载来源与原因留在详情和提示。矮窗口的 flex 滚动链必须有 `min-h-0`，保留标题与操作按钮，让中间内容滚动；普通 Dialog 已按两层内边距限制内容高度，并随视口缩放重算。
   - 主题 id、明暗、选择器分组 → `core/design/themes/registry.ts`；社区主题只加 `palettes.ts` 里一份调色板，token 由 `paletteCss.ts` 展开注入。样式里按明暗 / 纯色平面分支用 `<html>` 上的 `data-theme-scheme` / `data-theme-flat`，别逐个列主题名；跟随系统的暗色块写 `:root:not([data-theme])`
+  - 主题过渡 → `core/design/themeTransition.ts`；Linux Tauri 直接应用偏好，避免 WebKitGTK 快照合成触发原生段错误，不能仅凭 `startViewTransition` API 存在就启用动画。
+  - 界面缩放 → `AppUiPreferences.uiScale` 保存 1 / 1.25 / 1.5；`src-tauri/src/ui_scale.rs` 在窗口创建和倍率变化时调用原生 WebView 缩放，不与系统 DPI 重复相乘。浏览器预览仅编辑偏好，不模拟缩放。原生文件拖放在 transport 中按当前 `devicePixelRatio` 换算 CSS 坐标；终端沿用 ResizeObserver 与 xterm 的 DPR 处理。
+  - 窗口外框 → `renderRoot.tsx` 统一挂载 `WindowFrame`，标题栏和八方向缩放热区共用窗口状态。拖动尺寸调用原生 `startResizeDragging`，最大化/全屏时隐藏热区；Linux 使用透明窗口与整页圆角裁剪，包含 body portals。Windows 11 使用 DWM，Windows 10 由 `src-tauri/src/window_frame.rs` 裁剪原生窗口，并关闭系统阴影以保留四边缩放。
+    - Linux 主窗口初始尺寸 → `commands/window.rs` 按当前显示器逻辑工作区宽 80% / 高 85% 设置，基准 1280×800；小屏幕每侧留出 24 个逻辑像素，并同步降低最小尺寸。首次显示前提交尺寸，轻量模式重建共用；已有窗口恢复显示不重设尺寸。系统 DPI 只换算一次，不乘 `uiScale`；Wayland 的位置由合成器安排。
+    - 起拖使用 `mousedown`，与 Tauri 自带拖动区域一致；`pointerdown` 仅阻断模态框的外部点击事件，不阻止后续鼠标事件。WebKitGTK 下需验证连续的边缘与角落拖动，单次成功不足以确认事件衔接正常。
 - 服务端数据一律 react-query，别在组件里 `useEffect` + `let cancelled` 手搓 fetch：
   - 缓存键就近导出成工厂（`appConfigKey(id)` / `astrbotPersonasKey(id)` …），只在本文件用的键不导出。根组件也要的键单独成文件：实例列表的 `APP_INSTANCES_KEY` + `upsertInstance` 在 `hooks/apps/appInstancesCache.ts`，免得事件桥把整套应用端 hook 拖进主包。
   - 每次打开都得是当下状态的（对接计划 `useAppLinkPlan`、插件配置文件列表 `useAppPluginConfigDocs`）：`staleTime: 0` + `gcTime: 0`，重新拉的途中不给旧数据。
@@ -147,7 +152,7 @@ flowchart TB
 - 坑 2：同一事件不要在多个 hook 里各订一套。底层 listen 已经由 `domain-event-hub` 合成一份，但 `useNapcatLogin` 和 `useSnowlumaState` 的 reducer 各管各的，新组件不要把两个 hook 的 reducer 合并成一个（破坏边界）。
 - 坑 3：列表性能。bot 数量到几十就有重渲染卡顿时上虚拟列表（`@tanstack/react-virtual` 已在依赖里，`shared/log/LogConsole.tsx` 在用），但 props 的 ViewModel 形状不要因此改变。
 - 坑 4：日志的环形缓冲。Bot 日志和应用端日志都走 `shared/log/LogConsole`，缓冲规则在 `core/domain/events/log-buffer.ts`。高频推行时在 hook / store 里攒批，别每行 setState 一次全量替换。
-- 坑 5：Tauri 拖拽区域。`shared/components/next/CustomTitleBar.tsx`、`Sidebar.tsx` 的 `data-tauri-drag-region` 属性不能丢，否则窗口拖不动。改标题栏样式时单独 grep 一遍这个 attribute。
+- 坑 5：Tauri 拖拽区域。`shared/components/next/TitleBarChrome.tsx`、`Sidebar.tsx` 的 `data-tauri-drag-region="deep"` 属性不能丢，锁定版 SDK 会排除内部按钮；缩放热区另走原生 resize，不自行循环计算窗口尺寸。
 - 坑 6：路由切换徽章丢失。`AppNext.tsx` 的路由切换是 `displayedRoute + pageVisible` 双 state，路由切走整个 page unmount → hook 内部 `useReducer` state 清零 + 订阅取消，切回来时之前推过的 `BotOnline` / `LoginStateChanged` 已经过去了。修法：把"长期累积、跨路由保留"的聚合 state 做成模块级 store（第 11 节 + `hooks/utils/createStore.ts`），订阅在 store 第一次有 React 订阅者时挂一次，永远不卸载。新 hook 写之前自问：state 是"瞬时显示"（useReducer 没问题）还是"长期累积"（必须 store）。
 - 坑 7：BotCard 固定高度遇到稀疏内容时下方留白严重。修法：自适应高度 + 普通状态文案合到副标题行（QQ ID · flavor · 时间 · 状态文案），只有错误 / 被踢这类高 priority 红色标签独占一行。操作区按钮按状态收缩：日志 / WebUI 只在 `running` / `starting` 显示。
 
