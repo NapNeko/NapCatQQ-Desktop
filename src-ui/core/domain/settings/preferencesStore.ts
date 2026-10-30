@@ -5,6 +5,7 @@
 //
 // 当前承载：
 //   theme           auto / light / dark / Catppuccin / 社区主题（见 core/design/themes）
+//   uiScale         1 / 1.25 / 1.5。由桌面壳应用原生页面缩放
 //   showMascot      true / false
 //   closeAction     close（关闭程序）/ tray（最小化到托盘）
 //   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
@@ -39,6 +40,7 @@ import {
     type CloseAction,
     normalizeCloseAction,
     normalizeSidebarStyle,
+    normalizeUiScale,
 } from './appPreferences';
 
 export type { ThemeMode } from '../../design/themes/registry';
@@ -49,6 +51,7 @@ const STORAGE_KEY = 'ncd:preferences:v1';
 
 const defaultPrefs: AppPreferences = {
     theme: 'auto',
+    uiScale: 1,
     showMascot: true,
     closeAction: 'close',
     motionEnabled: true,
@@ -69,6 +72,7 @@ function loadFromStorage(): AppPreferences {
         const parsed = JSON.parse(raw) as Partial<AppPreferences>;
         return {
             theme: normalizeTheme(parsed.theme),
+            uiScale: normalizeUiScale(parsed.uiScale),
             showMascot: parsed.showMascot !== false,
             closeAction: parsed.closeAction === 'tray' ? 'tray' : 'close',
             motionEnabled: parsed.motionEnabled !== false,
@@ -171,6 +175,7 @@ export const preferencesStore = {
     applySnapshot(patch: Partial<AppPreferences>) {
         state = {
             theme: normalizeTheme(patch.theme ?? state.theme),
+            uiScale: normalizeUiScale(patch.uiScale ?? state.uiScale),
             showMascot: patch.showMascot !== undefined ? !!patch.showMascot : state.showMascot,
             closeAction:
                 patch.closeAction !== undefined

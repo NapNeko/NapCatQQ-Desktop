@@ -93,6 +93,8 @@ pub async fn open_debug_window(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
+    crate::ui_scale::apply_to_window(&window)?;
+    crate::window_frame::apply(&window)?;
     let _ = crate::window_icon::apply_window_icon(&app, &window);
     Ok(())
 }

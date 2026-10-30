@@ -146,7 +146,7 @@ export const Sidebar = memo(function Sidebar({
                 {floating ? (
                     <div
                         className="flex min-w-0 flex-1 items-center justify-center"
-                        data-tauri-drag-region
+                        data-tauri-drag-region="deep"
                     >
                         <img
                             src={logoSidebarCollapsed}
@@ -193,7 +193,7 @@ export const Sidebar = memo(function Sidebar({
                     <>
                         <div
                             className="flex min-w-0 flex-1 items-center gap-2"
-                            data-tauri-drag-region
+                            data-tauri-drag-region="deep"
                         >
                             <img
                                 src={logoSidebar}

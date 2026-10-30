@@ -6,7 +6,21 @@ import type { SnowLumaQrLoginSnapshot } from '../ipc/generated/domain/SnowLumaQr
 import type { WindowSignal } from '../ipc/generated/WindowSignal';
 import type { LogSnapshot } from '../ipc/types';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
-import { invoke, isTauri, listen } from '../ipc/transport';
+import {
+    invoke,
+    isTauri,
+    listen,
+    startWindowResizeDragging,
+    type WindowResizeDirection,
+} from '../ipc/transport';
+
+export type { WindowResizeDirection } from '../ipc/transport';
+
+export interface WindowFrameState {
+    isMaximized: boolean;
+    isFullscreen: boolean;
+    isResizable: boolean;
+}
 
 // 不走 DomainEvent 总线的几条窗口通知，名字和信封版本对应 src-tauri/src/window_events.rs，
 // 那边的测试会读这个文件核对，改名时两边一起改
@@ -26,6 +40,9 @@ type WindowController = {
     toggleMaximize: () => Promise<void>;
     close: () => Promise<void>;
     isMaximized: () => Promise<boolean>;
+    isFullscreen: () => Promise<boolean>;
+    isResizable: () => Promise<boolean>;
+    onResized: (cb: () => void) => Promise<() => void>;
     hide: () => Promise<void>;
     show: () => Promise<void>;
 };
@@ -96,33 +113,28 @@ export const windowControlService = {
         }
     },
 
-    isMaximized: async (): Promise<boolean> => {
+    frameState: async (): Promise<WindowFrameState> => {
+        const fallback = { isMaximized: false, isFullscreen: false, isResizable: false };
+        if (!isTauri) return fallback;
         const w = await getWindow();
-        if (!w) return false;
-        try {
-            return await w.isMaximized();
-        } catch {
-            return false;
-        }
+        if (!w) return fallback;
+        const [isMaximized, isFullscreen, isResizable] = await Promise.all([
+            w.isMaximized(),
+            w.isFullscreen(),
+            w.isResizable(),
+        ]);
+        return { isMaximized, isFullscreen, isResizable };
     },
 
-    onResize: async (cb: (isMaximized: boolean) => void): Promise<() => void> => {
+    startResizeDragging: async (direction: WindowResizeDirection): Promise<void> => {
+        if (isTauri) await startWindowResizeDragging(direction);
+    },
+
+    onResize: async (cb: () => void): Promise<() => void> => {
+        if (!isTauri) return () => {};
         const w = await getWindow();
         if (!w) return () => {};
-        try {
-            const { listen } = await import('@tauri-apps/api/event');
-            const unlisten = await listen('tauri://resize', async () => {
-                try {
-                    cb(await w.isMaximized());
-                } catch (err) {
-                    console.error('刷新窗口最大化状态失败:', err);
-                }
-            });
-            return unlisten;
-        } catch (err) {
-            console.error('初始化标题栏窗口状态失败:', err);
-            return () => {};
-        }
+        return w.onResized(cb);
     },
 };
 

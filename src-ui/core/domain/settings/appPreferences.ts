@@ -14,6 +14,7 @@ export function normalizeCloseAction(raw: unknown): CloseAction {
 
 export interface AppPreferences {
     theme: ThemeMode;
+    uiScale: number;
     showMascot: boolean;
     closeAction: CloseAction;
     motionEnabled: boolean;
@@ -21,6 +22,10 @@ export interface AppPreferences {
     motionSpeed: number;
     radiusStyle: RadiusStyle;
     sidebarStyle: SidebarStyle;
+}
+
+export function normalizeUiScale(raw: unknown): number {
+    return raw === 1.25 || raw === 1.5 ? raw : 1;
 }
 
 export type SidebarStyle = 'classic' | 'floating';

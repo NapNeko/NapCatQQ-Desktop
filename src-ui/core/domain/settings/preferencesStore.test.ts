@@ -25,6 +25,7 @@ describe('preferencesStore 读档归一化', () => {
         const { preferencesStore } = await loadStore();
         expect(preferencesStore.get()).toEqual({
             theme: 'auto',
+            uiScale: 1,
             showMascot: true,
             closeAction: 'close',
             motionEnabled: true,
@@ -45,6 +46,7 @@ describe('preferencesStore 读档归一化', () => {
         const { preferencesStore } = await loadStore({ theme: 'mocha' });
         const prefs = preferencesStore.get();
         expect(prefs.theme).toBe('mocha');
+        expect(prefs.uiScale).toBe(1);
         expect(prefs.showMascot).toBe(true);
         expect(prefs.closeAction).toBe('close');
         expect(prefs.motionSpeed).toBe(MOTION_SPEED_DEFAULT);
@@ -53,6 +55,7 @@ describe('preferencesStore 读档归一化', () => {
     it('存档里认识的值原样保留', async () => {
         const { preferencesStore } = await loadStore({
             theme: 'dracula',
+            uiScale: 1.25,
             showMascot: false,
             closeAction: 'tray',
             motionEnabled: false,
@@ -63,6 +66,7 @@ describe('preferencesStore 读档归一化', () => {
         });
         expect(preferencesStore.get()).toEqual({
             theme: 'dracula',
+            uiScale: 1.25,
             showMascot: false,
             closeAction: 'tray',
             motionEnabled: false,
@@ -76,6 +80,7 @@ describe('preferencesStore 读档归一化', () => {
     it('未知枚举值逐项兜底', async () => {
         const { preferencesStore } = await loadStore({
             theme: 'not-a-theme',
+            uiScale: 2,
             closeAction: 'minimize',
             motionLevel: 'ultra',
             radiusStyle: 'pointy',
@@ -83,6 +88,7 @@ describe('preferencesStore 读档归一化', () => {
         });
         const prefs = preferencesStore.get();
         expect(prefs.theme).toBe('auto');
+        expect(prefs.uiScale).toBe(1);
         expect(prefs.closeAction).toBe('close');
         expect(prefs.motionLevel).toBe('standard');
         expect(prefs.radiusStyle).toBe('standard');
@@ -108,6 +114,7 @@ describe('preferencesStore 读档归一化', () => {
         const first = await loadStore();
         first.preferencesStore.applySnapshot({
             theme: 'dark',
+            uiScale: 1.5,
             closeAction: 'tray',
             motionLevel: 'elegant',
             motionSpeed: 1.4,
@@ -142,6 +149,7 @@ describe('preferencesStore setter 归一化', () => {
     it('applySnapshot 只改草稿里出现的字段，其余保留', async () => {
         const { preferencesStore } = await loadStore({
             theme: 'dark',
+            uiScale: 1.25,
             closeAction: 'tray',
             motionSpeed: 1.4,
         });
@@ -149,6 +157,7 @@ describe('preferencesStore setter 归一化', () => {
         const prefs = preferencesStore.get();
         expect(prefs.showMascot).toBe(false);
         expect(prefs.theme).toBe('dark');
+        expect(prefs.uiScale).toBe(1.25);
         expect(prefs.closeAction).toBe('tray');
         expect(prefs.motionSpeed).toBe(1.4);
     });
@@ -157,11 +166,13 @@ describe('preferencesStore setter 归一化', () => {
         const { preferencesStore } = await loadStore();
         preferencesStore.applySnapshot({
             theme: 'x' as never,
+            uiScale: 1.1,
             closeAction: 'whatever' as never,
             motionSpeed: Number.POSITIVE_INFINITY,
         });
         const prefs = preferencesStore.get();
         expect(prefs.theme).toBe('auto');
+        expect(prefs.uiScale).toBe(1);
         expect(prefs.closeAction).toBe('close');
         expect(prefs.motionSpeed).toBe(MOTION_SPEED_DEFAULT);
     });
@@ -171,6 +182,7 @@ describe('preferencesStore setter 归一化', () => {
         preferencesStore.reset();
         expect(preferencesStore.get()).toEqual({
             theme: 'auto',
+            uiScale: 1,
             showMascot: true,
             closeAction: 'close',
             motionEnabled: true,

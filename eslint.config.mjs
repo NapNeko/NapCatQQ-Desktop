@@ -160,7 +160,6 @@ export default tseslint.config(
             `${UI}/modules/bot/config/BotConfigPage.next.tsx`,
             `${UI}/modules/bot/dialogs/ImportRemoteBotsDialog.tsx`,
             `${UI}/modules/bot/list/BotListPage.next.tsx`,
-            `${UI}/modules/settings/settings-draft.ts`,
             `${UI}/modules/settings/tabs/NcdWatchRemoteSection.tsx`,
             `${UI}/modules/settings/tabs/NotificationsTab.tsx`,
             `${UI}/modules/settings/tabs/WindowTab.tsx`,

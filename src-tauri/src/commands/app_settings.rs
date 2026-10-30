@@ -75,6 +75,7 @@ pub async fn set_app_settings(
     let _settings_guard = state.network_update_gate.lock().await;
     let (settings, network_changed) =
         save_desktop_settings(&state.data_root, &state.app_settings, &state.network, dto).await?;
+    crate::ui_scale::sync_all(&app, &settings.ui_preferences);
 
     // 已保存的安全策略必须立即生效，不能被其他功能的热应用失败跳过。
     crate::commands::mcp::apply_mcp_settings(

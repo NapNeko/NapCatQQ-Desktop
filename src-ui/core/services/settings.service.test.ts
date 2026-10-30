@@ -125,6 +125,47 @@ describe('network configuration persistence', () => {
 });
 
 describe('restoring persisted appearance', () => {
+    it.each([
+        { theme: 'auto' as const, uiScale: 1.25 },
+        { theme: 'dark' as const, uiScale: 1.5 },
+    ])('saves and restores interface scale with theme $theme', async ({ theme, uiScale }) => {
+        const { settingsService } = await import('./settings.service');
+        const {
+            applyClientPrefsFromDraft,
+            backendSlice,
+            draftFromBackendAndPrefs,
+            isSettingsDirty,
+        } = await import('../../modules/settings/settings-draft');
+        const original = preferencesStore.get();
+        preferencesStore.applySnapshot({ theme: 'auto', uiScale: 1 });
+        native.invoke.mockResolvedValue(legacySettingsDto());
+
+        try {
+            const backend = await settingsService.get(true);
+            const baseline = draftFromBackendAndPrefs(backend);
+            expect(isSettingsDirty(baseline, backend)).toBe(false);
+            const draft = { ...baseline, theme, uiScale };
+            expect(isSettingsDirty(draft, backend)).toBe(true);
+            expect(preferencesStore.get().uiScale).toBe(1);
+
+            await settingsService.set(backendSlice(draft));
+            await applyClientPrefsFromDraft(draft);
+
+            const saved = native.invoke.mock.calls.find(
+                ([name]) => name === 'set_app_settings',
+            )?.[1].dto;
+            expect(saved.settings.uiPreferences.uiScale).toBe(uiScale);
+            expect(preferencesStore.get()).toMatchObject({ theme, uiScale });
+            expect(JSON.parse(localStorage.getItem('ncd:preferences:v1') ?? '{}').uiScale).toBe(
+                uiScale,
+            );
+            native.invoke.mockResolvedValue(saved);
+            expect(draftFromBackendAndPrefs(await settingsService.get(true)).uiScale).toBe(uiScale);
+        } finally {
+            preferencesStore.applySnapshot(original);
+        }
+    });
+
     it('keeps relogin opt-in for old settings and preserves its administrator scope on save', async () => {
         const { settingsService } = await import('./settings.service');
         native.invoke.mockResolvedValue({

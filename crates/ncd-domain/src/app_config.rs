@@ -225,7 +225,6 @@ fn default_task_queue_cleanup_linger_ms() -> u64 {
     600_000
 }
 
-
 /// 任务队列终态条目保留时长下限(毫秒),0 = 关闭自动清理
 pub const TASK_QUEUE_CLEANUP_LINGER_MIN_MS: u64 = 3_000;
 /// 任务队列终态条目保留时长上限(毫秒)
@@ -255,6 +254,9 @@ pub struct AppUiPreferences {
     pub motion_level: String,
     #[serde(rename = "motionSpeed", default = "default_ui_motion_speed")]
     pub motion_speed: f64,
+    /// 原生 WebView 页面缩放倍率：1.0 / 1.25 / 1.5。
+    #[serde(rename = "uiScale", default = "default_ui_scale")]
+    pub ui_scale: f64,
     #[serde(rename = "radiusStyle", default = "default_ui_radius_style")]
     pub radius_style: String,
     /// InfoBar info tone 自动关闭毫秒,0 = 不自动关
@@ -288,11 +290,26 @@ impl Default for AppUiPreferences {
             motion_enabled: true,
             motion_level: default_ui_motion_level(),
             motion_speed: default_ui_motion_speed(),
+            ui_scale: default_ui_scale(),
             radius_style: default_ui_radius_style(),
             sidebar_style: default_ui_sidebar_style(),
             info_bar_dismiss_info_ms: default_infobar_dismiss_info_ms(),
             info_bar_dismiss_success_ms: default_infobar_dismiss_success_ms(),
             info_bar_dismiss_warning_ms: default_infobar_dismiss_warning_ms(),
+        }
+    }
+}
+
+fn default_ui_scale() -> f64 {
+    1.0
+}
+
+impl AppUiPreferences {
+    pub fn ui_scale_factor(&self) -> f64 {
+        match self.ui_scale {
+            1.25 => 1.25,
+            1.5 => 1.5,
+            _ => 1.0,
         }
     }
 }
@@ -553,6 +570,7 @@ impl AppSettings {
         self.offline_webhook.normalize();
         self.offline_onebot.normalize();
         self.poller.offline_notify_behavior.normalize();
+        self.ui_preferences.ui_scale = self.ui_preferences.ui_scale_factor();
     }
 
     /// 冷启动时要不要按实例的 auto_start 拉起应用端实例：全局开关开着、应用端功能也没关
@@ -700,6 +718,27 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
         assert_eq!(round, prefs);
         assert_eq!(AppUiPreferences::default().sidebar_style, "floating");
+        assert_eq!(prefs.ui_scale, 1.0);
+    }
+
+    #[test]
+    fn ui_scale_allowed_values_round_trip_and_invalid_values_normalize_to_default() {
+        for factor in [1.0, 1.25, 1.5] {
+            let mut settings = AppSettings::default();
+            settings.ui_preferences.ui_scale = factor;
+            settings.normalize();
+            let json = serde_json::to_string(&settings).unwrap();
+            let restored: AppSettings = serde_json::from_str(&json).unwrap();
+            assert_eq!(restored.ui_preferences.ui_scale, factor);
+            assert_eq!(restored.ui_preferences.ui_scale_factor(), factor);
+        }
+        for factor in [0.0, -1.0, 1.1, 2.0, f64::NAN, f64::INFINITY] {
+            let mut settings = AppSettings::default();
+            settings.ui_preferences.ui_scale = factor;
+            assert_eq!(settings.ui_preferences.ui_scale_factor(), 1.0);
+            settings.normalize();
+            assert_eq!(settings.ui_preferences.ui_scale, 1.0);
+        }
     }
 
     /// Legacy PySide6 版本规范 JSON

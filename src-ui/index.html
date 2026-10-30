@@ -1,36 +1,53 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>NapCatQQ Desktop</title>
+        <script>
+            if (window.__TAURI_INTERNALS__ && /linux/i.test(navigator.userAgent)) {
+                document.documentElement.dataset.nativeOs = 'linux';
+            }
+        </script>
+        <!-- JS/CSS 到达前避免 WebView 闪屏；暗色系统用深底，与 tokens surface-canvas 对齐 -->
+        <style>
+            html,
+            body,
+            #root {
+                height: 100%;
+                margin: 0;
+                background: #faf7f2;
+            }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NapCatQQ Desktop</title>
-  <!-- JS/CSS 到达前避免 WebView 闪屏；暗色系统用深底，与 tokens surface-canvas 对齐 -->
-  <style>
-    html,
-    body,
-    #root {
-      height: 100%;
-      margin: 0;
-      background: #faf7f2;
-    }
-
-    /* 只管跟随系统（没写 data-theme）的情况：选了具体主题时 syncRootChromeBackground
+            /* 只管跟随系统（没写 data-theme）的情况：选了具体主题时 syncRootChromeBackground
        会把主题画布色写成 html/body/#root 的内联背景，这里带 !important 会把它盖掉。 */
-    @media (prefers-color-scheme: dark) {
+            @media (prefers-color-scheme: dark) {
+                html:not([data-theme]),
+                html:not([data-theme]) body,
+                html:not([data-theme]) #root {
+                    background: #211f1d !important;
+                }
+            }
 
-      html:not([data-theme]),
-      html:not([data-theme]) body,
-      html:not([data-theme]) #root {
-        background: #211f1d !important;
-      }
-    }
-  </style>
-</head>
+            html[data-native-os='linux'] {
+                --ncd-window-radius: 12px;
+                overflow: hidden;
+                clip-path: inset(0 round var(--ncd-window-radius));
+                background: transparent !important;
+            }
 
-<body>
-  <div id="root" aria-busy="true" style="background-color: #faf7f2;"></div>
-  <script type="module" src="/main.tsx"></script>
-</body>
+            html[data-native-os='linux'][data-window-expanded] {
+                --ncd-window-radius: 0px;
+            }
 
+            html[data-native-os='linux'] body {
+                background: transparent !important;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="root" aria-busy="true" style="background-color: #faf7f2"></div>
+        <script type="module" src="/main.tsx"></script>
+    </body>
 </html>

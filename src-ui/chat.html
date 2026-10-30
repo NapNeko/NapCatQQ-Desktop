@@ -4,6 +4,11 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>聊天 - NapCatQQ Desktop</title>
+        <script>
+            if (window.__TAURI_INTERNALS__ && /linux/i.test(navigator.userAgent)) {
+                document.documentElement.dataset.nativeOs = 'linux';
+            }
+        </script>
         <style>
             html,
             body,
@@ -18,6 +23,18 @@
                 html:not([data-theme]) #root {
                     background: #211f1d !important;
                 }
+            }
+            html[data-native-os='linux'] {
+                --ncd-window-radius: 12px;
+                overflow: hidden;
+                clip-path: inset(0 round var(--ncd-window-radius));
+                background: transparent !important;
+            }
+            html[data-native-os='linux'][data-window-expanded] {
+                --ncd-window-radius: 0px;
+            }
+            html[data-native-os='linux'] body {
+                background: transparent !important;
             }
         </style>
     </head>

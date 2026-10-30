@@ -46,8 +46,10 @@ pub mod tray_panel;
 #[cfg(windows)]
 pub mod tray_panel_native;
 pub mod tray_summary;
+pub mod ui_scale;
 pub mod webview_scheduler;
 pub mod window_events;
+pub mod window_frame;
 pub mod window_icon;
 pub mod windows_toast;
 #[cfg(windows)]
@@ -250,6 +252,7 @@ pub fn run() {
     // 以 app-settings 为准收敛 HKCU Run(开=刷新路径,关=删本产品值)
     autostart::reconcile_launch_on_startup(app_settings.launch_on_startup);
     let app_settings_shared = Arc::new(RwLock::new(app_settings.clone()));
+    let initial_ui_scale = ui_scale::UiScale::new(&app_settings.ui_preferences);
     let metrics_prefs = {
         let mut p = ncd_runtime::metrics::BotRuntimeMetricsPrefs::from_app(&app_settings);
         p.normalize();
@@ -523,6 +526,7 @@ pub fn run() {
         // 页面开始（重新）加载时，旧页面的调试台事件订阅已经没人收了，但 Channel 还能 send 成功、探不出来，
         // 在这里按窗口摘掉，否则接收器一直算「有人在看」，空闲停不下来
         .manage(chat_window::ChatWindowCoordinator::default())
+        .manage(initial_ui_scale)
         .manage(chat_tray::ChatTrayState::default())
         .manage(webview_scheduler::WebviewScheduler::default())
         .manage(screenshot::ScreenshotCoordinator::default())
@@ -545,6 +549,10 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            if let Some(window) = app.get_webview_window(lightweight::MAIN_WINDOW_LABEL) {
+                ui_scale::apply_to_window(&window).map_err(std::io::Error::other)?;
+                window_frame::apply(&window).map_err(std::io::Error::other)?;
+            }
             if startup_tray_only {
                 if let Err(err) = lightweight::enter_lightweight_mode(app.handle()) {
                     desktop_log::write_session_line(

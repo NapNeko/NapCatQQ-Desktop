@@ -1,6 +1,6 @@
 // 外观 Tab：主题、吉祥物、圆角与动画体感。
 
-import { Switch } from '../../../shared/ui';
+import { Select, Switch } from '../../../shared/ui';
 import type { SettingsDraft } from '../settings-draft';
 import {
     FieldRow,
@@ -28,6 +28,19 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
             <SettingsSection title="界面" description="保存后生效，编辑时不预览主题切换">
                 <FieldRow label="主题">
                     <ThemePicker value={draft.theme} onChange={(v) => patchDraft({ theme: v })} />
+                </FieldRow>
+
+                <FieldRow label="界面缩放" description="保存后生效；放大后可最大化窗口">
+                    <Select
+                        aria-label="界面缩放"
+                        value={String(draft.uiScale)}
+                        onValueChange={(v) => patchDraft({ uiScale: Number(v) })}
+                        items={[
+                            { value: '1', label: '100%（默认）' },
+                            { value: '1.25', label: '125%' },
+                            { value: '1.5', label: '150%' },
+                        ]}
+                    />
                 </FieldRow>
 
                 <FieldRow label="圆角风格">

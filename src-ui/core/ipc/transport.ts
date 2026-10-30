@@ -7,6 +7,7 @@
 // `core/ipc/mock/*` 提供的纯前端假数据。
 
 import { Channel, invoke as tauriInvoke } from '@tauri-apps/api/core';
+import type { Window as TauriWindow } from '@tauri-apps/api/window';
 import { isTauri } from '../domain/runtime/env';
 import {
     listen as tauriListen,
@@ -20,6 +21,14 @@ export { Channel };
 /// 是否运行在 Tauri webview 内（vs 浏览器预览模式）。权威在 core/domain/runtime/env，
 /// 这里 re-export 兼容 services 层历史 import 路径。
 export { isTauri };
+
+export type WindowResizeDirection = Parameters<TauriWindow['startResizeDragging']>[0];
+
+/** 将边缘拖动交给窗口系统，不在前端逐帧修改尺寸。 */
+export async function startWindowResizeDragging(direction: WindowResizeDirection): Promise<void> {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().startResizeDragging(direction);
+}
 
 /// 透传到 `@tauri-apps/api/core` 的 invoke。
 /// services 层应在 `if (isTauri)` 分支调用本函数；否则走 mock。
@@ -169,7 +178,7 @@ export async function saveZipFile(title: string, defaultFileName: string): Promi
     return selected;
 }
 
-/// 窗口原生拖放的事件，坐标已换成网页里的逻辑像素；换算失败（拿不到缩放比）时为 null。
+/// 窗口原生拖放的事件，坐标已换成网页里的 CSS 像素。
 export type FileDragDropEvent =
     | { type: 'enter'; paths: string[]; position: { x: number; y: number } | null }
     | { type: 'over'; position: { x: number; y: number } | null }
@@ -177,28 +186,20 @@ export type FileDragDropEvent =
     | { type: 'leave' };
 
 /// 订阅往窗口里拖文件。窗口开着 dragDropEnabled，网页里的 HTML5 drop 拿不到本机路径，只能走这条；
-/// 按需加载 webview / window 模块，没用到拖放的页面不带它们。
+/// 按需加载 webview 模块，没用到拖放的页面不带它。
 export async function onFileDragDrop(
     handler: (event: FileDragDropEvent) => void,
 ): Promise<UnlistenFn> {
-    const [{ getCurrentWebview }, { getCurrentWindow }] = await Promise.all([
-        import('@tauri-apps/api/webview'),
-        import('@tauri-apps/api/window'),
-    ]);
-    return getCurrentWebview().onDragDropEvent(async (event) => {
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+    return getCurrentWebview().onDragDropEvent((event) => {
         const p = event.payload;
         if (p.type === 'leave') {
             handler(p);
             return;
         }
-        let position: { x: number; y: number } | null;
-        try {
-            // 每次都问缩放比：窗口拖到另一块屏上会变
-            const logical = p.position.toLogical(await getCurrentWindow().scaleFactor());
-            position = { x: logical.x, y: logical.y };
-        } catch {
-            position = null;
-        }
+        // DPR 同时包含系统 DPI 和页面缩放；每次读取以跟随跨屏与倍率变化。
+        const logical = p.position.toLogical(window.devicePixelRatio);
+        const position = { x: logical.x, y: logical.y };
         if (p.type === 'over') handler({ type: 'over', position });
         else handler({ type: p.type, paths: p.paths, position });
     });

@@ -4,7 +4,10 @@ import type { MotionLevel } from '../../core/design/motion';
 import { scaleDuration } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';
 import { clampPerformanceMonitorIntervalMs } from '../../core/domain/performance/performanceSettings';
-import { clientPrefsFromBackend, type BackendSettings } from '../../core/services/settings.service';
+import {
+    clientPrefsFromBackend,
+    type BackendSettings,
+} from '../../core/domain/settings/backendSettings';
 import { webhookChannelsEqual } from '../../core/domain/settings/offline-notify-defaults';
 import { featuresEqual } from '../../core/domain/settings/features';
 import { networkSettingsEqual } from '../../core/domain/settings/network';
@@ -36,6 +39,7 @@ import { playThemeTransition } from '../../core/design/themeTransition';
 /** 设置页可编辑项的完整草稿（通用 / 网络 Tab + 本机偏好）。 */
 export type SettingsDraft = Omit<BackendSettings, 'taskQueueCleanup'> & {
     theme: ThemeMode;
+    uiScale: number;
     showMascot: boolean;
     motionEnabled: boolean;
     motionLevel: MotionLevel;
@@ -117,6 +121,7 @@ export function draftFromBackendAndPrefs(
         snowlumaNodePath: backend.snowlumaNodePath,
         snowlumaPackage: backend.snowlumaPackage,
         theme: client.theme,
+        uiScale: client.uiScale,
         showMascot: client.showMascot,
         motionEnabled: client.motionEnabled,
         motionLevel: client.motionLevel,
@@ -167,6 +172,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         uiPreferences: appPreferencesToAppUiPreferences(
             {
                 theme: draft.theme,
+                uiScale: draft.uiScale,
                 showMascot: draft.showMascot,
                 closeAction: draft.closeAction,
                 motionEnabled: draft.motionEnabled,
@@ -233,6 +239,7 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         draft.notifyOnBotCrashed !== baseline.notifyOnBotCrashed ||
         draft.notifyOnLoginKicked !== baseline.notifyOnLoginKicked ||
         draft.theme !== baseline.theme ||
+        draft.uiScale !== baseline.uiScale ||
         draft.showMascot !== baseline.showMascot ||
         draft.motionEnabled !== baseline.motionEnabled ||
         draft.motionLevel !== baseline.motionLevel ||
@@ -312,6 +319,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
             () => {
                 preferencesStore.applySnapshot({
                     theme: draft.theme,
+                    uiScale: draft.uiScale,
                     showMascot: draft.showMascot,
                     closeAction: draft.closeAction,
                     motionEnabled: draft.motionEnabled,
@@ -326,6 +334,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
     } else {
         preferencesStore.applySnapshot({
             theme: draft.theme,
+            uiScale: draft.uiScale,
             showMascot: draft.showMascot,
             closeAction: draft.closeAction,
             motionEnabled: draft.motionEnabled,
@@ -339,6 +348,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
         appPreferencesToAppUiPreferences(
             {
                 theme: draft.theme,
+                uiScale: draft.uiScale,
                 showMascot: draft.showMascot,
                 closeAction: draft.closeAction,
                 motionEnabled: draft.motionEnabled,

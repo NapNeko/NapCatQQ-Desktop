@@ -11,7 +11,7 @@ import { MOTION_SPEED_DEFAULT, MOTION_SPEED_MAX, MOTION_SPEED_MIN } from '../../
 import { RADIUS_STYLE_DEFAULT, normalizeRadiusStyle } from '../../design/radius';
 import { normalizeTheme } from '../../design/themes/registry';
 import type { AppPreferences, CloseAction } from './appPreferences';
-import { normalizeCloseAction, normalizeSidebarStyle } from './appPreferences';
+import { normalizeCloseAction, normalizeSidebarStyle, normalizeUiScale } from './appPreferences';
 
 function normalizeMotionLevel(raw: unknown): AppPreferences['motionLevel'] {
     return raw === 'elegant' || raw === 'rich' ? raw : 'standard';
@@ -28,6 +28,7 @@ export function appUiPreferencesToAppPreferences(
 ): AppPreferences {
     return {
         theme: normalizeTheme(ui.theme),
+        uiScale: normalizeUiScale(ui.uiScale),
         showMascot: ui.showMascot !== false,
         closeAction,
         motionEnabled: ui.motionEnabled !== false,
@@ -44,6 +45,7 @@ export function appPreferencesToAppUiPreferences(
 ): AppUiPreferences {
     return {
         theme: prefs.theme,
+        uiScale: normalizeUiScale(prefs.uiScale),
         showMascot: prefs.showMascot,
         motionEnabled: prefs.motionEnabled,
         motionLevel: prefs.motionLevel,
@@ -75,6 +77,7 @@ export function closeActionFromDto(raw: unknown): CloseAction {
 export function isDefaultUiPreferencesOnDisk(ui: AppUiPreferences): boolean {
     return (
         normalizeTheme(ui.theme) === 'auto' &&
+        normalizeUiScale(ui.uiScale) === 1 &&
         ui.showMascot !== false &&
         ui.motionEnabled !== false &&
         normalizeMotionLevel(ui.motionLevel) === 'standard' &&

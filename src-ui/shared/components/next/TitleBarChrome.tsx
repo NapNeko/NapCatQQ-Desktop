@@ -16,6 +16,7 @@ export function TitleBarChrome({
     const { isMaximized, minimize, toggleMaximize, close, closeSelf } = useWindowControls();
     return (
         <header
+            data-tauri-drag-region="deep"
             className={cn(
                 'relative z-30 flex h-11 shrink-0 select-none items-center px-3',
                 'bg-transparent',

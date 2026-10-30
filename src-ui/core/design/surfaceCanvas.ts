@@ -10,13 +10,14 @@ export function readSurfaceCanvasColor(): string {
     return v || CANVAS_FALLBACK_LIGHT;
 }
 
-/** 把当前主题画布色写到 html/body/#root，与 Tauri 窗口透明区一致。 */
+/** Linux 窗口四角保留 alpha；画布色只画在根内容，其他平台保持原有背景。 */
 export function syncRootChromeBackground(): void {
     if (typeof document === 'undefined') return;
     const bg = readSurfaceCanvasColor();
     const html = document.documentElement;
-    html.style.backgroundColor = bg;
-    document.body.style.backgroundColor = bg;
+    const chrome = html.dataset.nativeOs === 'linux' ? 'transparent' : bg;
+    html.style.backgroundColor = chrome;
+    document.body.style.backgroundColor = chrome;
     const root = document.getElementById('root');
     if (root) root.style.backgroundColor = bg;
 }

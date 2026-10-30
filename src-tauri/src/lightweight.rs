@@ -73,6 +73,8 @@ pub async fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
+    crate::ui_scale::apply_to_window(&window)?;
+    crate::window_frame::apply(&window)?;
     apply_main_window_startup_geometry(app)?;
     let _ = crate::window_icon::apply_window_icon(app, &window);
     crate::webview_scheduler::show_window(&window).await?;

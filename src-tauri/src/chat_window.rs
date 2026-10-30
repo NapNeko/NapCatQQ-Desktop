@@ -290,17 +290,25 @@ pub fn chat_window_config(app: &AppHandle) -> Result<tauri::utils::config::Windo
     conf.min_height = Some(480.0);
     conf.visible = false;
     conf.url = tauri::WebviewUrl::App("chat.html".into());
-    // 聊天画布本身不透明，不继承控制台的透明窗口与 Mica 合成资源。
+    // 聊天不继承 Mica；Linux 保留透明表面供窗口圆角裁剪，Windows 使用不透明画布。
     conf.transparent = false;
     conf.window_effects = None;
+    #[cfg(target_os = "linux")]
+    {
+        conf.transparent = true;
+        conf.background_color = Some(tauri::utils::config::Color(0, 0, 0, 0));
+    }
     Ok(conf)
 }
 
 pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     let conf = chat_window_config(app)?;
-    WebviewWindowBuilder::from_config(app, &conf)
+    let window = WebviewWindowBuilder::from_config(app, &conf)
         .and_then(|builder| builder.build())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    crate::ui_scale::apply_to_window(&window)?;
+    crate::window_frame::apply(&window)?;
+    Ok(window)
 }
 
 #[tauri::command]
