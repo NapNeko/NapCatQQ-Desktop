@@ -568,7 +568,10 @@ mod tests {
                 .unwrap();
         // 等 ping 子进程真正接上控制台，冷启动不计入关闭耗时。
         let ready = wait_for_text(&mut session, "TTL=").await;
-        assert!(ready.contains("TTL="), "ping did not become ready: {ready:?}");
+        assert!(
+            ready.contains("TTL="),
+            "ping did not become ready: {ready:?}"
+        );
         let started = Instant::now();
         session.control.close();
         let (_, exit) = collect(session).await;

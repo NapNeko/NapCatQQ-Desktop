@@ -3525,6 +3525,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "flate2",
+ "libc",
  "ncd-domain",
  "russh",
  "russh-sftp",

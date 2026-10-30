@@ -7,7 +7,8 @@
 //! - LocalWindowsHost:本地 Windows 实装(基于 std::fs + tokio::process)
 //! - RemoteLinuxHost:远端 Linux 实装(基于 russh + russh-sftp)
 //! - RemoteWindowsHost:Windows OpenSSH + PowerShell + Agent
-//! - 未来 LocalLinuxHost / LocalMacOsHost / DockerHost / AgentHost
+//! - LocalLinuxHost:本地 Linux 实装(基于 POSIX 文件系统、进程组与 PTY)
+//! - 未来 LocalMacOsHost / DockerHost / AgentHost
 
 use async_trait::async_trait;
 use bytes::Bytes;

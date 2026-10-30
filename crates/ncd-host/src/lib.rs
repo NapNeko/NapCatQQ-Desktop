@@ -1,6 +1,6 @@
 //! ncd-host:NapCatQQ-Desktop 的"主机"抽象层
 //!
-//! Host trait 把"一台机器"(本地 Windows / 远端 Linux / 远端 Windows /
+//! Host trait 把"一台机器"(本地 Windows、Linux / 远端 Linux、Windows /
 //! 未来的 macOS / Docker / Agent)抽成统一接口,所有"装组件 / 跑命令 / 传文件 /
 //! 开隧道 / 提权"操作都通过它完成
 //!
@@ -15,7 +15,7 @@
 //! - Host / HostShell trait 定义,Linux 包管理器身份与命令拼装([LinuxPackageManager])
 //! - HostPath / HostCommand / CommandOutput / HostProcess 跨平台数据类型
 //! - HostError 错误体系
-//! - LocalWindowsHost 实装(local::windows,#[cfg(windows)])
+//! - LocalWindowsHost / LocalLinuxHost 实装(local 模块，按编译平台启用)
 //! - RemoteLinuxHost 实装(基于 russh / russh-sftp)
 //! - RemoteWindowsHost 实装(Windows OpenSSH / PowerShell / Agent)
 //!
@@ -41,27 +41,20 @@ pub mod shell;
 pub mod stream_chunk;
 pub mod subprocess;
 
-pub use apt_lock::{
-    host_command_wrap_dpkg_wait_for_apt,
-    output_indicates_dpkg_lock_hold,
-};
+pub use apt_lock::{host_command_wrap_dpkg_wait_for_apt, output_indicates_dpkg_lock_hold};
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
 pub use host::{Arch, Host, Locality, Os, SshDialTarget, StreamSource};
 pub use linux_pkg::LinuxPackageManager;
 pub use path::{ArchiveKind, DirEntry, DriveEntry, DriveKind, HostPath, PathStyle};
-pub use pkg_output::{
-    PkgPhase, parse_pkg_mgr_line, truncate_pkg_line,
-};
+pub use pkg_output::{PkgPhase, parse_pkg_mgr_line, truncate_pkg_line};
 pub use process::{ExitStatus, HostProcess, ProcessId};
 pub use pty::{
     PtyBackend, PtyControl, PtyExit, PtyInput, PtyProgram, PtyRequest, PtySession, PtySize,
     pty_channel_pair,
 };
 pub use remote::download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
-pub use remote::url_download::{
-    curl_url_download_command, wget_url_download_command,
-};
+pub use remote::url_download::{curl_url_download_command, wget_url_download_command};
 pub use remote_file::{
     LOG_FOLLOW_CHUNK_BYTES, remote_file_size, remote_read_from, remote_tail_lines,
 };

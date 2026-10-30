@@ -69,6 +69,48 @@ pub struct TunnelHandle {
 }
 
 impl TunnelHandle {
+    /// 本机 TCP 转发，用于 Docker 网桥到宿主机 loopback 的连接。
+    pub async fn local_forward(spec: TunnelSpec) -> Result<Self, crate::HostError> {
+        if spec.direction != TunnelDirection::LocalToRemote {
+            return Err(crate::HostError::Unsupported {
+                operation: "local_reverse_tunnel",
+            });
+        }
+        let listener =
+            tokio::net::TcpListener::bind((spec.local_host.as_str(), spec.local_port)).await?;
+        let local_port = listener.local_addr()?.port();
+        let shutdown = Arc::new(Notify::new());
+        let signal = Arc::clone(&shutdown);
+        let task = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = signal.notified() => break,
+                    Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                    accepted = listener.accept() => {
+                        let Ok((mut incoming, _)) = accepted else { break; };
+                        let target = (spec.remote_host.clone(), spec.remote_port);
+                        connections.spawn(async move {
+                            match tokio::net::TcpStream::connect(target).await {
+                                Ok(mut outgoing) => { let _ = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await; }
+                                Err(error) => tracing::debug!(%error, "local tunnel target unavailable"),
+                            }
+                        });
+                    }
+                }
+            }
+            // JoinSet 释放时中止当前连接，关闭句柄也会关闭已建立的 TCP 流。
+        });
+        Ok(Self {
+            local_port,
+            remote_listen_port: 0,
+            shutdown,
+            closed: AtomicBool::new(false),
+            _task: task,
+        })
+    }
+
     /// 不带后台转发任务的句柄：给自己不泵数据的主机实现用（上层编排的测试替身只需要记下口）。
     /// 要在 tokio 运行时里调用
     pub fn detached(local_port: u16, remote_listen_port: u16) -> Self {
@@ -116,6 +158,41 @@ impl Drop for TunnelHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn local_forward_relays_bytes_and_closes_active_connections() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let target = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                .await
+                .unwrap();
+            let port = target.local_addr().unwrap().port();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = target.accept().await.unwrap();
+                let mut message = [0; 4];
+                stream.read_exact(&mut message).await.unwrap();
+                assert_eq!(&message, b"ping");
+                stream.write_all(b"pong").await.unwrap();
+                assert_eq!(stream.read(&mut message).await.unwrap(), 0);
+            });
+            let handle = TunnelHandle::local_forward(TunnelSpec::local_to_remote(0, port))
+                .await
+                .unwrap();
+            let mut client = tokio::net::TcpStream::connect(("127.0.0.1", handle.local_port()))
+                .await
+                .unwrap();
+            client.write_all(b"ping").await.unwrap();
+            let mut reply = [0; 4];
+            client.read_exact(&mut reply).await.unwrap();
+            assert_eq!(&reply, b"pong");
+            handle.close();
+            assert!(handle.is_closed());
+            assert_eq!(client.read(&mut reply).await.unwrap(), 0);
+            server.await.unwrap();
+        })
+        .await
+        .unwrap();
+    }
 
     #[tokio::test]
     async fn detached_handle_stays_live_until_closed() {
