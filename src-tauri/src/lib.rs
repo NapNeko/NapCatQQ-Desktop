@@ -747,21 +747,20 @@ pub fn run() {
                 );
             });
 
-            // WebKitGTK 在隐藏窗口中不推进 rAF；显示后 GTK 才有实际窗口尺寸。
-            // Linux 主窗不透明，普通启动先显示再居中；仅托盘启动仍保持隐藏。
-            #[cfg(target_os = "linux")]
             if !startup_tray_only {
+                if let Err(err) = commands::window::apply_main_window_startup_geometry(app.handle())
+                {
+                    desktop_log::write_session_line(
+                        "WARN",
+                        "ncd::window",
+                        &format!("startup geometry failed: {err}"),
+                    );
+                }
+                // 先提交初始几何，再显示以推进 WebKitGTK 的 rAF，避免小窗闪现后放大。
+                #[cfg(target_os = "linux")]
                 if let Some(window) = app.get_webview_window(lightweight::MAIN_WINDOW_LABEL) {
                     window.show()?;
                 }
-            }
-
-            if let Err(err) = commands::window::apply_main_window_startup_geometry(app.handle()) {
-                desktop_log::write_session_line(
-                    "WARN",
-                    "ncd::window",
-                    &format!("startup geometry failed: {err}"),
-                );
             }
 
             if let Err(err) = window_icon::apply_main_window_icon(app.handle()) {

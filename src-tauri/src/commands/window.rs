@@ -1,4 +1,4 @@
-// 主窗口几何:对齐 legacy MainWindow._set_window(最小尺寸 + 工作区居中)
+// 主窗口几何：Linux 按显示器工作区适配，其它平台保留最小尺寸与居中策略。
 // 另含调试台弹出窗(独立工具窗)的创建 / 显示 / 聚焦。
 
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewWindowBuilder};
@@ -10,18 +10,83 @@ pub const DEBUG_WINDOW_LABEL: &str = "debug-console";
 const MAIN_MIN_WIDTH: f64 = 1148.0;
 const MAIN_MIN_HEIGHT: f64 = 720.0;
 
-/// 在 setup 中调用一次:限制最小尺寸,并按当前显示器工作区居中(排除任务栏)
+/// 启动及轻量模式重建主窗时应用，已有窗口仅恢复显示时不重设用户尺寸。
 pub fn apply_main_window_startup_geometry(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "主窗口未找到".to_string())?;
 
-    window
-        .set_min_size(Some(LogicalSize::new(MAIN_MIN_WIDTH, MAIN_MIN_HEIGHT)))
-        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    {
+        fit_linux_main_window(&window)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        window
+            .set_min_size(Some(LogicalSize::new(MAIN_MIN_WIDTH, MAIN_MIN_HEIGHT)))
+            .map_err(|e| e.to_string())?;
+        center_on_work_area(&window)
+    }
+}
 
-    center_on_work_area(&window)?;
-    Ok(())
+#[cfg(target_os = "linux")]
+struct MainWindowGeometry {
+    size: LogicalSize<f64>,
+    min_size: LogicalSize<f64>,
+    position: LogicalPosition<f64>,
+}
+
+#[cfg(target_os = "linux")]
+fn linux_startup_geometry(work: &tauri::PhysicalRect<i32, u32>, scale: f64) -> MainWindowGeometry {
+    // 系统 DPI 只换算一次；WebView 的 uiScale 不参与原生窗体尺寸计算。
+    let work_width = f64::from(work.size.width) / scale;
+    let work_height = f64::from(work.size.height) / scale;
+    let available_width = (work_width - 48.0).max(1.0);
+    let available_height = (work_height - 48.0).max(1.0);
+    let size = LogicalSize::new(
+        (work_width * 0.8).max(1280.0).min(available_width).round(),
+        (work_height * 0.85)
+            .max(800.0)
+            .min(available_height)
+            .round(),
+    );
+    MainWindowGeometry {
+        size,
+        min_size: LogicalSize::new(
+            MAIN_MIN_WIDTH.min(size.width),
+            MAIN_MIN_HEIGHT.min(size.height),
+        ),
+        position: LogicalPosition::new(
+            f64::from(work.position.x) / scale + (work_width - size.width) / 2.0,
+            f64::from(work.position.y) / scale + (work_height - size.height) / 2.0,
+        ),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn fit_linux_main_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let monitor = match window.current_monitor().map_err(|e| e.to_string())? {
+        Some(monitor) => Some(monitor),
+        // Wayland 不一定声明 primary monitor，仍可从有效显示器列表取得工作区。
+        None => window
+            .available_monitors()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .next(),
+    };
+    let Some(monitor) = monitor else {
+        return Ok(());
+    };
+    let geometry = linux_startup_geometry(monitor.work_area(), monitor.scale_factor());
+    window
+        .set_min_size(Some(geometry.min_size))
+        .map_err(|e| e.to_string())?;
+    window.set_size(geometry.size).map_err(|e| e.to_string())?;
+    // GTK 的尺寸请求异步生效，直接用目标尺寸居中，不能立刻回读旧的 inner_size。
+    // Wayland 下位置由合成器决定。
+    window
+        .set_position(geometry.position)
+        .map_err(|e| e.to_string())
 }
 
 /// 前端就绪后调用:显示主窗口(避免透明窗口启动闪烁)
@@ -36,6 +101,7 @@ pub async fn show_main_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn center_on_work_area(window: &tauri::WebviewWindow) -> Result<(), String> {
     let monitor = match window.current_monitor().map_err(|e| e.to_string())? {
         Some(m) => m,
@@ -47,10 +113,6 @@ fn center_on_work_area(window: &tauri::WebviewWindow) -> Result<(), String> {
 
     let scale = monitor.scale_factor();
     let work = monitor.work_area();
-    // GTK 首次映射前的 outer_size 尚未更新；无边框主窗的内外尺寸一致。
-    #[cfg(target_os = "linux")]
-    let outer = window.inner_size().map_err(|e| e.to_string())?;
-    #[cfg(not(target_os = "linux"))]
     let outer = window.outer_size().map_err(|e| e.to_string())?;
 
     let win_w = outer.width as f64 / scale;
@@ -131,4 +193,39 @@ pub async fn focus_debug_window(app: AppHandle) -> bool {
     let _ = window.unminimize();
     let _ = window.set_focus();
     true
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::linux_startup_geometry;
+    use tauri::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalRect, PhysicalSize};
+
+    #[test]
+    fn linux_startup_fits_the_logical_work_area_at_different_system_scales() {
+        for (scale, physical, expected_size, expected_position) in [
+            (1.0, (2560, 1600), (2048.0, 1360.0), (-2304.0, 120.0)),
+            (2.0, (3840, 2160), (1536.0, 918.0), (-1728.0, 81.0)),
+        ] {
+            let work = PhysicalRect {
+                position: PhysicalPosition::new(-(physical.0 as i32), 0),
+                size: PhysicalSize::new(physical.0, physical.1),
+            };
+            let geometry = linux_startup_geometry(&work, scale);
+            assert_eq!(geometry.size, LogicalSize::from(expected_size));
+            assert_eq!(geometry.position, LogicalPosition::from(expected_position));
+            assert_eq!(geometry.min_size, LogicalSize::new(1148.0, 720.0));
+        }
+    }
+
+    #[test]
+    fn linux_startup_lowers_the_minimum_to_fit_small_work_areas() {
+        let work = PhysicalRect {
+            position: PhysicalPosition::new(0, 24),
+            size: PhysicalSize::new(1280, 696),
+        };
+        let geometry = linux_startup_geometry(&work, 1.0);
+        assert_eq!(geometry.size, LogicalSize::new(1232.0, 648.0));
+        assert_eq!(geometry.min_size, LogicalSize::new(1148.0, 648.0));
+        assert_eq!(geometry.position, LogicalPosition::new(24.0, 48.0));
+    }
 }
