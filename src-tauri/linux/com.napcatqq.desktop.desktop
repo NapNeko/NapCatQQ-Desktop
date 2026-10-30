@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Utility;
+Comment=NapCatQQ / SnowLuma desktop console
+Exec=NapCatQQ-Desktop
+Icon=NapCatQQ-Desktop
+Name=NapCatQQ Desktop
+NoDisplay=true
+Terminal=false
+Type=Application

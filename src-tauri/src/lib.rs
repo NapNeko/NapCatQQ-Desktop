@@ -102,6 +102,9 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(target_os = "linux")]
+    window_icon::prepare_application_identity(&context.config().identifier);
     let data_root = bootstrap::resolve_data_root();
     let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
@@ -1247,7 +1250,7 @@ pub fn run() {
             commands::onebot_debug::onebot_debug_clear_history,
             commands::onebot_debug::onebot_debug_storage_notices,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {

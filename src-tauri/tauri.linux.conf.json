@@ -1,6 +1,7 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
     "app": {
+        "enableGTKAppId": true,
         "windows": [
             {
                 "label": "main",
@@ -22,6 +23,19 @@
         "active": true,
         "targets": ["deb", "appimage"],
         "category": "Utility",
-        "shortDescription": "NapCatQQ / SnowLuma desktop console"
+        "shortDescription": "NapCatQQ / SnowLuma desktop console",
+        "linux": {
+            "deb": {
+                "desktopTemplate": "linux/main.desktop.hbs",
+                "files": {
+                    "/usr/share/applications/com.napcatqq.desktop.desktop": "linux/com.napcatqq.desktop.desktop"
+                }
+            },
+            "appimage": {
+                "files": {
+                    "/usr/share/applications/com.napcatqq.desktop.desktop": "linux/com.napcatqq.desktop.desktop"
+                }
+            }
+        }
     }
 }

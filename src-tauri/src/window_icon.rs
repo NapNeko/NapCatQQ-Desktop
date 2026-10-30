@@ -1,9 +1,21 @@
 // 任务栏 / Alt+Tab / 窗口标题区图标(与通知区托盘无关)
-// 全部 embed,安装包不落 icons 目录。
+// 窗口 PNG 内嵌；Linux Dock 另通过应用 ID 与桌面入口关联。
 
 use tauri::AppHandle;
 use tauri::Manager;
 use tauri::image::Image;
+
+/// GTK 3 使用进程名称设置 Wayland app_id；在 GTK 初始化前与桌面入口对齐。
+/// 开发入口使用独立 ID，保留正式 bundle identifier 和单实例身份。
+#[cfg(target_os = "linux")]
+pub(crate) fn prepare_application_identity(identifier: &str) {
+    #[cfg(dev)]
+    if let Ok(identity) = std::env::var("NCD_DEV_DESKTOP_ID") {
+        gtk::glib::set_prgname(Some(&identity));
+        return;
+    }
+    gtk::glib::set_prgname(Some(identifier));
+}
 
 fn embed(name: &str) -> Option<Image<'static>> {
     let bytes: &[u8] = match name {
