@@ -4,6 +4,7 @@ import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { StatusCommandConfig } from '../../ipc/generated/domain/StatusCommandConfig';
 import { RUNTIME_TARGET_REMOTE_PLACEHOLDER } from './runtime-target';
 import { validateBotDockerConfig } from './docker-config';
+import { localOs } from '../runtime/env';
 
 export const defaultStatusCommandConfig = (): StatusCommandConfig => ({
     enabled: true,
@@ -69,7 +70,7 @@ export type ValidationResult = { ok: true } | { ok: false; reason: string };
 
 /// 保存前的最低限度校验。
 /// 后端 Rust 还会再做一次完整校验（`BotConfig::validate`），这里只挡住明显错误。
-export function validateBotConfig(config: BotConfig): ValidationResult {
+export function validateBotConfig(config: BotConfig, os = localOs()): ValidationResult {
     if (!Number.isFinite(config.bot.QQID) || config.bot.QQID <= 0) {
         return { ok: false, reason: '账号 (QQ ID) 必须是一个正整数！' };
     }
@@ -81,12 +82,14 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     if (config.bot.runtime_target === RUNTIME_TARGET_REMOTE_PLACEHOLDER) {
         return { ok: false, reason: '请选择一台具体的远程主机！' };
     }
-    // 本机(Windows)不支持 Docker:Docker Desktop 安装链路太麻烦,本机只走直接运行。
-    // Docker 启动方式只允许配合远程 SSH 主机。
-    if (config.bot.deploymentType === 'docker' && config.bot.runtime_target === 'local') {
+    if (
+        config.bot.deploymentType === 'docker' &&
+        config.bot.runtime_target === 'local' &&
+        os !== 'linux'
+    ) {
         return {
             ok: false,
-            reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。',
+            reason: '本机 Docker 部署仅支持 Linux，请改用「直接运行」或选择 Linux SSH 主机。',
         };
     }
     const dockerError = validateBotDockerConfig(config);

@@ -150,7 +150,9 @@ pub(crate) async fn sync_snowluma_docker_config(
         .await
         .map_err(|error| BotBackendError::Io(error.to_string()))?;
     // docker cp 默认归 root；与 compose 的运行用户保持一致，允许 WebUI 后续保存。
-    let (uid, gid) = DockerDeployment::container_uid_gid(host);
+    let (uid, gid) = DockerDeployment::container_uid_gid(host)
+        .await
+        .map_err(|error| BotBackendError::Io(error.to_string()))?;
     let chown = host
         .run_to_string(
             cli.command()
@@ -221,12 +223,12 @@ async fn read_existing_docker_napcat_config(
 /// NapCat 先读 host bind，没有再 `docker cp`；SnowLuma 以容器 named volume 为权威。
 pub(crate) async fn read_docker_imported_network(
     host: &dyn Host,
-    home: &str,
+    _home: &str,
     docker_name: &str,
     backend: BackendType,
     qq_id: &str,
 ) -> Result<Option<ImportedNetworkConfig>, String> {
-    let project_dir = ncd_domain::remote_paths::docker_bot_project_dir(home, docker_name);
+    let project_dir = ncd_deploy::docker_project_dir(host, docker_name).await?;
     match backend {
         BackendType::NapCat => {
             let host_path = format!("{project_dir}/napcat/config/onebot11_{qq_id}.json");

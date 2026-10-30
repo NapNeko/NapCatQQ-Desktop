@@ -4,10 +4,13 @@ use crate::kinds::{BotFlavor, RuntimeTarget};
 /// Bot runtime 的后端唯一场景模型。
 ///
 /// `BackendType`, `DeploymentType`, `RuntimeTarget` 仍然保持磁盘兼容;运行时只消费
-/// 这里的三种合法组合,从类型上排除 local docker。
+/// 场景只描述部署位置；实际主机平台由运行时校验（Docker 仅支持 Linux）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeScenario {
     LocalNative {
+        backend: BackendType,
+    },
+    LocalDocker {
         backend: BackendType,
     },
     RemoteNative {
@@ -36,12 +39,7 @@ impl RuntimeScenario {
     ) -> Result<Self, BotConfigError> {
         match (target, deployment) {
             (RuntimeTarget::Local, DeploymentType::Native) => Ok(Self::LocalNative { backend }),
-            (RuntimeTarget::Local, DeploymentType::Docker) => Err(
-                BotConfigError::UnsupportedRuntimeMatrix(
-                    "Local host does not support Docker deployment. Use native run or switch to a remote SSH host"
-                        .to_string(),
-                ),
-            ),
+            (RuntimeTarget::Local, DeploymentType::Docker) => Ok(Self::LocalDocker { backend }),
             (RuntimeTarget::Server(server_id), DeploymentType::Native) => Ok(Self::RemoteNative {
                 server_id: normalize_server_id(server_id)?,
                 backend,
@@ -56,6 +54,7 @@ impl RuntimeScenario {
     pub const fn backend_type(&self) -> BackendType {
         match self {
             Self::LocalNative { backend }
+            | Self::LocalDocker { backend }
             | Self::RemoteNative { backend, .. }
             | Self::RemoteDocker { backend, .. } => *backend,
         }
@@ -67,7 +66,7 @@ impl RuntimeScenario {
 
     pub fn server_id(&self) -> Option<&str> {
         match self {
-            Self::LocalNative { .. } => None,
+            Self::LocalNative { .. } | Self::LocalDocker { .. } => None,
             Self::RemoteNative { server_id, .. } | Self::RemoteDocker { server_id, .. } => {
                 Some(server_id.as_str())
             }
@@ -76,6 +75,10 @@ impl RuntimeScenario {
 
     pub const fn is_remote_docker(&self) -> bool {
         matches!(self, Self::RemoteDocker { .. })
+    }
+
+    pub const fn is_docker(&self) -> bool {
+        matches!(self, Self::LocalDocker { .. } | Self::RemoteDocker { .. })
     }
 
     pub const fn is_remote_native_napcat(&self) -> bool {
@@ -212,14 +215,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_local_docker_and_remote_placeholder() {
+    fn local_docker_has_no_server_and_remote_placeholder_is_rejected() {
         assert!(matches!(
             RuntimeScenario::from_config(&cfg(
                 BackendType::NapCat,
                 DeploymentType::Docker,
                 RuntimeTarget::Local
             )),
-            Err(BotConfigError::UnsupportedRuntimeMatrix(_))
+            Ok(RuntimeScenario::LocalDocker {
+                backend: BackendType::NapCat
+            })
         ));
         assert!(matches!(
             RuntimeScenario::from_config(&cfg(

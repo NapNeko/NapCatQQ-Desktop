@@ -3,7 +3,12 @@
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { DockerFlavor } from '../../ipc/generated/domain/DockerFlavor';
 import type { DockerStatus } from '../../ipc/types';
-import { isRuntimeTargetConcreteRemote } from './runtime-target';
+import {
+    isRuntimeTargetConcreteRemote,
+    isRuntimeTargetLocal,
+    remoteHostIdFromRuntimeTarget,
+} from './runtime-target';
+import { localOs } from '../runtime/env';
 
 const FLAVOR_LABEL: Record<DockerFlavor, string> = {
     napcat: 'NapCat',
@@ -15,15 +20,17 @@ export function dockerFlavorForBackend(backend: BotConfig['bot']['backend_type']
 }
 
 export function dockerHostIdForConfig(config: BotConfig): string | null {
+    if (config.bot.deploymentType !== 'docker') return null;
     const t = config.bot.runtime_target;
-    if (!isRuntimeTargetConcreteRemote(t)) return null;
-    return `remote:${t}`;
+    if (isRuntimeTargetLocal(t)) return localOs() === 'linux' ? 'local' : null;
+    return remoteHostIdFromRuntimeTarget(t);
 }
 
 export function isDockerBotConfig(config: BotConfig): boolean {
     return (
         config.bot.deploymentType === 'docker' &&
-        isRuntimeTargetConcreteRemote(config.bot.runtime_target)
+        (isRuntimeTargetConcreteRemote(config.bot.runtime_target) ||
+            (isRuntimeTargetLocal(config.bot.runtime_target) && localOs() === 'linux'))
     );
 }
 

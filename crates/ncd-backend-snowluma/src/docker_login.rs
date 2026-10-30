@@ -301,7 +301,9 @@ impl DockerLoginSession {
         host.create_dir_all(&HostPath::from_posix(&assets))
             .await
             .map_err(|_| unavailable())?;
-        let (uid, gid) = DockerDeployment::container_uid_gid(host);
+        let (uid, gid) = DockerDeployment::container_uid_gid(host)
+            .await
+            .map_err(|_| unavailable())?;
         let session = Self {
             method: "atspi".into(),
             directory: root.clone(),
@@ -392,7 +394,9 @@ impl DockerLoginSession {
             // 旧入口观察器会话不接管，运行中的旧容器仍保留 VNC。
             Err(_) => return Ok(None),
         };
-        let (uid, gid) = DockerDeployment::container_uid_gid(host);
+        let (uid, gid) = DockerDeployment::container_uid_gid(host)
+            .await
+            .map_err(|_| unavailable())?;
         if session.method != "atspi"
             || session.directory != root
             || session.expected_uin != bot_id.as_str()

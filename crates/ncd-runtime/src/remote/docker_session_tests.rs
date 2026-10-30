@@ -221,3 +221,12 @@ async fn host_disconnect_invalidates_only_matching_snowluma_docker_sessions() {
             .is_some()
     );
 }
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn local_docker_endpoint_uses_published_port_without_ssh() {
+    let host = ncd_host::local::LocalLinuxHost::new();
+    let (port, tunnel) = connect_loopback_endpoint(&host, 16099).await.unwrap();
+    assert_eq!(port, 16099);
+    assert!(tunnel.is_none());
+}

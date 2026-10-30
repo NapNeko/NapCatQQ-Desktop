@@ -81,7 +81,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         counts: &HashMap<String, usize>,
     ) -> Result<(), BotManagerError> {
         let id = BotId::new(config.bot.qq_id.to_string());
-        if !config.bot.runtime_target.is_local() {
+        if !config.bot.runtime_target.is_local()
+            || config.bot.deployment_type == DeploymentType::Docker
+        {
             if !self
                 .bootstrap_reconciler()
                 .reconcile_bot(config, counts, true)

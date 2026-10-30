@@ -717,3 +717,44 @@ async fn docker_reverse_persisted_apply_failure_restores_bot_app_and_unlinked_st
         "ssh-ed25519 unrelated original-user-key\n"
     );
 }
+
+#[tokio::test]
+async fn local_linux_docker_reverse_link_binds_gateway_without_ssh() {
+    for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+        let f = Fixture::new(LOCAL_HOST_ID, backend).await;
+        f.bots.0.lock().await.bot.runtime_target = RuntimeTarget::Local;
+        f.manager
+            .apply_link(&f.id, &BotId::new("10001"))
+            .await
+            .unwrap();
+        let client = f.linked_client().await;
+        let parts = parse_ws_url(&client.url).unwrap();
+        assert_eq!(parts.host, GATEWAY);
+        assert_eq!(parts.port, 41001);
+        assert_eq!(parts.path, "/onebot/v11/ws");
+        assert_eq!(client.base.token, TOKEN);
+        let tunnels = f.local.tunnels.lock().unwrap();
+        assert_eq!(tunnels.len(), 1);
+        assert_eq!(tunnels[0].local_host, GATEWAY);
+        assert_eq!(tunnels[0].remote_host, "127.0.0.1");
+        assert_eq!(tunnels[0].remote_port, APP_PORT);
+        assert!(
+            f.local
+                .commands
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|command| !matches!(command.program.as_str(), "ssh" | "ssh-keygen"))
+        );
+        drop(tunnels);
+        f.manager.unlink(&f.id).await.unwrap();
+        assert!(
+            !f.manager
+                .tunnels
+                .lock()
+                .await
+                .keys()
+                .any(|key| key.contains(":docker-bridge:"))
+        );
+    }
+}

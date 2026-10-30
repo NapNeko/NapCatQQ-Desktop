@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { featureTogglesStore } from '../preferences/featureTogglesStore';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { localOs } from '../../core/domain/runtime/env';
 import {
     consumePendingBotCreateRequest,
     createDockerBotConfig,
@@ -10,6 +11,7 @@ import {
 } from './botCreateNavigation';
 
 vi.mock('../ui/globalInfoBarStore', () => ({ pushInfoBar: vi.fn() }));
+vi.mock('../../core/domain/runtime/env', () => ({ localOs: vi.fn(() => 'windows') }));
 
 const unregister: Array<() => void> = [];
 
@@ -19,6 +21,7 @@ function clearPending(): void {
 }
 
 beforeEach(() => {
+    vi.mocked(localOs).mockReturnValue('windows');
     featureTogglesStore._reset();
     clearPending();
 });
@@ -108,6 +111,16 @@ describe('Docker Bot 新建导航', () => {
         });
         expect(config.connect.websocketClients).toEqual([]);
         expect(config.advanced.autoStart).toBe(false);
-        expect(() => createDockerBotConfig({ hostId: 'local', flavor })).toThrow('具体的远程主机');
+        expect(() => createDockerBotConfig({ hostId: 'local', flavor })).toThrow('Linux 主机');
+    });
+
+    it('Linux 本机入口保留本机目标，允许新建容器 Bot', () => {
+        vi.mocked(localOs).mockReturnValue('linux');
+        openCreateDockerBot({ hostId: 'local', flavor: 'napcat' });
+        expect(getPendingBotCreateRequest()).toMatchObject({ hostId: 'local' });
+        expect(createDockerBotConfig({ hostId: 'local', flavor: 'napcat' }).bot).toMatchObject({
+            runtime_target: 'local',
+            deploymentType: 'docker',
+        });
     });
 });

@@ -67,6 +67,7 @@ import { openDebugConsole } from '../../../../hooks/debug/debugNav';
 import { QrCodeDialog } from './QrCodeDialog';
 import { RemoteSnowLumaQrLoginDialog } from './RemoteSnowLumaQrLoginDialog';
 import { useRemoteSnowlumaQrEnabled } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
+import { localOs } from '../../../../core/domain/runtime/env';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
 import {
@@ -159,6 +160,7 @@ export function BotCard({
     const [remoteQrOpen, setRemoteQrOpen] = useState(false);
     const [migrationOpen, setMigrationOpen] = useState(false);
     const localQrEligible =
+        localOs() === 'windows' &&
         config?.bot.backend_type === 'snowluma' &&
         isRuntimeTargetLocal(config.bot.runtime_target) &&
         config.bot.deploymentType === 'native' &&
@@ -166,7 +168,8 @@ export function BotCard({
     const remoteQrEnabled = useRemoteSnowlumaQrEnabled(
         localQrEligible ||
             (config?.bot.backend_type === 'snowluma' &&
-                !isRuntimeTargetLocal(config.bot.runtime_target)),
+                (config.bot.deploymentType === 'docker' ||
+                    !isRuntimeTargetLocal(config.bot.runtime_target))),
         localQrEligible,
     );
     const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
@@ -191,13 +194,14 @@ export function BotCard({
     // 状态切换反馈:
     //   - 关键状态转移(starting→running 等) → 状态徽章 pop,而不是整张卡 pop
     //     (大卡 pop 会跟 hover lift / shadow 叠加放大成"整张卡突然鼓一下")
-    const m = useMotion();
+    const { enabled: motionEnabled, pop: popBadge, preset: motionPreset } = useMotion();
+    const popPeak = motionPreset.feel.popPeak;
     const badgeRef = useRef<HTMLSpanElement>(null);
     const prevStateRef = useRef<typeof bot.state>(bot.state);
 
     useEffect(() => {
         const el = badgeRef.current;
-        if (!el || !m.enabled) {
+        if (!el || !motionEnabled) {
             prevStateRef.current = bot.state;
             return;
         }
@@ -207,12 +211,12 @@ export function BotCard({
                 (prev === 'starting' && bot.state === 'running') ||
                 (prev === 'stopping' && bot.state === 'stopped') ||
                 (prev === 'running' && bot.state === 'stopped');
-            if (isImpactful && m.preset.feel.popPeak > 1) {
-                m.pop(el);
+            if (isImpactful && popPeak > 1) {
+                popBadge(el);
             }
         }
         prevStateRef.current = bot.state;
-    }, [bot.state, m.enabled, m.level, m.speed, m.pop, m.preset.feel.popPeak]);
+    }, [bot.state, motionEnabled, popBadge, popPeak]);
 
     const webuiAvailable = isWebuiAvailable({
         flavor,

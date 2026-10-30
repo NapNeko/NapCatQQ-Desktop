@@ -181,7 +181,7 @@ fn reach_for(
                 }
             }
         }
-        Some(RuntimeScenario::RemoteDocker { .. }) => {
+        Some(RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. }) => {
             // Docker 派生配置把回环监听改成通配地址，使用宿主机发布口连接。
             if is_any_or_loopback(host) {
                 let Some(remote_port) =
@@ -191,6 +191,14 @@ fn reach_for(
                         reason: format!("容器没有映射 {port} 端口"),
                     };
                 };
+                // 本机容器直连宿主机发布口，只有远端需要 SSH 隧道。
+                if matches!(scenario, Some(RuntimeScenario::LocalDocker { .. })) {
+                    return Reach::Direct {
+                        host: "127.0.0.1".into(),
+                        port: remote_port,
+                        path,
+                    };
+                }
                 // 连的是宿主机上发布出来的端口，不是容器里的监听地址；发布默认覆盖宿主机回环
                 Reach::Tunnel {
                     remote_host: "127.0.0.1".to_owned(),
@@ -580,10 +588,29 @@ mod tests {
     }
 
     #[test]
+    fn local_docker_debug_connects_to_published_host_port_without_ssh() {
+        let mut cfg = config(Where::Docker, 10001);
+        cfg.bot.runtime_target = RuntimeTarget::Local;
+        cfg.connect.http_servers.push(http("h", "127.0.0.1", 3000));
+        cfg.docker = Some(ncd_domain::BotDockerConfig {
+            port_mappings: vec![ncd_domain::PortMapping::new(18000, 3000)],
+            ..Default::default()
+        });
+        assert_eq!(
+            plan_channels(&cfg)[1].reach,
+            Reach::Direct {
+                host: "127.0.0.1".into(),
+                port: 18000,
+                path: "/".into()
+            }
+        );
+    }
+
+    #[test]
     fn broken_scenario_marks_every_real_channel_unsupported() {
-        // 本机 + Docker 是不支持的组合
+        // 远端目标必须有具体主机ID
         let mut cfg = BotConfigBuilder::new()
-            .runtime_target(RuntimeTarget::Local)
+            .runtime_target(RuntimeTarget::server("remote"))
             .deployment_type(DeploymentType::Docker)
             .build();
         cfg.connect.http_servers.push(http("h", "0.0.0.0", 3000));

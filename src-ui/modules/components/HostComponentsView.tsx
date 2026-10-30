@@ -111,8 +111,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
     const allComponents = [...machine.framework, ...machine.runtimeDep, ...machine.selfApp];
 
-    // 本机和远端 Windows 不提供 Linux 容器部署。
-    const dockerApplicable = host.locality === 'remote' && host.os === 'linux';
+    const dockerApplicable = host.os === 'linux';
 
     if (empty) {
         return (

@@ -19,7 +19,7 @@
 
 import { useQuery, useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { isTauri } from '../../core/domain/runtime/env';
+import { isTauri, localOs } from '../../core/domain/runtime/env';
 import { componentService } from '../../core/services/component.service';
 import { isComponentHiddenByFeatures } from '../../core/domain/settings/features';
 import { useFeatures } from '../preferences/featureTogglesStore';
@@ -33,7 +33,7 @@ import {
 } from '../../core/domain/components/types';
 import { errorText } from '../../core/domain/errors';
 import { mockHosts } from '../../core/domain/components/mockHosts';
-import type { Os, ComponentId, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
+import type { ComponentId, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 import { RUNTIME_READINESS_QUERY_KEY } from './useRuntimeReadiness';
@@ -52,17 +52,6 @@ export function openComponentDirectory(componentId: ComponentId): void {
 
 type DetectQuery = UseQueryResult<ComponentDetectResult, Error>;
 
-// 探测本机 OS。当前 Tauri 工程仅 Windows 编译 LocalHost（src-tauri/src/commands/
-// components.rs::local_host 上有 #[cfg(windows)]），所以 Windows 兜底是安全的；
-// 但保留 ua sniffing 让未来在 macOS / Linux 桌面跑起来时也能正确派生。
-function detectLocalOs(): Os {
-    if (typeof navigator === 'undefined') return 'windows';
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes('mac os') || ua.includes('macintosh')) return 'mac_os';
-    if (ua.includes('linux')) return 'linux';
-    return 'windows';
-}
-
 /// Tauri 模式下从 ServerManager 拉服务器档案，组合本机 + 远端 host 列表。
 /// 浏览器预览用 mockHosts。
 function useKnownHosts(enabled = true): { hosts: HostInfo[]; servers: ServerProfile[] } {
@@ -79,7 +68,7 @@ function useKnownHosts(enabled = true): { hosts: HostInfo[]; servers: ServerProf
         const local: HostInfo = {
             host_id: 'local',
             display_name: '本机',
-            os: detectLocalOs(),
+            os: localOs(),
             locality: 'local',
             // 本机无 transport 问题，显式标 connected 便于上层统一判断
             state: 'connected',
@@ -87,7 +76,7 @@ function useKnownHosts(enabled = true): { hosts: HostInfo[]; servers: ServerProf
         const remotes: HostInfo[] = (serversQuery.data ?? []).map((p: ServerProfile) => ({
             host_id: `remote:${p.id}`,
             display_name: p.name || p.host,
-            os: 'linux' as Os,
+            os: p.platform === 'windows' ? 'windows' : 'linux',
             locality: 'remote',
             state: p.state,
             health: p.health

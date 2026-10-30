@@ -31,9 +31,16 @@ pub async fn prepare_docker_metrics_overlay(
         return Ok(None);
     }
 
-    ensure_remote_metrics_assets(host, home, bot_id, config, prefs, local_data_root).await?;
-
-    let host_metrics_root = format!("{}/ncd-watch/metrics", home.trim_end_matches('/'));
+    let local = host.locality() == ncd_host::Locality::Local;
+    let host_metrics_root = if local {
+        super::prepare_inject(local_data_root, bot_id, config, prefs)?;
+        super::metrics_root(local_data_root)
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        ensure_remote_metrics_assets(host, home, bot_id, config, prefs, local_data_root).await?;
+        format!("{}/ncd-watch/metrics", home.trim_end_matches('/'))
+    };
 
     let overlay = match flavor {
         BotFlavor::NapCat => {
@@ -52,11 +59,14 @@ pub async fn prepare_docker_metrics_overlay(
         }
     };
 
-    let _ = host
-        .run_to_string(ncd_host::HostCommand::new("sh").arg("-c").arg(format!(
-            "chown -R 1000:1000 {host_metrics_root} 2>/dev/null || true"
-        )))
-        .await;
+    if !local {
+        let quoted_root = ncd_host::shell_single_quote(&host_metrics_root);
+        let _ = host
+            .run_to_string(ncd_host::HostCommand::new("sh").arg("-c").arg(format!(
+                "chown -R 1000:1000 {quoted_root} 2>/dev/null || true"
+            )))
+            .await;
+    }
 
     Ok(Some(overlay))
 }

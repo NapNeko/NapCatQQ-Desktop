@@ -50,14 +50,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .await?;
                 daemon.prepare_webui().await.map_err(Into::into)
             }
-            RuntimeScenario::RemoteDocker { .. } => self
+            RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. } => self
                 .snowluma_docker_endpoints(bot_id)
                 .await
                 .map(|endpoint| (endpoint.webui_local_port, endpoint.webui_password))
                 .ok_or_else(|| {
-                    BotManagerError::Render(
-                        "SnowLuma Docker 隧道未就绪，请确认 Bot 已启动且运行宿主为远端 SSH".into(),
-                    )
+                    BotManagerError::Render("SnowLuma Docker 入口未就绪，请确认 Bot 已启动".into())
                 }),
             RuntimeScenario::LocalNative { .. } => {
                 crate::local_snowluma_webui_endpoint(self.store.root())

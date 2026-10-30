@@ -414,6 +414,11 @@ impl AppManager {
             let host = self
                 .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
                 .await?;
+            if host.os() != ncd_host::Os::Linux {
+                return Err(AppFrameworkError::LinkModeUnsupported(
+                    "Docker Bot 对接仅支持 Linux 宿主机".into(),
+                ));
+            }
             ncd_deploy::ensure_managed_bot_container(host.as_ref(), &bot)
                 .await
                 .map_err(|error| AppFrameworkError::Integration(error.to_string()))?;

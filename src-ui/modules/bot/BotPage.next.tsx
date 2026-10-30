@@ -75,8 +75,9 @@ export function BotPageNext({ onNavigate }: { onNavigate?: (route: AppRoute) => 
             const serverId = dockerBotRuntimeTarget(pendingCreate.hostId);
             const framework = pendingCreate.flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
             const reason = !serverId
-                ? 'Docker Bot 只能部署到具体的远程主机。'
-                : !latestServers.current.some((server) => server.id === serverId)
+                ? 'Docker Bot 只能部署到 Linux 主机。'
+                : serverId !== 'local' &&
+                    !latestServers.current.some((server) => server.id === serverId)
                   ? '目标远程主机已不存在，请重新选择主机。'
                   : !featureTogglesStore.getSnapshot()[pendingCreate.flavor]
                     ? `请先在设置中启用 ${framework}。`

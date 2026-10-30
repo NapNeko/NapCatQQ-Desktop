@@ -70,7 +70,7 @@ export function DockerDeploymentSection({
         status.daemonRunning;
     const canDeploy = canPull && !!status?.composeAvailable;
     const blockedReason = !supported
-        ? 'Docker 部署仅支持远端 Linux 主机'
+        ? 'Docker 部署仅支持 Linux 主机'
         : isInstalling
           ? '正在准备 Docker 环境'
           : isProbing

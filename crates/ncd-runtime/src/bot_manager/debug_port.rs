@@ -92,11 +92,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> DebugBotPort for BotM
             return Err("这不是 SnowLuma Bot".to_owned());
         }
         match RuntimeScenario::from_config(&config) {
-            Ok(RuntimeScenario::RemoteDocker { .. }) => self
+            Ok(RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. }) => self
                 .snowluma_docker_endpoints(bot_id)
                 .await
                 .map(|ep| (ep.webui_local_port, ep.webui_password))
-                .ok_or_else(|| "SnowLuma Docker 隧道还没就绪".to_owned()),
+                .ok_or_else(|| "SnowLuma Docker 入口还没就绪".to_owned()),
             Ok(RuntimeScenario::RemoteNative { server_id, .. }) => self
                 .snowluma_native_endpoints_for_server(&server_id)
                 .await
@@ -114,6 +114,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> DebugBotPort for BotM
             .get_required_bot_config(bot_id)
             .await
             .map_err(|e| e.to_string())?;
+        if matches!(
+            RuntimeScenario::from_config(&config),
+            Ok(RuntimeScenario::LocalDocker { .. })
+        ) {
+            self.reconcile_remote_runtime_for(std::slice::from_ref(bot_id))
+                .await
+                .map_err(|error| error.to_string())?;
+            return Ok(());
+        }
         let ncd_domain::RuntimeTarget::Server(server_id) = &config.bot.runtime_target else {
             return Ok(());
         };

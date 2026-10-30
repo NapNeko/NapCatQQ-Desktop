@@ -194,6 +194,9 @@ mod tests {
             Err(HostError::Unsupported { operation: "mock" })
         }
         async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+            if cmd.program == "sh" && cmd.args == ["-c", "echo $HOME"] {
+                return Ok(output(0, "/home/u", ""));
+            }
             if cmd.program != "docker" {
                 return Ok(output(0, "", ""));
             }

@@ -1,6 +1,6 @@
 # Docker 管理
 
-Docker 页按远端主机提供容器、镜像、网络、数据卷四个视图。管理操作只要求 daemon 可用；Compose 插件仅用于部署。缺少 Compose 时仍可以查看和操作资源。
+Docker 页按本机 / 远端 Linux 主机提供容器、镜像、网络、数据卷四个视图。管理操作只要求 daemon 可用；Compose 插件仅用于部署。缺少 Compose 时仍可以查看和操作资源。本机 Bot 的项目保存在 `data_root/docker/<container>`，远端保存在 `$HOME/.napcat-bots/<container>`；两者使用相同的镜像平台、Compose 和容器状态校验。
 
 顶部「Docker 部署」携带当前主机跳到组件页的独立部署区。部署区负责安装或启动引擎、补全 Compose、准备框架镜像；「新建 Bot」预填主机、框架和 Docker 运行方式，容器在启动 Bot 时创建。返回 Docker 管理保留原主机。
 
@@ -10,6 +10,8 @@ Docker 页按远端主机提供容器、镜像、网络、数据卷四个视图�
 - 容器删除需要确认，默认不强制，不删除挂载卷；强制删除需单独勾选。
 - 刷新失败展示真实错误和重试入口；自动刷新可选，页面隐藏时不后台轮询。写操作失败后回读状态，不自动重试写操作。
 - 对话框绑定主机和容器 ID，切换主机后卸载；迟到响应不能覆盖当前主机。操作完成后只刷新发起操作的主机。
+
+本机项目位于 Desktop 权威数据根的 `docker/<container>`，远端项目位于 `$HOME/.napcat-bots/<container>`。本机连接宿主机发布端口，远端通过 SSH 转发访问；Windows 本机 Docker 保持不支持。
 
 ## 边界
 
@@ -38,6 +40,8 @@ NapCat / SnowLuma 的 Docker Bot 在配置中保存结构化的 `docker` 设置�
 使用说明见 [远端 Linux 管理](../user/remote-linux.md#调整-docker-bot-容器)。
 
 探测优先当前 SSH 用户的 Docker context，仅在默认系统 socket 权限不足时回退 sudo，不能因 rootless daemon 不可达而悄悄切换到 root 的 daemon。inspect 只导出展示字段，不导出环境变量。
+
+协议 Bot 可与原生应用端对接；本机容器的反向 WebSocket 经过仅绑定宿主机 Docker 网桥的 TCP 转发到回环应用端口，解绑时释放。远端容器仍使用经过认证的宿主机自 SSH 桥，不要求将应用监听地址改成公网地址。应用端自身的 Docker 部署未开放。
 
 CLI 格式依据 [Docker inspect](https://docs.docker.com/reference/cli/docker/container/inspect/)、[stats](https://docs.docker.com/reference/cli/docker/container/stats/)、[network ls](https://docs.docker.com/reference/cli/docker/network/ls/) 和 [volume ls](https://docs.docker.com/reference/cli/docker/volume/ls/) 官方文档。
 

@@ -441,7 +441,9 @@ fn lock_std<T>(mutex: &StdMutex<T>) -> MutexGuard<'_, T> {
 
 pub(super) fn debug_host(config: &BotConfig) -> DebugHost {
     match RuntimeScenario::from_config(config) {
-        Ok(RuntimeScenario::LocalNative { .. }) => DebugHost::Local,
+        Ok(RuntimeScenario::LocalNative { .. } | RuntimeScenario::LocalDocker { .. }) => {
+            DebugHost::Local
+        }
         Ok(RuntimeScenario::RemoteNative { server_id, .. }) => DebugHost::Remote { server_id },
         Ok(RuntimeScenario::RemoteDocker { server_id, .. }) => DebugHost::Docker { server_id },
         // 配置组合不合法时也得在列表里显示出来，按字面上的目标和部署方式归类

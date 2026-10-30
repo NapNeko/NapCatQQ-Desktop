@@ -88,7 +88,15 @@ impl DockerDeploymentBackend {
             return Arc::clone(&self.deployment);
         };
 
-        let home = match probe_remote_home(self.host.as_ref()).await {
+        let metrics_root = if self.host.locality() == ncd_host::Locality::Local {
+            self.host
+                .target_managed_root()
+                .map(|root| root.as_posix().to_owned())
+                .ok_or_else(|| "本机 Desktop 数据目录未配置".to_string())
+        } else {
+            probe_remote_home(self.host.as_ref()).await
+        };
+        let home = match metrics_root {
             Ok(h) => h,
             Err(err) => {
                 warn!(
@@ -107,8 +115,13 @@ impl DockerDeploymentBackend {
             },
             bot_config.bot.qq_id,
         );
-        // HOME 上面刚探过,别再为项目目录多跑一趟 echo $HOME
-        let project_dir = ncd_domain::remote_paths::docker_bot_project_dir(&home, &name);
+        let project_dir = match ncd_deploy::docker_project_dir(self.host.as_ref(), &name).await {
+            Ok(path) => path,
+            Err(error) => {
+                warn!(%error, "Docker metrics: project directory unavailable");
+                return Arc::clone(&self.deployment);
+            }
+        };
 
         // bot_id 与 watch metrics 一致：qq 字符串
         let bot_id = bot_config.bot.qq_id.to_string();
@@ -150,8 +163,10 @@ impl BotBackend for DockerDeploymentBackend {
     }
 
     fn kind(&self) -> BackendKind {
-        // docker 容器跑在 host 上;host 是本机还是远端由注入的 host 决定
-        BackendKind::Local
+        match self.host.locality() {
+            ncd_host::Locality::Local => BackendKind::Local,
+            ncd_host::Locality::Remote => BackendKind::RemoteSsh,
+        }
     }
 
     fn flavor(&self) -> BotFlavor {
@@ -178,6 +193,11 @@ impl BotBackend for DockerDeploymentBackend {
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let _qr_guard = self.qr_login_lock.lock().await;
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
+        if self.host.os() != ncd_host::Os::Linux {
+            return Err(BotBackendError::InvalidConfig(
+                "Docker Bot 仅支持 Linux 主机".into(),
+            ));
+        }
         let cli = DockerCli::new(self.host.as_ref());
         cli.ensure_daemon_ready()
             .await
@@ -200,6 +220,11 @@ impl BotBackend for DockerDeploymentBackend {
             .iter()
             .any(|c| candidates.contains(&c.name) && c.state == ContainerState::Running)
         {
+            if self.host.locality() == ncd_host::Locality::Local {
+                ncd_deploy::ensure_managed_bot_container(self.host.as_ref(), &bot_config)
+                    .await
+                    .map_err(|error| BotBackendError::InvalidConfig(error.to_string()))?;
+            }
             let started_at = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
@@ -385,8 +410,7 @@ impl BotBackend for DockerDeploymentBackend {
     ) -> Result<LogSnapshot, BotBackendError> {
         let name = resolve_bot_container_name(self.host.as_ref(), &bot_id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|error| BotBackendError::Io(error.to_string()))?
             .unwrap_or_else(|| {
                 let backend = match self.flavor {
                     BotFlavor::SnowLuma => BackendType::SnowLuma,
@@ -395,6 +419,9 @@ impl BotBackend for DockerDeploymentBackend {
                 bot_docker_container_name(backend, bot_id.as_str().parse().unwrap_or(0))
             });
         let cli = DockerCli::new(self.host.as_ref());
+        cli.ensure_daemon_ready()
+            .await
+            .map_err(|error| BotBackendError::Io(error.to_string()))?;
         let logs = cli
             .logs(&name, opts.lines as u32)
             .await

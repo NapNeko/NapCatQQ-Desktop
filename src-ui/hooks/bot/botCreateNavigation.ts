@@ -9,6 +9,7 @@ import type { DockerFlavor } from '../../core/ipc/types';
 import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import { featureTogglesStore } from '../preferences/featureTogglesStore';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { localOs } from '../../core/domain/runtime/env';
 
 export interface DockerBotCreateTarget {
     hostId: string;
@@ -36,6 +37,7 @@ export function registerBotCreateNavigator(fn: () => void): () => void {
 }
 
 export function dockerBotRuntimeTarget(hostId: string): string | null {
+    if (hostId === 'local') return localOs() === 'linux' ? 'local' : null;
     if (!hostId.startsWith('remote:') || !hostId.slice('remote:'.length).trim()) return null;
     const target = normalizeRuntimeTargetFromDisk(hostId);
     return target.trim() && isRuntimeTargetConcreteRemote(target) ? target : null;
@@ -44,7 +46,7 @@ export function dockerBotRuntimeTarget(hostId: string): string | null {
 export function openCreateDockerBot(target: DockerBotCreateTarget): void {
     const framework = target.flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
     const reason = !dockerBotRuntimeTarget(target.hostId)
-        ? '请选择一台远程主机后再新建 Docker Bot。'
+        ? '请选择本机 Linux 或一台 Linux 远程主机后再新建 Docker Bot。'
         : !featureTogglesStore.getSnapshot()[target.flavor]
           ? `请先在设置中启用 ${framework}。`
           : null;
@@ -83,7 +85,7 @@ export function usePendingBotCreateRequest(): DockerBotCreateRequest | null {
 
 export function createDockerBotConfig(target: DockerBotCreateTarget): BotConfig {
     const runtimeTarget = dockerBotRuntimeTarget(target.hostId);
-    if (!runtimeTarget) throw new Error('Docker Bot 必须使用具体的远程主机');
+    if (!runtimeTarget) throw new Error('Docker Bot 必须使用 Linux 主机');
     const config = createDefaultBotConfig();
     config.bot.backend_type = target.flavor;
     config.bot.runtime_target = runtimeTarget;

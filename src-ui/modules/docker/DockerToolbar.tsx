@@ -13,6 +13,7 @@ import {
 import { Button, Checkbox } from '../../shared/ui';
 import { ActionMotionIcon, RESOURCE_MOTION, refreshMotion } from '../../shared/ui/motion';
 import { cn } from '../../shared/utils/cn';
+import { localOs } from '../../core/domain/runtime/env';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
 interface DockerToolbarProps {
@@ -50,6 +51,7 @@ export function DockerToolbar({
         value: `remote:${s.id}`,
         label: `${s.name}（${s.host}）`,
     }));
+    if (localOs() === 'linux') items.unshift({ value: 'local', label: '本机 Linux' });
     const ready = summary?.ready ?? false;
 
     return (

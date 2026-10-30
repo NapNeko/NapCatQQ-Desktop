@@ -34,7 +34,7 @@ use ncd_domain::app_config::WebUiPollerSettings;
 use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError};
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{RuntimeTarget, StopMode};
-use ncd_domain::{DesktopNotifySettings, RuntimeScenario};
+use ncd_domain::{DeploymentType, DesktopNotifySettings, RuntimeScenario};
 use ncd_traits::backend_config_renderer::BackendConfigRenderer;
 use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
 use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
@@ -453,7 +453,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         use ncd_domain::bot_config::BackendType;
 
         // 仅本机启动注入；远端 NC 由 RemoteNativeLaunchTranslator + RuntimeRemoteMetricsInjector 处理
-        if !config.bot.runtime_target.is_local() {
+        if !config.bot.runtime_target.is_local()
+            || config.bot.deployment_type == DeploymentType::Docker
+        {
             return;
         }
 
@@ -561,7 +563,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         use crate::metrics::{apply_metrics_to_environment, prepare_inject};
         use ncd_domain::kinds::RuntimeTarget;
 
-        if !matches!(config.bot.runtime_target, RuntimeTarget::Local) {
+        if !matches!(config.bot.runtime_target, RuntimeTarget::Local)
+            || config.bot.deployment_type == DeploymentType::Docker
+        {
             return;
         }
         // 共享 SL node 由 daemon 吃主机级注册表；QQ 子进程不吃单账号探针环境。
@@ -753,7 +757,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 远端 SnowLuma WebUI 手动恢复，复用正在运行的 QQ/容器。
     pub async fn retry_snowluma_ui(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         let config = self.get_required_bot_config(bot_id).await?;
-        if config.bot.backend_type != BackendType::SnowLuma || config.bot.runtime_target.is_local()
+        if config.bot.backend_type != BackendType::SnowLuma
+            || (config.bot.runtime_target.is_local()
+                && config.bot.deployment_type == DeploymentType::Native)
         {
             return Err(BotManagerError::Render(
                 "仅远端 SnowLuma 支持手动恢复 WebUI".to_string(),
@@ -1899,7 +1905,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     fn snowluma_daemon_scope_for_config(config: &BotConfig) -> Option<String> {
-        if config.bot.backend_type != BackendType::SnowLuma {
+        if config.bot.backend_type != BackendType::SnowLuma
+            || config.bot.deployment_type == DeploymentType::Docker
+        {
             return None;
         }
         match &config.bot.runtime_target {
@@ -1909,7 +1917,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     fn skip_post_start_status_recheck(config: &BotConfig) -> bool {
-        config.bot.backend_type == BackendType::SnowLuma && config.bot.runtime_target.is_local()
+        config.bot.backend_type == BackendType::SnowLuma
+            && config.bot.runtime_target.is_local()
+            && config.bot.deployment_type == DeploymentType::Native
     }
 
     async fn ensure_snowluma_agreements_ready(
@@ -1980,13 +1990,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         bot_id: &BotId,
         config: &BotConfig,
     ) -> Result<Option<AgreementsPayload>, BotManagerError> {
-        let RuntimeScenario::RemoteDocker {
-            backend: BackendType::SnowLuma,
-            ..
-        } = RuntimeScenario::from_config(config)?
-        else {
+        let scenario = RuntimeScenario::from_config(config)?;
+        if !scenario.is_docker() || scenario.backend_type() != BackendType::SnowLuma {
             return Ok(None);
-        };
+        }
         let Some(endpoint) = self
             .remote_runtime_sessions()
             .snowluma_docker_endpoints(bot_id)
@@ -2165,9 +2172,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     }
                 }
             }
-            RuntimeScenario::RemoteNative { .. } | RuntimeScenario::RemoteDocker { .. } => {
-                self.build_runtime_config(bot_id, config)
-            }
+            RuntimeScenario::LocalDocker { .. }
+            | RuntimeScenario::RemoteNative { .. }
+            | RuntimeScenario::RemoteDocker { .. } => self.build_runtime_config(bot_id, config),
         };
         // 必须在 build_plan 之后：plan 会把 loadNapCat.js 写成无探针基线，
         // 若先 inject 再 build_plan，require(探针) 会被覆盖，永远写不出 net-stats。
@@ -2273,7 +2280,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 let mut attached_after_runtime_start = false;
                 if matches!(
                     &scenario,
-                    RuntimeScenario::RemoteDocker {
+                    RuntimeScenario::LocalDocker {
+                        backend: BackendType::SnowLuma
+                    } | RuntimeScenario::RemoteDocker {
                         backend: BackendType::SnowLuma,
                         ..
                     }
@@ -2703,6 +2712,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         uin: &str,
         payload: &serde_json::Value,
     ) -> &'static str {
+        if config.bot.deployment_type == DeploymentType::Docker {
+            let bot_id = BotId::new(config.bot.qq_id.to_string());
+            let Some((client, _, _)) = self
+                .remote_runtime_sessions()
+                .snowluma_docker_client(&bot_id)
+                .await
+            else {
+                return "config_saved_pending_reload";
+            };
+            return match client.update_onebot_config(uin, payload).await {
+                Ok(true) => "config_hot_reloaded",
+                _ => "config_saved_pending_reload",
+            };
+        }
         // 本机:daemon Ready 时直接用共享 client,client 内部已 login 持 token
         if config.bot.runtime_target.is_local() {
             let Some(daemon) = &self.snowluma_daemon else {

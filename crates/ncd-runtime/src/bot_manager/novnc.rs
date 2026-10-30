@@ -39,7 +39,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .await?;
                 (endpoint.novnc_local_port, endpoint.vnc_password)
             }
-            RuntimeScenario::RemoteDocker { .. } => {
+            RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. } => {
                 if self.snowluma_docker_endpoints(bot_id).await.is_none() {
                     self.reconcile_remote_runtime_for(std::slice::from_ref(bot_id))
                         .await?;
@@ -48,13 +48,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .snowluma_docker_endpoints(bot_id)
                     .await
                     .ok_or_else(|| {
-                        BotManagerError::Render("noVNC 隧道未就绪，请确认 Bot 已启动".into())
+                        BotManagerError::Render("noVNC 入口未就绪，请确认 Bot 已启动".into())
                     })?;
                 (endpoint.novnc_local_port, endpoint.vnc_password)
             }
             _ => {
                 return Err(BotManagerError::Render(
-                    "仅远端 SnowLuma 支持 noVNC 扫码".into(),
+                    "仅 Linux 原生远端或 Docker SnowLuma 支持 noVNC 扫码".into(),
                 ));
             }
         };

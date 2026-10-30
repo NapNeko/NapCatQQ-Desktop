@@ -929,9 +929,9 @@ mod write_config {
         assert_eq!(*f.bots.upserts.lock().unwrap(), 0);
     }
 
-    /// 本机 Docker 仍不支持，不能因远端 Docker 对接开放而误接管本机容器。
+    /// Windows 本机 Docker 不支持，不能因 Linux Docker 对接开放而误接管本机容器。
     #[tokio::test]
-    async fn local_docker_bot_is_refused_before_touching_anything() {
+    async fn windows_local_docker_bot_is_refused_before_touching_anything() {
         let f = maibot_fixture("m-docker").await;
         let bot_id = BotId::new("10001");
         let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();

@@ -52,6 +52,7 @@ struct DockerRuntimeMockHost {
     fail_login_overlay: bool,
     fail_home_probe: bool,
     fail_copy: bool,
+    launched: std::sync::atomic::AtomicBool,
 }
 
 impl DockerRuntimeMockHost {
@@ -64,6 +65,7 @@ impl DockerRuntimeMockHost {
             fail_login_overlay: false,
             fail_home_probe: false,
             fail_copy: false,
+            launched: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -192,6 +194,17 @@ impl Host for DockerRuntimeMockHost {
         }
         match cmd.args.first().map(String::as_str) {
             Some("cp") if self.fail_copy => Ok(command_output(1, "", "copy failed")),
+            Some("info") if cmd.args.iter().any(|arg| arg.contains("OSType")) => {
+                Ok(command_output(0, "linux/x86_64", ""))
+            }
+            Some("image") => Ok(command_output(0, "linux/amd64", "")),
+            Some("compose") if cmd.args.get(1).map(String::as_str) == Some("up") => {
+                self.launched.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(command_output(0, "", ""))
+            }
+            Some("ps") if self.ps_json.is_empty() && self.launched.load(std::sync::atomic::Ordering::SeqCst) => {
+                Ok(command_output(0, r#"{"ID":"started","Names":"slbot-10001","Image":"motricseven7/snowluma:latest","State":"running","Status":"Up","Ports":""}"#, ""))
+            }
             Some("version" | "info") => Ok(command_output(0, "27.3.1\n", "")),
             Some("ps") => Ok(command_output(0, self.ps_json.clone(), "")),
             Some("logs") => Ok(command_output(0, "legacy-line-a\nlegacy-line-b\n", "")),

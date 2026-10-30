@@ -639,8 +639,7 @@ impl BotConfig {
 
     /// 校验运行矩阵是否支持
     ///
-    /// 当前支持三类场景: local native, remote native, remote docker.
-    /// 本机不支持 Docker;远端 SSH 支持原生进程和 Docker.
+    /// 校验部署场景；Docker 的 Linux 平台要求由运行时针对实际 Host 校验。
     pub fn validate_runtime_matrix(&self) -> Result<(), BotConfigError> {
         RuntimeScenario::from_config(self).map(|_| ())
     }
@@ -856,6 +855,12 @@ fn default_root_path() -> String {
 pub fn is_remote_docker_config(config: &BotConfig) -> bool {
     RuntimeScenario::from_config(config)
         .map(|scenario| scenario.is_remote_docker())
+        .unwrap_or(false)
+}
+
+pub fn is_docker_config(config: &BotConfig) -> bool {
+    RuntimeScenario::from_config(config)
+        .map(|scenario| scenario.is_docker())
         .unwrap_or(false)
 }
 
@@ -1119,15 +1124,13 @@ mod runtime_matrix_tests {
     }
 
     #[test]
-    fn docker_on_local_is_rejected() {
-        let err = cfg(
-            BackendType::NapCat,
-            DeploymentType::Docker,
-            RuntimeTarget::Local,
-        )
-        .validate_runtime_matrix()
-        .unwrap_err();
-        assert!(matches!(err, BotConfigError::UnsupportedRuntimeMatrix(_)));
+    fn local_docker_is_a_valid_scenario_with_host_platform_checked_at_runtime() {
+        for backend in [BackendType::NapCat, BackendType::SnowLuma] {
+            let config = cfg(backend, DeploymentType::Docker, RuntimeTarget::Local);
+            config.validate_runtime_matrix().unwrap();
+            assert!(is_docker_config(&config));
+            assert!(!is_remote_docker_config(&config));
+        }
     }
 
     #[test]

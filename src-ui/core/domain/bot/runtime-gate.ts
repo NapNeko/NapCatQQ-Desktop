@@ -11,18 +11,25 @@ import {
     type ComponentNames,
 } from '../components/readiness';
 import { isRuntimeTargetLocal } from './runtime-target';
+import { localOs } from '../runtime/env';
 
 export type RuntimeRequirement =
     | { kind: 'local-direct'; backend: BackendType }
     | { kind: 'remote-direct'; hostId: string; backend: BackendType }
     | { kind: 'remote-docker'; hostId: string; backend: BackendType }
+    | { kind: 'local-docker'; hostId: 'local'; backend: BackendType }
     | { kind: 'unsupported-local-docker'; backend: BackendType };
 
-export function getRuntimeRequirement(config: BotConfig): RuntimeRequirement | null {
+export function getRuntimeRequirement(
+    config: BotConfig,
+    os = localOs(),
+): RuntimeRequirement | null {
     const { backend_type, runtime_target, deploymentType } = config.bot;
 
     if (isRuntimeTargetLocal(runtime_target)) {
         if (deploymentType === 'docker') {
+            if (os === 'linux')
+                return { kind: 'local-docker', hostId: 'local', backend: backend_type };
             return { kind: 'unsupported-local-docker', backend: backend_type };
         }
         return { kind: 'local-direct', backend: backend_type };
@@ -44,6 +51,7 @@ export function describeRuntimeRequirement(req: RuntimeRequirement): string {
     if (req.kind === 'unsupported-local-docker') {
         return '本机 Docker 部署';
     }
+    if (req.kind === 'local-docker') return '本机 Linux Docker 镜像';
     if (req.kind === 'remote-direct') {
         const label = req.backend === 'snowluma' ? 'SnowLuma' : 'NapCat';
         return `远程主机 ${req.hostId} 上的 ${label} 直接运行依赖`;
@@ -80,6 +88,7 @@ export interface RemoteTransportStatus {
 
 export interface RuntimeGateArgs {
     config: BotConfig;
+    localPlatform?: ReturnType<typeof localOs>;
     local?: DirectRuntimeStatus;
     remoteDirect?: DirectRuntimeStatus; // 仅当 remote-direct 时使用
     docker?: DockerStatusLite; // 仅当 remote-docker 时使用
@@ -107,11 +116,11 @@ function directBlockReason(
 
 /** 计算启动阻断原因（返回非空字符串表示不能启动）。 */
 export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
-    const req = getRuntimeRequirement(args.config);
+    const req = getRuntimeRequirement(args.config, args.localPlatform);
     if (!req) return null;
 
     if (req.kind === 'unsupported-local-docker') {
-        return '本机不支持 Docker 部署，请改为直接运行或选择远程主机';
+        return '本机 Docker 部署仅支持 Linux，请改为直接运行或选择 Linux 主机';
     }
 
     // 优先检查传输层：远端主机不可达时，直接返回 transport 原因，不再看组件。
@@ -134,7 +143,7 @@ export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
     const d = args.docker;
     if (!d) return '正在检测 Docker 状态...';
     if (!d.installed || !d.daemonRunning || !d.composeAvailable) {
-        return '远程主机 Docker 未就绪，请到「组件」页安装并启动 Docker';
+        return '此主机 Docker 未就绪，请到「组件」页安装并启动 Docker';
     }
     return null;
 }
@@ -144,7 +153,7 @@ export function runtimeSaveBlockReason(args: RuntimeGateArgs): string | null {
     const block = runtimeStartBlockReason(args);
     if (block) return block;
 
-    const req = getRuntimeRequirement(args.config);
+    const req = getRuntimeRequirement(args.config, args.localPlatform);
     if (req?.kind === 'remote-direct') {
         const readiness = args.remoteDirect?.readiness;
         if (readiness && describeBlocking(readiness, args.componentNames)) {
@@ -159,13 +168,13 @@ export function runtimeReadinessNotice(args: RuntimeGateArgs): {
     tone: 'ok' | 'warn' | 'neutral';
     text: string;
 } | null {
-    const req = getRuntimeRequirement(args.config);
+    const req = getRuntimeRequirement(args.config, args.localPlatform);
     if (!req) return null;
 
     if (req.kind === 'unsupported-local-docker') {
         return {
             tone: 'warn',
-            text: '本机不支持 Docker 部署，请改为直接运行或选择远程主机',
+            text: '本机 Docker 部署仅支持 Linux，请改为直接运行或选择 Linux 主机',
         };
     }
 
@@ -198,7 +207,7 @@ export function runtimeReadinessNotice(args: RuntimeGateArgs): {
         return { tone: 'neutral', text: '正在检测 Docker...' };
     }
     if (!d.installed || !d.daemonRunning || !d.composeAvailable) {
-        return { tone: 'warn', text: '远程主机 Docker 未就绪，请到「组件」页安装' };
+        return { tone: 'warn', text: '此主机 Docker 未就绪，请到「组件」页安装' };
     }
     return { tone: 'ok', text: 'Docker 已就绪' };
 }

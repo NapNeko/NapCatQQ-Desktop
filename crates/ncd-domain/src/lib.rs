@@ -86,7 +86,8 @@ pub use bot_config::{
     BotConfigError, BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig,
     HttpServerConfig, HttpSseServerConfig, ImportedNetworkConfig, LogLevel, MessagePostFormat,
     NetworkBaseFields, O3HookMode, StatusCommandConfig, TimeUnit, WebsocketClientConfig,
-    WebsocketServerConfig, WsRole, is_remote_docker_config, is_remote_native_napcat_config,
+    WebsocketServerConfig, WsRole, is_docker_config, is_remote_docker_config,
+    is_remote_native_napcat_config,
 };
 pub use bot_runtime_metrics::{
     BOT_RUNTIME_METRICS_INTERVAL_MAX_MS, BOT_RUNTIME_METRICS_INTERVAL_MIN_MS,

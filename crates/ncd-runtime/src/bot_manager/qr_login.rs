@@ -154,7 +154,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .qr_login_snapshot(bot_id, refresh)
                 .await?);
         }
-        if config.bot.backend_type != BackendType::SnowLuma || config.bot.runtime_target.is_local()
+        if config.bot.backend_type != BackendType::SnowLuma
+            || (config.bot.runtime_target.is_local()
+                && config.bot.deployment_type == DeploymentType::Native)
         {
             return Ok(SnowLumaQrLoginSnapshot::unavailable(
                 "仅远端 SnowLuma 支持简化扫码",
@@ -181,7 +183,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
             }
         }
-        if matches!(scenario, RuntimeScenario::RemoteDocker { .. }) {
+        if scenario.is_docker() {
             let backend = self.backend_for_config(&config).await?;
             if refresh {
                 self.docker_sessions.request_qr_refresh(bot_id).await;

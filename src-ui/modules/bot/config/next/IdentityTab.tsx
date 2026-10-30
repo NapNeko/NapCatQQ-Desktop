@@ -45,6 +45,7 @@ import {
     serverProfileIdFromRuntimeTarget,
 } from '../../../../core/domain/bot/runtime-target';
 import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
+import { localOs } from '../../../../core/domain/runtime/env';
 import { cn } from '../../../../shared/utils/cn';
 import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
@@ -91,7 +92,7 @@ const RUNTIME_ITEMS: ReadonlyArray<{
     {
         value: 'local',
         label: '本机',
-        summary: '当前 Windows 桌面直接运行',
+        summary: '当前桌面主机，Linux 可选 Docker',
         icon: Monitor,
     },
     {
@@ -128,6 +129,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     }, [isEditMode, features, data.backend_type]);
 
     const isRemote = !isRuntimeTargetLocal(data.runtime_target);
+    const localDockerAllowed = localOs() === 'linux';
     const runtimeMode = runtimeModeForTarget(data.runtime_target);
 
     const serverItems = useMemo(
@@ -144,7 +146,14 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         [isRemote, data.runtime_target],
     );
 
-    const dockerHostIds = useMemo(() => (remoteHostId ? [remoteHostId] : []), [remoteHostId]);
+    const dockerHostId = isRemote ? remoteHostId : localDockerAllowed ? 'local' : null;
+    const dockerAllowed = isRemote
+        ? servers.find((server) => server.id === data.runtime_target)?.platform !== 'windows'
+        : localDockerAllowed;
+    const dockerHostIds = useMemo(
+        () => (deploymentType === 'docker' && dockerHostId ? [dockerHostId] : []),
+        [deploymentType, dockerHostId],
+    );
     const { statusByHost, probingByHost, imageReadyByHost } = useDockerHosts(dockerHostIds);
 
     // 直接运行的框架 + 依赖状态由后端解析；SnowLuma Full/Lite 也由后端按设置 / 库存判定
@@ -152,7 +161,10 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         isRemote && deploymentType === 'native' ? remoteHostId : null,
         data.backend_type,
     );
-    const localReadiness = useRuntimeReadiness(isRemote ? null : 'local', data.backend_type);
+    const localReadiness = useRuntimeReadiness(
+        !isRemote && deploymentType === 'native' ? 'local' : null,
+        data.backend_type,
+    );
     const componentNames = useComponentNames();
 
     const remoteReachable = useIsHostReachable(remoteHostId);
@@ -169,10 +181,18 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
     const onRuntimeModeChange = (mode: 'local' | 'remote') => {
         if (mode === 'local') {
-            onChange({ runtime_target: 'local', deploymentType: 'native' });
+            onChange({
+                runtime_target: 'local',
+                deploymentType: localDockerAllowed ? deploymentType : 'native',
+            });
         } else {
             const only = servers.length === 1 ? servers[0].id : RUNTIME_TARGET_REMOTE_PLACEHOLDER;
-            onChange({ runtime_target: only });
+            onChange({
+                runtime_target: only,
+                ...(servers.find((server) => server.id === only)?.platform === 'windows'
+                    ? { deploymentType: 'native' }
+                    : {}),
+            });
         }
     };
 
@@ -195,10 +215,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     })();
 
     const showDockerBlock =
-        isRemote &&
         deploymentType === 'docker' &&
         (data.backend_type === 'napcat' || data.backend_type === 'snowluma') &&
-        remoteHostId != null;
+        dockerHostId != null;
 
     const dockerFlavorLabel = data.backend_type === 'snowluma' ? 'SnowLuma' : 'NapCat';
     const localBlocking = localReadiness.readiness
@@ -316,7 +335,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 <FormSection
                     title="运行场景"
                     layout="none"
-                    description="本机固定直接运行；远程 Linux 可选 Docker"
+                    description="Linux 主机支持直接运行与 Docker；Windows 使用直接运行"
                     actions={
                         sceneExplainer ? (
                             <SceneExplainerPopover>{sceneExplainer}</SceneExplainerPopover>
@@ -375,10 +394,12 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         </div>
                     </div>
 
-                    <ExpandPresence visible={isRemote}>
+                    <ExpandPresence visible={isRemote || localDockerAllowed}>
                         <div className="pt-3">
                             <div className="flex flex-col rounded-md border border-border-subtle/80 bg-field/30 p-3.5">
-                                <ExpandPresence visible={!hasRemoteHosts && !serversLoading}>
+                                <ExpandPresence
+                                    visible={isRemote && !hasRemoteHosts && !serversLoading}
+                                >
                                     <div className="pb-3">
                                         <InlineNotice tone="warn">
                                             请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
@@ -388,17 +409,26 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                 <div
                                     className={cn(
                                         'grid grid-cols-1 gap-3',
-                                        hasRemoteHosts &&
+                                        isRemote &&
+                                            hasRemoteHosts &&
                                             serverItems.length > 0 &&
                                             'sm:grid-cols-2',
                                     )}
                                 >
-                                    {hasRemoteHosts && serverItems.length > 0 && (
+                                    {isRemote && hasRemoteHosts && serverItems.length > 0 && (
                                         <Select
                                             label="目标远程主机"
                                             items={serverItems}
                                             value={remoteHostSelectValue}
-                                            onValueChange={(v) => onChange({ runtime_target: v })}
+                                            onValueChange={(v) =>
+                                                onChange({
+                                                    runtime_target: v,
+                                                    ...(servers.find((server) => server.id === v)
+                                                        ?.platform === 'windows'
+                                                        ? { deploymentType: 'native' }
+                                                        : {}),
+                                                })
+                                            }
                                             placeholder="选择主机"
                                         />
                                     )}
@@ -421,6 +451,10 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                                         type="button"
                                                         role="radio"
                                                         aria-checked={selected}
+                                                        disabled={
+                                                            item.value === 'docker' &&
+                                                            !dockerAllowed
+                                                        }
                                                         onClick={() =>
                                                             onChange({ deploymentType: item.value })
                                                         }
@@ -448,23 +482,23 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                                     </div>
                                 </div>
 
-                                <ExpandPresence visible={!!showDockerBlock && !!remoteHostId}>
+                                <ExpandPresence visible={!!showDockerBlock}>
                                     <div className="pt-3">
                                         <DockerReadinessLine
                                             flavorLabel={dockerFlavorLabel}
                                             status={
-                                                remoteHostId
-                                                    ? statusByHost[remoteHostId]
+                                                dockerHostId
+                                                    ? statusByHost[dockerHostId]
                                                     : undefined
                                             }
                                             probing={
-                                                remoteHostId
-                                                    ? (probingByHost[remoteHostId] ?? false)
+                                                dockerHostId
+                                                    ? (probingByHost[dockerHostId] ?? false)
                                                     : false
                                             }
                                             imageReady={
-                                                remoteHostId
-                                                    ? imageReadyByHost[remoteHostId]?.[
+                                                dockerHostId
+                                                    ? imageReadyByHost[dockerHostId]?.[
                                                           data.backend_type === 'snowluma'
                                                               ? 'snowluma'
                                                               : 'napcat'
@@ -494,7 +528,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         </div>
                     </ExpandPresence>
 
-                    <ExpandPresence visible={!isRemote && !!localNotice}>
+                    <ExpandPresence
+                        visible={!isRemote && deploymentType === 'native' && !!localNotice}
+                    >
                         <div className="pt-3">
                             <InlineNotice tone={localBlocking ? 'warn' : 'neutral'}>
                                 {localNotice}

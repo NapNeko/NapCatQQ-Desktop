@@ -76,6 +76,15 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
             }
         }
         match scenario {
+            RuntimeScenario::LocalDocker { .. } => {
+                let Some(resolver) = &self.host_resolver else {
+                    return;
+                };
+                match resolver.resolve(&RuntimeTarget::Local).await {
+                    Ok(host) => self.attach_remote_docker(bot_id, config, host).await,
+                    Err(error) => warn!(%bot_id, %error, "本机 Docker 会话接管失败"),
+                }
+            }
             RuntimeScenario::RemoteDocker { server_id, .. } => {
                 let Some(host) = self.resolve_remote_host(bot_id, &server_id).await else {
                     return;
@@ -139,11 +148,13 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
         config: &BotConfig,
         host: Arc<dyn Host>,
     ) {
-        let Ok(RuntimeScenario::RemoteDocker { backend, .. }) =
-            RuntimeScenario::from_config(config)
-        else {
+        let Ok(scenario) = RuntimeScenario::from_config(config) else {
             return;
         };
+        if !scenario.is_docker() {
+            return;
+        }
+        let backend = scenario.backend_type();
 
         let napcat_token = (backend == BackendType::NapCat)
             .then(|| self.docker_secrets.napcat_webui_token(config.bot.qq_id))

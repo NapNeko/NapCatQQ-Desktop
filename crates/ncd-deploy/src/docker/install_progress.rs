@@ -208,14 +208,14 @@ async fn install_docker_linux_with_progress(
                     "安装 Docker 需要 sudo 密码，等待用户在弹框输入"
                 );
                 return Ok(DockerInstallReport::need_sudo_password(
-                    "这台远端是密钥登录且未保存密码，安装 Docker 需要 sudo 权限。请输入 sudo 密码后重试。",
+                    "安装 Docker 需要此主机的 sudo 权限。请输入 sudo 密码后重试。",
                 ));
             }
         },
     };
     if !elevation {
         return Ok(DockerInstallReport::need_sudo_password(
-            "这台远端是密钥登录且未保存密码，安装 Docker 需要 sudo 权限。请输入 sudo 密码后重试。",
+            "安装 Docker 需要此主机的 sudo 权限。请输入 sudo 密码后重试。",
         ));
     }
 

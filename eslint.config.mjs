@@ -160,7 +160,6 @@ export default tseslint.config(
             `${UI}/modules/bot/config/BotConfigPage.next.tsx`,
             `${UI}/modules/bot/dialogs/ImportRemoteBotsDialog.tsx`,
             `${UI}/modules/bot/list/BotListPage.next.tsx`,
-            `${UI}/modules/settings/DataRootMigrateDialog.tsx`,
             `${UI}/modules/settings/settings-draft.ts`,
             `${UI}/modules/settings/tabs/NcdWatchRemoteSection.tsx`,
             `${UI}/modules/settings/tabs/NotificationsTab.tsx`,
@@ -207,7 +206,10 @@ export default tseslint.config(
                 'error',
                 {
                     patterns: [
-                        { group: TAURI_PACKAGES, message: 'Tauri API 只许 core/ipc/transport.ts import。' },
+                        {
+                            group: TAURI_PACKAGES,
+                            message: 'Tauri API 只许 core/ipc/transport.ts import。',
+                        },
                         {
                             group: ['**/modules/**', '**/hooks/**', '@/modules/**'],
                             message: 'services 层不得依赖 UI 层。',

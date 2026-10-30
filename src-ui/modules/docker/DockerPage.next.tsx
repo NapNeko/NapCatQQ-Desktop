@@ -9,6 +9,7 @@ import { openDockerDeployment } from '../../hooks/components/componentsNavigatio
 import { useDockerHostSelection } from '../../hooks/docker/dockerNavigation';
 import { dockerManagementSummary, imageRemoveRef } from '../../core/domain/docker/status';
 import { errorText } from '../../core/domain/errors';
+import { localOs } from '../../core/domain/runtime/env';
 import { cn } from '../../shared/utils/cn';
 import { DockerToolbar } from './DockerToolbar';
 import { ContainerCard } from './ContainerCard';
@@ -41,17 +42,23 @@ const EMPTY_HINTS: Record<DockerTab, string> = {
 };
 
 export function DockerPageNext() {
-    const { servers } = useServerManager();
+    const { servers: allServers } = useServerManager();
+    const servers = allServers.filter((server) => server.platform !== 'windows');
+    const localAvailable = localOs() === 'linux';
     const { selectedHost, setSelectedHost } = useDockerHostSelection();
-    const hostId = servers.some((s) => `remote:${s.id}` === selectedHost)
-        ? selectedHost!
-        : servers[0]
-          ? `remote:${servers[0].id}`
-          : '';
+    const hostId =
+        (selectedHost === 'local' && localAvailable) ||
+        servers.some((s) => `remote:${s.id}` === selectedHost)
+            ? selectedHost!
+            : localAvailable
+              ? 'local'
+              : servers[0]
+                ? `remote:${servers[0].id}`
+                : '';
     if (!hostId)
         return (
             <PagePlaceholder>
-                <p className="text-sm text-text-secondary">添加远程主机后即可管理 Docker</p>
+                <p className="text-sm text-text-secondary">添加 Linux 远程主机后即可管理 Docker</p>
             </PagePlaceholder>
         );
     return (

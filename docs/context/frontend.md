@@ -58,7 +58,7 @@ flowchart TB
 
 分层禁令在 `eslint.config.mjs` 是机器门禁：modules/shared/app、hooks、core/domain、core/services 各一块 `no-restricted-imports: error`，新违规直接红。白名单文件按文件降 warn（可见不拦截），收掉一个删一个 override，`pnpm run lint` 即清单本身。
 
-- modules 直连 services（override warn）：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`（botService/componentService/snowlumaAppService 调用多、夹着各自的状态流，得单独拆 hook）；`settings/DataRootMigrateDialog.tsx`、`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（同上）；`settings/settings-draft.ts`、`settings/tabs/WindowTab.tsx` 只引 `settings.service` 的类型和 `clientPrefsFromBackend`，没有对应的生成类型，见上面手写载荷那条。chat/apps/debug/shared/app 闭包已清零，保持住。
+- modules 直连 services（override warn）：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`（botService/componentService/snowlumaAppService 调用多、夹着各自的状态流，得单独拆 hook）；`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（同上）；`settings/settings-draft.ts` 只引 `settings.service` 的类型和 `clientPrefsFromBackend`，没有对应的生成类型，见上面手写载荷那条。chat/apps/debug/shared/app 闭包已清零，保持住。
 - hooks 引 transport 的 shell 薄封装（override warn）：`useAppInstances`、`useOpenExternal`、`usePickDirectory`、`useOpenSnowlumaNovnc`、`useOpenWebui`、`ui/useTauriFileDrop`——外链打开、目录选择、原生拖放没有 services 等价物，直连 transport 的三个纯 shell 函数；`isTauri` 已下沉 `core/domain/runtime/env.ts` 不再是理由。
 - `hooks/preferences/useBackendSettings.ts` ↔ `modules/settings/settings-draft` 双向纠缠（override warn）：settings 草稿体系重构前维持，重构时一起拆。
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。动态 import 不受 `no-restricted-imports` 约束，靠 review 盯着。

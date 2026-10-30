@@ -73,7 +73,53 @@ impl DesktopTerminalPlanner {
                 )
             }
             (RuntimeTarget::Local, DeploymentType::Docker) => {
-                Err(TerminalError::Plan("本机不跑 Docker 部署的 Bot".into()))
+                let host = self.resolve(&RuntimeTarget::Local).await?;
+                if host.os() != ncd_host::Os::Linux {
+                    return Err(TerminalError::Plan("Docker Bot 仅支持 Linux 主机".into()));
+                }
+                let names =
+                    ncd_deploy::bot_docker_container_candidates(basic.backend_type, basic.qq_id)
+                        .to_vec();
+                if host_dir {
+                    let dir = names
+                        .iter()
+                        .map(|name| self.paths.root().join("docker").join(name))
+                        .find(|dir| dir.is_dir())
+                        .ok_or_else(|| {
+                            TerminalError::Plan(
+                                "尚未创建此 Bot 的 Docker 部署目录，请先启动 Bot".into(),
+                            )
+                        })?;
+                    self.local_plan(
+                        host,
+                        request,
+                        Some(format!("{name} 部署目录")),
+                        Some(dir),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        vec![
+                            TerminalSnippet::new("容器状态", "docker compose ps"),
+                            TerminalSnippet::new("最近日志", "docker compose logs --tail 200"),
+                        ],
+                    )
+                } else {
+                    Ok(TerminalLaunchPlan {
+                        host,
+                        host_id: ncd_domain::LOCAL_HOST_ID.into(),
+                        host_label: "本机".into(),
+                        host_os: ncd_domain::TerminalHostOs::Linux,
+                        title: format!("{name} 容器"),
+                        program: ncd_host::PtyProgram::Script(super::docker_exec_script(&names)),
+                        cwd: None,
+                        env: std::collections::BTreeMap::new(),
+                        cwd_display: None,
+                        shell: None,
+                        features: ncd_domain::TerminalFeatures::default(),
+                        snippets: Vec::new(),
+                        banner: vec![format!("进 {name} 的容器；在容器里 exit 这个终端就结束了")],
+                    })
+                }
             }
             (RuntimeTarget::Server(server_id), DeploymentType::Native) => {
                 let host = self.resolve(&basic.runtime_target).await?;

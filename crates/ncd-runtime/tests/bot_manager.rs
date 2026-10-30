@@ -5,16 +5,15 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use ncd_host::local::LocalWindowsHost;
 use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotActorState, BotBackend,
     BotBackendError, BotBasicConfig, BotConfig, BotConfigRepo, BotId, BotManager, BotManagerError,
     BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, ConnectConfig,
     DeploymentType, DesktopNotifySettings, DispatchRenderer, EventBus, EventFilter, HostResolver,
-    JsonTransaction, LocalBotConfigRepo, LocalConfigStore, LocalOnlyHostResolver,
-    NoopOfflineNotifier, ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError,
-    RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, SnowLumaDaemon, SnowLumaWebUiClient,
-    SnowLumaWebUiClientFactory, SnowLumaWebUiError, StopMode, TailOpts, WebUiPollerSettings,
+    JsonTransaction, LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier,
+    ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError, RuntimeLaunchPlanner,
+    SecretStore, SecretStoreImpl, SnowLumaDaemon, SnowLumaWebUiClient, SnowLumaWebUiClientFactory,
+    SnowLumaWebUiError, StopMode, TailOpts, WebUiPollerSettings,
 };
 
 #[derive(Default)]
@@ -312,7 +311,7 @@ fn bot_config_auto_start(qq_id: u64, name: &str) -> BotConfig {
     config
 }
 
-fn docker_local_blocked_config(qq_id: u64, name: &str) -> BotConfig {
+fn docker_local_config(qq_id: u64, name: &str) -> BotConfig {
     let mut config = bot_config(qq_id, name);
     config.bot.deployment_type = DeploymentType::Docker;
     config.bot.runtime_target = ncd_runtime::RuntimeTarget::Local;
@@ -326,10 +325,20 @@ type ManagerFixture = (
     BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
 );
 
-fn make_manager_with_local_resolver(root: &std::path::Path) -> ManagerFixture {
+fn make_manager_without_docker_host(root: &std::path::Path) -> ManagerFixture {
     let (store, repo, backend, manager) = make_manager(root);
-    let local_host: Arc<dyn ncd_host::Host> = Arc::new(LocalWindowsHost::new());
-    let resolver: Arc<dyn HostResolver> = Arc::new(LocalOnlyHostResolver::new(local_host));
+    struct UnavailableDockerHost;
+    #[async_trait]
+    impl HostResolver for UnavailableDockerHost {
+        async fn resolve(
+            &self,
+            target: &ncd_runtime::RuntimeTarget,
+        ) -> Result<Arc<dyn ncd_host::Host>, ncd_runtime::HostResolveError> {
+            assert!(target.is_local(), "LocalDocker must resolve the local host");
+            Err("fixture Docker host unavailable".into())
+        }
+    }
+    let resolver: Arc<dyn HostResolver> = Arc::new(UnavailableDockerHost);
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
     );
@@ -1392,59 +1401,52 @@ async fn batch_delete_stops_and_removes_bots() {
 }
 
 #[tokio::test]
-async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
+async fn lifecycle_stop_does_not_fallback_when_local_docker_host_is_unavailable() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let (store, repo, backend, manager) = make_manager_with_local_resolver(temp.path());
+    let (_, repo, backend, manager) = make_manager_without_docker_host(temp.path());
     let bot_id = BotId::new("10120");
-
-    // 直接写盘绕过 upsert 矩阵校验;invalidate 后 stop 才能读到 Docker 配置
-    let config = docker_local_blocked_config(10120, "bot");
-    let payload = serde_json::json!({
-        "info": {"configVersion": 999},
-        "bots": [serde_json::to_value(&config).unwrap()]
-    });
-    store
-        .apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload))
+    manager
+        .upsert_bot_config(bot_config(10120, "bot"))
+        .await
         .unwrap();
-    repo.invalidate_cache().await;
+    manager.start_bot(&bot_id).await.unwrap();
 
+    // 磁盘模型允许 LocalDocker；运行中的 Actor 不得因 Docker 主机不可用而误用原生后端。
+    repo.upsert(docker_local_config(10120, "bot"))
+        .await
+        .unwrap();
     let err = manager.stop_bot(&bot_id).await.unwrap_err();
-    // 未 upsert actor 时可能 not found;有配置时走 Docker 路由失败。
-    // 重点是验证没有错误回退本地 backend(stop_count=0)
     assert!(
-        err.to_string().contains("not found") || err.to_string().contains("Docker"),
-        "unexpected stop error: {err}"
+        err.to_string().contains("fixture Docker host unavailable"),
+        "{err}"
     );
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
+    assert!(repo.get(10120).await.unwrap().is_some());
+    assert_eq!(
+        manager.get_snapshot(&bot_id).await.unwrap().state,
+        BotActorState::Running
+    );
 }
 
 #[tokio::test]
-async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
+async fn lifecycle_delete_does_not_fallback_when_local_docker_host_is_unavailable() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let (store, repo, backend, manager) = make_manager_with_local_resolver(temp.path());
+    let (_, repo, backend, manager) = make_manager_without_docker_host(temp.path());
     let bot_id = BotId::new("10121");
-
     manager
         .upsert_bot_config(bot_config(10121, "bot"))
         .await
         .unwrap();
     manager.start_bot(&bot_id).await.unwrap();
 
-    // 直接写盘绕过 upsert 矩阵校验;必须 invalidate 进程内 cache,否则 delete 仍读到本机配置
-    let config = docker_local_blocked_config(10121, "bot");
-    let payload = serde_json::json!({
-        "info": {"configVersion": 999},
-        "bots": [serde_json::to_value(&config).unwrap()]
-    });
-    store
-        .apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload))
+    // 直接更新 repo 以保留正在运行的 Actor，验证删除失败仍保留配置和原生进程。
+    repo.upsert(docker_local_config(10121, "bot"))
+        .await
         .unwrap();
-    repo.invalidate_cache().await;
-
     let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
     assert!(
-        err.to_string().contains("Docker"),
-        "expected Docker routing error, got: {err}"
+        err.to_string().contains("fixture Docker host unavailable"),
+        "{err}"
     );
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
     assert!(repo.get(10121).await.unwrap().is_some());
@@ -1694,7 +1696,7 @@ async fn docker_recreation_preflight_failure_keeps_saved_configuration_and_actor
 #[tokio::test]
 async fn upsert_remote_native_server_passes_runtime_matrix() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let (_, _, _, manager) = make_manager_with_local_resolver(temp.path());
+    let (_, _, _, manager) = make_manager_without_docker_host(temp.path());
     manager
         .upsert_bot_config(bot_config_remote_native_server(10003, "remote-native"))
         .await
@@ -1858,7 +1860,7 @@ async fn exit_desktop_stops_only_local_active_bots() {
 #[tokio::test]
 async fn exit_desktop_leaves_remote_native_running() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let (_, _, backend, manager) = make_manager_with_local_resolver(temp.path());
+    let (_, _, backend, manager) = make_manager_without_docker_host(temp.path());
 
     let local_id = BotId::new("10001");
     manager

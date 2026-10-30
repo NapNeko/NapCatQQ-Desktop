@@ -31,7 +31,10 @@ impl DockerCli<'_> {
         Ok(())
     }
 
-    async fn management_output(&self, cmd: HostCommand) -> Result<String, DockerCliError> {
+    pub(super) async fn management_output(
+        &self,
+        cmd: HostCommand,
+    ) -> Result<String, DockerCliError> {
         let command = format!("docker {}", cmd.args.join(" "));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {

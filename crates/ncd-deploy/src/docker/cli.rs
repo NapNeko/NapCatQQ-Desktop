@@ -110,7 +110,7 @@ impl<'h> DockerCli<'h> {
     /// operation 入口先调用这里,就算上一次 probe 的 elevated 标志没有跨对象保存,
     /// 本次命令也会重新定夺 sudo 路径
     pub async fn ensure_ready(&self) -> Result<DockerStatus, DockerCliError> {
-        let status = self.probe().await;
+        let status = self.probe_checked().await?;
         if status.ready_to_deploy() {
             Ok(status)
         } else {
@@ -353,9 +353,7 @@ impl<'h> DockerCli<'h> {
 }
 
 impl<'h> DockerCli<'h> {
-    /// docker compose up -d,在 project_dir 下跑(compose 会读那里的
-    /// docker-compose.yml),pull 由 compose 自己按需做;这里加 --pull missing
-    /// 让首次部署自动拉镜像
+    /// 镜像在组件页预拉并验证；启动不隐式联网拉取不同版本。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -364,7 +362,7 @@ impl<'h> DockerCli<'h> {
             .arg("-d")
             .arg("--remove-orphans")
             .arg("--pull")
-            .arg("missing")
+            .arg("never")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))
             .timeout(std::time::Duration::from_secs(900));
         let out = self.host.run_to_string(cmd).await?;
@@ -554,8 +552,9 @@ impl<'h> DockerCli<'h> {
             {
                 Ok(()) => {
                     if image != official_image {
-                        let _ = self.retag(image, official_image).await;
+                        self.retag(image, official_image).await?;
                     }
+                    self.ensure_image_compatible(official_image).await?;
                     info!(
                         target: "ncd_deploy::docker",
                         index = idx,
@@ -600,6 +599,53 @@ impl<'h> DockerCli<'h> {
         let cmd = self.docker_cmd().arg("image").arg("inspect").arg(image_ref);
         let out = self.host.run_to_string(cmd).await?;
         Ok(out.success())
+    }
+
+    /// 验证实际 daemon 和已拉取镜像的平台，避免错误架构到启动时才报 exec format error。
+    pub async fn ensure_image_compatible(&self, image_ref: &str) -> Result<(), DockerCliError> {
+        let daemon = self
+            .management_output(
+                self.command()
+                    .args(["info", "--format", "{{.OSType}}/{{.Architecture}}"])
+                    .timeout(std::time::Duration::from_secs(15)),
+            )
+            .await?;
+        let image = self
+            .management_output(
+                self.command()
+                    .args([
+                        "image",
+                        "inspect",
+                        "--format",
+                        "{{.Os}}/{{.Architecture}}",
+                        "--",
+                        image_ref,
+                    ])
+                    .timeout(std::time::Duration::from_secs(15)),
+            )
+            .await?;
+        fn platform(value: &str) -> (&str, &str) {
+            let (os, arch) = value.trim().split_once('/').unwrap_or(("", ""));
+            let arch = match arch {
+                "x86_64" => "amd64",
+                "aarch64" => "arm64",
+                other => other,
+            };
+            (os, arch)
+        }
+        let daemon_platform = platform(&daemon);
+        let image_platform = platform(&image);
+        if daemon_platform.0 != "linux"
+            || daemon_platform.1.is_empty()
+            || image_platform != daemon_platform
+        {
+            return Err(DockerCliError::InvalidArgument(format!(
+                "镜像 {image_ref} 平台 {} 与 Docker daemon {} 不兼容，需要原生 Linux 镜像",
+                image.trim(),
+                daemon.trim()
+            )));
+        }
+        Ok(())
     }
 
     /// 容器内端口在宿主机上实际映射到哪个口。network_mode=host 时就是容器内端口;

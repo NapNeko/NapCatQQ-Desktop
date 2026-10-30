@@ -29,7 +29,7 @@ export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | u
         enabled: isTauri,
         staleTime: 15_000,
     });
-    const servers = serversQuery.data ?? [];
+    const servers = useMemo(() => serversQuery.data ?? [], [serversQuery.data]);
 
     // 直接运行的 (host, backend) 对；主机不可达时不发探测
     const directTargets = useMemo(() => {
@@ -97,7 +97,7 @@ export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | u
                 const st = readinessByTarget[`${req.hostId}|${req.backend}`];
                 out.remoteDirect = { readiness: st?.readiness, probing: st?.probing ?? true };
                 out.remoteTransport = transportFor(req.hostId);
-            } else if (req.kind === 'remote-docker') {
+            } else if (req.kind === 'remote-docker' || req.kind === 'local-docker') {
                 const dockerStatus = dockerStatusByHost[req.hostId];
                 out.docker = {
                     installed: !!dockerStatus?.installed,
@@ -105,7 +105,7 @@ export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | u
                     composeAvailable: !!dockerStatus?.composeAvailable,
                     probing: dockerProbingByHost[req.hostId] ?? false,
                 };
-                out.remoteTransport = transportFor(req.hostId);
+                if (req.kind === 'remote-docker') out.remoteTransport = transportFor(req.hostId);
             }
             return out;
         },

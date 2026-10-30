@@ -53,7 +53,7 @@ fn parse_gateway(text: &str) -> Result<Ipv4Addr, AppFrameworkError> {
         })
 }
 
-async fn gateway(host: &dyn Host) -> Result<Ipv4Addr, AppFrameworkError> {
+pub(super) async fn gateway(host: &dyn Host) -> Result<Ipv4Addr, AppFrameworkError> {
     let cli = DockerCli::new(host);
     cli.ensure_daemon_ready()
         .await

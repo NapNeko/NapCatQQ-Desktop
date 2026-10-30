@@ -278,8 +278,26 @@ impl RuntimeBackendRouter {
     ) -> Result<Arc<dyn BotBackend>, RuntimeRouterError> {
         match scenario {
             RuntimeScenario::LocalNative { backend } => self.local_backend_for(*backend),
-            RuntimeScenario::RemoteDocker { server_id, backend } => {
-                let host = self.resolve_remote_host(server_id).await?;
+            RuntimeScenario::LocalDocker { backend }
+            | RuntimeScenario::RemoteDocker { backend, .. } => {
+                let target = match scenario.server_id() {
+                    Some(server_id) => RuntimeTarget::server(server_id),
+                    None => RuntimeTarget::Local,
+                };
+                let resolver = self
+                    .host_resolver
+                    .as_ref()
+                    .ok_or_else(|| RuntimeRouterError::Render("HostResolver 未初始化".into()))?;
+                let host = resolver
+                    .resolve(&target)
+                    .await
+                    .map_err(|error| RuntimeRouterError::Render(error.to_string()))?;
+                if host.os() != Os::Linux {
+                    return Err(RuntimeRouterError::Render(
+                        "Docker Bot 仅支持 Linux 主机".into(),
+                    ));
+                }
+                let host_key = scenario.server_id().unwrap_or("local").to_string();
                 let backend_id = BotId::new(format!("docker-{qq_id}"));
                 let flavor = BotFlavor::from(*backend);
                 let deployment: Arc<DockerDeployment> = match backend {
@@ -305,7 +323,7 @@ impl RuntimeBackendRouter {
                         .docker_qr_login_locks
                         .lock()
                         .await
-                        .entry((server_id.clone(), qq_id))
+                        .entry((host_key, qq_id))
                         .or_insert_with(|| Arc::new(Mutex::new(())))
                         .clone();
                     backend = backend.with_qr_login_lock(lock);

@@ -87,7 +87,12 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         let mut tasks = stream::iter(configs.to_vec())
             .map(|config| async move {
                 let bot_id = BotId::new(config.bot.qq_id.to_string());
-                if skipped.contains(&bot_id) || config.bot.runtime_target.is_local() {
+                if skipped.contains(&bot_id)
+                    || matches!(
+                        RuntimeScenario::from_config(&config),
+                        Ok(RuntimeScenario::LocalNative { .. })
+                    )
+                {
                     return None;
                 }
                 match self.reconcile_bot(&config, snowluma_counts, false).await {
@@ -143,6 +148,11 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             .await
             .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;
         let scenario = RuntimeScenario::from_config(config)?;
+        if matches!(scenario, RuntimeScenario::LocalDocker { .. }) {
+            ncd_deploy::ensure_managed_bot_container(host.as_ref(), config)
+                .await
+                .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+        }
         if host.os() == ncd_host::Os::Windows
             && matches!(scenario, RuntimeScenario::RemoteNative { .. })
         {
@@ -167,7 +177,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         let mut sl_backend = None;
         let mut sl_observation = None;
         let pid = match &scenario {
-            RuntimeScenario::RemoteDocker { .. } => {
+            RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. } => {
                 let state = DockerDeployment::new()
                     .observe(host.as_ref(), &bot_id)
                     .await
@@ -250,7 +260,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             "runtime_refreshed",
         ));
         match scenario {
-            RuntimeScenario::RemoteDocker { .. } => {
+            RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. } => {
                 self.remote_sessions
                     .attach_remote_docker(&bot_id, config, host)
                     .await;

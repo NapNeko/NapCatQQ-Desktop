@@ -347,14 +347,13 @@ impl DockerBotSessionRegistry {
         if config.bot.deployment_type != DeploymentType::Docker {
             return;
         }
-        if config.bot.runtime_target.is_local() {
-            return;
-        }
-        let Ok(RuntimeScenario::RemoteDocker { server_id, .. }) =
-            RuntimeScenario::from_config(&config)
-        else {
+        let Ok(scenario) = RuntimeScenario::from_config(&config) else {
             return;
         };
+        if !scenario.is_docker() {
+            return;
+        }
+        let server_id = scenario.server_id().unwrap_or("local").to_string();
 
         self.shutdown_bot(&bot_id).await;
 
@@ -396,9 +395,10 @@ impl DockerBotSessionRegistry {
                     );
                 }
                 let initial = from_container.or(from_store);
-                if let Ok(handle) = open_loopback_tunnel(host.as_ref(), remote_webui).await {
-                    let local_port = handle.local_port();
-                    tunnels.push(handle);
+                if let Ok((local_port, handle)) =
+                    connect_loopback_endpoint(host.as_ref(), remote_webui).await
+                {
+                    tunnels.extend(handle);
                     if let Some(token) = initial.clone() {
                         bus.publish(DomainEvent::napcat_webui_available_remote(
                             bot_id.clone(),
@@ -429,19 +429,19 @@ impl DockerBotSessionRegistry {
                 let vnc = snowluma_vnc_passwd.unwrap_or_default();
                 let webui = snowluma_webui_bootstrap.unwrap_or_default();
                 match (
-                    open_loopback_tunnel(host.as_ref(), remote_webui).await,
-                    open_loopback_tunnel(host.as_ref(), remote_novnc).await,
+                    connect_loopback_endpoint(host.as_ref(), remote_webui).await,
+                    connect_loopback_endpoint(host.as_ref(), remote_novnc).await,
                 ) {
-                    (Ok(w), Ok(n)) => {
+                    (Ok((webui_port, w)), Ok((novnc_port, n))) => {
                         snowluma_eps = Some(SnowLumaDockerEndpoints {
-                            webui_local_port: w.local_port(),
+                            webui_local_port: webui_port,
                             webui_host_port: remote_webui,
-                            novnc_local_port: n.local_port(),
+                            novnc_local_port: novnc_port,
                             vnc_password: vnc.clone(),
                             webui_password: webui,
                         });
-                        tunnels.push(w);
-                        tunnels.push(n);
+                        tunnels.extend(w);
+                        tunnels.extend(n);
                         bus.publish(DomainEvent::SnowLumaDockerEndpointsReady {
                             bot_id: bot_id.clone(),
                         });
@@ -595,12 +595,17 @@ impl DockerBotSessionRegistry {
     }
 }
 
-async fn open_loopback_tunnel(
+async fn connect_loopback_endpoint(
     host: &dyn Host,
-    remote_port: u16,
-) -> Result<TunnelHandle, HostError> {
-    host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
-        .await
+    host_port: u16,
+) -> Result<(u16, Option<TunnelHandle>), HostError> {
+    if host.locality() == ncd_host::Locality::Local {
+        return Ok((host_port, None));
+    }
+    let tunnel = host
+        .open_tunnel(TunnelSpec::local_to_remote(0, host_port))
+        .await?;
+    Ok((tunnel.local_port(), Some(tunnel)))
 }
 
 /// 构造 SnowLuma WebUI client(隧道本地端口 + bootstrap 密码)→ wait_ready → login →

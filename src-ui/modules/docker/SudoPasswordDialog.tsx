@@ -79,7 +79,7 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
                         type="password"
                         label="sudo 密码"
                         autoFocus
-                        placeholder="输入远端用户的 sudo 密码"
+                        placeholder="输入目标主机用户的 sudo 密码"
                         value={password}
                         onValueChange={setPassword}
                         disabled={busy}

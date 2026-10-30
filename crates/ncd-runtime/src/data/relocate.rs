@@ -171,6 +171,11 @@ fn dir_or_file_size(path: &Path) -> io::Result<u64> {
     Ok(total)
 }
 
+fn docker_migration_warning(source: &Path) -> Option<String> {
+    fs::read_dir(source.join("docker")).ok()?.next()?.ok()?;
+    Some("数据迁移不会更新已有 Docker 容器的挂载和 Compose 目录。重启后请在 Docker 页删除旧的已停止容器（保留数据卷），再启动 Bot 重建；确认新位置正常前请保留旧目录。".into())
+}
+
 /// 预检(不写盘)。`local_active_bots` 由调用方填入。
 pub fn preflight_relocate(
     source: &Path,
@@ -238,6 +243,9 @@ pub fn preflight_relocate(
     warnings.push("迁移成功后需要重启应用才能使用新数据目录".into());
     warnings.push("整树包含配置、密钥、SSH 私钥与组件安装文件;请选择可信磁盘".into());
     warnings.push("旧数据目录默认保留,确认新位置正常后再手动删除".into());
+    if let Some(warning) = docker_migration_warning(&source) {
+        warnings.push(warning);
+    }
     // 不链 Win32 查卷剩余:避免假硬挡;靠可写探测 + 复制期 IO 错误
     warnings.push("未检查目标卷剩余空间,请确认磁盘足够容纳整树".into());
 
@@ -454,6 +462,9 @@ pub fn execute_relocate(
     );
 
     let mut warnings = Vec::new();
+    if let Some(warning) = docker_migration_warning(&source) {
+        warnings.push(warning);
+    }
     match rewrite_server_private_key_paths(&target) {
         Ok(true) => warnings.push("已重写 servers.json 中的私钥路径".into()),
         Ok(false) => {}
@@ -825,6 +836,38 @@ mod tests {
         let p = preflight_relocate(&src, &dst, 0);
         assert!(!p.ok);
         assert!(p.blocking_reasons.iter().any(|r| r.contains("空")));
+    }
+
+    #[test]
+    fn docker_projects_require_rebuild_notice_in_preview_and_result() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source");
+        let target = tmp.path().join("target");
+        fs::create_dir_all(source.join("docker")).unwrap();
+        assert!(
+            !preflight_relocate(&source, &target, 0)
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("Docker"))
+        );
+        write_file(
+            &source.join("docker/ncbot-10001/docker-compose.yml"),
+            "services: {}\n",
+        );
+        let preview = preflight_relocate(&source, &target, 0);
+        assert!(
+            preview
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("保留数据卷"))
+        );
+        let result = execute_relocate(&source, &target, None, None, None).unwrap();
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("Docker") && warning.contains("保留数据卷"))
+        );
     }
 
     #[test]

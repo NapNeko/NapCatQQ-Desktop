@@ -130,6 +130,33 @@ impl AppManager {
         let host = self
             .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
             .await?;
+        if host.locality() == ncd_host::Locality::Local {
+            let gateway = docker_link::gateway(host.as_ref()).await?.to_string();
+            let key = format!("{}:docker-bridge:{gateway}", instance.id.as_str());
+            let prefix = format!("{}:docker-bridge:", instance.id.as_str());
+            self.tunnels
+                .lock()
+                .await
+                .retain(|saved, _| !saved.starts_with(&prefix) || saved == &key);
+            let mut spec = TunnelSpec::local_to_remote(0, host_port);
+            spec.local_host = gateway.clone();
+            let port = self
+                .ensure_desktop_tunnel(
+                    key,
+                    host_port,
+                    AppLinkTopology::SameHost,
+                    TunnelHandle::local_port,
+                    "Docker 网桥转发未分配端口",
+                    async { host.open_tunnel(spec).await.map_err(host_err) },
+                )
+                .await?;
+            let scheme = if url.trim().starts_with("wss://") {
+                "wss"
+            } else {
+                "ws"
+            };
+            return Ok(format!("{scheme}://{gateway}:{port}{}", parsed.path));
+        }
         let preferred = docker_link::DockerBridgeEndpoint {
             host: parsed.host.clone(),
             port: parsed.port,
@@ -167,6 +194,14 @@ impl AppManager {
             let host = self
                 .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
                 .await?;
+            if host.locality() == ncd_host::Locality::Local {
+                let prefix = format!("{}:docker-bridge:", instance.id.as_str());
+                self.tunnels
+                    .lock()
+                    .await
+                    .retain(|key, _| !key.starts_with(&prefix));
+                return Ok(());
+            }
             docker_link::teardown_docker_loopback_bridge(host.as_ref(), instance).await
         }
         .await;
@@ -355,6 +390,7 @@ impl AppManager {
         map.remove(&id_str);
         map.remove(&webui);
         map.remove(&forward_tunnel_key(id));
+        map.retain(|key, _| !key.starts_with(&format!("{id_str}:docker-bridge:")));
     }
 
     /// 正向跨机、桌面端握着的隧道：应用端在自己机的回环上连 Q，隧道把 Q 接到 Bot 机回环上的 `bot_port`。

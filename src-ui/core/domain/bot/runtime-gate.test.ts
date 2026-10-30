@@ -106,18 +106,42 @@ describe('runtime gate matrix', () => {
         });
     });
 
-    it('blocks local docker before runtime checks', () => {
+    it('blocks local Windows docker before runtime checks', () => {
         const config = botConfig({ deploymentType: 'docker' });
 
-        expect(getRuntimeRequirement(config)).toEqual({
+        expect(getRuntimeRequirement(config, 'windows')).toEqual({
             kind: 'unsupported-local-docker',
             backend: 'napcat',
         });
-        expect(runtimeStartBlockReason({ config })).toContain('本机不支持 Docker 部署');
-        expect(runtimeReadinessNotice({ config })).toEqual({
+        expect(runtimeStartBlockReason({ config, localPlatform: 'windows' })).toContain(
+            '仅支持 Linux',
+        );
+        expect(runtimeReadinessNotice({ config, localPlatform: 'windows' })).toEqual({
             tone: 'warn',
-            text: '本机不支持 Docker 部署，请改为直接运行或选择远程主机',
+            text: '本机 Docker 部署仅支持 Linux，请改为直接运行或选择 Linux 主机',
         });
+    });
+
+    it('checks the local Docker daemon instead of native dependencies on Linux', () => {
+        const config = botConfig({ deploymentType: 'docker' });
+        expect(getRuntimeRequirement(config, 'linux')).toEqual({
+            kind: 'local-docker',
+            hostId: 'local',
+            backend: 'napcat',
+        });
+        expect(runtimeStartBlockReason({ config, localPlatform: 'linux' })).toContain('Docker');
+        expect(
+            runtimeStartBlockReason({
+                config,
+                localPlatform: 'linux',
+                docker: {
+                    installed: true,
+                    daemonRunning: true,
+                    composeAvailable: true,
+                    probing: false,
+                },
+            }),
+        ).toBeNull();
     });
 
     it('transport failure wins over component state on remote direct', () => {

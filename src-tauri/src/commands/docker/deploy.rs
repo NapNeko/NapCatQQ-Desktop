@@ -316,6 +316,7 @@ async fn docker_deploy_execute(
             .await;
 
         heartbeat_stop.store(true, Ordering::Relaxed);
+        heartbeat.abort();
         let _ = heartbeat.await;
 
         match pull_result {

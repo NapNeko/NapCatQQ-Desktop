@@ -2,7 +2,7 @@
 
 use ncd_deploy::docker::DockerCli;
 use ncd_domain::{ContainerAction, ContainerInfo, DockerFlavor, DockerStatus, ImageInfo};
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand};
 use tauri::State;
 use tracing::error;
 
@@ -185,10 +185,7 @@ async fn resolve_project_dir(
 ) -> Result<String, String> {
     if host_id == "local" {
         let base = state.data_root.join("docker").join(name);
-        // HostPath::from_windows 把 C:\... 规范成 /c/...,LocalWindowsHost 能还原
-        return Ok(HostPath::from_windows(&base.to_string_lossy())
-            .as_posix()
-            .to_string());
+        return Ok(base.to_string_lossy().into_owned());
     }
     // 远端:探 $HOME探不到就 fail-fast,不回退 /root——路径落盘红线:宁可报错让
     // 用户处理,也不把生产数据静默落到错误目录(/root 通常无权限,或污染 root 家目录)

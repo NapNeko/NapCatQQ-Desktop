@@ -1,13 +1,7 @@
 // 数据根整树迁移向导：说明 → 选空目录 → 预览路径/结构 → 确认迁移 → 进度 → 完成。
 
-import { useCallback, useEffect, useState } from 'react';
-import { dataRootMigrateService } from '../../core/services/data-root-migrate.service';
-import type {
-    DataRootMigratePreview,
-    DataRootMigrateProgress,
-    DataRootMigrateResult,
-    DataRootTreeEntry,
-} from '../../core/ipc/types';
+import { useDataRootMigration } from '../../hooks/preferences/useDataRootMigration';
+import type { DataRootMigrateProgress, DataRootTreeEntry } from '../../core/ipc/types';
 import {
     Button,
     Dialog,
@@ -20,8 +14,6 @@ import {
 } from '../../shared/ui';
 import { DialogStepTransition } from '../../shared/ui/motion';
 import { cn } from '../../shared/utils/cn';
-
-type Phase = 'guide' | 'preview' | 'running' | 'done' | 'error';
 
 export interface DataRootMigrateDialogProps {
     open: boolean;
@@ -102,126 +94,35 @@ export function DataRootMigrateDialog({
     onOpenChange,
     currentDataRoot,
 }: DataRootMigrateDialogProps) {
-    const [phase, setPhase] = useState<Phase>('guide');
-    const [target, setTarget] = useState<string | null>(null);
-    const [preview, setPreview] = useState<DataRootMigratePreview | null>(null);
-    const [progress, setProgress] = useState<DataRootMigrateProgress | null>(null);
-    const [result, setResult] = useState<DataRootMigrateResult | null>(null);
-    const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [picking, setPicking] = useState(false);
-    const [deletingOld, setDeletingOld] = useState(false);
-    const [oldDeleted, setOldDeleted] = useState(false);
-    const [restarting, setRestarting] = useState(false);
-
-    const reset = useCallback(() => {
-        setPhase('guide');
-        setTarget(null);
-        setPreview(null);
-        setProgress(null);
-        setResult(null);
-        setErrorMsg(null);
-        setPicking(false);
-        setDeletingOld(false);
-        setOldDeleted(false);
-        setRestarting(false);
-    }, []);
-
-    useEffect(() => {
-        if (!open) {
-            reset();
-        }
-    }, [open, reset]);
-
-    useEffect(() => {
-        if (!open || phase !== 'running') return;
-        let unlisten: (() => void) | undefined;
-        void dataRootMigrateService
-            .listenProgress((p) => setProgress(p))
-            .then((u) => {
-                unlisten = u;
-            });
-        return () => {
-            unlisten?.();
-        };
-    }, [open, phase]);
+    const {
+        phase,
+        target,
+        preview,
+        progress,
+        result,
+        errorMsg,
+        picking,
+        deletingOld,
+        oldDeleted,
+        restarting,
+        deleteOldRoot,
+        restartApp,
+        pickTarget,
+        startMigrate,
+        cancelRunning,
+    } = useDataRootMigration(open);
 
     const handleOpenChange = (next: boolean) => {
         if (phase === 'running' || deletingOld || restarting) return;
-        if (!next) onOpenChange(false);
-        else onOpenChange(true);
+        onOpenChange(next);
     };
 
-    const deleteOldRoot = async () => {
+    const confirmDeleteOldRoot = async () => {
         if (!result?.old_root || !result.new_root) return;
         const ok = window.confirm(
             `确认新数据目录可用后，将永久删除旧目录：\n\n${result.old_root}\n\n此操作不可恢复。`,
         );
-        if (!ok) return;
-        setDeletingOld(true);
-        setErrorMsg(null);
-        try {
-            await dataRootMigrateService.deleteRetired(result.old_root, result.new_root);
-            setOldDeleted(true);
-        } catch (e) {
-            setErrorMsg(e instanceof Error ? e.message : String(e));
-        } finally {
-            setDeletingOld(false);
-        }
-    };
-
-    const restartApp = async () => {
-        setRestarting(true);
-        setErrorMsg(null);
-        try {
-            await dataRootMigrateService.restart();
-        } catch (e) {
-            setRestarting(false);
-            setErrorMsg(e instanceof Error ? e.message : String(e));
-        }
-    };
-
-    const pickTarget = async () => {
-        setPicking(true);
-        setErrorMsg(null);
-        try {
-            const path = await dataRootMigrateService.pickTargetDirectory();
-            if (!path) return;
-            setTarget(path);
-            const p = await dataRootMigrateService.preview(path);
-            setPreview(p);
-            setPhase('preview');
-            if (!p.ok) {
-                setErrorMsg(p.blocking_reasons[0] ?? '预检未通过');
-            }
-        } catch (e) {
-            setErrorMsg(e instanceof Error ? e.message : String(e));
-            setPhase('error');
-        } finally {
-            setPicking(false);
-        }
-    };
-
-    const startMigrate = async () => {
-        if (!target || !preview?.ok) return;
-        setPhase('running');
-        setErrorMsg(null);
-        setProgress(null);
-        try {
-            const r = await dataRootMigrateService.start(target);
-            setResult(r);
-            setPhase('done');
-        } catch (e) {
-            setErrorMsg(e instanceof Error ? e.message : String(e));
-            setPhase('error');
-        }
-    };
-
-    const cancelRunning = async () => {
-        try {
-            await dataRootMigrateService.cancel();
-        } catch {
-            // ignore
-        }
+        if (ok) await deleteOldRoot();
     };
 
     return (
@@ -347,7 +248,7 @@ export function DataRootMigrateDialog({
                                 )}
                             </div>
                             <p className="text-[12px] text-text-tertiary">
-                                需重启后才会使用新数据根；可先删旧目录再重启。
+                                重启后才会使用新数据目录；确认 Bot 和应用端运行正常后再删除旧目录。
                             </p>
                             {result.warnings.length > 0 ? (
                                 <ul className="list-disc pl-4 text-text-tertiary">
@@ -420,7 +321,7 @@ export function DataRootMigrateDialog({
                                     variant="secondary"
                                     size="sm"
                                     disabled={deletingOld || restarting}
-                                    onClick={() => void deleteOldRoot()}
+                                    onClick={() => void confirmDeleteOldRoot()}
                                 >
                                     {deletingOld ? '删除中…' : '删除旧目录'}
                                 </Button>
