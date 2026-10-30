@@ -68,7 +68,10 @@ fn manifest_round_trip_keeps_unknown_keys_and_drops_bad_rows() {
 
 mod on_disk {
     use ncd_domain::{AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement};
-    use ncd_host::local::LocalWindowsHost;
+    #[cfg(target_os = "linux")]
+    use ncd_host::local::LocalLinuxHost as LocalHost;
+    #[cfg(windows)]
+    use ncd_host::local::LocalWindowsHost as LocalHost;
 
     use super::super::*;
 
@@ -124,7 +127,7 @@ mod on_disk {
             "data/custom_prompts/zh-CN/greet.prompt",
             "嗨 {bot_name}",
         );
-        let host = LocalWindowsHost::new();
+        let host = LocalHost::new();
         let inst = instance(tmp.path());
 
         let cat = catalog(MaiBotPromptTarget::Disk {
@@ -178,7 +181,7 @@ mod on_disk {
             "prompts/zh-CN/greet.prompt",
             "你好\r\n{bot_name}",
         );
-        let host = LocalWindowsHost::new();
+        let host = LocalHost::new();
         let inst = instance(tmp.path());
         let t = || MaiBotPromptTarget::Disk {
             host: &host,

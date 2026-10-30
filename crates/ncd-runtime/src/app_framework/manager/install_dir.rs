@@ -233,7 +233,7 @@ impl AppManager {
         Ok(self.apps_root_for(host, framework).await?.join(id.as_str()))
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, windows))]
     pub(super) async fn resolve_install_dir_for_test(
         &self,
         host_id: &str,

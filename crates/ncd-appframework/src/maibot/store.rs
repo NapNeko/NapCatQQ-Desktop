@@ -863,7 +863,10 @@ mod tests {
         use std::io::Write;
 
         use ncd_domain::{AppFrameworkId, AppInstanceId, AppPlacement};
-        use ncd_host::local::LocalWindowsHost;
+        #[cfg(target_os = "linux")]
+        use ncd_host::local::LocalLinuxHost as LocalHost;
+        #[cfg(windows)]
+        use ncd_host::local::LocalWindowsHost as LocalHost;
 
         use super::super::*;
 
@@ -906,7 +909,7 @@ mod tests {
         }
 
         async fn staged(
-            host: &LocalWindowsHost,
+            host: &LocalHost,
             root: &HostPath,
             id: &str,
             files: &[(&str, &str)],
@@ -917,7 +920,7 @@ mod tests {
         }
 
         async fn unpack_zip(
-            host: &LocalWindowsHost,
+            host: &LocalHost,
             stage: &HostPath,
             id: &str,
             files: &[(&str, &str)],
@@ -930,7 +933,7 @@ mod tests {
         #[tokio::test]
         async fn install_update_toggle_uninstall_round_trip() {
             let tmp = tempfile::tempdir().unwrap();
-            let host = LocalWindowsHost::new();
+            let host = LocalHost::new();
             let inst = instance(tmp.path(), AppInstanceState::Installed);
             let root = plugins_root(&inst);
             let id = "sengokucola.mute-plugin";
@@ -1016,7 +1019,7 @@ mod tests {
         #[tokio::test]
         async fn unpack_rejects_old_manifests_and_impostors() {
             let tmp = tempfile::tempdir().unwrap();
-            let host = LocalWindowsHost::new();
+            let host = LocalHost::new();
             let root = plugins_root(&instance(tmp.path(), AppInstanceState::Installed));
             let id = "sengokucola.mute-plugin";
 
@@ -1053,7 +1056,7 @@ mod tests {
         #[ignore = "要联网从 GitHub 下插件包"]
         async fn real_market_install_smoke() {
             let tmp = tempfile::tempdir().unwrap();
-            let host = LocalWindowsHost::new();
+            let host = LocalHost::new();
             let inst = instance(tmp.path(), AppInstanceState::Installed);
             let text = reqwest::get(MARKET_RAW)
                 .await
@@ -1085,7 +1088,7 @@ mod tests {
         #[tokio::test]
         async fn the_managed_adapter_cannot_be_touched_and_residue_is_cleared() {
             let tmp = tempfile::tempdir().unwrap();
-            let host = LocalWindowsHost::new();
+            let host = LocalHost::new();
             let inst = instance(tmp.path(), AppInstanceState::Installed);
             let root = plugins_root(&inst);
             let adapter = root.join(LOCKED_PLUGIN_DIR);

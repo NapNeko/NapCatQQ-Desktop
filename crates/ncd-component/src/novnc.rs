@@ -148,12 +148,11 @@ impl Component for NoVncComponent {
         let cmd = HostCommand::new("sh").arg("-c").arg(
             "command -v Xvfb >/dev/null && command -v x11vnc >/dev/null && \
              command -v websockify >/dev/null && command -v dbus-launch >/dev/null && \
+             (command -v fluxbox >/dev/null || command -v openbox >/dev/null) && \
+             (test -f /usr/share/novnc/vnc.html || test -f /usr/share/noVNC/vnc.html) && \
              echo OK && websockify --help 2>&1 | head -1",
         );
-        let out = match host.run_to_string(cmd).await {
-            Ok(o) => o,
-            Err(_) => return Ok(None),
-        };
+        let out = host.run_to_string(cmd).await?;
         if !out.success() {
             return Ok(None);
         }
@@ -215,6 +214,12 @@ impl Component for NoVncComponent {
         let install_cmd = self.build_install_command(mgr);
         run_pkg_command_with_progress(host, ctx, install_cmd, 3, 28, 95, "apt/dnf install 图形栈…")
             .await?;
+        if self.detect(host).await?.is_none() {
+            return Err(ActionError::install_step(
+                "verify_graphics_stack",
+                "图形栈安装后仍缺少 Xvfb / x11vnc / websockify / dbus / 窗口管理器或 noVNC 页面",
+            ));
+        }
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -267,8 +272,7 @@ impl Component for NoVncComponent {
             detected.as_ref().map(|v| v.source.clone()),
         );
 
-        // 单独再检查 fluxbox / xvfb(只 warn,不影响 ok)
-        for binary in &["fluxbox", "Xvfb"] {
+        for binary in &["Xvfb"] {
             let cmd = HostCommand::new("sh")
                 .arg("-c")
                 .arg(format!("command -v {binary}"));

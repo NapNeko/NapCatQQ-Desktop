@@ -153,6 +153,7 @@ async fn run_single_step(
     host: &dyn Host,
     ctx: &mut ActionCtx,
 ) -> Result<bool, ncd_component::ActionError> {
+    step.component.check_target(host)?;
     match step.kind {
         StepKind::EnsureInstalled => {
             let detected = step.component.detect(host).await?;

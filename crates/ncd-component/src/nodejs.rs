@@ -22,14 +22,10 @@
 //! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
 //! 可通过 NodeJsComponent::with_url(...) 覆盖镜像
 
-
 use async_trait::async_trait;
 
 use ncd_domain::{NodeEnvironmentCandidate, NodeSourceKind};
-use ncd_host::shell::BashShell;
-use ncd_host::{
-    Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, HostShell, Locality, Os,
-};
+use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locality, Os};
 
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::download::DownloadHelper;
@@ -61,8 +57,10 @@ pub async fn probe_node_bin_status(
     match host.run_to_string(cmd).await {
         Ok(out) if out.success() => {
             let ver = out.stdout.trim().trim_start_matches('v').to_string();
-            if ver.is_empty() {
-                Ok(NodeBinProbe::Broken("--version 无输出".into()))
+            if semver::Version::parse(&ver).is_err() {
+                Ok(NodeBinProbe::Broken(format!(
+                    "--version 未返回有效版本号：{ver}"
+                )))
             } else {
                 Ok(NodeBinProbe::Version(ver))
             }
@@ -202,6 +200,9 @@ impl NodeJsComponent {
             Os::MacOs => ("darwin", "tar.xz"),
             Os::Windows => ("win", "zip"),
         };
+        if host.os() == Os::Linux && host.arch() == Arch::X86 {
+            return Err(ActionError::other("Node.js 不提供 Linux x86 发行包"));
+        }
         let arch = match host.arch() {
             Arch::X86_64 => "x64",
             Arch::Aarch64 => "arm64",
@@ -238,9 +239,16 @@ impl NodeJsComponent {
 
     fn source_is_managed(&self, host: &dyn Host, source: &str) -> bool {
         let expected = self.node_binary_path(host);
-        let normalize = |path: &str| path.replace('\\', "/").trim_end_matches('/').to_lowercase();
+        let normalize = |path: &str| {
+            let path = path.replace('\\', "/").trim_end_matches('/').to_string();
+            if host.os() == Os::Windows {
+                path.to_lowercase()
+            } else {
+                path
+            }
+        };
         normalize(source) == normalize(expected.as_posix())
-            || normalize(source) == normalize(&expected.render(ncd_host::PathStyle::Windows))
+            || normalize(source) == normalize(&expected.render_for(host.os()))
     }
 
     fn extract_root_subdir(&self, host: &dyn Host) -> String {
@@ -325,7 +333,7 @@ impl Component for NodeJsComponent {
         match host.run_to_string(path_cmd).await {
             Ok(out) if out.success() => {
                 let ver = out.stdout.trim().trim_start_matches('v').to_string();
-                if !ver.is_empty() {
+                if semver::Version::parse(&ver).is_ok() {
                     if all_versions_match(&self.accept, &ver) {
                         return Ok(DetectOutcome::Installed(DetectedVersion {
                             version: ver,
@@ -451,20 +459,37 @@ impl Component for NodeJsComponent {
             host.create_dir_all(&self.install_dir).await?;
             copy_dir_all(host, &root_subdir, &self.install_dir).await?;
         } else {
-            let _ = host.remove_dir_all(&self.install_dir).await;
-            host.create_dir_all(&self.install_dir).await?;
-            let root = BashShell.escape(root_subdir.as_posix());
-            let dest = BashShell.escape(self.install_dir.as_posix());
-            let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
-                "mv {root}/* {dest}/ && mv {root}/.* {dest}/ 2>/dev/null; true",
-            ));
-            let mv_out = host.run_to_string(mv_cmd).await?;
-            if !mv_out.success() {
+            let incoming = self
+                .install_dir
+                .parent()
+                .ok_or_else(|| ActionError::other("Node 安装目录无父目录"))?
+                .join(format!(".ncd-node-new-{install_nonce}"));
+            host.create_dir_all(&incoming).await?;
+            let copy = HostCommand::new("cp").args([
+                "-a",
+                &format!("{}/.", root_subdir.as_posix()),
+                incoming.as_posix(),
+            ]);
+            let output = host.run_to_string(copy).await?;
+            if !output.success() {
+                return Err(ActionError::install_step("copy_install", output.stderr));
+            }
+            let binary = Self::node_binary_path_for_os(&incoming, host.os());
+            let version = probe_node_raw_version(host, &binary).await?;
+            if version.as_deref() != Some(self.version.as_str()) {
+                let _ = host.remove_dir_all(&incoming).await;
                 return Err(ActionError::install_step(
-                    "mv_install",
-                    format!("exit={:?}: {}", mv_out.exit_code, mv_out.stderr.trim()),
+                    "verify_node",
+                    format!(
+                        "Node.js 发行包无法执行或版本不符，expected={} actual={version:?}",
+                        self.version
+                    ),
                 ));
             }
+            if host.exists(&self.install_dir).await? {
+                host.remove_dir_all(&self.install_dir).await?;
+            }
+            host.rename(&incoming, &self.install_dir).await?;
         }
 
         // 清理 stage 与 archive
@@ -536,39 +561,19 @@ impl Component for NodeJsComponent {
     }
 
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
-        let binary = self.node_binary_path(host);
-        let exists = host.exists(&binary).await?;
-        let mut report =
-            VerifyReport::ok().with_check("node binary exists", exists, Some(format!("{binary}")));
-        if exists {
-            let cmd = HostCommand::new(binary.as_posix()).arg("--version");
-            match host.run_to_string(cmd).await {
-                Ok(out) if out.success() => {
-                    let actual = out.stdout.trim().trim_start_matches('v').to_string();
-                    let matches = actual == self.version;
-                    report = report.with_check(
-                        "version matches",
-                        matches,
-                        Some(format!("expected={} actual={actual}", self.version)),
-                    );
-                }
-                Ok(out) => {
-                    report = report.with_check(
-                        "version executable",
-                        false,
-                        Some(format!(
-                            "exit={:?} stderr={}",
-                            out.exit_code,
-                            out.stderr.trim()
-                        )),
-                    );
-                }
-                Err(e) => {
-                    report = report.with_check("version executable", false, Some(format!("{e}")));
-                }
+        let outcome = self.detect_outcome(host).await?;
+        let (passed, detail) = match outcome {
+            DetectOutcome::Installed(found) => {
+                (true, format!("{} ({})", found.version, found.source))
             }
-        }
-        Ok(report)
+            DetectOutcome::Unusable(found) => (false, found.reason),
+            DetectOutcome::NotInstalled => (false, "未找到可用的 Node.js".into()),
+        };
+        Ok(VerifyReport::ok().with_check(
+            "Node.js runs and satisfies requirements",
+            passed,
+            Some(detail),
+        ))
     }
 
     fn launch_command(
@@ -609,16 +614,23 @@ pub async fn probe_local_system_nodes(
 ) -> Vec<NodeEnvironmentCandidate> {
     let mut results = Vec::new();
     let mut seen_paths = std::collections::HashSet::new();
+    let path_key = |path: &str| match host.os() {
+        Os::Windows => path.to_lowercase(),
+        _ => path.to_owned(),
+    };
 
     // 1. Custom configured path
     if let Some(cp) = custom_path {
         let trimmed = cp.trim();
         if !trimmed.is_empty() {
-            let hp = HostPath::from_windows(trimmed);
+            let hp = match host.os() {
+                Os::Windows => HostPath::from_windows(trimmed),
+                _ => HostPath::from_posix(trimmed),
+            };
             if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
                 let is_valid = all_versions_match(accept, &ver);
-                let path_str = hp.render(ncd_host::PathStyle::Windows);
-                seen_paths.insert(path_str.to_lowercase());
+                let path_str = hp.render_for(host.os());
+                seen_paths.insert(path_key(&path_str));
                 results.push(NodeEnvironmentCandidate {
                     path: path_str,
                     version: ver.clone(),
@@ -634,9 +646,9 @@ pub async fn probe_local_system_nodes(
     if let Some(cp) = component_path {
         if let Ok(Some(ver)) = probe_node_raw_version(host, cp).await {
             let is_valid = all_versions_match(accept, &ver);
-            let path_str = cp.render(ncd_host::PathStyle::Windows);
-            if !seen_paths.contains(&path_str.to_lowercase()) {
-                seen_paths.insert(path_str.to_lowercase());
+            let path_str = cp.render_for(host.os());
+            if !seen_paths.contains(&path_key(&path_str)) {
+                seen_paths.insert(path_key(&path_str));
                 results.push(NodeEnvironmentCandidate {
                     path: path_str,
                     version: ver.clone(),
@@ -662,13 +674,13 @@ pub async fn probe_local_system_nodes(
                         continue;
                     }
                     let hp = HostPath::from_windows(trimmed);
-                    let path_str = hp.render(ncd_host::PathStyle::Windows);
-                    if seen_paths.contains(&path_str.to_lowercase()) {
+                    let path_str = hp.render_for(host.os());
+                    if seen_paths.contains(&path_key(&path_str)) {
                         continue;
                     }
                     if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
                         let is_valid = all_versions_match(accept, &ver);
-                        seen_paths.insert(path_str.to_lowercase());
+                        seen_paths.insert(path_key(&path_str));
                         results.push(NodeEnvironmentCandidate {
                             path: path_str,
                             version: ver.clone(),
@@ -678,6 +690,24 @@ pub async fn probe_local_system_nodes(
                         });
                     }
                 }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Ok(Some(path)) = host.which("node").await {
+        let hp = HostPath::from_posix(path);
+        let path_str = hp.render_for(host.os());
+        if !seen_paths.contains(&path_key(&path_str)) {
+            if let Ok(Some(version)) = probe_node_raw_version(host, &hp).await {
+                let is_valid = all_versions_match(accept, &version);
+                results.push(NodeEnvironmentCandidate {
+                    path: path_str,
+                    label: format!("系统 PATH (v{version})"),
+                    version,
+                    source_kind: NodeSourceKind::SystemPath,
+                    is_valid,
+                });
             }
         }
     }
@@ -710,11 +740,11 @@ pub async fn probe_local_system_nodes(
             let node_exe = base_dir.join("node.exe");
             if node_exe.is_file() {
                 let hp = HostPath::from_windows(node_exe.to_string_lossy().trim());
-                let path_str = hp.render(ncd_host::PathStyle::Windows);
-                if !seen_paths.contains(&path_str.to_lowercase()) {
+                let path_str = hp.render_for(host.os());
+                if !seen_paths.contains(&path_key(&path_str)) {
                     if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
                         let is_valid = all_versions_match(accept, &ver);
-                        seen_paths.insert(path_str.to_lowercase());
+                        seen_paths.insert(path_key(&path_str));
                         results.push(NodeEnvironmentCandidate {
                             path: path_str,
                             version: ver.clone(),
@@ -734,6 +764,63 @@ pub async fn probe_local_system_nodes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn bad_release_archive_preserves_the_installed_runtime() {
+        use std::os::unix::fs::PermissionsExt;
+        use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
+
+        let workspace = tempfile::tempdir().unwrap();
+        let host = ncd_host::local::LocalLinuxHost::new();
+        let install = workspace.path().join("installed");
+        let old_binary = install.join("bin/node");
+        std::fs::create_dir_all(old_binary.parent().unwrap()).unwrap();
+        std::fs::write(&old_binary, "old runtime").unwrap();
+        let mut component =
+            NodeJsComponent::new("22.13.0", HostPath::from_posix(install.to_string_lossy()))
+                .with_tmp_dir(HostPath::from_posix(
+                    workspace.path().join("staging").to_string_lossy(),
+                ));
+
+        // 归档结构正确，二进制不能运行，必须在替换现有安装前发现。
+        let source = workspace.path().join("source");
+        let binary = source
+            .join(component.extract_root_subdir(&host))
+            .join("bin/node");
+        std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        std::fs::write(&binary, "#!/bin/sh\nexit 17\n").unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let archive = workspace.path().join("fixture.tar.xz");
+        assert!(
+            std::process::Command::new("tar")
+                .arg("-cJf")
+                .arg(&archive)
+                .arg("-C")
+                .arg(&source)
+                .arg(".")
+                .status()
+                .unwrap()
+                .success()
+        );
+        let server = MockServer::start().await;
+        Mock::given(path("/node.tar.xz"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_bytes(std::fs::read(archive).unwrap()),
+            )
+            .mount(&server)
+            .await;
+        component.download_url_template = Some(format!("{}/node.tar.xz", server.uri()));
+        let (ctx, receiver) = ActionCtx::new();
+        drop(receiver);
+        let mut ctx = ctx.with_download_dir(workspace.path().join("downloads"));
+        let result = component.install(&host, &mut ctx).await;
+        assert!(
+            matches!(result, Err(ActionError::InstallStepFailed { ref step, .. }) if step == "verify_node"),
+            "{result:?}"
+        );
+        assert_eq!(std::fs::read_to_string(old_binary).unwrap(), "old runtime");
+    }
 
     #[test]
     fn build_download_url_substitutes_version_and_arch() {

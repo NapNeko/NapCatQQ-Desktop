@@ -269,10 +269,13 @@ async fn remove_if_exists(host: &dyn Host, path: &HostPath) -> Result<(), AppFra
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ncd_host::local::LocalWindowsHost;
+    #[cfg(target_os = "linux")]
+    use ncd_host::local::LocalLinuxHost as LocalHost;
+    #[cfg(windows)]
+    use ncd_host::local::LocalWindowsHost as LocalHost;
 
-    fn host() -> LocalWindowsHost {
-        LocalWindowsHost::new()
+    fn host() -> LocalHost {
+        LocalHost::new()
     }
 
     fn root_of(dir: &std::path::Path) -> HostPath {

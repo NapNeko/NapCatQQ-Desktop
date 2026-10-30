@@ -72,6 +72,16 @@ pub async fn resolve_node_toolchain(
                 if host.exists(&npm_cli).await? {
                     return Ok(NodeToolchain { node_bin, npm_cli });
                 }
+                // Debian/Ubuntu 把 npm 放在 /usr/share/nodejs，通过 PATH 入口交给
+                // 已选中的 node 执行，不把发行版的 Node 误判成缺少 npm。
+                if host.os() == Os::Linux
+                    && let Some(npm) = host.which("npm").await?
+                {
+                    return Ok(NodeToolchain {
+                        node_bin,
+                        npm_cli: HostPath::from_posix(npm),
+                    });
+                }
                 last_err = Some(format!(
                     "{}: 未找到随附 npm（{}）",
                     node_bin.as_posix(),

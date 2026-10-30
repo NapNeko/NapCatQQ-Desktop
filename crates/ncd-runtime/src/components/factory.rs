@@ -95,12 +95,16 @@ pub fn build_component_for_host(
             ctx.host.os(),
         )
     };
+    let local_linux = ctx.host.os() == Os::Linux && ctx.host.locality() == Locality::Local;
     let layout = ctx.layout;
     let remote_home = ctx.remote_home;
     let snapshot = ctx.snapshot;
     let local_snowluma_version = ctx.local_snowluma_version;
 
     let resolve_napcat_base = || -> Result<HostPath, String> {
+        if local_linux {
+            return Ok(data_root_host.join("components"));
+        }
         if let Some(sel) = ctx.selected {
             if let Ok(base) = require_qq_install_base(sel) {
                 return Ok(HostPath::from_posix(base));
@@ -135,10 +139,15 @@ pub fn build_component_for_host(
                 }
                 Arc::new(comp)
             } else {
-                Arc::new(
-                    NapCatComponent::new(resolve_napcat_base()?)
-                        .with_sudo(matches!(layout, RemoteLayout::System)),
-                )
+                let mut comp = NapCatComponent::new(resolve_napcat_base()?)
+                    .with_sudo(matches!(layout, RemoteLayout::System));
+                if let Some(sha) = snapshot
+                    .and_then(|s| s.napcat_latest.as_ref())
+                    .and_then(|info| asset_sha256(info, "NapCat.Shell.zip"))
+                {
+                    comp = comp.with_sha256(sha);
+                }
+                Arc::new(comp)
             }
         }
         ComponentId::SnowLuma => {
@@ -169,7 +178,9 @@ pub fn build_component_for_host(
                 Arc::new(comp)
             } else {
                 let workspace =
-                    if let Some(ws) = ctx
+                    if local_linux {
+                        data_root_host.join("components")
+                    } else if let Some(ws) = ctx
                         .selected
                         .and_then(|s| s.snowluma_workspace.as_deref())
                         .filter(|p| !p.is_empty())
@@ -194,10 +205,19 @@ pub fn build_component_for_host(
                 let package = ctx
                     .snowluma_linux_package
                     .unwrap_or_else(|| infer_snowluma_linux_package(ctx.selected));
+                if !matches!(ctx.host.arch(), Arch::X86_64 | Arch::Aarch64) {
+                    return Err(format!(
+                        "SnowLuma Linux 仅提供 x86_64 / aarch64 构建，当前为 {:?}",
+                        ctx.host.arch()
+                    ));
+                }
                 let asset = snowluma_linux_release_asset(&tag, ctx.host.arch(), package);
                 let url =
                     format!("https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}");
                 let mut comp = SnowLumaComponent::new(workspace, url).with_package(package);
+                if local_linux {
+                    comp = comp.with_snowluma_dir(data_root_host.join("components/SnowLuma"));
+                }
                 if let Some(dir) = ctx
                     .selected
                     .and_then(|s| s.snowluma_dir.as_deref())
@@ -258,9 +278,16 @@ pub fn build_component_for_host(
                 }
                 Arc::new(comp)
             } else {
-                let install_dir = node_install_dir(ctx.selected, remote_home)?;
+                let install_dir = if local_linux {
+                    data_root_host.join("components/NodeJs")
+                } else {
+                    node_install_dir(ctx.selected, remote_home)?
+                };
                 let mut comp =
                     NodeJsComponent::new("22.13.0", install_dir).with_version_reqs(accept);
+                if let Some(path) = ctx.snowluma_node_path {
+                    comp = comp.with_extra_detect_bin(HostPath::from_posix(path));
+                }
                 if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
                     comp = comp.with_extra_detect_bin(bin);
                 }
@@ -306,11 +333,9 @@ pub fn build_component_for_host(
                 comp = comp
                     .with_release_tag(tag.clone())
                     .with_version_label(info.version.clone());
-                if ctx.host.arch() == Arch::X86_64 {
-                    if let Some(asset) = ncd_watch_asset_name(&tag, Arch::X86_64) {
-                        if let Some(sha) = asset_sha256(info, &asset) {
-                            comp = comp.with_sha256(sha);
-                        }
+                if let Some(asset) = ncd_watch_asset_name(&tag, ctx.host.arch()) {
+                    if let Some(sha) = asset_sha256(info, &asset) {
+                        comp = comp.with_sha256(sha);
                     }
                 }
                 if let Some(url) = ncd_watch_release_download_url_for_tag(&tag, ctx.host.arch()) {
@@ -328,7 +353,7 @@ pub fn build_component_for_host(
             }))
         }
         ComponentId::Uv => {
-            let install_dir = if ctx.host.os() == Os::Windows {
+            let install_dir = if ctx.host.os() == Os::Windows || local_linux {
                 data_root_host.join("components").join("Uv")
             } else {
                 let home = require_remote_home(remote_home)?;
@@ -346,7 +371,7 @@ pub fn build_component_for_host(
             data_root_host.join("components").join("Git"),
         )),
         ComponentId::Redis => {
-            let install_dir = if ctx.host.os() == Os::Windows {
+            let install_dir = if ctx.host.os() == Os::Windows || local_linux {
                 data_root_host.join("components").join("Redis")
             } else {
                 RedisComponent::default_remote_install_dir(require_remote_home(remote_home)?)
@@ -376,10 +401,11 @@ fn build_app_framework_component(
     // 工具链取值口径与其他远端组件一致：用户 path_overrides 优先，其次桌面端管理的
     // 组件落点（NodeJs / Uv 组件同一目录），都没有再由框架组件回退到实例标记 / PATH。
     // 两条都算出来交给适配器，Node 系只用 node_bin，Python 系只用 uv_bin。
-    let node_bin = if ctx.host.os() == Os::Windows {
+    let local = ctx.host.locality() == Locality::Local;
+    let node_bin = if ctx.host.os() == Os::Windows || local {
         Some(NodeJsComponent::node_binary_path_for_os(
             &data_root_host.join("components").join("NodeJs"),
-            Os::Windows,
+            ctx.host.os(),
         ))
     } else {
         nodejs_extra_detect_bin(ctx.selected).or_else(|| {
@@ -388,10 +414,10 @@ fn build_app_framework_component(
                 .map(|dir| NodeJsComponent::node_binary_path_for_os(&dir, ctx.host.os()))
         })
     };
-    let uv_bin = if ctx.host.os() == Os::Windows {
+    let uv_bin = if ctx.host.os() == Os::Windows || local {
         Some(UvComponent::uv_binary_path_for_os(
             &data_root_host.join("components").join("Uv"),
-            Os::Windows,
+            ctx.host.os(),
         ))
     } else {
         remote_home.map(|home| {
@@ -406,10 +432,10 @@ fn build_app_framework_component(
         &data_root_host.join("components").join("Git"),
         ctx.host.os(),
     );
-    let redis_bin = if ctx.host.os() == Os::Windows {
+    let redis_bin = if ctx.host.os() == Os::Windows || local {
         Some(RedisComponent::managed_binary_path_for_os(
             &data_root_host.join("components").join("Redis"),
-            Os::Windows,
+            ctx.host.os(),
         ))
     } else {
         remote_home.map(|home| {

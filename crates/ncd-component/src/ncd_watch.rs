@@ -37,7 +37,7 @@ pub fn ncd_watch_bin_path(home: &str, root: Option<&str>) -> HostPath {
 pub struct NcdWatchComponent {
     /// 远端 $HOME(探测得到);None 时 install 失败
     pub remote_home: Option<String>,
-    /// release tag(如 watch-v0.2.0);place_binary 时按远端 uname 拼 URL
+    /// release tag(如 watch-v0.2.0);place_binary 时按 Host 的目标架构拼 URL
     pub release_tag: Option<String>,
     /// 显式下载 URL(无 tag 时用;开发回退)
     pub download_url: Option<String>,
@@ -177,18 +177,7 @@ impl NcdWatchComponent {
     async fn place_binary(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         let dest = self.bin_path()?;
 
-        // Host::arch() 远端写死 X86_64;装 musl 必须以 uname 为准
-        let arch = match probe_remote_arch(host).await {
-            Ok(a) => a,
-            Err(err) => {
-                ctx.emit(ProgressKind::Log {
-                    level: ProgressLogLevel::Warn,
-                    message: format!("uname -m 失败,回退 host.arch(): {err}"),
-                })
-                .await;
-                host.arch()
-            }
-        };
+        let arch = host.arch();
 
         let (url, sha) = if let Some(tag) = self
             .release_tag
@@ -201,13 +190,7 @@ impl NcdWatchComponent {
                     reason: format!("无法为架构 {arch:?} 拼 ncd-watch 下载 URL(tag={tag})"),
                 }
             })?;
-            // expected_sha256 按 build 时 host.arch() 预填;uname 结果若不同则丢弃 hash,
-            // 避免用 x86_64 digest 校验 aarch64 二进制。
-            let sha = if arch == host.arch() {
-                self.expected_sha256.clone().filter(|s| !s.is_empty())
-            } else {
-                None
-            };
+            let sha = self.expected_sha256.clone().filter(|s| !s.is_empty());
             (url, sha)
         } else {
             let url = self
@@ -350,29 +333,17 @@ impl Component for NcdWatchComponent {
         }
         let bin_s = bin.as_posix().to_string();
 
-        // 优先 installed_version 戳(与 release tag/文件名一致);
-        // clap --version 跟 workspace CARGO_PKG_VERSION,发版 tag 不等于 crate 版本时会漂。
-        if let Some(stamped) = self.read_installed_version_stamp(host).await {
-            return Ok(Some(DetectedVersion {
-                version: stamped,
-                source: format!("{bin_s} (installed_version)"),
-            }));
-        }
-
         let out = host
             .run_to_string(HostCommand::new(&bin_s).arg("--version"))
-            .await;
-        let version = match out {
-            Ok(o) if o.success() => {
-                let line = o.stdout.lines().next().unwrap_or("").trim();
-                if line.is_empty() {
-                    self.version_label.clone()
-                } else {
-                    normalize_detected_version(line)
-                }
-            }
-            _ => self.version_label.clone(),
-        };
+            .await?;
+        if !out.success() || out.stdout.trim().is_empty() {
+            return Ok(None);
+        }
+        // 标签可与 workspace 版本不同，但戳文件不能代替二进制可执行性校验。
+        let version = self
+            .read_installed_version_stamp(host)
+            .await
+            .unwrap_or_else(|| normalize_detected_version(&out.stdout));
         Ok(Some(DetectedVersion {
             version,
             source: bin_s,
@@ -406,6 +377,12 @@ impl Component for NcdWatchComponent {
         })
         .await;
         self.place_binary(host, ctx).await?;
+        if self.detect(host).await?.is_none() {
+            return Err(ActionError::install_step(
+                "verify_binary",
+                "ncd-watch 安装后无法执行",
+            ));
+        }
         self.write_installed_version_stamp(host).await?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -464,18 +441,12 @@ impl Component for NcdWatchComponent {
     }
 
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
-        let bin = self.bin_path()?;
-        let exists = host
-            .exists(&bin)
-            .await
-            .map_err(|e| ActionError::other(e.to_string()))?;
-        Ok(
-            VerifyReport::ok().with_check(
-                "binary exists",
-                exists,
-                Some(bin.as_posix().to_string()),
-            ),
-        )
+        let detected = self.detect(host).await?;
+        Ok(VerifyReport::ok().with_check(
+            "ncd-watch --version runs",
+            detected.is_some(),
+            detected.map(|v| format!("{} ({})", v.version, v.source)),
+        ))
     }
 
     fn launch_command(
@@ -517,41 +488,6 @@ pub fn normalize_detected_version(raw: &str) -> String {
             .to_string()
     } else {
         token.to_string()
-    }
-}
-
-/// 远端 uname -m → Arch。
-/// Host::arch() 对远端写死 X86_64,装 musl 二进制必须以 uname 为准。
-pub async fn probe_remote_arch(host: &dyn Host) -> Result<Arch, ActionError> {
-    if host.os() == Os::Windows {
-        return Ok(host.arch());
-    }
-    let out = host
-        .run_to_string(HostCommand::new("uname").arg("-m"))
-        .await
-        .map_err(|e| ActionError::other(format!("uname -m: {e}")))?;
-    if !out.success() {
-        return Err(ActionError::other(format!(
-            "uname -m failed: exit={:?} {}",
-            out.exit_code,
-            out.stderr.trim()
-        )));
-    }
-    let m = out
-        .stdout
-        .lines()
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    match m.as_str() {
-        "x86_64" | "amd64" => Ok(Arch::X86_64),
-        "aarch64" | "arm64" => Ok(Arch::Aarch64),
-        "armv7l" | "armv7" => Ok(Arch::Armv7),
-        "i386" | "i686" | "x86" => Ok(Arch::X86),
-        other => Err(ActionError::other(format!(
-            "不支持的远端架构 uname -m={other}(仅 x86_64/aarch64 musl 发版)"
-        ))),
     }
 }
 

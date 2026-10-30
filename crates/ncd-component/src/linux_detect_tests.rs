@@ -68,8 +68,11 @@ impl Host for DetectHost {
     }
     async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
         assert!(
-            path.as_posix().ends_with("/index.mjs"),
-            "only the framework entry needs an identity check"
+            path.as_posix().ends_with("/index.mjs")
+                || path.as_posix().ends_with("/opt/QQ/qq")
+                || path.as_posix().ends_with("/client")
+                || path.as_posix().ends_with("/native"),
+            "unexpected executable identity check"
         );
         self.exists.fetch_add(1, Ordering::SeqCst);
         Ok(self.entry_exists)
@@ -127,16 +130,20 @@ async fn qq_linux_detect_reads_package_once_and_only_missing_is_absent() {
     let host = DetectHost::new(PackageReply::Json(br#"{"version":"3.2.25"}"#));
     assert_eq!(qq().detect(&host).await.unwrap().unwrap().version, "3.2.25");
     assert_eq!(host.reads.load(Ordering::SeqCst), 1);
-    assert_eq!(host.exists.load(Ordering::SeqCst), 0);
+    assert_eq!(host.exists.load(Ordering::SeqCst), 1);
     let missing = DetectHost::new(PackageReply::Missing);
     assert!(qq().detect(&missing).await.unwrap().is_none());
+    let mut without_binary = DetectHost::new(PackageReply::Json(br#"{"version":"3.2.25"}"#));
+    without_binary.entry_exists = false;
+    assert!(qq().detect(&without_binary).await.unwrap().is_none());
+    assert_eq!(without_binary.reads.load(Ordering::SeqCst), 0);
     for reply in [PackageReply::Denied, PackageReply::Disconnected] {
         let host = DetectHost::new(reply);
         assert!(matches!(
             qq().detect(&host).await,
             Err(ActionError::Host(_))
         ));
-        assert_eq!(host.exists.load(Ordering::SeqCst), 0);
+        assert_eq!(host.exists.load(Ordering::SeqCst), 1);
     }
 }
 
@@ -148,7 +155,7 @@ async fn snowluma_linux_detect_checks_entry_and_reads_package_once() {
         "1.2.3"
     );
     assert_eq!(host.reads.load(Ordering::SeqCst), 1);
-    assert_eq!(host.exists.load(Ordering::SeqCst), 1);
+    assert_eq!(host.exists.load(Ordering::SeqCst), 3);
     let mut absent = DetectHost::new(PackageReply::Denied);
     absent.entry_exists = false;
     assert!(snowluma().detect(&absent).await.unwrap().is_none());
@@ -168,7 +175,7 @@ async fn snowluma_linux_detect_keeps_legacy_package_fallback_but_propagates_host
             "installed"
         );
         assert_eq!(host.reads.load(Ordering::SeqCst), 1);
-        assert_eq!(host.exists.load(Ordering::SeqCst), 1);
+        assert_eq!(host.exists.load(Ordering::SeqCst), 3);
     }
     for reply in [PackageReply::Denied, PackageReply::Disconnected] {
         let host = DetectHost::new(reply);
@@ -177,6 +184,6 @@ async fn snowluma_linux_detect_keeps_legacy_package_fallback_but_propagates_host
             Err(ActionError::Host(_))
         ));
         assert_eq!(host.reads.load(Ordering::SeqCst), 1);
-        assert_eq!(host.exists.load(Ordering::SeqCst), 1);
+        assert_eq!(host.exists.load(Ordering::SeqCst), 3);
     }
 }

@@ -247,18 +247,7 @@ impl Component for UvComponent {
         let nonce = crate::windows_install::nonce();
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
-        // 远端 Host::arch() 写死 x86_64，ARM 服务器上会传一个跑不起来的 uv 上去
-        let arch = if host.locality() == Locality::Remote {
-            match crate::ncd_watch::probe_remote_arch(host).await {
-                Ok(arch) => arch,
-                Err(e) => {
-                    ctx.warn(format!("{e}；按 x86_64 装")).await;
-                    host.arch()
-                }
-            }
-        } else {
-            host.arch()
-        };
+        let arch = host.arch();
 
         // 1. 下载
         ctx.emit(ProgressKind::StepBegin {
@@ -361,6 +350,17 @@ impl Component for UvComponent {
                 ));
             }
         }
+        let staged_bin = Self::uv_binary_path_for_os(&new_dir, host.os());
+        let staged_version = self
+            .probe(host, staged_bin.as_posix(), staged_bin.as_posix())
+            .await?;
+        if !staged_version.is_some_and(|v| v.version == self.version) {
+            let _ = host.remove_dir_all(&new_dir).await;
+            return Err(ActionError::install_step(
+                "verify_uv",
+                "uv 发行包无法执行或版本不符",
+            ));
+        }
         if remote_windows {
             crate::windows_install::replace(host, &self.install_dir, &new_dir, &[]).await?;
         } else {
@@ -405,28 +405,12 @@ impl Component for UvComponent {
     }
 
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
-        let bin = self.uv_binary_path(host);
-        let exists = host.exists(&bin).await?;
-        let mut report = VerifyReport::ok().with_check(
-            "uv binary exists",
-            exists,
-            Some(bin.as_posix().to_string()),
-        );
-        if exists {
-            match self.probe(host, bin.as_posix(), bin.as_posix()).await? {
-                Some(v) => {
-                    report = report.with_check(
-                        "version matches",
-                        v.version == self.version,
-                        Some(format!("expected={} actual={}", self.version, v.version)),
-                    );
-                }
-                None => {
-                    report = report.with_check("version executable", false, None);
-                }
-            }
-        }
-        Ok(report)
+        let detected = self.detect(host).await?;
+        Ok(VerifyReport::ok().with_check(
+            "uv --version runs",
+            detected.is_some(),
+            detected.map(|v| format!("{} ({})", v.version, v.source)),
+        ))
     }
 
     fn launch_command(

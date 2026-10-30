@@ -1176,7 +1176,7 @@ fn command_row(name: &str, c: &Value) -> KoishiCommandRow {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod smoke;
 #[cfg(test)]
 mod tests;

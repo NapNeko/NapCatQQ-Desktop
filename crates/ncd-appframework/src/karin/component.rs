@@ -192,18 +192,15 @@ impl KarinComponent {
             message: name.to_string(),
         })
         .await;
-        let cmd = if host.os() == Os::Windows && host.locality() == Locality::Remote {
-            let preferred = self.preferred_nodes(host).await;
-            let tc = resolve_node_toolchain(host, &preferred).await?;
-            let path = crate::node_tooling::target_path_env(
-                host,
-                &path_prefix(&tc, &self.install_dir, host.os()),
-            )
-            .await?;
-            cmd.env("PATH", path)
-        } else {
-            cmd
-        };
+        // pnpm 的依赖构建和 karin init 也会启动 node，不能只给最外层命令绝对路径。
+        let preferred = self.preferred_nodes(host).await;
+        let tc = resolve_node_toolchain(host, &preferred).await?;
+        let path = crate::node_tooling::target_path_env(
+            host,
+            &path_prefix(&tc, &self.install_dir, host.os()),
+        )
+        .await?;
+        let cmd = cmd.env("PATH", path);
         let cmd = cmd
             .timeout(LONG_STEP_TIMEOUT)
             .cancel_token(ctx.cancel_token())

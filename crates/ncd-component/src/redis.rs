@@ -300,11 +300,7 @@ impl RedisComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        let arch = if host.locality() == Locality::Remote {
-            crate::ncd_watch::probe_remote_arch(host).await?
-        } else {
-            host.arch()
-        };
+        let arch = host.arch();
         let asset = Self::valkey_asset(arch)?;
         let url = format!("https://download.valkey.io/releases/{asset}");
         let local_tmp = self.download(ctx, &url, &asset, 2).await?;
@@ -342,6 +338,18 @@ impl RedisComponent {
             return Err(ActionError::install_step(
                 "mv_install",
                 format!("exit={:?}: {}", out.exit_code, out.stderr.trim()),
+            ));
+        }
+        let staged = Self::managed_binary_path_for_os(&new_dir, host.os());
+        if self
+            .probe(host, staged.as_posix(), staged.as_posix())
+            .await?
+            .is_none()
+        {
+            let _ = host.remove_dir_all(&new_dir).await;
+            return Err(ActionError::install_step(
+                "verify_valkey",
+                "Valkey 发行包无法执行",
             ));
         }
         let _ = host.remove_dir_all(&self.install_dir).await;

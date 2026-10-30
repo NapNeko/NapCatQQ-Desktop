@@ -332,6 +332,17 @@ impl SnowLumaComponent {
         if !host.exists(&entry).await? {
             return Ok(None);
         }
+        for name in ["client", "native"] {
+            if !host.exists(&dir.join(name)).await? {
+                return Ok(None);
+            }
+        }
+        if self.package == SnowLumaLinuxPackage::Full
+            && !host.exists(&dir.join("node")).await?
+            && !host.exists(&dir.join("node/bin/node")).await?
+        {
+            return Ok(None);
+        }
         let pkg = dir.join("package.json");
         let package_read = host.read_file(&pkg).await;
         let package = package_read
@@ -389,7 +400,16 @@ impl SnowLumaComponent {
 
     /// Linux verify:校验 entry + client/ + native/(legacy lite tarball 应有)
     async fn verify_linux(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
-        let entry = self.entry_path();
+        let root = self
+            .detect_linux(host)
+            .await?
+            .and_then(|v| {
+                v.source
+                    .rsplit_once('/')
+                    .map(|(root, _)| HostPath::from_posix(root))
+            })
+            .unwrap_or_else(|| self.snowluma_dir.clone());
+        let entry = root.join("index.mjs");
         let entry_exists = host.exists(&entry).await?;
         let mut report = VerifyReport::ok().with_check(
             "framework entry exists (index.mjs)",
@@ -397,12 +417,32 @@ impl SnowLumaComponent {
             Some(format!("{entry}")),
         );
         for sub in &["client", "native"] {
-            let path = self.snowluma_dir.join(*sub);
+            let path = root.join(*sub);
             let exists = host.exists(&path).await.unwrap_or(false);
             report = report.with_check(
                 format!("subdir {sub} exists"),
                 exists,
                 Some(format!("{path}")),
+            );
+        }
+        if self.package == SnowLumaLinuxPackage::Full {
+            let direct = root.join("node");
+            let nested = direct.join("bin/node");
+            let node = if host.exists(&nested).await? {
+                nested
+            } else {
+                direct
+            };
+            let version = crate::nodejs::probe_node_raw_version(host, &node).await?;
+            let required = [crate::requirement::VersionReq::semver(
+                Self::NODE_VERSION_RANGE,
+            )];
+            report = report.with_check(
+                "bundled Node runs and satisfies requirements",
+                version
+                    .as_ref()
+                    .is_some_and(|v| crate::requirement::all_versions_match(&required, v)),
+                version,
             );
         }
         Ok(report)
@@ -511,6 +551,11 @@ impl SnowLumaComponent {
             .await;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
+        if have_archive {
+            if let Some(expected) = &self.expected_sha256 {
+                crate::host_download::verify_remote_sha256(host, &remote_archive, expected).await?;
+            }
+        }
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
         // Step 2:tar 解压 + strip-components=1
@@ -519,6 +564,15 @@ impl SnowLumaComponent {
             message: "extract framework tarball".into(),
         })
         .await;
+        let stage = self
+            .snowluma_dir
+            .parent()
+            .ok_or_else(|| ActionError::other("SnowLuma 安装目录无父目录"))?
+            .join(format!(
+                ".ncd-snowluma-new-{}",
+                crate::windows_install::nonce()
+            ));
+        host.create_dir_all(&stage).await?;
         // ncd-host::extract_archive 不支持 strip-components,直接走 tar 命令
         ctx.info(format!(
             "解压 SnowLuma tarball 到 {}",
@@ -529,7 +583,7 @@ impl SnowLumaComponent {
             .arg("-xzf")
             .arg(remote_archive.as_posix())
             .arg("-C")
-            .arg(self.snowluma_dir.as_posix())
+            .arg(stage.as_posix())
             .arg("--strip-components=1");
         let out = host.run_to_string(cmd).await?;
         if !out.success() {
@@ -546,16 +600,40 @@ impl SnowLumaComponent {
             message: "verify framework entry".into(),
         })
         .await;
-        if !host.exists(&self.entry_path()).await? {
+        let mut staged = self.clone().with_snowluma_dir(stage.clone());
+        staged.extra_detect_dirs.clear();
+        let report = staged.verify_linux(host).await?;
+        if !report.ok {
+            let _ = host.remove_dir_all(&stage).await;
             return Err(ActionError::install_step(
-                "verify_entry",
-                format!(
-                    "{} missing after extract (lite tarball incomplete or structure changed)",
-                    self.entry_path()
-                ),
+                "verify_framework",
+                format!("SnowLuma 发行包不完整或无法运行：{:?}", report.checks),
             ));
         }
-        ctx.info(format!("SnowLuma 入口文件已验证: {}", self.entry_path()))
+        for name in ["config", "data"] {
+            let source = self.snowluma_dir.join(name);
+            if host.exists(&source).await? {
+                let target = stage.join(name);
+                if host.exists(&target).await? {
+                    host.remove_dir_all(&target).await?;
+                }
+                let output = host
+                    .run_to_string(HostCommand::new("cp").args([
+                        "-a",
+                        source.as_posix(),
+                        target.as_posix(),
+                    ]))
+                    .await?;
+                if !output.success() {
+                    return Err(ActionError::install_step("preserve_data", output.stderr));
+                }
+            }
+        }
+        if host.exists(&self.snowluma_dir).await? {
+            host.remove_dir_all(&self.snowluma_dir).await?;
+        }
+        host.rename(&stage, &self.snowluma_dir).await?;
+        ctx.info(format!("SnowLuma 安装产物已验证: {}", self.snowluma_dir))
             .await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -1204,6 +1282,13 @@ mod tests {
             async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
                 if path.as_posix().contains("/config/") {
                     self.config_checks.fetch_add(1, Ordering::SeqCst);
+                }
+                if let Some((root, name)) = path.as_posix().rsplit_once('/') {
+                    if matches!(name, "client" | "native") {
+                        return Ok(self
+                            .files
+                            .contains_key(format!("{root}/index.mjs").as_str()));
+                    }
                 }
                 Ok(self.files.contains_key(path.as_posix()))
             }

@@ -422,7 +422,12 @@ impl YunzaiComponent {
                 host.os(),
                 &args.iter().map(String::as_str).collect::<Vec<_>>(),
             )
-            .working_dir(self.install_dir.clone());
+            .working_dir(self.install_dir.clone())
+            .env(
+                "PATH",
+                crate::node_tooling::target_path_env(host, &self.path_entries(host, tc, None))
+                    .await?,
+            );
         self.run_step(host, ctx, step, "安装项目私有 pnpm", cmd)
             .await
     }

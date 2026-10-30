@@ -208,7 +208,7 @@ pub async fn download_url_to_host_with_progress(
     Ok(())
 }
 
-async fn verify_remote_sha256(
+pub(crate) async fn verify_remote_sha256(
     host: &dyn Host,
     path: &HostPath,
     expected: &str,

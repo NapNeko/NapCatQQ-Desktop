@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use ncd_component::{
     ActionCtx, ActionError, Component, ComponentId, DetectOutcome, DetectedVersion, DownloadHelper,
-    LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport, probe_remote_arch,
+    LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport,
 };
 use ncd_host::{ArchiveKind, Host, HostCommand, HostPath, Locality, Os};
 use ncd_network::build_mirror_urls;
@@ -70,12 +70,7 @@ impl KoishiComponent {
     }
 
     async fn pick_asset(&self, host: &dyn Host, ctx: &ActionCtx) -> BoilerplateAsset {
-        let arch = if host.os() == Os::Linux && host.locality() == Locality::Remote {
-            probe_remote_arch(host).await.unwrap_or(host.arch())
-        } else {
-            host.arch()
-        };
-        let slug = platform_slug(host.os(), arch);
+        let slug = platform_slug(host.os(), host.arch());
         match fetch_latest_asset(slug).await {
             Ok(Some(asset)) => asset,
             Ok(None) => {

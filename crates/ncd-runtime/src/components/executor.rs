@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ncd_appframework::AppFrameworkRegistry;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use ncd_component::NodeJsComponent;
 use ncd_component::{
     ActionCtx, Component, ComponentId, DependencyPlan, DependencyTarget, ProgressEvent,
@@ -24,17 +24,17 @@ use ncd_domain::{
     NodeEnvironmentCandidate, NodeProbeResult, RemoteSelectedPaths, SnowLumaLinuxPackage,
     server_id_of_host,
 };
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use ncd_host::HostPath;
-#[cfg(windows)]
-use ncd_host::local::LocalWindowsHost;
+#[cfg(any(windows, target_os = "linux"))]
+use ncd_host::local::local_host;
 use ncd_host::{Host, HostCommand, Locality, Os};
 use ncd_server::ServerManager;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::{CancellationToken, DropGuard};
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use crate::components::action_policy::data_root_to_host_path;
 use crate::components::action_policy::{
     RemoteHostProbe, RemoteLayout, component_action_cancellable,
@@ -511,14 +511,14 @@ impl ComponentExecutor {
 
     /// 本机能给 SnowLuma 用的 Node:Desktop 管的 NodeJs 组件、设置里的自定义路径、PATH 上的。
     /// 版本约束来自本机上要用 Node 的组件声明
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     pub async fn probe_local_node_candidates(&self) -> Vec<NodeEnvironmentCandidate> {
-        let host = LocalWindowsHost::new();
+        let host = local_host();
         let managed = NodeJsComponent::node_binary_path_for_os(
-            &data_root_to_host_path(&self.data_root, Os::Windows)
+            &data_root_to_host_path(&self.data_root, host.os())
                 .join("components")
                 .join("NodeJs"),
-            Os::Windows,
+            host.os(),
         );
         let custom = self
             .app_settings
@@ -528,7 +528,7 @@ impl ComponentExecutor {
             .map(str::to_string);
         let accept = self.catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
         ncd_component::nodejs::probe_local_system_nodes(
-            &host,
+            host.as_ref(),
             Some(&managed),
             custom.as_deref(),
             &accept,
@@ -537,9 +537,9 @@ impl ComponentExecutor {
     }
 
     /// 设置页填的 Node 路径能不能跑、版本够不够
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     pub async fn probe_node_binary(&self, path: String) -> NodeProbeResult {
-        let host = LocalWindowsHost::new();
+        let host = local_host();
         let accept = self.catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
         let missing = |error: String| NodeProbeResult {
             path: path.clone(),
@@ -549,8 +549,11 @@ impl ComponentExecutor {
             error: Some(error),
         };
         match ncd_component::nodejs::probe_node_raw_version(
-            &host,
-            &HostPath::from_windows(path.trim()),
+            host.as_ref(),
+            &match host.os() {
+                Os::Windows => HostPath::from_windows(path.trim()),
+                _ => HostPath::from_posix(path.trim()),
+            },
         )
         .await
         {
@@ -566,24 +569,24 @@ impl ComponentExecutor {
                     error,
                 }
             }
-            Ok(None) => missing("无法执行或未找到 node.exe".to_string()),
+            Ok(None) => missing("无法执行或未找到 Node.js".to_string()),
             Err(err) => missing(err.to_string()),
         }
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     pub async fn probe_local_node_candidates(&self) -> Vec<NodeEnvironmentCandidate> {
         Vec::new()
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     pub async fn probe_node_binary(&self, path: String) -> NodeProbeResult {
         NodeProbeResult {
             path,
             exists: false,
             version: None,
             is_valid: false,
-            error: Some("本机 Node 环境探测仅支持 Windows".to_string()),
+            error: Some("当前平台不支持本机 Node 环境探测".to_string()),
         }
     }
 
@@ -1252,10 +1255,15 @@ async fn persist_local_snowluma_package(
     .map(|_| ())
 }
 
-/// 本机 SnowLuma 目录里有 node.exe 就是完整包;没装按完整包(不会平白拉 Node)
+/// 本机 SnowLuma 自带 Node 就是完整包;没装按完整包(不会平白拉 Node)。
 pub fn infer_local_snowluma_package(data_root: &Path) -> SnowLumaLinuxPackage {
     let install_dir = data_root.join("components").join("SnowLuma");
-    if install_dir.is_dir() && !install_dir.join("node.exe").is_file() {
+    let bundled_node = if cfg!(windows) {
+        install_dir.join("node.exe").is_file()
+    } else {
+        install_dir.join("node").is_file() || install_dir.join("node/bin/node").is_file()
+    };
+    if install_dir.is_dir() && !bundled_node {
         SnowLumaLinuxPackage::Lite
     } else {
         SnowLumaLinuxPackage::Full
@@ -1846,10 +1854,24 @@ mod tests {
             infer_local_snowluma_package(tmp.path()),
             SnowLumaLinuxPackage::Lite
         );
-        std::fs::write(dir.join("node.exe"), b"x").unwrap();
-        assert_eq!(
-            infer_local_snowluma_package(tmp.path()),
-            SnowLumaLinuxPackage::Full
-        );
+        let binaries: &[&str] = if cfg!(windows) {
+            &["node.exe"]
+        } else {
+            &["node", "node/bin/node"]
+        };
+        for binary in binaries {
+            let path = dir.join(binary);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"x").unwrap();
+            assert_eq!(
+                infer_local_snowluma_package(tmp.path()),
+                SnowLumaLinuxPackage::Full
+            );
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(
+                infer_local_snowluma_package(tmp.path()),
+                SnowLumaLinuxPackage::Lite
+            );
+        }
     }
 }

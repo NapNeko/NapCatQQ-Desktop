@@ -340,6 +340,9 @@ impl Component for NapCatComponent {
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let mjs = self.napcat_mjs_for_mode();
+        if self.mode == PlatformMode::Linux && !host.exists(&self.load_script_path()).await? {
+            return Ok(None);
+        }
         if !host.exists(&mjs).await? {
             return Ok(None);
         }
@@ -417,21 +420,21 @@ impl NapCatComponent {
                 Some(format!("{load_js}")),
             );
 
-        // 检查 QQ package.json 的 main 字段是否被 patch
         let pkg_json = self.qq_package_json();
-        if host.exists(&pkg_json).await? {
-            if let Ok(bytes) = host.read_file(&pkg_json).await {
-                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                    let main = v.get("main").and_then(|m| m.as_str()).unwrap_or("");
-                    let patched = main == "./loadNapCat.js";
-                    report = report.with_check(
-                        "QQ package.json main patched",
-                        patched,
-                        Some(format!("main={main}")),
-                    );
-                }
-            }
-        }
+        let package = match host.read_file(&pkg_json).await {
+            Ok(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes).ok(),
+            Err(HostError::PathNotFound { .. }) => None,
+            Err(error) => return Err(ActionError::Host(error)),
+        };
+        let main = package
+            .as_ref()
+            .and_then(|v| v.get("main"))
+            .and_then(|m| m.as_str());
+        report = report.with_check(
+            "QQ package.json main patched",
+            main == Some("./loadNapCat.js"),
+            Some(format!("main={main:?}")),
+        );
 
         if let Ok(Some(v)) = self.detect(host).await {
             report = report.with_check(

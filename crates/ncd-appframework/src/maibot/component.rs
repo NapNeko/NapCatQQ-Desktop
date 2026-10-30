@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use ncd_component::{
     ActionCtx, ActionError, Component, ComponentId, DetectOutcome, DetectedVersion, DownloadHelper,
-    LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport, probe_remote_arch,
+    LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport,
 };
 use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostPath, Locality, Os};
 use ncd_network::build_mirror_urls;
@@ -344,18 +344,14 @@ impl MaiBotComponent {
     }
 
     /// 装之前看一眼 Linux 主机：glibc 旧了 uv 会退回源码编译，几十分钟后才报一串编译错误；
-    /// 依赖只有 x86_64 / aarch64 的轮子。探测不出来的不拦，真装不上 uv 自己会报
+    /// 依赖只有 x86_64 / aarch64 的轮子。C 库探测不出来不拦，真装不上 uv 自己会报
     async fn preflight(&self, host: &dyn Host, ctx: &ActionCtx) -> Result<(), ActionError> {
         if host.os() != Os::Linux {
             return Ok(());
         }
-        let arch = match host.locality() {
-            Locality::Remote => probe_remote_arch(host).await.ok(),
-            Locality::Local => Some(host.arch()),
-        };
-        let unsupported = match arch {
-            Some(Arch::X86) => Some("32 位 x86"),
-            Some(Arch::Armv7) => Some("32 位 ARM"),
+        let unsupported = match host.arch() {
+            Arch::X86 => Some("32 位 x86"),
+            Arch::Armv7 => Some("32 位 ARM"),
             _ => None,
         };
         if let Some(what) = unsupported {

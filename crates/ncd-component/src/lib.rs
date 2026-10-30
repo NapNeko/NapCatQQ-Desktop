@@ -46,19 +46,17 @@ pub use error::ActionError;
 pub use git::{GitComponent, MINGIT_DEFAULT_VERSION};
 pub use napcat::NapCatComponent;
 pub use ncd_watch::{
-    NcdWatchComponent, ncd_watch_asset_name, ncd_watch_bin_path,
-    ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
-    probe_remote_arch,
+    NcdWatchComponent, ncd_watch_asset_name, ncd_watch_bin_path, ncd_watch_release_download_url,
+    ncd_watch_release_download_url_for_tag,
 };
 pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
 pub use qq::{
-    MANAGED_QQ_DIR_NAME, QQ_PCCONFIG_URL, QQ_REGISTRY_SUBKEY,
-    QQComponent, managed_qq_current_dir, managed_qq_root, probe_linux_qq_latest,
-    probe_windows_qq_latest,
+    MANAGED_QQ_DIR_NAME, QQ_PCCONFIG_URL, QQ_REGISTRY_SUBKEY, QQComponent, managed_qq_current_dir,
+    managed_qq_root, probe_linux_qq_latest, probe_windows_qq_latest,
 };
 pub use qq_linux_pid::{LINUX_QQ_PROCESS_PROBE, linux_qq_running_pid_script};
-pub use redis::{RedisComponent};
+pub use redis::RedisComponent;
 
 pub use remote_qq_entry::{
     QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, load_napcat_js_path, napcat_mjs_path,
@@ -66,8 +64,7 @@ pub use remote_qq_entry::{
 };
 pub use requirement::{
     DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, Requirement,
-    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
-    all_versions_match,
+    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq, all_versions_match,
 };
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
@@ -76,6 +73,6 @@ pub use types::{
     DetectedVersion, LaunchArgs, SupportedTarget, UninstallSupport, UnusableInstall, VerifyReport,
 };
 pub use uv::{UV_DEFAULT_VERSION, UvComponent};
-pub use vcredist::{VcRedistComponent};
-pub use windows_agent::{WindowsAgentComponent};
+pub use vcredist::VcRedistComponent;
+pub use windows_agent::WindowsAgentComponent;
 pub use windows_watch::WindowsNcdWatchComponent;

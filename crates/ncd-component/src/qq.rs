@@ -751,6 +751,9 @@ impl QQComponent {
     /// Linux detect:读 <install_base>/opt/QQ/resources/app/package.json
     /// 的 version 字段
     async fn detect_linux(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
+        if !host.exists(&self.qq_executable()).await? {
+            return Ok(None);
+        }
         let pkg_json = self.qq_package_json();
         let bytes = match host.read_file(&pkg_json).await {
             Ok(b) => b,

@@ -822,18 +822,24 @@ impl AppManager {
         let log_file = launch_log_file(adapter.as_ref(), &instance);
         let launch_args = self.desktop_session_launch_args(&instance, adapter.as_ref());
         // 起不来的原因（缺 venv、条款没同意）也要落到 last_error：开机自启没人盯着看报错条
-        let started = match adapter
-            .launch_command(host.as_ref(), &spec, &launch_args)
-            .await
-        {
-            Ok(command) => {
-                let launch = AppLaunchSpec { command, log_file };
-                self.runtime
-                    .start(Arc::clone(&host), &instance, launch)
-                    .await
+        let started = async {
+            adapter
+                .component(&spec)
+                .check_target(host.as_ref())
+                .map_err(|e| AppFrameworkError::Runtime(e.to_string()))?;
+            if host.os() == Os::Linux {
+                // 安装之后端口仍可能被其它服务占用，启动前重查本机/远端监听表。
+                self.ensure_port_free(&instance, instance.port).await?;
             }
-            Err(e) => Err(e),
-        };
+            let command = adapter
+                .launch_command(host.as_ref(), &spec, &launch_args)
+                .await?;
+            let launch = AppLaunchSpec { command, log_file };
+            self.runtime
+                .start(Arc::clone(&host), &instance, launch)
+                .await
+        }
+        .await;
 
         match started {
             Ok(_pid) => {
