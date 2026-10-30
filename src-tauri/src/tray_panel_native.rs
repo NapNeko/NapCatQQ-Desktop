@@ -1,4 +1,4 @@
-// 主托盘右键面板（原生 Direct2D，宽 260 DIP）。
+// 主托盘面板（Windows Direct2D / Linux Cairo，宽 260 DIP）。
 #![warn(clippy::indexing_slicing)]
 
 use std::cell::RefCell;
@@ -28,7 +28,7 @@ pub struct BotCard {
     pub state: String,
     pub name: String,
     pub qq: String,
-    pub is_snowluma: bool,
+    pub novnc_available: bool,
     /// NapCat 且 webui 端点已就绪：(端口, token)
     pub webui: Option<(u16, String)>,
 }
@@ -366,10 +366,10 @@ impl TrayView {
         let right = rect.right() - 8.0;
         let top = rect.y + 9.0;
         let mut buttons = Vec::new();
-        if running && card.is_snowluma {
+        if running && card.novnc_available {
             buttons.push((CardButton::Novnc, Rect::new(right - 80.0, top, 24.0, 24.0)));
         }
-        if running {
+        if running && card.webui.is_some() {
             buttons.push((CardButton::Webui, Rect::new(right - 52.0, top, 24.0, 24.0)));
         }
         buttons.push((
@@ -467,9 +467,8 @@ impl TrayView {
                     }
                     CardButton::Webui => (card.running() && card.webui.is_some())
                         .then_some(Action::OpenWebui(*index)),
-                    CardButton::Novnc => {
-                        (card.running() && card.is_snowluma).then_some(Action::OpenNovnc(*index))
-                    }
+                    CardButton::Novnc => (card.running() && card.novnc_available)
+                        .then_some(Action::OpenNovnc(*index)),
                 }
             }
         }
@@ -692,6 +691,8 @@ pub(crate) fn sync_ui_preferences(app: &tauri::AppHandle) {
     };
     let ui = ncd_runtime::desktop::load_app_settings(&state.data_root).ui_preferences;
     crate::native_panel::window::set_motion(ui.motion_enabled, ui.motion_speed);
+    #[cfg(target_os = "linux")]
+    crate::native_panel::window::set_ui_scale(ui.ui_scale_factor());
     set_ui_preferences(UiPreferences {
         theme: ui.theme,
         radius_style: ui.radius_style,
@@ -700,6 +701,17 @@ pub(crate) fn sync_ui_preferences(app: &tauri::AppHandle) {
         elapsed_us = started.elapsed().as_micros(),
         "native tray preference sync"
     );
+}
+
+/// 保存或导入偏好后，让已打开的原生面板同步外观。
+pub(crate) fn refresh_ui_preferences(app: &tauri::AppHandle) {
+    let refresh_app = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        sync_ui_preferences(&refresh_app);
+        crate::native_panel::window::refresh_visible_themes();
+    }) {
+        tracing::warn!(%error, "刷新原生托盘界面偏好失败");
+    }
 }
 
 fn deliver_avatar(key: AvatarKey, pixels: Option<Arc<AvatarPixels>>) {
@@ -1016,36 +1028,53 @@ async fn full_snapshot(app: &tauri::AppHandle) -> Snapshot {
         .into_iter()
         .map(|(id, port, token, _online)| (id.to_string(), (port, token)))
         .collect();
-    let cards = snapshots
-        .into_iter()
-        .map(|snap| {
-            let bot_id = snap.bot_id.to_string();
-            let cfg = configs.get(&bot_id);
-            let is_snowluma = matches!(
-                flavors.get(&bot_id),
-                Some(ncd_domain::bot_config::BackendType::SnowLuma)
-            ) || cfg.is_some_and(|c| {
-                matches!(
-                    c.bot.backend_type,
-                    ncd_domain::bot_config::BackendType::SnowLuma
-                )
-            });
-            BotCard {
-                state: BotCard::state_str(&snap.state).to_string(),
-                name: cfg
-                    .map(|c| c.bot.name.trim().to_string())
-                    .filter(|n| !n.is_empty())
-                    .unwrap_or_else(|| bot_id.clone()),
-                qq: cfg
-                    .map(|c| c.bot.qq_id.to_string())
-                    .filter(|q| !q.is_empty() && q != "0")
-                    .unwrap_or_else(|| bot_id.clone()),
-                is_snowluma,
-                webui: webuis.get(&bot_id).cloned(),
-                bot_id,
+    let mut cards = Vec::with_capacity(snapshots.len());
+    for snap in snapshots {
+        let bot_id = snap.bot_id.to_string();
+        let cfg = configs.get(&bot_id);
+        let is_snowluma = matches!(
+            flavors.get(&bot_id),
+            Some(ncd_domain::bot_config::BackendType::SnowLuma)
+        ) || cfg.is_some_and(|c| {
+            matches!(
+                c.bot.backend_type,
+                ncd_domain::bot_config::BackendType::SnowLuma
+            )
+        });
+        let novnc_available = if is_snowluma && let Some(cfg) = cfg {
+            match (&cfg.bot.deployment_type, &cfg.bot.runtime_target) {
+                (ncd_domain::DeploymentType::Docker, _) => state
+                    .bot_manager
+                    .snowluma_docker_endpoints(&snap.bot_id)
+                    .await
+                    .is_some(),
+                (ncd_domain::DeploymentType::Native, ncd_domain::RuntimeTarget::Server(server)) => {
+                    state
+                        .bot_manager
+                        .snowluma_native_endpoints_for_server(server)
+                        .await
+                        .is_some()
+                }
+                _ => false,
             }
-        })
-        .collect();
+        } else {
+            false
+        };
+        cards.push(BotCard {
+            state: BotCard::state_str(&snap.state).to_string(),
+            name: cfg
+                .map(|c| c.bot.name.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| bot_id.clone()),
+            qq: cfg
+                .map(|c| c.bot.qq_id.to_string())
+                .filter(|q| !q.is_empty() && q != "0")
+                .unwrap_or_else(|| bot_id.clone()),
+            novnc_available,
+            webui: webuis.get(&bot_id).cloned(),
+            bot_id,
+        });
+    }
     Snapshot { cards }
 }
 
@@ -1207,7 +1236,7 @@ pub(crate) mod tests {
             state: state.into(),
             name: name.into(),
             qq: id.into(),
-            is_snowluma: snowluma,
+            novnc_available: snowluma,
             webui: (state == "running").then(|| (6099, "t".into())),
         }
     }

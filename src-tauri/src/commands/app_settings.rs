@@ -90,16 +90,8 @@ pub async fn set_app_settings(
         .set_enabled(settings.features.api_debug)
         .await;
 
-    #[cfg(windows)]
-    {
-        let refresh_app = app.clone();
-        if let Err(error) = app.run_on_main_thread(move || {
-            crate::tray_panel_native::sync_ui_preferences(&refresh_app);
-            crate::native_panel::window::refresh_visible_themes();
-        }) {
-            tracing::warn!(%error, "界面偏好已保存，刷新原生托盘主题失败");
-        }
-    }
+    #[cfg(any(windows, target_os = "linux"))]
+    crate::tray_panel_native::refresh_ui_preferences(&app);
 
     if network_changed {
         if let Err(err) = ncd_runtime::release::invalidate_release_cache(&state.data_root) {

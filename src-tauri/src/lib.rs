@@ -17,7 +17,7 @@ pub mod avatar_cache;
 pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod chat_tray;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub mod chat_tray_panel_native;
 pub mod chat_window;
 pub mod clipboard;
@@ -31,7 +31,9 @@ pub mod desktop_update;
 pub mod legacy_install_cleanup;
 pub mod lightweight;
 pub mod lightweight_scheduler;
-#[cfg(windows)]
+#[cfg(target_os = "linux")]
+pub(crate) mod linux_tray;
+#[cfg(any(windows, target_os = "linux"))]
 pub mod native_panel;
 pub mod onebot_endpoint_resolver;
 pub mod product_registry;
@@ -39,11 +41,11 @@ pub mod runtime;
 pub mod screenshot;
 pub mod single_instance;
 pub mod snowluma_offline_listener;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub mod tray_avatars;
 pub mod tray_icon;
 pub mod tray_panel;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub mod tray_panel_native;
 pub mod tray_summary;
 pub mod ui_scale;
@@ -603,9 +605,9 @@ pub fn run() {
                         event.kind(),
                         EK::BotStateChanged | EK::BotStatusChanged | EK::BotProcessExited
                     ) {
-                        #[cfg(windows)]
+                        #[cfg(any(windows, target_os = "linux"))]
                         tray_panel_native::refresh_if_visible(&handle);
-                        #[cfg(windows)]
+                        #[cfg(any(windows, target_os = "linux"))]
                         chat_tray_panel_native::refresh_if_visible(&handle);
                     }
                 }

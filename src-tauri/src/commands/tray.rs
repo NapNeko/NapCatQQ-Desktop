@@ -72,7 +72,7 @@ pub async fn window_hide_to_tray(app: AppHandle) -> Result<(), String> {
     hide_main_window_to_tray(app).await
 }
 
-/// 在 setup 中注册托盘(幂等)。不附系统菜单,右键走原生面板。
+/// 注册托盘；Linux 能嵌入 XEmbed 时右键直出面板，其余环境保留系统菜单。
 pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     if TRAY_ATTACHED.swap(true, Ordering::SeqCst) {
         return Ok(());
@@ -81,15 +81,19 @@ pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     let icon = crate::tray_icon::idle_tray_icon(app)?;
 
     let builder = TrayIconBuilder::with_id(TRAY_ID)
-        .icon(icon)
-        .title("NapCatQQ Desktop")
+        .icon(icon.clone())
         .tooltip("NapCatQQ Desktop")
         .on_tray_icon_event(crate::tray_panel::handle_tray_icon_event);
+    // AppIndicator 把 title 作为面板文字标签；Linux 只显示图标。
+    #[cfg(not(target_os = "linux"))]
+    let builder = builder.title("NapCatQQ Desktop");
     // Linux 的 AppIndicator 不投递鼠标事件，恢复窗口和退出必须有系统菜单入口。
     #[cfg(target_os = "linux")]
     let builder = builder
         .menu(
             &tauri::menu::MenuBuilder::new(app)
+                .text("panel", "打开托盘面板")
+                .separator()
                 .text("show", "显示主窗口")
                 .text("lightweight", "释放界面内存")
                 .separator()
@@ -98,6 +102,16 @@ pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
                 .map_err(|e| e.to_string())?,
         )
         .on_menu_event(|app, event| {
+            if event.id().as_ref() == "panel" {
+                let panel_app = app.clone();
+                if let Err(error) = app.run_on_main_thread(move || {
+                    let anchor = crate::native_panel::window::menu_anchor();
+                    crate::tray_panel_native::open(&panel_app, anchor);
+                }) {
+                    tracing::warn!(%error, "打开托盘面板失败");
+                }
+                return;
+            }
             let action = event.id().as_ref().to_owned();
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
@@ -112,7 +126,36 @@ pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
                 }
             });
         });
-    let _tray = builder.build(app).map_err(|e| e.to_string())?;
+    let tray = builder.build(app).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    {
+        let panel_app = app.clone();
+        if let Err(error) = crate::linux_tray::attach(
+            app,
+            &tray,
+            icon,
+            "NapCatQQ Desktop",
+            move |event| match event.button {
+                tauri::tray::MouseButton::Left => {
+                    let app = panel_app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(error) = window_show(app).await {
+                            tracing::warn!(%error, "从托盘恢复主窗口失败");
+                        }
+                    });
+                }
+                tauri::tray::MouseButton::Right => {
+                    crate::native_panel::window::set_tray_display(Some(&event.display));
+                    crate::tray_panel_native::open(&panel_app, event.anchor);
+                }
+                _ => {}
+            },
+        ) {
+            tracing::warn!(%error, "XEmbed 托盘初始化失败，保留系统菜单");
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = tray;
 
     let app_refresh = app.clone();
     tauri::async_runtime::spawn(async move {

@@ -1,4 +1,4 @@
-// 账号托盘面板（原生 Direct2D）：右键菜单 + 悬停未读预览。
+// 账号托盘面板：Windows 悬停预览，Linux 从原生右键菜单进入未读预览。
 #![warn(clippy::indexing_slicing)]
 
 use std::cell::RefCell;
@@ -23,7 +23,13 @@ use crate::tray_avatars::{self, AvatarSlots};
 const WIDTH: f32 = 260.0;
 // .chat-tray-conversations 的 max-height 284：5 行（240）放得下，第 6 行就要滚动，原生版不做滚动
 const MAX_ROWS: usize = 5;
-const MIN_HEIGHT: f32 = 192.0;
+const MENU_ACTION_COUNT: f32 = if cfg!(target_os = "linux") { 5.0 } else { 4.0 };
+const MIN_HEIGHT: f32 = 192.0
+    + if cfg!(target_os = "linux") {
+        ACTION_H
+    } else {
+        0.0
+    };
 
 #[derive(Clone)]
 pub struct ConvItem {
@@ -60,11 +66,24 @@ pub struct Snapshot {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Action {
     Open,
+    #[cfg(target_os = "linux")]
+    Preview,
     Console,
     Background,
     HideTray,
     OpenConv(usize),
     DismissError,
+}
+
+impl Action {
+    fn closes_panel(self) -> bool {
+        match self {
+            Self::Background | Self::DismissError => false,
+            #[cfg(target_os = "linux")]
+            Self::Preview => false,
+            _ => true,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -247,8 +266,8 @@ impl ChatTrayView {
 
         match self.mode {
             Mode::Menu => {
-                let action_h = ((height - 68.5) / 4.0).clamp(ACTION_H, 44.0);
-                let group_inset = (height - 68.5 - 4.0 * action_h) / 6.0;
+                let action_h = ((height - 68.5) / MENU_ACTION_COUNT).clamp(ACTION_H, 44.0);
+                let group_inset = (height - 68.5 - MENU_ACTION_COUNT * action_h) / 6.0;
                 y += 2.0 + group_inset;
                 let open = ActionRow::new(width, y, Icon::MessageCircle, "打开聊天", 0.0)
                     .with_height(action_h);
@@ -268,6 +287,15 @@ impl ChatTrayView {
                 };
                 rows.push(row);
                 y += action_h;
+                #[cfg(target_os = "linux")]
+                {
+                    rows.push(menu_row(
+                        ActionRow::new(width, y, Icon::Bell, "未读预览", 0.0).with_height(action_h),
+                        Trailing::None,
+                        Action::Preview,
+                    ));
+                    y += action_h;
+                }
                 rows.push(menu_row(
                     ActionRow::new(width, y, Icon::Monitor, "打开控制台", 0.0)
                         .with_height(action_h),
@@ -815,11 +843,12 @@ impl ChatTrayPanelNative {
         self.mark_dirty();
     }
 
-    /// 打开面板：menu 模式拿焦点，preview 模式悬停。数据回来再显示。只从主线程调。
+    /// 打开面板：Windows 预览跟随悬停，Linux 从系统菜单显式打开。数据回来再显示。
     fn show(self: &Rc<Self>, bot: String, qq: String, anchor: (i32, i32), mode: Mode) {
         // 菜单开着时光标划过托盘图标会再来一次 Enter，不能把菜单换成预览
         let menu_open = self.panel().is_some_and(|p| p.is_visible())
             && self.view.try_borrow().is_ok_and(|v| v.mode == Mode::Menu);
+        #[cfg(windows)]
         if mode == Mode::Preview && menu_open {
             return;
         }
@@ -859,6 +888,7 @@ impl ChatTrayPanelNative {
         }
         self.anchor.set(anchor);
         let reuse = same_account && shown;
+        let focus = mode == Mode::Menu || cfg!(target_os = "linux");
         if !reuse {
             crate::tray_panel_native::sync_ui_preferences(&self.app);
         }
@@ -878,11 +908,7 @@ impl ChatTrayPanelNative {
             v.switch_mode(mode, animate_mode);
         });
         if reuse && let Some(panel) = panel {
-            panel.show_with(
-                anchor,
-                mode == Mode::Menu,
-                crate::native_panel::window::hover_panel_xy,
-            );
+            panel.show_with(anchor, focus, crate::native_panel::window::hover_panel_xy);
             self.opening.set(None);
             return;
         }
@@ -898,17 +924,14 @@ impl ChatTrayPanelNative {
                     if snapshot.self_id != qq {
                         return;
                     }
+                    #[cfg(windows)]
                     if mode == Mode::Preview && !reuse && !cursor_on_icon(anchor) {
                         return;
                     }
                     c.apply_snapshot(snapshot);
                     if !reuse && let Some(panel) = c.panel() {
                         panel.refresh_theme();
-                        panel.show_with(
-                            anchor,
-                            mode == Mode::Menu,
-                            crate::native_panel::window::hover_panel_xy,
-                        );
+                        panel.show_with(anchor, focus, crate::native_panel::window::hover_panel_xy);
                     }
                 });
             });
@@ -929,6 +952,12 @@ impl ChatTrayPanelNative {
                 with_content(|c| {
                     if c.generation.get() == generation && c.panel().is_some_and(|p| p.is_visible())
                     {
+                        if snapshot.self_id != qq {
+                            if let Some(panel) = c.panel() {
+                                panel.hide();
+                            }
+                            return;
+                        }
                         c.apply_snapshot(snapshot);
                     }
                 });
@@ -940,6 +969,11 @@ impl ChatTrayPanelNative {
         let app = self.app.clone();
         let (bot, qq) = self.ids();
         match action {
+            #[cfg(target_os = "linux")]
+            Action::Preview => {
+                self.show(bot, qq, self.anchor.get(), Mode::Preview);
+                self.refresh_if_visible();
+            }
             Action::Open => {
                 tauri::async_runtime::spawn(async move {
                     let _ = crate::chat_window::open_from_tray(app, bot, qq, None).await;
@@ -1050,8 +1084,7 @@ impl PanelContent for ChatTrayPanelCell {
             .flatten();
         let Some(action) = action else { return false };
         self.0.do_action(action);
-        // 切后台接收、关错误条时面板留着，其它点完收起
-        !matches!(action, Action::Background | Action::DismissError)
+        action.closes_panel()
     }
 
     fn hover(&mut self, x: f32, y: f32, inside: bool, _theme: &Theme) {
@@ -1080,7 +1113,7 @@ impl PanelContent for ChatTrayPanelCell {
                 .flatten();
             let Some(action) = action else { return false };
             self.0.do_action(action);
-            if !matches!(action, Action::Background | Action::DismissError)
+            if action.closes_panel()
                 && let Some(panel) = self.0.panel()
             {
                 panel.hide();
@@ -1095,11 +1128,13 @@ impl PanelContent for ChatTrayPanelCell {
     }
 
     fn is_hover_panel(&self) -> bool {
-        self.0
-            .view
-            .try_borrow()
-            .map(|v| v.mode == Mode::Preview)
-            .unwrap_or(false)
+        cfg!(windows)
+            && self
+                .0
+                .view
+                .try_borrow()
+                .map(|v| v.mode == Mode::Preview)
+                .unwrap_or(false)
     }
 
     fn hover_anchor(&self) -> Option<(i32, i32, i32)> {
@@ -1181,11 +1216,17 @@ fn connection_text_of(account: &ncd_domain::chat_desktop::ChatAccountStatus) -> 
 
 // ---------- 对外入口 ----------
 
+#[cfg(windows)]
 fn cursor_on_icon(anchor: (i32, i32)) -> bool {
     let scale = crate::windows_ui::monitor_dpi_scale_at(anchor.0, anchor.1).max(0.25);
     let radius = (20.0 * scale).ceil() as i32;
     crate::native_panel::sys::cursor_pos()
         .is_some_and(|(x, y)| (x - anchor.0).abs() <= radius && (y - anchor.1).abs() <= radius)
+}
+
+#[cfg(target_os = "linux")]
+fn cursor_on_icon(_anchor: (i32, i32)) -> bool {
+    false
 }
 
 fn ensure_content(app: tauri::AppHandle, anchor: (i32, i32)) -> Option<Rc<ChatTrayPanelNative>> {
@@ -1240,6 +1281,7 @@ pub fn cancel_hover(app: &tauri::AppHandle, bot: String, qq: String) {
 
 /// 右键菜单入口（menu=true）；悬停预览入口（menu=false）。
 pub fn show(app: &tauri::AppHandle, bot: String, qq: String, anchor: (i32, i32), menu: bool) {
+    #[cfg(windows)]
     if !menu {
         hover(app, bot, qq, anchor);
         return;

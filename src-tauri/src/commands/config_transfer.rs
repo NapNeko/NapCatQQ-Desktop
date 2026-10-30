@@ -646,6 +646,8 @@ pub async fn import_config(
 
     let settings = state.app_settings.read().await.clone();
     crate::ui_scale::sync_all(&app, &settings.ui_preferences);
+    #[cfg(any(windows, target_os = "linux"))]
+    crate::tray_panel_native::refresh_ui_preferences(&app);
     let mut prefs = ncd_runtime::metrics::BotRuntimeMetricsPrefs::from_app(&settings);
     prefs.normalize();
     *state.metrics_collector.prefs().write().await = prefs;

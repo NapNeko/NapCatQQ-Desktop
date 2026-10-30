@@ -324,7 +324,24 @@ pub fn parse_color(value: &str) -> Option<Rgba> {
 }
 
 fn system_dark() -> bool {
-    crate::windows_ui::system_prefers_dark()
+    #[cfg(windows)]
+    {
+        crate::windows_ui::system_prefers_dark()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::GtkSettingsExt;
+        // 配色解析也用于不启动 GTK 的工具与测试；系统设置只在 UI 线程读取。
+        if !gtk::is_initialized_main_thread() {
+            return false;
+        }
+        gtk::Settings::default().is_some_and(|settings| {
+            settings.is_gtk_application_prefer_dark_theme()
+                || settings
+                    .gtk_theme_name()
+                    .is_some_and(|name| name.to_lowercase().contains("dark"))
+        })
+    }
 }
 
 /// 当前面板主题：主窗口推过配色就用推的，否则按 app-settings 的主题选内置色板；圆角按 radiusStyle 缩放。
