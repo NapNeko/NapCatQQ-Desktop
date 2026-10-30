@@ -7,6 +7,7 @@
 // 所有半径绑同一个注册属性所以天然同步；JS 只写几个变量、挂几个元素。
 
 import './themeTransition.css';
+import { isTauri, localOs } from '../domain/runtime/env';
 import { runThemeCharge } from './themeCharge';
 
 /** 主题过渡的动画配置。 */
@@ -85,6 +86,13 @@ export async function playThemeTransition(
     changeTheme: () => void,
     opts: ThemeTransitionOptions,
 ): Promise<void> {
+    // WebKitGTK 的快照合成可能触发原生崩溃，JS 无法捕获；Linux 桌面直接应用主题。
+    // https://github.com/skyhook-io/radar/issues/1606
+    if (isTauri && localOs() === 'linux') {
+        changeTheme();
+        return;
+    }
+
     // elegant / 禁用动画 / 过渡进行中走瞬时切换；不支持时也直接切。
     if (!opts.enabled || opts.level === 'elegant' || !SUPPORTS_VIEW_TRANSITION || active) {
         changeTheme();
