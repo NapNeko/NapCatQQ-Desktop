@@ -1,4 +1,4 @@
-//! Windows 开机自启(当前用户)
+//! 当前用户开机自启：Windows HKCU Run / Linux XDG autostart。
 //!
 //! 写 HKCU\Software\Microsoft\Windows\CurrentVersion\Run,不需要管理员/UAC。
 //! 机器级 HKLM Run 或计划任务才要提权;本产品默认用户级即可,与「启动时仅托盘」
@@ -16,11 +16,14 @@ use std::path::{Path, PathBuf};
 pub const AUTOSTART_VALUE_NAME: &str = "NapCatQQ Desktop";
 
 /// 安装树主程序文件名(与 Cargo [[bin]] / WiX Path 一致)
+#[cfg(windows)]
 const MAIN_EXE_NAME: &str = "NapCatQQ-Desktop.exe";
 
+#[cfg(windows)]
 const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
 /// Win32 ERROR_FILE_NOT_FOUND:删除不存在的值时视为已关闭
+#[cfg(windows)]
 const ERROR_FILE_NOT_FOUND: i32 = 2;
 
 /// 按开关同步自启注册表项。
@@ -37,7 +40,49 @@ pub fn apply_launch_on_startup(enabled: bool) -> Result<(), String> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub fn apply_launch_on_startup(enabled: bool) -> Result<(), String> {
+    let entry = dirs::config_dir()
+        .ok_or("无法确定用户配置目录")?
+        .join("autostart/com.napcatqq.desktop.desktop");
+    if !enabled {
+        return match std::fs::remove_file(&entry) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!("删除自启动项失败: {error}")),
+        };
+    }
+    // AppImage 的 current_exe 位于临时挂载目录，登录时应启动原始 AppImage。
+    let exe = std::env::var_os("APPIMAGE")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .map(Ok)
+        .unwrap_or_else(current_exe_path)?;
+    let command = desktop_exec(&exe);
+    let contents = format!(
+        "[Desktop Entry]\nType=Application\nName=NapCatQQ Desktop\nExec={command}\nTerminal=false\n"
+    );
+    let directory = entry.parent().ok_or("自启动目录无效")?;
+    std::fs::create_dir_all(directory).map_err(|e| format!("创建自启动目录失败: {e}"))?;
+    std::fs::write(entry, contents).map_err(|e| format!("写入自启动项失败: {e}"))
+}
+
+#[cfg(target_os = "linux")]
+fn desktop_exec(exe: &Path) -> String {
+    // Exec 先经过 desktop-entry 字符串反转义，再解析带引号的参数。
+    let escaped = exe
+        .to_string_lossy()
+        .replace('\\', r"\\\\")
+        .replace('"', r#"\\\""#)
+        .replace('`', r"\\`")
+        .replace('$', r"\\$")
+        .replace('%', "%%")
+        .replace('\n', r"\n")
+        .replace('\r', r"\r");
+    format!("\"{escaped}\"")
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn apply_launch_on_startup(_enabled: bool) -> Result<(), String> {
     Ok(())
 }
@@ -48,22 +93,23 @@ pub fn apply_launch_on_startup(_enabled: bool) -> Result<(), String> {
 /// - enabled=false: 删除本产品 Run 值(只动 AUTOSTART_VALUE_NAME)
 ///
 /// 失败只记日志,不阻断启动。
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub fn reconcile_launch_on_startup(enabled: bool) {
     if let Err(err) = apply_launch_on_startup(enabled) {
         tracing::warn!(
             target: "ncd_tauri::autostart",
             enabled,
             error = %err,
-            "failed to reconcile HKCU Run autostart entry"
+            "failed to reconcile user autostart entry"
         );
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn reconcile_launch_on_startup(_enabled: bool) {}
 
 /// 解析写入 Run 的 exe:优先 InstallDir 主程序,否则 current_exe。
+#[cfg(windows)]
 fn resolve_autostart_exe() -> Result<PathBuf, String> {
     if let Some(from_install) = install_dir_main_exe() {
         return Ok(from_install);
@@ -71,6 +117,7 @@ fn resolve_autostart_exe() -> Result<PathBuf, String> {
     current_exe_path()
 }
 
+#[cfg(windows)]
 fn install_dir_main_exe() -> Option<PathBuf> {
     let dir = crate::product_registry::read_install_dir()?;
     let candidate = dir.join(MAIN_EXE_NAME);
@@ -90,6 +137,7 @@ fn current_exe_path() -> Result<PathBuf, String> {
 }
 
 /// Run 值:路径含空格时必须整体加引号
+#[cfg(any(windows, test))]
 fn format_run_command(exe: &Path) -> String {
     let s = exe.to_string_lossy();
     if s.contains(' ') || s.contains('\t') {

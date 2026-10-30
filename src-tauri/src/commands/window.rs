@@ -47,6 +47,10 @@ fn center_on_work_area(window: &tauri::WebviewWindow) -> Result<(), String> {
 
     let scale = monitor.scale_factor();
     let work = monitor.work_area();
+    // GTK 首次映射前的 outer_size 尚未更新；无边框主窗的内外尺寸一致。
+    #[cfg(target_os = "linux")]
+    let outer = window.inner_size().map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "linux"))]
     let outer = window.outer_size().map_err(|e| e.to_string())?;
 
     let win_w = outer.width as f64 / scale;

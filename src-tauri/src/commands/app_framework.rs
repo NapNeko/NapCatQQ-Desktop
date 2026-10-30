@@ -352,7 +352,7 @@ pub(crate) fn test_app_manager(
 ) -> std::sync::Arc<ncd_runtime::AppManager> {
     use std::sync::Arc;
     let app_store = Arc::new(ncd_runtime::AppInstanceStore::empty(root));
-    let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+    let local_host: Arc<dyn ncd_host::Host> = ncd_host::local::local_host();
     Arc::new(ncd_runtime::AppManager::new(
         Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin()),
         Arc::clone(&app_store),

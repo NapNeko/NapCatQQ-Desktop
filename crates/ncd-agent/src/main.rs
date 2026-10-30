@@ -11,11 +11,13 @@ mod native;
 mod runner;
 #[cfg(windows)]
 mod service;
+#[cfg(windows)]
 mod store;
 #[cfg(windows)]
 mod supervisor;
 #[cfg(windows)]
 mod watch;
+#[cfg(windows)]
 mod wire;
 
 fn main() {

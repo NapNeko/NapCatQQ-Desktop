@@ -200,7 +200,7 @@ pub fn run() {
             .with_snowluma_data_root(paths.snowluma_data_dir()),
     );
     // NativeDeployment 替代旧 LocalRuntimeBackend:通过适配器壳对外仍是 BotBackend
-    let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+    let local_host: Arc<dyn ncd_host::Host> = ncd_host::local::local_host_for_data_root(&data_root);
     let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
         Arc::new(ncd_runtime::EventBusSink::new(Arc::new(event_bus.clone())));
     let translator: Arc<dyn ncd_deploy::NativeLaunchTranslator> =
@@ -736,6 +736,15 @@ pub fn run() {
                     app_manager_migration_monitor.run_bot_migration_monitor(),
                 );
             });
+
+            // WebKitGTK 在隐藏窗口中不推进 rAF；显示后 GTK 才有实际窗口尺寸。
+            // Linux 主窗不透明，普通启动先显示再居中；仅托盘启动仍保持隐藏。
+            #[cfg(target_os = "linux")]
+            if !startup_tray_only {
+                if let Some(window) = app.get_webview_window(lightweight::MAIN_WINDOW_LABEL) {
+                    window.show()?;
+                }
+            }
 
             if let Err(err) = commands::window::apply_main_window_startup_geometry(app.handle()) {
                 desktop_log::write_session_line(

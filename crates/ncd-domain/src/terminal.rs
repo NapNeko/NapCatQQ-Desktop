@@ -47,6 +47,14 @@ pub enum LocalShellKind {
     GitBash,
     /// 默认的 WSL 发行版
     Wsl,
+    /// Linux Bash
+    Bash,
+    /// Linux Zsh
+    Zsh,
+    /// Linux Fish
+    Fish,
+    /// POSIX shell
+    Sh,
 }
 
 /// 本机探到的一个 shell
@@ -86,7 +94,7 @@ pub struct TerminalOpenRequest {
     pub target: TerminalTarget,
     pub cols: u16,
     pub rows: u16,
-    /// 本机目标用哪个 shell；不给就按 PowerShell 7、Windows PowerShell、命令提示符的顺序挑
+    /// 本机目标用哪个 shell；不给就使用平台默认（Linux 优先 $SHELL）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub shell: Option<LocalShellKind>,

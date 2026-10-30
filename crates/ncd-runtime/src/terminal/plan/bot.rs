@@ -43,7 +43,10 @@ impl DesktopTerminalPlanner {
                     BackendType::SnowLuma => {
                         let dir = self.paths.snowluma_install_dir();
                         let node_dir = self.paths.components_dir().join("NodeJs");
-                        let prefix = local_dir_prefix(&[&dir, &node_dir], "node.exe");
+                        let prefix = local_dir_prefix(
+                            &[&dir, &node_dir, &node_dir.join("bin")],
+                            if cfg!(windows) { "node.exe" } else { "node" },
+                        );
                         (dir, prefix)
                     }
                 };

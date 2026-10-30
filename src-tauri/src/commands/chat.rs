@@ -343,9 +343,9 @@ pub(crate) fn test_chat(
 ) -> Arc<ncd_runtime::chat::ChatManager> {
     Arc::new(ncd_runtime::chat::ChatManager::new(
         bots,
-        Arc::new(ncd_runtime::LocalOnlyHostResolver::new(Arc::new(
-            ncd_host::local::LocalWindowsHost::new(),
-        ))),
+        Arc::new(ncd_runtime::LocalOnlyHostResolver::new(
+            ncd_host::local::local_host(),
+        )),
         root.to_path_buf(),
     ))
 }

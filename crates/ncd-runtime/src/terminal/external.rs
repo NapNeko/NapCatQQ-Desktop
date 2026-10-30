@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use ncd_domain::{LocalShellKind, TerminalHostOs, TerminalOpenRequest};
+use ncd_domain::{LocalShellKind, TerminalOpenRequest};
 use ncd_host::{PathStyle, PtyProgram};
 
 use super::TerminalError;
@@ -23,7 +23,10 @@ pub(crate) fn external_args(kind: Option<LocalShellKind>) -> Vec<String> {
             "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue"
                 .to_string(),
         ],
-        Some(LocalShellKind::GitBash) => vec!["--login".to_string(), "-i".to_string()],
+        Some(LocalShellKind::GitBash | LocalShellKind::Bash | LocalShellKind::Zsh) => {
+            vec!["--login".to_string(), "-i".to_string()]
+        }
+        Some(LocalShellKind::Fish | LocalShellKind::Sh) => vec!["-i".to_string()],
         Some(LocalShellKind::Cmd | LocalShellKind::Wsl) | None => Vec::new(),
     }
 }
@@ -39,7 +42,7 @@ pub(crate) fn external_env(env: &BTreeMap<String, String>) -> BTreeMap<String, S
 impl TerminalManager {
     pub async fn open_external(&self, request: &TerminalOpenRequest) -> Result<(), TerminalError> {
         let plan = self.plan_for_external(request).await?;
-        if plan.host_os != TerminalHostOs::Windows || !plan.features.external {
+        if !plan.features.external {
             return Err(TerminalError::Unsupported(
                 "只有本机的终端能在系统终端里打开".into(),
             ));
@@ -49,7 +52,10 @@ impl TerminalManager {
                 "这个终端没法在系统终端里打开".into(),
             ));
         };
-        let cwd = plan.cwd.as_ref().map(|p| p.render(PathStyle::Windows));
+        let cwd = plan
+            .cwd
+            .as_ref()
+            .map(|p| p.render(PathStyle::for_os(plan.host.os())));
         spawn_console(
             program,
             &external_args(plan.shell),
@@ -78,7 +84,61 @@ fn spawn_console(
         .map_err(|e| TerminalError::Host(format!("打开系统终端失败：{e}")))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+fn spawn_console(
+    program: &str,
+    args: &[String],
+    cwd: Option<&str>,
+    env: &BTreeMap<String, String>,
+) -> Result<(), TerminalError> {
+    use ncd_host::shell_single_quote;
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let terminal = [
+        ("x-terminal-emulator", "-e"),
+        ("gnome-terminal", "--"),
+        ("konsole", "-e"),
+        ("xfce4-terminal", "-x"),
+        ("xterm", "-e"),
+    ]
+    .into_iter()
+    .find_map(|(name, flag)| {
+        std::env::split_paths(&path)
+            .map(|dir| dir.join(name))
+            .find(|p| {
+                p.metadata()
+                    .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            })
+            .map(|p| (p, flag))
+    })
+    .ok_or_else(|| {
+        TerminalError::Unsupported("未找到系统终端，请安装 xterm 或桌面环境的终端程序".into())
+    })?;
+
+    // GNOME/KDE 可能复用已运行的终端进程，工作目录和环境在新 shell 内显式设置。
+    let mut script = String::new();
+    if let Some(dir) = cwd {
+        script.push_str(&format!("cd {} && ", shell_single_quote(dir)));
+    }
+    script.push_str("exec env ");
+    for (key, value) in env {
+        script.push_str(&shell_single_quote(&format!("{key}={value}")));
+        script.push(' ');
+    }
+    script.push_str(&shell_single_quote(program));
+    for arg in args {
+        script.push(' ');
+        script.push_str(&shell_single_quote(arg));
+    }
+    std::process::Command::new(terminal.0)
+        .args([terminal.1, "sh", "-c", &script])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| TerminalError::Host(format!("打开系统终端失败：{e}")))
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 fn spawn_console(
     _program: &str,
     _args: &[String],
@@ -86,7 +146,7 @@ fn spawn_console(
     _env: &BTreeMap<String, String>,
 ) -> Result<(), TerminalError> {
     Err(TerminalError::Unsupported(
-        "只在 Windows 上能打开系统终端".into(),
+        "当前系统不支持打开系统终端".into(),
     ))
 }
 

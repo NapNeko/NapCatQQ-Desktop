@@ -266,15 +266,42 @@ async fn create(
 ) -> Result<(), String> {
     let bot = row.target.bot_id.clone();
     let qq = row.preference.self_id.clone();
-    TrayIconBuilder::with_id(id)
-        .icon(icon)
-        .show_menu_on_left_click(false)
+    let builder = TrayIconBuilder::with_id(id).icon(icon);
+    #[cfg(target_os = "linux")]
+    let builder = {
+        let bot = bot.clone();
+        let qq = qq.clone();
+        let menu_id = format!("{id}:open-chat");
+        builder
+            .menu(
+                &tauri::menu::MenuBuilder::new(app)
+                    .text(&menu_id, "打开聊天")
+                    .build()
+                    .map_err(|e| e.to_string())?,
+            )
+            .show_menu_on_left_click(true)
+            .on_menu_event(move |app, event| {
+                if event.id().as_ref() != menu_id {
+                    return;
+                }
+                let (app, bot, qq) = (app.clone(), bot.clone(), qq.clone());
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = crate::chat_window::open_from_tray(app, bot, qq, None).await
+                    {
+                        tracing::warn!(%error, "聊天托盘操作失败");
+                    }
+                });
+            })
+    };
+    #[cfg(not(target_os = "linux"))]
+    let builder = builder.show_menu_on_left_click(false);
+    builder
         .on_tray_icon_event(move |tray, event| {
             let app = tray.app_handle().clone();
             match event {
+                #[cfg(windows)]
                 TrayIconEvent::Enter { position, rect, .. }
                 | TrayIconEvent::Move { position, rect, .. } => {
-                    #[cfg(windows)]
                     crate::chat_tray_panel_native::hover(
                         &app,
                         bot.clone(),
@@ -282,12 +309,13 @@ async fn create(
                         tray_anchor(&rect, position),
                     );
                 }
+                #[cfg(windows)]
                 TrayIconEvent::Leave { .. } => {
-                    #[cfg(windows)]
                     crate::chat_tray_panel_native::cancel_hover(&app, bot.clone(), qq.clone());
                 }
+                #[cfg(windows)]
                 TrayIconEvent::Click {
-                    button,
+                    button: MouseButton::Right,
                     button_state: MouseButtonState::Up,
                     position,
                     rect,
@@ -296,29 +324,28 @@ async fn create(
                     let bot = bot.clone();
                     let qq = qq.clone();
                     tauri::async_runtime::spawn(async move {
-                        match button {
-                            MouseButton::Right => {
-                                #[cfg(windows)]
-                                crate::chat_tray_panel_native::show(
-                                    &app,
-                                    bot,
-                                    qq,
-                                    tray_anchor(&rect, position),
-                                    true,
-                                );
-                                #[cfg(not(windows))]
-                                let _ = position;
-                            }
-                            MouseButton::Left => {
-                                #[cfg(windows)]
-                                crate::chat_tray_panel_native::hide(&app);
-                                if let Err(e) =
-                                    crate::chat_window::open_from_tray(app, bot, qq, None).await
-                                {
-                                    tracing::warn!("chat tray action: {e}");
-                                }
-                            }
-                            _ => {}
+                        crate::chat_tray_panel_native::show(
+                            &app,
+                            bot,
+                            qq,
+                            tray_anchor(&rect, position),
+                            true,
+                        );
+                    });
+                }
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => {
+                    let bot = bot.clone();
+                    let qq = qq.clone();
+                    tauri::async_runtime::spawn(async move {
+                        #[cfg(windows)]
+                        crate::chat_tray_panel_native::hide(&app);
+                        if let Err(e) = crate::chat_window::open_from_tray(app, bot, qq, None).await
+                        {
+                            tracing::warn!("chat tray action: {e}");
                         }
                     });
                 }

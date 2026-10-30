@@ -3,6 +3,7 @@
 //! 不走 tauri-plugin-updater 签名包；下载 MSI 后用 msiexec 安装
 //!（`/passive` 进度条 + `/norestart` 不重启系统），资产名与 build-msi.yml
 //! 一致：`NapCatQQ-Desktop-{ver}-x64.msi` / 别名 `NapCatQQ-Desktop-x64.msi`。
+//! Linux 检查更新返回发布页，由用户安装 deb 或替换 AppImage。
 //!
 //! 装完自启：在退出前 spawn 独立 helper，等本进程退出后再启动新 exe
 //!（避免文件锁；不依赖整机 reboot）。
@@ -15,16 +16,18 @@ use chrono::{TimeZone, Utc};
 use ncd_domain::SchemaVersion;
 use ncd_domain::release_snapshot::ReleaseInfo;
 use ncd_domain::{ProgressEvent, ProgressKind, ProgressLogLevel};
+#[cfg(windows)]
 use ncd_network::{
-    ChunkedConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig, NoopProgressSink,
-    ProgressUpdate, build_mirror_urls, download_smart,
+    ChunkedConfig, MirrorRaceConfig, NoopProgressSink, build_mirror_urls, download_smart,
 };
+use ncd_network::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use ncd_runtime::release::fetch_release_snapshot;
 use ncd_runtime::{BroadcastEventBus, DomainEvent, EventBus};
 use ncd_update::types::UPDATE_PROTOCOL_VERSION;
 use ncd_update::{AvailableUpdate, UpdateChannel, UpdateError, UpdateOrchestrator, UpdateProvider};
 use semver::Version;
 use tokio_util::sync::CancellationToken;
+#[cfg(windows)]
 use tracing::info;
 
 // 跨边界类型 re-export：定义在 ncd-update（ts-rs 路径与 AvailableUpdate 一致）
@@ -35,6 +38,7 @@ pub const MSI_VERSIONED_NAME_FMT: &str = "NapCatQQ-Desktop-{version}-x64.msi";
 pub const MSI_ALIAS_NAME: &str = "NapCatQQ-Desktop-x64.msi";
 /// 安装树主程序（与 autostart / WiX 一致）
 pub const MAIN_EXE_NAME: &str = "NapCatQQ-Desktop.exe";
+#[cfg(windows)]
 const MINIMUM_MSI_SIZE_BYTES: u64 = 1024 * 1024;
 /// 仅允许本仓库 GitHub Releases 下载路径，防止 IPC 篡改 download_url。
 const TRUSTED_RELEASE_HOST: &str = "github.com";
@@ -170,7 +174,16 @@ pub fn release_info_to_available_update(
 ) -> Result<AvailableUpdate, UpdateError> {
     let version = Version::parse(info.version.trim().trim_start_matches(['v', 'V']))
         .map_err(|e| UpdateError::check_failed(format!("desktop release version parse: {e}")))?;
+    #[cfg(windows)]
     let (download_url, _name, sha) = pick_desktop_msi(info)?;
+    // Linux 安装由发行版包管理器或用户替换 AppImage，更新入口打开发布页。
+    #[cfg(not(windows))]
+    let (download_url, sha) = (
+        format!(
+            "https://{TRUSTED_RELEASE_HOST}/{TRUSTED_RELEASE_OWNER}/{TRUSTED_RELEASE_REPO}/releases/tag/v{version}"
+        ),
+        None::<String>,
+    );
     let pub_date = if info.published_at > 0 {
         Utc.timestamp_opt(info.published_at as i64, 0)
             .single()
@@ -372,14 +385,17 @@ impl GithubMsiUpdateProvider {
         self
     }
 
+    #[cfg(windows)]
     fn staging_dir(&self) -> PathBuf {
         ncd_runtime::DataPaths::new(&self.data_root).update_cache_dir()
     }
 
+    #[cfg(windows)]
     fn staged_msi_path(&self) -> PathBuf {
         self.staging_dir().join(MSI_ALIAS_NAME)
     }
 
+    #[cfg(windows)]
     async fn verify_sha256_if_needed(
         path: &Path,
         expected: Option<&str>,
@@ -1009,12 +1025,19 @@ mod tests {
         let u = release_info_to_available_update(&info).unwrap();
         assert_eq!(u.version, Version::new(3, 1, 0));
         assert!(u.download_url.contains("3.1.0"));
+        #[cfg(windows)]
         assert!(is_trusted_desktop_msi_url(&u.download_url));
+        #[cfg(not(windows))]
+        assert_eq!(
+            u.download_url,
+            "https://github.com/NapNeko/NapCatQQ-Desktop/releases/tag/v3.1.0"
+        );
         assert!(u.signature.is_empty());
         assert!(u.content_sha256.is_empty());
     }
 
     #[test]
+    #[cfg(windows)]
     fn release_puts_digest_in_content_sha256_not_signature() {
         let info = sample_info(
             "3.1.0",

@@ -14,7 +14,8 @@ const APP_DATA_DIR_NAME: &str = "NapCatQQ Desktop";
 /// 2. Windows `HKCU\SOFTWARE\NapCatQQ-Desktop\DataRoot`(用户迁移,无 UAC)
 /// 3. Windows `HKLM\SOFTWARE\NapCatQQ-Desktop\DataRoot`(MSI 默认 / 启动补写)
 /// 4. `%ProgramData%\NapCatQQ Desktop`(生产默认)
-/// 5. LocalAppData / cwd 兜底(无 ProgramData 的非 Windows 或开发机)
+/// Linux: `NCD_DATA_ROOT` → XDG 配置目录中的迁移指针 → XDG 数据目录。
+/// 无系统数据目录时使用当前目录。
 ///
 /// `read_data_root` 已合并 2+3;此处只再调一次。
 pub(crate) fn resolve_data_root() -> PathBuf {
@@ -22,7 +23,7 @@ pub(crate) fn resolve_data_root() -> PathBuf {
         return from_env;
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     if let Some(from_reg) = product_registry::read_data_root() {
         return from_reg;
     }

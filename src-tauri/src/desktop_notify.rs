@@ -31,6 +31,7 @@ impl TauriOfflineNotifier {
         let _ = self.app.set(app);
     }
 
+    #[cfg(windows)]
     fn aumid(app: &AppHandle) -> String {
         app.config().identifier.clone()
     }
@@ -38,18 +39,18 @@ impl TauriOfflineNotifier {
     fn dispatch_toast(app: &AppHandle, headline: &str, body: &str) {
         let headline = headline.to_string();
         let body = body.to_string();
-        let aumid = Self::aumid(app);
         #[cfg(windows)]
         {
+            let aumid = Self::aumid(app);
             let _ = app.run_on_main_thread(move || {
                 crate::windows_toast::show_desktop_toast(&aumid, &headline, &body);
             });
         }
         #[cfg(not(windows))]
         {
-            let app = app.clone();
+            let notification_app = app.clone();
             let _ = app.run_on_main_thread(move || {
-                if let Err(err) = app
+                if let Err(err) = notification_app
                     .notification()
                     .builder()
                     .title(&headline)

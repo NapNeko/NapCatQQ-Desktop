@@ -17,7 +17,7 @@ use std::time::Duration;
 use ncd_domain::{AppInstance, AppInstanceId, AppInstanceState};
 use ncd_host::{
     ExitStatus, Host, HostCommand, HostPath, HostProcess, LOG_FOLLOW_CHUNK_BYTES as MAX_CHUNK,
-    Locality, PathStyle, remote_file_size, remote_read_from, shell_single_quote,
+    Locality, remote_file_size, remote_read_from, shell_single_quote,
 };
 use ncd_traits::{AppFrameworkError, EventBus};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
@@ -357,8 +357,8 @@ impl NativeAppRuntime {
         match host.locality() {
             Locality::Local => {
                 reset_local_log(
-                    &log_file.render(PathStyle::Windows),
-                    &previous.render(PathStyle::Windows),
+                    &log_file.render_for(host.os()),
+                    &previous.render_for(host.os()),
                 )
                 .await;
             }
@@ -398,10 +398,10 @@ impl NativeAppRuntime {
 
         // 起来了才换日志：没起来时上一轮的输出还留在面板上，对着报错看。
         // 文件由下面的泵写，泵开起来之前换掉就不会有新一轮的行落进 `.1`
-        let log_path = spec.log_file.render(PathStyle::Windows);
+        let log_path = spec.log_file.render_for(host.os());
         rotate_local_log(
             &log_path,
-            &previous_run_log(&spec.log_file).render(PathStyle::Windows),
+            &previous_run_log(&spec.log_file).render_for(host.os()),
         )
         .await;
         self.event_bus
@@ -552,7 +552,7 @@ impl NativeAppRuntime {
     ) -> JoinHandle<()> {
         let store = Arc::clone(&self.store);
         let bus = Arc::clone(&self.event_bus);
-        let path = log_file.render(PathStyle::Windows);
+        let path = log_file.render_for(host.os());
         tokio::spawn(async move {
             let mut pid = pid;
             let mut program = program;

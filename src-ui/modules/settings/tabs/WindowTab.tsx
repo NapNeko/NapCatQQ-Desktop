@@ -1,10 +1,6 @@
 // 窗口 Tab：关闭按钮、托盘、轻量模式和启动显示策略。
 
 import type { CloseAction } from '../../../core/domain/settings/preferencesStore';
-import type {
-    AfterCloseUiBehavior,
-    UiModeOnStartup,
-} from '../../../core/services/settings.service';
 import { Select, Switch } from '../../../shared/ui';
 import { ExpandPresence } from '../../../shared/ui/motion';
 import type { SettingsDraft } from '../settings-draft';
@@ -41,7 +37,8 @@ export function WindowTab({ draft, patchDraft }: Props) {
                                 value={draft.afterCloseUiBehavior}
                                 onValueChange={(v) =>
                                     patchDraft({
-                                        afterCloseUiBehavior: v as AfterCloseUiBehavior,
+                                        afterCloseUiBehavior:
+                                            v as SettingsDraft['afterCloseUiBehavior'],
                                     })
                                 }
                                 items={[
@@ -90,7 +87,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
             <SettingsSection title="启动">
                 <FieldRow
                     label="开机自启"
-                    description="登录当前 Windows 用户后自动启动；写入用户启动项，无需管理员"
+                    description="登录当前用户后自动启动；写入用户启动项，无需管理员"
                 >
                     <Switch
                         checked={draft.launchOnStartup}
@@ -102,7 +99,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
                         value={draft.uiModeOnStartup}
                         onValueChange={(v) =>
                             patchDraft({
-                                uiModeOnStartup: v as UiModeOnStartup,
+                                uiModeOnStartup: v as SettingsDraft['uiModeOnStartup'],
                             })
                         }
                         items={[

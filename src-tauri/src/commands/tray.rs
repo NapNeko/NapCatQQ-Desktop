@@ -80,13 +80,39 @@ pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
 
     let icon = crate::tray_icon::idle_tray_icon(app)?;
 
-    let _tray = TrayIconBuilder::with_id(TRAY_ID)
+    let builder = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .title("NapCatQQ Desktop")
         .tooltip("NapCatQQ Desktop")
-        .on_tray_icon_event(crate::tray_panel::handle_tray_icon_event)
-        .build(app)
-        .map_err(|e| e.to_string())?;
+        .on_tray_icon_event(crate::tray_panel::handle_tray_icon_event);
+    // Linux 的 AppIndicator 不投递鼠标事件，恢复窗口和退出必须有系统菜单入口。
+    #[cfg(target_os = "linux")]
+    let builder = builder
+        .menu(
+            &tauri::menu::MenuBuilder::new(app)
+                .text("show", "显示主窗口")
+                .text("lightweight", "释放界面内存")
+                .separator()
+                .text("quit", "退出")
+                .build()
+                .map_err(|e| e.to_string())?,
+        )
+        .on_menu_event(|app, event| {
+            let action = event.id().as_ref().to_owned();
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let result = match action.as_str() {
+                    "show" => window_show(app).await,
+                    "lightweight" => tray_panel_enter_lightweight(app).await,
+                    "quit" => tray_panel_quit(app).await,
+                    _ => Ok(()),
+                };
+                if let Err(error) = result {
+                    tracing::warn!(%error, "托盘菜单操作失败");
+                }
+            });
+        });
+    let _tray = builder.build(app).map_err(|e| e.to_string())?;
 
     let app_refresh = app.clone();
     tauri::async_runtime::spawn(async move {

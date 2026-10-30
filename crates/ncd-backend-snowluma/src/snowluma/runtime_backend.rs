@@ -398,6 +398,19 @@ async fn spawn_cold_qq(
         .clone();
     let qq_path = PathBuf::from(qq_path);
 
+    #[cfg(target_os = "linux")]
+    {
+        let install_base = ncd_domain::qq_install_base_from_qq_bin(&qq_path.to_string_lossy())
+            .ok_or_else(|| BotBackendError::InvalidConfig("无法解析 QQ 安装根".into()))?;
+        ncd_component::remote_qq_entry::set_remote_qq_package_main(
+            &ncd_host::local::LocalLinuxHost::new(),
+            &ncd_host::HostPath::from_posix(install_base),
+            ncd_component::remote_qq_entry::QQ_MAIN_NATIVE,
+        )
+        .await
+        .map_err(BotBackendError::Io)?;
+    }
+
     let mut qq_cmd = tokio::process::Command::new(&qq_path);
     if config
         .environment
@@ -411,6 +424,35 @@ async fn spawn_cold_qq(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     hide_console_window(&mut qq_cmd);
+    #[cfg(target_os = "linux")]
+    {
+        qq_cmd.process_group(0).arg("--no-sandbox");
+        let inherited = std::env::var("LD_PRELOAD").unwrap_or_default();
+        qq_cmd.env("LD_PRELOAD", format!("libgcc_s.so.1 {inherited}"));
+        let has_yama = std::path::Path::new("/proc/sys/kernel/yama/ptrace_scope").exists();
+        // daemon 与 QQ 为兄弟进程；仅为此冷启动子进程开放 Yama 注入权限。
+        // SAFETY: pre_exec 只执行 prctl，不分配内存，不修改桌面端或系统配置。
+        #[expect(
+            unsafe_code,
+            reason = "allow SnowLuma to ptrace its spawned QQ process"
+        )]
+        unsafe {
+            qq_cmd.pre_exec(move || {
+                if has_yama
+                    && libc::prctl(
+                        libc::PR_SET_PTRACER,
+                        libc::PR_SET_PTRACER_ANY,
+                        0 as libc::c_ulong,
+                        0 as libc::c_ulong,
+                        0 as libc::c_ulong,
+                    ) == -1
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
     let child = qq_cmd.spawn().map_err(|e| {
         BotBackendError::Io(format!(
             "spawn QQ.exe failed: {e} (path={})",
@@ -464,9 +506,16 @@ async fn kill_process_tree(qq_pid: u32) -> Result<(), BotBackendError> {
 
 #[cfg(not(windows))]
 async fn kill_process_tree(qq_pid: u32) -> Result<(), BotBackendError> {
-    // 非 Windows 平台 SnowLuma 不支持,但保持函数可编译
-    let _ = qq_pid;
-    Ok(())
+    let status = tokio::process::Command::new("kill")
+        .args(["-KILL", "--", &format!("-{qq_pid}")])
+        .status()
+        .await
+        .map_err(|e| BotBackendError::Io(format!("kill process group: {e}")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(BotBackendError::Io("kill process group failed".into()))
+    }
 }
 
 // abort_start:start 中段失败回滚
@@ -506,12 +555,12 @@ impl BotBackend for SnowLumaRuntimeBackend {
     }
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "linux")))]
         return Err(BotBackendError::InvalidConfig(
-            "snowluma backend requires windows".into(),
+            "snowluma backend requires Windows or Linux".into(),
         ));
 
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         {
             let bot_id = ctx.config.bot_id.clone();
             let start_mode = read_start_mode(&ctx.config);
@@ -533,6 +582,7 @@ impl BotBackend for SnowLumaRuntimeBackend {
                 }
             };
 
+            #[cfg(windows)]
             let qr_binding = if start_mode.is_cold()
                 && ctx
                     .config
@@ -549,6 +599,7 @@ impl BotBackend for SnowLumaRuntimeBackend {
             } else {
                 None
             };
+            #[cfg(windows)]
             if let Some(old) = self.qr_sessions.lock().await.remove(&bot_id) {
                 old.cancel.cancel();
             }
@@ -617,11 +668,14 @@ impl BotBackend for SnowLumaRuntimeBackend {
                         qq_pid,
                         qq_child,
                         started_at,
+                        #[cfg(windows)]
                         config: ctx.config.clone(),
                         start_mode,
                         uin: None,
                         ancillary_pids: HashSet::new(),
+                        #[cfg(windows)]
                         qr_binding,
+                        #[cfg(windows)]
                         qr_process_cancel: tokio_util::sync::CancellationToken::new(),
                     },
                 );

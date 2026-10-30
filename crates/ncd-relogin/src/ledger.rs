@@ -91,8 +91,11 @@ impl Store {
         #[cfg(unix)]
         {
             use std::os::fd::AsRawFd;
-            // 文件在 Store 生命周期内保持打开；进程退出由内核释放锁。
-            if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            // SAFETY: lock 持有有效文件描述符，在 Store 生命周期内保持打开；
+            // 进程退出由内核释放锁，flock 不接收内存指针。
+            #[expect(unsafe_code, reason = "lock the owned ledger file descriptor")]
+            let result = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+            if result != 0 {
                 return Err("重登服务已运行".into());
             }
         }

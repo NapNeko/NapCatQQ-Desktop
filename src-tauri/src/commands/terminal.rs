@@ -10,6 +10,8 @@ use ncd_domain::{
     TerminalOpenRequest, TerminalSessionInfo, TerminalTextFile,
 };
 use ncd_runtime::terminal::TerminalSink;
+#[cfg(target_os = "linux")]
+use tauri::Manager;
 use tauri::State;
 use tauri::ipc::{Channel, InvokeResponseBody};
 
@@ -282,10 +284,18 @@ pub async fn terminal_export_text(
 }
 
 #[tauri::command]
-pub async fn read_clipboard_text() -> Result<String, String> {
-    tokio::task::spawn_blocking(crate::clipboard::read_text)
-        .await
-        .map_err(|e| e.to_string())?
+pub async fn read_clipboard_text(app: tauri::AppHandle) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::clipboard::read_text_linux(app).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        tokio::task::spawn_blocking(crate::clipboard::read_text)
+            .await
+            .map_err(|e| e.to_string())?
+    }
 }
 
 #[tauri::command]
@@ -307,7 +317,11 @@ pub async fn write_clipboard_text(
         .await
         .map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::clipboard::copy_message_linux(window.app_handle().clone(), text, vec![], None).await
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (window, text);
         Err("文本复制需要 Windows 客户端".into())

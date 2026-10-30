@@ -274,9 +274,7 @@ mod tests {
     };
     use ncd_traits::{
         ConfigStore, SecretStore,
-        runtime_backend::{
-            BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
-        },
+        runtime_backend::{BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts},
     };
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -405,9 +403,9 @@ mod tests {
         let mcp = Arc::new(ncd_mcp::McpServer::new(Arc::clone(&onebot_debug), secrets));
         let chat = Arc::new(ncd_runtime::chat::ChatManager::new(
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
-            Arc::new(ncd_runtime::LocalOnlyHostResolver::new(Arc::new(
-                ncd_host::local::LocalWindowsHost::new(),
-            ))),
+            Arc::new(ncd_runtime::LocalOnlyHostResolver::new(
+                ncd_host::local::local_host(),
+            )),
             root.to_path_buf(),
         ));
         let state = AppState {

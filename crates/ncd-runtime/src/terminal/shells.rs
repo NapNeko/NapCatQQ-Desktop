@@ -15,7 +15,7 @@ pub(crate) struct LocalShellLaunch {
     pub integration: bool,
 }
 
-/// 按默认顺序挑：指定了且有就用指定的，不然 PowerShell 7 → Windows PowerShell → 命令提示符
+/// Windows 优先 PowerShell；Linux 的探测结果已按登录 shell 排序。
 pub(crate) fn pick_shell(
     options: &[LocalShellOption],
     wanted: Option<LocalShellKind>,
@@ -32,6 +32,7 @@ pub(crate) fn pick_shell(
     ]
     .iter()
     .find_map(|kind| options.iter().find(|o| o.kind == *kind).cloned())
+    .or_else(|| options.first().cloned())
 }
 
 /// `git_bash_rc`：Git Bash 用的 rc 文件（写在数据根的缓存目录里）；没写成功就按普通登录 shell 起
@@ -50,9 +51,13 @@ pub(crate) fn launch_for(shell: &LocalShellOption, git_bash_rc: Option<&str>) ->
             env: vec![("PROMPT".to_string(), CMD_PROMPT.to_string())],
             integration: true,
         },
-        LocalShellKind::GitBash => {
+        LocalShellKind::GitBash | LocalShellKind::Bash => {
             // Git 的 /etc/profile 没见到 CHERE_INVOKING 会 cd 回家目录
-            let env = vec![("CHERE_INVOKING".to_string(), "1".to_string())];
+            let env = if shell.kind == LocalShellKind::GitBash {
+                vec![("CHERE_INVOKING".to_string(), "1".to_string())]
+            } else {
+                Vec::new()
+            };
             match git_bash_rc {
                 Some(rc) => LocalShellLaunch {
                     program,
@@ -74,6 +79,12 @@ pub(crate) fn launch_for(shell: &LocalShellOption, git_bash_rc: Option<&str>) ->
             env: Vec::new(),
             integration: false,
         },
+        LocalShellKind::Zsh | LocalShellKind::Fish | LocalShellKind::Sh => LocalShellLaunch {
+            program,
+            args: vec!["-i".to_string()],
+            env: Vec::new(),
+            integration: false,
+        },
     }
 }
 
@@ -83,7 +94,11 @@ pub fn detect_local_shells() -> Vec<LocalShellOption> {
     {
         windows_impl::detect()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        linux_impl::detect()
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         Vec::new()
     }
@@ -107,6 +122,7 @@ pub(crate) fn fresh_local_path() -> String {
 }
 
 /// 两份 `;` 分隔的 PATH 合一份：前一份在前，后一份只补前面没有的（不分大小写、忽略尾部 `\`）
+#[cfg(any(windows, test))]
 pub(crate) fn merge_path_lists(first: &str, second: &str) -> String {
     let mut seen: Vec<String> = Vec::new();
     let mut out: Vec<&str> = Vec::new();
@@ -126,6 +142,7 @@ pub(crate) fn merge_path_lists(first: &str, second: &str) -> String {
 }
 
 /// 把 `%VAR%` 换成当前环境里的值；不认识的原样留着
+#[cfg(any(windows, test))]
 pub(crate) fn expand_percent_vars(raw: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut rest = raw;
@@ -153,6 +170,53 @@ pub(crate) fn expand_percent_vars(raw: &str, lookup: impl Fn(&str) -> Option<Str
     }
     out.push_str(rest);
     out
+}
+
+#[cfg(target_os = "linux")]
+mod linux_impl {
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::{Path, PathBuf};
+
+    use ncd_domain::{LocalShellKind, LocalShellOption};
+
+    pub(super) fn detect() -> Vec<LocalShellOption> {
+        let mut candidates = Vec::new();
+        if let Some(shell) = std::env::var_os("SHELL") {
+            candidates.push(PathBuf::from(shell));
+        }
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        for name in ["bash", "zsh", "fish", "sh"] {
+            if let Some(found) = std::env::split_paths(&path)
+                .map(|dir| dir.join(name))
+                .find(|p| executable(p))
+            {
+                candidates.push(found);
+            }
+        }
+        let mut out: Vec<LocalShellOption> = Vec::new();
+        for path in candidates {
+            let (kind, label) = match path.file_name().and_then(|s| s.to_str()) {
+                Some("bash") => (LocalShellKind::Bash, "Bash"),
+                Some("zsh") => (LocalShellKind::Zsh, "Zsh"),
+                Some("fish") => (LocalShellKind::Fish, "Fish"),
+                Some("sh" | "dash" | "ash") => (LocalShellKind::Sh, "sh"),
+                _ => continue,
+            };
+            if executable(&path) && !out.iter().any(|s| s.kind == kind) {
+                out.push(LocalShellOption {
+                    kind,
+                    label: label.to_string(),
+                    path: path.to_string_lossy().into_owned(),
+                });
+            }
+        }
+        out
+    }
+
+    fn executable(path: &Path) -> bool {
+        path.metadata()
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
 }
 
 #[cfg(windows)]

@@ -63,6 +63,94 @@ pub fn read_text() -> Result<String, String> {
     Err("只在 Windows 上能读剪贴板".into())
 }
 
+#[cfg(target_os = "linux")]
+pub async fn read_text_linux(app: tauri::AppHandle) -> Result<String, String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        // GTK 剪贴板属于主事件循环；异步请求避免阻塞 Wayland / X11 的数据交换。
+        gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).request_text(move |_, text| {
+            let _ = sender.send(text.unwrap_or_default().to_owned());
+        });
+    })
+    .map_err(|e| e.to_string())?;
+    receiver.await.map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+pub async fn copy_message_linux(
+    app: tauri::AppHandle,
+    text: String,
+    paths: Vec<std::path::PathBuf>,
+    image_path: Option<std::path::PathBuf>,
+) -> Result<(), String> {
+    use gtk::{TargetEntry, TargetFlags};
+
+    let uris = paths
+        .iter()
+        .map(|path| {
+            url::Url::from_file_path(path)
+                .map(String::from)
+                .map_err(|_| format!("无法复制文件路径: {}", path.display()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let pixels = tokio::task::spawn_blocking(move || {
+        image_path
+            .map(|path| image::open(path).map(|image| image.to_rgba8()))
+            .transpose()
+            .map_err(|e| format!("读取剪贴板图片失败: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let mut targets = vec![
+            TargetEntry::new("UTF8_STRING", TargetFlags::empty(), 0),
+            TargetEntry::new("text/plain;charset=utf-8", TargetFlags::empty(), 0),
+            TargetEntry::new("text/plain", TargetFlags::empty(), 0),
+        ];
+        if !uris.is_empty() {
+            targets.push(TargetEntry::new("text/uri-list", TargetFlags::empty(), 1));
+        }
+        let pixbuf = pixels.map(|pixels| {
+            let (width, height) = pixels.dimensions();
+            gtk::gdk_pixbuf::Pixbuf::from_bytes(
+                &gtk::glib::Bytes::from_owned(pixels.into_raw()),
+                gtk::gdk_pixbuf::Colorspace::Rgb,
+                true,
+                8,
+                width as i32,
+                height as i32,
+                width as i32 * 4,
+            )
+        });
+        if pixbuf.is_some() {
+            targets.push(TargetEntry::new("image/png", TargetFlags::empty(), 2));
+        }
+        let clipboard = gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD);
+        let success = clipboard.set_with_data(&targets, move |_, selection, kind| match kind {
+            1 => {
+                let uris: Vec<_> = uris.iter().map(String::as_str).collect();
+                selection.set_uris(&uris);
+            }
+            2 => {
+                if let Some(pixbuf) = &pixbuf {
+                    selection.set_pixbuf(pixbuf);
+                }
+            }
+            _ => {
+                selection.set_text(&text);
+            }
+        });
+        let _ = sender.send(if success {
+            Ok(())
+        } else {
+            Err("写入剪贴板失败".to_string())
+        });
+    })
+    .map_err(|e| e.to_string())?;
+    receiver.await.map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 #[cfg(windows)]
 mod tests {

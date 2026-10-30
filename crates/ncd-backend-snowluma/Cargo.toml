@@ -46,6 +46,9 @@ aes-gcm = "0.10"
 hex = "0.4"
 netstat2 = "0.11.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 windows = { version = "0.61", features = [

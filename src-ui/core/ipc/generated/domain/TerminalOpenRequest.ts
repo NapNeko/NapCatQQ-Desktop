@@ -7,6 +7,6 @@ import type { TerminalTarget } from "./TerminalTarget";
  */
 export type TerminalOpenRequest = { target: TerminalTarget, cols: number, rows: number, 
 /**
- * 本机目标用哪个 shell；不给就按 PowerShell 7、Windows PowerShell、命令提示符的顺序挑
+ * 本机目标用哪个 shell；不给就使用平台默认（Linux 优先 $SHELL）
  */
 shell?: LocalShellKind, };

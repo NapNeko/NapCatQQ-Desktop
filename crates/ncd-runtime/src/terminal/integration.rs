@@ -202,6 +202,11 @@ pub(crate) fn git_bash_rc() -> String {
     bash_rc("")
 }
 
+/// Linux 本机继承桌面会话的环境，按交互式 shell 读取 bashrc，避免登录配置重置 PATH。
+pub(crate) fn local_bash_rc() -> String {
+    format!("if [ -r \"$HOME/.bashrc\" ]; then . \"$HOME/.bashrc\"; fi\n{BASH_LOCALE}{BASH_MARKS}")
+}
+
 /// PowerShell 的参数：不退出、先跑标记脚本
 pub(crate) fn powershell_args() -> Vec<String> {
     vec![

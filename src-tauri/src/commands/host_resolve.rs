@@ -19,7 +19,7 @@ pub async fn resolve_host_with_autoconnect(
     state: &AppState,
 ) -> Result<Arc<dyn Host>, String> {
     if host_id == "local" {
-        return local_host();
+        return Ok(ncd_host::local::local_host_for_data_root(&state.data_root));
     }
     let Some(server_id) = host_id.strip_prefix("remote:") else {
         return Err(format!("unknown host_id: {host_id}"));
@@ -30,12 +30,12 @@ pub async fn resolve_host_with_autoconnect(
     state.server_manager.ensure_connected(server_id).await
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub fn local_host() -> Result<Arc<dyn Host>, String> {
-    Ok(Arc::new(ncd_host::local::LocalWindowsHost::new()))
+    Ok(ncd_host::local::local_host())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn local_host() -> Result<Arc<dyn Host>, String> {
-    Err("local host on non-Windows targets is not yet implemented".to_string())
+    Err("local host is not supported on this platform".to_string())
 }

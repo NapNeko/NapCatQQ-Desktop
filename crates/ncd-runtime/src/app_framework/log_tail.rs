@@ -50,7 +50,7 @@ pub async fn tail_file(host: &dyn Host, path: &HostPath, lines: usize) -> Vec<St
             .unwrap_or_default();
     }
     match host.locality() {
-        Locality::Local => tail_local(path, lines).await,
+        Locality::Local => tail_local(path, host_path_style(host), lines).await,
         Locality::Remote => tail_remote(host, path.as_posix(), lines).await,
     }
 }
@@ -89,7 +89,7 @@ pub async fn newest_project_log(host: &dyn Host, install_dir: &str) -> Option<Ho
             let path = pick_first_log_path(&out.stdout)?;
             Some(HostPath::from_posix(&path))
         }
-        Locality::Local => newest_local_log(install_dir),
+        Locality::Local => newest_local_log(install_dir, host_path_style(host)),
     }
 }
 
@@ -143,9 +143,9 @@ fn host_path_style(host: &dyn Host) -> PathStyle {
     }
 }
 
-fn newest_local_log(install_dir: &str) -> Option<HostPath> {
+fn newest_local_log(install_dir: &str, style: PathStyle) -> Option<HostPath> {
     let root = HostPath::from_posix(install_dir);
-    let rendered = root.render(PathStyle::Windows);
+    let rendered = root.render(style);
     let dir = std::path::Path::new(&rendered);
     let mut best: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
     let candidates = [dir.to_path_buf(), dir.join("logs")];
@@ -170,11 +170,14 @@ fn newest_local_log(install_dir: &str) -> Option<HostPath> {
             }
         }
     }
-    best.map(|(_, path)| HostPath::from_windows(&path.to_string_lossy()))
+    best.map(|(_, path)| match style {
+        PathStyle::Windows => HostPath::from_windows(&path.to_string_lossy()),
+        PathStyle::Posix => HostPath::from_posix(path.to_string_lossy().into_owned()),
+    })
 }
 
-async fn tail_local(path: &HostPath, lines: usize) -> Vec<String> {
-    let rendered = path.render(PathStyle::Windows);
+async fn tail_local(path: &HostPath, style: PathStyle, lines: usize) -> Vec<String> {
+    let rendered = path.render(style);
     let Ok(meta) = tokio::fs::metadata(&rendered).await else {
         return Vec::new();
     };

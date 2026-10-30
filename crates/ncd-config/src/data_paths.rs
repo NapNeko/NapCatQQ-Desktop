@@ -73,7 +73,12 @@ impl DataPaths {
     }
 
     pub fn napcat_install_dir(&self) -> PathBuf {
-        self.components_dir().join("NapCatQQ")
+        if cfg!(target_os = "linux") {
+            self.components_dir()
+                .join(ncd_domain::remote_paths::REL_NAPCAT_ROOT)
+        } else {
+            self.components_dir().join("NapCatQQ")
+        }
     }
 
     pub fn napcat_config_dir(&self) -> PathBuf {
@@ -241,7 +246,11 @@ mod tests {
         );
         assert_eq!(
             p.napcat_install_dir(),
-            PathBuf::from("D:/data/components/NapCatQQ")
+            PathBuf::from(if cfg!(target_os = "linux") {
+                "D:/data/components/opt/QQ/resources/app/app_launcher/napcat"
+            } else {
+                "D:/data/components/NapCatQQ"
+            })
         );
         assert_eq!(
             p.snowluma_data_dir(),

@@ -69,7 +69,12 @@ pub fn read_data_root() -> Option<PathBuf> {
         .and_then(|p| p.data_root)
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub fn read_data_root() -> Option<PathBuf> {
+    read_user_data_root()
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn read_data_root() -> Option<PathBuf> {
     None
 }
@@ -79,7 +84,14 @@ pub fn read_user_data_root() -> Option<PathBuf> {
     read_path_from_hive(Hive::CurrentUser, VALUE_DATA_ROOT)
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub fn read_user_data_root() -> Option<PathBuf> {
+    let bytes = std::fs::read(data_root_pointer_path().ok()?).ok()?;
+    let path: PathBuf = serde_json::from_slice(&bytes).ok()?;
+    is_usable_absolute_path(&path).then_some(path)
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn read_user_data_root() -> Option<PathBuf> {
     None
 }
@@ -95,7 +107,29 @@ pub fn write_user_data_root(path: &Path) -> Result<PathBuf, String> {
     Ok(data_norm)
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub fn write_user_data_root(path: &Path) -> Result<PathBuf, String> {
+    if !is_usable_absolute_path(path) {
+        return Err("DataRoot: path is not a usable absolute path".into());
+    }
+    let pointer = data_root_pointer_path()?;
+    let directory = pointer.parent().ok_or("数据根指针目录无效")?;
+    std::fs::create_dir_all(directory).map_err(|e| format!("创建数据根指针目录失败: {e}"))?;
+    let bytes = serde_json::to_vec(path).map_err(|e| format!("编码数据根指针失败: {e}"))?;
+    let temporary = pointer.with_extension("tmp");
+    std::fs::write(&temporary, bytes).map_err(|e| format!("写入数据根指针失败: {e}"))?;
+    std::fs::rename(&temporary, &pointer).map_err(|e| format!("保存数据根指针失败: {e}"))?;
+    Ok(path.to_path_buf())
+}
+
+#[cfg(target_os = "linux")]
+fn data_root_pointer_path() -> Result<PathBuf, String> {
+    dirs::config_dir()
+        .map(|directory| directory.join("NapCatQQ Desktop/data-root.json"))
+        .ok_or_else(|| "无法确定用户配置目录".into())
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn write_user_data_root(_path: &Path) -> Result<PathBuf, String> {
     Err("user DataRoot registry is only supported on Windows".into())
 }

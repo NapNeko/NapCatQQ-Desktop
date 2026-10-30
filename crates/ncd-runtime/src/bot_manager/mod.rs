@@ -497,8 +497,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             // env 必须写进脚本：WinBoot 注入的 QQ 不一定继承 BotRuntimeConfig.environment。
             // 调用方须在 build_plan 之后执行，否则 plan 会写回无探针基线。
             use crate::metrics::{apply_metrics_to_environment, build_napcat_load_script_with_env};
-            let napcat_dir = data_root.join("components").join("NapCatQQ");
-            let load_path = napcat_dir.join("loadNapCat.js");
+            let napcat_dir = crate::DataPaths::new(&data_root).napcat_install_dir();
+            let load_path = if cfg!(target_os = "linux") {
+                data_root
+                    .join("components")
+                    .join(ncd_domain::remote_paths::REL_LOAD_NAPCAT_JS)
+            } else {
+                napcat_dir.join("loadNapCat.js")
+            };
             let napcat_mjs = napcat_dir.join("napcat.mjs");
             if napcat_mjs.is_file() {
                 let uri = {

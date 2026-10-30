@@ -116,8 +116,11 @@ async fn scan_qq_processes() -> QqProcessScan {
             sysinfo::ProcessRefreshKind::new().with_cmd(sysinfo::UpdateKind::OnlyIfNotSet),
         );
 
-        let is_qq =
-            |p: &sysinfo::Process| p.name().to_string_lossy().eq_ignore_ascii_case("QQ.exe");
+        let is_qq = |p: &sysinfo::Process| {
+            p.name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case(if cfg!(windows) { "QQ.exe" } else { "qq" })
+        };
 
         let qq_pids: std::collections::HashSet<Pid> = sys
             .processes()

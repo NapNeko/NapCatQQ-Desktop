@@ -2,7 +2,7 @@
 //!
 //! 会话活在桌面端后端，和网页无关：切页面、收起面板、轻量模式销毁网页都不断，前端回来重新
 //! attach，先收一遍回放再接实时输出。关标签或退出桌面端才真正结束。
-//! 本机走 ConPTY、远端走 SSH 的 pty 通道，都在 `ncd_host::Host::open_pty` 后面。
+//! 本机走 ConPTY / Unix PTY、远端走 SSH 的 pty 通道，都在 `ncd_host::Host::open_pty` 后面。
 
 mod external;
 mod files;

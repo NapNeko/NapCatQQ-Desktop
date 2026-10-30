@@ -298,7 +298,7 @@ pub(crate) fn test_onebot_debug(
     root: &Path,
     bots: Arc<dyn ncd_runtime::DebugBotPort>,
 ) -> Arc<ncd_runtime::DebugManager> {
-    let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+    let local_host: Arc<dyn ncd_host::Host> = ncd_host::local::local_host();
     Arc::new(ncd_runtime::DebugManager::new(
         bots,
         Arc::new(ncd_runtime::LocalOnlyHostResolver::new(local_host)),

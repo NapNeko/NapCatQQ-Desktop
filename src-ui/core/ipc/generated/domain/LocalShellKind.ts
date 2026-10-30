@@ -3,4 +3,4 @@
 /**
  * 本机能开的 shell
  */
-export type LocalShellKind = "pwsh" | "windows_powershell" | "cmd" | "git_bash" | "wsl";
+export type LocalShellKind = "pwsh" | "windows_powershell" | "cmd" | "git_bash" | "wsl" | "bash" | "zsh" | "fish" | "sh";

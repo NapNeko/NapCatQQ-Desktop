@@ -37,6 +37,7 @@ const LEGACY_ORPHAN_NAMES: &[&str] = &[
 const MAIN_EXE_NAME: &str = "NapCatQQ-Desktop.exe";
 
 /// 3.0.0 模板转义错误留下的字面量键(不是 `Software\NapCatQQ Desktop`)
+#[cfg(any(windows, test))]
 const BROKEN_HKCU_PRODUCT_KEY: &str = r"Software{{product_name}}";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

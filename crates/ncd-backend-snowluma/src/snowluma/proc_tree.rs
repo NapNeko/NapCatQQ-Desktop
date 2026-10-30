@@ -4,15 +4,8 @@
 //! [crate::snowluma::status_poller] 中
 //! 本文件仅提供 SysinfoProcessTreeProbe(生产实装)与 MockProcessTreeProbe
 //! (单元测试 helper),避免 trait 重复定义
-//! 设计要点(与 对齐):
-//! - SnowLuma 仅在 Windows 工作(runtime_backend::start 在非 Windows 上直接返回
-//!   Unsupported),但本 trait 实装跨平台编译可通过:非 Windows 上直接返回
-//!   只含 initial_pid 的集合,避免在 macOS / Linux CI 上把测试拉爆
-//! - sysinfo 进程枚举在 Windows 上仍有开销,必须放进 spawn_blocking;
-//!   只 refresh 进程列表(不要 new_all 拉 CPU/内存/磁盘),parent 链路 BFS 够用
-//! - 实现失败兜底:sysinfo 找不到 initial_pid,权限不足,API 调用 panic
-//!   等所有异常情况都收敛到「返回单元素集合 {initial_pid}」,不向上抛
-//!   Status poller 允许"暂时拿不到子进程",下一轮会再 probe
+//! Windows / Linux 使用 sysinfo 枚举进程并按 parent 链做 BFS，阻塞工作放到
+//! spawn_blocking；其他平台保留单 PID 结果。状态轮询器会在下一轮重新采样。
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -25,9 +18,6 @@ use crate::snowluma::status_poller::ProcessTreeProbe;
 /// 基于 sysinfo crate 的 ProcessTreeProbe 默认实装
 /// 无状态结构(Copy):每次 collect_descendants 新建 System 并只刷进程表
 /// 不在 tick 间复用,避免脏快照(process exit / new spawn)影响 BFS
-/// # 平台差异
-/// - Windows:枚举进程,按 parent 链路 BFS
-/// - 非 Windows:直接返回 {initial_pid};SnowLuma 不在非 Windows 上运行
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SysinfoProcessTreeProbe;
 
@@ -56,8 +46,8 @@ impl ProcessTreeProbe for SysinfoProcessTreeProbe {
 /// 同步实现入口:在阻塞 pool 中执行的纯计算
 /// 该函数对所有失败路径(sysinfo 拿不到进程,parent 链断裂,平台不支持)
 /// 都返回 {initial_pid} 单元素集合,不向上传播错误
-/// #[cfg(windows)] 路径在非 Windows 平台被裁剪,只剩 fallback 分支
-#[cfg(windows)]
+/// Windows / Linux 枚举完整进程树，其他平台保留 fallback 分支
+#[cfg(any(windows, target_os = "linux"))]
 fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
     // 只要 pid + parent 做 BFS;ProcessRefreshKind::new() 全关仍会拿到基础字段,
     // 比 System::new_all() 少刷 CPU/内存/磁盘/用户等无关信息
@@ -109,7 +99,7 @@ fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
     visited
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
     // SnowLuma backend 在非 Windows 平台被 runtime_backend::start 早期拒绝
     // 这里仅保证 trait 编译可过,行为退化为单元素集合

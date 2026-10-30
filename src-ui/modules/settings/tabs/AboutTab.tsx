@@ -37,6 +37,10 @@ function formatUpdateVersion(version: string): string {
     return v.startsWith('v') || v.startsWith('V') ? v : `v${v}`;
 }
 
+function isManualDesktopUpdate(update: AvailableUpdate): boolean {
+    return update.download_url.includes('/releases/tag/');
+}
+
 export function AboutTab() {
     const openExternal = useOpenExternal();
     const { startAction, isInstalling } = useComponentAction();
@@ -85,7 +89,9 @@ export function AboutTab() {
                 key: 'about-desktop-update',
                 tone: 'info',
                 title: `发现新版本 ${formatUpdateVersion(next.version)}`,
-                content: '可在本页或「组件」页安装。',
+                content: isManualDesktopUpdate(next)
+                    ? '可打开发布页下载新版 deb 或 AppImage。'
+                    : '可在本页或「组件」页安装。',
             });
         } catch (err) {
             setCheckState('error');
@@ -99,20 +105,25 @@ export function AboutTab() {
 
     const handleInstallUpdate = useCallback(async () => {
         if (!available || installing) return;
+        const manual = isManualDesktopUpdate(available);
         try {
             pushInfoBar({
                 key: 'about-desktop-update',
                 tone: 'info',
-                title: '正在安装更新',
-                content: '应用会短暂退出，安装完成后自动重开；进度见任务队列。',
+                title: manual ? '正在打开下载页' : '正在安装更新',
+                content: manual
+                    ? '下载后退出 Desktop，再安装 deb 或替换 AppImage。'
+                    : '应用会短暂退出，安装完成后自动重开；进度见任务队列。',
             });
             await startAction('desktop_self', 'local', 'update');
             // 成功路径后端会 exit；若仍返回则多为 mock / 异常未退出
             pushInfoBar({
                 key: 'about-desktop-update',
                 tone: 'info',
-                title: '安装程序已启动',
-                content: '应用未自动退出时手动关闭，等安装跑完。',
+                title: manual ? '更新下载页已打开' : '安装程序已启动',
+                content: manual
+                    ? '请下载新版安装包，退出 Desktop 后手动升级。'
+                    : '应用未自动退出时手动关闭，等安装跑完。',
             });
         } catch (err) {
             pushErrorBar({
@@ -181,7 +192,7 @@ export function AboutTab() {
                                 {installing ? <Spinner size="xs" className="text-white" /> : null}
                                 {installing
                                     ? '安装中…'
-                                    : `安装 ${formatUpdateVersion(available.version)}`}
+                                    : `${isManualDesktopUpdate(available) ? '下载' : '安装'} ${formatUpdateVersion(available.version)}`}
                             </Button>
                         ) : null}
                         <Button

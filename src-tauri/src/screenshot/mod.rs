@@ -38,6 +38,7 @@ pub struct ScreenshotCoordinator {
 
 pub(crate) const SHORTCUT_CAPTURE_OWNER: &str = "screenshot-shortcut";
 impl ScreenshotCoordinator {
+    #[cfg(windows)]
     fn acquire(&self, owner: &str) -> Result<CancellationToken, String> {
         let mut active = self.active.lock().map_err(|_| "截图状态不可用")?;
         if active.is_some() {
@@ -47,6 +48,7 @@ impl ScreenshotCoordinator {
         *active = Some((owner.to_string(), cancel.clone()));
         Ok(cancel)
     }
+    #[cfg(windows)]
     fn release(&self, owner: &str) {
         if let Ok(mut active) = self.active.lock() {
             if active.as_ref().is_some_and(|(p, _)| p == owner) {
@@ -274,11 +276,7 @@ fn emit_shortcut(
 
 #[cfg(windows)]
 fn should_restore_owner(hidden: bool, completed: bool, add_to_chat: bool) -> bool {
-    if completed {
-        add_to_chat
-    } else {
-        hidden
-    }
+    if completed { add_to_chat } else { hidden }
 }
 
 #[cfg(windows)]

@@ -266,15 +266,24 @@ pub fn delete_retired_data_root(
 /// 迁移完成后重启进程以加载新 data_root。
 #[tauri::command]
 pub fn restart_after_data_root_migrate(app: AppHandle) -> Result<(), String> {
-    relaunch_self()?;
-    let app_exit = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-        app_exit.exit(0);
-    });
+    #[cfg(target_os = "linux")]
+    {
+        // Tauri 先退出单实例事件循环，再重启；AppImage 也由运行时恢复原始路径。
+        app.request_restart();
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        relaunch_self()?;
+        let app_exit = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            app_exit.exit(0);
+        });
+    }
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn relaunch_self() -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
     let mut cmd = std::process::Command::new(&exe);

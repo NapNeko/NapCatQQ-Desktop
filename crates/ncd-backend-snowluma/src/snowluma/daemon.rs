@@ -171,13 +171,24 @@ impl SnowLumaDaemon {
             }
         }
 
-        let bundled = self.runtime_root.join("node.exe");
+        let bundled = self
+            .runtime_root
+            .join(if cfg!(windows) { "node.exe" } else { "node" });
         if bundled.is_file() {
             return Ok(bundled);
         }
 
+        let nested = bundled.join("bin/node");
+        if nested.is_file() {
+            return Ok(nested);
+        }
+
         if let Some(parent) = self.runtime_root.parent() {
-            let comp_node = parent.join("NodeJs").join("node.exe");
+            let comp_node = parent.join("NodeJs").join(if cfg!(windows) {
+                "node.exe"
+            } else {
+                "bin/node"
+            });
             if comp_node.is_file() {
                 return Ok(comp_node);
             }
@@ -185,7 +196,7 @@ impl SnowLumaDaemon {
 
         if let Ok(path_var) = std::env::var("PATH") {
             for dir in std::env::split_paths(&path_var) {
-                let candidate = dir.join("node.exe");
+                let candidate = dir.join(if cfg!(windows) { "node.exe" } else { "node" });
                 if candidate.is_file() {
                     return Ok(candidate);
                 }

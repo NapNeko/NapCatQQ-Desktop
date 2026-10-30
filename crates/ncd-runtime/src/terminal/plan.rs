@@ -18,7 +18,9 @@ use crate::host_resolver::HostResolver;
 use crate::server_manager::{ServerManager, ServerProfile};
 
 use super::TerminalError;
-use super::integration::{bash_env_section, bash_rc, git_bash_rc, remote_bash_exec_line};
+use super::integration::{
+    bash_env_section, bash_rc, git_bash_rc, local_bash_rc, remote_bash_exec_line,
+};
 use super::shells::{detect_local_shells, fresh_local_path, launch_for, pick_shell};
 
 mod bot;
@@ -215,17 +217,27 @@ impl DesktopTerminalPlanner {
         Ok(info)
     }
 
-    /// Git Bash 的 rc 放数据根的缓存目录；写不了就退回普通登录 shell
-    fn git_bash_rc_path(&self) -> Option<String> {
+    /// Bash 的 rc 放数据根的缓存目录；写不了就退回普通登录 shell。
+    fn bash_rc_path(&self, git_bash: bool) -> Option<String> {
         let dir = self.paths.cache_dir().join("terminal");
         let file = dir.join("ncd-bashrc.sh");
         std::fs::create_dir_all(&dir).ok()?;
-        std::fs::write(&file, git_bash_rc()).ok()?;
-        Some(
+        std::fs::write(
+            &file,
+            if git_bash {
+                git_bash_rc()
+            } else {
+                local_bash_rc()
+            },
+        )
+        .ok()?;
+        Some(if git_bash {
             HostPath::from_windows(&file.to_string_lossy())
                 .as_posix()
-                .to_string(),
-        )
+                .to_string()
+        } else {
+            file.to_string_lossy().into_owned()
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -243,17 +255,19 @@ impl DesktopTerminalPlanner {
         let shells = detect_local_shells();
         let shell = pick_shell(&shells, request.shell)
             .ok_or_else(|| TerminalError::Plan("这台电脑上没找到能用的 shell".into()))?;
-        let rc = (shell.kind == LocalShellKind::GitBash)
-            .then(|| self.git_bash_rc_path())
+        let rc = matches!(shell.kind, LocalShellKind::GitBash | LocalShellKind::Bash)
+            .then(|| self.bash_rc_path(shell.kind == LocalShellKind::GitBash))
             .flatten();
         let launch = launch_for(&shell, rc.as_deref());
 
         let mut env_map = BTreeMap::new();
+        let windows = host.os() == ncd_host::Os::Windows;
+        let separator = if windows { ";" } else { ":" };
         let base_path = fresh_local_path();
         let path = if path_prefix.is_empty() {
             base_path
         } else {
-            format!("{};{base_path}", path_prefix.join(";"))
+            format!("{}{separator}{base_path}", path_prefix.join(separator))
         };
         env_map.insert("PATH".to_string(), path);
         env_map.extend(env);
@@ -265,13 +279,23 @@ impl DesktopTerminalPlanner {
             host,
             host_id: ncd_domain::LOCAL_HOST_ID.to_string(),
             host_label: "本机".to_string(),
-            host_os: TerminalHostOs::Windows,
+            host_os: if windows {
+                TerminalHostOs::Windows
+            } else {
+                TerminalHostOs::Linux
+            },
             title: title.unwrap_or_else(|| format!("本机 · {}", shell.label)),
             program: PtyProgram::Program {
                 program: launch.program,
                 args: launch.args,
             },
-            cwd: cwd.map(|p| HostPath::from_windows(&p.to_string_lossy())),
+            cwd: cwd.map(|p| {
+                if windows {
+                    HostPath::from_windows(&p.to_string_lossy())
+                } else {
+                    HostPath::from_posix(p.to_string_lossy().into_owned())
+                }
+            }),
             env: env_map,
             cwd_display,
             shell: Some(shell.kind),
@@ -550,13 +574,14 @@ impl DesktopTerminalPlanner {
         let profile = &ctx.profile;
         match server_id_of_host(&instance.host_id) {
             None => {
-                let local_dir = dir.render(PathStyle::Windows);
+                let style = PathStyle::for_os(ctx.host.os());
+                let local_dir = dir.render(style);
                 let mut banner = vec![dir_line(&ctx.framework_name, &local_dir)];
                 banner.extend(profile.hint.clone());
                 let prefix = profile
                     .path_prefix
                     .iter()
-                    .map(|p| p.render(PathStyle::Windows))
+                    .map(|p| p.render(style))
                     .collect();
                 self.local_plan(
                     Arc::clone(&ctx.host),

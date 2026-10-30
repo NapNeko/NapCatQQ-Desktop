@@ -1,0 +1,27 @@
+{
+    "$schema": "https://schema.tauri.app/config/2",
+    "app": {
+        "windows": [
+            {
+                "label": "main",
+                "title": "NapCatQQ Desktop",
+                "width": 1280,
+                "height": 800,
+                "minWidth": 1148,
+                "minHeight": 720,
+                "center": true,
+                "visible": false,
+                "decorations": false,
+                "transparent": false,
+                "backgroundColor": "#211f1d",
+                "shadow": true
+            }
+        ]
+    },
+    "bundle": {
+        "active": true,
+        "targets": ["deb", "appimage"],
+        "category": "Utility",
+        "shortDescription": "NapCatQQ / SnowLuma desktop console"
+    }
+}

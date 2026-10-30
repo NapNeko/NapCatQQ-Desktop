@@ -1,7 +1,7 @@
 //! Desktop 自更新 Tauri 薄壳：check / install。
 //!
 //! 业务在 ncd-update::UpdateOrchestrator + GithubMsiUpdateProvider；
-//! 安装成功后主动 exit，让 msiexec 完成 MajorUpgrade。
+//! Windows 安装成功后主动 exit，让 msiexec 完成 MajorUpgrade；Linux 打开发布页手动升级。
 //!
 //! 安全：install 不信任前端传入的 download_url，安装前重新 check，
 //! 仅使用服务端解析出的 AvailableUpdate；期望版本与 UI 展示不一致则拒绝。
@@ -11,20 +11,26 @@
 
 use std::sync::Arc;
 
-use ncd_domain::{ProgressLogLevel, SchemaVersion};
+#[cfg(windows)]
+use ncd_domain::ProgressLogLevel;
+use ncd_domain::SchemaVersion;
+#[cfg(windows)]
 use ncd_network::DownloadProgressSink;
 use ncd_update::{AvailableUpdate, PrecheckReport, UpdateChannel, UpdateOrchestrator};
 use tauri::{AppHandle, State};
+#[cfg(windows)]
 use tokio_util::sync::CancellationToken;
+#[cfg(windows)]
 use tracing::info;
 use uuid::Uuid;
 
 use crate::AppState;
 use crate::commands::app_settings::read_github_pat;
+#[cfg(windows)]
+use crate::desktop_update::spawn_post_install_relaunch_helper;
 use crate::desktop_update::{
     DesktopUpdateProgressSink, DesktopUpdateStartupNotice, GithubMsiUpdateProvider,
     consume_startup_update_notice, product_version, product_version_str,
-    spawn_post_install_relaunch_helper,
 };
 
 fn build_check_orchestrator(state: &AppState) -> Result<UpdateOrchestrator, String> {
@@ -39,6 +45,7 @@ fn build_check_orchestrator(state: &AppState) -> Result<UpdateOrchestrator, Stri
     ))
 }
 
+#[cfg(windows)]
 fn build_install_orchestrator(
     state: &AppState,
     progress: Arc<dyn DownloadProgressSink>,
@@ -59,7 +66,7 @@ fn build_install_orchestrator(
     ))
 }
 
-/// 检查是否有新的 Desktop MSI（正式 Release；渠道未开放）。
+/// 检查 Desktop 正式 Release；Windows 返回 MSI，Linux 返回手动下载页。
 ///
 /// - `Ok(None)`：远端可达且已是最新（或 orchestrator 过滤了伪更新）
 /// - `Err`：网络/解析/无 release 快照等检查失败（前端勿当成「无需更新」）
@@ -89,6 +96,7 @@ pub async fn precheck_desktop_update(
 /// 以服务端 `check` 结果为准。`task_id` 可选，传入则推送 component_action_progress。
 ///
 /// 若本机仍有活跃 Bot，拒绝更新（与组件更新闸门一致）。
+#[cfg(windows)]
 #[tauri::command]
 pub async fn install_desktop_update(
     app: AppHandle,
@@ -241,6 +249,43 @@ pub async fn install_desktop_update(
             Err(msg)
         }
     }
+}
+
+/// Linux 更新由用户安装 deb 或替换 AppImage，打开可信发布页并保留运行状态。
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn install_desktop_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    expected: AvailableUpdate,
+    task_id: Option<String>,
+) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let orch = build_check_orchestrator(&state)?;
+    let update = orch
+        .check(UpdateChannel::Stable)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("当前已是最新版本，无需更新")?;
+    if update.version != expected.version {
+        return Err("可更新版本已变化，请重新检查后再下载".into());
+    }
+    app.opener()
+        .open_url(update.download_url, None::<&str>)
+        .map_err(|e| format!("无法打开更新下载页: {e}"))?;
+
+    let task_id = task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let progress = DesktopUpdateProgressSink::new(state.event_bus.clone(), task_id.clone(), 1);
+    progress.emit_started(1);
+    progress.emit_step_begin(1, "下载新版 Desktop 安装包");
+    progress.emit_log(
+        ncd_domain::ProgressLogLevel::Info,
+        "已打开发布页，请下载 deb 或 AppImage，并在退出 Desktop 后安装新版。",
+    );
+    progress.emit_step_end(1, true);
+    progress.emit_finished(true);
+    Ok(task_id)
 }
 
 /// 启动时消费一次：上次自更新成功 / 未完成 / 失败提示。

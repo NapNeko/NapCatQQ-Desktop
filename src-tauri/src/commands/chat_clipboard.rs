@@ -204,7 +204,12 @@ pub async fn chat_copy_message(
         .await
         .map_err(|e| e.to_string())?
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::clipboard::copy_message_linux(webview.app_handle().clone(), text, paths, image_path)
+            .await
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (webview, text, paths, image_path);
         Err("文件复制需要 Windows 客户端".into())

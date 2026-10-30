@@ -1,6 +1,6 @@
 // Desktop 自更新 IPC 服务。
 // 命令名字符串只在此处持有，后端改命令名只用改这一处。
-// 安装成功后后端会 exit(0)，前端应把失败/取消展示给用户。
+// Windows 安装后后端退出，Linux 打开手动下载页；失败/取消交由调用方展示。
 
 import { invoke, isTauri } from '../ipc/transport';
 import type { AvailableUpdate } from '../ipc/generated/update/AvailableUpdate';
@@ -37,7 +37,7 @@ export const desktopUpdateService = {
     },
 
     /**
-     * 下载 MSI 并启动 msiexec；成功时进程会退出，Promise 可能永不 resolve。
+     * Windows 下载 MSI 并退出安装；Linux 打开发布页，保留当前应用。
      * `expected` 只带 UI 看到的版本；后端会重新 check，不信任本地下发的 URL。
      * `taskId` 与组件任务队列对齐，后端推 component_action_progress。
      */

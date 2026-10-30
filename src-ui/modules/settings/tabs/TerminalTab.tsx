@@ -107,7 +107,7 @@ export function TerminalTab() {
                             patch({ defaultShell: v === 'auto' ? null : (v as LocalShellKind) })
                         }
                         items={[
-                            { value: 'auto', label: '自动（PowerShell 7 优先）' },
+                            { value: 'auto', label: '自动（系统默认）' },
                             ...shells.map((s) => ({ value: s.kind, label: s.label })),
                         ]}
                     />
