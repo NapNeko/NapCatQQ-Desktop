@@ -21,6 +21,7 @@
 | :------------------------------ | :-------------------------------------- |
 | 配置开发环境、运行检查、提交 PR | [贡献指南](../CONTRIBUTING.md)          |
 | 按功能定位源码                  | [代码地图](context/codemap.md)          |
+| 核对 Linux 组件支持与校验边界    | [Linux 组件校验矩阵](context/linux-component-validation.md) |
 | 查找已有后端能力                | [后端能力速查](context/capabilities.md) |
 | 了解前端分层与组件约定          | [前端约定](context/frontend.md)         |
 | 查阅历史问题与约束              | [开发经验](context/lessons.md)          |

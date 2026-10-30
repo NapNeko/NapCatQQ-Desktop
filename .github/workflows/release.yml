@@ -1,7 +1,7 @@
-# Desktop MSI 发版。与 ncd-watch 的 watch-v* 分流；本工作流只响应 v*.*.*。
+# Desktop Windows / Linux 发版。与 ncd-watch 的 watch-v* 分流；本工作流只响应 v*.*.*。
 # 质量门禁默认信任 ci.yml；run_gates 复用同一套并行测试和缓存，与打包并行。
 
-name: Release MSI
+name: Release Desktop
 
 on:
   push:
@@ -25,7 +25,7 @@ on:
         default: false
         type: boolean
       dry_run:
-        description: "只验证门禁与 MSI 打包，不创建或更新 GitHub Release"
+        description: "只验证门禁与 Windows / Linux 打包，不创建或更新 GitHub Release"
         required: false
         default: false
         type: boolean
@@ -35,7 +35,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: release-msi-${{ github.ref }}
+  group: release-desktop-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -103,13 +103,21 @@ jobs:
       git_ref: ${{ github.sha }}
     secrets: inherit
 
+  build-linux:
+    needs: resolve
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      git_ref: ${{ github.sha }}
+    secrets: inherit
+
   publish:
     needs:
       - resolve
       - gates
       - build-msi
+      - build-linux
     # 可选门禁跳过时仍可发布；失败、取消或整次取消都不能发布。
-    if: ${{ !cancelled() && !inputs.dry_run && needs.resolve.result == 'success' && needs.build-msi.result == 'success' && (needs.gates.result == 'success' || needs.gates.result == 'skipped') }}
+    if: ${{ !cancelled() && !inputs.dry_run && needs.resolve.result == 'success' && needs.build-msi.result == 'success' && needs.build-linux.result == 'success' && (needs.gates.result == 'success' || needs.gates.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -124,6 +132,12 @@ jobs:
           name: ${{ needs.build-msi.outputs.artifact_name }}
           path: release-assets
 
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-linux.outputs.artifact_name }}
+          path: release-assets
+
       - name: Verify assets and checksums
         id: assets
         shell: bash
@@ -135,6 +149,12 @@ jobs:
           if [[ ${#msis[@]} -lt 1 ]]; then
             echo "release-assets 中没有 MSI" >&2
             ls -la
+            exit 1
+          fi
+          debs=(*.deb)
+          appimages=(*.AppImage)
+          if [[ ${#debs[@]} -lt 1 || ${#appimages[@]} -lt 1 ]]; then
+            echo "release-assets 中缺少 Linux 安装包" >&2
             exit 1
           fi
           : > SHA256SUMS
@@ -177,5 +197,7 @@ jobs:
           # 自更新走 GitHub Release MSI，不上传 latest.json / .sig
           files: |
             release-assets/*.msi
+            release-assets/*.deb
+            release-assets/*.AppImage
             release-assets/SHA256SUMS
           fail_on_unmatched_files: false

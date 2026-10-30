@@ -2,11 +2,11 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const jobs = ['changes', 'frontend', 'rust-core', 'rust-shell'];
+const jobs = ['changes', 'frontend', 'rust-core', 'rust-shell', 'rust-linux'];
 const suites = {
-    full: ['frontend', 'rust-core', 'rust-shell'],
+    full: ['frontend', 'rust-core', 'rust-shell', 'rust-linux'],
     frontend: ['frontend'],
-    rust: ['rust-core', 'rust-shell'],
+    rust: ['rust-core', 'rust-shell', 'rust-linux'],
     'rust-smoke': ['rust-core'],
 };
 
@@ -18,6 +18,7 @@ export function checkGate({ event, suite = 'full', needs }) {
             ['frontend', 'frontend'],
             ['rust_core', 'rust-core'],
             ['rust_shell', 'rust-shell'],
+            ['rust_shell', 'rust-linux'],
         ]) {
             const changed = needs.changes?.outputs?.[area];
             if (changed === 'true') required.add(job);

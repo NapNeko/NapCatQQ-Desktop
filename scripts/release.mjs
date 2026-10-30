@@ -206,7 +206,7 @@ async function cmdShip(versionPlain, { push, yes }) {
         console.log(`[info] push origin HEAD && push origin ${tagName}`);
         git(['push', 'origin', 'HEAD'], { inherit: true });
         git(['push', 'origin', tagName], { inherit: true });
-        console.log('[ok] 已推送。Release MSI 应由 tag 触发');
+        console.log('[ok] 已推送。Release Desktop 应由 tag 触发');
         console.log('     https://github.com/NapNeko/NapCatQQ-Desktop/actions');
     } else {
         console.log('');
@@ -512,7 +512,7 @@ function printHelp() {
 
 用法:
   pnpm run release -- <X.Y.Z>              # commit + 本地 tag，不 push
-  pnpm run release -- <X.Y.Z> --push       # 再推送分支与 tag → CI Release MSI
+  pnpm run release -- <X.Y.Z> --push       # 再推送分支与 tag → CI Release Desktop
   pnpm run release -- <X.Y.Z> --yes --push # 跳过确认
 
 分步:
@@ -534,7 +534,7 @@ function printHelp() {
   pnpm run release -- X.Y.Z --push
 
 注意:
-  - 推送 tag 会触发正式 Release MSI
+  - 推送 tag 会触发正式 Release Desktop（Windows / Linux）
   - 默认不 push，与旧版 python release.py 一致
 `);
 }

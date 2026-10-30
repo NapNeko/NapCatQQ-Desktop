@@ -2,7 +2,7 @@
 
 [返回用户指南](README.md) · [应用端实例](app-instances.md) · [ncd-watch 值守](ncd-watch.md)
 
-Desktop 运行在 Windows，通过 SSH 管理 Linux 主机。协议 Bot 支持远端原生运行和 Docker 部署；应用端的安装、配置和日志也按实例所属主机管理。
+Desktop 运行在 Windows 或 Linux，通过 SSH 管理远端 Linux 主机。协议 Bot 支持远端原生运行和 Docker 部署；应用端的安装、配置和日志也按实例所属主机管理。
 
 ## 添加主机
 

@@ -26,20 +26,40 @@ Windows 下使用 `pnpm.cmd` 可避免 PowerShell 脚本执行策略影响。启
 
 Windows 的 `tauri:dev` 自动使用 `%LOCALAPPDATA%\NapCatQQ Desktop\cargo-targets\<工作区标识>`，避免可执行产物继承沙盒工作区的低完整性标签。每个工作区独立缓存，已有 `CARGO_TARGET_DIR` 时沿用它；实际路径会显示在启动日志中。首次切换目录需要重建。直接执行 Cargo 命令时可使用日志中的同一产物目录。
 
+## Linux 开发环境
+
+使用与上表相同的 Node.js、pnpm 和 Rust stable，Rust 使用本机 GNU 工具链。Linux 桌面依赖 GTK 3、WebKitGTK 4.1 和 AppIndicator；Debian / Ubuntu 可先安装：
+
+```bash
+sudo apt update
+sudo apt install build-essential curl wget file pkg-config libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+pnpm install --frozen-lockfile
+pnpm run tauri:dev
+```
+
+其他发行版的依赖名称见 [Tauri 官方 Linux 环境说明](https://v2.tauri.app/start/prerequisites/#linux)。开发与运行均需要图形桌面会话。Linux 下使用 `pnpm`，下文检查表中的 `pnpm.cmd` 替换为 `pnpm` 即可；`scripts/build-remote-agent.mjs` 在 Linux 上会跳过 Windows Agent 构建。
+
+```bash
+# 在 Linux 上构建 deb 和 AppImage
+pnpm run tauri:build:linux
+```
+
+产物位于 `target/release/bundle/{deb,appimage}`。Tauri 自动合并 `src-tauri/tauri.linux.conf.json`；Windows 保持使用 `tauri.windows.conf.json`。正式 Linux 安装包在 Ubuntu 22.04 x64 上构建，避免依赖更新系统的 glibc。CI 对 Linux 运行 workspace 编译检查，平台专属行为仍需对应桌面环境验收。
+
 ## 浏览器预览
 
 ```powershell
 pnpm.cmd run dev
 ```
 
-打开 `http://localhost:1420`。非 Tauri 环境会使用 `src-ui/core/ipc/mock/` 的演示数据，适合检查页面、交互和文案。它不能验证真实协议端、SSH、Windows 窗口生命周期、原生截图或 ConPTY 终端。
+打开 `http://localhost:1420`。非 Tauri 环境会使用 `src-ui/core/ipc/mock/` 的演示数据，适合检查页面、交互和文案。它不能验证真实协议端、SSH、窗口生命周期、原生截图或 PTY 终端。
 
 ## 代码结构
 
 | 路径                                               | 职责                                     |
 | :------------------------------------------------- | :--------------------------------------- |
 | `src-ui/`                                          | React 界面、hooks、服务与生成的 IPC 类型 |
-| `src-tauri/`                                       | Tauri 命令薄壳、窗口、托盘与 MSI         |
+| `src-tauri/`                                       | Tauri 命令薄壳、窗口、托盘与安装包         |
 | `crates/ncd-domain`                                | 配置、模型、事件与错误类型               |
 | `crates/ncd-traits`                                | 接口与 Mock 边界                         |
 | `crates/ncd-runtime`                               | Bot、应用端、调试台与任务编排            |
@@ -68,7 +88,8 @@ Tauri command 只转换参数和错误，业务放在对应 crate。跨 IPC 的�
 | lint 与格式检查     | `pnpm.cmd run lint` / `pnpm.cmd run fmt:check` |
 | 综合检查            | `pnpm.cmd run verify`                          |
 | 版本元数据一致性    | `pnpm.cmd run check:versions`                  |
-| 构建 MSI            | `pnpm.cmd run tauri:build:msi`                 |
+| 构建 MSI（Windows） | `pnpm.cmd run tauri:build:msi`                 |
+| 构建 deb / AppImage（Linux） | `pnpm run tauri:build:linux`           |
 
 `verify` 包含类型导出、TypeScript、lint、Rust 和格式检查，不包含完整测试；导出的 `src-ui/core/ipc/generated/` 有变化时一起提交。CI 入口见 [ci.yml](.github/workflows/ci.yml)，真实环境冒烟测试按相应测试的说明单独执行。
 
@@ -83,4 +104,4 @@ Tauri command 只转换参数和错误，业务放在对应 crate。跨 IPC 的�
 
 ## 发布说明
 
-用户可见的变化写入 `docs/releases/vX.Y.Z.md`，远端监控使用 `watch-vX.Y.Z.md`。维护和预览流程见 [发布说明指南](docs/releases/README.md)。Desktop 与 ncd-watch 独立发布；自更新读取 GitHub Release 中的 MSI。
+用户可见的变化写入 `docs/releases/vX.Y.Z.md`，远端监控使用 `watch-vX.Y.Z.md`。维护和预览流程见 [发布说明指南](docs/releases/README.md)。Desktop 与 ncd-watch 独立发布；Windows 自更新读取 GitHub Release 中的 MSI，Linux 使用发布页的 deb / AppImage 手动升级。

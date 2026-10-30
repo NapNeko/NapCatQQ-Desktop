@@ -11,6 +11,7 @@ function needs(areas = {}, results = {}) {
         frontend: { result: 'skipped' },
         'rust-core': { result: 'skipped' },
         'rust-shell': { result: 'skipped' },
+        'rust-linux': { result: 'skipped' },
         ...Object.fromEntries(Object.entries(results).map(([job, result]) => [job, { result }])),
     };
 }
@@ -21,7 +22,13 @@ for (const event of ['pull_request', 'push']) {
     });
     test(`${event}: shell-only changes do not require core or frontend`, () => {
         assert.deepEqual(
-            checkGate({ event, needs: needs({ rust_shell: 'true' }, { 'rust-shell': 'success' }) }),
+            checkGate({
+                event,
+                needs: needs(
+                    { rust_shell: 'true' },
+                    { 'rust-shell': 'success', 'rust-linux': 'success' },
+                ),
+            }),
             [],
         );
     });
@@ -30,6 +37,7 @@ for (const event of ['pull_request', 'push']) {
             ['frontend', 'frontend'],
             ['rust_core', 'rust-core'],
             ['rust_shell', 'rust-shell'],
+            ['rust_shell', 'rust-linux'],
         ]) {
             assert.ok(
                 checkGate({ event, needs: needs({ [area]: 'true' }) }).some((s) => s.includes(job)),
@@ -44,9 +52,9 @@ for (const event of ['pull_request', 'push']) {
 }
 
 for (const [suite, required] of Object.entries({
-    full: ['frontend', 'rust-core', 'rust-shell'],
+    full: ['frontend', 'rust-core', 'rust-shell', 'rust-linux'],
     frontend: ['frontend'],
-    rust: ['rust-core', 'rust-shell'],
+    rust: ['rust-core', 'rust-shell', 'rust-linux'],
     'rust-smoke': ['rust-core'],
 })) {
     test(`dispatch ${suite}: only selected suites are required`, () => {

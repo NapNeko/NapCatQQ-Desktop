@@ -261,6 +261,8 @@ function desktopDownload({ versionPlain, tag, repo }) {
         '',
         '适用于 Windows 10 / Server 2016 及以上。已装旧版的直接覆盖安装，Bot、远端主机和配置都会保留；也可以在应用里「检查更新」一键升级。',
         '',
+        `Linux x64：[Debian / Ubuntu 安装包](${assetUrl(repo, tag, `NapCatQQ-Desktop-${versionPlain}-amd64.deb`)}) · [AppImage](${assetUrl(repo, tag, `NapCatQQ-Desktop-${versionPlain}-x86_64.AppImage`)})。需图形桌面；Linux 请下载新版安装包升级。`,
+        '',
         `文件名固定的同款安装包：[NapCatQQ-Desktop-x64.msi](${assetUrl(repo, tag, 'NapCatQQ-Desktop-x64.msi')})（给脚本用） · 校验和：[SHA256SUMS](${assetUrl(repo, tag, 'SHA256SUMS')})`,
     ];
 }
@@ -461,7 +463,7 @@ async function generateAiCuratedCore({ kind, versionPlain, tag, prev, config }) 
     }
 
     const product =
-        kind === 'watch' ? 'ncd-watch（远端监控二进制）' : 'NapCatQQ Desktop（Windows 桌面控制台）';
+        kind === 'watch' ? 'ncd-watch（远端监控二进制）' : 'NapCatQQ Desktop（Windows / Linux 桌面控制台）';
     const userPrompt = `产品: ${product}
 当前版本: ${tag}
 上一版本: ${prev || '(无)'}

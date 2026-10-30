@@ -7,7 +7,7 @@
 
 | 产物 | 文件 | 对应 tag |
 | :--- | :--- | :--- |
-| Desktop MSI | `vX.Y.Z.md` | `vX.Y.Z` |
+| Desktop（Windows MSI / Linux deb、AppImage） | `vX.Y.Z.md` | `vX.Y.Z` |
 | ncd-watch | `watch-vX.Y.Z.md` | `watch-vX.Y.Z` |
 
 示例：`v3.0.1.md`、`watch-v0.2.6.md`。
@@ -53,7 +53,7 @@ CI 会优先读取本目录文件；没有策展文件时才用自动草稿，�
 # 工作区干净时：写版本 + 策展 + 单 commit + 本地 tag（默认不 push）
 pnpm run release -- 3.1.2
 
-# 确认后推送分支与 tag → 触发 Release MSI
+# 确认后推送分支与 tag → 触发 Release Desktop
 pnpm run release -- 3.1.2 --push
 
 # 跳过交互确认

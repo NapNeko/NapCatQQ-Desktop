@@ -1,6 +1,6 @@
 # 质量门禁：PR / main 按改动路径过滤，main 的缓存供后续 PR 复用。
 # 手动 dispatch 可选手动 suite 加速迭代（忽略路径过滤）。
-# MSI 打包见 build-msi.yml / release.yml。
+# 打包见 build-msi.yml / build-linux.yml / release.yml。
 # Rust 全量测试必须在 Windows（大量 #[cfg(windows)]）。
 #
 # 关于「虚拟机复用」：
@@ -8,7 +8,7 @@
 #   能复用的是 Cargo/pnpm 缓存（actions/cache、setup-node cache）。
 #   要真·常驻机只能 self-hosted runner。
 #
-# Job 拓扑：changes → frontend / rust-core / rust-shell（并行）→ gate。
+# Job 拓扑：changes → frontend / rust-core / rust-shell / rust-linux（并行）→ gate。
 #   rust-core  --exclude ncd-tauri：ncd-* 纯 Rust  crate，
 #   rust-shell 只编 ncd-tauri：tauri/wry/tao/webview2 链是大头，拆开并行才省墙钟。
 #
@@ -367,6 +367,41 @@ jobs:
       - name: Capture Cargo input timestamps
         run: node scripts/ci-rust-cache.mjs capture
 
+  rust-linux:
+    name: Rust workspace (Linux)
+    needs: changes
+    if: >-
+      inputs.force_full ||
+      ((github.event_name == 'pull_request' || github.event_name == 'push') && needs.changes.outputs.rust_shell == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust'))
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-check
+
+      - name: Check Linux workspace
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Check Linux host and Docker contracts
+        run: |
+          cargo test -p ncd-host --lib --locked
+          cargo test -p ncd-component --lib bad_release_archive_preserves_the_installed_runtime --locked
+          cargo test -p ncd-deploy -p ncd-runtime --lib docker --locked
+
   gate:
     name: Gate
     needs:
@@ -374,6 +409,7 @@ jobs:
       - frontend
       - rust-core
       - rust-shell
+      - rust-linux
     runs-on: ubuntu-latest
     if: always()
     steps:

@@ -33,6 +33,7 @@
     "tauri:dev": "node scripts/assert-no-diagnostic-agent.mjs source && node scripts/tauri-dev.mjs",
     "tauri:build": "tauri build",
     "tauri:build:msi": "tauri build --bundles msi",
+    "tauri:build:linux": "tauri build --bundles deb,appimage",
     "icons:gen": "python scripts/generate_app_icons.py",
     "tauri:icon": "pnpm run icons:gen",
     "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\"",
