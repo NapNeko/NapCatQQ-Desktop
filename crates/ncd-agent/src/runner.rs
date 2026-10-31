@@ -544,6 +544,11 @@ Start-Sleep -Seconds 45
         let log = store::instance_dir(root.path(), &entry.spec.instance_id)
             .join(format!("{}.log", entry.status.generation));
         let child_pid = child_from_log(&log);
+        // 子进程的就绪日志可能早于运行线程持久化 Running 状态。
+        wait_until("running status is persisted", || {
+            store::read::<Entry>(&runner.path)
+                .is_ok_and(|entry| entry.status.state == WindowsWorkloadState::Running)
+        });
         let running: Entry = store::read(&runner.path).unwrap();
         assert_eq!(running.status.state, WindowsWorkloadState::Running);
         let parent_pid = running.status.pid.unwrap();

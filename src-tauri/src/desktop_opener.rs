@@ -27,7 +27,7 @@ pub async fn open_url(url: &str) -> Result<(), String> {
 #[cfg(target_os = "linux")]
 pub async fn open_directory(path: &std::path::Path) -> Result<(), String> {
     if !path.is_absolute() || !path.is_dir() {
-        return Err(format!("日志目录不存在: {}", path.display()));
+        return Err(format!("目录不存在: {}", path.display()));
     }
     launch(
         linux_open_command(path),

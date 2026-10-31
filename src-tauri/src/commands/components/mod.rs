@@ -49,7 +49,7 @@ pub async fn open_component_directory(
         .await
         .local_component_directory(component_id, host.as_ref())
         .await?;
-    super::open_local_directory(&directory)
+    super::open_local_directory(&directory).await
 }
 
 #[tauri::command]
