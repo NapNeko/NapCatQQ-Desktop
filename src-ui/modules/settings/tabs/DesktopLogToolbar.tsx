@@ -24,6 +24,8 @@ type Props = Pick<
     | 'onCopy'
     | 'onOpenLocation'
     | 'opening'
+    | 'onCopyLocation'
+    | 'copyingLocation'
     | 'copyDisabled'
     | 'autoScroll'
     | 'setAutoScroll'
@@ -44,6 +46,8 @@ export function DesktopLogToolbar(props: Props) {
         onCopy,
         onOpenLocation,
         opening,
+        onCopyLocation,
+        copyingLocation,
         copyDisabled,
         autoScroll,
         setAutoScroll,
@@ -141,6 +145,18 @@ export function DesktopLogToolbar(props: Props) {
                 >
                     <FolderOpen size={13} strokeWidth={2.2} />
                     <span className="ml-1 hidden text-[11.5px] lg:inline">打开位置</span>
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => void onCopyLocation()}
+                    disabled={copyingLocation}
+                    aria-label="复制日志目录"
+                    title="复制日志目录"
+                >
+                    <Copy size={13} />
+                    <span className="ml-1 hidden text-[11.5px] lg:inline">复制目录</span>
                 </Button>
 
                 <Button

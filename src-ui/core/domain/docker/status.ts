@@ -34,27 +34,39 @@ export function containerStateBadge(state: ContainerState): ContainerBadge {
 }
 
 /// 一句话概括 docker 是否能直接部署,给页面顶部状态条用。
-export function dockerStatusSummary(status: DockerStatus): {
+export function dockerStatusSummary(
+    status: DockerStatus,
+    engineName = 'Docker',
+): {
     ready: boolean;
     label: string;
 } {
     if (!status.installed) {
-        return { ready: false, label: '未安装 Docker' };
+        return { ready: false, label: `未安装 ${engineName}` };
     }
     if (!status.daemonRunning) {
-        return { ready: false, label: `Docker ${status.version} 已装，但守护进程未运行` };
+        return {
+            ready: false,
+            label:
+                engineName === 'Podman'
+                    ? `Podman ${status.version} 运行环境未就绪`
+                    : `${engineName} ${status.version} 已装，但守护进程未运行`,
+        };
     }
     if (!status.composeAvailable) {
-        return { ready: false, label: `Docker ${status.version} 缺少 compose 插件` };
+        return { ready: false, label: `${engineName} ${status.version} 缺少 compose 插件` };
     }
-    return { ready: true, label: `Docker ${status.version} 就绪` };
+    return { ready: true, label: `${engineName} ${status.version} 就绪` };
 }
 
-export function dockerManagementSummary(status: DockerStatus): { ready: boolean; label: string } {
+export function dockerManagementSummary(
+    status: DockerStatus,
+    engineName = 'Docker',
+): { ready: boolean; label: string } {
     if (status.installed && status.daemonRunning && !status.composeAvailable) {
-        return { ready: true, label: `Docker ${status.version} 可管理 · 缺少 compose 插件` };
+        return { ready: true, label: `${engineName} ${status.version} 可管理 · 缺少 compose 插件` };
     }
-    return dockerStatusSummary(status);
+    return dockerStatusSummary(status, engineName);
 }
 
 /// 判断一个容器名是不是本工程部署的 NapCat / SnowLuma(用于在容器列表里

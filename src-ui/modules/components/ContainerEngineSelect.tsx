@@ -1,42 +1,44 @@
-import { useEffect } from 'react';
-import { useContainerEngine } from '../../hooks/docker/useContainerEngine';
-import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
-import { errorText } from '../../core/domain/errors';
+import * as RadioGroup from '@radix-ui/react-radio-group';
+import { Check } from 'lucide-react';
 import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 
+const ENGINES = [
+    { value: 'docker', label: 'Docker' },
+    { value: 'podman', label: 'Podman' },
+] as const;
+
 export function ContainerEngineSelect({
-    hostId,
+    value,
     disabled,
-    onEngine,
+    onValueChange,
 }: {
-    hostId: string;
+    value: ContainerEngine;
     disabled: boolean;
-    onEngine: (engine: ContainerEngine) => void;
+    onValueChange: (engine: ContainerEngine) => void;
 }) {
-    const state = useContainerEngine(hostId);
-    useEffect(() => onEngine(state.engine), [onEngine, state.engine]);
     return (
-        <label className="mb-2 flex items-center gap-2 text-xs text-text-secondary">
-            容器引擎
-            <select
-                aria-label="选择容器引擎"
-                value={state.engine}
-                disabled={disabled || state.loading || state.switching}
-                className="rounded-sm border border-border-subtle bg-canvas px-2 py-1 text-text"
-                onChange={(event) =>
-                    void state.select(event.target.value as ContainerEngine).catch((error) =>
-                        pushErrorBar({
-                            key: `container-engine:${hostId}`,
-                            title: '无法切换容器引擎',
-                            raw: errorText(error),
-                        }),
-                    )
-                }
-            >
-                <option value="docker">Docker</option>
-                <option value="podman">Podman</option>
-            </select>
-            <span>各引擎的容器和镜像独立</span>
-        </label>
+        <RadioGroup.Root
+            aria-label="选择容器引擎"
+            orientation="horizontal"
+            value={value}
+            disabled={disabled}
+            onValueChange={(engine) => onValueChange(engine as ContainerEngine)}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border-subtle bg-canvas p-0.5"
+        >
+            {ENGINES.map(({ value: engine, label }) => (
+                <RadioGroup.Item
+                    key={engine}
+                    value={engine}
+                    className="inline-flex h-8 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-sm px-2.5 text-xs font-medium text-text-secondary transition-colors hover:bg-field/60 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 data-[state=checked]:bg-surface data-[state=checked]:text-text data-[state=checked]:shadow-sm data-[state=checked]:ring-1 data-[state=checked]:ring-border-subtle"
+                >
+                    <Check
+                        size={12}
+                        aria-hidden
+                        className={value === engine ? 'text-brand' : 'invisible'}
+                    />
+                    {label}
+                </RadioGroup.Item>
+            ))}
+        </RadioGroup.Root>
     );
 }

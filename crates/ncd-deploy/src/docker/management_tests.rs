@@ -15,6 +15,11 @@ struct MockHost {
     disconnected: bool,
     fail_remove: bool,
     compose_available: bool,
+    standalone_compose: bool,
+    docker_compat: bool,
+    formatted_podman_version_fails: bool,
+    os: Os,
+    id: &'static str,
 }
 
 impl MockHost {
@@ -27,6 +32,11 @@ impl MockHost {
             disconnected: false,
             fail_remove: false,
             compose_available: false,
+            standalone_compose: false,
+            docker_compat: false,
+            formatted_podman_version_fails: false,
+            os: Os::Linux,
+            id: "docker-test",
         }
     }
 }
@@ -34,7 +44,7 @@ impl MockHost {
 #[async_trait]
 impl Host for MockHost {
     fn os(&self) -> Os {
-        Os::Linux
+        self.os
     }
     fn arch(&self) -> Arch {
         Arch::X86_64
@@ -47,7 +57,7 @@ impl Host for MockHost {
         }
     }
     fn id(&self) -> &str {
-        "docker-test"
+        self.id
     }
     fn shell(&self) -> &dyn HostShell {
         &ncd_host::shell::BashShell
@@ -102,10 +112,25 @@ impl Host for MockHost {
                 operation: "SSH disconnected",
             });
         }
-        let (code, stdout, stderr) = if self.missing {
+        let (code, stdout, stderr) = if command.program == "podman-compose" {
+            if self.standalone_compose {
+                (0, "podman-compose version 1.6.0", "")
+            } else {
+                (127, "", "podman-compose: command not found")
+            }
+        } else if self.missing {
             (127, "", "docker: command not found")
         } else {
             match command.args.first().map(String::as_str) {
+                Some("--version") if self.docker_compat || command.program == "podman" => {
+                    (0, "podman version 5.8.9\n", "")
+                }
+                Some("--version") => (0, "Docker version 27.3.1, build example\n", ""),
+                Some("version")
+                    if command.program == "podman" && self.formatted_podman_version_fails =>
+                {
+                    (125, "", "cannot re-exec process")
+                }
                 Some("version") => (1, "27.3.1\n", "daemon is unreachable"),
                 Some("info") if !command.elevated && self.daemon_error.is_some() => {
                     (1, "", self.daemon_error.unwrap())
@@ -361,4 +386,214 @@ async fn podman_compose_does_not_pass_docker_only_pull_flag() {
         ["compose", "up", "-d", "--remove-orphans"]
     );
     assert_eq!(commands.last().unwrap().program, "podman");
+}
+
+#[tokio::test]
+async fn podman_standalone_provider_is_shared_by_probe_up_and_down_without_sudo() {
+    let host = MockHost {
+        standalone_compose: true,
+        ..MockHost::new()
+    };
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    assert!(cli.probe().await.compose_available);
+    cli.compose_up("/tmp/a project").await.unwrap();
+    cli.compose_down("/tmp/a project", true).await.unwrap();
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(
+        commands
+            .iter()
+            .filter(|c| c.program == "podman-compose" && c.args == ["--version"])
+            .count(),
+        1
+    );
+    let up = commands
+        .iter()
+        .find(|c| c.args.first().is_some_and(|a| a == "up"))
+        .unwrap();
+    assert_eq!(up.program, "podman-compose");
+    assert_eq!(up.args, ["up", "-d", "--remove-orphans"]);
+    assert_eq!(
+        up.working_dir.as_ref().unwrap().as_posix(),
+        "/tmp/a project"
+    );
+    assert_eq!(commands.last().unwrap().program, "podman-compose");
+    assert_eq!(commands.last().unwrap().args, ["down", "-v"]);
+    assert!(commands.iter().all(|c| !c.elevated));
+}
+
+#[tokio::test]
+async fn missing_podman_providers_preserve_both_failures_and_do_not_start_a_deployment() {
+    let host = MockHost::new();
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    assert!(!cli.probe().await.compose_available);
+    let error = cli
+        .compose_up("/tmp/project")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("compose is not a docker command"));
+    assert!(error.contains("podman-compose: command not found"));
+    assert!(
+        !host
+            .commands
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|c| c.args.iter().any(|a| a == "up"))
+    );
+}
+
+#[tokio::test]
+async fn windows_docker_compose_keeps_original_arguments_and_elevation() {
+    let host = MockHost {
+        os: Os::Windows,
+        compose_available: true,
+        ..MockHost::new()
+    };
+    let cli = DockerCli::new(&host);
+    cli.elevated
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    cli.compose_up("C:/a project").await.unwrap();
+    cli.compose_down("C:/a project", true).await.unwrap();
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(commands.len(), 2);
+    assert!(commands.iter().all(|c| c.program == "docker" && c.elevated));
+    assert_eq!(
+        commands[0].args,
+        ["compose", "up", "-d", "--remove-orphans", "--pull", "never"]
+    );
+    assert_eq!(commands[1].args, ["compose", "down", "-v"]);
+}
+
+#[tokio::test]
+async fn podman_runtime_failure_does_not_reinstall_packages_or_request_sudo() {
+    use crate::docker::engine::{self, ContainerEngine};
+    let host = MockHost {
+        id: "podman-runtime-failure-test",
+        formatted_podman_version_fails: true,
+        compose_available: true,
+        daemon_error: Some("rootless runtime namespace unavailable"),
+        ..MockHost::new()
+    };
+    let mut preferences = engine::preferences();
+    preferences.insert(host.id().into(), ContainerEngine::Podman);
+    engine::replace_preferences(preferences);
+    let report =
+        crate::docker::install_docker_with_progress(&host, None, None, std::sync::Arc::new(|_| {}))
+            .await;
+    let mut preferences = engine::preferences();
+    preferences.remove(host.id());
+    engine::replace_preferences(preferences);
+    let report = report.unwrap();
+    assert!(matches!(
+        report.status,
+        ncd_domain::DockerInstallStatus::ManualRequired
+    ));
+    assert!(
+        report
+            .message
+            .contains("rootless runtime namespace unavailable")
+    );
+    assert!(
+        host.commands
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|command| command.program == "podman" && !command.elevated)
+    );
+}
+
+#[tokio::test]
+async fn podman_docker_shim_without_banner_requires_explicit_engine_selection() {
+    let host = MockHost {
+        docker_compat: true,
+        ..MockHost::new()
+    };
+    let cli = DockerCli::new(&host);
+    let error = cli.probe_checked().await.unwrap_err();
+    assert!(matches!(error, DockerCliError::PodmanCompatibilityShim));
+    assert!(error.to_string().contains("选择 Podman"));
+    assert!(cli.ensure_daemon_ready().await.is_err());
+    assert!(cli.compose_up("/tmp/project").await.is_err());
+    assert!(!cli.probe().await.installed);
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].args, ["--version"]);
+    assert!(!commands[0].elevated);
+}
+
+#[tokio::test]
+async fn podman_docker_shim_does_not_install_docker_over_the_existing_engine() {
+    let host = MockHost {
+        docker_compat: true,
+        ..MockHost::new()
+    };
+    let report =
+        crate::docker::install_docker_with_progress(&host, None, None, std::sync::Arc::new(|_| {}))
+            .await
+            .unwrap();
+    assert!(matches!(
+        report.status,
+        ncd_domain::DockerInstallStatus::ManualRequired
+    ));
+    assert!(report.message.contains("podman-docker"));
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].program, "docker");
+    assert_eq!(commands[0].args, ["--version"]);
+    assert!(!commands[0].elevated);
+}
+
+#[tokio::test]
+async fn windows_docker_probe_does_not_add_linux_identity_commands() {
+    let host = MockHost {
+        os: Os::Windows,
+        docker_compat: true,
+        compose_available: true,
+        ..MockHost::new()
+    };
+    assert!(
+        DockerCli::new(&host)
+            .probe_checked()
+            .await
+            .unwrap()
+            .installed
+    );
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(
+        commands[0].args,
+        ["version", "--format", "{{.Client.Version}}"]
+    );
+    assert!(
+        commands
+            .iter()
+            .all(|c| c.program == "docker" && !c.elevated)
+    );
+    assert!(!commands.iter().any(|c| c.args == ["--version"]));
+}
+
+#[tokio::test]
+async fn podman_installation_is_detected_without_initializing_its_broken_runtime() {
+    let host = MockHost {
+        formatted_podman_version_fails: true,
+        compose_available: true,
+        daemon_error: Some("rootless runtime namespace unavailable"),
+        ..MockHost::new()
+    };
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    let status = cli.probe().await;
+    assert!(status.installed);
+    assert_eq!(status.version, "5.8.9");
+    assert!(status.compose_available);
+    assert!(!status.daemon_running);
+    assert!(host.commands.lock().unwrap().iter().all(|c| !c.elevated));
 }

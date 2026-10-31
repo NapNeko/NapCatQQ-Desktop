@@ -125,10 +125,9 @@ pub fn classify_pull_failure(err: &DockerCliError) -> (PullFailureKind, String) 
             (kind, format!("{}：{}", kind.user_title(), detail))
         }
         DockerCliError::RuntimeUnavailable { .. }
+        | DockerCliError::PodmanCompatibilityShim
         | DockerCliError::ParseFailed(_)
-        | DockerCliError::InvalidArgument(_) => {
-            (PullFailureKind::Other, err.to_string())
-        }
+        | DockerCliError::InvalidArgument(_) => (PullFailureKind::Other, err.to_string()),
     }
 }
 

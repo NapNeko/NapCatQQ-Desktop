@@ -14,12 +14,20 @@ use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerS
 use ncd_host::{Host, HostCommand, HostError, HostPath, StreamSource};
 use tracing::{info, warn};
 
+#[path = "compose_provider.rs"]
+mod compose_provider;
+#[path = "engine_identity.rs"]
+mod engine_identity;
 #[path = "management.rs"]
 mod management;
 
 /// DockerCli 操作错误
 #[derive(Debug, thiserror::Error)]
 pub enum DockerCliError {
+    #[error(
+        "检测到 docker 命令由 podman-docker 提供，它是 Podman 的兼容入口。请在“容器部署”中选择 Podman 引擎，以管理当前用户的容器和镜像。"
+    )]
+    PodmanCompatibilityShim,
     #[error("invalid docker argument: {0}")]
     InvalidArgument(String),
     /// host 层调用失败(SSH 中断 / 进程起不来)
@@ -54,6 +62,8 @@ pub struct DockerCli<'h> {
     host: &'h dyn Host,
     engine: super::engine::ContainerEngine,
     elevated: std::sync::atomic::AtomicBool,
+    podman_compose: tokio::sync::OnceCell<compose_provider::PodmanComposeProbe>,
+    docker_is_podman: tokio::sync::OnceCell<bool>,
 }
 
 impl<'h> DockerCli<'h> {
@@ -62,6 +72,8 @@ impl<'h> DockerCli<'h> {
             host,
             engine: super::engine::engine_for(host),
             elevated: std::sync::atomic::AtomicBool::new(false),
+            podman_compose: tokio::sync::OnceCell::new(),
+            docker_is_podman: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -85,6 +97,9 @@ impl<'h> DockerCli<'h> {
     /// 探测 docker 是否可用,任何一步失败都退化成"未装/未就绪",不报错——
     /// 探测本身不该把"没装 docker"当异常
     pub async fn probe(&self) -> DockerStatus {
+        if self.verify_selected_engine().await.is_err() {
+            return DockerStatus::absent();
+        }
         // docker 客户端版本(不连 daemon,普通用户就能跑),拿不到直接判定未装
         let version = match self.docker_client_version().await {
             Some(v) => v,
@@ -136,19 +151,15 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// docker version --format '{{.Client.Version}}',失败返回 None
+    /// Docker 使用 Client.Version；Linux Podman 使用不初始化运行时的 --version。
     /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据
     async fn docker_client_version(&self) -> Option<String> {
         // 先尝试普通命令
-        let cmd = HostCommand::new(self.engine.program())
-            .arg("version")
-            .arg("--format")
-            .arg("{{.Client.Version}}")
-            .timeout(std::time::Duration::from_secs(15));
+        let cmd = self.client_version_command();
         if let Ok(out) = self.host.run_to_string(cmd).await {
-            let v = out.stdout.trim();
+            let v = self.client_version_text(&out.stdout);
             if !v.is_empty() {
-                return Some(v.to_string());
+                return Some(v);
             }
         }
 
@@ -187,6 +198,9 @@ impl<'h> DockerCli<'h> {
 
     /// docker compose version,compose v2 插件存在时退出码 0,按 elevated 标志跑
     async fn docker_compose_ok(&self) -> bool {
+        if self.is_linux_podman() {
+            return self.podman_compose_available().await;
+        }
         let cmd = self
             .docker_cmd()
             .arg("compose")
@@ -361,8 +375,8 @@ impl<'h> DockerCli<'h> {
     /// 镜像在组件页预拉并验证；启动不隐式联网拉取不同版本。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
         let mut cmd = self
-            .docker_cmd()
-            .arg("compose")
+            .compose_cmd()
+            .await?
             .arg("up")
             .arg("-d")
             .arg("--remove-orphans")
@@ -390,8 +404,8 @@ impl<'h> DockerCli<'h> {
         remove_volumes: bool,
     ) -> Result<(), DockerCliError> {
         let mut cmd = self
-            .docker_cmd()
-            .arg("compose")
+            .compose_cmd()
+            .await?
             .arg("down")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))
             .timeout(std::time::Duration::from_secs(300));

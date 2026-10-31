@@ -59,7 +59,7 @@ export function DockerToolbar({
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
                     <h1 className="shrink-0 font-display text-xl font-semibold text-text">
-                        Docker 管理
+                        容器管理
                     </h1>
                     <span aria-hidden className="hidden h-5 w-px bg-border-subtle sm:block" />
                     <HostSelect items={items} value={hostId ?? undefined} onChange={onChangeHost} />
@@ -91,7 +91,7 @@ export function DockerToolbar({
                     </Button>
                     <Button size="sm" variant="primary" onClick={onOpenDeployment}>
                         <Container size={14} />
-                        Docker 部署
+                        容器部署
                     </Button>
                 </div>
             </div>

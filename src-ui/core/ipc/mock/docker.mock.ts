@@ -10,6 +10,15 @@ import type {
     ProgressEvent,
 } from '../types';
 import { emitMockEvent } from './events.mock';
+import type { ContainerEngine } from '../generated/domain/ContainerEngine';
+
+const mockEngines = new Map<string, ContainerEngine>();
+export const mockContainerEngine = {
+    get: (hostId: string): ContainerEngine => mockEngines.get(hostId) ?? 'docker',
+    set: (hostId: string, engine: ContainerEngine): void => {
+        mockEngines.set(hostId, engine);
+    },
+};
 
 export { withMockDelay } from './bootstrap.mock';
 

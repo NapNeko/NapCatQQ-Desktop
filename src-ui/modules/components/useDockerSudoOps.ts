@@ -55,7 +55,7 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
                     globalInfoBarStore.push({
                         key: `docker-install:${hostId}`,
                         tone: 'success',
-                        title: `Docker · ${hostName}`,
+                        title: `容器环境 · ${hostName}`,
                         content: report.message,
                         autoDismissMs: 8000,
                     });
@@ -64,7 +64,7 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
                     globalInfoBarStore.push({
                         key: `docker-install:${hostId}`,
                         tone: 'danger',
-                        title: `Docker 未就绪 · ${hostName}`,
+                        title: `容器环境未就绪 · ${hostName}`,
                         content: report.message,
                         autoDismissMs: 0,
                     });
@@ -100,7 +100,7 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
             } catch (err) {
                 pushErrorBar({
                     key: `docker-install:${hostId}`,
-                    title: `准备 Docker 失败 · ${hostNameOf(hostId)}`,
+                    title: `准备容器环境失败 · ${hostNameOf(hostId)}`,
                     raw: errorText(err, '无法准备 Docker 环境，请检查主机连接后重试'),
                 });
             }

@@ -547,7 +547,8 @@ async fn docker_login_start_never_recreates_active_containers() {
             cmd.program == "docker"
                 && matches!(
                     cmd.args.first().map(String::as_str),
-                    Some("version" | "info" | "compose" | "ps")
+                    // --version 只读取 Linux 的 CLI 身份，兼容 podman-docker。
+                    Some("--version" | "version" | "info" | "compose" | "ps")
                 )
         }));
         assert!(!host.commands().iter().any(|cmd| {

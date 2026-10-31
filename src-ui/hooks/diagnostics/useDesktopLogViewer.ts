@@ -5,6 +5,10 @@ import type { DesktopLogLevelFilterValue } from '../../core/domain/desktop-log';
 import { filterLogs, serializeDesktopLogs } from '../../core/domain/events/log-buffer';
 import { desktopLogService } from '../../core/services/desktop.service';
 import { useDesktopLogStream } from './useDesktopLogStream';
+import { pushErrorBar } from '../ui/pushErrorBar';
+import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { errorText } from '../../core/domain/errors';
+import { localOs } from '../../core/domain/runtime/env';
 
 const MIN_FONT = 10;
 const MAX_FONT = 18;
@@ -17,6 +21,7 @@ export function useDesktopLogViewer(enabled: boolean) {
     const [autoScroll, setAutoScroll] = useState(true);
     const [fontSize, setFontSize] = useState(DEFAULT_FONT);
     const [opening, setOpening] = useState(false);
+    const [copyingLocation, setCopyingLocation] = useState(false);
     const viewportRef = useRef<HTMLDivElement>(null);
 
     const filtered = useMemo(() => filterLogs(logs, query, 'all', 'all'), [logs, query]);
@@ -32,9 +37,33 @@ export function useDesktopLogViewer(enabled: boolean) {
         try {
             await desktopLogService.openLogLocation();
         } catch (err) {
-            console.warn('打开日志位置失败:', err);
+            if (localOs() === 'linux')
+                pushErrorBar({
+                    title: '打开日志目录失败',
+                    raw: errorText(err),
+                    content: '可点击“复制目录”，在文件管理器中打开。',
+                });
+            else console.warn('打开日志位置失败:', err);
         } finally {
             setOpening(false);
+        }
+    }, []);
+
+    const onCopyLocation = useCallback(async () => {
+        setCopyingLocation(true);
+        try {
+            const path = await desktopLogService.logDirectory();
+            await navigator.clipboard.writeText(path);
+            pushInfoBar({
+                tone: 'success',
+                title: '已复制日志目录',
+                content: path,
+                autoDismissMs: 4000,
+            });
+        } catch (err) {
+            pushErrorBar({ title: '复制日志目录失败', raw: errorText(err) });
+        } finally {
+            setCopyingLocation(false);
         }
     }, []);
 
@@ -72,6 +101,8 @@ export function useDesktopLogViewer(enabled: boolean) {
         reload,
         opening,
         onOpenLocation,
+        onCopyLocation,
+        copyingLocation,
         onCopy,
         filteredCount: filtered.length,
         copyDisabled: filtered.length === 0,

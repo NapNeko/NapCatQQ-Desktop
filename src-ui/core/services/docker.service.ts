@@ -23,6 +23,7 @@ import {
     mockDeployed,
     mockProgressSequence,
     withMockDelay,
+    mockContainerEngine,
 } from '../ipc/mock/docker.mock';
 import {
     mockDockerHost,
@@ -39,13 +40,19 @@ export interface DockerInstallOptions {
 
 export const dockerService = {
     getEngine: async (hostId: string): Promise<ContainerEngine> =>
-        isTauri ? invoke('container_engine_get', { hostId }) : 'docker',
+        isTauri ? invoke('container_engine_get', { hostId }) : mockContainerEngine.get(hostId),
     setEngine: async (hostId: string, engine: ContainerEngine): Promise<void> => {
         if (isTauri) await invoke('container_engine_set', { hostId, engine });
+        else mockContainerEngine.set(hostId, engine);
     },
     probe: async (hostId: string): Promise<DockerStatus> => {
         if (isTauri) return invoke<DockerStatus>('docker_probe', { hostId });
-        return withMockDelay(mockDockerStatus, 200);
+        return withMockDelay(
+            mockContainerEngine.get(hostId) === 'podman'
+                ? { ...mockDockerStatus, version: '5.8.9' }
+                : mockDockerStatus,
+            200,
+        );
     },
 
     install: async (

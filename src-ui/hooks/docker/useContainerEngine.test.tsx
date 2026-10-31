@@ -8,10 +8,10 @@ const service = vi.hoisted(() => ({ getEngine: vi.fn(), setEngine: vi.fn() }));
 vi.mock('../../core/services/docker.service', () => ({ dockerService: service }));
 afterEach(cleanup);
 beforeEach(() => {
-    service.getEngine.mockResolvedValue('docker');
+    service.getEngine.mockReset().mockResolvedValue('docker');
     service.setEngine.mockReset().mockResolvedValue(undefined);
 });
-function setup() {
+function setup(enabled = true) {
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: Infinity } },
     });
@@ -20,9 +20,14 @@ function setup() {
     const wrapper = ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-    return { client, ...renderHook(() => useContainerEngine('local'), { wrapper }) };
+    return { client, ...renderHook(() => useContainerEngine('local', enabled), { wrapper }) };
 }
 describe('container engine selection', () => {
+    it('does not query an unsupported desktop host', () => {
+        const { result } = setup(false);
+        expect(result.current.loading).toBe(false);
+        expect(service.getEngine).not.toHaveBeenCalled();
+    });
     it('persists the host choice and clears only that engine resource cache', async () => {
         const { result, client } = setup();
         await waitFor(() => expect(result.current.loading).toBe(false));

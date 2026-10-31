@@ -190,6 +190,8 @@ export const desktopLogService = {
         if (isTauri) return invoke<string>('open_desktop_log_location');
         return '';
     },
+    logDirectory: async (): Promise<string> =>
+        isTauri ? invoke<string>('desktop_log_directory') : '/preview/logs/desktop',
 };
 
 export const snowlumaService = {

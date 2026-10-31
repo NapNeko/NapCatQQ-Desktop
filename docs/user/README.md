@@ -2,7 +2,7 @@
 
 [项目首页](../../README.md) · [下载 Desktop](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest) · [全部文档](../README.md)
 
-NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 桌面控制台。可以管理本机与远端 Bot、安装应用端、聊天和截图，也提供日志、监控、OneBot 调试台与终端。
+NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 与 Linux 桌面控制台。可以管理本机与远端 Bot、安装应用端、聊天和截图，也提供日志、监控、OneBot 调试台与终端。
 
 ## 快速开始
 
@@ -10,14 +10,18 @@ NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 桌面控制台。可以管�
 
 从 [最新发布页](https://github.com/NapNeko/NapCatQQ-Desktop/releases/latest) 下载 `NapCatQQ-Desktop-<版本>-x64.msi`，双击安装。`NapCatQQ-Desktop-x64.msi` 是同内容别名；带 `watch-v` 的发布是远端组件。
 
-| 环境       | 要求                                                           |
-| :--------- | :------------------------------------------------------------- |
-| 桌面客户端 | Windows 10 / 11 x64，或 Windows Server 2016+；需要 WebView2    |
-| 本机终端   | Windows 10 1809 / Server 2019+；更早的系统不能使用 ConPTY 终端 |
-| 远端主机   | 可通过 SSH 访问的 Linux 或 Windows；Windows 原生运行需远程代理，QQ 需桌面会话 |
-| 资源       | QQ、协议端和应用端共同占用 CPU / 内存，按实例数与框架需求预留  |
+| 环境           | 要求                                                                          |
+| :------------- | :---------------------------------------------------------------------------- |
+| Windows 客户端 | Windows 10 / 11 x64，或 Windows Server 2016+；需要 WebView2                   |
+| Windows 终端   | Windows 10 1809 / Server 2019+；更早的系统不能使用 ConPTY 终端                |
+| 远端主机       | 可通过 SSH 访问的 Linux 或 Windows；Windows 原生运行需远程代理，QQ 需桌面会话 |
+| 资源           | QQ、协议端和应用端共同占用 CPU / 内存，按实例数与框架需求预留                 |
 
-安装包会在缺少 WebView2 时处理安装。Desktop 目前不提供 Linux / macOS 客户端，本机 Docker 不在支持范围内。
+Windows 安装包会在缺少 WebView2 时处理安装。本机 Windows 使用原生部署，不提供本机容器管理；可通过 SSH 管理 Linux 主机上的容器。
+
+Linux 请从发布页下载 `.deb` 或 `.AppImage`，需要图形桌面。Linux 本机可使用原生部署或 Docker / Podman，在「组件 → 容器部署」选择引擎，再进入「容器管理」查看容器、镜像、网络和数据卷。切换引擎会使用各自的容器和镜像；已有容器 Bot 配置时需先处理配置再切换。
+
+**Linux 验证范围目前仅限 Ubuntu。** 维护者没有其他发行版、桌面环境和第三方 AppImage 管理工具的实机验证条件；Fedora 等系统特有的问题暂无法继续做专项适配。若仍有问题，请先在 Ubuntu 上确认是否同样复现。macOS 客户端暂未提供。
 
 ### 本机创建 Bot
 
@@ -43,12 +47,12 @@ NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 桌面控制台。可以管�
 | 安装应用端或导入已有项目   | [应用端实例](app-instances.md)                            |
 | 私聊、群聊、群文件与截图   | [聊天与截图](chat.md)                                     |
 | 调用 OneBot 接口、查看事件 | 「调试台」或 Bot 卡片「调试」                             |
-| 整套迁移 Bot 到其他服务器 | Bot 卡片菜单；见 [服务器间 Bot 迁移](bot-migration.md)     |
-| 使用 AI 客户端查询与调试   | 「设置 → 运行 → MCP」；见 [MCP 接入](mcp.md)             |
+| 整套迁移 Bot 到其他服务器  | Bot 卡片菜单；见 [服务器间 Bot 迁移](bot-migration.md)    |
+| 使用 AI 客户端查询与调试   | 「设置 → 运行 → MCP」；见 [MCP 接入](mcp.md)              |
 | 打开终端                   | 标题栏终端按钮、卡片入口，或 `Ctrl+反引号`                |
 | 查看安装 / 部署进度        | 「任务」                                                  |
 | 配置掉线通知               | 「设置 → 通知」；远端独立值守见 [ncd-watch](ncd-watch.md) |
-| 配置代理、选择下载线路     | 「设置 → 网络」；见 [网络代理与下载线路](network.md)       |
+| 配置代理、选择下载线路     | 「设置 → 网络」；见 [网络代理与下载线路](network.md)      |
 | 调整主题、侧栏或功能开关   | 「设置 → 外观 / 功能」                                    |
 
 功能入口可由设置中的开关隐藏。聊天的后台接收、账号托盘按账号单独设置，应用端的运行面板按框架和版本提供。
