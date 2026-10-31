@@ -87,6 +87,25 @@ jobs:
           NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
         run: pnpm run tauri:build:linux
 
+      - name: Verify AppImage desktop integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage=$(realpath target/release/bundle/appimage/*.AppImage)
+          check_dir=$(mktemp -d)
+          trap 'rm -rf "$check_dir"' EXIT
+          cd "$check_dir"
+          "$appimage" --appimage-extract > /dev/null
+          desktop=(squashfs-root/*.desktop)
+          [[ ${#desktop[@]} -eq 1 ]]
+          for entry in "${desktop[0]}" squashfs-root/.DirIcon; do
+            [[ -f "$entry" ]]
+            if [[ -L "$entry" ]]; then
+              [[ $(readlink "$entry") != /* ]]
+            fi
+          done
+          ! grep -Eq '^NoDisplay=true[[:space:]]*$' "${desktop[0]}"
+
       - name: Collect Linux packages
         id: collect
         run: |

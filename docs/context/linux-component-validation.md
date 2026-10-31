@@ -157,14 +157,14 @@ Ubuntu GNOME 扩展另外提供 [XEmbed 托盘宿主](https://github.com/ubuntu/
 
 ## Linux Dock 图标与应用身份（2026-10-31）
 
-Linux Dock 通过桌面入口解析应用图标，Wayland 下不能只依赖窗口 PNG。`window_icon.rs::prepare_application_identity` 在 GTK 初始化前将 GLib 程序名设为配置 identifier；正式配置启用 GTK App ID，使 Wayland `app_id` 和 GTK 应用 ID 均与 `com.napcatqq.desktop` 对齐。生成的可见桌面入口使用同值的 `StartupWMClass`；deb / AppImage 另包含隐藏的 `com.napcatqq.desktop.desktop` 兼容入口，图标沿用包内 hicolor 资源，保持一个可见启动项。
+Linux Dock 通过桌面入口解析应用图标，Wayland 下不能只依赖窗口 PNG。`window_icon.rs::prepare_application_identity` 在 GTK 初始化前将 GLib 程序名设为配置 identifier；正式配置启用 GTK App ID，使 Wayland `app_id` 和 GTK 应用 ID 均与 `com.napcatqq.desktop` 对齐。生成的可见桌面入口使用同值的 `StartupWMClass`；deb 另包含隐藏的 `com.napcatqq.desktop.desktop` 兼容入口，图标沿用包内 hicolor 资源。AppImage 只保留一个根桌面入口，避免 linuxdeploy 将额外的隐藏入口提升到根目录，影响桌面集成。
 
 `pnpm run tauri:dev` 在用户 XDG 应用目录准备 `com.napcatqq.desktop.Development.desktop`，使用仓库内 PNG 的绝对路径，避免依赖已安装的正式包。开发配置关闭 GTK App ID，通过 `NCD_DEV_DESKTOP_ID` 向早期初始化提供独立开发身份；bundle identifier、单实例身份和数据根保持不变。入口标记 `NoDisplay=true`，不额外占用应用菜单，仍可供 Dock 解析；其 Exec 可重新启动原开发脚本，保留 CLI 参数转发与信号收尾。
 
 - 开发脚本 5 项检查通过，其中 2 项覆盖 Linux 入口隔离、XDG 目录及 Exec 特殊字符；Linux 专用检查在其它系统跳过。私有 GIO 启动检查确认空格、引号、反斜杠、美元符号、百分号及反引号路径按原样解码。
 - 开发模式实际 Wayland 协议确认 `app_id=com.napcatqq.desktop.Development`，X11 WM_CLASS 实例同值，窗口 `_NET_WM_ICON` 为 256×256。GIO 可解析开发入口及绝对 PNG 图标。
 - 正式模式实际 Wayland 协议确认 `app_id` 与 GTK Application ID 均为 `com.napcatqq.desktop`；X11 WM_CLASS 实例同值，窗口图标为 256×256。检查通过后已清理隔离进程，未以协议检查代替 Dock 视觉截图验收。
-- 最终 Linux debug DEB 构建通过，无 Rust 编译警告；包内桌面入口与图标文件经过校验。AppImage 配置复用相同桌面模板与兼容入口；未重跑完整 AppImage 打包，宿主桌面集成仍由安装器或集成器负责。
+- 最终 Linux debug DEB 构建通过，无 Rust 编译警告；包内桌面入口与图标文件经过校验。3.5.11 发版检查另外发现 AppImage 根桌面入口与 `.DirIcon` 指向 CI 构建目录，因此升级到修复相对链接的 [Tauri CLI 2.11.4](https://github.com/tauri-apps/tauri/releases/tag/tauri-cli-v2.11.4)，并移除 AppImage 隐藏别名映射。宿主桌面集成仍由安装器或集成器负责。
 
 ## Linux 本机联网安装补验（2026-10-31）
 

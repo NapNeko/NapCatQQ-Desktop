@@ -30,11 +30,6 @@
                 "files": {
                     "/usr/share/applications/com.napcatqq.desktop.desktop": "linux/com.napcatqq.desktop.desktop"
                 }
-            },
-            "appimage": {
-                "files": {
-                    "/usr/share/applications/com.napcatqq.desktop.desktop": "linux/com.napcatqq.desktop.desktop"
-                }
             }
         }
     }
