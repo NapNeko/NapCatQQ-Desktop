@@ -62,11 +62,18 @@ describe('GroupFilesDialog', () => {
     it('filters the current listing', async () => {
         renderDialog();
         await screen.findByText('config.example.json');
-        await userEvent.type(screen.getByRole('textbox', { name: '搜索群文件' }), 'config');
+        // jsdom 没有布局；GSAP 清理入场 transform 时会把零宽弹窗临时移出父节点，丢失输入焦点。
+        // 提供可见弹窗的尺寸，并让输入跨过入场动画完成，保持真实 userEvent 键盘流程。
+        vi.spyOn(screen.getByRole('dialog'), 'getBoundingClientRect').mockReturnValue(
+            new DOMRect(24, 24, 640, 480),
+        );
+        const search = screen.getByRole('textbox', { name: '搜索群文件' });
+        await userEvent.type(search, 'config', { delay: 40 });
         await waitFor(() => {
-            expect(screen.getByRole('textbox', { name: '搜索群文件' })).toHaveValue('config');
+            expect(search).toHaveValue('config');
             expect(screen.queryByText('截图合集.zip')).toBeNull();
         });
+        expect(search).toHaveFocus();
         expect(screen.getByText('config.example.json')).toBeTruthy();
     });
 
