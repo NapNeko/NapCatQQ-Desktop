@@ -111,7 +111,7 @@ NapCat 与 SnowLuma 支持 Linux 本机 Docker 和 Linux 远端 Docker。Windows
 
 矩阵中的支持声明与 `verify` 实现不能代替实机部署结果。
 
-尚未据此证明以下场景全部通过：真实 SSH 主机安装 12 个组件、七个应用端完整联网安装与插件加载、QQ 图形会话及扫码登录、NapCat/SnowLuma 容器拉取与登录、不同发行版和 ARM 主机的全流程。
+尚未据此证明以下场景全部通过：真实 SSH 主机安装 12 个组件、任意第三方插件加载、QQ 图形会话及扫码登录、NapCat/SnowLuma 容器拉取与登录、不同发行版和 ARM 主机的全流程。
 
 Linux 启动中的 `libayatana-appindicator` 弃用提示来自当前 Tauri 托盘依赖使用的系统库，见 [tray-icon 上游问题 #260](https://github.com/tauri-apps/tray-icon/issues/260)。它与 Rust 编译警告分开处理，保留系统诊断输出；单独一条弃用提示不能作为应用崩溃证据。
 
@@ -165,3 +165,72 @@ Linux Dock 通过桌面入口解析应用图标，Wayland 下不能只依赖窗�
 - 开发模式实际 Wayland 协议确认 `app_id=com.napcatqq.desktop.Development`，X11 WM_CLASS 实例同值，窗口 `_NET_WM_ICON` 为 256×256。GIO 可解析开发入口及绝对 PNG 图标。
 - 正式模式实际 Wayland 协议确认 `app_id` 与 GTK Application ID 均为 `com.napcatqq.desktop`；X11 WM_CLASS 实例同值，窗口图标为 256×256。检查通过后已清理隔离进程，未以协议检查代替 Dock 视觉截图验收。
 - 最终 Linux debug DEB 构建通过，无 Rust 编译警告；包内桌面入口与图标文件经过校验。AppImage 配置复用相同桌面模板与兼容入口；未重跑完整 AppImage 打包，宿主桌面集成仍由安装器或集成器负责。
+
+## Linux 本机联网安装补验（2026-10-31）
+
+本轮使用 Debian x86_64 的 `LocalLinuxHost`，直接调用生产 `Component::install`、`detect` / `detect_outcome`、`verify`，再用 `ComponentBuildInputs` 读取实际产物运行安装依赖与启动门禁。安装根为 `/tmp/ncd-linux-validation`，没有接触用户已有 Bot 或账号。
+
+发现并修复的本机问题：
+
+- 本机下载进度不再标记为远端，Node / uv / NapCat 准备安装包的步骤按 locality 显示。
+- QQ 本机依赖只包含运行库；远端继续保留虚拟显示与部署脚本工具。deb / rpm 解包器和 NapCat 的 unzip 仍单独检查。
+- NC / SL / QQ 的本机依赖提权可输入一次性 sudo 密码重试；密码保留在任务专用 Host，重试保持原组件和 SL Full / Lite 选择。
+- SnowLuma 本机只从数据根识别运行文件，避免系统目录或远端库存误放行。本机文件探测遇到 `node/bin/node` 的父路径实际为文件时返回不存在，使 Full 包自带的 `node` 能继续被识别。
+- MaiBot 按下载源码是否附带 `uv.lock` 选择锁定安装，未附锁时按上游 `pyproject.toml` 解析并生成实例锁。NoneBot2 检查虚拟环境内真实发行包，MaiBot 检查安装结束才写入的配置，失败的半安装不再显示就绪。
+- MaiBot 新版从 `[http]` 读取监听端口；首装、界面读取、停止时保存和运行时更新共用实际配置字段，旧版仍使用 `[webui]`，避免实际监听口与分配口失配。
+- 云崽安装步骤和子进程沿用所选 Node / Git / pnpm PATH；Linux 本机缺少 Python 且直连下载失败时也可使用既有镜像回落。
+
+实际安装与 `detect` / `verify` 均通过：
+
+| 项目 | 实际版本 | 额外验证 |
+| --- | --- | --- |
+| QQ | 3.2.34-53644 | 用户目录解包；`ldd` 无缺失库 |
+| NapCat | 4.18.42 | 注入上述 QQ，检查入口、版本与 `package.json.main` |
+| SnowLuma Lite | 2.2.1 | 入口、client、native；使用托管 Node 通过门禁 |
+| SnowLuma Full | 2.2.1 | 内置 Node 24.22.1 能执行；真实安装与门禁通过 |
+| Node.js | 22.13.0 | 托管程序真实执行 |
+| uv | 0.12.8 | 内置 SHA 校验及托管程序执行 |
+| Valkey | 9.0.6 | 内置 SHA 校验、托管程序执行；云崽可连接 |
+| Git | 2.52.0 | 生产安装器复用并验证系统 Git |
+| Karin | 1.18.0 | 实际启动，WebUI HTTP 200 |
+| Koishi | 4.18.11 | OneBot 适配器完成安装；实际启动 HTTP 200 |
+| TRSS-Yunzai | 3.1.3 | 使用托管 Node / Valkey 启动，HTTP 200 |
+| NoneBot2 | 2.5.0 | 实际启动并监听分配端口 |
+| AstrBot | 4.29.3 | 实际启动，WebUI HTTP 200 |
+| NeoBot | 2.0.1 | 实际启动，WebUI HTTP 200 |
+| MaiBot | 1.3.19 + 适配器 1.4.1 | 无上游锁文件的完整联网安装、初始化曾通过；HTTP 端口兼容修复后的全新复装遭环境 503，实际端口复验未完成 |
+
+NC、SL 两个包型及其余六个应用端使用最终代码的生产 `ComponentBuildInputs` 检查，安装依赖与根组件门禁均通过。SL 独立数据根初次检查正确阻止缺 QQ 的启动；链接到同机真实安装的 QQ 后放行，没有创建占位文件绕过检查。
+
+MaiBot 最后一轮为了确认新 HTTP 字段而清理了本任务的临时实例并重新安装，此时 GitHub、各镜像、PyPI、npm 均经现有代理返回 HTTP 503，最终临时目录只完成了 uv 标记。真实门禁检查正确返回根组件未安装并阻止启动；HTTP 字段读写回归通过，修复后全新安装与实际分配端口的响应仍待网络恢复后复验。此前成功的完整安装与初始化记录保留在 `evidence/python-apps-final.log` 和 `evidence/maibot-startup.log`，不以旧结果冒充最终 HTTP 复验通过。
+
+此前“七个应用端完整联网安装尚未验证”的结论由本节逐项结果更新；真实 SSH、其他架构、模型服务与 QQ 登录仍不由这些结果证明。完整安装日志及 JSON 检查结果保存在验证根的 `protocol-evidence/`、`evidence/` 和 `apps/install-results-*.json`。
+
+可复用的手动入口（不会由普通测试自动执行）：
+
+```bash
+cargo run --locked -p ncd-component --example linux_local_tools_smoke -- nodejs uv redis git
+cargo run --locked -p ncd-component --example linux_protocol_install -- qq /tmp/ncd-linux-validation
+cargo run --locked -p ncd-component --example linux_protocol_install -- napcat /tmp/ncd-linux-validation
+cargo run --locked -p ncd-component --example linux_protocol_install -- snowluma-lite /tmp/ncd-linux-validation
+cargo run --locked -p ncd-component --example linux_protocol_install -- snowluma-full /tmp/ncd-linux-validation
+NCD_SMOKE_NODE=/tmp/ncd-linux-validation/components/NodeJs/bin/node \
+NCD_SMOKE_UV=/tmp/ncd-linux-validation/components/Uv/uv \
+NCD_SMOKE_REDIS=/tmp/ncd-linux-validation/components/Redis/bin/valkey-server \
+cargo run --locked -p ncd-appframework --example linux_local_install_smoke
+cargo run --locked -p ncd-runtime --example linux_local_readiness -- /tmp/ncd-linux-validation napcat astrbot karin koishi maibot neobot nonebot2 yunzai
+NCD_SMOKE_SNOWLUMA_PACKAGE=lite \
+NCD_SMOKE_NODE=/tmp/ncd-linux-validation/components/NodeJs/bin/node \
+cargo run --locked -p ncd-runtime --example linux_local_readiness -- /tmp/ncd-linux-validation/snowluma-lite snowluma
+NCD_SMOKE_SNOWLUMA_PACKAGE=full \
+cargo run --locked -p ncd-runtime --example linux_local_readiness -- /tmp/ncd-linux-validation/snowluma-full snowluma
+```
+
+联网示例信任执行环境已有的 `SSL_CERT_FILE` / 系统 CA，保留 TLS 校验与继承的代理。当前云环境中 Yarn 需显式继承 `YARN_HTTP_PROXY` / `YARN_HTTPS_PROXY`；这属于安装命令的环境设置。SL 两个包使用独立数据根，复用同机真实安装的 QQ；Lite 另指定已安装的 Node。主机已有 Git 时生产安装器复用系统 Git，不替换它。
+
+最终代码检查：
+
+- `cargo test --locked -p ncd-host -p ncd-component -p ncd-appframework --lib -- --skip export_bindings_`：主机 139、组件 232 通过；应用端在最后的 HTTP 配置修复后单独重跑为 541 通过、2 项既有忽略测试。类型导出用例未运行，本轮没有修改 IPC 数据模型。
+- `cargo test --locked -p ncd-runtime --lib components:: -- --skip export_bindings_`：54 通过，包含本机 sudo 范围、密码隔离、系统依赖预检、SnowLuma 受管目录与组件依赖门禁。
+- 相关前端 6 文件 48 项通过，TypeScript 与改动 UI 文件 ESLint 通过；修改的 Rust 文件格式检查和 `git diff --check` 通过。全仓库格式检查仍有未修改文件的既有差异，未顺带格式化无关源码。
+- 完整 `cargo check --locked -p ncd-tauri --all-targets` **未完成**：未缓存的 `alloc-stdlib 0.2.2` 下载遭代理 HTTP 503；环境同时缺少 GTK / WebKit 开发包。Docker 镜像与 apt 包下载同样遭 503，未跳过原生依赖检查或据此宣称桌面构建通过。日志 `/tmp/ncd-tauri-final-check.log`。
