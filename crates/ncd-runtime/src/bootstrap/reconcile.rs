@@ -179,6 +179,10 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         let pid = match &scenario {
             RuntimeScenario::LocalDocker { .. } | RuntimeScenario::RemoteDocker { .. } => {
                 let state = DockerDeployment::new()
+                    .with_engine(ncd_deploy::docker::engine::engine_for_bot(
+                        host.as_ref(),
+                        config,
+                    ))
                     .observe(host.as_ref(), &bot_id)
                     .await
                     .map_err(|err| BotManagerError::RemoteRead(err.to_string()))?;

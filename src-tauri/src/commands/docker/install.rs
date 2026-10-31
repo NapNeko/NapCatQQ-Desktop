@@ -1,7 +1,9 @@
 //! Docker 安装 command
 
 use ncd_component::ProgressKind;
-use ncd_deploy::docker::{install_docker_with_progress, progress_event};
+use ncd_deploy::docker::install_progress::install_container_engine_with_progress;
+use ncd_deploy::docker::progress_event;
+use ncd_domain::docker::ContainerEngine;
 use ncd_domain::{
     DeploymentTaskKind, DeploymentTaskResource, DockerInstallReport, DockerInstallStatus,
 };
@@ -27,9 +29,12 @@ pub async fn docker_install(
     task_id: String,
     sudo_password: Option<String>,
     remember_sudo: Option<bool>,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<DockerInstallReport, String> {
     let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+    let engine =
+        engine.unwrap_or_else(|| ncd_deploy::docker::engine::preference_for_host_id(&host_id));
     let effective_password = sudo_password.clone().or_else(|| {
         server_id
             .as_deref()
@@ -108,11 +113,12 @@ pub async fn docker_install(
                         server_manager
                             .with_isolated_connection(id, move |host| {
                                 Box::pin(async move {
-                                    install_docker_with_progress(
+                                    install_container_engine_with_progress(
                                         host.as_ref(),
                                         effective_password_clone.as_deref(),
                                         ssh_user_clone.as_deref(),
                                         emit_clone,
+                                        engine,
                                     )
                                     .await
                                     .map_err(|e| format!("Docker 安装失败: {e}"))
@@ -120,11 +126,12 @@ pub async fn docker_install(
                             })
                             .await
                     } else if let Some(host) = local_host {
-                        install_docker_with_progress(
+                        install_container_engine_with_progress(
                             host.as_ref(),
                             effective_password.as_deref(),
                             ssh_user.as_deref(),
                             emit,
+                            engine,
                         )
                         .await
                         .map_err(|e| format!("Docker 安装失败: {e}"))

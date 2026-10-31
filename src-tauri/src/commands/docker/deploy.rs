@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_deploy::docker::{DockerCli, PullProgress, classify_pull_failure};
+use ncd_domain::docker::ContainerEngine;
 use ncd_domain::{
     DeployedContainer, DeploymentTaskKind, DeploymentTaskResource, DockerImageReady, DockerPullSpec,
 };
@@ -25,9 +26,11 @@ pub async fn docker_deploy(
     host_id: String,
     spec: DockerPullSpec,
     task_id: String,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<DeployedContainer, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+    let engine = engine.unwrap_or_else(|| ncd_deploy::docker::engine::engine_for(host.as_ref()));
     let (tx, rx) = oneshot::channel::<Result<DeployedContainer, String>>();
     let event_bus = state.event_bus.clone();
     let deployment_tasks = state.deployment_tasks.clone();
@@ -60,6 +63,7 @@ pub async fn docker_deploy(
                         spec,
                         task_id,
                         host,
+                        engine,
                         event_bus,
                         Some(task_ctx),
                     )
@@ -89,6 +93,7 @@ async fn docker_deploy_execute(
     spec: DockerPullSpec,
     task_id: String,
     host: Arc<dyn Host>,
+    engine: ContainerEngine,
     event_bus: BroadcastEventBus,
     task_ctx: Option<DeploymentTaskContext>,
 ) -> Result<DeployedContainer, String> {
@@ -119,7 +124,7 @@ async fn docker_deploy_execute(
         step: 1,
         message: "探测 docker 状态...".to_string(),
     });
-    let cli = DockerCli::new(host_ref);
+    let cli = DockerCli::for_engine(host_ref, Some(engine));
     let status = cli.probe().await;
     if !status.ready_to_deploy() {
         let msg = format!(

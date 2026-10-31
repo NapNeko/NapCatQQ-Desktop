@@ -38,6 +38,7 @@ use crate::docker::{
 /// Docker 部署实装
 #[derive(Clone)]
 pub struct DockerDeployment {
+    engine: Option<crate::docker::engine::ContainerEngine>,
     id: &'static str,
     flavors: &'static [BotFlavor],
     /// NapCat: WEBUI_TOKEN; SnowLuma: VNC_PASSWD(compose 环境变量)
@@ -53,6 +54,7 @@ pub struct DockerDeployment {
 impl DockerDeployment {
     pub fn new() -> Self {
         Self {
+            engine: None,
             id: "docker",
             flavors: &[BotFlavor::NapCat, BotFlavor::SnowLuma],
             compose_secret: None,
@@ -61,6 +63,26 @@ impl DockerDeployment {
             metrics_overlay: None,
             login_overlay: None,
         }
+    }
+
+    pub fn with_engine(mut self, engine: crate::docker::engine::ContainerEngine) -> Self {
+        self.engine = Some(engine);
+        self
+    }
+
+    pub fn cli<'h>(&self, host: &'h dyn Host) -> DockerCli<'h> {
+        DockerCli::for_engine(host, self.engine)
+    }
+
+    fn cli_for_bot<'h>(&self, host: &'h dyn Host, config: &BotConfig) -> DockerCli<'h> {
+        DockerCli::for_engine(
+            host,
+            config
+                .docker
+                .as_ref()
+                .and_then(|s| s.engine)
+                .or(self.engine),
+        )
     }
 
     /// NapCat Docker: WEBUI_TOKEN,ncd-deploy 不从 QQ 号派生凭据
@@ -232,7 +254,7 @@ pub async fn ensure_managed_bot_container(
     host: &dyn Host,
     config: &BotConfig,
 ) -> Result<(), DeploymentError> {
-    let cli = DockerCli::new(host);
+    let cli = DockerCli::for_bot(host, config);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| DeploymentError::ConfigInvalid(format!("检查容器归属失败: {e}")))?;
@@ -345,7 +367,7 @@ impl Deployment for DockerDeployment {
             });
         }
 
-        let cli = DockerCli::new(host);
+        let cli = self.cli_for_bot(host, config);
         progress.report("docker", "探测 Docker 状态", 5);
         cli.ensure_ready().await.map_err(|e| {
             error!(
@@ -429,9 +451,8 @@ impl Deployment for DockerDeployment {
         };
         let yaml = apply_bot_docker_settings(&yaml, config.docker.as_ref())
             .map_err(DeploymentError::ConfigInvalid)?;
-        let yaml =
-            crate::docker::engine::prepare_compose(crate::docker::engine::engine_for(host), &yaml)
-                .map_err(DeploymentError::ConfigInvalid)?;
+        let yaml = crate::docker::engine::prepare_compose(cli.engine(), &yaml)
+            .map_err(DeploymentError::ConfigInvalid)?;
         let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
         host.write_file(&compose_path, yaml.as_bytes())
             .await
@@ -456,7 +477,7 @@ impl Deployment for DockerDeployment {
         if !self.supports(host) {
             return Err(DeploymentError::Unsupported("Docker Bot 仅支持 Linux 主机"));
         }
-        let cli = DockerCli::new(host);
+        let cli = self.cli_for_bot(host, config);
         cli.ensure_ready().await.map_err(|e| {
             error!(
                 target: "ncd_deploy::docker_bot",
@@ -534,7 +555,7 @@ impl Deployment for DockerDeployment {
         host: &dyn Host,
         bot_id: &BotId,
     ) -> Result<DeploymentState, DeploymentError> {
-        let cli = DockerCli::new(host);
+        let cli = self.cli(host);
         if !self.supports(host) {
             return Err(DeploymentError::Unsupported("Docker Bot 仅支持 Linux 主机"));
         }
@@ -574,7 +595,7 @@ impl Deployment for DockerDeployment {
         if !self.supports(host) {
             return Err(DeploymentError::Unsupported("Docker Bot 仅支持 Linux 主机"));
         }
-        let cli = DockerCli::new(host);
+        let cli = self.cli(host);
         cli.ensure_daemon_ready()
             .await
             .map_err(|e| DeploymentError::StopFailed(format!("Docker 未就绪: {e}")))?;
@@ -615,7 +636,7 @@ impl Deployment for DockerDeployment {
         if !self.supports(host) {
             return Err(DeploymentError::Unsupported("Docker Bot 仅支持 Linux 主机"));
         }
-        let cli = DockerCli::new(host);
+        let cli = self.cli_for_bot(host, config);
         let name = Self::container_name(config);
         let project_dir = Self::project_dir(host, &name)
             .await
@@ -684,7 +705,7 @@ pub async fn resolve_bot_container_name(
 }
 
 /// 按 qq 在远端查找实际在跑的 bot 容器名(兼容历史 ncbot 命名跑 SL 的残留)
-async fn resolve_bot_container_name_with_cli(
+pub async fn resolve_bot_container_name_with_cli(
     cli: &DockerCli<'_>,
     bot_id: &BotId,
 ) -> Result<Option<String>, DeploymentError> {

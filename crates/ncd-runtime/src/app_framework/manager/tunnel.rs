@@ -131,7 +131,12 @@ impl AppManager {
             .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
             .await?;
         if host.locality() == ncd_host::Locality::Local {
-            let gateway = docker_link::gateway(host.as_ref()).await?.to_string();
+            let gateway = docker_link::gateway(
+                host.as_ref(),
+                ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), bot),
+            )
+            .await?
+            .to_string();
             let key = format!("{}:docker-bridge:{gateway}", instance.id.as_str());
             let prefix = format!("{}:docker-bridge:", instance.id.as_str());
             self.tunnels
@@ -166,6 +171,7 @@ impl AppManager {
             instance,
             host_port,
             Some(&preferred),
+            ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), bot),
         )
         .await?;
         let scheme = if url.trim().starts_with("wss://") {

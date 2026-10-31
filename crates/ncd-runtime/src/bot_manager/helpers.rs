@@ -27,6 +27,9 @@ pub(super) fn docker_container_config_changed(
     // 比较最终映射，显式填写自动默认值或调整行顺序无需中断容器。
     previous_settings.port_mappings.clear();
     current_settings.port_mappings.clear();
+    // 引擎归属由 upsert 单独校验；给旧配置补字段不改变容器创建参数。
+    previous_settings.engine = None;
+    current_settings.engine = None;
     previous_spec != current_spec || previous_settings != current_settings
 }
 

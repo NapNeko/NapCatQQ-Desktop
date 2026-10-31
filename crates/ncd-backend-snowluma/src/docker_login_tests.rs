@@ -13,6 +13,7 @@ struct CaptureHost {
 impl CaptureHost {
     fn new(replace_container: bool) -> Self {
         let session = DockerLoginSession {
+            engine: None,
             method: "atspi".into(),
             directory: format!(
                 "{}/ncd-login",

@@ -19,7 +19,7 @@ NapCatQQ Desktop 是 NapCat / SnowLuma 的 Windows 与 Linux 桌面控制台。�
 
 Windows 安装包会在缺少 WebView2 时处理安装。本机 Windows 使用原生部署，不提供本机容器管理；可通过 SSH 管理 Linux 主机上的容器。
 
-Linux 请从发布页下载 `.deb` 或 `.AppImage`，需要图形桌面。Linux 本机可使用原生部署或 Docker / Podman，在「组件 → 容器部署」选择引擎，再进入「容器管理」查看容器、镜像、网络和数据卷。切换引擎会使用各自的容器和镜像；已有容器 Bot 配置时需先处理配置再切换。
+Linux 请从发布页下载 `.deb` 或 `.AppImage`，需要图形桌面。Linux 本机可使用原生部署或 Docker / Podman，在「组件 → 容器部署」选择引擎，再进入「容器管理」查看容器、镜像、网络和数据卷。切换引擎会使用各自的容器和镜像。新建容器 Bot 时可单独选择 Docker 或 Podman；已有 Bot 会记住创建时的引擎，切换管理视图不影响它们。
 
 **Linux 验证范围目前仅限 Ubuntu。** 维护者没有其他发行版、桌面环境和第三方 AppImage 管理工具的实机验证条件；Fedora 等系统特有的问题暂无法继续做专项适配。若仍有问题，请先在 Ubuntu 上确认是否同样复现。macOS 客户端暂未提供。
 

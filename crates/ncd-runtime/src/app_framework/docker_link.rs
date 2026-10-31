@@ -7,6 +7,7 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use ncd_deploy::DockerCli;
+use ncd_domain::docker::ContainerEngine;
 use ncd_domain::{AppInstance, AppInstanceId};
 use ncd_host::{Host, HostPath, Os};
 use ncd_traits::AppFrameworkError;
@@ -37,7 +38,7 @@ fn bridge_instance(instance: &AppInstance) -> AppInstance {
 fn parse_gateway(text: &str) -> Result<Ipv4Addr, AppFrameworkError> {
     #[derive(Deserialize)]
     struct Ipam {
-        #[serde(rename = "Gateway", default)]
+        #[serde(rename = "Gateway", alias = "gateway", default)]
         gateway: String,
     }
     let configs: Vec<Ipam> = serde_json::from_str(text)
@@ -53,18 +54,48 @@ fn parse_gateway(text: &str) -> Result<Ipv4Addr, AppFrameworkError> {
         })
 }
 
-pub(super) async fn gateway(host: &dyn Host) -> Result<Ipv4Addr, AppFrameworkError> {
-    let cli = DockerCli::new(host);
+pub(super) async fn gateway(
+    host: &dyn Host,
+    engine: ContainerEngine,
+) -> Result<Ipv4Addr, AppFrameworkError> {
+    let cli = DockerCli::for_engine(host, Some(engine));
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| AppFrameworkError::Host(format!("Docker 未就绪：{e}")))?;
+    if engine == ContainerEngine::Podman {
+        let rootless = host
+            .run_to_string(
+                cli.command()
+                    .args(["info", "--format", "{{.Host.Security.Rootless}}"])
+                    .timeout(Duration::from_secs(10)),
+            )
+            .await
+            .map_err(host_err)?;
+        if !rootless.success() {
+            return Err(AppFrameworkError::Host(format!(
+                "读取 Podman 网络模式失败：{}",
+                rootless.stderr.trim()
+            )));
+        }
+        if rootless.stdout.trim() != "false" {
+            return Err(AppFrameworkError::Validation("Podman rootless 网络无法使用宿主机网桥回环转发；请使用容器可达的应用监听地址手动对接。".into()));
+        }
+    }
     let command = cli
         .command()
         .arg("network")
         .arg("inspect")
-        .arg("bridge")
+        .arg(if engine == ContainerEngine::Podman {
+            "podman"
+        } else {
+            "bridge"
+        })
         .arg("--format")
-        .arg("{{json .IPAM.Config}}")
+        .arg(if engine == ContainerEngine::Podman {
+            "{{json .Subnets}}"
+        } else {
+            "{{json .IPAM.Config}}"
+        })
         .timeout(Duration::from_secs(10));
     let out = host.run_to_string(command).await.map_err(host_err)?;
     if !out.success() {
@@ -82,13 +113,14 @@ pub(super) async fn ensure_docker_loopback_bridge(
     instance: &AppInstance,
     target_port: u16,
     preferred_endpoint: Option<&DockerBridgeEndpoint>,
+    engine: ContainerEngine,
 ) -> Result<DockerBridgeEndpoint, AppFrameworkError> {
     if host.os() != Os::Linux || target_port == 0 {
         return Err(AppFrameworkError::Validation(
             "Docker 桥接需要 Linux 宿主机和有效目标端口".into(),
         ));
     }
-    let listen_host = gateway(host).await?;
+    let listen_host = gateway(host, engine).await?;
     let bridge = bridge_instance(instance);
     let home = resident_link::remote_home(host).await?;
     let dir = resident_link::remote_link_dir(&home, &bridge.id);

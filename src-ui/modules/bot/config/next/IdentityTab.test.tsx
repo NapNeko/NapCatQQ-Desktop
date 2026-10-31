@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import userEvent from '@testing-library/user-event';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import gsap from 'gsap';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createDefaultBotConfig } from '../../../../core/domain/bot/config-defaults';
 import { IdentityTab } from './IdentityTab';
 
@@ -46,6 +47,12 @@ function finishMotion() {
     });
 }
 
+beforeAll(() => {
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+});
+
 afterEach(cleanup);
 
 describe('身份配置动态区域', () => {
@@ -80,4 +87,31 @@ describe('身份配置动态区域', () => {
         finishMotion();
         expect(duration).not.toBeInTheDocument();
     });
+});
+
+it('新建容器 Bot 可选择 Podman，已有容器的引擎归属保持锁定', async () => {
+    const user = userEvent.setup();
+    const data = {
+        ...createDefaultBotConfig().bot,
+        deploymentType: 'docker' as const,
+        runtime_target: 'linux',
+    };
+    const onEngine = vi.fn();
+    const props = {
+        data,
+        onChange: vi.fn(),
+        isEditMode: false,
+        isRunning: false,
+        containerEngine: 'podman' as const,
+        onContainerEngineChange: onEngine,
+    };
+    const { rerender } = render(<IdentityTab {...props} />);
+    finishMotion();
+    expect(screen.getByRole('combobox', { name: '容器引擎' })).toHaveTextContent('Podman');
+    await user.click(screen.getByRole('combobox', { name: '容器引擎' }));
+    finishMotion();
+    await user.click(await screen.findByRole('option', { name: 'Docker', exact: true }));
+    expect(onEngine).toHaveBeenCalledWith('docker');
+    rerender(<IdentityTab {...props} isEditMode containerEngineLocked />);
+    expect(screen.getByRole('combobox', { name: '容器引擎' })).toBeDisabled();
 });

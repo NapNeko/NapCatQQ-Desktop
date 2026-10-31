@@ -1,3 +1,4 @@
+import { defaultBotDockerConfig } from '../../../core/domain/bot/docker-config';
 // Bot 配置页壳：身份 / 连接 / 高级 + 粘性保存。连接编辑态在 ConnectionsTab。
 // services 直连（botService / snowlumaAppService）按 eslint 白名单留在本文件，注入子 hook。
 
@@ -326,6 +327,21 @@ export function BotConfigPageNext({
                         <TabsContent value="identity" className="w-full pb-8 pt-4">
                             <IdentityTab
                                 data={formData.bot}
+                                containerEngine={formData.docker?.engine}
+                                containerEngineLocked={
+                                    isEditMode &&
+                                    loadedConfig?.bot.deploymentType === 'docker' &&
+                                    loadedConfig.bot.runtime_target === formData.bot.runtime_target
+                                }
+                                onContainerEngineChange={(engine) =>
+                                    setFormData((current) => ({
+                                        ...current,
+                                        docker: {
+                                            ...(current.docker ?? defaultBotDockerConfig()),
+                                            engine,
+                                        },
+                                    }))
+                                }
                                 onChange={updateBot}
                                 isEditMode={isEditMode}
                                 isRunning={isRunning}

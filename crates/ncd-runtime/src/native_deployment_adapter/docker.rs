@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_deploy::docker::DockerCli;
+use ncd_deploy::deployments::docker::resolve_bot_container_name_with_cli;
 use ncd_deploy::{
     Deployment, DeploymentHandle, DockerDeployment, NullProgressSink,
-    bot_docker_container_candidates, bot_docker_container_name, resolve_bot_container_name,
+    bot_docker_container_candidates, bot_docker_container_name,
 };
 use ncd_domain::bot_status::BotStatus;
 use ncd_domain::ids::BotId;
@@ -177,11 +177,11 @@ impl BotBackend for DockerDeploymentBackend {
         let bot_id = BotId::new(config.bot.qq_id.to_string());
         render_docker_config_on_host(self.host.as_ref(), &bot_id, config).await?;
         if self.flavor == BotFlavor::SnowLuma {
-            let cli = DockerCli::new(self.host.as_ref());
+            let cli = self.deployment.cli(self.host.as_ref());
             cli.ensure_daemon_ready()
                 .await
                 .map_err(|error| BotBackendError::Io(error.to_string()))?;
-            let container = resolve_bot_container_name(self.host.as_ref(), &bot_id)
+            let container = resolve_bot_container_name_with_cli(&cli, &bot_id)
                 .await
                 .map_err(|error| BotBackendError::Io(error.to_string()))?
                 .unwrap_or_else(|| DockerDeployment::container_name(config));
@@ -198,7 +198,7 @@ impl BotBackend for DockerDeploymentBackend {
                 "Docker Bot 仅支持 Linux 主机".into(),
             ));
         }
-        let cli = DockerCli::new(self.host.as_ref());
+        let cli = self.deployment.cli(self.host.as_ref());
         cli.ensure_daemon_ready()
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
@@ -270,6 +270,7 @@ impl BotBackend for DockerDeploymentBackend {
                             ncd_backend_snowluma::docker_login::DockerLoginSession::abort_prepare(
                                 self.host.as_ref(),
                                 &ctx.config.bot_id,
+                                cli.engine(),
                             )
                             .await;
                         deployment = base_deployment;
@@ -285,6 +286,7 @@ impl BotBackend for DockerDeploymentBackend {
                     let _ = ncd_backend_snowluma::docker_login::DockerLoginSession::abort_prepare(
                         self.host.as_ref(),
                         &ctx.config.bot_id,
+                        cli.engine(),
                     )
                     .await;
                     warn!(target: "ncd_runtime::docker_login", "Docker 扫码辅助未就绪，保留 VNC 登录");
@@ -408,7 +410,11 @@ impl BotBackend for DockerDeploymentBackend {
         bot_id: BotId,
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
-        let name = resolve_bot_container_name(self.host.as_ref(), &bot_id)
+        let cli = self.deployment.cli(self.host.as_ref());
+        cli.ensure_daemon_ready()
+            .await
+            .map_err(|error| BotBackendError::Io(error.to_string()))?;
+        let name = resolve_bot_container_name_with_cli(&cli, &bot_id)
             .await
             .map_err(|error| BotBackendError::Io(error.to_string()))?
             .unwrap_or_else(|| {
@@ -418,10 +424,6 @@ impl BotBackend for DockerDeploymentBackend {
                 };
                 bot_docker_container_name(backend, bot_id.as_str().parse().unwrap_or(0))
             });
-        let cli = DockerCli::new(self.host.as_ref());
-        cli.ensure_daemon_ready()
-            .await
-            .map_err(|error| BotBackendError::Io(error.to_string()))?;
         let logs = cli
             .logs(&name, opts.lines as u32)
             .await

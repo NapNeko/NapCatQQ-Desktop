@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { dockerQueryMatchesHost } from '../../core/domain/docker/engine';
 import { dockerService } from '../../core/services/docker.service';
 import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 
@@ -17,9 +18,10 @@ export function useContainerEngine(hostId: string, enabled = true) {
             // 两个引擎的镜像和容器完全独立，切换后立即移除旧缓存再重新探测。
             await client.resetQueries({
                 predicate: (q) =>
-                    q.queryKey[0] === 'docker' &&
-                    q.queryKey[2] === hostId &&
-                    q.queryKey[1] !== 'engine',
+                    dockerQueryMatchesHost(q.queryKey, hostId) && q.queryKey[1] !== 'engine',
+            });
+            await client.invalidateQueries({
+                predicate: (q) => q.queryKey[0] === 'botConfig' || q.queryKey[0] === 'botConfigs',
             });
         },
     });

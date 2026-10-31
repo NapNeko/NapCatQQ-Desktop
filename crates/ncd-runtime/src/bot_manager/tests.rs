@@ -17,6 +17,8 @@ fn docker_recreation_detects_container_changes_and_keeps_protocol_hot_reload() {
         let mut current = previous.clone();
         current.docker = Some(BotDockerConfig::default());
         assert!(!docker_container_config_changed(&previous, &current));
+        current.docker.as_mut().unwrap().engine = Some(ncd_domain::docker::ContainerEngine::Docker);
+        assert!(!docker_container_config_changed(&previous, &current));
         current.bot.name = "renamed".into();
         assert!(!docker_container_config_changed(&previous, &current));
 

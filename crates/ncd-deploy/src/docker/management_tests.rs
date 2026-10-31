@@ -18,6 +18,7 @@ struct MockHost {
     standalone_compose: bool,
     docker_compat: bool,
     formatted_podman_version_fails: bool,
+    standalone_compose_error: Option<&'static str>,
     os: Os,
     id: &'static str,
 }
@@ -35,6 +36,7 @@ impl MockHost {
             standalone_compose: false,
             docker_compat: false,
             formatted_podman_version_fails: false,
+            standalone_compose_error: None,
             os: Os::Linux,
             id: "docker-test",
         }
@@ -113,7 +115,9 @@ impl Host for MockHost {
             });
         }
         let (code, stdout, stderr) = if command.program == "podman-compose" {
-            if self.standalone_compose {
+            if let Some(error) = self.standalone_compose_error {
+                (1, "", error)
+            } else if self.standalone_compose {
                 (0, "podman-compose version 1.6.0", "")
             } else {
                 (127, "", "podman-compose: command not found")
@@ -596,4 +600,73 @@ async fn podman_installation_is_detected_without_initializing_its_broken_runtime
     assert!(status.compose_available);
     assert!(!status.daemon_running);
     assert!(host.commands.lock().unwrap().iter().all(|c| !c.elevated));
+}
+
+#[tokio::test]
+async fn existing_broken_podman_compose_keeps_diagnostic_and_never_installs_packages() {
+    use crate::docker::engine::ContainerEngine;
+    let host = MockHost {
+        standalone_compose_error: Some("ModuleNotFoundError: No module named 'podman_compose'"),
+        ..MockHost::new()
+    };
+    let cli = DockerCli::for_engine(&host, Some(ContainerEngine::Podman));
+    let status = cli.probe_checked().await.unwrap();
+    assert!(status.installed && status.daemon_running);
+    assert!(!status.compose_available);
+    assert!(
+        status
+            .compose_diagnostic
+            .unwrap()
+            .contains("ModuleNotFoundError")
+    );
+    let report = crate::docker::install_progress::install_container_engine_with_progress(
+        &host,
+        None,
+        None,
+        std::sync::Arc::new(|_| {}),
+        ContainerEngine::Podman,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        report.status,
+        ncd_domain::DockerInstallStatus::ManualRequired
+    ));
+    assert!(report.message.contains("ModuleNotFoundError"));
+    assert!(
+        host.commands
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|c| matches!(c.program.as_str(), "podman" | "podman-compose") && !c.elevated)
+    );
+}
+
+#[tokio::test]
+async fn bot_engine_overrides_host_selection_without_changing_other_instances() {
+    use crate::docker::engine::ContainerEngine;
+    let host = MockHost::new();
+    let config = |engine| {
+        serde_json::from_value::<ncd_domain::BotConfig>(serde_json::json!({
+            "bot": { "name": "coexist", "QQID": 10001, "deploymentType": "docker" },
+            "connect": {}, "advanced": {}, "docker": { "engine": engine }
+        }))
+        .unwrap()
+    };
+    let podman = DockerCli::for_bot(&host, &config("podman"));
+    let docker = DockerCli::for_bot(&host, &config("docker"));
+    assert_eq!(podman.engine(), ContainerEngine::Podman);
+    assert_eq!(docker.engine(), ContainerEngine::Docker);
+    podman
+        .container_action(ContainerAction::Start, "same-name", false)
+        .await
+        .unwrap();
+    docker
+        .container_action(ContainerAction::Stop, "same-name", false)
+        .await
+        .unwrap();
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(commands[0].program, "podman");
+    assert_eq!(commands[1].program, "docker");
+    assert!(commands.iter().all(|c| !c.elevated));
 }

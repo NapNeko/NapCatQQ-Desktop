@@ -156,7 +156,7 @@ pub async fn rewrite_remote_napcat_load_script(
     let uri = if napcat_mjs_posix.starts_with("file:") {
         napcat_mjs_posix.to_string()
     } else {
-        format!("file://{napcat_mjs_posix}")
+        super::napcat_file_uri(std::path::Path::new(napcat_mjs_posix))?
     };
     let probe = probe_script_posix.map(std::path::Path::new);
     let script = build_napcat_load_script_with_env(&uri, probe, metrics_env);

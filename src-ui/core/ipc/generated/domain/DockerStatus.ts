@@ -7,19 +7,19 @@
  * 前端据此显示"安装 Docker"按钮
  * compose_available 单独拎出来是因为老系统可能有 docker 但没有 compose v2 插件
  */
-export type DockerStatus = { 
+export type DockerStatus = { composeDiagnostic?: string,
 /**
  * docker 二进制是否存在且能跑 docker version
  */
-installed: boolean, 
+installed: boolean,
 /**
  * docker 客户端版本号(如 "27.3.1");探测不到留空
  */
-version: string, 
+version: string,
 /**
  * docker compose version 是否可用(compose v2 插件)
  */
-composeAvailable: boolean, 
+composeAvailable: boolean,
 /**
  * docker daemon 是否在跑(docker info 成功)装了但没起 daemon 时为 false
  */

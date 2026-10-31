@@ -1,3 +1,5 @@
+import type { ContainerEngine } from '../../../../core/ipc/generated/domain/ContainerEngine';
+import { dockerHostTargetKey } from '../../../../core/domain/docker/engine';
 // 身份 Tab：账号、底座、运行宿主与自愈。
 
 import { useEffect, useMemo, type ComponentType, type ReactNode } from 'react';
@@ -58,6 +60,9 @@ interface IdentityTabProps {
     onChange: (patch: Partial<BotBasicConfig>) => void;
     isEditMode: boolean;
     isRunning: boolean;
+    containerEngine?: ContainerEngine;
+    onContainerEngineChange?: (engine: ContainerEngine | undefined) => void;
+    containerEngineLocked?: boolean;
 }
 
 const BACKEND_ITEMS: ReadonlyArray<{
@@ -92,7 +97,7 @@ const RUNTIME_ITEMS: ReadonlyArray<{
     {
         value: 'local',
         label: '本机',
-        summary: '当前桌面主机，Linux 可选 Docker',
+        summary: '当前桌面主机，Linux 可选 Docker / Podman',
         icon: Monitor,
     },
     {
@@ -109,10 +114,18 @@ const DEPLOYMENT_ITEMS: ReadonlyArray<{
     icon: ComponentType<LucideProps>;
 }> = [
     { value: 'native', label: '直接运行', icon: Terminal },
-    { value: 'docker', label: 'Docker', icon: Box },
+    { value: 'docker', label: '容器', icon: Box },
 ];
 
-export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
+export function IdentityTab({
+    data,
+    onChange,
+    isEditMode,
+    isRunning,
+    containerEngine,
+    onContainerEngineChange,
+    containerEngineLocked = false,
+}: IdentityTabProps) {
     const { servers, isLoading: serversLoading } = useServerManager();
 
     // 设置里关掉的协议端不给选；已经是它的（老配置）照常显示
@@ -151,9 +164,15 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         ? servers.find((server) => server.id === data.runtime_target)?.platform !== 'windows'
         : localDockerAllowed;
     const dockerHostIds = useMemo(
-        () => (deploymentType === 'docker' && dockerHostId ? [dockerHostId] : []),
-        [deploymentType, dockerHostId],
+        () =>
+            deploymentType === 'docker' && dockerHostId
+                ? [{ hostId: dockerHostId, engine: containerEngine }]
+                : [],
+        [deploymentType, dockerHostId, containerEngine],
     );
+    const dockerProbeKey = dockerHostId
+        ? dockerHostTargetKey({ hostId: dockerHostId, engine: containerEngine })
+        : '';
     const { statusByHost, probingByHost, imageReadyByHost } = useDockerHosts(dockerHostIds);
 
     // 直接运行的框架 + 依赖状态由后端解析；SnowLuma Full/Lite 也由后端按设置 / 库存判定
@@ -335,7 +354,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 <FormSection
                     title="运行场景"
                     layout="none"
-                    description="Linux 主机支持直接运行与 Docker；Windows 使用直接运行"
+                    description="Linux 主机支持直接运行与 Docker / Podman；Windows 使用直接运行"
                     actions={
                         sceneExplainer ? (
                             <SceneExplainerPopover>{sceneExplainer}</SceneExplainerPopover>
@@ -484,21 +503,44 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
                                 <ExpandPresence visible={!!showDockerBlock}>
                                     <div className="pt-3">
+                                        {onContainerEngineChange && (
+                                            <label className="mb-3 flex items-center gap-3 text-xs text-text-secondary">
+                                                容器引擎
+                                                <Select
+                                                    aria-label="容器引擎"
+                                                    value={containerEngine ?? 'default'}
+                                                    disabled={containerEngineLocked || isRunning}
+                                                    items={[
+                                                        { value: 'default', label: '主机当前引擎' },
+                                                        { value: 'docker', label: 'Docker' },
+                                                        { value: 'podman', label: 'Podman' },
+                                                    ]}
+                                                    onValueChange={(value) =>
+                                                        onContainerEngineChange(
+                                                            value === 'default'
+                                                                ? undefined
+                                                                : (value as ContainerEngine),
+                                                        )
+                                                    }
+                                                />
+                                            </label>
+                                        )}
                                         <DockerReadinessLine
+                                            engine={containerEngine}
                                             flavorLabel={dockerFlavorLabel}
                                             status={
                                                 dockerHostId
-                                                    ? statusByHost[dockerHostId]
+                                                    ? statusByHost[dockerProbeKey]
                                                     : undefined
                                             }
                                             probing={
                                                 dockerHostId
-                                                    ? (probingByHost[dockerHostId] ?? false)
+                                                    ? (probingByHost[dockerProbeKey] ?? false)
                                                     : false
                                             }
                                             imageReady={
                                                 dockerHostId
-                                                    ? imageReadyByHost[dockerHostId]?.[
+                                                    ? imageReadyByHost[dockerProbeKey]?.[
                                                           data.backend_type === 'snowluma'
                                                               ? 'snowluma'
                                                               : 'napcat'
@@ -677,17 +719,20 @@ function SceneExplainerPopover({ children }: { children: ReactNode }) {
 }
 
 function DockerReadinessLine({
+    engine,
     flavorLabel,
     status,
     probing,
     imageReady,
 }: {
     flavorLabel: string;
+    engine?: ContainerEngine;
     status: import('../../../../core/ipc/types').DockerStatus | undefined;
     probing: boolean;
     imageReady: boolean | undefined;
 }) {
     const notice = dockerReadinessNotice({
+        engine,
         flavorLabel,
         status,
         probing,

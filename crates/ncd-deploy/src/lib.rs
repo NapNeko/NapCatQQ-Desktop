@@ -15,6 +15,7 @@ pub mod deployment;
 pub mod deployments;
 pub mod docker;
 pub mod error;
+pub mod napcat_loader;
 pub mod napcat_log_sanitize;
 pub mod plan;
 pub mod qq_console_noise;

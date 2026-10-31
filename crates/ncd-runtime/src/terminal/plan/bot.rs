@@ -80,6 +80,7 @@ impl DesktopTerminalPlanner {
                 let names =
                     ncd_deploy::bot_docker_container_candidates(basic.backend_type, basic.qq_id)
                         .to_vec();
+                let engine = ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), &config);
                 if host_dir {
                     let dir = names
                         .iter()
@@ -90,6 +91,7 @@ impl DesktopTerminalPlanner {
                                 "尚未创建此 Bot 的 Docker 部署目录，请先启动 Bot".into(),
                             )
                         })?;
+                    let snippets = bot_compose_snippets(host.as_ref(), &config, false).await;
                     self.local_plan(
                         host,
                         request,
@@ -98,10 +100,7 @@ impl DesktopTerminalPlanner {
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
-                        vec![
-                            TerminalSnippet::new("容器状态", "docker compose ps"),
-                            TerminalSnippet::new("最近日志", "docker compose logs --tail 200"),
-                        ],
+                        snippets,
                     )
                 } else {
                     Ok(TerminalLaunchPlan {
@@ -110,7 +109,9 @@ impl DesktopTerminalPlanner {
                         host_label: "本机".into(),
                         host_os: ncd_domain::TerminalHostOs::Linux,
                         title: format!("{name} 容器"),
-                        program: ncd_host::PtyProgram::Script(super::docker_exec_script(&names)),
+                        program: ncd_host::PtyProgram::Script(super::docker_exec_script(
+                            &names, engine,
+                        )),
                         cwd: None,
                         env: std::collections::BTreeMap::new(),
                         cwd_display: None,
@@ -210,6 +211,7 @@ impl DesktopTerminalPlanner {
                     ncd_deploy::bot_docker_container_candidates(basic.backend_type, basic.qq_id)
                         .to_vec();
                 let host = self.resolve(&basic.runtime_target).await?;
+                let engine = ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), &config);
                 if host_dir {
                     let info = self
                         .remote_shell(&remote_host_id(server_id), host.as_ref())
@@ -218,11 +220,7 @@ impl DesktopTerminalPlanner {
                         .iter()
                         .map(|n| docker_bot_project_dir(&info.home, n))
                         .collect();
-                    let snippets = vec![
-                        TerminalSnippet::new("容器状态", "docker compose ps"),
-                        TerminalSnippet::new("最近日志", "docker compose logs --tail 200"),
-                        TerminalSnippet::new("跟着看日志", "docker compose logs -f --tail 50"),
-                    ];
+                    let snippets = bot_compose_snippets(host.as_ref(), &config, true).await;
                     self.remote_plan(
                         host,
                         server_id,
@@ -241,7 +239,7 @@ impl DesktopTerminalPlanner {
                         host,
                         server_id,
                         Some(format!("{name} 容器")),
-                        RemoteStart::Container(names),
+                        RemoteStart::Container(names, engine),
                         Vec::new(),
                         Vec::new(),
                         vec![format!("进 {name} 的容器；在容器里 exit 这个终端就结束了")],
@@ -252,4 +250,34 @@ impl DesktopTerminalPlanner {
             }
         }
     }
+}
+
+async fn bot_compose_snippets(
+    host: &dyn ncd_host::Host,
+    config: &ncd_domain::BotConfig,
+    follow: bool,
+) -> Vec<TerminalSnippet> {
+    let cli = ncd_deploy::DockerCli::for_bot(host, config);
+    let Ok(command) = cli.compose_command().await else {
+        return vec![TerminalSnippet::new(
+            "引擎诊断",
+            format!("{} info", cli.engine().program()),
+        )];
+    };
+    let compose = std::iter::once(command.program.as_str())
+        .chain(command.args.iter().map(String::as_str))
+        .map(ncd_host::shell_single_quote)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut snippets = vec![
+        TerminalSnippet::new("容器状态", format!("{compose} ps")),
+        TerminalSnippet::new("最近日志", format!("{compose} logs --tail 200")),
+    ];
+    if follow {
+        snippets.push(TerminalSnippet::new(
+            "跟着看日志",
+            format!("{compose} logs -f --tail 50"),
+        ));
+    }
+    snippets
 }

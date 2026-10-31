@@ -45,11 +45,13 @@ fn strip_appimage_paths(
         let Some(name) = key.to_str() else { continue };
         let paths: Vec<_> = match name {
             "PATH" | "LD_LIBRARY_PATH" | "GTK_PATH" | "GIO_EXTRA_MODULES" | "XDG_DATA_DIRS"
-            | "QT_PLUGIN_PATH" | "QML2_IMPORT_PATH" => std::env::split_paths(&value).collect(),
+            | "QT_PLUGIN_PATH" | "QML2_IMPORT_PATH" | "PYTHONPATH" | "GI_TYPELIB_PATH"
+            | "GCONV_PATH" => std::env::split_paths(&value).collect(),
             "GDK_PIXBUF_MODULE_FILE"
             | "GSETTINGS_SCHEMA_DIR"
             | "GTK_EXE_PREFIX"
-            | "GTK_DATA_PREFIX" => vec![std::path::PathBuf::from(&value)],
+            | "GTK_DATA_PREFIX"
+            | "PYTHONHOME" => vec![std::path::PathBuf::from(&value)],
             "LD_PRELOAD" => {
                 // ld.so 同时接受空格和冒号分隔。
                 let Some(value) = value.to_str() else {
@@ -87,6 +89,12 @@ mod tests {
             ("ARGV0", "napcatqq_desktop.appimage"),
             ("OWD", "/home/user"),
             ("PATH", "/tmp/.mount_ncd/usr/bin:/usr/bin:/bin"),
+            ("PYTHONHOME", "/tmp/.mount_ncd/usr"),
+            (
+                "PYTHONPATH",
+                "/tmp/.mount_ncd/usr/lib/python:/opt/host/python",
+            ),
+            ("GI_TYPELIB_PATH", "/tmp/.mount_ncd/usr/lib/girepository"),
             ("LD_LIBRARY_PATH", "/tmp/.mount_ncd/usr/lib:/opt/host/lib"),
             (
                 "LD_PRELOAD",
@@ -112,6 +120,7 @@ mod tests {
         let env = String::from_utf8(output.stdout).unwrap();
         for expected in [
             "PATH=/usr/bin:/bin\n",
+            "PYTHONPATH=/opt/host/python\n",
             "LD_LIBRARY_PATH=/opt/host/lib\n",
             "LD_PRELOAD=/opt/host/libshim.so\n",
             "QT_PLUGIN_PATH=/tmp/.mount_ncd-other/plugins:/usr/lib/qt/plugins\n",
@@ -121,7 +130,14 @@ mod tests {
             assert!(env.contains(expected), "{expected:?} missing from {env}");
         }
         assert!(!env.contains("GDK_PIXBUF_MODULE_FILE="));
-        for key in ["APPDIR=", "APPIMAGE=", "ARGV0=", "OWD="] {
+        for key in [
+            "APPDIR=",
+            "APPIMAGE=",
+            "ARGV0=",
+            "OWD=",
+            "PYTHONHOME=",
+            "GI_TYPELIB_PATH=",
+        ] {
             assert!(!env.contains(key), "{key} leaked into the system command");
         }
     }

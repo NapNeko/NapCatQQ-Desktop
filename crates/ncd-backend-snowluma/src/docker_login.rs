@@ -81,6 +81,8 @@ struct BindReply {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DockerLoginSession {
+    #[serde(default)]
+    engine: Option<ncd_domain::docker::ContainerEngine>,
     method: String,
     directory: String,
     session_id: String,
@@ -216,7 +218,7 @@ impl DockerLoginSession {
         if config.bot.qq_id == 0 {
             return Err(unavailable());
         }
-        let cli = DockerCli::new(host);
+        let cli = DockerCli::for_bot(host, config);
         cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let candidates = bot_docker_container_candidates(BackendType::SnowLuma, config.bot.qq_id);
         if cli
@@ -305,6 +307,7 @@ impl DockerLoginSession {
             .await
             .map_err(|_| unavailable())?;
         let session = Self {
+            engine: Some(cli.engine()),
             method: "atspi".into(),
             directory: root.clone(),
             session_id: format!("{:032x}", rand::random::<u128>()),
@@ -487,7 +490,7 @@ impl DockerLoginSession {
         let Some(mut session) = Self::recover(host, bot_id).await? else {
             return Ok(None);
         };
-        let cli = DockerCli::new(host);
+        let cli = DockerCli::for_engine(host, session.engine);
         cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let (_, anchor) = session.anchor(host, &cli).await?;
         Ok(Some(anchor.pid))
@@ -594,7 +597,7 @@ impl DockerLoginSession {
             ));
         };
         // 一轮采集复用已判定的 Docker 权限，避免慢 SSH 上重复探测占满请求期限。
-        let cli = DockerCli::new(host);
+        let cli = DockerCli::for_engine(host, session.engine);
         cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let (id, anchor) = session.anchor(host, &cli).await?;
         if session
@@ -703,7 +706,11 @@ impl DockerLoginSession {
         session.save(host).await
     }
 
-    pub async fn abort_prepare(host: &dyn Host, bot_id: &BotId) -> Result<(), BotBackendError> {
+    pub async fn abort_prepare(
+        host: &dyn Host,
+        bot_id: &BotId,
+        engine: ncd_domain::docker::ContainerEngine,
+    ) -> Result<(), BotBackendError> {
         let root = session_root(host, bot_id).await?;
         if !host
             .exists(&HostPath::from_posix(&root))
@@ -712,7 +719,8 @@ impl DockerLoginSession {
         {
             return Ok(());
         }
-        let cli = DockerCli::new(host);
+        // 准备失败时 session.json 可能尚未写出；使用本次启动固定的引擎清理。
+        let cli = DockerCli::for_engine(host, Some(engine));
         cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let candidates = bot_docker_container_candidates(BackendType::SnowLuma, bot_id.as_str());
         if cli
@@ -795,6 +803,7 @@ mod tests {
     #[test]
     fn replies_bind_session_pid_and_clear_terminal_or_scanned_qr() {
         let mut session = DockerLoginSession {
+            engine: None,
             method: "atspi".into(),
             directory: "/home/u/private".into(),
             session_id: "abc".into(),

@@ -85,8 +85,8 @@ export function DockerHostPage({
     const [search, setSearch] = useState('');
     const [stateFilter, setStateFilter] = useState('all');
     const [autoRefresh, setAutoRefresh] = useState(false);
-    const docker = useDocker(hostId, tab, autoRefresh);
-    const { engine } = useContainerEngine(hostId);
+    const { engine, loading: engineLoading } = useContainerEngine(hostId);
+    const docker = useDocker(engineLoading ? '' : hostId, tab, autoRefresh, engine);
     const engineName = engine === 'podman' ? 'Podman' : 'Docker';
     const [logs, setLogs] = useState<ContainerInfo | null>(null);
     const [details, setDetails] = useState<ContainerInfo | null>(null);
@@ -337,6 +337,7 @@ export function DockerHostPage({
                 <ContainerLogsDialog
                     key={logs.id}
                     hostId={hostId}
+                    engine={engine}
                     id={logs.id}
                     name={logs.name}
                     onClose={() => setLogs(null)}
@@ -346,6 +347,7 @@ export function DockerHostPage({
                 <ContainerDetailsDialog
                     key={details.id}
                     hostId={hostId}
+                    engine={engine}
                     id={details.id}
                     name={details.name}
                     onClose={() => setDetails(null)}

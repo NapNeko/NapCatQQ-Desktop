@@ -231,6 +231,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     debug_recovery: host_recovery::DebugRecoveryGates,
     reconcile_locks: crate::bootstrap_reconcile::ReconcileLocks,
     refresh_lock: Arc<Mutex<()>>,
+    config_write_lock: Arc<Mutex<()>>,
     migration_reserved: Arc<std::sync::Mutex<migration::MigrationProtocolGate>>,
     /// 和组件执行器共用的远端库存副本;启动路由按它取选中路径,装卸后的重探对这边也生效
     remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
@@ -276,6 +277,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             debug_recovery: Arc::clone(&self.debug_recovery),
             reconcile_locks: Arc::clone(&self.reconcile_locks),
             refresh_lock: Arc::clone(&self.refresh_lock),
+            config_write_lock: Arc::clone(&self.config_write_lock),
             migration_reserved: Arc::clone(&self.migration_reserved),
             remote_inventory: self.remote_inventory.clone(),
             runtime_gate: self.runtime_gate.clone(),
@@ -375,6 +377,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             debug_recovery: Arc::new(Mutex::new(HashMap::new())),
             reconcile_locks: Arc::new(Mutex::new(HashMap::new())),
             refresh_lock: Arc::new(Mutex::new(())),
+            config_write_lock: Arc::new(Mutex::new(())),
             migration_reserved: Arc::new(std::sync::Mutex::new(Default::default())),
             remote_inventory: None,
             runtime_gate: None,
@@ -509,12 +512,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             };
             let napcat_mjs = napcat_dir.join("napcat.mjs");
             if napcat_mjs.is_file() {
-                let uri = {
-                    let normalized = napcat_mjs.to_string_lossy().replace('\\', "/");
-                    if normalized.contains(":/") {
-                        format!("file:///{normalized}")
-                    } else {
-                        format!("file://{normalized}")
+                let uri = match crate::metrics::napcat_file_uri(&napcat_mjs) {
+                    Ok(uri) => uri,
+                    Err(error) => {
+                        warn!(%error, "NapCat 入口路径无法转换为文件 URL，保留已有加载脚本");
+                        return;
                     }
                 };
                 let metrics_env = plan.as_ref().map(|p| {
@@ -857,6 +859,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         enable_auto_start: bool,
     ) -> Result<BootstrapResult, BotManagerError> {
+        self.pin_container_engines().await?;
         let configs = self.repo.list().await?;
         info!(
             target: "ncd_runtime::bot_manager",
@@ -1187,9 +1190,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 把 overrides 带进来;无 drift 时传空 map
     pub async fn upsert_bot_config_with_overrides(
         &self,
-        config: BotConfig,
+        mut config: BotConfig,
         overrides: &std::collections::HashMap<String, Vec<(String, serde_json::Value)>>,
     ) -> Result<BotActorSnapshot, BotManagerError> {
+        ncd_deploy::docker::engine::pin_bot_engine(&mut config);
         let bot_id = BotId::new(config.bot.qq_id.to_string());
         let _migration_guard = self.guard_protocol_mutation(&bot_id)?;
         let is_new = {
@@ -1221,11 +1225,23 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         // 0. 读旧 config 拿原 backend_type,用于检测 backend 切换走特殊路径
         //    新建 bot 没有旧 config,这步返回 None
-        let previous_config: Option<BotConfig> = if is_new {
-            None
-        } else {
-            self.repo.get(config.bot.qq_id).await.ok().flatten()
-        };
+        let config_guard = self.config_write_lock.lock().await;
+        let previous_config: Option<BotConfig> = self.repo.get(config.bot.qq_id).await?;
+        if let Some(previous) = &previous_config
+            && previous.bot.deployment_type == ncd_domain::DeploymentType::Docker
+            && config.bot.deployment_type == ncd_domain::DeploymentType::Docker
+            && previous.bot.runtime_target == config.bot.runtime_target
+        {
+            let mut pinned = previous.clone();
+            ncd_deploy::docker::engine::pin_bot_engine(&mut pinned);
+            if pinned.docker.as_ref().and_then(|s| s.engine)
+                != config.docker.as_ref().and_then(|s| s.engine)
+            {
+                return Err(BotManagerError::RemoteRead(
+                    "已有容器 Bot 的引擎不能直接更换，请新建实例或先迁移容器数据。".into(),
+                ));
+            }
+        }
         let recreate_docker = previous_config
             .as_ref()
             .is_some_and(|previous| docker_container_config_changed(previous, &config));
@@ -1255,6 +1271,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         // 1. 先持久化 bot.json(source of truth)
         self.repo.upsert(config.clone()).await?;
+        drop(config_guard);
         if let Some(previous) = &previous_config {
             if previous.bot.runtime_target != config.bot.runtime_target
                 || previous.bot.backend_type != config.bot.backend_type
@@ -1527,6 +1544,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 列出全部 Bot 配置(持久化源)
     pub async fn list_bot_configs(&self) -> Result<Vec<BotConfig>, BotManagerError> {
         self.repo.list().await.map_err(BotManagerError::from)
+    }
+
+    pub async fn pin_container_engines(&self) -> Result<(), BotManagerError> {
+        let _config_guard = self.config_write_lock.lock().await;
+        for mut config in self.repo.list().await? {
+            if ncd_deploy::docker::engine::pin_bot_engine(&mut config) {
+                self.repo.upsert(config).await?;
+            }
+        }
+        Ok(())
     }
 
     /// 供 ncd-watch 同步:优先内存 endpoint(真实 port/token),
@@ -2651,7 +2678,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        self.repo.delete(qq_id).await?;
+        {
+            let _config_guard = self.config_write_lock.lock().await;
+            self.repo.delete(qq_id).await?;
+        }
         if let Some(config) = &previous_config {
             self.remove_snowluma_metrics_registration(config).await;
         }

@@ -5,6 +5,8 @@ import {
     isRuntimeTargetConcreteRemote,
     normalizeRuntimeTargetFromDisk,
 } from '../../core/domain/bot/runtime-target';
+import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
+import { defaultBotDockerConfig } from '../../core/domain/bot/docker-config';
 import type { DockerFlavor } from '../../core/ipc/types';
 import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import { featureTogglesStore } from '../preferences/featureTogglesStore';
@@ -14,6 +16,7 @@ import { localOs } from '../../core/domain/runtime/env';
 export interface DockerBotCreateTarget {
     hostId: string;
     flavor: DockerFlavor;
+    engine?: ContainerEngine;
 }
 
 export interface DockerBotCreateRequest extends DockerBotCreateTarget {
@@ -90,5 +93,6 @@ export function createDockerBotConfig(target: DockerBotCreateTarget): BotConfig 
     config.bot.backend_type = target.flavor;
     config.bot.runtime_target = runtimeTarget;
     config.bot.deploymentType = 'docker';
+    if (target.engine) config.docker = { ...defaultBotDockerConfig(), engine: target.engine };
     return config;
 }

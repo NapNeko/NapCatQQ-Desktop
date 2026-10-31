@@ -35,7 +35,7 @@ impl DockerCli<'_> {
         &self,
         cmd: HostCommand,
     ) -> Result<String, DockerCliError> {
-        let command = format!("docker {}", cmd.args.join(" "));
+        let command = format!("{} {}", self.engine.program(), cmd.args.join(" "));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -78,11 +78,13 @@ impl DockerCli<'_> {
             });
         }
         self.management_probe_daemon().await?;
+        let compose_available = self.docker_compose_ok().await;
         Ok(DockerStatus {
+            compose_diagnostic: self.compose_diagnostic().await,
             installed: true,
             version,
             daemon_running: true,
-            compose_available: self.docker_compose_ok().await,
+            compose_available,
         })
     }
 
@@ -111,7 +113,7 @@ impl DockerCli<'_> {
             return Ok(());
         }
         Err(DockerCliError::CommandFailed {
-            command: "docker info".into(),
+            command: format!("{} info", self.engine.program()),
             exit_code: out.exit_code,
             stderr: out.stderr,
         })

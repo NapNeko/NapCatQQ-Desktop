@@ -1,3 +1,4 @@
+import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 // 容器诊断信息与按需资源采样。
 import { RefreshCw } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -92,16 +93,18 @@ function ErrorNotice({
 
 export function ContainerDetailsDialog({
     hostId,
+    engine,
     id,
     name,
     onClose,
 }: {
     hostId: string;
+    engine?: ContainerEngine;
     id: string;
     name: string;
     onClose: () => void;
 }) {
-    const { details, stats } = useDockerContainer(hostId, id);
+    const { details, stats } = useDockerContainer(hostId, id, engine);
     const data = details.data;
     const badge = data ? containerStateBadge(data.state) : null;
     const busy = details.isFetching || stats.isFetching;

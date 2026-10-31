@@ -1,26 +1,10 @@
 //! 按主机选择容器引擎；Podman 始终使用当前用户的容器存储，不能自动切换到 sudo。
-use serde::{Deserialize, Serialize};
+pub use ncd_domain::docker::ContainerEngine;
 use std::{
     collections::HashMap,
     sync::{Mutex, OnceLock},
 };
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum ContainerEngine {
-    #[default]
-    Docker,
-    Podman,
-}
-impl ContainerEngine {
-    pub fn program(self) -> &'static str {
-        match self {
-            Self::Docker => "docker",
-            Self::Podman => "podman",
-        }
-    }
-}
 static ENGINES: OnceLock<Mutex<HashMap<String, ContainerEngine>>> = OnceLock::new();
 pub fn preferences() -> HashMap<String, ContainerEngine> {
     ENGINES
@@ -39,13 +23,46 @@ pub fn engine_for(host: &dyn ncd_host::Host) -> ContainerEngine {
     if host.os() != ncd_host::Os::Linux {
         return ContainerEngine::Docker;
     }
+    preference_for_host_id(host.id())
+}
+
+pub fn preference_for_host_id(host_id: &str) -> ContainerEngine {
+    let host_id = host_id.strip_prefix("remote:").unwrap_or(host_id);
     ENGINES
         .get_or_init(Default::default)
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .get(host.id())
+        .get(host_id)
         .copied()
         .unwrap_or_default()
+}
+
+pub fn engine_for_bot(
+    host: &dyn ncd_host::Host,
+    config: &ncd_domain::BotConfig,
+) -> ContainerEngine {
+    config
+        .docker
+        .as_ref()
+        .and_then(|settings| settings.engine)
+        .unwrap_or_else(|| engine_for(host))
+}
+
+/// 补齐历史配置时只改持久化归属，不重建、停止或迁移容器。
+pub fn pin_bot_engine(config: &mut ncd_domain::BotConfig) -> bool {
+    if config.bot.deployment_type != ncd_domain::DeploymentType::Docker {
+        return false;
+    }
+    let settings = config.docker.get_or_insert_with(Default::default);
+    if settings.engine.is_some() {
+        return false;
+    }
+    let host_id = match &config.bot.runtime_target {
+        ncd_domain::RuntimeTarget::Local => "local".to_owned(),
+        ncd_domain::RuntimeTarget::Server(id) => format!("remote:{id}"),
+    };
+    settings.engine = Some(preference_for_host_id(&host_id));
+    true
 }
 
 pub fn image_reference(engine: ContainerEngine, image: &str) -> String {

@@ -268,13 +268,19 @@ impl RuntimeBackendRouter {
         config: &BotConfig,
     ) -> Result<Arc<dyn BotBackend>, RuntimeRouterError> {
         let scenario = RuntimeScenario::from_config(config)?;
-        self.backend_for_scenario(&scenario, config.bot.qq_id).await
+        self.backend_for_scenario(
+            &scenario,
+            config.bot.qq_id,
+            config.docker.as_ref().and_then(|s| s.engine),
+        )
+        .await
     }
 
     async fn backend_for_scenario(
         &self,
         scenario: &RuntimeScenario,
         qq_id: u64,
+        engine: Option<ncd_domain::docker::ContainerEngine>,
     ) -> Result<Arc<dyn BotBackend>, RuntimeRouterError> {
         match scenario {
             RuntimeScenario::LocalNative { backend } => self.local_backend_for(*backend),
@@ -300,15 +306,17 @@ impl RuntimeBackendRouter {
                 let host_key = scenario.server_id().unwrap_or("local").to_string();
                 let backend_id = BotId::new(format!("docker-{qq_id}"));
                 let flavor = BotFlavor::from(*backend);
+                let engine =
+                    engine.unwrap_or_else(|| ncd_deploy::docker::engine::engine_for(host.as_ref()));
                 let deployment: Arc<DockerDeployment> = match backend {
                     BackendType::SnowLuma => {
                         let vnc = self.docker_secrets.snowluma_vnc_passwd(qq_id)?;
                         let webui = self.docker_secrets.snowluma_webui_bootstrap(qq_id)?;
-                        Arc::new(DockerDeployment::with_sl_secrets(vnc, webui))
+                        Arc::new(DockerDeployment::with_sl_secrets(vnc, webui).with_engine(engine))
                     }
                     BackendType::NapCat => {
                         let token = self.docker_secrets.napcat_webui_token(qq_id)?;
-                        Arc::new(DockerDeployment::with_webui_token(token))
+                        Arc::new(DockerDeployment::with_webui_token(token).with_engine(engine))
                     }
                 };
                 let mut backend =

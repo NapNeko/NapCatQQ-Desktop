@@ -11,6 +11,12 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 
 import { dockerService, type DockerInstallOptions } from '../../core/services/docker.service';
 import { openExternalOrReport } from '../useOpenExternal';
+import {
+    dockerHostTarget,
+    dockerHostTargetKey,
+    dockerQueryMatchesHost,
+    type DockerHostTarget,
+} from '../../core/domain/docker/engine';
 import { dockerActionStore, dockerPullTargetKey } from './dockerActionStore';
 import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import type {
@@ -65,13 +71,18 @@ export interface UseDockerHostsResult {
     isDeploying: boolean;
 }
 
-export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
+export function useDockerHosts(
+    targets: readonly (string | DockerHostTarget)[],
+): UseDockerHostsResult {
+    const hostIds = targets.map(dockerHostTargetKey);
+    const resolvedTargets = targets.map(dockerHostTarget);
     const queryClient = useQueryClient();
 
     const queries = useQueries({
-        queries: hostIds.map((hostId) => ({
+        queries: hostIds.map((hostId, i) => ({
             queryKey: ['docker', 'status', hostId],
-            queryFn: () => dockerService.probe(hostId),
+            queryFn: () =>
+                dockerService.probe(resolvedTargets[i].hostId, resolvedTargets[i].engine),
             staleTime: 30 * 1000,
             retry: false,
         })),
@@ -102,9 +113,14 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     }, [hostIds, queries]);
 
     const imageReadyNapcatQueries = useQueries({
-        queries: hostIds.map((hostId) => ({
+        queries: hostIds.map((hostId, i) => ({
             queryKey: ['docker', 'imageReady', hostId, 'napcat'],
-            queryFn: () => dockerService.imageReadyForFlavor(hostId, 'napcat'),
+            queryFn: () =>
+                dockerService.imageReadyForFlavor(
+                    resolvedTargets[i].hostId,
+                    'napcat',
+                    resolvedTargets[i].engine,
+                ),
             retry: false,
             enabled: !errorByHost[hostId] && (statusByHost[hostId]?.daemonRunning ?? false),
             staleTime: 30 * 1000,
@@ -112,9 +128,14 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     });
 
     const imageReadySnowlumaQueries = useQueries({
-        queries: hostIds.map((hostId) => ({
+        queries: hostIds.map((hostId, i) => ({
             queryKey: ['docker', 'imageReady', hostId, 'snowluma'],
-            queryFn: () => dockerService.imageReadyForFlavor(hostId, 'snowluma'),
+            queryFn: () =>
+                dockerService.imageReadyForFlavor(
+                    resolvedTargets[i].hostId,
+                    'snowluma',
+                    resolvedTargets[i].engine,
+                ),
             retry: false,
             enabled: !errorByHost[hostId] && (statusByHost[hostId]?.daemonRunning ?? false),
             staleTime: 30 * 1000,
@@ -147,9 +168,10 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
 
     // 容器列表：Docker 管理页等仍需要；框架「拉镜像」不再依赖容器是否存在。
     const containerQueries = useQueries({
-        queries: hostIds.map((hostId) => ({
+        queries: hostIds.map((hostId, i) => ({
             queryKey: ['docker', 'containers', hostId],
-            queryFn: () => dockerService.listContainers(hostId),
+            queryFn: () =>
+                dockerService.listContainers(resolvedTargets[i].hostId, resolvedTargets[i].engine),
             enabled: !errorByHost[hostId] && (statusByHost[hostId]?.daemonRunning ?? false),
             staleTime: 30 * 1000,
         })),
@@ -168,7 +190,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
             void queryClient.invalidateQueries({
                 predicate: (query) =>
                     query.queryKey[0] === 'docker' &&
-                    (hostId === undefined || query.queryKey[2] === hostId),
+                    (hostId === undefined || dockerQueryMatchesHost(query.queryKey, hostId)),
             });
         },
         [queryClient],

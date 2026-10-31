@@ -367,7 +367,8 @@ async fn build_napcat_launch_plan_inner(
     ensure_runtime_file(&qq_exe, "未检测到 QQ.exe，请确认已安装 QQ NT")?;
 
     let load_script_path = napcat_dir.join("loadNapCat.js");
-    let napcat_mjs_uri = path_to_file_uri(&napcat_dir.join("napcat.mjs"));
+    let napcat_mjs_uri = crate::metrics::napcat_file_uri(&napcat_dir.join("napcat.mjs"))
+        .map_err(RuntimeLaunchPlanError::LoadScript)?;
 
     // 指标注入必须在本函数内完成：BotManager 与 NativeDeployment::launch 都会
     // 调 build_plan。若只在 Manager 侧改 loadNapCat.js，launch 里第二次
@@ -491,7 +492,8 @@ async fn build_napcat_launch_plan_inner(
         crate::metrics::apply_metrics_to_environment(&mut environment, plan);
     }
     let script = crate::metrics::build_napcat_load_script_with_env(
-        &path_to_file_uri(&napcat_dir.join("napcat.mjs")),
+        &crate::metrics::napcat_file_uri(&napcat_dir.join("napcat.mjs"))
+            .map_err(RuntimeLaunchPlanError::LoadScript)?,
         metrics.as_ref().map(|p| p.probe_script.as_path()),
         Some(&environment),
     );
@@ -521,17 +523,6 @@ async fn build_napcat_launch_plan_inner(
         working_dir: qq_install.to_path_buf(),
         load_script_path,
     }))
-}
-
-fn path_to_file_uri(path: &Path) -> String {
-    let normalized = path.to_string_lossy().replace('\\', "/");
-    if normalized.contains(":/") {
-        format!("file:///{}", normalized)
-    } else if normalized.starts_with('/') {
-        format!("file://{}", normalized)
-    } else {
-        format!("file:///{}", normalized)
-    }
 }
 
 fn ensure_runtime_file(path: &Path, message: &str) -> Result<(), RuntimeLaunchPlanError> {

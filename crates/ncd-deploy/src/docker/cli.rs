@@ -68,13 +68,25 @@ pub struct DockerCli<'h> {
 
 impl<'h> DockerCli<'h> {
     pub fn new(host: &'h dyn Host) -> Self {
+        Self::for_engine(host, None)
+    }
+
+    pub fn for_bot(host: &'h dyn Host, config: &ncd_domain::BotConfig) -> Self {
+        Self::for_engine(host, Some(super::engine::engine_for_bot(host, config)))
+    }
+
+    pub fn for_engine(host: &'h dyn Host, engine: Option<super::engine::ContainerEngine>) -> Self {
         Self {
             host,
-            engine: super::engine::engine_for(host),
+            engine: engine.unwrap_or_else(|| super::engine::engine_for(host)),
             elevated: std::sync::atomic::AtomicBool::new(false),
             podman_compose: tokio::sync::OnceCell::new(),
             docker_is_podman: tokio::sync::OnceCell::new(),
         }
+    }
+
+    pub fn engine(&self) -> super::engine::ContainerEngine {
+        self.engine
     }
 
     /// 按当前提权标志构造命令；调用前先 ensure_ready / ensure_daemon_ready。
@@ -115,6 +127,7 @@ impl<'h> DockerCli<'h> {
         let compose_available = self.docker_compose_ok().await;
 
         DockerStatus {
+            compose_diagnostic: self.compose_diagnostic().await,
             installed: true,
             version,
             compose_available,
@@ -375,7 +388,7 @@ impl<'h> DockerCli<'h> {
     /// 镜像在组件页预拉并验证；启动不隐式联网拉取不同版本。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
         let mut cmd = self
-            .compose_cmd()
+            .compose_command()
             .await?
             .arg("up")
             .arg("-d")
@@ -404,7 +417,7 @@ impl<'h> DockerCli<'h> {
         remove_volumes: bool,
     ) -> Result<(), DockerCliError> {
         let mut cmd = self
-            .compose_cmd()
+            .compose_command()
             .await?
             .arg("down")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))
