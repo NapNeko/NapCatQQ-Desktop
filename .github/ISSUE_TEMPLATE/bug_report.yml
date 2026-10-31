@@ -43,6 +43,8 @@ body:
         - 浏览器预览（pnpm dev）
         - 自打 / 内测 MSI
         - 旧版 2.x / Python（归档）
+        - 正式 Appimage (Github Release)
+        - 正式 deb (Github Release)
         - 其他 / 不确定
     validations:
       required: true
@@ -93,9 +95,10 @@ body:
       multiple: true
       options:
         - 本机 Windows · 原生
+        - 远端 Windows · 远程代理（ncd-agent）
         - 远端 Linux · 原生
         - 远端 Linux · Docker
-        - 远端 Windows · 远程代理（ncd-agent）
+        - 本机 Linux · Docker
         - 不适用
         - 不确定
     validations:
