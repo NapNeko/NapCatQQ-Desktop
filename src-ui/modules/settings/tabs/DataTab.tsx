@@ -7,6 +7,10 @@ import { DataRootMigrateDialog } from '../DataRootMigrateDialog';
 import { CacheCleanupDialog } from '../CacheCleanupDialog';
 import { Button } from '../../../shared/ui';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
+import { localOs } from '../../../core/domain/runtime/env';
+import { errorText } from '../../../core/domain/errors';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
+import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 
 interface Props {
     dataRoot: string;
@@ -17,6 +21,8 @@ interface Props {
 export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir }: Props) {
     const [migrateOpen, setMigrateOpen] = useState(false);
     const [cleanupOpen, setCleanupOpen] = useState(false);
+    const [copyingDirectory, setCopyingDirectory] = useState(false);
+    const hasDataRoot = !!dataRoot && dataRoot !== '—';
     const {
         exportConfig,
         openImportWizard,
@@ -36,7 +42,30 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir }: Props) {
         try {
             await onOpenDataDir();
         } catch (err) {
-            console.warn('打开数据目录失败:', err);
+            if (localOs() === 'linux')
+                pushErrorBar({
+                    title: '打开数据目录失败',
+                    raw: errorText(err),
+                    content: '可点击“复制目录”，在文件管理器中打开。',
+                });
+            else console.warn('打开数据目录失败:', err);
+        }
+    };
+
+    const handleCopyDirectory = async () => {
+        setCopyingDirectory(true);
+        try {
+            await navigator.clipboard.writeText(dataRoot);
+            pushInfoBar({
+                tone: 'success',
+                title: '已复制数据目录',
+                content: dataRoot,
+                autoDismissMs: 4000,
+            });
+        } catch (err) {
+            pushErrorBar({ title: '复制数据目录失败', raw: errorText(err) });
+        } finally {
+            setCopyingDirectory(false);
         }
     };
 
@@ -59,6 +88,14 @@ export function DataTab({ dataRoot, onOpenDataDir, isOpeningDir }: Props) {
                             disabled={isOpeningDir}
                         >
                             打开
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCopyDirectory}
+                            disabled={!hasDataRoot || copyingDirectory}
+                        >
+                            复制目录
                         </Button>
                         <Button
                             variant="secondary"

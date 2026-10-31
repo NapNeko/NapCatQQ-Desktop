@@ -33,6 +33,7 @@ pub mod window;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "linux"))]
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -188,8 +189,11 @@ pub async fn get_remote_webui_endpoint(
 }
 
 #[tauri::command]
-pub fn open_data_dir(state: State<'_, AppState>) -> Result<PathBuf, String> {
+pub async fn open_data_dir(state: State<'_, AppState>) -> Result<PathBuf, String> {
     fs::create_dir_all(&state.data_root).map_err(|err| format!("创建数据目录失败: {err}"))?;
+    #[cfg(target_os = "linux")]
+    open_local_directory(&state.data_root).await?;
+    #[cfg(not(target_os = "linux"))]
     open_in_file_manager(&state.data_root)?;
     Ok(state.data_root.clone())
 }
@@ -225,14 +229,22 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
-fn open_local_directory(path: &Path) -> Result<(), String> {
-    if !path.is_absolute() || !path.is_dir() {
-        return Err(format!("目录不存在: {}", path.display()));
+async fn open_local_directory(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::desktop_opener::open_directory(path).await
     }
-    tauri_plugin_opener::open_path(path, None::<&str>)
-        .map_err(|error| format!("无法打开目录: {error}"))
+    #[cfg(not(target_os = "linux"))]
+    {
+        if !path.is_absolute() || !path.is_dir() {
+            return Err(format!("目录不存在: {}", path.display()));
+        }
+        tauri_plugin_opener::open_path(path, None::<&str>)
+            .map_err(|error| format!("无法打开目录: {error}"))
+    }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn open_in_file_manager(path: &Path) -> Result<(), String> {
     let mut command = if cfg!(target_os = "windows") {
         let mut cmd = Command::new("explorer");

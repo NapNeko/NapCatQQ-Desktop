@@ -58,7 +58,7 @@ pub async fn open_app_instance_directory(
     }
     let host = super::host_resolve::local_host()?;
     let directory = ncd_host::HostPath::from_posix(&instance.install_dir).render_for(host.os());
-    super::open_local_directory(std::path::Path::new(&directory))
+    super::open_local_directory(std::path::Path::new(&directory)).await
 }
 
 #[tauri::command]
