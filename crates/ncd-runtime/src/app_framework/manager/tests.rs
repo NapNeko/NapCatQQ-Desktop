@@ -542,10 +542,11 @@ mod write_config {
         assert_ne!(second, first);
     }
 
-    /// 远端替身：文件照样落在本机临时目录（实例目录在那），但自称远端；开隧道只记下请求、
-    /// 按请求的口（没指定就给固定口）回句柄；跑命令一律回空，占口探测、时区都当没有
+    /// 远端替身：系统与 shell 按场景选择，文件仍委托本机 Windows 临时目录；
+    /// 开隧道只记录请求并返回固定口，Docker 版本之外的命令回空。
     struct TunnelHost {
         fs: ncd_host::local::LocalWindowsHost,
+        os: Os,
         specs: Mutex<Vec<TunnelSpec>>,
     }
 
@@ -553,9 +554,10 @@ mod write_config {
     const AUTO_REMOTE: u16 = 42002;
 
     impl TunnelHost {
-        fn new() -> Arc<Self> {
+        fn new(os: Os) -> Arc<Self> {
             Arc::new(Self {
                 fs: ncd_host::local::LocalWindowsHost::new(),
+                os,
                 specs: Mutex::new(Vec::new()),
             })
         }
@@ -568,7 +570,7 @@ mod write_config {
     #[async_trait::async_trait]
     impl Host for TunnelHost {
         fn os(&self) -> Os {
-            self.fs.os()
+            self.os
         }
         fn arch(&self) -> ncd_host::Arch {
             self.fs.arch()
@@ -580,7 +582,10 @@ mod write_config {
             "remote:test"
         }
         fn shell(&self) -> &dyn ncd_host::HostShell {
-            self.fs.shell()
+            match self.os {
+                Os::Windows => self.fs.shell(),
+                Os::Linux | Os::MacOs => &ncd_host::shell::BashShell,
+            }
         }
         async fn read_file(&self, p: &HostPath) -> Result<bytes::Bytes, ncd_host::HostError> {
             self.fs.read_file(p).await
@@ -702,9 +707,10 @@ mod write_config {
     async fn tunnel_fixture(
         instance_id: &str,
         host_id: &str,
+        remote_os: Os,
     ) -> (Fixture, Arc<TunnelHost>, Arc<TunnelHost>) {
-        let vps = TunnelHost::new();
-        let vps2 = TunnelHost::new();
+        let vps = TunnelHost::new(remote_os);
+        let vps2 = TunnelHost::new(remote_os);
         let resolver = Arc::new(VpsResolver {
             local: Arc::new(ncd_host::local::LocalWindowsHost::new()),
             vps: vps.clone(),
@@ -721,7 +727,7 @@ mod write_config {
     /// 桌面端重开时隧道先要适配器里那个口，要到了就不改适配器
     #[tokio::test]
     async fn maibot_reaches_a_remote_bot_through_a_desktop_l_tunnel() {
-        let (f, vps, _) = tunnel_fixture("m3", LOCAL_HOST_ID).await;
+        let (f, vps, _) = tunnel_fixture("m3", LOCAL_HOST_ID, Os::Windows).await;
         let bot_id = BotId::new("30003");
         let linked = f.manager.apply_link(&f.id, &bot_id).await.unwrap();
         let link = linked.link.clone().expect("已对接");
@@ -787,7 +793,7 @@ mod write_config {
     #[tokio::test]
     async fn docker_forward_link_uses_published_port_on_same_host_for_nc_and_sl() {
         for backend in [BackendType::NapCat, BackendType::SnowLuma] {
-            let (f, vps, _) = tunnel_fixture("m-docker-same", "remote:vps").await;
+            let (f, vps, _) = tunnel_fixture("m-docker-same", "remote:vps", Os::Linux).await;
             let bot_id = BotId::new("30003");
             let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
             bot.bot.backend_type = backend;
@@ -812,7 +818,7 @@ mod write_config {
 
     #[tokio::test]
     async fn docker_forward_link_and_server_recovery_keep_custom_host_mapping() {
-        let (f, vps, _) = tunnel_fixture("m-docker-remote", LOCAL_HOST_ID).await;
+        let (f, vps, _) = tunnel_fixture("m-docker-remote", LOCAL_HOST_ID, Os::Linux).await;
         let bot_id = BotId::new("30003");
         let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
         bot.bot.deployment_type = DeploymentType::Docker;
@@ -843,7 +849,7 @@ mod write_config {
 
     #[tokio::test]
     async fn docker_mapping_events_and_rapid_host_recoveries_refresh_linked_apps() {
-        let (f, _, _) = tunnel_fixture("m-docker-events", "remote:vps").await;
+        let (f, _, _) = tunnel_fixture("m-docker-events", "remote:vps", Os::Linux).await;
         let bot_id = BotId::new("30003");
         let mut config = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
         config.bot.deployment_type = DeploymentType::Docker;
@@ -892,7 +898,7 @@ mod write_config {
     /// 本机 Bot + 远端麦麦：桌面端对麦麦那台机开 `-R`，在那台机的回环上听 Q、接回本机的 P
     #[tokio::test]
     async fn maibot_on_a_remote_host_reaches_a_local_bot_through_a_desktop_r_tunnel() {
-        let (f, vps, _) = tunnel_fixture("m3r", "remote:vps").await;
+        let (f, vps, _) = tunnel_fixture("m3r", "remote:vps", Os::Windows).await;
         let bot_id = BotId::new("10001");
         f.manager.apply_link(&f.id, &bot_id).await.unwrap();
         let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
@@ -910,7 +916,7 @@ mod write_config {
     /// 两台远端：要应用机能 SSH 上 Bot 机；替身拿不到拨号地址（也不是 Linux），一步都不该落
     #[tokio::test]
     async fn maibot_between_two_remotes_needs_the_resident_tunnel_before_touching_anything() {
-        let (f, vps, vps2) = tunnel_fixture("m3rr", "remote:vps").await;
+        let (f, vps, vps2) = tunnel_fixture("m3rr", "remote:vps", Os::Windows).await;
         let err = f
             .manager
             .apply_link(&f.id, &BotId::new("50005"))
