@@ -14,6 +14,28 @@ pub async fn fetch_imported_network(
     qq_id: &str,
     docker_name: Option<&str>,
 ) -> Result<Option<ImportedNetworkConfig>, String> {
+    fetch_imported_network_for_engine(
+        host,
+        selected,
+        backend,
+        deployment,
+        qq_id,
+        docker_name,
+        None,
+    )
+    .await
+}
+
+pub async fn fetch_imported_network_for_engine(
+    host: &dyn Host,
+    selected: &RemoteSelectedPaths,
+    backend: BackendType,
+    deployment: DeploymentType,
+    qq_id: &str,
+    docker_name: Option<&str>,
+    engine: Option<ncd_domain::docker::ContainerEngine>,
+) -> Result<Option<ImportedNetworkConfig>, String> {
+    let engine = Some(engine.unwrap_or_else(|| ncd_deploy::docker::engine::engine_for(host)));
     match (backend, deployment) {
         (BackendType::SnowLuma, DeploymentType::Native) => {
             let dir = selected
@@ -37,7 +59,7 @@ pub async fn fetch_imported_network(
             if home.is_empty() {
                 return Err("尚未发现该主机的安装库存，请先在导入对话框点「重新发现」".into());
             }
-            read_docker_imported_network(host, home, name, backend, qq_id).await
+            read_docker_imported_network(host, home, name, backend, qq_id, engine).await
         }
     }
 }
@@ -97,6 +119,7 @@ mod tests {
     struct FileHost {
         files: Mutex<HashMap<String, Vec<u8>>>,
         container_files: HashMap<String, Vec<u8>>,
+        commands: Mutex<Vec<HostCommand>>,
     }
 
     impl FileHost {
@@ -105,6 +128,7 @@ mod tests {
             files.insert(path.to_string(), body.to_vec());
             Self {
                 files: Mutex::new(files),
+                commands: Mutex::new(Vec::new()),
                 container_files: HashMap::new(),
             }
         }
@@ -114,6 +138,7 @@ mod tests {
             container_files.insert(container_src.to_string(), body.to_vec());
             Self {
                 files: Mutex::new(HashMap::new()),
+                commands: Mutex::new(Vec::new()),
                 container_files,
             }
         }
@@ -194,10 +219,14 @@ mod tests {
             Err(HostError::Unsupported { operation: "mock" })
         }
         async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+            self.commands.lock().unwrap().push(cmd.clone());
+            if cmd.program == "podman" && cmd.args == ["--version"] {
+                return Ok(output(0, "podman version 5.8.9", ""));
+            }
             if cmd.program == "sh" && cmd.args == ["-c", "echo $HOME"] {
                 return Ok(output(0, "/home/u", ""));
             }
-            if cmd.program != "docker" {
+            if !matches!(cmd.program.as_str(), "docker" | "podman") {
                 return Ok(output(0, "", ""));
             }
             match cmd.args.first().map(String::as_str) {
@@ -414,5 +443,38 @@ mod tests {
         .await
         .unwrap_err();
         assert!(err.contains("SnowLuma"));
+    }
+
+    #[tokio::test]
+    async fn persisted_podman_bot_reads_its_container_config_even_when_host_defaults_to_docker() {
+        use ncd_domain::docker::ContainerEngine;
+        let host = FileHost::with_container_file(
+            "slbot-10001:/app/snowluma-data/config/onebot_10001.json",
+            &sl_onebot(),
+        );
+        let selected = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            ..Default::default()
+        };
+        let imported = fetch_imported_network_for_engine(
+            &host,
+            &selected,
+            BackendType::SnowLuma,
+            DeploymentType::Docker,
+            "10001",
+            Some("slbot-10001"),
+            Some(ContainerEngine::Podman),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(imported.connect.http_servers[0].base.token, "t");
+        let commands = host.commands.lock().unwrap();
+        assert!(!commands.iter().any(|c| c.program == "docker"));
+        assert!(
+            commands
+                .iter()
+                .any(|c| c.program == "podman" && c.args.first().is_some_and(|arg| arg == "cp"))
+        );
     }
 }
