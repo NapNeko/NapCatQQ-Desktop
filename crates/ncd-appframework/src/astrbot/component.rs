@@ -212,6 +212,7 @@ impl AstrBotComponent {
 
         let venv = HostCommand::new(uv.uv_bin.as_posix())
             .arg("venv")
+            .arg("--clear")
             .arg("--python")
             .arg(ASTRBOT_PYTHON_REQUIRES)
             .arg(".venv")
