@@ -23,6 +23,24 @@ fn strip_appimage_paths(
     if !appdir.is_absolute() || appdir == std::path::Path::new("/") {
         return;
     }
+    let vars: std::collections::HashMap<_, _> = vars.into_iter().collect();
+    // ARGV0 会被 mise 等工具当作自身程序名；APPDIR/APPIMAGE 也只属于 Desktop。
+    for key in ["APPDIR", "APPIMAGE", "ARGV0", "OWD"] {
+        command.env_remove(key);
+    }
+    // Gear Lever 等启动器可能把 cwd 留在 FUSE 挂载中。系统命令（如 Podman/pasta）
+    // 不应继承它；显式指定的工作目录仍由调用方决定。
+    if command.get_current_dir().is_none()
+        && std::env::current_dir().is_ok_and(|cwd| cwd.starts_with(appdir))
+    {
+        let host_cwd = ["OWD", "HOME"]
+            .iter()
+            .filter_map(|key| vars.get(std::ffi::OsStr::new(key)))
+            .map(std::path::PathBuf::from)
+            .find(|path| path.is_absolute() && !path.starts_with(appdir) && path.is_dir())
+            .unwrap_or_else(|| std::path::PathBuf::from("/"));
+        command.env("PWD", &host_cwd).current_dir(host_cwd);
+    }
     for (key, value) in vars {
         let Some(name) = key.to_str() else { continue };
         let paths: Vec<_> = match name {
@@ -64,6 +82,10 @@ mod tests {
     #[test]
     fn host_browser_keeps_host_paths_and_session_but_drops_bundled_libraries() {
         let vars = [
+            ("APPDIR", "/tmp/.mount_ncd"),
+            ("APPIMAGE", "/home/user/Desktop.AppImage"),
+            ("ARGV0", "napcatqq_desktop.appimage"),
+            ("OWD", "/home/user"),
             ("PATH", "/tmp/.mount_ncd/usr/bin:/usr/bin:/bin"),
             ("LD_LIBRARY_PATH", "/tmp/.mount_ncd/usr/lib:/opt/host/lib"),
             (
@@ -99,5 +121,56 @@ mod tests {
             assert!(env.contains(expected), "{expected:?} missing from {env}");
         }
         assert!(!env.contains("GDK_PIXBUF_MODULE_FILE="));
+        for key in ["APPDIR=", "APPIMAGE=", "ARGV0=", "OWD="] {
+            assert!(!env.contains(key), "{key} leaked into the system command");
+        }
+    }
+
+    #[test]
+    fn host_commands_leave_inherited_appimage_mount_but_keep_explicit_cwd() {
+        const MARKER: &str = "NCD_APPIMAGE_CWD_FIXTURE";
+        if let Some(root) = std::env::var_os(MARKER) {
+            let root = std::path::PathBuf::from(root);
+            let mut command = Command::new("/bin/pwd");
+            clean_appimage_environment(&mut command);
+            let output = command.output().unwrap();
+            assert!(output.status.success());
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap().trim(),
+                root.to_str().unwrap()
+            );
+
+            let appdir = std::env::current_dir().unwrap();
+            let mut explicit = Command::new("/bin/pwd");
+            explicit.current_dir(&appdir);
+            clean_appimage_environment(&mut explicit);
+            let output = explicit.output().unwrap();
+            assert!(output.status.success());
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap().trim(),
+                appdir.to_str().unwrap()
+            );
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("appimage");
+        std::fs::create_dir(&appdir).unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "appimage::tests::host_commands_leave_inherited_appimage_mount_but_keep_explicit_cwd",
+                "--nocapture",
+            ])
+            .current_dir(&appdir)
+            .env("APPDIR", &appdir)
+            .env("OWD", root.path())
+            .env(MARKER, root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
     }
 }

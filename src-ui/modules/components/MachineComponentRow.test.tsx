@@ -84,6 +84,39 @@ afterEach(() => {
     clients.length = 0;
 });
 
+describe('external Node.js component management', () => {
+    it.each(['local', 'remote:linux'])(
+        'offers an independent installation on %s without uninstalling the system Node.js',
+        (hostId) => {
+            const { onAction } = renderCard({
+                hostId,
+                row: {
+                    info: {
+                        id: 'nodejs',
+                        display_name: 'Node.js',
+                        description: 'Node.js 运行时',
+                        repo_url: null,
+                        supported_targets: [{ os: 'linux', locality: 'local' }],
+                        category: 'runtime_dep',
+                        uninstall: 'supported',
+                    },
+                    status: {
+                        state: 'installed',
+                        detected: { version: '26.12.1', source: '$PATH/node' },
+                    },
+                },
+            });
+            const install = screen.getByRole('button', { name: '独立安装' });
+            expect(install).toHaveAttribute('title', expect.stringContaining('不改动系统'));
+            expect(screen.queryByRole('button', { name: '卸载组件' })).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: '更新' })).not.toBeInTheDocument();
+            fireEvent.click(install);
+            expect(onAction).toHaveBeenCalledTimes(1);
+            expect(onAction).toHaveBeenCalledWith({ stepKind: 'force_install' });
+        },
+    );
+});
+
 describe('QQ component management', () => {
     it('offers a separate installation even when the system QQ is already installed', async () => {
         const { onAction } = renderCard();

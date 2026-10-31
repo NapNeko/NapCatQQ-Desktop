@@ -111,6 +111,12 @@ pub fn run() {
     let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
     desktop_log::init_desktop_logging(&data_root, event_bus.clone());
+    #[cfg(target_os = "linux")]
+    tracing::info!(
+        "Linux WebView 渲染配置: WEBKIT_DISABLE_DMABUF_RENDERER={:?}, WEBKIT_DISABLE_COMPOSITING_MODE={:?}",
+        std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER"),
+        std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE")
+    );
     container_engine::initialize(&data_root);
     #[cfg(windows)]
     {

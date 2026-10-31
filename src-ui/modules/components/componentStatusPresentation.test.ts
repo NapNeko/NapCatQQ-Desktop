@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     hostComponentStatusBadge,
-    shouldOfferManagedNodeInstall,
+    shouldOfferIndependentNodeInstall,
     uninstallEntryAction,
 } from './componentStatusPresentation';
 
@@ -42,25 +42,25 @@ describe('hostComponentStatusBadge', () => {
 });
 
 describe('Node.js component actions', () => {
-    it('does not offer installation when a valid external Node.js is detected', () => {
+    it('offers an independent installation when a valid external Node.js is detected', () => {
         expect(
-            shouldOfferManagedNodeInstall({
+            shouldOfferIndependentNodeInstall({
                 state: 'installed',
                 detected: { version: '24.18.0', source: '$PATH/node' },
             }),
-        ).toBe(false);
+        ).toBe(true);
     });
 
-    it('offers installation when the managed Node.js component is detected', () => {
+    it('does not offer an independent installation over the managed Node.js component', () => {
         expect(
-            shouldOfferManagedNodeInstall({
+            shouldOfferIndependentNodeInstall({
                 state: 'installed',
                 detected: {
                     version: '24.18.0',
                     source: 'C:/ProgramData/NapCatQQ Desktop/NodeJs/node.exe',
                 },
             }),
-        ).toBe(true);
+        ).toBe(false);
     });
 });
 

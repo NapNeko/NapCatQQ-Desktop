@@ -60,12 +60,25 @@ describe('QQ sudo action retry', () => {
 
     it('requests and retries local noVNC elevation without remembering the password', async () => {
         componentActionStore.started('local-novnc', 'novnc', 'local', 'ensure_installed');
-        componentActionStore.failTask(
-            'local-novnc',
-            'elevation_required: noVNC 图形栈需要 sudo 密码',
-        );
         const args = inputs();
         const { result } = renderHook(() => useDockerSudoOps(args));
+        act(() => {
+            // 真实后台任务会在提权错误之后追加 finished；终态日志是「任务失败」。
+            componentActionStore.applyProgress('local-novnc', {
+                v: 1,
+                timestamp_ms: 1n,
+                kind: 'log',
+                level: 'error',
+                message:
+                    "step 'single' failed: install step failed: sudo: elevation_required: noVNC 图形栈需要 sudo 密码",
+            });
+            componentActionStore.applyProgress('local-novnc', {
+                v: 1,
+                timestamp_ms: 2n,
+                kind: 'finished',
+                ok: false,
+            });
+        });
         expect(result.current.sudoPrompt).toMatchObject({ componentId: 'novnc', hostId: 'local' });
         await act(async () => result.current.handleSudoConfirm('local-password', false));
         expect(args.startAction).toHaveBeenCalledWith('novnc', 'local', 'ensure_installed', {
