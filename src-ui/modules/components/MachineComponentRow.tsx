@@ -40,6 +40,7 @@ import { componentLogoIcon } from './componentLogos';
 import {
     hostComponentStatusBadge,
     isExternalNodeSource,
+    shouldOfferIndependentNodeInstall,
     uninstallEntryAction,
 } from './componentStatusPresentation';
 import type { StepKind } from '../../core/ipc/types';
@@ -107,6 +108,9 @@ export const MachineComponentRowView: React.FC<Props> = ({
     const isLocalQq = info.id === 'qq' && hostId === 'local';
     const qqSource = useLocalQqSource(isLocalQq);
     const usesSystemQq = isLocalQq && qqSource === 'system' && status.state === 'installed';
+    const usesSystemNode = info.id === 'nodejs' && shouldOfferIndependentNodeInstall(status);
+    const canInstallIndependent = usesSystemQq || usesSystemNode;
+    const independentInstallLabel = usesSystemNode ? '独立安装' : '转为 NCD 管理';
     const managedActionsAllowed = !isLocalQq || qqSource === 'managed';
 
     const isCancelable =
@@ -142,15 +146,19 @@ export const MachineComponentRowView: React.FC<Props> = ({
     const uninstallAction =
         !inFlight && managedActionsAllowed ? uninstallEntryAction(info.uninstall, status) : 'none';
 
-    const componentActions = usesSystemQq ? (
+    const componentActions = canInstallIndependent ? (
         <Button
             size="sm"
             variant="primary"
             disabled={disabled || inFlight}
-            title="单独安装一份 QQ，Bot 下次启动时优先使用；不改动系统 QQ"
+            title={
+                usesSystemNode
+                    ? '在组件目录安装独立的 Node.js，不改动系统或版本管理器中的 Node.js'
+                    : '单独安装一份 QQ，Bot 下次启动时优先使用；不改动系统 QQ'
+            }
             onClick={() => handle({ kind: 'install_independent' })}
         >
-            转为 NCD 管理
+            {independentInstallLabel}
         </Button>
     ) : status.state !== 'installed' || managedActionsAllowed ? (
         <ActionButtons
@@ -320,14 +328,14 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     </ContextMenuItem>
                 )}
 
-                {!inFlight && usesSystemQq && (
+                {!inFlight && canInstallIndependent && (
                     <ContextMenuItem
                         tone="brand"
                         disabled={disabled}
                         onClick={() => handle({ kind: 'install_independent' })}
                     >
                         <Download size={13} className="text-brand" />
-                        <span>转为 NCD 管理</span>
+                        <span>{independentInstallLabel}</span>
                     </ContextMenuItem>
                 )}
 

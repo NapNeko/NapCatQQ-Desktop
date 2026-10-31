@@ -82,7 +82,7 @@ export interface QqSudoElevationHit {
 }
 
 // 扫协议端安装的终态任务，保留因 QQ 依赖缺提权而失败的原组件和包型。
-// 后端在日志里埋 elevation_required 标记；取最后一条 error 日志、没有就退回 message。
+// finished 会追加不含提权标记的「任务失败」，因此要查找最近一条含标记的错误。
 export function findQqSudoElevationTask(
     tasks: Readonly<Record<string, ActionProgressView>>,
     taskTargets: Readonly<
@@ -113,8 +113,10 @@ export function findQqSudoElevationTask(
         )
             continue;
         const msg =
-            [...progress.logs].reverse().find((l) => l.level === 'error')?.message ??
-            progress.message;
+            [...progress.logs]
+                .reverse()
+                .find((l) => l.level === 'error' && l.message.includes('elevation_required'))
+                ?.message ?? progress.message;
         if (!msg.includes('elevation_required')) continue;
         const reason = msg
             .slice(msg.indexOf('elevation_required') + 'elevation_required'.length)

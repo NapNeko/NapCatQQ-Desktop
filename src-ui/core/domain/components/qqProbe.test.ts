@@ -76,4 +76,23 @@ describe('QQ sudo retry target', () => {
             ),
         ).toBeNull();
     });
+
+    it('keeps the elevation reason when generic failure logs follow it', () => {
+        expect(
+            findQqSudoElevationTask(
+                {
+                    failed: {
+                        ...failed,
+                        message: '失败',
+                        logs: [
+                            ...failed.logs,
+                            { level: 'error', message: '任务失败', timestamp_ms: 2 },
+                        ],
+                    },
+                },
+                { failed: { componentId: 'novnc', hostId: 'local', kind: 'ensure_installed' } },
+                new Set(),
+            ),
+        ).toMatchObject({ componentId: 'novnc', reason: '请输入 sudo 密码' });
+    });
 });

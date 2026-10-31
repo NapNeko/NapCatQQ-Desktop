@@ -10,8 +10,8 @@ export function isExternalNodeSource(source: string): boolean {
     return source.trim().toLowerCase().startsWith('$path');
 }
 
-export function shouldOfferManagedNodeInstall(status: HostComponentStatus): boolean {
-    return !(status.state === 'installed' && isExternalNodeSource(status.detected.source));
+export function shouldOfferIndependentNodeInstall(status: HostComponentStatus): boolean {
+    return status.state === 'installed' && isExternalNodeSource(status.detected.source);
 }
 
 /// 卸载入口的动作形态：跑组件任务 / 跳系统卸载流 / 不渲染

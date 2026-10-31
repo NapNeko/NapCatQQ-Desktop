@@ -320,7 +320,7 @@ export const ComponentsPageNext: React.FC = () => {
 
             <div
                 className={cn(
-                    'mt-2 flex min-h-0 min-w-0 flex-1 flex-col pb-6',
+                    'mt-2 min-h-0 min-w-0 flex-1 pb-6',
                     scrollStyles.componentsPageScroll,
                 )}
             >
