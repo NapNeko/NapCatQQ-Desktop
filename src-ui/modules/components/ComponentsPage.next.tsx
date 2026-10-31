@@ -119,11 +119,11 @@ export const ComponentsPageNext: React.FC = () => {
         };
         const target = machines.find((machine) => machine.host.host_id === request.hostId);
         if (!target) {
-            unavailable('目标主机已移除或组件清单不可用，请刷新后重新选择远程主机。');
+            unavailable('目标主机已移除或组件清单不可用，请刷新后重新选择主机。');
             return;
         }
-        if (target.host.locality !== 'remote' || target.host.os !== 'linux') {
-            unavailable('Docker 部署需要远程 Linux 主机，请重新选择主机。');
+        if (target.host.os !== 'linux') {
+            unavailable('Docker 部署需要 Linux 主机，请重新选择主机。');
             return;
         }
         if (activeHostId !== request.hostId) {
@@ -431,10 +431,11 @@ export const ComponentsPageNext: React.FC = () => {
                             : `docker:${sudoPrompt.hostId}`
                     }
                     hostName={sudoPrompt.hostName}
+                    allowRemember={sudoPrompt.hostId !== 'local'}
                     reason={sudoPrompt.reason}
                     actionLabel={
                         sudoPrompt.purpose === 'qq_action'
-                            ? qqSudoActionLabel(sudoPrompt.kind)
+                            ? qqSudoActionLabel(sudoPrompt.kind, sudoPrompt.componentId)
                             : (dockerSetupAction(dockerHosts.statusByHost[sudoPrompt.hostId])
                                   ?.label ?? '准备 Docker')
                     }

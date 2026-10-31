@@ -7,6 +7,26 @@ import { SudoPasswordDialog } from './SudoPasswordDialog';
 afterEach(cleanup);
 
 describe('sudo password dialog', () => {
+    it('keeps local sudo passwords limited to the current operation', async () => {
+        const onConfirm = vi.fn();
+        render(
+            <SudoPasswordDialog
+                hostName="本机"
+                actionLabel="修复 QQ 依赖"
+                isSubmitting={false}
+                allowRemember={false}
+                onConfirm={onConfirm}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('sudo 密码'), { target: { value: 'password' } });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: '修复 QQ 依赖' }));
+        });
+        expect(onConfirm).toHaveBeenCalledWith('password', false);
+    });
+
     it('shows the QQ action and prevents duplicate confirmation while validation is pending', async () => {
         let resolve!: () => void;
         const onConfirm = vi.fn(

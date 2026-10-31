@@ -22,6 +22,7 @@ interface SudoPasswordDialogProps {
     actionLabel?: string;
     reason?: string;
     isSubmitting: boolean;
+    allowRemember?: boolean;
     onConfirm: (password: string, remember: boolean) => void | Promise<void>;
     onClose: () => void;
 }
@@ -31,6 +32,7 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
     actionLabel = '安装 Docker',
     reason,
     isSubmitting,
+    allowRemember = true,
     onConfirm,
     onClose,
 }) => {
@@ -53,7 +55,7 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
         try {
             // 上层负责真正下发安装并在成功时关闭对话框。失败(密码错 / 提权被拒等)它会抛出，
             // 这里就地显示原因，对话框保持打开让用户改密码重试，而不是默默关掉。
-            await onConfirm(password, remember);
+            await onConfirm(password, allowRemember && remember);
         } catch (e) {
             setError(errorText(e, '安装失败'));
         } finally {
@@ -85,13 +87,15 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
                         disabled={busy}
                     />
 
-                    <Checkbox
-                        label="在此设备记住密码"
-                        hint="密码会安全存入系统密钥串，下次安装 / 提权免输入。不勾选则仅本次使用。"
-                        checked={remember}
-                        onCheckedChange={setRemember}
-                        disabled={busy}
-                    />
+                    {allowRemember && (
+                        <Checkbox
+                            label="在此设备记住密码"
+                            hint="密码会安全存入系统密钥串，下次安装 / 提权免输入。不勾选则仅本次使用。"
+                            checked={remember}
+                            onCheckedChange={setRemember}
+                            disabled={busy}
+                        />
+                    )}
 
                     {error && <p className="text-xs text-danger">{error}</p>}
                 </div>

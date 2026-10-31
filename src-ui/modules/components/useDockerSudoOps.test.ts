@@ -58,6 +58,36 @@ describe('QQ sudo action retry', () => {
         );
     });
 
+    it('retries a local SnowLuma install with its original package choice', async () => {
+        componentActionStore.started('local-sl', 'snowluma', 'local', 'ensure_installed', 'lite');
+        componentActionStore.failTask('local-sl', 'elevation_required: QQ 系统依赖需要 sudo 密码');
+        const args = inputs();
+        const { result } = renderHook(() => useDockerSudoOps(args));
+        expect(result.current.sudoPrompt).toMatchObject({
+            componentId: 'snowluma',
+            hostId: 'local',
+            snowlumaLinuxPackage: 'lite',
+        });
+        await act(async () => result.current.handleSudoConfirm('one-time-password', false));
+        expect(args.startAction).toHaveBeenCalledWith('snowluma', 'local', 'ensure_installed', {
+            sudoPassword: 'one-time-password',
+            rememberSudo: false,
+            snowlumaLinuxPackage: 'lite',
+        });
+    });
+
+    it('retries the original local NapCat install after dependency elevation fails', async () => {
+        componentActionStore.started('local-nc', 'napcat', 'local', 'ensure_installed');
+        componentActionStore.failTask('local-nc', 'elevation_required: QQ 系统依赖需要 sudo 密码');
+        const args = inputs();
+        const { result } = renderHook(() => useDockerSudoOps(args));
+        await act(async () => result.current.handleSudoConfirm('one-time-password', false));
+        expect(args.startAction).toHaveBeenCalledWith('napcat', 'local', 'ensure_installed', {
+            sudoPassword: 'one-time-password',
+            rememberSudo: false,
+        });
+    });
+
     it('forwards the remember choice and refreshes after the original action succeeds', async () => {
         failedTask('original', 'update');
         const args = inputs();

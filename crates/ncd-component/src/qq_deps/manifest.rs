@@ -9,6 +9,18 @@ pub struct QQDependencyManifest {
     pub dependencies: Vec<SystemDependency>,
 }
 
+/// 本机桌面只需要 QQ 运行库；远端安装脚本还依赖虚拟显示和部署工具。
+/// 解包器和协议端工具由各组件的 HostCommand 依赖独立检查。
+pub fn qq_qqnt_dependencies_for_locality(locality: ncd_host::Locality) -> QQDependencyManifest {
+    let mut manifest = qq_qqnt_dependencies_v3_2_25();
+    if locality == ncd_host::Locality::Local {
+        manifest
+            .dependencies
+            .retain(|dependency| dependency.category == DependencyCategory::Runtime);
+    }
+    manifest
+}
+
 /// 获取 QQ 3.2.25 的官方依赖清单
 pub fn qq_qqnt_dependencies_v3_2_25() -> QQDependencyManifest {
     QQDependencyManifest {
@@ -171,5 +183,39 @@ pub fn qq_qqnt_dependencies_v3_2_25() -> QQDependencyManifest {
                 description: "Secret service library".to_string(),
             },
         ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ncd_host::Locality;
+
+    #[test]
+    fn desktop_qq_does_not_require_remote_display_and_script_tools() {
+        let local = qq_qqnt_dependencies_for_locality(Locality::Local);
+        let remote = qq_qqnt_dependencies_for_locality(Locality::Remote);
+        for manifest in [&local, &remote] {
+            assert!(
+                manifest
+                    .dependencies
+                    .iter()
+                    .any(|dependency| dependency.canonical_name == "nss")
+            );
+        }
+        for tool in ["xvfb", "xauth", "screen", "rpm2cpio", "jq"] {
+            assert!(
+                !local
+                    .dependencies
+                    .iter()
+                    .any(|dependency| dependency.canonical_name == tool)
+            );
+            assert!(
+                remote
+                    .dependencies
+                    .iter()
+                    .any(|dependency| dependency.canonical_name == tool)
+            );
+        }
     }
 }

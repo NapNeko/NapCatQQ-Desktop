@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use futures_util::stream::{self, StreamExt};
 use ncd_appframework::AppFrameworkRegistry;
-use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_v3_2_25};
+use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_for_locality};
 use ncd_component::{
     Component, ComponentId, DependencyNode, DependencyPlan, DependencyTarget, DetectOutcome,
     HostPackageGroup, RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
@@ -168,7 +168,8 @@ async fn probe_built_component(
 async fn probe_host_packages(group: HostPackageGroup, host: &dyn Host) -> RequirementStatus {
     match group {
         HostPackageGroup::QqDependencies => {
-            let detector = QqDependencyDetector::new(qq_qqnt_dependencies_v3_2_25());
+            let detector =
+                QqDependencyDetector::new(qq_qqnt_dependencies_for_locality(host.locality()));
             match detector.detect_runtime(host).await {
                 Ok(report) if report.missing.is_empty() => RequirementStatus::Satisfied {
                     version: None,

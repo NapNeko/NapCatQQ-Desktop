@@ -216,17 +216,19 @@ pub fn build_component_for_host(
                     format!("https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}");
                 let mut comp = SnowLumaComponent::new(workspace, url).with_package(package);
                 if local_linux {
+                    // 本机 daemon 只从数据根启动，不能让系统包或远端库存替代本机安装门禁。
                     comp = comp.with_snowluma_dir(data_root_host.join("components/SnowLuma"));
-                }
-                if let Some(dir) = ctx
-                    .selected
-                    .and_then(|s| s.snowluma_dir.as_deref())
-                    .filter(|p| !p.is_empty())
-                {
-                    comp = comp.with_snowluma_dir(HostPath::from_posix(dir));
-                }
-                for dir in snowluma_linux_extra_detect_dirs(ctx.selected, remote_home) {
-                    comp = comp.with_extra_detect_dir(dir);
+                } else {
+                    if let Some(dir) = ctx
+                        .selected
+                        .and_then(|s| s.snowluma_dir.as_deref())
+                        .filter(|p| !p.is_empty())
+                    {
+                        comp = comp.with_snowluma_dir(HostPath::from_posix(dir));
+                    }
+                    for dir in snowluma_linux_extra_detect_dirs(ctx.selected, remote_home) {
+                        comp = comp.with_extra_detect_dir(dir);
+                    }
                 }
                 if let Some(sha) = latest.and_then(|info| asset_sha256(info, &asset)) {
                     comp = comp.with_sha256(sha);
@@ -519,6 +521,65 @@ fn node_install_dir(
 mod selected_path_tests {
     use super::{node_install_dir, nodejs_extra_detect_bin, snowluma_linux_extra_detect_dirs};
     use ncd_domain::RemoteSelectedPaths;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn local_snowluma_gate_requires_the_managed_runtime() {
+        use super::{BuildComponentCtx, build_component_for_host};
+        use crate::components::action_policy::RemoteLayout;
+        use ncd_appframework::AppFrameworkRegistry;
+        use ncd_component::{ComponentId, DetectOutcome};
+        use ncd_host::local::LocalLinuxHost;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let data_root = workspace.path().join("desktop");
+        let external = workspace.path().join("external-snowluma");
+        for root in [&external, &data_root.join("components/SnowLuma")] {
+            std::fs::create_dir_all(root.join("client")).unwrap();
+            std::fs::create_dir_all(root.join("native")).unwrap();
+            std::fs::write(root.join("index.mjs"), "").unwrap();
+            std::fs::write(root.join("node"), "").unwrap();
+            std::fs::write(
+                root.join("package.json"),
+                r#"{"name":"@snowluma/runtime","version":"1.0.0"}"#,
+            )
+            .unwrap();
+        }
+        let host = LocalLinuxHost::new();
+        let registry = AppFrameworkRegistry::with_builtin();
+        let selected = RemoteSelectedPaths {
+            snowluma_dir: Some(external.to_string_lossy().into_owned()),
+            ..RemoteSelectedPaths::default()
+        };
+        let component = build_component_for_host(
+            ComponentId::SnowLuma,
+            &BuildComponentCtx {
+                data_root: &data_root,
+                remote_windows_root: None,
+                host: &host,
+                remote_home: None,
+                layout: RemoteLayout::Rootless,
+                snapshot: None,
+                local_snowluma_version: Some("1.0.0"),
+                desktop_product_version: "1.0.0",
+                selected: Some(&selected),
+                snowluma_linux_package: None,
+                snowluma_node_path: None,
+                app_component: None,
+                registry: &registry,
+            },
+        )
+        .unwrap();
+        let detected = component.detect_outcome(&host).await.unwrap();
+        assert!(
+            matches!(detected, DetectOutcome::Installed(version) if version.source.contains("/desktop/components/SnowLuma/"))
+        );
+        std::fs::remove_dir_all(data_root.join("components/SnowLuma")).unwrap();
+        assert_eq!(
+            component.detect_outcome(&host).await.unwrap(),
+            DetectOutcome::NotInstalled
+        );
+    }
 
     #[test]
     fn node_install_dir_uses_portable_prefix() {

@@ -3,7 +3,7 @@
 
 import type { ActionProgressView } from './progress';
 import type { MachineView } from './types';
-import type { ComponentId, StepKind } from '../../ipc/types';
+import type { ComponentId, SnowLumaLinuxPackage, StepKind } from '../../ipc/types';
 import type { QqDependencyReport } from '../../ipc/generated/qq/QqDependencyReport';
 
 export type QqDependencyProbeState =
@@ -30,8 +30,19 @@ export type QqSudoActionKind = Extract<
     'ensure_installed' | 'force_install' | 'update' | 'ensure_dependencies'
 >;
 
+export type QqSudoComponentId = Extract<ComponentId, 'qq' | 'napcat' | 'snowluma'>;
+
 export type SudoPromptTarget = SudoPromptHost &
-    ({ purpose: 'docker' } | { purpose: 'qq_action'; kind: QqSudoActionKind; taskId: string });
+    (
+        | { purpose: 'docker' }
+        | {
+              purpose: 'qq_action';
+              componentId: QqSudoComponentId;
+              kind: QqSudoActionKind;
+              taskId: string;
+              snowlumaLinuxPackage?: SnowLumaLinuxPackage;
+          }
+    );
 
 export function isQqSudoAction(kind: StepKind | undefined): kind is QqSudoActionKind {
     return (
@@ -42,27 +53,42 @@ export function isQqSudoAction(kind: StepKind | undefined): kind is QqSudoAction
     );
 }
 
-export function qqSudoActionLabel(kind: QqSudoActionKind): string {
+export function qqSudoActionLabel(
+    kind: QqSudoActionKind,
+    componentId: QqSudoComponentId = 'qq',
+): string {
+    const name =
+        componentId === 'napcat' ? 'NapCat' : componentId === 'snowluma' ? 'SnowLuma' : 'QQ';
     return kind === 'update'
-        ? '更新 QQ'
+        ? `更新 ${name}`
         : kind === 'ensure_dependencies'
-          ? '修复 QQ 依赖'
-          : '安装 QQ';
+          ? `修复 ${name} 依赖`
+          : `安装 ${name}`;
 }
 
 export interface QqSudoElevationHit {
+    componentId: QqSudoComponentId;
+    snowlumaLinuxPackage?: SnowLumaLinuxPackage;
     taskId: string;
     hostId: string;
     reason: string;
     kind: QqSudoActionKind;
 }
 
-// 扫终态任务，找第一个「QQ 组件因缺提权而失败、且还没提示过」的 task。
+// 扫协议端安装的终态任务，保留因 QQ 依赖缺提权而失败的原组件和包型。
 // 后端在日志里埋 elevation_required 标记；取最后一条 error 日志、没有就退回 message。
 export function findQqSudoElevationTask(
     tasks: Readonly<Record<string, ActionProgressView>>,
     taskTargets: Readonly<
-        Record<string, { componentId: ComponentId; hostId: string; kind?: StepKind }>
+        Record<
+            string,
+            {
+                componentId: ComponentId;
+                hostId: string;
+                kind?: StepKind;
+                snowlumaLinuxPackage?: SnowLumaLinuxPackage;
+            }
+        >
     >,
     alreadyPrompted: ReadonlySet<string>,
 ): QqSudoElevationHit | null {
@@ -72,8 +98,10 @@ export function findQqSudoElevationTask(
         const target = taskTargets[taskId];
         if (
             !target ||
-            target.componentId !== 'qq' ||
-            !target.hostId.startsWith('remote:') ||
+            (target.componentId !== 'qq' &&
+                target.componentId !== 'napcat' &&
+                target.componentId !== 'snowluma') ||
+            (target.hostId !== 'local' && !target.hostId.startsWith('remote:')) ||
             !isQqSudoAction(target.kind)
         )
             continue;
@@ -84,7 +112,16 @@ export function findQqSudoElevationTask(
         const reason = msg
             .slice(msg.indexOf('elevation_required') + 'elevation_required'.length)
             .replace(/^:\s*/, '');
-        return { taskId, hostId: target.hostId, reason, kind: target.kind };
+        return {
+            taskId,
+            hostId: target.hostId,
+            reason,
+            kind: target.kind,
+            componentId: target.componentId,
+            ...(target.snowlumaLinuxPackage === undefined
+                ? {}
+                : { snowlumaLinuxPackage: target.snowlumaLinuxPackage }),
+        };
     }
     return null;
 }

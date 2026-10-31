@@ -1,4 +1,4 @@
-// 组件页：远端 Linux 上 QQ 系统依赖缺失时推 InfoBar，点击后走任务队列 ensure_dependencies。
+// 组件页：Linux 主机上 QQ 系统依赖缺失时推 InfoBar，点击后走任务队列 ensure_dependencies。
 // 平时 QQ 卡片不挂「补全依赖」按钮。
 
 import { useEffect, useRef } from 'react';
@@ -13,9 +13,9 @@ import {
 
 const alertKey = (hostId: string) => `qq-system-deps:${hostId}`;
 
-function isRemoteLinux(machine: MachineView | null): boolean {
+function isLinux(machine: MachineView | null): boolean {
     if (!machine) return false;
-    return machine.host.os === 'linux' && machine.host.locality === 'remote';
+    return machine.host.os === 'linux';
 }
 
 export function useQqDependencyAlerts(
@@ -27,7 +27,7 @@ export function useQqDependencyAlerts(
     const checkedHostsRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
-        if (!isRemoteLinux(activeMachine)) {
+        if (!isLinux(activeMachine)) {
             return;
         }
         const hostId = activeMachine!.host.host_id;

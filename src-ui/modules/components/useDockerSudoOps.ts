@@ -147,15 +147,18 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
         async (password: string, remember: boolean) => {
             if (!sudoPrompt) return;
             if (sudoPrompt.purpose === 'qq_action') {
-                const { hostId, kind } = sudoPrompt;
+                const { hostId, kind, componentId } = sudoPrompt;
                 const previousTasks = new Set(
                     Object.keys(componentActionStore.getSnapshot().tasks),
                 );
                 let taskId: string;
                 try {
-                    taskId = await startAction('qq', hostId, kind, {
+                    taskId = await startAction(componentId, hostId, kind, {
                         sudoPassword: password,
                         rememberSudo: remember,
+                        ...(sudoPrompt.snowlumaLinuxPackage === undefined
+                            ? {}
+                            : { snowlumaLinuxPackage: sudoPrompt.snowlumaLinuxPackage }),
                     });
                 } catch (err) {
                     // 本次验证错误由当前弹框显示，不能在稍后关闭时再为同一次尝试开框。
@@ -219,7 +222,7 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
             key: `qq-sudo:${hit.hostId}`,
             tone: 'warning',
             title: `需要 sudo 密码 · ${hostNameOf(hit.hostId)}`,
-            content: `${qqSudoActionLabel(hit.kind)}需要提权，请输入密码后重试。`,
+            content: `${qqSudoActionLabel(hit.kind, hit.componentId)}需要提权，请输入密码后重试。`,
             autoDismissMs: 0,
         });
         const target: SudoPromptTarget = {
@@ -227,6 +230,8 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
             hostName: hostNameOf(hit.hostId),
             reason: hit.reason,
             purpose: 'qq_action',
+            componentId: hit.componentId,
+            snowlumaLinuxPackage: hit.snowlumaLinuxPackage,
             kind: hit.kind,
             taskId: hit.taskId,
         };

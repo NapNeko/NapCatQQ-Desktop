@@ -79,7 +79,13 @@ export function useComponentAction(): UseComponentActionResult {
         ) => {
             const taskId = crypto.randomUUID();
             // 排队提示（等前置 / 等包管理器）由后端入队时以 log 事件推来，这里不猜
-            componentActionStore.started(taskId, componentId, hostId, kind);
+            componentActionStore.started(
+                taskId,
+                componentId,
+                hostId,
+                kind,
+                options?.snowlumaLinuxPackage,
+            );
             try {
                 // Desktop 自身更新走 ncd-update MSI 路径，不走 DeployPlan/Component::update
                 if (componentId === 'desktop_self' && kind === 'update') {

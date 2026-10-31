@@ -506,7 +506,11 @@ impl NapCatComponent {
         // Step 2:上传到远端
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
-            message: "upload to host".into(),
+            message: match host.locality() {
+                Locality::Local => "暂存本机安装包",
+                Locality::Remote => "上传安装包到远端",
+            }
+            .into(),
         })
         .await;
         host.create_dir_all(&self.tmp_dir).await?;

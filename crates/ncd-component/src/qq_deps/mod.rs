@@ -8,4 +8,6 @@ pub mod manifest;
 
 pub use detector::QqDependencyDetector;
 pub use installer::QqDependencyInstaller;
-pub use manifest::{QQDependencyManifest, qq_qqnt_dependencies_v3_2_25};
+pub use manifest::{
+    QQDependencyManifest, qq_qqnt_dependencies_for_locality, qq_qqnt_dependencies_v3_2_25,
+};

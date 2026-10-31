@@ -84,7 +84,7 @@ pub async fn docker_install(
                         target: "ncd_tauri::docker",
                         host_id = %host_id,
                         task_id = %task_id,
-                        "开始安装 Docker（远端 Linux 将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
+                        "开始安装 Docker（Linux 主机将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
                     );
 
                     let tid = task_id.clone();

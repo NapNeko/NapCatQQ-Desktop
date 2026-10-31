@@ -374,7 +374,12 @@ impl QQComponent {
         self
     }
 
-    fn package_filename(&self, pkg: PackageFormat, arch: Arch) -> Result<String, ActionError> {
+    fn package_filename(
+        &self,
+        pkg: PackageFormat,
+        arch: Arch,
+        locality: Locality,
+    ) -> Result<String, ActionError> {
         let arch_str = match (pkg, arch) {
             (PackageFormat::Deb, Arch::X86_64) => "amd64",
             (PackageFormat::Deb, Arch::Aarch64) => "arm64",
@@ -384,7 +389,7 @@ impl QQComponent {
                 return Err(ActionError::UnsupportedTarget {
                     component: "qq".into(),
                     os: Os::Linux,
-                    locality: Locality::Remote,
+                    locality,
                 });
             }
         };
@@ -395,8 +400,13 @@ impl QQComponent {
         Ok(format!("linuxqq_{}_{arch_str}.{ext}", self.version))
     }
 
-    fn build_download_url(&self, pkg: PackageFormat, arch: Arch) -> Result<String, ActionError> {
-        let filename = self.package_filename(pkg, arch)?;
+    fn build_download_url(
+        &self,
+        pkg: PackageFormat,
+        arch: Arch,
+        locality: Locality,
+    ) -> Result<String, ActionError> {
+        let filename = self.package_filename(pkg, arch, locality)?;
         Ok(format!(
             "https://dldir1.qq.com/qqfile/qq/QQNT/{}/{filename}",
             self.url_hash_segment
@@ -408,10 +418,11 @@ impl QQComponent {
         &self,
         pkg: PackageFormat,
         arch: Arch,
+        locality: Locality,
     ) -> Result<LinuxQqRelease, ActionError> {
         Ok(LinuxQqRelease {
             version: self.version.clone(),
-            download_url: self.build_download_url(pkg, arch)?,
+            download_url: self.build_download_url(pkg, arch, locality)?,
             source: "pin",
         })
     }
@@ -422,8 +433,10 @@ impl QQComponent {
         &self,
         pkg: PackageFormat,
         arch: Arch,
+        locality: Locality,
         ctx: &mut ActionCtx,
     ) -> Result<LinuxQqRelease, ActionError> {
+        let pin = self.pin_linux_release(pkg, arch, locality)?;
         let mut candidates: Vec<LinuxQqRelease> = Vec::with_capacity(3);
 
         match fetch_linux_qq_from_pcconfig(pkg, arch).await {
@@ -454,7 +467,6 @@ impl QQComponent {
             }
         }
 
-        let pin = self.pin_linux_release(pkg, arch)?;
         ctx.info(format!(
             "候选 Linux QQ: source=pin version={} url={}",
             pin.version, pin.download_url
@@ -514,7 +526,7 @@ impl QQComponent {
         ))
     }
 
-    /// 探测远端有 dpkg-deb 还是 rpm2cpio,dpkg 优先(deb 更普遍)
+    /// 探测目标主机有 dpkg-deb 还是 rpm2cpio,dpkg 优先(deb 更普遍)
     async fn detect_package_format(&self, host: &dyn Host) -> Result<PackageFormat, ActionError> {
         for (binary, fmt) in &[
             ("dpkg-deb", PackageFormat::Deb),
@@ -532,7 +544,7 @@ impl QQComponent {
                 return Err(ActionError::install_step(
                     "detect_pkg_format",
                     format!(
-                        "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在远端执行 sudo {} 后重试",
+                        "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在目标主机执行 sudo {} 后重试",
                         pm.install_hint(&["cpio"])
                     ),
                 ));
@@ -554,7 +566,7 @@ impl QQComponent {
         Err(ActionError::install_step(
             "detect_pkg_format",
             format!(
-                "远端缺少 LinuxQQ 解包工具：既没有 dpkg-deb，也没有 rpm2cpio + cpio。请先{how} 后重试"
+                "目标主机缺少 LinuxQQ 解包工具：既没有 dpkg-deb，也没有 rpm2cpio + cpio。请先{how} 后重试"
             ),
         ))
     }
@@ -570,7 +582,7 @@ impl QQComponent {
         }
 
         ctx.info("检测 QQ 系统依赖").await;
-        let manifest = crate::qq_deps::qq_qqnt_dependencies_v3_2_25();
+        let manifest = crate::qq_deps::qq_qqnt_dependencies_for_locality(host.locality());
         let detector = crate::qq_deps::QqDependencyDetector::new(manifest);
         let report = detector.detect(host, None).await?;
 
@@ -805,7 +817,7 @@ impl QQComponent {
         })
         .await;
         let release = self
-            .resolve_linux_release(pkg_format, host.arch(), ctx)
+            .resolve_linux_release(pkg_format, host.arch(), host.locality(), ctx)
             .await?;
         let url = release.download_url.clone();
         ctx.info(format!(
@@ -1579,8 +1591,11 @@ pub async fn probe_linux_qq_latest() -> Result<LinuxQqRelease, ActionError> {
     for rel in [
         fetch_linux_qq_from_pcconfig(PackageFormat::Deb, Arch::X86_64).await,
         fetch_linux_qq_from_nclatest(PackageFormat::Deb, Arch::X86_64).await,
-        QQComponent::default_v3_2_25(HostPath::from_posix("/tmp/ncd-probe"))
-            .pin_linux_release(PackageFormat::Deb, Arch::X86_64),
+        QQComponent::default_v3_2_25(HostPath::from_posix("/tmp/ncd-probe")).pin_linux_release(
+            PackageFormat::Deb,
+            Arch::X86_64,
+            Locality::Remote,
+        ),
     ] {
         match rel {
             Ok(candidate) => match prepare_qq_download_url(&candidate.download_url).await {
@@ -1760,7 +1775,7 @@ mod tests {
     fn package_filename_amd64_deb() {
         let c = comp();
         let name = c
-            .package_filename(PackageFormat::Deb, Arch::X86_64)
+            .package_filename(PackageFormat::Deb, Arch::X86_64, Locality::Remote)
             .unwrap();
         assert_eq!(name, "linuxqq_3.2.25-45758_amd64.deb");
     }
@@ -1769,7 +1784,7 @@ mod tests {
     fn package_filename_arm64_deb() {
         let c = comp();
         let name = c
-            .package_filename(PackageFormat::Deb, Arch::Aarch64)
+            .package_filename(PackageFormat::Deb, Arch::Aarch64, Locality::Remote)
             .unwrap();
         assert_eq!(name, "linuxqq_3.2.25-45758_arm64.deb");
     }
@@ -1778,7 +1793,7 @@ mod tests {
     fn package_filename_x86_64_rpm() {
         let c = comp();
         let name = c
-            .package_filename(PackageFormat::Rpm, Arch::X86_64)
+            .package_filename(PackageFormat::Rpm, Arch::X86_64, Locality::Remote)
             .unwrap();
         assert_eq!(name, "linuxqq_3.2.25-45758_x86_64.rpm");
     }
@@ -1787,25 +1802,29 @@ mod tests {
     fn package_filename_aarch64_rpm() {
         let c = comp();
         let name = c
-            .package_filename(PackageFormat::Rpm, Arch::Aarch64)
+            .package_filename(PackageFormat::Rpm, Arch::Aarch64, Locality::Remote)
             .unwrap();
         assert_eq!(name, "linuxqq_3.2.25-45758_aarch64.rpm");
     }
 
     #[test]
-    fn package_filename_unsupported_arch_returns_error() {
+    fn package_filename_unsupported_arch_returns_target_locality() {
         let c = comp();
-        let err = c
-            .package_filename(PackageFormat::Deb, Arch::X86)
-            .unwrap_err();
-        assert!(matches!(err, ActionError::UnsupportedTarget { .. }));
+        for locality in [Locality::Local, Locality::Remote] {
+            let err = c
+                .package_filename(PackageFormat::Deb, Arch::X86, locality)
+                .unwrap_err();
+            assert!(
+                matches!(err, ActionError::UnsupportedTarget { locality: actual, .. } if actual == locality)
+            );
+        }
     }
 
     #[test]
     fn download_url_format_matches_official() {
         let c = comp();
         let url = c
-            .build_download_url(PackageFormat::Deb, Arch::X86_64)
+            .build_download_url(PackageFormat::Deb, Arch::X86_64, Locality::Remote)
             .unwrap();
         // 与官方 install.sh L640 完全一致
         assert_eq!(
@@ -1818,7 +1837,7 @@ mod tests {
     fn download_url_arm64_deb() {
         let c = comp();
         let url = c
-            .build_download_url(PackageFormat::Deb, Arch::Aarch64)
+            .build_download_url(PackageFormat::Deb, Arch::Aarch64, Locality::Remote)
             .unwrap();
         assert_eq!(
             url,
@@ -2050,13 +2069,13 @@ mod tests {
     fn pin_linux_release_matches_build_download_url() {
         let c = comp();
         let pin = c
-            .pin_linux_release(PackageFormat::Deb, Arch::X86_64)
+            .pin_linux_release(PackageFormat::Deb, Arch::X86_64, Locality::Remote)
             .unwrap();
         assert_eq!(pin.source, "pin");
         assert_eq!(pin.version, "3.2.25-45758");
         assert_eq!(
             pin.download_url,
-            c.build_download_url(PackageFormat::Deb, Arch::X86_64)
+            c.build_download_url(PackageFormat::Deb, Arch::X86_64, Locality::Remote)
                 .unwrap()
         );
     }

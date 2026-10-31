@@ -1,6 +1,6 @@
 //! QQ 系统依赖 detect / install 命令薄壳;runner 在 ncd-runtime::components::system_package
 
-use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_v3_2_25};
+use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_for_locality};
 use ncd_domain::{InstallDependenciesResult, QqDependencyReport};
 use ncd_host::Os;
 use tauri::State;
@@ -8,7 +8,7 @@ use tauri::State;
 use crate::AppState;
 use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
-/// 检测 QQ 系统依赖(仅 Linux 远端)
+/// 检测 QQ 系统依赖(Linux 本机与远端)
 #[tauri::command]
 pub async fn detect_qq_dependencies(
     host_id: String,
@@ -18,13 +18,13 @@ pub async fn detect_qq_dependencies(
     if host.os() != Os::Linux {
         return Err("QQ dependencies check is only supported on Linux".to_string());
     }
-    QqDependencyDetector::new(qq_qqnt_dependencies_v3_2_25())
+    QqDependencyDetector::new(qq_qqnt_dependencies_for_locality(host.locality()))
         .detect(host.as_ref(), None)
         .await
         .map_err(|e| e.to_string())
 }
 
-/// 安装 QQ 系统依赖(仅 Linux 远端)
+/// 安装 QQ 系统依赖(Linux 本机与远端)
 #[tauri::command]
 pub async fn install_qq_dependencies(
     host_id: String,

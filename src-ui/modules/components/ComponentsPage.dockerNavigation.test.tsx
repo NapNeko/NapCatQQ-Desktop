@@ -265,6 +265,18 @@ describe('组件页 Docker 部署导航', () => {
         expect(scrollIntoView).toHaveBeenCalledOnce();
     });
 
+    it('本机 Linux 可以定位 Docker 部署区', () => {
+        setHosts([{ ...local, os: 'linux' }]);
+        openDockerDeployment('local');
+        render(<ComponentsPageNext />);
+        flushFrames();
+
+        expect(getPendingDockerDeployment()).toBeNull();
+        expect(screen.getByTestId('docker-section')).toHaveFocus();
+        expect(scrollIntoView).toHaveBeenCalledOnce();
+        expect(harness.pushInfoBar).not.toHaveBeenCalled();
+    });
+
     it('失效目标清除请求并提示，不把本机当作部署目标聚焦或执行操作', () => {
         openDockerDeployment('remote:removed');
         render(<ComponentsPageNext />);

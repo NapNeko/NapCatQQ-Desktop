@@ -4,7 +4,7 @@
 //! 这里只负责在拿到 host 之后把事干完并往 task 推进度。
 
 use ncd_component::qq_deps::{
-    QqDependencyDetector, QqDependencyInstaller, qq_qqnt_dependencies_v3_2_25,
+    QqDependencyDetector, QqDependencyInstaller, qq_qqnt_dependencies_for_locality,
 };
 use ncd_component::{
     ActionCtx, DependencyTarget, HostPackageGroup, ProgressEvent, ProgressKind, ProgressLogLevel,
@@ -148,10 +148,10 @@ pub async fn ensure_host_command_task(
 fn ensure_failure_message(command: &str, package: &str, err: EnsureCommandError) -> String {
     match err {
         EnsureCommandError::NoPackageManager => {
-            format!("远端缺少 {command} 且未识别到包管理器，请手动安装 {package} 后重试")
+            format!("主机缺少 {command} 且未识别到包管理器，请手动安装 {package} 后重试")
         }
         EnsureCommandError::NeedsElevation(pm) => format!(
-            "安装 {package} 需要 sudo 密码，请在远端主机配置中保存 sudo 密码，或手动执行 sudo {} 后重试",
+            "安装 {package} 需要 sudo 权限，请手动执行 sudo {} 后重试",
             pm.install_hint(&[package])
         ),
         EnsureCommandError::StillMissing { detail, .. } => {
@@ -185,7 +185,8 @@ pub async fn install_qq_dependencies_task(
 
     let packages = if packages.is_empty() {
         log(&task_ctx, ProgressLogLevel::Info, "检测 QQ 系统依赖").await;
-        let detector = QqDependencyDetector::new(qq_qqnt_dependencies_v3_2_25());
+        let detector =
+            QqDependencyDetector::new(qq_qqnt_dependencies_for_locality(host.locality()));
         match detector.detect(host, None).await {
             Ok(report) => report.missing.into_iter().map(|p| p.name).collect(),
             Err(err) => return fail(&task_ctx, format!("检测 QQ 系统依赖失败: {err}")).await,
@@ -215,8 +216,7 @@ pub async fn install_qq_dependencies_task(
         Ok(result) if result.elevation_required => {
             fail(
                 &task_ctx,
-                "安装 QQ 系统依赖需要 sudo 密码，请在远端主机配置中保存 sudo 密码后重试"
-                    .to_string(),
+                "elevation_required: 安装 QQ 系统依赖需要 sudo 密码，请输入密码后重试".to_string(),
             )
             .await
         }

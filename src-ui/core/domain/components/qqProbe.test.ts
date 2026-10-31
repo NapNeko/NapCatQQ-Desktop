@@ -27,10 +27,32 @@ describe('QQ sudo retry target', () => {
                 { failed: { componentId: 'qq', hostId: 'remote:one', kind } },
                 new Set(),
             ),
-        ).toEqual({ taskId: 'failed', hostId: 'remote:one', kind, reason: '请输入 sudo 密码' });
+        ).toEqual({
+            componentId: 'qq',
+            taskId: 'failed',
+            hostId: 'remote:one',
+            kind,
+            reason: '请输入 sudo 密码',
+        });
     });
 
-    it('ignores ordinary failures, local tasks, missing actions and already shown prompts', () => {
+    it('allows a local QQ dependency failure to request a password', () => {
+        expect(
+            findQqSudoElevationTask(
+                { failed },
+                { failed: { componentId: 'qq', hostId: 'local', kind: 'ensure_dependencies' } },
+                new Set(),
+            ),
+        ).toEqual({
+            componentId: 'qq',
+            taskId: 'failed',
+            hostId: 'local',
+            kind: 'ensure_dependencies',
+            reason: '请输入 sudo 密码',
+        });
+    });
+
+    it('ignores ordinary failures, missing actions and already shown prompts', () => {
         const targets = {
             failed: { componentId: 'qq' as const, hostId: 'remote:one', kind: 'update' as const },
         };
@@ -38,13 +60,7 @@ describe('QQ sudo retry target', () => {
             findQqSudoElevationTask({ failed: { ...failed, logs: [] } }, targets, new Set()),
         ).toBeNull();
         expect(findQqSudoElevationTask({ failed }, targets, new Set(['failed']))).toBeNull();
-        expect(
-            findQqSudoElevationTask(
-                { failed },
-                { failed: { ...targets.failed, hostId: 'local' } },
-                new Set(),
-            ),
-        ).toBeNull();
+
         expect(
             findQqSudoElevationTask(
                 { failed },

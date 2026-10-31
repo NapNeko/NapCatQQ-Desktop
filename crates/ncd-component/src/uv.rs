@@ -282,7 +282,11 @@ impl Component for UvComponent {
         // 2. 上传到目标主机
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
-            message: "传输到目标主机".into(),
+            message: match host.locality() {
+                Locality::Local => "准备本机安装包",
+                Locality::Remote => "传输到远端主机",
+            }
+            .into(),
         })
         .await;
         let remote_archive = self.tmp_dir.join(&file_name);

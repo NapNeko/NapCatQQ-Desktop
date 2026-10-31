@@ -19,7 +19,12 @@ import {
     reduceActionProgress,
     type ActionProgressView,
 } from '../../core/domain/components/progress';
-import type { ComponentId, ProgressEvent, StepKind } from '../../core/ipc/types';
+import type {
+    ComponentId,
+    ProgressEvent,
+    SnowLumaLinuxPackage,
+    StepKind,
+} from '../../core/ipc/types';
 import {
     scheduleTaskQueueTerminalCleanup,
     trimTerminalTasksWhenAutoCleanupOff,
@@ -29,6 +34,7 @@ export interface ComponentActionTarget {
     componentId: ComponentId;
     hostId: string;
     kind?: StepKind;
+    snowlumaLinuxPackage?: SnowLumaLinuxPackage;
 }
 
 export interface ComponentActionStoreState {
@@ -147,6 +153,7 @@ export const componentActionStore = {
         componentId: ComponentId,
         hostId: string,
         kind?: StepKind,
+        snowlumaLinuxPackage?: SnowLumaLinuxPackage,
     ): void {
         const current = store.getSnapshot();
         const key = targetKey(componentId, hostId);
@@ -168,6 +175,7 @@ export const componentActionStore = {
                     componentId,
                     hostId,
                     ...(kind === undefined ? {} : { kind }),
+                    ...(snowlumaLinuxPackage === undefined ? {} : { snowlumaLinuxPackage }),
                 },
             },
         });
@@ -175,8 +183,14 @@ export const componentActionStore = {
     },
 
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
-    started(taskId: string, componentId: ComponentId, hostId: string, kind?: StepKind): void {
-        this.registerTarget(taskId, componentId, hostId, kind);
+    started(
+        taskId: string,
+        componentId: ComponentId,
+        hostId: string,
+        kind?: StepKind,
+        snowlumaLinuxPackage?: SnowLumaLinuxPackage,
+    ): void {
+        this.registerTarget(taskId, componentId, hostId, kind, snowlumaLinuxPackage);
     },
 
     /** invoke 失败时把任务标为 failed，避免队列里一直 pending。 */

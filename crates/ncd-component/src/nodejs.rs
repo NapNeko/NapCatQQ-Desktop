@@ -402,7 +402,11 @@ impl Component for NodeJsComponent {
         // Step 2: 上传到目标 host
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
-            message: "upload archive to host".into(),
+            message: match host.locality() {
+                Locality::Local => "准备本机安装包",
+                Locality::Remote => "上传安装包到远端主机",
+            }
+            .into(),
         })
         .await;
         let remote_archive = self.tmp_dir.join(format!(

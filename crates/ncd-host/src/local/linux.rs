@@ -231,7 +231,14 @@ impl Host for LocalLinuxHost {
         let local = self.to_local(path);
         match tokio::fs::metadata(&local).await {
             Ok(_) => Ok(true),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
+                Ok(false)
+            }
             Err(e) => Err(HostError::Io(e)),
         }
     }
@@ -760,6 +767,27 @@ impl HostProcess for ChildHostProcess {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn exists_returns_false_when_parent_is_a_file() {
+        let workspace = tempfile::tempdir().unwrap();
+        let binary = workspace.path().join("node");
+        tokio::fs::write(&binary, b"binary").await.unwrap();
+        let host = LocalLinuxHost::new();
+        assert!(
+            host.exists(&HostPath::from_posix(binary.to_string_lossy()))
+                .await
+                .unwrap()
+        );
+        assert!(
+            !host
+                .exists(&HostPath::from_posix(
+                    binary.join("bin/node").to_string_lossy()
+                ))
+                .await
+                .unwrap()
+        );
+    }
 
     #[tokio::test]
     async fn timeout_stops_the_entire_command_group() {

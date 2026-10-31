@@ -247,10 +247,15 @@ fn component_task_sudo(
     if password.is_none() && !remember {
         return Ok(None);
     }
-    let remote_linux_qq_action = component_id == ComponentId::Qq
-        && os == Os::Linux
-        && locality == Locality::Remote
-        && server_id_of_host(host_id).is_some_and(|id| !id.is_empty())
+    let target_matches = match locality {
+        Locality::Local => host_id == "local",
+        Locality::Remote => server_id_of_host(host_id).is_some_and(|id| !id.is_empty()),
+    };
+    let linux_protocol_action = matches!(
+        component_id,
+        ComponentId::NapCat | ComponentId::SnowLuma | ComponentId::Qq
+    ) && os == Os::Linux
+        && target_matches
         && matches!(
             kind,
             StepKind::EnsureInstalled
@@ -258,13 +263,16 @@ fn component_task_sudo(
                 | StepKind::Update
                 | StepKind::EnsureDependencies
         );
-    if !remote_linux_qq_action {
-        return Err("sudo 密码仅可用于远端 Linux QQ 安装、更新或依赖安装".to_string());
+    if !linux_protocol_action {
+        return Err("sudo 密码仅可用于 Linux 协议端或 QQ 的安装、更新或依赖安装".to_string());
     }
     let password = password
         .filter(|password| !password.is_empty())
         .ok_or_else(|| "请输入 sudo 密码".to_string())?;
-    Ok(Some(ComponentTaskSudo { password, remember }))
+    Ok(Some(ComponentTaskSudo {
+        password,
+        remember: remember && locality == Locality::Remote,
+    }))
 }
 
 async fn validate_component_task_sudo(
@@ -629,26 +637,41 @@ impl ComponentExecutor {
             return Ok(existing);
         }
 
+        // 密码仅属于本次任务及其依赖，不进入解析器缓存的本机 Host。
+        #[cfg(target_os = "linux")]
+        let host = if sudo.is_some() && host.locality() == Locality::Local {
+            ncd_host::local::local_host_for_data_root(&self.data_root)
+        } else {
+            host
+        };
         if sudo.is_some() {
-            let server_id = server_id_of_host(&host_id)
-                .ok_or_else(|| "无法解析 sudo 验证目标主机".to_string())?
-                .to_string();
-            let validation_id = server_id.clone();
-            let validation_sudo = sudo.clone();
-            let server_manager = Arc::clone(&self.server_manager);
-            self.server_manager
-                .with_isolated_connection(&server_id, move |isolated_host| {
-                    Box::pin(async move {
-                        validate_component_task_sudo(
-                            isolated_host.as_ref(),
-                            validation_sudo,
-                            server_manager.as_ref(),
-                            &validation_id,
-                        )
-                        .await
+            if let Some(server_id) = server_id_of_host(&host_id) {
+                let validation_id = server_id.to_string();
+                let validation_sudo = sudo.clone();
+                let server_manager = Arc::clone(&self.server_manager);
+                self.server_manager
+                    .with_isolated_connection(server_id, move |isolated_host| {
+                        Box::pin(async move {
+                            validate_component_task_sudo(
+                                isolated_host.as_ref(),
+                                validation_sudo,
+                                server_manager.as_ref(),
+                                &validation_id,
+                            )
+                            .await
+                        })
                     })
-                })
+                    .await?;
+            } else {
+                validate_component_task_sudo(
+                    host.as_ref(),
+                    sudo.clone(),
+                    self.server_manager.as_ref(),
+                    "",
+                )
                 .await?;
+                inject_component_task_sudo(host.as_ref(), sudo.clone()).await;
+            }
         }
 
         let root = inputs.build(component_id, host.as_ref())?;
@@ -659,9 +682,7 @@ impl ComponentExecutor {
                 .resolve(component_id, host.as_ref(), RequirementPhase::Install)
                 .await?;
 
-            if component_id == ComponentId::Qq
-                && host.os() == Os::Linux
-                && host.locality() == Locality::Remote
+            if host.os() == Os::Linux
                 && plan.nodes.iter().any(|node| {
                     node.status.needs_action()
                         && matches!(
@@ -672,18 +693,20 @@ impl ComponentExecutor {
                         )
                 })
             {
-                let server_id = server_id_of_host(&host_id)
-                    .ok_or_else(|| "无法解析 QQ 系统依赖目标主机".to_string())?;
-                let preflight_sudo = sudo.clone();
-                self.server_manager
-                    .with_isolated_connection(server_id, move |isolated_host| {
-                        Box::pin(async move {
-                            inject_component_task_sudo(isolated_host.as_ref(), preflight_sudo)
-                                .await;
-                            preflight_qq_dependency_elevation(isolated_host.as_ref()).await
+                if let Some(server_id) = server_id_of_host(&host_id) {
+                    let preflight_sudo = sudo.clone();
+                    self.server_manager
+                        .with_isolated_connection(server_id, move |isolated_host| {
+                            Box::pin(async move {
+                                inject_component_task_sudo(isolated_host.as_ref(), preflight_sudo)
+                                    .await;
+                                preflight_qq_dependency_elevation(isolated_host.as_ref()).await
+                            })
                         })
-                    })
-                    .await?;
+                        .await?;
+                } else {
+                    preflight_qq_dependency_elevation(host.as_ref()).await?;
+                }
             }
 
             for node in &plan.nodes {
@@ -811,6 +834,12 @@ impl ComponentExecutor {
                 .and_then(|id| self.server_manager.sudo_password(id))
         });
         let server_manager = Arc::clone(&self.server_manager);
+        #[cfg(target_os = "linux")]
+        let host = if host.locality() == Locality::Local && sudo_password.is_some() {
+            ncd_host::local::local_host_for_data_root(&self.data_root)
+        } else {
+            host
+        };
         let local_host = if server_id.is_none() {
             Some(host)
         } else {
@@ -1450,7 +1479,7 @@ mod tests {
     fn component_sudo_rejects_unrelated_targets_and_actions() {
         for (component, host_id, kind, os, locality) in [
             (
-                ComponentId::NapCat,
+                ComponentId::NodeJs,
                 "remote:s1",
                 StepKind::Update,
                 Os::Linux,
@@ -1548,6 +1577,34 @@ mod tests {
             assert_eq!(sudo.password, " value with spaces ");
             assert!(!sudo.remember);
         }
+        for component_id in [ComponentId::NapCat, ComponentId::SnowLuma] {
+            assert!(
+                component_task_sudo(
+                    component_id,
+                    "local",
+                    StepKind::EnsureInstalled,
+                    Os::Linux,
+                    Locality::Local,
+                    Some("local-password".into()),
+                    false,
+                )
+                .unwrap()
+                .is_some()
+            );
+        }
+        let local = component_task_sudo(
+            ComponentId::Qq,
+            "local",
+            StepKind::EnsureDependencies,
+            Os::Linux,
+            Locality::Local,
+            Some("local-password".into()),
+            true,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(local.password, "local-password");
+        assert!(!local.remember);
         assert!(
             component_task_sudo(
                 ComponentId::NapCat,
