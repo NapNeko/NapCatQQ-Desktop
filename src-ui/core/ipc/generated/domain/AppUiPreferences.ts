@@ -3,23 +3,23 @@
 /**
  * 外观偏好(与 WebView localStorage 同步)
  */
-export type AppUiPreferences = { theme: string, showMascot: boolean, motionEnabled: boolean, motionLevel: string, motionSpeed: number,
+export type AppUiPreferences = { theme: string, showMascot: boolean, motionEnabled: boolean, motionLevel: string, motionSpeed: number, 
 /**
  * 原生 WebView 页面缩放倍率：1.0 / 1.25 / 1.5。
  */
-uiScale: number, radiusStyle: string,
+uiScale: number, radiusStyle: string, 
 /**
  * InfoBar info tone 自动关闭毫秒,0 = 不自动关
  */
-infoBarDismissInfoMs: bigint,
+infoBarDismissInfoMs: bigint, 
 /**
  * InfoBar success tone 自动关闭毫秒
  */
-infoBarDismissSuccessMs: bigint,
+infoBarDismissSuccessMs: bigint, 
 /**
  * InfoBar warning tone 自动关闭毫秒,danger 始终不自动关
  */
-infoBarDismissWarningMs: bigint,
+infoBarDismissWarningMs: bigint, 
 /**
  * 侧栏形态：classic 贴边可折叠 / floating 悬浮卡片恒展开
  */
