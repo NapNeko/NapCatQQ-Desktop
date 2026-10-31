@@ -30,7 +30,7 @@ export type QqSudoActionKind = Extract<
     'ensure_installed' | 'force_install' | 'update' | 'ensure_dependencies'
 >;
 
-export type QqSudoComponentId = Extract<ComponentId, 'qq' | 'napcat' | 'snowluma'>;
+export type QqSudoComponentId = Extract<ComponentId, 'qq' | 'napcat' | 'snowluma' | 'novnc'>;
 
 export type SudoPromptTarget = SudoPromptHost &
     (
@@ -58,7 +58,13 @@ export function qqSudoActionLabel(
     componentId: QqSudoComponentId = 'qq',
 ): string {
     const name =
-        componentId === 'napcat' ? 'NapCat' : componentId === 'snowluma' ? 'SnowLuma' : 'QQ';
+        componentId === 'napcat'
+            ? 'NapCat'
+            : componentId === 'snowluma'
+              ? 'SnowLuma'
+              : componentId === 'novnc'
+                ? 'noVNC'
+                : 'QQ';
     return kind === 'update'
         ? `更新 ${name}`
         : kind === 'ensure_dependencies'
@@ -100,7 +106,8 @@ export function findQqSudoElevationTask(
             !target ||
             (target.componentId !== 'qq' &&
                 target.componentId !== 'napcat' &&
-                target.componentId !== 'snowluma') ||
+                target.componentId !== 'snowluma' &&
+                target.componentId !== 'novnc') ||
             (target.hostId !== 'local' && !target.hostId.startsWith('remote:')) ||
             !isQqSudoAction(target.kind)
         )

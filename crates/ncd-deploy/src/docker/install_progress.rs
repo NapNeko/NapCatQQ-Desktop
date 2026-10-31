@@ -102,6 +102,9 @@ pub async fn install_docker_with_progress(
         );
     }
     emit_step_end(&emit, 1, true);
+    if super::engine::engine_for(host) == super::engine::ContainerEngine::Podman {
+        return install_podman(host, sudo_password, emit).await;
+    }
 
     match host.os() {
         Os::Linux => {
@@ -477,4 +480,72 @@ async fn finalize_linux_docker_after_install(
 /// Tauri 层用:把 ProgressKind 包装成 ProgressEvent(时间戳由 ProgressEvent::new 填充)
 pub fn progress_event(kind: ProgressKind) -> ProgressEvent {
     ProgressEvent::new(kind)
+}
+
+async fn install_podman(
+    host: &dyn Host,
+    password: Option<&str>,
+    emit: InstallProgressEmit,
+) -> Result<DockerInstallReport, DockerCliError> {
+    emit_step_begin(&emit, 2, "检查 Podman 安装权限");
+    if probe_sudo(host).await == SudoAccess::PasswordRequired
+        && password.is_none()
+        && !host.has_elevation_password().await
+    {
+        emit_step_end(&emit, 2, false);
+        finish_install(&emit, false);
+        return Ok(DockerInstallReport::need_sudo_password(
+            "安装 Podman / Compose 需要 sudo 密码，请输入后重试。",
+        ));
+    }
+    if let Some(password) = password {
+        host.set_elevation_password(Some(password.into())).await;
+    }
+    emit_step_end(&emit, 2, true);
+    let Some(manager) = LinuxPackageManager::detect(host).await else {
+        finish_install(&emit, false);
+        return Ok(DockerInstallReport::manual_required(
+            "未识别 Linux 包管理器，请手动安装 podman 和 podman-compose。",
+            None,
+        ));
+    };
+    emit_step_begin(&emit, 3, "安装 Podman 和 podman-compose");
+    let cmd = HostCommand::new("sh")
+        .args([
+            "-c",
+            &manager.refresh_and_install_script(&["podman", "podman-compose"]),
+        ])
+        .elevated()
+        .timeout(std::time::Duration::from_secs(600));
+    let out = run_pkg_with_emit(host, &emit, cmd, 3, 10, 90, "安装 Podman / Compose…").await?;
+    if !out.success() {
+        emit_step_end(&emit, 3, false);
+        finish_install(&emit, false);
+        if looks_like_bad_sudo_password(&out.stderr) {
+            return Ok(DockerInstallReport::need_sudo_password(
+                "sudo 密码不正确，请重新输入。",
+            ));
+        }
+        return Err(DockerCliError::CommandFailed {
+            command: "install podman podman-compose".into(),
+            exit_code: out.exit_code,
+            stderr: out.stderr,
+        });
+    }
+    emit_step_end(&emit, 3, true);
+    // 安装包使用 sudo；运行时恢复当前用户，绝不探测 root 的另一套存储。
+    let status = DockerCli::new(host).probe().await;
+    let ready = status.ready_to_deploy();
+    finish_install(&emit, ready);
+    if ready {
+        Ok(DockerInstallReport {
+            status: ncd_domain::DockerInstallStatus::Installed,
+            message: "Podman 和 Compose 已就绪".into(),
+            download_url: None,
+            probed_status: None,
+        }
+        .with_probed_status(status))
+    } else {
+        Ok(DockerInstallReport::manual_required("Podman 已安装但当前用户运行环境未就绪，请在此用户下检查 podman info 和 podman compose version。", None).with_probed_status(status))
+    }
 }

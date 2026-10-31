@@ -429,6 +429,9 @@ impl Deployment for DockerDeployment {
         };
         let yaml = apply_bot_docker_settings(&yaml, config.docker.as_ref())
             .map_err(DeploymentError::ConfigInvalid)?;
+        let yaml =
+            crate::docker::engine::prepare_compose(crate::docker::engine::engine_for(host), &yaml)
+                .map_err(DeploymentError::ConfigInvalid)?;
         let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
         host.write_file(&compose_path, yaml.as_bytes())
             .await

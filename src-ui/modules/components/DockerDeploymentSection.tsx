@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 // Docker 部署入口集中展示运行环境、框架镜像和 Bot 配置入口。
 import type { Ref } from 'react';
 import { Check, Container, Plus, RefreshCw } from 'lucide-react';
@@ -7,6 +9,7 @@ import { openCreateDockerBot } from '../../hooks/bot/botCreateNavigation';
 import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DeployedContainer, DockerFlavor, DockerStatus, Os } from '../../core/ipc/types';
+import { ContainerEngineSelect } from './ContainerEngineSelect';
 import { DockerRow } from './DockerRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
 import { componentLogoIcon } from './componentLogos';
@@ -59,6 +62,7 @@ export function DockerDeploymentSection({
     onOpenDownload,
     sectionRef,
 }: DockerDeploymentSectionProps) {
+    const [engine, setEngine] = useState<ContainerEngine>('docker');
     const managementEnabled = useFeatureEnabled('dockerPage');
     const supported = os === 'linux';
     const canPull =
@@ -130,7 +134,19 @@ export function DockerDeploymentSection({
             </div>
             <div className="min-w-0 overflow-hidden rounded-md border border-border-subtle bg-surface shadow-card">
                 <div data-tour-id="comp-row-docker" className="min-w-0">
+                    {supported && (
+                        <ContainerEngineSelect
+                            hostId={hostId}
+                            disabled={
+                                isInstalling ||
+                                isProbing ||
+                                flavors.some((flavor) => isPullingImage(hostId, flavor))
+                            }
+                            onEngine={setEngine}
+                        />
+                    )}
                     <DockerRow
+                        engine={engine}
                         os={os}
                         status={status}
                         isProbing={isProbing}

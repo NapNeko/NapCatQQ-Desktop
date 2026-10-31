@@ -9,6 +9,8 @@ use tauri::image::Image;
 /// 开发入口使用独立 ID，保留正式 bundle identifier 和单实例身份。
 #[cfg(target_os = "linux")]
 pub(crate) fn prepare_application_identity(identifier: &str) {
+    // AppIndicator 的可读名称取自 application_name；prgname 仍用于桌面入口匹配。
+    gtk::glib::set_application_name("NapCatQQ Desktop");
     #[cfg(dev)]
     if let Ok(identity) = std::env::var("NCD_DEV_DESKTOP_ID") {
         gtk::glib::set_prgname(Some(&identity));

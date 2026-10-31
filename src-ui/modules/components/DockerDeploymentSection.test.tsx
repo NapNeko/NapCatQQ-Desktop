@@ -1,11 +1,18 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderUI, screen } from '@testing-library/react';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import {
     DockerDeploymentSection,
     type DockerDeploymentSectionProps,
 } from './DockerDeploymentSection';
+
+function render(ui: ReactNode) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    return renderUI(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const navigation = vi.hoisted(() => ({ create: vi.fn(), manage: vi.fn() }));
 

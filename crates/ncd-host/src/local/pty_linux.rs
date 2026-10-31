@@ -132,6 +132,7 @@ pub(super) fn open_pty(request: PtyRequest) -> Result<PtySession, HostError> {
         .env("TERM", "xterm-256color")
         .envs(request.env)
         .kill_on_drop(true);
+    crate::appimage::clean_appimage_environment(command.as_std_mut());
     if let Some(cwd) = request.cwd {
         command.current_dir(cwd.as_posix());
     }

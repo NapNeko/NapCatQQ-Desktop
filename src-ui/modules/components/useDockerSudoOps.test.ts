@@ -58,6 +58,40 @@ describe('QQ sudo action retry', () => {
         );
     });
 
+    it('requests and retries local noVNC elevation without remembering the password', async () => {
+        componentActionStore.started('local-novnc', 'novnc', 'local', 'ensure_installed');
+        componentActionStore.failTask(
+            'local-novnc',
+            'elevation_required: noVNC 图形栈需要 sudo 密码',
+        );
+        const args = inputs();
+        const { result } = renderHook(() => useDockerSudoOps(args));
+        expect(result.current.sudoPrompt).toMatchObject({ componentId: 'novnc', hostId: 'local' });
+        await act(async () => result.current.handleSudoConfirm('local-password', false));
+        expect(args.startAction).toHaveBeenCalledWith('novnc', 'local', 'ensure_installed', {
+            sudoPassword: 'local-password',
+            rememberSudo: false,
+        });
+        expect(result.current.sudoPrompt).toBeNull();
+        expect(JSON.stringify(componentActionStore.getSnapshot())).not.toContain('local-password');
+    });
+
+    it('opens a local Docker password prompt and retries the same host', async () => {
+        const args = inputs();
+        vi.mocked(args.installDocker)
+            .mockResolvedValueOnce({ status: 'needSudoPassword', message: '请输入 sudo 密码' })
+            .mockResolvedValueOnce({ status: 'installed', message: '已安装' });
+        const { result } = renderHook(() => useDockerSudoOps(args));
+        await act(async () => result.current.handleInstallDocker('local'));
+        expect(result.current.sudoPrompt).toMatchObject({ purpose: 'docker', hostId: 'local' });
+        await act(async () => result.current.handleSudoConfirm('local-password', false));
+        expect(args.installDocker).toHaveBeenLastCalledWith('local', {
+            sudoPassword: 'local-password',
+            rememberSudo: false,
+        });
+        expect(result.current.sudoPrompt).toBeNull();
+    });
+
     it('retries a local SnowLuma install with its original package choice', async () => {
         componentActionStore.started('local-sl', 'snowluma', 'local', 'ensure_installed', 'lite');
         componentActionStore.failTask('local-sl', 'elevation_required: QQ 系统依赖需要 sudo 密码');

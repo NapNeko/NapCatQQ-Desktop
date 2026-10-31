@@ -200,6 +200,8 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | domain UI | `src-ui/core/domain/remote-host/` |
 
 归档设计：`docs/dev/archive/bugfix/remote-ssh-stability/`  
+AppImage 本机子进程环境：`ncd-host/src/appimage.rs` 清理打包目录的库和插件搜索路径；普通命令、sudo 校验、PTY 和系统浏览器共用，保留宿主路径及桌面会话变量。
+
 Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`；shell 引号 `shell.rs`（`shell_single_quote`，拼 `sh -c` 只用它或 `HostShell::escape`）；Linux 包管理器 `linux_pkg.rs`（`LinuxPackageManager`）+ 装包输出解析 `pkg_output.rs` + dpkg 锁 `apt_lock.rs`；远端读文件大小 / 偏移 / 尾巴 `remote_file.rs`
 
 ---
@@ -229,7 +231,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 部署编排 | `crates/ncd-deploy/src/{deployment,plan,runner,result}.rs` |
-| Docker 子树 | `crates/ncd-deploy/src/docker/` |
+| Docker / Podman 子树 | `crates/ncd-deploy/src/docker/`；`engine.rs` 按 Host ID 选择引擎，默认 Docker；Podman 不自动提权，Compose 使用完整镜像名和共享 SELinux bind 标签。Desktop `container_engine.rs` 将选择原子保存到 `config/container-engines.json`，启动时在 runtime 前恢复；组件页 `ContainerEngineSelect` / `useContainerEngine` 切换后重置该主机容器缓存 |
 | Deployments（docker/native…） | `crates/ncd-deploy/src/deployments/` |
 | 配置渲染（NC/SL docker payload） | `crates/ncd-deploy/src/backend_config_renderer.rs`（runtime 可能 re-export） |
 | 模板 | `crates/ncd-template/` |
@@ -292,7 +294,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 轻量模式 | `src-tauri/src/lightweight.rs`, `lightweight_scheduler.rs` |
-| 托盘 | `tray_icon.rs`, `tray_panel.rs`（图标事件）, `tray_panel_native.rs`（主面板）, `tray_summary.rs` + `commands/tray.rs`；主托盘与账号托盘共用 `native_panel/` 的布局、主题和业务，Windows 使用 Direct2D / DirectWrite，Linux 由 `gfx_linux.rs` / `window_linux.rs` 使用 GTK / Cairo / Pango 绘制，不建 WebView。`linux_tray.rs` 在 XEmbed 成功嵌入时接管图标事件并隐藏 SNI 图标，未嵌入或丢失宿主时恢复系统菜单；图标和 tooltip 同步刷新。原生面板可单独使用 X11 display 定位，主窗仍使用 Wayland。界面倍率由宿主应用一次，系统 DPI 交给 GTK |
+| 托盘 | `tray_icon.rs`, `tray_panel.rs`（图标事件）, `tray_panel_native.rs`（主面板）, `tray_summary.rs` + `commands/tray.rs`；主托盘与账号托盘共用 `native_panel/` 的布局、主题和业务，Windows 使用 Direct2D / DirectWrite，Linux 由 `gfx_linux.rs` / `window_linux.rs` 使用 GTK / Cairo / Pango 绘制，不建 WebView。`linux_tray.rs` 只使用 AppIndicator，主托盘的 Bot 启停、WebUI / noVNC 与窗口操作直接放入系统菜单，由桌面环境定位；不再创建 XEmbed 图标或二次打开主托盘面板。GTK application_name 使用产品名，prgname 保持桌面入口 ID。界面倍率由宿主应用一次，系统 DPI 交给 GTK |
 | 退出闸门 | `commands/exit.rs`（`shutdown_and_exit`：菜单退出、托盘退出、应用内更新后重启共用一份收尾；`local_active_bots` 给闸门计数）+ 窗口通知名和信封 `src-tauri/src/window_events.rs`；前端 `src-ui/app/DesktopExitGate.tsx`（只渲染对话框）+ `hooks/desktop/useDesktopExitGate.ts` + `exit.service.ts`，三条窗口通知只经 `desktop.service.ts` 的 `windowEventService` 订 |
 | 窗口 | `commands/window.rs`, `window_icon.rs` |
 | Linux Dock 身份 | `window_icon.rs::prepare_application_identity` 在 GTK 初始化前对齐 GLib 程序名与应用 ID；`tauri.linux.conf.json` 启用 GTK App ID，`linux/main.desktop.hbs` 对齐 StartupWMClass，canonical desktop alias 提供按 ID 查找。`scripts/tauri-dev.mjs` 生成独立 `.Development.desktop` 用户入口与绝对 PNG 图标路径，开发配置关闭 GTK App ID 并以环境变量把开发 ID 交给早期初始化；bundle identifier、数据根和单实例身份保持原值 |
@@ -452,7 +454,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 传输与生命周期 | `crates/ncd-runtime/src/chat.rs`：动作白名单与独立协议会话，复用 `DebugManager::new_ephemeral`；`chat/desktop.rs` 持有界面/后台租约，最后一个消费者离开时释放连接、隧道与缓存，并失效迟到的调用。聊天窗与后台共用每 Bot 接收器；保留 Chat/Debug 原有物理会话隔离。总开关沿用 `FeatureToggles.chat`（设置 · 功能，缺字段默认开启）；启动、保存设置和导入配置时生效，关闭会隐藏入口、销毁独立窗、停止接收/调用/文件下载/截图快捷键与账号托盘，保留记录和账号偏好，重新开启恢复原后台设置 |
 | 窗口 / 账号托盘 | `ncd-domain/src/chat_desktop.rs` → `ncd-runtime/src/chat/{desktop,inbox}.rs`：按 Bot+QQ 默认关闭后台/托盘，最多 8 个后台账号、9 个完整收件箱（每个消息体缓存 2 MiB），暂停后只保留有界未读摘要。`src-tauri/src/{chat_window,chat_tray}.rs` 管单实例 `chat-panel`、带确认/取消的草稿交接、独立 QQ 头像托盘与控制台回收；头像异步下载、最多 4 并发，不创建后台 WebView。`chat.html` / `chat-main.ts` / `app/startChat.tsx` 为独立构建入口，工具标题栏不加载终端；`ChatPopoutApp` / `ChatAccountControls` / `chat-desktop.service` 为前端入口；视图保存校验窗口所有者和挂载代次，关闭后销毁聊天 WebView |
 | 新消息提示 / 群忽略 | `chat/notifications.rs` 把 QQ `GroupMsgMask` 与账号本地 `ignoredGroups` / `hiddenGroups` 合并，消息与普通未读继续保留，`notificationUnread` 单独控制托盘。NapCat 的 `get_group_detail_info` 按需读取，最多 4 并发、成功缓存 5 分钟；SnowLuma 当前不返回 QQ 档位，未知群默认不提示，账号设置可显式开启。`useChatNotifications` + 会话右键保存本地免打扰、迁移既有隐藏群。聊天设置提供免打扰群恢复与提醒预览；托盘默认静态红点，可选头像闪烁（600ms 明暗切换，两帧预计算）或关闭，只有需要提醒时才运行计时器。托盘头像有透明圆角，128px 原图复用于聊天窗标题、任务栏和 Alt+Tab |
-| 账号托盘菜单 / 未读预览 | `src-tauri/src/chat_tray_panel_native.rs` 经 `native_panel/` 绘制，所有账号共用一个原生窗口。Windows 图标中心固定锚点，Enter/Move 共用可取消的 500ms 悬停请求；重复悬停不重开。右键在同一窗口内将预览切为账号菜单，内容交叉淡入淡出；已打开菜单时重复右键只恢复焦点。Windows 预览不抢焦点，离开图标和面板 320ms 后关闭；Linux XEmbed 右键直出账号菜单，回退系统菜单时保留账号面板和未读预览入口，拿焦点后通过 Escape / 失焦收起。X11 面板按事件位置和工作区定位，Wayland 面板由合成器放置。runtime tray_snapshot 沿用群免打扰策略，展开/关闭带代次，过期快照丢弃；预览不标已读，账号托盘关闭后收起已有面板。点击会话通过 ChatTrayNavigation 在档案恢复后定位会话 |
+| 账号托盘菜单 / 未读预览 | `src-tauri/src/chat_tray_panel_native.rs` 经 `native_panel/` 绘制，所有账号共用一个原生窗口。Windows 图标中心固定锚点，Enter/Move 共用可取消的 500ms 悬停请求；重复悬停不重开。右键在同一窗口内将预览切为账号菜单，内容交叉淡入淡出；已打开菜单时重复右键只恢复焦点。Windows 预览不抢焦点，离开图标和面板 320ms 后关闭；Linux 只使用 AppIndicator，系统菜单保留账号面板和未读预览入口，拿焦点后通过 Escape / 失焦收起。X11 面板按事件位置和工作区定位，Wayland 面板由合成器放置。runtime tray_snapshot 沿用群免打扰策略，展开/关闭带代次，过期快照丢弃；预览不标已读，账号托盘关闭后收起已有面板。点击会话通过 ChatTrayNavigation 在档案恢复后定位会话 |
 | 远端聊天恢复 | `onebot_debug/port.rs` 的 `recover_webui` 由 `bot_manager/debug_port.rs` 实装：缺少远端 WebUI 端点时单飞取得活 SSH 并复用运行态接管，独立任务不被接收器连接超时半途取消；保留 ServerManager 冷却限制，不启动新 Bot。SSH 恢复事件唤醒接收器，后台租约每 15 秒重新核对停止状态 |
 | IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe` 与 `chat_archive_load/save`；前端 `core/services/chat.service.ts` / `chat-archive.service.ts`，档案类型来自 `generated/chat/`。`core/ipc/mock/chat.mock.ts` 提供多页历史，`chat-archive.mock.ts` 仅在浏览器预览用 localStorage 模拟存储。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
 | 复用边界 | 复用 debug 的 BotPicker、消息段解析、@ 组装、SegmentList 与虚拟列表贴底；弹层使用 shared/ui/Popover；不导入 DebugConsolePage 或调试工作区 store |

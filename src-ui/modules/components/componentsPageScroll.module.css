@@ -2,10 +2,13 @@
 .componentsPageScroll {
     container: components-page / inline-size;
     overflow-y: auto;
-    overflow-x: visible;
+    overflow-x: hidden;
     min-width: 0;
     scrollbar-gutter: stable;
     /* 与全局 6px 细滚动条配合，右列 ring 不贴视口边 */
-    padding-inline-end: 4px;
+    padding-inline-end: 10px;
+    /* WebKitGTK 的合成滚动条也必须留在页面绘制边界内，不能盖过终端浮层。 */
+    contain: paint;
+    isolation: isolate;
     box-sizing: border-box;
 }

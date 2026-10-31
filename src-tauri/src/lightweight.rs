@@ -106,6 +106,16 @@ fn prevent_implicit_exit(lightweight: bool, code: Option<i32>) -> bool {
 mod tests {
     use super::prevent_implicit_exit;
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_webview_config_uses_an_opaque_surface_after_platform_merge() {
+        // 检查 Tauri 实际合并后的配置；启动、轻量模式重建和调试窗都从这里取配置。
+        let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+        let main = context.config().app.windows.first().unwrap();
+        assert!(!main.transparent);
+        assert_eq!(main.background_color.unwrap().3, 255);
+    }
+
     #[test]
     fn lightweight_keeps_the_tray_alive_but_allows_explicit_exit() {
         assert!(prevent_implicit_exit(true, None));

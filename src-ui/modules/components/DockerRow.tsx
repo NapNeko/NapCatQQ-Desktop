@@ -34,6 +34,7 @@ import { shouldShowProgressBar, ProgressBarOverlay } from '../../shared/componen
 import { dockerRowStatusBadge, type StatusBadgeSpec } from './componentStatusPresentation';
 
 interface DockerRowProps {
+    engine?: 'docker' | 'podman';
     os: Os;
     status: DockerStatus | undefined;
     isProbing: boolean;
@@ -47,6 +48,7 @@ interface DockerRowProps {
 }
 
 export const DockerRow: React.FC<DockerRowProps> = ({
+    engine = 'docker',
     os,
     status,
     isProbing,
@@ -64,7 +66,9 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     const ready = !failed && (summary?.ready ?? false);
     const autoInstallable = os === 'linux';
     const probing = isProbing;
-    const action = dockerSetupAction(status);
+    const engineName = engine === 'podman' ? 'Podman' : 'Docker';
+    const setup = dockerSetupAction(status);
+    const action = setup && { ...setup, label: setup.label.replace('Docker', engineName) };
     const canSetup = !failed && !isProbing && !!status && !ready;
     const statusBadge: StatusBadgeSpec = isInstalling
         ? { tone: 'brand' as const, label: action?.pendingLabel ?? '处理中' }
@@ -101,7 +105,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
             await navigator.clipboard.writeText(v);
             pushInfoBar({
                 tone: 'info',
-                title: '已复制 Docker 版本号',
+                title: `已复制 ${engineName} 版本号`,
                 content: v,
                 autoDismissMs: 2000,
             });
@@ -125,10 +129,10 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                                         <PopoverTrigger asChild>
                                             <button
                                                 type="button"
-                                                aria-label="Docker 环境详情"
+                                                aria-label={`${engineName} 环境详情`}
                                                 className="flex max-w-full items-center gap-1 rounded-sm text-left hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                                             >
-                                                <span className="truncate">Docker 引擎</span>
+                                                <span className="truncate">{engineName} 引擎</span>
                                                 <ChevronDown
                                                     size={13}
                                                     className="shrink-0 text-text-tertiary"
@@ -138,18 +142,22 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                                     </h4>
                                     <PopoverContent
                                         align="start"
-                                        aria-label="Docker 环境详情"
+                                        aria-label={`${engineName} 环境详情`}
                                         className="max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-4"
                                     >
                                         <div className="mb-3 flex items-center justify-between gap-3">
                                             <p className="text-sm font-semibold text-text">
-                                                Docker 环境
+                                                {engineName} 环境
                                             </p>
                                             <Button
                                                 size="sm"
                                                 variant="ghost"
                                                 onClick={() =>
-                                                    openExternal('https://www.docker.com/')
+                                                    openExternal(
+                                                        engine === 'podman'
+                                                            ? 'https://podman.io/'
+                                                            : 'https://www.docker.com/',
+                                                    )
                                                 }
                                             >
                                                 <ExternalLink size={13} />
@@ -188,7 +196,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                                             >
                                                 {installProgress?.message ||
                                                     installHint ||
-                                                    '正在准备 Docker 环境'}
+                                                    `正在准备 ${engineName} 环境`}
                                             </p>
                                         ) : null}
                                     </PopoverContent>
@@ -215,7 +223,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
 
             <ContextMenuContent className="w-52">
                 <ContextMenuLabel className="font-mono text-2xs truncate">
-                    Docker 运行环境
+                    {engineName} 运行环境
                 </ContextMenuLabel>
                 <ContextMenuSeparator />
 
@@ -233,9 +241,15 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                     </ContextMenuItem>
                 )}
 
-                <ContextMenuItem onClick={() => openExternal('https://www.docker.com/')}>
+                <ContextMenuItem
+                    onClick={() =>
+                        openExternal(
+                            engine === 'podman' ? 'https://podman.io/' : 'https://www.docker.com/',
+                        )
+                    }
+                >
                     <ExternalLink size={13} />
-                    <span>访问 Docker 官网</span>
+                    <span>访问 {engineName} 官网</span>
                 </ContextMenuItem>
 
                 {ready && status?.version && (
@@ -243,7 +257,9 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                         <ContextMenuSeparator />
                         <ContextMenuItem onClick={() => handleCopyVersion(status.version!)}>
                             <Copy size={13} />
-                            <span>复制 Docker 版本 ({status.version})</span>
+                            <span>
+                                复制 {engineName} 版本 ({status.version})
+                            </span>
                         </ContextMenuItem>
                     </>
                 )}

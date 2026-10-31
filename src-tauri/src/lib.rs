@@ -22,11 +22,13 @@ pub mod chat_tray_panel_native;
 pub mod chat_window;
 pub mod clipboard;
 pub mod commands;
+pub mod container_engine;
 pub mod desktop_consent;
 pub mod desktop_log;
 pub mod desktop_log_format;
 pub mod desktop_notify;
 pub mod desktop_onboarding;
+pub mod desktop_opener;
 pub mod desktop_update;
 pub mod legacy_install_cleanup;
 pub mod lightweight;
@@ -109,6 +111,7 @@ pub fn run() {
     let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
     desktop_log::init_desktop_logging(&data_root, event_bus.clone());
+    container_engine::initialize(&data_root);
     #[cfg(windows)]
     {
         let reg = product_registry::ensure_product_paths_registered(&data_root);
@@ -606,10 +609,23 @@ pub fn run() {
                     use ncd_domain::domain_event::DomainEventKind as EK;
                     if matches!(
                         event.kind(),
-                        EK::BotStateChanged | EK::BotStatusChanged | EK::BotProcessExited
+                        EK::BotStateChanged
+                            | EK::BotStatusChanged
+                            | EK::BotProcessExited
+                            | EK::NapCatWebuiAvailable
+                            | EK::SnowLumaDockerEndpointsReady
                     ) {
                         #[cfg(any(windows, target_os = "linux"))]
                         tray_panel_native::refresh_if_visible(&handle);
+                        #[cfg(target_os = "linux")]
+                        {
+                            let handle = handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(error) = linux_tray::refresh(&handle).await {
+                                    tracing::warn!(%error, "更新系统托盘菜单失败");
+                                }
+                            });
+                        }
                         #[cfg(any(windows, target_os = "linux"))]
                         chat_tray_panel_native::refresh_if_visible(&handle);
                     }
@@ -894,6 +910,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            desktop_opener::open_external_url,
+            container_engine::container_engine_get,
+            container_engine::container_engine_set,
             commands::connect_remote_host,
             commands::export_migration_report,
             commands::get_bootstrap_status,

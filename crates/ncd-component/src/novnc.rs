@@ -172,6 +172,16 @@ impl Component for NoVncComponent {
 
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.check_target(host)?;
+        if self.use_sudo
+            && ncd_host::remote::probe_sudo(host).await
+                == ncd_host::remote::SudoAccess::PasswordRequired
+            && !host.has_elevation_password().await
+        {
+            return Err(ActionError::install_step(
+                "sudo",
+                "elevation_required: 安装 noVNC 图形栈需要 sudo 密码，请输入密码后重试",
+            ));
+        }
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
 
         // Step 1:探测包管理器

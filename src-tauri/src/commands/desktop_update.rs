@@ -255,13 +255,11 @@ pub async fn install_desktop_update(
 #[cfg(not(windows))]
 #[tauri::command]
 pub async fn install_desktop_update(
-    app: AppHandle,
+    _app: AppHandle,
     state: State<'_, AppState>,
     expected: AvailableUpdate,
     task_id: Option<String>,
 ) -> Result<String, String> {
-    use tauri_plugin_opener::OpenerExt;
-
     let orch = build_check_orchestrator(&state)?;
     let update = orch
         .check(UpdateChannel::Stable)
@@ -271,8 +269,8 @@ pub async fn install_desktop_update(
     if update.version != expected.version {
         return Err("可更新版本已变化，请重新检查后再下载".into());
     }
-    app.opener()
-        .open_url(update.download_url, None::<&str>)
+    crate::desktop_opener::open_url(&update.download_url)
+        .await
         .map_err(|e| format!("无法打开更新下载页: {e}"))?;
 
     let task_id = task_id.unwrap_or_else(|| Uuid::new_v4().to_string());

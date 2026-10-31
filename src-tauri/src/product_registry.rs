@@ -326,9 +326,10 @@ mod tests {
 
     #[test]
     fn select_prefers_env_then_user_then_machine() {
-        let env = PathBuf::from(r"C:\env-root");
-        let user = PathBuf::from(r"C:\user-root");
-        let machine = PathBuf::from(r"C:\machine-root");
+        let root = tempfile::tempdir().unwrap();
+        let env = root.path().join("env-root");
+        let user = root.path().join("user-root");
+        let machine = root.path().join("machine-root");
         assert_eq!(
             select_data_root_pointer(Some(env.clone()), Some(user.clone()), Some(machine.clone())),
             Some(env)
@@ -346,7 +347,8 @@ mod tests {
 
     #[test]
     fn select_skips_unusable_env() {
-        let user = PathBuf::from(r"C:\user-root");
+        let root = tempfile::tempdir().unwrap();
+        let user = root.path().join("user-root");
         assert_eq!(
             select_data_root_pointer(Some(PathBuf::from("relative")), Some(user.clone()), None),
             Some(user)

@@ -1,11 +1,52 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PhysicalPosition } from '@tauri-apps/api/dpi';
-import { onFileDragDrop } from './transport';
+import { onFileDragDrop, openExternalUrl } from './transport';
 
 const native = vi.hoisted(() => ({ onDragDropEvent: vi.fn() }));
+const bridge = vi.hoisted(() => ({ invoke: vi.fn(), isTauri: true }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: bridge.invoke, Channel: class {} }));
+vi.mock('../domain/runtime/env', () => ({
+    get isTauri() {
+        return bridge.isTauri;
+    },
+}));
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => native }));
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    bridge.invoke.mockReset();
+    bridge.isTauri = true;
+});
+
+describe('external links', () => {
+    it('routes web links through the host browser command and propagates failures', async () => {
+        await openExternalUrl('https://github.com/NapNeko/NapCatQQ-Desktop');
+        expect(bridge.invoke).toHaveBeenCalledWith('open_external_url', {
+            url: 'https://github.com/NapNeko/NapCatQQ-Desktop',
+        });
+        bridge.invoke.mockRejectedValueOnce(new Error('browser unavailable'));
+        await expect(openExternalUrl('http://127.0.0.1:6099')).rejects.toThrow(
+            'browser unavailable',
+        );
+    });
+
+    it.each(['not a url', 'file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,hello'])(
+        'rejects %s without native dispatch',
+        async (url) => {
+            await expect(openExternalUrl(url)).rejects.toThrow();
+            expect(bridge.invoke).not.toHaveBeenCalled();
+        },
+    );
+
+    it('opens browser preview links without IPC', async () => {
+        bridge.isTauri = false;
+        const open = vi.spyOn(window, 'open').mockReturnValue(null);
+        await openExternalUrl('https://example.com');
+        expect(open).toHaveBeenCalledWith('https://example.com/', '_blank', 'noopener,noreferrer');
+        expect(bridge.invoke).not.toHaveBeenCalled();
+    });
+});
 
 describe('native file drop coordinates', () => {
     it('keeps the same CSS target when page zoom and monitor DPI change', async () => {

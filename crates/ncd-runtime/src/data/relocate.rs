@@ -809,18 +809,20 @@ mod tests {
 
     #[test]
     fn target_inside_source_detects_nested() {
-        let s = PathBuf::from(r"C:\data\root");
-        let t = PathBuf::from(r"C:\data\root\child");
+        let root = tempfile::tempdir().unwrap();
+        let s = root.path().join("data/root");
+        let t = s.join("child");
         assert!(target_inside_source(&s, &s));
         assert!(target_inside_source(&s, &t));
-        assert!(!target_inside_source(&s, Path::new(r"C:\other")));
+        assert!(!target_inside_source(&s, &root.path().join("other")));
     }
 
     #[test]
     fn target_inside_source_allows_sibling_prefix_names() {
         // data vs data2 不能当父子
-        let s = PathBuf::from(r"C:\data");
-        let sibling = PathBuf::from(r"C:\data2");
+        let root = tempfile::tempdir().unwrap();
+        let s = root.path().join("data");
+        let sibling = root.path().join("data2");
         assert!(!target_inside_source(&s, &sibling));
     }
 

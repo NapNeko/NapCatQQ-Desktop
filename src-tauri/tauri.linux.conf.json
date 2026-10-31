@@ -13,8 +13,8 @@
                 "center": true,
                 "visible": false,
                 "decorations": false,
-                "transparent": true,
-                "backgroundColor": "#00000000",
+                "transparent": false,
+                "backgroundColor": "#211f1d",
                 "shadow": true
             }
         ]

@@ -399,9 +399,7 @@ mod tests {
     };
     use ncd_traits::{
         ConfigStore, SecretStore,
-        runtime_backend::{
-            BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts,
-        },
+        runtime_backend::{BotBackend, BotBackendError, BotStartCtx, LogSnapshot, TailOpts},
     };
     use tempfile::tempdir;
 
@@ -455,10 +453,15 @@ mod tests {
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        // 注入假 QQ 安装目录,CI runner 无本机 QQ 注册表时仍能测到 NapCat 缺组件
+        // 注入当前平台的假 QQ 安装目录，确保错误来自缺失的 NapCat 组件。
         let qq_install = root.join("fake-qqnt");
         let _ = std::fs::create_dir_all(&qq_install);
-        let _ = std::fs::write(qq_install.join("QQ.exe"), b"");
+        let qq_binary = if cfg!(target_os = "linux") {
+            "qq"
+        } else {
+            "QQ.exe"
+        };
+        let _ = std::fs::write(qq_install.join(qq_binary), b"");
         let launch_planner = Arc::new(
             FileSystemRuntimeLaunchPlanner::new(ncd_runtime::DataPaths::new(root).components_dir())
                 .with_qq_install_path(qq_install),
@@ -616,7 +619,7 @@ mod tests {
             .start_bot(&BotId::new("10002"))
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("NapCatWinBootMain.exe"));
+        assert_missing_napcat(&err.to_string());
 
         let snapshot = state
             .bot_manager
@@ -724,7 +727,16 @@ mod tests {
             .start_bot(&BotId::new("10007"))
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("NapCatWinBootMain.exe"));
+        assert_missing_napcat(&err.to_string());
         assert_eq!(state.bot_manager.active_count().await, 0);
+    }
+
+    fn assert_missing_napcat(error: &str) {
+        let expected = if cfg!(target_os = "linux") {
+            "未检测到 NapCat"
+        } else {
+            "NapCatWinBootMain.exe"
+        };
+        assert!(error.contains(expected), "{error}");
     }
 }

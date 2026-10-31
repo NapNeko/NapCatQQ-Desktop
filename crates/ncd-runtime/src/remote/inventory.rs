@@ -711,15 +711,16 @@ for d in /proc/[0-9]*; do
   esac
 done
 
-if command -v docker >/dev/null 2>&1; then
-  docker ps -a --filter name=ncbot- --format '{{.Names}}' 2>/dev/null | while IFS= read -r name; do
+container_cli="${NCD_CONTAINER_CLI:-docker}"
+if command -v "$container_cli" >/dev/null 2>&1; then
+  "$container_cli" ps -a --filter name=ncbot- --format '{{.Names}}' 2>/dev/null | while IFS= read -r name; do
     [ -n "$name" ] || continue
     echo "HIT kind=docker_container source=pathLookup verified=1 root=$name dockerName=$name"
     qq="${name#ncbot-}"
     case "$qq" in *[!0-9]*|"") continue ;; esac
     echo "HIT kind=bot backend=napcat deployment=docker qq=$qq source=dockerContainer dockerName=$name"
   done
-  docker ps -a --filter name=slbot- --format '{{.Names}}' 2>/dev/null | while IFS= read -r name; do
+  "$container_cli" ps -a --filter name=slbot- --format '{{.Names}}' 2>/dev/null | while IFS= read -r name; do
     [ -n "$name" ] || continue
     echo "HIT kind=docker_container source=pathLookup verified=1 root=$name dockerName=$name"
     qq="${name#slbot-}"
@@ -743,6 +744,10 @@ pub async fn probe_remote_inventory(
     let cmd = HostCommand::new("sh")
         .arg("-c")
         .arg(script)
+        .env(
+            "NCD_CONTAINER_CLI",
+            ncd_deploy::docker::engine::engine_for(host).program(),
+        )
         .timeout(INVENTORY_PROBE_TIMEOUT);
     let out = host
         .run_to_string(cmd)

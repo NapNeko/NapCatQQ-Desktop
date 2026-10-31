@@ -7,6 +7,7 @@
 //! 解析策略:用 --format '{{json .}}' 让 docker 自己吐 JSON,逐行 serde 解析,
 //! 不靠脆弱的列宽切分
 
+use serde::Deserialize;
 use std::collections::HashMap;
 
 use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerStatus, ImageInfo};
@@ -51,6 +52,7 @@ pub enum DockerCliError {
 /// 用 AtomicBool 是因为操作方法都是 &self,且要跨 await 保持 Send
 pub struct DockerCli<'h> {
     host: &'h dyn Host,
+    engine: super::engine::ContainerEngine,
     elevated: std::sync::atomic::AtomicBool,
 }
 
@@ -58,6 +60,7 @@ impl<'h> DockerCli<'h> {
     pub fn new(host: &'h dyn Host) -> Self {
         Self {
             host,
+            engine: super::engine::engine_for(host),
             elevated: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -67,7 +70,7 @@ impl<'h> DockerCli<'h> {
     /// Host 层用注入的 sudo 密码走 sudo -S/-n;否则裸 docker,所有 docker 操作
     /// 都经这里,保证「探测判定要 sudo」,后续操作就一致地 sudo,不会探测过了部署却挂
     pub fn command(&self) -> HostCommand {
-        let cmd = HostCommand::new("docker");
+        let cmd = HostCommand::new(self.engine.program());
         if self.elevated.load(std::sync::atomic::Ordering::Relaxed) {
             cmd.elevated()
         } else {
@@ -137,7 +140,7 @@ impl<'h> DockerCli<'h> {
     /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据
     async fn docker_client_version(&self) -> Option<String> {
         // 先尝试普通命令
-        let cmd = HostCommand::new("docker")
+        let cmd = HostCommand::new(self.engine.program())
             .arg("version")
             .arg("--format")
             .arg("{{.Client.Version}}")
@@ -152,12 +155,14 @@ impl<'h> DockerCli<'h> {
         // sudo fallback 只对 Linux 远端有意义(刚装完 PATH 未刷新 / docker 组未生效);
         // Windows 本机没有 sudo 语义,裸 docker 失败就该直接判未装,
         // 再发 elevated 会真的去 ShellExecute "docker",找不到文件只会白弹提权链路
-        if self.host.os() == ncd_host::Os::Windows {
+        if self.host.os() == ncd_host::Os::Windows
+            || self.engine == super::engine::ContainerEngine::Podman
+        {
             return None;
         }
 
         // fallback: 尝试 sudo(刚安装完 PATH 可能未刷新)
-        let cmd_sudo = HostCommand::new("docker")
+        let cmd_sudo = HostCommand::new(self.engine.program())
             .arg("version")
             .arg("--format")
             .arg("{{.Client.Version}}")
@@ -200,7 +205,7 @@ impl<'h> DockerCli<'h> {
             .arg("-a")
             .arg("--no-trunc")
             .arg("--format")
-            .arg("{{json .}}")
+            .arg(if self.engine == super::engine::ContainerEngine::Podman { r#"{"ID":{{json .ID}},"Names":{{json .Names}},"Image":{{json .Image}},"State":{{json .State}},"Status":{{json .Status}},"Ports":{{json .Ports}}}"# } else { "{{json .}}" })
             .timeout(std::time::Duration::from_secs(30));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
@@ -220,7 +225,7 @@ impl<'h> DockerCli<'h> {
             .arg("images")
             .arg("--no-trunc")
             .arg("--format")
-            .arg("{{json .}}")
+            .arg(if self.engine == super::engine::ContainerEngine::Podman { r#"{"ID":{{json .ID}},"Repository":{{json .Repository}},"Tag":{{json .Tag}},"Size":{{json .Size}},"CreatedSince":{{json .CreatedSince}}}"# } else { "{{json .}}" })
             .timeout(std::time::Duration::from_secs(30));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
@@ -355,16 +360,18 @@ impl<'h> DockerCli<'h> {
 impl<'h> DockerCli<'h> {
     /// 镜像在组件页预拉并验证；启动不隐式联网拉取不同版本。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
-        let cmd = self
+        let mut cmd = self
             .docker_cmd()
             .arg("compose")
             .arg("up")
             .arg("-d")
             .arg("--remove-orphans")
-            .arg("--pull")
-            .arg("never")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))
             .timeout(std::time::Duration::from_secs(900));
+        // podman-compose 的 --pull 是布尔开关；Podman 在生成的 YAML 中声明 never。
+        if self.engine == super::engine::ContainerEngine::Docker {
+            cmd = cmd.args(["--pull", "never"]);
+        }
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -468,10 +475,11 @@ impl<'h> DockerCli<'h> {
             on_line(src, line);
         };
 
+        let pull_image = super::engine::image_reference(self.engine, image);
         let cmd = self
             .docker_cmd()
             .arg("pull")
-            .arg(image)
+            .arg(pull_image)
             .timeout(Self::PULL_PER_CANDIDATE_TIMEOUT)
             .cancel_token(kill_token.clone());
 
@@ -596,7 +604,11 @@ impl<'h> DockerCli<'h> {
 
     /// 本地是否已有指定镜像引用(docker image inspect 成功即视为存在)
     pub async fn image_exists(&self, image_ref: &str) -> Result<bool, DockerCliError> {
-        let cmd = self.docker_cmd().arg("image").arg("inspect").arg(image_ref);
+        let cmd = self
+            .docker_cmd()
+            .arg("image")
+            .arg("inspect")
+            .arg(super::engine::image_reference(self.engine, image_ref));
         let out = self.host.run_to_string(cmd).await?;
         Ok(out.success())
     }
@@ -606,7 +618,15 @@ impl<'h> DockerCli<'h> {
         let daemon = self
             .management_output(
                 self.command()
-                    .args(["info", "--format", "{{.OSType}}/{{.Architecture}}"])
+                    .args([
+                        "info",
+                        "--format",
+                        if self.engine == super::engine::ContainerEngine::Podman {
+                            "{{.Host.OS}}/{{.Host.Arch}}"
+                        } else {
+                            "{{.OSType}}/{{.Architecture}}"
+                        },
+                    ])
                     .timeout(std::time::Duration::from_secs(15)),
             )
             .await?;
@@ -619,7 +639,7 @@ impl<'h> DockerCli<'h> {
                         "--format",
                         "{{.Os}}/{{.Architecture}}",
                         "--",
-                        image_ref,
+                        &super::engine::image_reference(self.engine, image_ref),
                     ])
                     .timeout(std::time::Duration::from_secs(15)),
             )
@@ -773,7 +793,11 @@ impl<'h> DockerCli<'h> {
 
     /// docker tag <src> <dst>,给镜像打一个别名引用,不重新拉取
     async fn retag(&self, src: &str, dst: &str) -> Result<(), DockerCliError> {
-        let cmd = self.docker_cmd().arg("tag").arg(src).arg(dst);
+        let cmd = self
+            .docker_cmd()
+            .arg("tag")
+            .arg(super::engine::image_reference(self.engine, src))
+            .arg(super::engine::image_reference(self.engine, dst));
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
@@ -1012,13 +1036,53 @@ fn parse_ps_json(stdout: &str) -> Result<Vec<ContainerInfo>, DockerCliError> {
     Ok(out)
 }
 
+fn string_or_list<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(value) => Ok(value),
+        serde_json::Value::Array(values) => Ok(values
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join(",")),
+        _ => Err(serde::de::Error::custom(
+            "expected a string or list of strings",
+        )),
+    }
+}
+fn podman_ports<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(value) => Ok(value),
+        serde_json::Value::Null => Ok(String::new()),
+        serde_json::Value::Array(values) => Ok(values
+            .iter()
+            .map(|v| {
+                let host = v["host_ip"]
+                    .as_str()
+                    .filter(|v| !v.is_empty())
+                    .unwrap_or("0.0.0.0");
+                format!(
+                    "{host}:{}->{}/{}",
+                    v["host_port"],
+                    v["container_port"],
+                    v["protocol"].as_str().unwrap_or("tcp")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")),
+        _ => Err(serde::de::Error::custom("expected port mappings")),
+    }
+}
+
 /// docker ps --format '{{json .}}' 单行的字段子集,docker 这个格式的字段名
 /// 是固定的(ID / Names / Image / State / Status / Ports)
 #[derive(serde::Deserialize)]
 struct PsLine {
-    #[serde(rename = "ID")]
+    #[serde(rename = "ID", alias = "Id")]
     id: String,
     #[serde(rename = "Names")]
+    #[serde(deserialize_with = "string_or_list")]
     names: String,
     #[serde(rename = "Image")]
     image: String,
@@ -1026,7 +1090,7 @@ struct PsLine {
     state: String,
     #[serde(rename = "Status")]
     status: String,
-    #[serde(rename = "Ports", default)]
+    #[serde(rename = "Ports", default, deserialize_with = "podman_ports")]
     ports: String,
 }
 
@@ -1075,7 +1139,7 @@ fn parse_images_json(stdout: &str) -> Result<Vec<ImageInfo>, DockerCliError> {
 
 #[derive(serde::Deserialize)]
 struct ImagesLine {
-    #[serde(rename = "ID")]
+    #[serde(rename = "ID", alias = "Id")]
     id: String,
     #[serde(rename = "Repository")]
     repository: String,
@@ -1102,6 +1166,13 @@ impl ImagesLine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_podman_container_report_arrays() {
+        let rows = parse_ps_json(r#"{"Id":"podman123","Names":["napcat","alias"],"Image":"docker.io/mlikiowa/napcat-docker:latest","State":"running","Status":"Up 2 seconds","Ports":[{"host_ip":"127.0.0.1","host_port":6099,"container_port":6099,"protocol":"tcp"}]}"#).unwrap();
+        assert_eq!(rows[0].name, "napcat");
+        assert_eq!(rows[0].ports, ["127.0.0.1:6099->6099/tcp"]);
+    }
 
     #[test]
     fn parse_images_json_single_line() {

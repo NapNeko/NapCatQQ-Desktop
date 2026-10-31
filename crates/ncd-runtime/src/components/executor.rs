@@ -253,7 +253,7 @@ fn component_task_sudo(
     };
     let linux_protocol_action = matches!(
         component_id,
-        ComponentId::NapCat | ComponentId::SnowLuma | ComponentId::Qq
+        ComponentId::NapCat | ComponentId::SnowLuma | ComponentId::Qq | ComponentId::NoVnc
     ) && os == Os::Linux
         && target_matches
         && matches!(
@@ -264,7 +264,9 @@ fn component_task_sudo(
                 | StepKind::EnsureDependencies
         );
     if !linux_protocol_action {
-        return Err("sudo 密码仅可用于 Linux 协议端或 QQ 的安装、更新或依赖安装".to_string());
+        return Err(
+            "sudo 密码仅可用于 Linux 协议端、QQ 或 noVNC 的安装、更新或依赖安装".to_string(),
+        );
     }
     let password = password
         .filter(|password| !password.is_empty())
@@ -1553,6 +1555,23 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn novnc_accepts_a_one_time_local_password() {
+        let sudo = component_task_sudo(
+            ComponentId::NoVnc,
+            "local",
+            StepKind::EnsureInstalled,
+            Os::Linux,
+            Locality::Local,
+            Some("secret".into()),
+            true,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(sudo.password, "secret");
+        assert!(!sudo.remember);
     }
 
     #[test]

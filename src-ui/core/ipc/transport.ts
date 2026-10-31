@@ -64,7 +64,7 @@ export async function listen<T = unknown>(
 }
 
 /// 打开外部 URL（系统默认浏览器）。Tauri webview 不支持 `<a target="_blank">`，
-/// 必须走 `tauri-plugin-opener`，capabilities 已在 src-tauri 配好。
+/// 统一交给后端，Linux 会隔离 AppImage 的库搜索路径。
 ///
 /// 安全闸:只放行 http/https。把任意 url 丢给系统 opener 等于把危险 scheme
 /// (javascript: / file: / data: 等)交给 OS 执行,这里收口成 scheme 白名单。
@@ -79,8 +79,11 @@ export async function openExternalUrl(url: string): Promise<void> {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new Error(`拒绝打开非 http/https 链接(${parsed.protocol})`);
     }
-    const { openUrl } = await import('@tauri-apps/plugin-opener');
-    return openUrl(url);
+    if (!isTauri) {
+        window.open(parsed.href, '_blank', 'noopener,noreferrer');
+        return;
+    }
+    return tauriInvoke('open_external_url', { url: parsed.href });
 }
 
 /// 打开 Windows「设置 → 应用 → 已安装的应用」。归系统管理的组件（VC++ 运行库、

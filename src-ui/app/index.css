@@ -400,22 +400,6 @@ body,
     height: 100%;
 }
 
-/* 根节点裁剪也覆盖 body 下的 Radix/BodyPortal 浮层；最大化和全屏贴合屏幕。 */
-html[data-native-os="linux"] {
-    --ncd-window-radius: 12px;
-    overflow: hidden;
-    clip-path: inset(0 round var(--ncd-window-radius));
-    background: transparent !important;
-}
-
-html[data-native-os="linux"][data-window-expanded] {
-    --ncd-window-radius: 0px;
-}
-
-html[data-native-os="linux"] body {
-    background: transparent !important;
-}
-
 .ndf-window-resize-handles {
     position: fixed;
     inset: 0;

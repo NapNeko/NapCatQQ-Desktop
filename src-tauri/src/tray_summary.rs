@@ -32,7 +32,7 @@ pub async fn refresh_tray_tooltip(app: &AppHandle) -> Result<(), String> {
         .tray_by_id(TRAY_ID)
         .ok_or_else(|| "托盘未初始化".to_string())?;
     #[cfg(target_os = "linux")]
-    crate::linux_tray::set_tooltip(app, TRAY_ID, &text)?;
+    crate::linux_tray::refresh(app).await?;
     tray.set_tooltip(Some(text)).map_err(|e| e.to_string())?;
     crate::tray_icon::refresh_tray_icon(app).await
 }

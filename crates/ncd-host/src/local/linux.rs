@@ -48,6 +48,7 @@ impl LocalLinuxHost {
         if let Some(password) = self.elevation_password.read().await.as_ref() {
             // 密码仅交给校验进程，避免 sudo 缓存或 NOPASSWD 时落入目标程序 stdin。
             let mut validate = Command::new("sudo");
+            crate::appimage::clean_appimage_environment(validate.as_std_mut());
             validate
                 .args(["-S", "-p", "", "-v"])
                 .stdin(Stdio::piped())
@@ -608,6 +609,7 @@ fn build_tokio_command(cmd: &HostCommand) -> Result<Command, HostError> {
         .envs(&cmd.environment)
         .process_group(0)
         .kill_on_drop(true);
+    crate::appimage::clean_appimage_environment(command.as_std_mut());
     if let Some(cwd) = &cmd.working_dir {
         command.current_dir(cwd.as_posix());
     }
@@ -767,6 +769,60 @@ impl HostProcess for ChildHostProcess {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn appimage_archive_extraction_uses_the_host_lzma_library() {
+        const MARKER: &str = "NCD_APPIMAGE_ARCHIVE_FIXTURE";
+        if let Some(root) = std::env::var_os(MARKER) {
+            let root = PathBuf::from(root);
+            LocalLinuxHost::new()
+                .extract_archive(
+                    &HostPath::from_posix(root.join("node.tar.xz").to_string_lossy()),
+                    &HostPath::from_posix(root.join("out").to_string_lossy()),
+                    ArchiveKind::TarXz,
+                )
+                .await
+                .unwrap();
+            assert_eq!(std::fs::read(root.join("out/node")).unwrap(), b"fixture");
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("node"), b"fixture").unwrap();
+        let archive = std::process::Command::new("tar")
+            .args(["-cJf", "node.tar.xz", "node"])
+            .current_dir(root.path())
+            .status()
+            .unwrap();
+        assert!(archive.success());
+        let appdir = root.path().join("appimage");
+        std::fs::create_dir_all(appdir.join("usr/lib")).unwrap();
+        let libs = appdir.join("usr/lib");
+        // 模拟 AppImage 中不兼容的 liblzma；未经清理的系统 xz 必须失败。
+        std::fs::write(libs.join("liblzma.so.5"), b"incompatible bundled library").unwrap();
+        let broken = std::process::Command::new("xz")
+            .arg("--version")
+            .env("LD_LIBRARY_PATH", &libs)
+            .output()
+            .unwrap();
+        assert!(!broken.status.success());
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "local::linux::tests::appimage_archive_extraction_uses_the_host_lzma_library",
+                "--nocapture",
+            ])
+            .env(MARKER, root.path())
+            .env("APPDIR", &appdir)
+            .env("LD_LIBRARY_PATH", libs)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[tokio::test]
     async fn exists_returns_false_when_parent_is_a_file() {

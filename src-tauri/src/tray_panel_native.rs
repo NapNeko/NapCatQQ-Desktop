@@ -898,7 +898,11 @@ impl TrayPanelNative {
     }
 }
 
-async fn start_stop(app: &tauri::AppHandle, bot_id: &str, running_now: bool) -> Result<(), String> {
+pub(crate) async fn start_stop(
+    app: &tauri::AppHandle,
+    bot_id: &str,
+    running_now: bool,
+) -> Result<(), String> {
     let state = app
         .try_state::<crate::AppState>()
         .ok_or_else(|| "app state not ready".to_string())?;
@@ -997,7 +1001,7 @@ impl PanelContent for TrayPanelCell {
 
 // ---------- 后台数据 ----------
 
-async fn full_snapshot(app: &tauri::AppHandle) -> Snapshot {
+pub(crate) async fn full_snapshot(app: &tauri::AppHandle) -> Snapshot {
     let Some(state) = app.try_state::<crate::AppState>() else {
         return Snapshot::default();
     };
@@ -1080,7 +1084,7 @@ async fn full_snapshot(app: &tauri::AppHandle) -> Snapshot {
 
 // ---------- URL / noVNC ----------
 
-async fn open_napcat_webui(app: &tauri::AppHandle, bot_id: &str) {
+pub(crate) async fn open_napcat_webui(app: &tauri::AppHandle, bot_id: &str) {
     let Some(state) = app.try_state::<crate::AppState>() else {
         return;
     };
@@ -1095,13 +1099,12 @@ async fn open_napcat_webui(app: &tauri::AppHandle, bot_id: &str) {
         "http://127.0.0.1:{port}/webui?token={}",
         urlencoding::encode(&token)
     );
-    use tauri_plugin_opener::OpenerExt;
-    if let Err(e) = app.opener().open_url(&url, None::<&str>) {
+    if let Err(e) = crate::desktop_opener::open_url(&url).await {
         tracing::warn!("native tray open webui: {e}");
     }
 }
 
-async fn open_snowluma_novnc(app: &tauri::AppHandle, bot_id: &str) {
+pub(crate) async fn open_snowluma_novnc(app: &tauri::AppHandle, bot_id: &str) {
     let Some(state) = app.try_state::<crate::AppState>() else {
         return;
     };
@@ -1140,8 +1143,7 @@ async fn open_snowluma_novnc(app: &tauri::AppHandle, bot_id: &str) {
     } else {
         return;
     };
-    use tauri_plugin_opener::OpenerExt;
-    if let Err(e) = app.opener().open_url(&url, None::<&str>) {
+    if let Err(e) = crate::desktop_opener::open_url(&url).await {
         tracing::warn!("native tray open novnc: {e}");
     }
 }

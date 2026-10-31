@@ -41,7 +41,5 @@ pub async fn refresh_tray_icon(app: &AppHandle) -> Result<(), String> {
     let tray = app
         .tray_by_id(crate::commands::tray::TRAY_ID)
         .ok_or_else(|| "托盘未初始化".to_string())?;
-    #[cfg(target_os = "linux")]
-    crate::linux_tray::set_icon(app, crate::commands::tray::TRAY_ID, &icon)?;
     tray.set_icon(Some(icon)).map_err(|error| error.to_string())
 }

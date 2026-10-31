@@ -434,7 +434,7 @@ export const AppNext: React.FC = () => {
 
                         <main
                             className={
-                                'relative z-10 flex min-w-0 flex-1 overflow-hidden ' +
+                                'relative isolate z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden [contain:paint] ' +
                                 (motion.enabled ? 'ndf-shell-enter-main' : '') +
                                 (terminalCoversPage ? ' hidden' : '')
                             }

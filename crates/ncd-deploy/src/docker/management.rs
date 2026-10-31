@@ -52,7 +52,7 @@ impl DockerCli<'_> {
         let result = self
             .host
             .run_to_string(
-                HostCommand::new("docker")
+                HostCommand::new(self.engine.program())
                     .args(["version", "--format", "{{.Client.Version}}"])
                     .timeout(Duration::from_secs(15)),
             )
@@ -90,16 +90,20 @@ impl DockerCli<'_> {
     pub(super) async fn management_probe_daemon(&self) -> Result<(), DockerCliError> {
         use std::sync::atomic::Ordering;
         self.elevated.store(false, Ordering::Relaxed);
-        let cmd = HostCommand::new("docker")
-            .args(["info", "--format", "{{.ServerVersion}}"])
-            .timeout(Duration::from_secs(15));
+        let cmd = if self.engine == crate::docker::engine::ContainerEngine::Podman {
+            HostCommand::new("podman").arg("info")
+        } else {
+            HostCommand::new("docker").args(["info", "--format", "{{.ServerVersion}}"])
+        }
+        .timeout(Duration::from_secs(15));
         let out = self.host.run_to_string(cmd.clone()).await?;
         if out.success() {
             return Ok(());
         }
         let error = out.stderr.to_ascii_lowercase();
         // 只在 socket 权限不足时提权；context 不可达不能悄悄切到 root 的 daemon。
-        if self.host.os() != ncd_host::Os::Windows
+        if self.engine != crate::docker::engine::ContainerEngine::Podman
+            && self.host.os() != ncd_host::Os::Windows
             && error.contains("permission denied")
             && (error.contains("/var/run/docker.sock") || error.contains("unix:///run/docker.sock"))
         {
@@ -153,7 +157,9 @@ impl DockerCli<'_> {
         let out = self
             .management_output(
                 self.command()
-                    .args(["stats", "--no-stream", "--format", "{{json .}}", "--", id])
+                    .args(["stats", "--no-stream", "--format", if self.engine == crate::docker::engine::ContainerEngine::Podman {
+                        r#"{"CPUPerc":{{json .CPUPerc}},"MemUsage":{{json .MemUsage}},"MemPerc":{{json .MemPerc}},"NetIO":{{json .NetIO}},"BlockIO":{{json .BlockIO}},"PIDs":{{json (printf "%v" .PIDs)}}}"#
+                    } else { "{{json .}}" }, "--", id])
                     .timeout(Duration::from_secs(20)),
             )
             .await?;
@@ -242,11 +248,11 @@ fn parse_lines<T: DeserializeOwned>(output: &str) -> Result<Vec<T>, DockerCliErr
 
 #[derive(Deserialize)]
 struct NetworkLine {
-    #[serde(rename = "ID")]
+    #[serde(rename = "ID", alias = "id", alias = "Id")]
     id: String,
-    #[serde(rename = "Name")]
+    #[serde(rename = "Name", alias = "name")]
     name: String,
-    #[serde(rename = "Driver")]
+    #[serde(rename = "Driver", alias = "driver")]
     driver: String,
     #[serde(rename = "Scope", default)]
     scope: String,
@@ -254,9 +260,9 @@ struct NetworkLine {
 
 #[derive(Deserialize)]
 struct VolumeLine {
-    #[serde(rename = "Name")]
+    #[serde(rename = "Name", alias = "name")]
     name: String,
-    #[serde(rename = "Driver")]
+    #[serde(rename = "Driver", alias = "driver")]
     driver: String,
     #[serde(rename = "Scope", default)]
     scope: String,

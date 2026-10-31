@@ -2,6 +2,7 @@
 // 唯一持有 docker_* Tauri command 名字符串的位置，后端改命令名只用改这一处。
 // 部署 / 容器管理都按 host_id（"local" 或 "remote:<id>"）选主机。
 
+import type { ContainerEngine } from '../ipc/generated/domain/ContainerEngine';
 import { invoke, isTauri } from '../ipc/transport';
 import type {
     ContainerAction,
@@ -37,6 +38,11 @@ export interface DockerInstallOptions {
 }
 
 export const dockerService = {
+    getEngine: async (hostId: string): Promise<ContainerEngine> =>
+        isTauri ? invoke('container_engine_get', { hostId }) : 'docker',
+    setEngine: async (hostId: string, engine: ContainerEngine): Promise<void> => {
+        if (isTauri) await invoke('container_engine_set', { hostId, engine });
+    },
     probe: async (hostId: string): Promise<DockerStatus> => {
         if (isTauri) return invoke<DockerStatus>('docker_probe', { hostId });
         return withMockDelay(mockDockerStatus, 200);

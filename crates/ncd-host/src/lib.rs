@@ -25,6 +25,7 @@
 //! - 各 OS 差异由 [Host::os] / [Host::shell] 暴露,Linux 上用哪个包管理器由
 //!   [LinuxPackageManager::detect] 现探,Component 内部 match host.os() { ... } 决策
 
+pub mod appimage;
 pub mod apt_lock;
 pub mod command;
 pub mod error;

@@ -19,20 +19,10 @@ static UI_SCALE: AtomicU64 = AtomicU64::new(1.0f64.to_bits());
 
 thread_local! {
     static WINDOWS: RefCell<Vec<Weak<WindowData>>> = const { RefCell::new(Vec::new()) };
-    static TRAY_DISPLAY: RefCell<Option<gdk::Display>> = const { RefCell::new(None) };
-}
-
-/// XEmbed 托盘与自绘面板共用 X11 display，不改变主界面的 Wayland display。
-/// 业务入口可能排队到下一轮主循环，因此保存选择直到后端明确释放。
-/// 仅在 GTK 主线程调用。
-pub fn set_tray_display(display: Option<&gdk::Display>) {
-    TRAY_DISPLAY.with(|selected| *selected.borrow_mut() = display.cloned());
 }
 
 fn tray_display() -> Option<gdk::Display> {
-    TRAY_DISPLAY
-        .with(|selected| selected.borrow().clone())
-        .or_else(gdk::Display::default)
+    gdk::Display::default()
 }
 
 pub fn set_motion(enabled: bool, speed: f64) {

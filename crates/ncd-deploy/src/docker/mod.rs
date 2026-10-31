@@ -11,6 +11,7 @@
 
 pub mod cli;
 pub mod compose;
+pub mod engine;
 pub mod install;
 pub mod install_progress;
 pub mod pkg_install_emit;

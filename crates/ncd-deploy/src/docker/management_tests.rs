@@ -14,6 +14,7 @@ struct MockHost {
     local_missing: bool,
     disconnected: bool,
     fail_remove: bool,
+    compose_available: bool,
 }
 
 impl MockHost {
@@ -25,6 +26,7 @@ impl MockHost {
             local_missing: false,
             disconnected: false,
             fail_remove: false,
+            compose_available: false,
         }
     }
 }
@@ -109,6 +111,7 @@ impl Host for MockHost {
                     (1, "", self.daemon_error.unwrap())
                 }
                 Some("info") => (0, "27.3.1", ""),
+                Some("compose") if self.compose_available => (0, "compose version", ""),
                 Some("compose") => (1, "", "compose is not a docker command"),
                 Some("volume" | "network") if self.fail_remove => (1, "", "resource is in use"),
                 _ => (0, "", ""),
@@ -295,4 +298,67 @@ fn docker_management_inspect_handles_null_networks_and_filters_secrets() {
             .contains("never-export-this")
     );
     assert!(parse_details("[]").is_err());
+}
+
+#[tokio::test]
+async fn podman_keeps_rootless_storage_for_probe_and_container_actions() {
+    let host = MockHost {
+        compose_available: true,
+        ..MockHost::new()
+    };
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    cli.ensure_ready().await.unwrap();
+    cli.container_action(ContainerAction::Start, "abc123", false)
+        .await
+        .unwrap();
+    let commands = host.commands.lock().unwrap();
+    assert!(
+        commands
+            .iter()
+            .all(|command| command.program == "podman" && !command.elevated)
+    );
+    assert_eq!(commands.last().unwrap().args, ["start", "--", "abc123"]);
+}
+
+#[tokio::test]
+async fn podman_permission_errors_never_select_root_storage() {
+    let host = MockHost {
+        daemon_error: Some("permission denied connecting to /var/run/docker.sock"),
+        ..MockHost::new()
+    };
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    assert!(cli.ensure_daemon_ready().await.is_err());
+    assert!(
+        !host
+            .commands
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|command| command.elevated)
+    );
+}
+
+#[tokio::test]
+async fn podman_compose_does_not_pass_docker_only_pull_flag() {
+    let host = MockHost {
+        compose_available: true,
+        ..MockHost::new()
+    };
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    cli.compose_up("/tmp/project").await.unwrap();
+    let commands = host.commands.lock().unwrap();
+    assert_eq!(
+        commands.last().unwrap().args,
+        ["compose", "up", "-d", "--remove-orphans"]
+    );
+    assert_eq!(commands.last().unwrap().program, "podman");
 }

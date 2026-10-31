@@ -78,6 +78,10 @@ impl Host for LinuxHost {
                     None => output(0, "", ""),
                 })
             }
+            "sudo" => Ok(match self.sudo_error {
+                Some(stderr) => output(1, "", stderr),
+                None => output(0, "", ""),
+            }),
             "sh" | "dpkg-deb" | "rpm" => Ok(self.package_output.clone()),
             other => panic!("unexpected command: {other}"),
         }
@@ -376,4 +380,22 @@ fn rootless_host_elevation_error_is_not_reclassified_for_sudo_retry() {
         error,
         ActionError::Host(HostError::ElevationFailed { .. })
     ));
+}
+
+#[tokio::test]
+async fn novnc_requests_password_before_installing_graphics_packages() {
+    let host = LinuxHost {
+        sudo_error: Some("sudo: a password is required"),
+        ..LinuxHost::user()
+    };
+    let (mut ctx, _) = ActionCtx::new();
+    let error = crate::novnc::NoVncComponent::new()
+        .install(&host, &mut ctx)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("elevation_required"));
+    assert!(error.contains("noVNC"));
+    assert_eq!(host.commands().len(), 2);
+    assert!(host.commands().iter().all(|command| !command.elevated));
 }

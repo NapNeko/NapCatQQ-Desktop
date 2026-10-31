@@ -271,8 +271,6 @@ async fn create(
         .icon(icon.clone())
         .tooltip(tooltip);
     #[cfg(target_os = "linux")]
-    let (xembed_bot, xembed_qq) = (bot.clone(), qq.clone());
-    #[cfg(target_os = "linux")]
     let builder = {
         let bot = bot.clone();
         let qq = qq.clone();
@@ -374,39 +372,6 @@ async fn create(
         })
         .build(app)
         .map_err(|e| e.to_string())?;
-    #[cfg(target_os = "linux")]
-    {
-        let panel_app = app.clone();
-        if let Err(error) =
-            crate::linux_tray::attach(app, &tray, icon, tooltip, move |event| match event.button {
-                MouseButton::Right => {
-                    crate::native_panel::window::set_tray_display(Some(&event.display));
-                    crate::chat_tray_panel_native::show(
-                        &panel_app,
-                        xembed_bot.clone(),
-                        xembed_qq.clone(),
-                        event.anchor,
-                        true,
-                    );
-                }
-                MouseButton::Left => {
-                    let (app, bot, qq) = (panel_app.clone(), xembed_bot.clone(), xembed_qq.clone());
-                    tauri::async_runtime::spawn(async move {
-                        crate::chat_tray_panel_native::hide(&app);
-                        if let Err(error) =
-                            crate::chat_window::open_from_tray(app, bot, qq, None).await
-                        {
-                            tracing::warn!(%error, "聊天托盘操作失败");
-                        }
-                    });
-                }
-                _ => {}
-            })
-        {
-            tracing::warn!(%error, "XEmbed 账号托盘初始化失败，保留系统菜单");
-        }
-    }
-    #[cfg(not(target_os = "linux"))]
     let _ = tray;
     Ok(())
 }
@@ -488,8 +453,6 @@ async fn refresh(app: &AppHandle) -> Result<(), String> {
     lock(&registry.avatars).retain(|qq, _| qqs.contains(qq.as_str()));
     let remove: Vec<_> = lock(&registry.ids).difference(&wanted).cloned().collect();
     for id in remove {
-        #[cfg(target_os = "linux")]
-        crate::linux_tray::remove(app, &id)?;
         app.remove_tray_by_id(&id);
         lock(&registry.ids).remove(&id);
         lock(&registry.displayed).remove(&id);
@@ -541,11 +504,6 @@ async fn refresh(app: &AppHandle) -> Result<(), String> {
             lock(&registry.ids).insert(id.clone());
         }
         if let Some(tray) = app.tray_by_id(&id) {
-            #[cfg(target_os = "linux")]
-            {
-                crate::linux_tray::set_icon(app, &id, &icon)?;
-                crate::linux_tray::set_tooltip(app, &id, &tooltip)?;
-            }
             tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
             tray.set_tooltip(Some(tooltip)).map_err(|e| e.to_string())?;
         }
@@ -577,10 +535,6 @@ fn pulse(app: &AppHandle) {
             .unwrap_or_else(|| fallback(app));
         if let Some(tray) = app.tray_by_id(&id) {
             let icon = avatar.pulse_frame(offline, phase);
-            #[cfg(target_os = "linux")]
-            if let Err(error) = crate::linux_tray::set_icon(app, &id, &icon) {
-                tracing::warn!(%error, "更新 XEmbed 未读提醒失败");
-            }
             if let Err(e) = tray.set_icon(Some(icon)) {
                 tracing::warn!("chat tray pulse: {e}");
             }
