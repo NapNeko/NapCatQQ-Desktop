@@ -10,6 +10,7 @@ import { useDockerHostSelection } from '../../hooks/docker/dockerNavigation';
 import { dockerManagementSummary, imageRemoveRef } from '../../core/domain/docker/status';
 import { errorText } from '../../core/domain/errors';
 import { localOs } from '../../core/domain/runtime/env';
+import { useContainerEngine } from '../../hooks/docker/useContainerEngine';
 import { cn } from '../../shared/utils/cn';
 import { DockerToolbar } from './DockerToolbar';
 import { ContainerCard } from './ContainerCard';
@@ -35,10 +36,10 @@ const CARD_GRID_STYLE = {
 } satisfies CSSProperties;
 
 const EMPTY_HINTS: Record<DockerTab, string> = {
-    containers: '在「Docker 部署」中新建 Bot，启动后创建对应容器。',
-    images: '在「Docker 部署」中准备 NapCat 或 SnowLuma 镜像。',
-    networks: 'Docker 部署创建网络后，会出现在这里。',
-    volumes: 'Docker 部署或容器创建数据卷后，会出现在这里。',
+    containers: '在「容器部署」中新建 Bot，启动后创建对应容器。',
+    images: '在「容器部署」中准备 NapCat 或 SnowLuma 镜像。',
+    networks: '容器部署创建网络后，会出现在这里。',
+    volumes: '容器部署或容器创建数据卷后，会出现在这里。',
 };
 
 export function DockerPageNext() {
@@ -58,7 +59,7 @@ export function DockerPageNext() {
     if (!hostId)
         return (
             <PagePlaceholder>
-                <p className="text-sm text-text-secondary">添加 Linux 远程主机后即可管理 Docker</p>
+                <p className="text-sm text-text-secondary">添加 Linux 远程主机后即可管理容器</p>
             </PagePlaceholder>
         );
     return (
@@ -85,14 +86,16 @@ export function DockerHostPage({
     const [stateFilter, setStateFilter] = useState('all');
     const [autoRefresh, setAutoRefresh] = useState(false);
     const docker = useDocker(hostId, tab, autoRefresh);
+    const { engine } = useContainerEngine(hostId);
+    const engineName = engine === 'podman' ? 'Podman' : 'Docker';
     const [logs, setLogs] = useState<ContainerInfo | null>(null);
     const [details, setDetails] = useState<ContainerInfo | null>(null);
     const [remove, setRemove] = useState<RemovalTarget | null>(null);
     const [image, setImage] = useState<ImageInfo | null>(null);
     const summary = docker.statusError
-        ? { ready: false, label: 'Docker 状态读取失败' }
+        ? { ready: false, label: `${engineName} 状态读取失败` }
         : docker.status
-          ? dockerManagementSummary(docker.status)
+          ? dockerManagementSummary(docker.status, engineName)
           : null;
     const label = TABS.find((t) => t.id === tab)!.label;
     const term = search.trim().toLowerCase();
@@ -141,7 +144,7 @@ export function DockerHostPage({
             >
                 <nav
                     className="inline-flex w-fit max-w-full flex-wrap items-center gap-0.5 rounded-md bg-inset p-0.5"
-                    aria-label="Docker 管理视图"
+                    aria-label="容器管理视图"
                 >
                     {TABS.map(({ id, label: title, icon: Icon }) => (
                         <button
@@ -197,7 +200,9 @@ export function DockerHostPage({
                         className="rounded-md border border-danger/30 bg-danger-soft p-3 text-sm"
                     >
                         <p className="font-medium text-danger">
-                            {docker.statusError ? '无法读取 Docker 状态' : `无法刷新${label}`}
+                            {docker.statusError
+                                ? `无法读取 ${engineName} 状态`
+                                : `无法刷新${label}`}
                         </p>
                         <p className="mt-1 break-all text-text-secondary">{errorText(error)}</p>
                         <Button
@@ -225,7 +230,9 @@ export function DockerHostPage({
                                     size={24}
                                     motion={refreshMotion(true)}
                                 />
-                                <p className="text-sm text-text-secondary">正在连接 Docker…</p>
+                                <p className="text-sm text-text-secondary">
+                                    正在连接 {engineName}…
+                                </p>
                             </>
                         ) : (
                             <>
@@ -240,8 +247,8 @@ export function DockerHostPage({
                                     </p>
                                     <p className="mt-1 text-xs leading-relaxed text-text-secondary">
                                         {docker.status?.installed
-                                            ? '在部署区启动 Docker，完成后即可管理这台主机的资源。'
-                                            : '为当前主机安装 Docker 后，即可管理容器、镜像、网络和数据卷。'}
+                                            ? `在部署区检查 ${engineName} 环境，完成后即可管理这台主机的资源。`
+                                            : `为当前主机安装 ${engineName} 后，即可管理容器、镜像、网络和数据卷。`}
                                     </p>
                                 </div>
                                 <Button
@@ -249,7 +256,7 @@ export function DockerHostPage({
                                     variant="primary"
                                     onClick={() => openDockerDeployment(hostId)}
                                 >
-                                    去 Docker 部署
+                                    去容器部署
                                 </Button>
                             </>
                         )}
@@ -457,7 +464,7 @@ function DockerEmptyState({
                 </Button>
             ) : tab === 'containers' || tab === 'images' ? (
                 <Button size="sm" variant="secondary" onClick={onOpenDeployment}>
-                    去 Docker 部署
+                    去容器部署
                 </Button>
             ) : null}
         </PagePlaceholder>

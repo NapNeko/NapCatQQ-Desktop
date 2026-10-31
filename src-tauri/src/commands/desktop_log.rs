@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+#[cfg(not(target_os = "linux"))]
 use std::process::Command;
 
 use ncd_runtime::desktop_log;
@@ -51,15 +52,31 @@ pub fn tail_desktop_log(
 }
 
 #[tauri::command]
-pub fn open_desktop_log_location(state: State<'_, AppState>) -> Result<PathBuf, String> {
+pub fn desktop_log_directory(state: State<'_, AppState>) -> PathBuf {
+    crate::desktop_log::active_log_path()
+        .or_else(|| desktop_log::resolve_active_log_path(&state.data_root))
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+        .unwrap_or_else(|| desktop_log::desktop_log_dir(&state.data_root))
+}
+
+#[tauri::command]
+pub async fn open_desktop_log_location(state: State<'_, AppState>) -> Result<PathBuf, String> {
     let path = crate::desktop_log::active_log_path()
         .or_else(|| desktop_log::resolve_active_log_path(&state.data_root))
         .ok_or_else(|| "当前会话尚未创建 Desktop 日志文件".to_string())?;
 
+    #[cfg(target_os = "linux")]
+    crate::desktop_opener::open_directory(
+        path.parent()
+            .ok_or_else(|| "无法解析日志文件所在目录".to_string())?,
+    )
+    .await?;
+    #[cfg(not(target_os = "linux"))]
     open_in_file_manager_select(&path)?;
     Ok(path)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn open_in_file_manager_select(path: &std::path::Path) -> Result<(), String> {
     let status = if cfg!(target_os = "windows") {
         let arg = format!("/select,{}", path.display());

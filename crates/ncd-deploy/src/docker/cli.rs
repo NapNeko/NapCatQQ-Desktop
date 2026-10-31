@@ -14,6 +14,8 @@ use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerS
 use ncd_host::{Host, HostCommand, HostError, HostPath, StreamSource};
 use tracing::{info, warn};
 
+#[path = "compose_provider.rs"]
+mod compose_provider;
 #[path = "management.rs"]
 mod management;
 
@@ -54,6 +56,7 @@ pub struct DockerCli<'h> {
     host: &'h dyn Host,
     engine: super::engine::ContainerEngine,
     elevated: std::sync::atomic::AtomicBool,
+    podman_compose: tokio::sync::OnceCell<compose_provider::PodmanComposeProbe>,
 }
 
 impl<'h> DockerCli<'h> {
@@ -62,6 +65,7 @@ impl<'h> DockerCli<'h> {
             host,
             engine: super::engine::engine_for(host),
             elevated: std::sync::atomic::AtomicBool::new(false),
+            podman_compose: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -187,6 +191,9 @@ impl<'h> DockerCli<'h> {
 
     /// docker compose version,compose v2 插件存在时退出码 0,按 elevated 标志跑
     async fn docker_compose_ok(&self) -> bool {
+        if self.is_linux_podman() {
+            return self.podman_compose_available().await;
+        }
         let cmd = self
             .docker_cmd()
             .arg("compose")
@@ -361,8 +368,8 @@ impl<'h> DockerCli<'h> {
     /// 镜像在组件页预拉并验证；启动不隐式联网拉取不同版本。
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
         let mut cmd = self
-            .docker_cmd()
-            .arg("compose")
+            .compose_cmd()
+            .await?
             .arg("up")
             .arg("-d")
             .arg("--remove-orphans")
@@ -390,8 +397,8 @@ impl<'h> DockerCli<'h> {
         remove_volumes: bool,
     ) -> Result<(), DockerCliError> {
         let mut cmd = self
-            .docker_cmd()
-            .arg("compose")
+            .compose_cmd()
+            .await?
             .arg("down")
             .working_dir(ncd_host::HostPath::from_posix(project_dir))
             .timeout(std::time::Duration::from_secs(300));

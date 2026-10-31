@@ -75,12 +75,18 @@ pub async fn install_docker_with_progress(
         total_steps: INSTALL_TOTAL_STEPS,
     });
 
+    let engine = super::engine::engine_for(host);
+    let engine_name = if engine == super::engine::ContainerEngine::Podman {
+        "Podman"
+    } else {
+        "Docker"
+    };
     info!(
         target: "ncd_deploy::docker",
         os = ?host.os(),
-        "开始检查并安装 Docker"
+        "开始检查并安装 {engine_name}"
     );
-    emit_step_begin(&emit, 1, "检查 Docker 是否已就绪…");
+    emit_step_begin(&emit, 1, &format!("检查 {engine_name} 是否已就绪…"));
 
     let cli = DockerCli::new(host);
     let status = cli.probe().await;
@@ -89,20 +95,37 @@ pub async fn install_docker_with_progress(
         emit_log(
             &emit,
             ProgressLogLevel::Info,
-            format!("Docker 已就绪（{}）", status.version),
+            format!("{engine_name} 已就绪（{}）", status.version),
         );
         finish_install(&emit, true);
         info!(
             target: "ncd_deploy::docker",
             version = %status.version,
-            "Docker 已就绪，跳过安装"
+            "{engine_name} 已就绪，跳过安装"
         );
-        return Ok(
-            DockerInstallReport::already_installed(&status.version).with_probed_status(status)
-        );
+        let mut report = DockerInstallReport::already_installed(&status.version);
+        if engine == super::engine::ContainerEngine::Podman {
+            report.message = format!("Podman 已就绪（{}）", status.version);
+        }
+        return Ok(report.with_probed_status(status));
     }
     emit_step_end(&emit, 1, true);
-    if super::engine::engine_for(host) == super::engine::ContainerEngine::Podman {
+    if engine == super::engine::ContainerEngine::Podman {
+        if status.installed && status.compose_available && !status.daemon_running {
+            // 已有引擎和 provider 时，运行环境异常不能靠再次装包或切到 root 修复。
+            let detail = cli
+                .ensure_daemon_ready()
+                .await
+                .err()
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| "请在当前用户下检查 podman info。".into());
+            let message = format!("Podman 和 Compose 已安装，但当前用户运行环境不可用。\n{detail}");
+            emit_log(&emit, ProgressLogLevel::Error, &message);
+            finish_install(&emit, false);
+            return Ok(
+                DockerInstallReport::manual_required(message, None).with_probed_status(status)
+            );
+        }
         return install_podman(host, sudo_password, emit).await;
     }
 
@@ -534,7 +557,8 @@ async fn install_podman(
     }
     emit_step_end(&emit, 3, true);
     // 安装包使用 sudo；运行时恢复当前用户，绝不探测 root 的另一套存储。
-    let status = DockerCli::new(host).probe().await;
+    let cli = DockerCli::new(host);
+    let status = cli.probe().await;
     let ready = status.ready_to_deploy();
     finish_install(&emit, ready);
     if ready {
@@ -546,6 +570,14 @@ async fn install_podman(
         }
         .with_probed_status(status))
     } else {
-        Ok(DockerInstallReport::manual_required("Podman 已安装但当前用户运行环境未就绪，请在此用户下检查 podman info 和 podman compose version。", None).with_probed_status(status))
+        let detail = cli
+            .compose_diagnostic()
+            .await
+            .unwrap_or_else(|| "请在当前用户下检查 podman info。".into());
+        Ok(DockerInstallReport::manual_required(
+            format!("Podman 已安装，但当前用户运行环境未就绪。\n{detail}"),
+            None,
+        )
+        .with_probed_status(status))
     }
 }

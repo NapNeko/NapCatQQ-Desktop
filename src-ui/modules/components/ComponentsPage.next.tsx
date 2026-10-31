@@ -33,7 +33,6 @@ import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallPro
 import { useAppFrameworks, useAppInstances } from '../../hooks/apps/useAppInstances';
 import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
 import { useMotion } from '../../hooks/preferences/useMotion';
-import { dockerSetupAction } from '../../core/domain/docker/setup';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { HostSwitcher } from './HostSwitcher';
@@ -436,8 +435,7 @@ export const ComponentsPageNext: React.FC = () => {
                     actionLabel={
                         sudoPrompt.purpose === 'qq_action'
                             ? qqSudoActionLabel(sudoPrompt.kind, sudoPrompt.componentId)
-                            : (dockerSetupAction(dockerHosts.statusByHost[sudoPrompt.hostId])
-                                  ?.label ?? '准备 Docker')
+                            : '继续准备环境'
                     }
                     isSubmitting={
                         sudoPrompt.purpose === 'docker'

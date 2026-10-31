@@ -401,6 +401,7 @@ jobs:
           cargo test -p ncd-host --lib --locked
           cargo test -p ncd-component --lib bad_release_archive_preserves_the_installed_runtime --locked
           cargo test -p ncd-deploy -p ncd-runtime --lib docker --locked
+          cargo test -p ncd-tauri --lib desktop_opener::tests --locked
 
   gate:
     name: Gate

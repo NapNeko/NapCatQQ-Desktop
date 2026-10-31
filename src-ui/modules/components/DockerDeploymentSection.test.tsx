@@ -15,6 +15,16 @@ function render(ui: ReactNode) {
 }
 
 const navigation = vi.hoisted(() => ({ create: vi.fn(), manage: vi.fn() }));
+const engine = vi.hoisted(() => ({
+    engine: 'docker' as 'docker' | 'podman',
+    loading: false,
+    switching: false,
+    pendingEngine: undefined as 'docker' | 'podman' | undefined,
+    error: null,
+    select: vi.fn(),
+    refetch: vi.fn(),
+}));
+vi.mock('../../hooks/docker/useContainerEngine', () => ({ useContainerEngine: () => engine }));
 
 vi.mock('../../hooks/bot/botCreateNavigation', () => ({
     openCreateDockerBot: navigation.create,
@@ -24,7 +34,14 @@ vi.mock('../../hooks/docker/dockerNavigation', () => ({
 }));
 vi.mock('../../hooks/useOpenExternal', () => ({ useOpenExternal: () => vi.fn() }));
 
-beforeEach(() => preferencesStore.setMotionEnabled(false));
+beforeEach(() => {
+    preferencesStore.setMotionEnabled(false);
+    engine.engine = 'docker';
+    engine.loading = false;
+    engine.switching = false;
+    engine.pendingEngine = undefined;
+    engine.select.mockReset().mockResolvedValue(undefined);
+});
 afterEach(() => {
     cleanup();
     preferencesStore.reset();
@@ -87,6 +104,27 @@ describe('Docker 部署区', () => {
         fireEvent.click(screen.getByRole('button', { name: '补全 Compose' }));
         expect(input.onInstall).toHaveBeenCalledOnce();
         expect(navigation.create).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: '容器管理' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: '容器管理' })).toHaveAttribute(
+            'title',
+            expect.not.stringContaining('Compose'),
+        );
+    });
+
+    it.each([
+        { installed: false, daemonRunning: false, composeAvailable: false },
+        { installed: true, daemonRunning: false, composeAvailable: true },
+    ])('does not offer an unusable management route for %o', (status) => {
+        render(
+            <DockerDeploymentSection {...props({ status: { ...status, version: '27.3.1' } })} />,
+        );
+        expect(screen.getByRole('button', { name: '容器管理' })).toBeDisabled();
+    });
+
+    it('does not expose local Windows container management', () => {
+        render(<DockerDeploymentSection {...props({ hostId: 'local', os: 'windows' })} />);
+        expect(screen.queryByRole('button', { name: '容器管理' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('radiogroup', { name: '选择容器引擎' })).not.toBeInTheDocument();
     });
 
     it('新建入口保留原主机和框架，管理入口也不跳到首台主机', () => {
@@ -100,8 +138,30 @@ describe('Docker 部署区', () => {
             hostId: 'remote:second-host',
             flavor: 'snowluma',
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Docker 管理' }));
+        fireEvent.click(screen.getByRole('button', { name: '容器管理' }));
         expect(navigation.manage).toHaveBeenCalledWith('remote:second-host');
+    });
+
+    it('blocks management and deployment while changing the engine', () => {
+        engine.switching = true;
+        engine.pendingEngine = 'podman';
+        render(<DockerDeploymentSection {...props()} />);
+        expect(screen.getByText('正在切换引擎', { selector: 'span' })).toBeVisible();
+        expect(screen.getByRole('button', { name: '容器管理' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: '新建 NapCat Bot' })).toBeDisabled();
+        expect(screen.getByRole('radio', { name: 'Podman' })).toBeDisabled();
+    });
+
+    it('keeps engine switching locked for an active pull even if that framework is hidden', () => {
+        render(
+            <DockerDeploymentSection
+                {...props({
+                    flavors: ['napcat'],
+                    isPullingImage: (_, flavor) => flavor === 'snowluma',
+                })}
+            />,
+        );
+        expect(screen.getByRole('radio', { name: 'Podman' })).toBeDisabled();
     });
 
     it('只显示已启用的框架，镜像就绪后仍需用户主动新建 Bot', () => {

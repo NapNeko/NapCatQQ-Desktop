@@ -47,7 +47,9 @@ import { registerDebugNavigator } from '../hooks/debug/debugNav';
 import { registerComponentsNavigator } from '../hooks/components/componentsNavigation';
 import { registerDockerNavigator } from '../hooks/docker/dockerNavigation';
 import { registerBotCreateNavigator } from '../hooks/bot/botCreateNavigation';
-import { dockerStatusSummary } from '../core/domain/docker/status';
+import { dockerManagementSummary } from '../core/domain/docker/status';
+import { dockerProbeHosts } from '../core/domain/docker/hosts';
+import { localOs } from '../core/domain/runtime/env';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
@@ -202,17 +204,24 @@ export const AppNext: React.FC = () => {
     useHostHealthAlerts();
 
     const { servers } = useServerManager();
-    const dockerHostIds = useMemo(() => servers.map((p) => `remote:${p.id}`), [servers]);
+    const dockerHostIds = useMemo(
+        () =>
+            dockerProbeHosts(
+                localOs(),
+                servers.map((p) => p.id),
+            ),
+        [servers],
+    );
     const features = useFeatures();
     useAppScreenshotShortcut(features.chat);
-    // 容器页关了就不去每台远端探 Docker，这份探测只为决定侧栏要不要显示容器页
+    // 容器页关闭时不探测主机；入口只要求引擎可管理，部署另行检查 Compose。
     const dockerProbeHostIds = features.dockerPage ? dockerHostIds : NO_HOSTS;
     const dockerStatusByHost = useDockerStatusByHost(dockerProbeHostIds);
     const showDocker = useMemo(
         () =>
             dockerProbeHostIds.some((hostId) => {
                 const status = dockerStatusByHost[hostId];
-                return status ? dockerStatusSummary(status).ready : false;
+                return status ? dockerManagementSummary(status).ready : false;
             }),
         [dockerProbeHostIds, dockerStatusByHost],
     );

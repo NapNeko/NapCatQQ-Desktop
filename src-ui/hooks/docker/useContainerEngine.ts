@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dockerService } from '../../core/services/docker.service';
 import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 
-export function useContainerEngine(hostId: string) {
+export function useContainerEngine(hostId: string, enabled = true) {
     const client = useQueryClient();
     const query = useQuery({
         queryKey: ['docker', 'engine', hostId],
         queryFn: () => dockerService.getEngine(hostId),
-        enabled: !!hostId,
+        enabled: !!hostId && enabled,
         staleTime: Infinity,
     });
     const mutation = useMutation({
@@ -25,8 +25,11 @@ export function useContainerEngine(hostId: string) {
     });
     return {
         engine: query.data ?? 'docker',
-        loading: query.isPending,
+        loading: enabled && query.isPending,
         switching: mutation.isPending,
+        pendingEngine: mutation.isPending ? mutation.variables : undefined,
+        error: query.error,
+        refetch: query.refetch,
         select: mutation.mutateAsync,
     };
 }
