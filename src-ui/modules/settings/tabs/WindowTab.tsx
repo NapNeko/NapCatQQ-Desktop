@@ -94,7 +94,11 @@ export function WindowTab({ draft, patchDraft }: Props) {
                         onCheckedChange={(v) => patchDraft({ launchOnStartup: v })}
                     />
                 </FieldRow>
-                <FieldRow label="启动时" description="仅托盘：Bot 照常运行，从托盘打开界面" isLast>
+                <FieldRow
+                    label="登录自启时"
+                    description="仅托盘：Bot 照常运行；手动启动始终显示主窗口"
+                    isLast
+                >
                     <Select
                         value={draft.uiModeOnStartup}
                         onValueChange={(v) =>

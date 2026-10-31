@@ -303,7 +303,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 离线多渠道 | `crates/ncd-runtime/src/notify/` + 设计归档 `docs/dev/archive/ncd-watch/offline-onebot-notice.md` |
 | OneBot 重登互助 | `ncd-relogin` 事件/指令/投递账本；`ncd-watch/src/relogin/` 常驻探测/收发/取码；`runtime/watch/sync.rs` 配置与能力确认；SL 复用 `resources/login-helper/atspi-login.py` |
 | 远端脱管后监控（设计） | 设计归档 `docs/dev/archive/ncd-watch/`；活 plan `.claude/plan/ncd-watch.md`；crate `crates/ncd-watch` |
-| 单实例 | `single_instance.rs` |
+| 单实例 / 登录自启 | `single_instance.rs`（手动二次启动唤起主窗口）；`autostart.rs`（Windows HKCU Run / Linux XDG 启动项附带 `--autostart`，仅登录自启遵循 `uiModeOnStartup`，手动启动始终显示窗口） |
 | hooks | `src-ui/hooks/desktop/` |
 
 产品口径：托盘隐藏 ≠ 退出；退出停本机 Bot 和本机应用端实例、关终端、关掉调试台的通道和 SSH 隧道（`DebugManager::close_all`），远端脱管；再开走 bootstrap reconcile。新的退出或重启入口只调 `shutdown_and_exit`，不再自己拼收尾。

@@ -70,7 +70,7 @@ closeAction: CloseAction,
  */
 afterCloseUiBehavior: AfterCloseUiBehavior, enterLightweightDelaySecs: number, uiModeOnStartup: UiModeOnStartup, 
 /**
- * 登录当前 Windows 用户后自动启动本程序(HKCU Run,无需管理员)
+ * 登录当前用户后自动启动本程序(Windows HKCU Run / Linux XDG,无需管理员)
  */
 launchOnStartup: boolean, 
 /**

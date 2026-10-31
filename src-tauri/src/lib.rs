@@ -271,9 +271,9 @@ pub fn run() {
     let lightweight_scheduler = Arc::new(lightweight_scheduler::LightweightScheduler::new(
         Arc::clone(&app_settings_shared),
     ));
-    let startup_tray_only = matches!(
-        app_settings.ui_mode_on_startup,
-        ncd_domain::UiModeOnStartup::TrayOnly
+    let startup_tray_only = autostart::start_in_tray(
+        &app_settings.ui_mode_on_startup,
+        autostart::is_autostart_launch(std::env::args_os()),
     );
     let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
     let desktop_notify = Arc::new(RwLock::new(app_settings.desktop_notify_flags()));

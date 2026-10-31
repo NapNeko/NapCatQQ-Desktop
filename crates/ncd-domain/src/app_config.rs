@@ -53,7 +53,7 @@ string_enum! {
 }
 
 string_enum! {
-    /// 启动时 UI 模式
+    /// 登录自启时 UI 模式；手动启动始终显示主窗口
     #[derive(Debug, Clone, PartialEq, Eq, Default, TS)]
     #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
     pub enum UiModeOnStartup {
@@ -455,7 +455,7 @@ pub struct AppSettings {
     pub enter_lightweight_delay_secs: u32,
     #[serde(rename = "uiModeOnStartup", default)]
     pub ui_mode_on_startup: UiModeOnStartup,
-    /// 登录当前 Windows 用户后自动启动本程序(HKCU Run,无需管理员)
+    /// 登录当前用户后自动启动本程序(Windows HKCU Run / Linux XDG,无需管理员)
     #[serde(rename = "launchOnStartup", default)]
     pub launch_on_startup: bool,
     /// 桌面端启动时自动启动已安装的应用端实例（按实例 auto_start 字段）。默认 true。

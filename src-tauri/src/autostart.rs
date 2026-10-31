@@ -12,6 +12,19 @@
 
 use std::path::{Path, PathBuf};
 
+const AUTOSTART_ARG: &str = "--autostart";
+
+/// 只将用户启动项视为登录自启；应用启动器和直接运行始终打开主窗口。
+pub fn is_autostart_launch(args: impl IntoIterator<Item = impl AsRef<std::ffi::OsStr>>) -> bool {
+    args.into_iter()
+        .skip(1)
+        .any(|arg| arg.as_ref() == AUTOSTART_ARG)
+}
+
+pub fn start_in_tray(mode: &ncd_domain::UiModeOnStartup, autostart: bool) -> bool {
+    autostart && matches!(mode, ncd_domain::UiModeOnStartup::TrayOnly)
+}
+
 /// Run 键下的值名(与 productName 对齐,卸载/排障可按名查找)
 pub const AUTOSTART_VALUE_NAME: &str = "NapCatQQ Desktop";
 
@@ -79,7 +92,7 @@ fn desktop_exec(exe: &Path) -> String {
         .replace('%', "%%")
         .replace('\n', r"\n")
         .replace('\r', r"\r");
-    format!("\"{escaped}\"")
+    format!("\"{escaped}\" {AUTOSTART_ARG}")
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
@@ -141,9 +154,9 @@ fn current_exe_path() -> Result<PathBuf, String> {
 fn format_run_command(exe: &Path) -> String {
     let s = exe.to_string_lossy();
     if s.contains(' ') || s.contains('\t') {
-        format!("\"{s}\"")
+        format!("\"{s}\" {AUTOSTART_ARG}")
     } else {
-        s.into_owned()
+        format!("{s} {AUTOSTART_ARG}")
     }
 }
 
@@ -195,18 +208,63 @@ mod tests {
     #[test]
     fn format_run_command_quotes_when_path_has_spaces() {
         let cmd = format_run_command(Path::new(r"C:\Program Files\NapCatQQ Desktop\app.exe"));
-        assert_eq!(cmd, r#""C:\Program Files\NapCatQQ Desktop\app.exe""#);
+        assert_eq!(
+            cmd,
+            r#""C:\Program Files\NapCatQQ Desktop\app.exe" --autostart"#
+        );
     }
 
     #[test]
     fn format_run_command_leaves_simple_paths_unquoted() {
         let cmd = format_run_command(Path::new(r"C:\Apps\ncd\app.exe"));
-        assert_eq!(cmd, r"C:\Apps\ncd\app.exe");
+        assert_eq!(cmd, r"C:\Apps\ncd\app.exe --autostart");
     }
 
     #[test]
     fn format_run_command_quotes_when_path_has_tab() {
         let cmd = format_run_command(Path::new("C:\\Apps\\\tbad\\app.exe"));
-        assert!(cmd.starts_with('"') && cmd.ends_with('"'), "cmd={cmd}");
+        assert!(
+            cmd.starts_with('"') && cmd.ends_with("\" --autostart"),
+            "cmd={cmd}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn desktop_exec_quotes_appimage_and_marks_login_autostart() {
+        assert_eq!(
+            desktop_exec(Path::new("/home/user/My Apps/NapCatQQ 100%.AppImage")),
+            "\"/home/user/My Apps/NapCatQQ 100%%.AppImage\" --autostart"
+        );
+    }
+
+    #[test]
+    fn manual_start_opens_window_even_with_tray_only_preference() {
+        for mode in [
+            ncd_domain::UiModeOnStartup::Normal,
+            ncd_domain::UiModeOnStartup::TrayOnly,
+        ] {
+            assert!(!start_in_tray(&mode, is_autostart_launch(["app"])));
+        }
+    }
+
+    #[test]
+    fn login_autostart_obeys_window_preference() {
+        let autostart = is_autostart_launch(["app", "--autostart"]);
+        assert!(autostart);
+        assert!(start_in_tray(
+            &ncd_domain::UiModeOnStartup::TrayOnly,
+            autostart
+        ));
+        assert!(!start_in_tray(
+            &ncd_domain::UiModeOnStartup::Normal,
+            autostart
+        ));
+    }
+
+    #[test]
+    fn autostart_marker_must_be_a_separate_argument() {
+        assert!(!is_autostart_launch(["/apps/--autostart"]));
+        assert!(!is_autostart_launch(["app", "--autostart=false"]));
     }
 }
