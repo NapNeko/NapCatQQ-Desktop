@@ -630,10 +630,11 @@ impl AppFrameworkAdapter for MaiBotAdapter {
             &config::read_webui_token(token_json.as_deref()),
         )?;
 
-        let before_bot = schema::bot_config_to_toml(&before.bot)
+        let bot_text = read_text(host, &root.join(BOT_CONFIG)).await?;
+        let before_bot = schema::bot_config_to_toml_for_source(&before.bot, bot_text.as_deref())
             .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
-        let after_bot =
-            schema::bot_config_to_toml(&cfg.bot).map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
+        let after_bot = schema::bot_config_to_toml_for_source(&cfg.bot, bot_text.as_deref())
+            .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
         if before_bot != after_bot {
             if crate::toml_patch::removed_keys(&before_bot, &after_bot).is_empty() {
                 let partial =

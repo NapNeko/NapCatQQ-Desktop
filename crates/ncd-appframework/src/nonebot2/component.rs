@@ -517,7 +517,26 @@ impl Component for NoneBot2Component {
                 reason: "项目已创建但依赖未同步（缺 .venv），重新安装可修复".to_string(),
             }));
         }
-        let version = version.unwrap_or_else(|| "installed".to_string());
+        // uv 会先建 .venv 再安装依赖；仅存在解释器不能证明同步成功。
+        let installed = host
+            .run_to_string(
+                HostCommand::new(python.as_posix())
+                    .args([
+                        "-I",
+                        "-c",
+                        "from importlib.metadata import version; print(version('nonebot2'))",
+                    ])
+                    .timeout(Duration::from_secs(30)),
+            )
+            .await?;
+        if !installed.success() || installed.stdout.trim().is_empty() {
+            return Ok(DetectOutcome::Unusable(UnusableInstall {
+                source: self.install_dir.as_posix().to_string(),
+                version,
+                reason: "虚拟环境已创建但未安装 NoneBot2，重新安装可修复".to_string(),
+            }));
+        }
+        let version = installed.stdout.trim().to_string();
         Ok(DetectOutcome::Installed(DetectedVersion {
             version,
             source: if host.exists(&self.uv_lock()).await.unwrap_or(false) {
@@ -564,7 +583,11 @@ impl Component for NoneBot2Component {
             let ok = host.exists(&path).await?;
             report = report.with_check(name, ok, Some(path.as_posix().to_string()));
         }
-        Ok(report)
+        Ok(report.with_check(
+            "nonebot2 distribution",
+            self.detect(host).await?.is_some(),
+            None,
+        ))
     }
 
     fn launch_command(
@@ -579,6 +602,29 @@ impl Component for NoneBot2Component {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn empty_venv_does_not_pass_installation_gate() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let host = ncd_host::local::LocalLinuxHost::new();
+        let comp = NoneBot2Component::new(
+            HostPath::from_posix(directory.path().to_string_lossy().into_owned()),
+            8080,
+        );
+        comp.ensure_project_scaffold(&host).await.unwrap();
+        let python = directory.path().join(".venv/bin/python");
+        std::fs::create_dir_all(python.parent().unwrap()).unwrap();
+        std::fs::write(&python, "#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&python, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(matches!(
+            comp.detect_outcome(&host).await.unwrap(),
+            DetectOutcome::Unusable(_)
+        ));
+        assert!(!comp.verify(&host).await.unwrap().ok);
+    }
 
     #[test]
     fn adapter_source_reaches_sync_without_rewriting_named_sources() {

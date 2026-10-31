@@ -282,18 +282,13 @@ impl YunzaiComponent {
         name: &str,
         cmd: HostCommand,
     ) -> Result<(), ActionError> {
-        let cmd = if host.os() == Os::Windows && host.locality() == Locality::Remote {
-            let tc = resolve_node_toolchain(host, &self.preferred_nodes(host).await).await?;
-            let git = GitTool::resolve(host, self.git_bin.as_ref()).await.ok();
-            let path = crate::node_tooling::target_path_env(
-                host,
-                &self.path_entries(host, &tc, git.as_ref()),
-            )
-            .await?;
-            cmd.env("PATH", path)
-        } else {
-            cmd
-        };
+        // git、pnpm 和浏览器下载的子进程都要复用实例选定的工具链。
+        let tc = resolve_node_toolchain(host, &self.preferred_nodes(host).await).await?;
+        let git = GitTool::resolve(host, self.git_bin.as_ref()).await.ok();
+        let path =
+            crate::node_tooling::target_path_env(host, &self.path_entries(host, &tc, git.as_ref()))
+                .await?;
+        let cmd = cmd.env("PATH", path);
         let cmd = cmd
             .timeout(LONG_STEP_TIMEOUT)
             .cancel_token(ctx.cancel_token())

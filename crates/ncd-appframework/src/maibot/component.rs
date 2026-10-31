@@ -1,7 +1,7 @@
 //! 每实例一份 MaiBot 源码 + 项目内 `.venv`。
 //!
 //! 首装：解析 uv → 定适配器版本并下载 → 按适配器声明的范围挑 MaiBot 版本、下载源码 →
-//! 解压到实例目录里的暂存目录，剥掉源码包的顶级目录挪进来 → `uv sync --locked` →
+//! 解压到实例目录里的暂存目录，剥掉源码包的顶级目录挪进来 → `uv sync`（附有上游锁时 --locked）→
 //! 种最小配置（两个口、WebUI token、协议确认）。
 //! 更新：下载同上，换代码但留下 config / data / plugins / logs / .venv / 协议确认；
 //! 适配器换代码、留 config.toml。协议确认只在首装时写，条款改了要用户重新同意，这里不替用户做主。
@@ -86,12 +86,13 @@ impl MaiBotComponent {
         self
     }
 
-    fn sync_command(&self, uv: &HostPath) -> HostCommand {
+    fn sync_command(&self, uv: &HostPath, upstream_locked: bool) -> HostCommand {
         // 改默认索引会使 uv 要求重写锁文件；安装必须保留上游验证过的依赖源。
-        HostCommand::new(uv.as_posix())
-            .arg("sync")
-            .arg("--locked")
-            .arg("--no-dev")
+        let mut cmd = HostCommand::new(uv.as_posix()).arg("sync");
+        if upstream_locked {
+            cmd = cmd.arg("--locked");
+        }
+        cmd.arg("--no-dev")
             .arg("--no-install-project")
             .arg("--python")
             .arg(MAIBOT_PYTHON_REQUIRES)
@@ -422,6 +423,8 @@ impl MaiBotComponent {
             },
         )
         .await;
+        // 看下载的源码，而非实例里可能遗留的旧锁：新版本不附锁时需允许重新解析依赖。
+        let upstream_locked = host.exists(&maibot.root.join("uv.lock")).await?;
         self.place_maibot(host, &maibot, updating).await?;
         self.place_adapter(host, &adapter).await?;
         let _ = host.remove_dir_all(&self.stage_dir()).await;
@@ -440,9 +443,13 @@ impl MaiBotComponent {
         end(ctx, 5).await;
 
         if self.pypi_index.is_some() {
-            ctx.info("MaiBot 按上游锁文件安装，保留锁定的依赖源").await;
+            ctx.info("MaiBot 保留上游声明的依赖源").await;
         }
-        let sync = self.sync_command(&uv.uv_bin);
+        if !upstream_locked {
+            ctx.info("上游未附带 uv.lock，按 pyproject.toml 解析依赖并生成实例锁文件")
+                .await;
+        }
+        let sync = self.sync_command(&uv.uv_bin, upstream_locked);
         self.run_step(
             host,
             ctx,
@@ -478,7 +485,15 @@ impl MaiBotComponent {
                 )
             })?;
             let legacy = self.pick_legacy_port(host).await;
-            let text = write_bot_config_ports(None, &version, self.webui_port, legacy)
+            let http_seed = if host
+                .exists(&self.install_dir.join("src/common/http_service/config.py"))
+                .await?
+            {
+                Some("[http]\n")
+            } else {
+                None
+            };
+            let text = write_bot_config_ports(http_seed, &version, self.webui_port, legacy)
                 .map_err(|e| ActionError::install_step("seed-config", e))?;
             host.create_dir_all(&self.install_dir.join("config"))
                 .await?;
@@ -712,6 +727,13 @@ impl Component for MaiBotComponent {
                 reason: "源码已就位但依赖未同步，重新安装可修复".to_string(),
             }));
         }
+        if !host.exists(&self.install_dir.join(BOT_CONFIG)).await? {
+            return Ok(DetectOutcome::Unusable(UnusableInstall {
+                source: self.install_dir.as_posix().to_string(),
+                version: Some(version),
+                reason: "源码已就位但安装尚未完成（缺少 Bot 配置），重新安装可修复".to_string(),
+            }));
+        }
         Ok(DetectOutcome::Installed(DetectedVersion {
             version,
             source: self.install_dir.join(PYPROJECT).as_posix().to_string(),
@@ -743,6 +765,7 @@ impl Component for MaiBotComponent {
         let mut report = VerifyReport::ok();
         for (name, path) in [
             (BOT_PY, self.install_dir.join(BOT_PY)),
+            (BOT_CONFIG, self.install_dir.join(BOT_CONFIG)),
             ("python", self.venv_python(host.os())),
             (
                 "napcat-adapter",
@@ -801,18 +824,53 @@ async fn remove_existing(
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn failed_sync_without_config_does_not_pass_installation_gate() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = ncd_host::local::LocalLinuxHost::new();
+        let comp = MaiBotComponent::new(
+            HostPath::from_posix(directory.path().to_string_lossy().into_owned()),
+            8001,
+        );
+        let root = directory.path();
+        std::fs::write(root.join(BOT_PY), "").unwrap();
+        std::fs::write(
+            root.join(PYPROJECT),
+            format!("[project]\nname = \"{PYPROJECT_NAME}\"\nversion = \"1.2.5\"\n"),
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join(".venv/bin")).unwrap();
+        std::fs::write(root.join(".venv/bin/python"), "").unwrap();
+        std::fs::create_dir_all(root.join(ADAPTER_DIR)).unwrap();
+        std::fs::write(root.join(ADAPTER_DIR).join(ADAPTER_MANIFEST_FILE), "{}").unwrap();
+        assert!(matches!(
+            comp.detect_outcome(&host).await.unwrap(),
+            DetectOutcome::Unusable(_)
+        ));
+        assert!(!comp.verify(&host).await.unwrap().ok);
+    }
+
     #[test]
     fn selected_source_keeps_upstream_lock_and_registry_unchanged() {
         let comp = MaiBotComponent::new(HostPath::from_posix("/apps/m1"), 23001)
             .with_pypi_index(Some("https://pypi.example/simple".into()));
         let uv = HostPath::from_posix("/tools/uv");
-        let cmd = comp.sync_command(&uv);
+        let cmd = comp.sync_command(&uv, true);
         let default =
-            MaiBotComponent::new(HostPath::from_posix("/apps/m1"), 23001).sync_command(&uv);
+            MaiBotComponent::new(HostPath::from_posix("/apps/m1"), 23001).sync_command(&uv, true);
         assert_eq!(cmd.args, default.args);
         assert!(cmd.args.iter().any(|arg| arg == "--locked"));
         assert!(!cmd.args.iter().any(|arg| arg == "--default-index"));
         assert!(!cmd.args.iter().any(|arg| arg == "--no-sources"));
+        let unlocked = comp.sync_command(&uv, false);
+        assert!(!unlocked.args.iter().any(|arg| arg == "--locked"));
+        assert!(
+            unlocked
+                .args
+                .iter()
+                .any(|arg| arg == "--no-install-project")
+        );
     }
 
     #[test]

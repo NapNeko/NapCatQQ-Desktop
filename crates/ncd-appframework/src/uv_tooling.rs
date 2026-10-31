@@ -231,7 +231,7 @@ const PYTHON_BUILDS_ASTRAL: &str =
     "https://releases.astral.sh/github/python-build-standalone/releases/download/";
 
 /// 实例要的解释器没有就装一个 uv 托管的，免得 `uv sync` 在装依赖中途才去下、失败了只剩一句网络错误。
-/// 先让主机自己下；远端下不动时由桌面端按 uv 给的地址镜像竞速下好传上去，
+/// 先让主机自己下；Linux 本机或远端下不动时，由桌面端按 uv 给的地址镜像竞速下载，
 /// 用 `UV_PYTHON_INSTALL_MIRROR=file://` 装（上游支持本地目录当镜像）。`scratch` 用完就删。
 /// uv 0.8 起显式安装默认往 `~/.local/bin` 放 `python3.x`、在 Windows 上还写注册表，
 /// 都不该替用户做：两个开关关掉（老版本不认这两个变量，本来也不做这两件事）
@@ -289,11 +289,11 @@ pub async fn ensure_python(
         return Ok(());
     }
     let direct_err = direct_err.trim().lines().last().unwrap_or_default();
-    if host.locality() != Locality::Remote {
+    if host.locality() != Locality::Remote && host.os() != Os::Linux {
         return Err(python_install_failed(request, direct_err));
     }
     ctx.warn(format!(
-        "主机自己下载解释器失败（{direct_err}），改由桌面端下载后传上去"
+        "下载解释器失败（{direct_err}），改用镜像下载后安装"
     ))
     .await;
 

@@ -4,7 +4,7 @@
 use toml_edit::DocumentMut;
 
 use super::super::schema::{
-    MaiBotBotConfigFile, MaiBotModelConfigFile, bot_config_to_toml, model_config_seed,
+    MaiBotBotConfigFile, MaiBotModelConfigFile, bot_config_to_toml_for_source, model_config_seed,
     model_config_to_toml,
 };
 use crate::toml_patch;
@@ -43,21 +43,8 @@ pub fn patch_bot_config(
         None => format!("[inner]\nversion = \"{config_version}\"\n"),
     };
     let mut doc = parse(&base, "bot_config.toml")?;
-    let existing = toml::from_str::<toml::Table>(&base).map_err(|e| e.to_string())?;
-    let mut before_table = bot_config_to_toml(before)?;
-    let mut after_table = bot_config_to_toml(after)?;
-    // 旧实例仍读旧路径时，在原路径上差量写；不替框架执行整份配置升级。
-    for &(source, target) in super::super::schema::BOT_ALIASES {
-        if super::super::schema::value_at(&existing, source).is_some()
-            && super::super::schema::value_at(&existing, target).is_none()
-        {
-            for table in [&mut before_table, &mut after_table] {
-                if let Some(value) = super::super::schema::remove_at(table, target) {
-                    super::super::schema::insert_at(table, source, value);
-                }
-            }
-        }
-    }
+    let before_table = bot_config_to_toml_for_source(before, Some(&base))?;
+    let after_table = bot_config_to_toml_for_source(after, Some(&base))?;
     let changed = toml_patch::apply(&mut doc, &before_table, &after_table, &bot_identity);
     Ok((!changed.is_empty()).then(|| doc.to_string()))
 }
@@ -120,6 +107,36 @@ mod tests {
             patch_model_config(None, Some("1.17.9"), &models, &models).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn http_listener_seed_projection_and_edits_share_the_actual_port() {
+        use super::super::super::schema::bot_config_to_toml_for_source;
+        use super::super::{read_bot_config_ports, write_bot_config_ports};
+
+        let seed = write_bot_config_ports(Some("[http]\n"), "8.15.68", 23001, 23002).unwrap();
+        assert!(!seed.contains("[webui]"));
+        for source in [
+            seed,
+            "[http]\nport = 23001\nhost = [\"127.0.0.1\"]\n[webui]\nport = 8001\n".to_string(),
+        ] {
+            let before = read_bot_config_file(Some(&source)).unwrap();
+            assert_eq!(before.webui.port, 23001);
+            assert_eq!(read_bot_config_ports(Some(&source)).0, 23001);
+            let mut after = before.clone();
+            after.webui.port = 24001;
+            let patched = patch_bot_config(Some(&source), "8.15.68", &before, &after)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                read_bot_config_file(Some(&patched)).unwrap().webui.port,
+                24001
+            );
+            assert_eq!(read_bot_config_ports(Some(&patched)).0, 24001);
+            let payload = bot_config_to_toml_for_source(&after, Some(&source)).unwrap();
+            assert_eq!(payload["http"]["port"].as_integer(), Some(24001));
+            assert!(payload["webui"].get("port").is_none());
+        }
     }
 
     #[test]

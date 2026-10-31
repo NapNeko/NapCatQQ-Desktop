@@ -136,7 +136,18 @@ pub(super) fn set_value(doc: &mut DocumentMut, table: &str, key: &str, mut v: to
 pub fn read_bot_config_ports(text: Option<&str>) -> (u16, u16) {
     let root = parse_table(text);
     (
-        port_of(sub(&root, "webui"), "port", MAIBOT_DEFAULT_WEBUI_PORT),
+        port_of(
+            sub(
+                &root,
+                if root.contains_key("http") {
+                    "http"
+                } else {
+                    "webui"
+                },
+            ),
+            "port",
+            MAIBOT_DEFAULT_WEBUI_PORT,
+        ),
         port_of(
             sub(&root, "maim_message"),
             "ws_server_port",
@@ -216,7 +227,17 @@ pub fn write_bot_config_ports(
     if !has_version {
         set_value(&mut doc, "inner", "version", config_version.into());
     }
-    set_value(&mut doc, "webui", "port", i64::from(webui_port).into());
+    let listen_section = if doc.contains_key("http") {
+        "http"
+    } else {
+        "webui"
+    };
+    set_value(
+        &mut doc,
+        listen_section,
+        "port",
+        i64::from(webui_port).into(),
+    );
     set_value(
         &mut doc,
         "maim_message",

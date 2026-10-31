@@ -69,6 +69,31 @@ pub fn bot_config_to_toml(cfg: &MaiBotBotConfigFile) -> Result<toml::Table, Stri
     to_table(cfg)
 }
 
+/// 类型化界面沿用 webui 字段；写回时使用实例源码实际读取的配置路径。
+pub fn bot_config_to_toml_for_source(
+    cfg: &MaiBotBotConfigFile,
+    source: Option<&str>,
+) -> Result<toml::Table, String> {
+    let existing = parse(source.unwrap_or(""), "bot_config.toml")?;
+    let mut table = bot_config_to_toml(cfg)?;
+    for &(source, target) in BOT_ALIASES {
+        if value_at(&existing, source).is_some()
+            && value_at(&existing, target).is_none()
+            && let Some(value) = remove_at(&mut table, target)
+        {
+            insert_at(&mut table, source, value);
+        }
+    }
+    if existing.contains_key("http") {
+        for key in ["port", "host"] {
+            if let Some(value) = remove_at(&mut table, &["webui", key]) {
+                insert_at(&mut table, &["http", key], value);
+            }
+        }
+    }
+    Ok(table)
+}
+
 /// 模型配置转成要写进文件的 TOML 值：`extra_params` 的文本转回表
 pub fn model_config_to_toml(cfg: &MaiBotModelConfigFile) -> Result<toml::Table, String> {
     let mut table = to_table(cfg)?;
@@ -155,6 +180,16 @@ fn project_bot_aliases(root: &mut toml::Table) {
             && let Some(value) = value_at(root, source).cloned()
         {
             insert_at(root, target, value);
+        }
+    }
+    // 新版将 HTTP 监听从 webui 移到了 http；旧字段残留时也以实际监听字段为准。
+    if root.contains_key("http") {
+        let port = value_at(root, &["http", "port"])
+            .cloned()
+            .unwrap_or(toml::Value::Integer(8001));
+        insert_at(root, &["webui", "port"], port);
+        if let Some(host) = value_at(root, &["http", "host"]).cloned() {
+            insert_at(root, &["webui", "host"], host);
         }
     }
 }

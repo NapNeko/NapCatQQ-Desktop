@@ -169,22 +169,29 @@ mod tests {
                 webui_username: None,
                 webui_password: None,
             };
-            let mut from_reqs: Vec<String> = adapter
-                .component(&spec)
-                .requirements(Os::Linux, Locality::Remote)
-                .iter()
-                .filter_map(|r| r.component_id())
-                .map(|id| id.as_str().to_string())
-                .collect();
-            from_reqs.sort();
             let mut declared = m.runtime_component_ids.clone();
             declared.sort();
-            assert_eq!(
-                declared,
-                from_reqs,
-                "{} 的 runtime_component_ids 与 requirements 不一致",
-                m.id.as_str()
-            );
+            let component = adapter.component(&spec);
+            for locality in [Locality::Local, Locality::Remote] {
+                assert!(
+                    component
+                        .supported_targets()
+                        .contains(&(Os::Linux, locality))
+                );
+                let mut from_reqs: Vec<String> = component
+                    .requirements(Os::Linux, locality)
+                    .iter()
+                    .filter_map(|r| r.component_id())
+                    .map(|id| id.as_str().to_string())
+                    .collect();
+                from_reqs.sort();
+                assert_eq!(
+                    declared,
+                    from_reqs,
+                    "{} 的 Linux {locality:?} runtime_component_ids 与 requirements 不一致",
+                    m.id.as_str()
+                );
+            }
         }
     }
 
