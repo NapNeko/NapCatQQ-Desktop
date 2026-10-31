@@ -87,6 +87,7 @@ impl DockerCli<'_> {
     }
 
     pub(super) async fn compose_cmd(&self) -> Result<HostCommand, DockerCliError> {
+        self.verify_selected_engine().await?;
         if !self.is_linux_podman() {
             return Ok(self.command().arg("compose"));
         }

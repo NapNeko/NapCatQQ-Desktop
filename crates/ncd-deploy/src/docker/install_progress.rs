@@ -89,6 +89,12 @@ pub async fn install_docker_with_progress(
     emit_step_begin(&emit, 1, &format!("检查 {engine_name} 是否已就绪…"));
 
     let cli = DockerCli::new(host);
+    if let Err(error) = cli.verify_selected_engine().await {
+        let message = error.to_string();
+        emit_log(&emit, ProgressLogLevel::Error, &message);
+        finish_install(&emit, false);
+        return Ok(DockerInstallReport::manual_required(message, None));
+    }
     let status = cli.probe().await;
     if status.ready_to_deploy() {
         emit_step_end(&emit, 1, true);

@@ -49,6 +49,7 @@ impl DockerCli<'_> {
 
     /// 管理页保留连接、权限和 daemon 错误，不能把故障画成“未安装”。
     pub async fn probe_checked(&self) -> Result<DockerStatus, DockerCliError> {
+        self.verify_selected_engine().await?;
         let result = self
             .host
             .run_to_string(

@@ -164,6 +164,19 @@ describe('Docker 部署区', () => {
         expect(screen.getByRole('radio', { name: 'Podman' })).toBeDisabled();
     });
 
+    it('shows an engine mismatch and leaves explicit engine selection available', () => {
+        const message = '检测到 podman-docker，请选择 Podman 引擎';
+        render(
+            <DockerDeploymentSection
+                {...props({ status: undefined, probeError: new Error(message) })}
+            />,
+        );
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(screen.getByRole('radio', { name: 'Podman' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: '容器管理' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: '安装 Docker' })).not.toBeInTheDocument();
+    });
+
     it('只显示已启用的框架，镜像就绪后仍需用户主动新建 Bot', () => {
         const input = props({ flavors: ['napcat'], imageReadyByFlavor: { napcat: true } });
         render(<DockerDeploymentSection {...input} />);

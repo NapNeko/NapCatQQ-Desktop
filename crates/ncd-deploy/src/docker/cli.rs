@@ -16,12 +16,18 @@ use tracing::{info, warn};
 
 #[path = "compose_provider.rs"]
 mod compose_provider;
+#[path = "engine_identity.rs"]
+mod engine_identity;
 #[path = "management.rs"]
 mod management;
 
 /// DockerCli 操作错误
 #[derive(Debug, thiserror::Error)]
 pub enum DockerCliError {
+    #[error(
+        "检测到 docker 命令由 podman-docker 提供，它是 Podman 的兼容入口。请在“容器部署”中选择 Podman 引擎，以管理当前用户的容器和镜像。"
+    )]
+    PodmanCompatibilityShim,
     #[error("invalid docker argument: {0}")]
     InvalidArgument(String),
     /// host 层调用失败(SSH 中断 / 进程起不来)
@@ -57,6 +63,7 @@ pub struct DockerCli<'h> {
     engine: super::engine::ContainerEngine,
     elevated: std::sync::atomic::AtomicBool,
     podman_compose: tokio::sync::OnceCell<compose_provider::PodmanComposeProbe>,
+    docker_is_podman: tokio::sync::OnceCell<bool>,
 }
 
 impl<'h> DockerCli<'h> {
@@ -66,6 +73,7 @@ impl<'h> DockerCli<'h> {
             engine: super::engine::engine_for(host),
             elevated: std::sync::atomic::AtomicBool::new(false),
             podman_compose: tokio::sync::OnceCell::new(),
+            docker_is_podman: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -89,6 +97,9 @@ impl<'h> DockerCli<'h> {
     /// 探测 docker 是否可用,任何一步失败都退化成"未装/未就绪",不报错——
     /// 探测本身不该把"没装 docker"当异常
     pub async fn probe(&self) -> DockerStatus {
+        if self.verify_selected_engine().await.is_err() {
+            return DockerStatus::absent();
+        }
         // docker 客户端版本(不连 daemon,普通用户就能跑),拿不到直接判定未装
         let version = match self.docker_client_version().await {
             Some(v) => v,

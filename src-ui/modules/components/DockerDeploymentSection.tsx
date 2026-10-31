@@ -206,6 +206,14 @@ export function DockerDeploymentSection({
                         onRetry={retry}
                     />
                 </div>
+                {supported && engineError != null && !engineBusy ? (
+                    <p
+                        role="alert"
+                        className="px-4 py-3 text-xs leading-relaxed text-danger break-words"
+                    >
+                        {errorText(engineError)}
+                    </p>
+                ) : null}
                 <div
                     className={
                         flavors.length > 1 ? 'grid min-w-0 @min-[48rem]:grid-cols-2' : 'min-w-0'
