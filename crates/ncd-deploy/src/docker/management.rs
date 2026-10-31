@@ -50,14 +50,7 @@ impl DockerCli<'_> {
     /// 管理页保留连接、权限和 daemon 错误，不能把故障画成“未安装”。
     pub async fn probe_checked(&self) -> Result<DockerStatus, DockerCliError> {
         self.verify_selected_engine().await?;
-        let result = self
-            .host
-            .run_to_string(
-                HostCommand::new(self.engine.program())
-                    .args(["version", "--format", "{{.Client.Version}}"])
-                    .timeout(Duration::from_secs(15)),
-            )
-            .await;
+        let result = self.host.run_to_string(self.client_version_command()).await;
         let out = match result {
             Err(ncd_host::HostError::Io(error))
                 if self.host.locality() == ncd_host::Locality::Local
@@ -71,10 +64,15 @@ impl DockerCli<'_> {
             return Ok(DockerStatus::absent());
         }
         // version 在 daemon 不可达时仍输出 Client.Version，但退出码为 1。
-        let version = out.stdout.trim().to_owned();
+        let version = self.client_version_text(&out.stdout);
         if version.is_empty() {
             return Err(DockerCliError::CommandFailed {
-                command: "docker version".into(),
+                command: if self.is_linux_podman() {
+                    "podman --version"
+                } else {
+                    "docker version"
+                }
+                .into(),
                 exit_code: out.exit_code,
                 stderr: out.stderr,
             });

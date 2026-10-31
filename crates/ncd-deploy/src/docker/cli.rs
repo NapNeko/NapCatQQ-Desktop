@@ -151,19 +151,15 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// docker version --format '{{.Client.Version}}',失败返回 None
+    /// Docker 使用 Client.Version；Linux Podman 使用不初始化运行时的 --version。
     /// 客户端版本不连 daemon,无需提权,固定裸跑——它是"装没装 docker"的判据
     async fn docker_client_version(&self) -> Option<String> {
         // 先尝试普通命令
-        let cmd = HostCommand::new(self.engine.program())
-            .arg("version")
-            .arg("--format")
-            .arg("{{.Client.Version}}")
-            .timeout(std::time::Duration::from_secs(15));
+        let cmd = self.client_version_command();
         if let Ok(out) = self.host.run_to_string(cmd).await {
-            let v = out.stdout.trim();
+            let v = self.client_version_text(&out.stdout);
             if !v.is_empty() {
-                return Some(v.to_string());
+                return Some(v);
             }
         }
 

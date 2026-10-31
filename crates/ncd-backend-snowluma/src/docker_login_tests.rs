@@ -111,6 +111,7 @@ impl Host for CaptureHost {
             String::new()
         } else {
             match command.args.first().map(String::as_str) {
+                Some("--version") => "Docker version 27.3.1, build test".into(),
                 Some("version") => "27.3.1".into(),
                 Some("info") if !command.elevated => {
                     code = 1;

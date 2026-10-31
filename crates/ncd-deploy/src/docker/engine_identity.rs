@@ -5,6 +5,30 @@ use crate::docker::engine::ContainerEngine;
 use ncd_host::{HostCommand, Os};
 
 impl DockerCli<'_> {
+    pub(super) fn client_version_command(&self) -> HostCommand {
+        let command = HostCommand::new(self.engine.program());
+        let command = if self.is_linux_podman() {
+            // Podman 的 version 子命令会初始化运行时；--version 可独立判断安装状态。
+            command.arg("--version")
+        } else {
+            command.args(["version", "--format", "{{.Client.Version}}"])
+        };
+        command.timeout(std::time::Duration::from_secs(15))
+    }
+
+    pub(super) fn client_version_text(&self, output: &str) -> String {
+        let output = output.trim();
+        if self.is_linux_podman() {
+            output
+                .strip_prefix("podman version ")
+                .unwrap_or(output)
+                .trim()
+                .to_owned()
+        } else {
+            output.to_owned()
+        }
+    }
+
     pub(crate) async fn verify_selected_engine(&self) -> Result<(), DockerCliError> {
         if self.host.os() != Os::Linux || self.engine != ContainerEngine::Docker {
             return Ok(());

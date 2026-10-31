@@ -17,6 +17,7 @@ struct MockHost {
     compose_available: bool,
     standalone_compose: bool,
     docker_compat: bool,
+    formatted_podman_version_fails: bool,
     os: Os,
     id: &'static str,
 }
@@ -33,6 +34,7 @@ impl MockHost {
             compose_available: false,
             standalone_compose: false,
             docker_compat: false,
+            formatted_podman_version_fails: false,
             os: Os::Linux,
             id: "docker-test",
         }
@@ -120,8 +122,15 @@ impl Host for MockHost {
             (127, "", "docker: command not found")
         } else {
             match command.args.first().map(String::as_str) {
-                Some("--version") if self.docker_compat => (0, "podman version 5.8.9\n", ""),
+                Some("--version") if self.docker_compat || command.program == "podman" => {
+                    (0, "podman version 5.8.9\n", "")
+                }
                 Some("--version") => (0, "Docker version 27.3.1, build example\n", ""),
+                Some("version")
+                    if command.program == "podman" && self.formatted_podman_version_fails =>
+                {
+                    (125, "", "cannot re-exec process")
+                }
                 Some("version") => (1, "27.3.1\n", "daemon is unreachable"),
                 Some("info") if !command.elevated && self.daemon_error.is_some() => {
                     (1, "", self.daemon_error.unwrap())
@@ -467,6 +476,7 @@ async fn podman_runtime_failure_does_not_reinstall_packages_or_request_sudo() {
     use crate::docker::engine::{self, ContainerEngine};
     let host = MockHost {
         id: "podman-runtime-failure-test",
+        formatted_podman_version_fails: true,
         compose_available: true,
         daemon_error: Some("rootless runtime namespace unavailable"),
         ..MockHost::new()
@@ -566,4 +576,24 @@ async fn windows_docker_probe_does_not_add_linux_identity_commands() {
             .all(|c| c.program == "docker" && !c.elevated)
     );
     assert!(!commands.iter().any(|c| c.args == ["--version"]));
+}
+
+#[tokio::test]
+async fn podman_installation_is_detected_without_initializing_its_broken_runtime() {
+    let host = MockHost {
+        formatted_podman_version_fails: true,
+        compose_available: true,
+        daemon_error: Some("rootless runtime namespace unavailable"),
+        ..MockHost::new()
+    };
+    let cli = DockerCli {
+        engine: crate::docker::engine::ContainerEngine::Podman,
+        ..DockerCli::new(&host)
+    };
+    let status = cli.probe().await;
+    assert!(status.installed);
+    assert_eq!(status.version, "5.8.9");
+    assert!(status.compose_available);
+    assert!(!status.daemon_running);
+    assert!(host.commands.lock().unwrap().iter().all(|c| !c.elevated));
 }
