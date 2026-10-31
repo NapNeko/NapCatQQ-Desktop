@@ -63,7 +63,10 @@ describe('GroupFilesDialog', () => {
         renderDialog();
         await screen.findByText('config.example.json');
         await userEvent.type(screen.getByRole('textbox', { name: '搜索群文件' }), 'config');
-        expect(screen.queryByText('截图合集.zip')).toBeNull();
+        await waitFor(() => {
+            expect(screen.getByRole('textbox', { name: '搜索群文件' })).toHaveValue('config');
+            expect(screen.queryByText('截图合集.zip')).toBeNull();
+        });
         expect(screen.getByText('config.example.json')).toBeTruthy();
     });
 
