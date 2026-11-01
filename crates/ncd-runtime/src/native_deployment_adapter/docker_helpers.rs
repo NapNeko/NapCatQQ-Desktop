@@ -115,7 +115,7 @@ pub(crate) async fn render_docker_config_on_host(
 }
 
 /// SnowLuma 的运行数据在 named volume，宿主机暂存文件需显式拷入容器。
-/// 只替换当前账号的 OneBot 文件，不覆盖 WebUI 凭据或其它账号配置。
+/// 同步当前账号 OneBot 文件，以及用户在协议弹窗中明确同意、待写入卷的记录。
 pub(crate) async fn sync_snowluma_docker_config(
     host: &dyn Host,
     cli: &DockerCli<'_>,
@@ -125,6 +125,19 @@ pub(crate) async fn sync_snowluma_docker_config(
     let project_dir = docker_project_dir(host, &docker_container_name(config)).await?;
     let file = format!("onebot_{}.json", config.bot.qq_id);
     let source = format!("{project_dir}/snowluma-data/config/{file}");
+    let consent_source =
+        HostPath::from_posix(format!("{project_dir}/snowluma-data/config/consent.json"));
+    let pending_consent = match host.read_file(&consent_source).await {
+        Ok(bytes) => Some(
+            crate::snowluma_consent_files::parse_consent_version_json(
+                std::str::from_utf8(&bytes)
+                    .map_err(|error| BotBackendError::Io(error.to_string()))?,
+            )
+            .ok_or_else(|| BotBackendError::Io("暂存的 SnowLuma 协议同意记录无效".into()))?,
+        ),
+        Err(HostError::PathNotFound { .. }) => None,
+        Err(error) => return Err(BotBackendError::Io(error.to_string())),
+    };
     let target_dir = "/app/snowluma-data/config";
     let target = format!("{target_dir}/{file}");
     let mkdir = host
@@ -149,6 +162,14 @@ pub(crate) async fn sync_snowluma_docker_config(
     cli.copy_to_container(container, &source, &target)
         .await
         .map_err(|error| BotBackendError::Io(error.to_string()))?;
+    let consent_target = format!("{target_dir}/consent.json");
+    let mut files = vec![target.as_str()];
+    if pending_consent.is_some() {
+        cli.copy_to_container(container, consent_source.as_posix(), &consent_target)
+            .await
+            .map_err(|error| BotBackendError::Io(error.to_string()))?;
+        files.push(&consent_target);
+    }
     // docker cp 默认归 root；与 compose 的运行用户保持一致，允许 WebUI 后续保存。
     let (uid, gid) = DockerDeployment::container_uid_gid(host)
         .await
@@ -164,7 +185,7 @@ pub(crate) async fn sync_snowluma_docker_config(
                 .arg(format!("{uid}:{gid}"))
                 .arg("--")
                 .arg(target_dir)
-                .arg(&target),
+                .args(files.iter().copied()),
         )
         .await
         .map_err(|error| BotBackendError::Io(error.to_string()))?;
@@ -185,7 +206,7 @@ pub(crate) async fn sync_snowluma_docker_config(
                 .arg("chmod")
                 .arg("644")
                 .arg("--")
-                .arg(&target),
+                .args(files.iter().copied()),
         )
         .await
         .map_err(|error| BotBackendError::Io(error.to_string()))?;
@@ -194,6 +215,22 @@ pub(crate) async fn sync_snowluma_docker_config(
             "设置 SnowLuma 容器配置权限失败：{}",
             chmod.stderr.trim()
         )));
+    }
+    if let Some(version) = pending_consent {
+        let saved = cli
+            .exec_read_file(container, &consent_target)
+            .await
+            .map_err(|error| BotBackendError::Io(error.to_string()))?;
+        if crate::snowluma_consent_files::parse_consent_version_json(&saved).as_deref()
+            != Some(&version)
+        {
+            return Err(BotBackendError::Io(
+                "同步 SnowLuma 协议同意记录后校验失败".into(),
+            ));
+        }
+        host.remove_file(&consent_source)
+            .await
+            .map_err(|error| BotBackendError::Io(error.to_string()))?;
     }
     Ok(())
 }

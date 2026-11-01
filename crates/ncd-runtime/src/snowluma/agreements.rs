@@ -17,6 +17,8 @@ use ncd_domain::{BackendType, BotConfig, RuntimeScenario, RuntimeTarget};
 use ncd_host::{Host, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 
+use super::docker_agreements::{load_docker_agreements, record_docker_consent};
+
 #[derive(Clone)]
 pub(crate) struct SnowLumaAgreementService {
     local_daemon: Option<Arc<SnowLumaDaemon>>,
@@ -49,6 +51,16 @@ impl SnowLumaAgreementService {
                 server_id,
                 backend: BackendType::SnowLuma,
             } => self.prepare_remote(&server_id).await,
+            RuntimeScenario::LocalDocker {
+                backend: BackendType::SnowLuma,
+            }
+            | RuntimeScenario::RemoteDocker {
+                backend: BackendType::SnowLuma,
+                ..
+            } => {
+                let host = self.docker_host(config).await?;
+                load_docker_agreements(host.as_ref(), config).await
+            }
             _ => Ok(None),
         }
     }
@@ -66,6 +78,16 @@ impl SnowLumaAgreementService {
                 server_id,
                 backend: BackendType::SnowLuma,
             } => self.record_remote(&server_id, version).await,
+            RuntimeScenario::LocalDocker {
+                backend: BackendType::SnowLuma,
+            }
+            | RuntimeScenario::RemoteDocker {
+                backend: BackendType::SnowLuma,
+                ..
+            } => {
+                let host = self.docker_host(config).await?;
+                record_docker_consent(host.as_ref(), config, version).await
+            }
             _ => Ok(false),
         }
     }
@@ -98,6 +120,17 @@ impl SnowLumaAgreementService {
         let agreements =
             load_payload_from_runtime_root(daemon.runtime_root()).map_err(map_consent_file_io)?;
         Ok(agreements.and_then(|payload| payload.consent_required.then_some(payload)))
+    }
+
+    async fn docker_host(&self, config: &BotConfig) -> Result<Arc<dyn Host>, BotManagerError> {
+        let resolver = self
+            .host_resolver
+            .as_ref()
+            .ok_or_else(|| BotManagerError::Render("HostResolver 未初始化".into()))?;
+        resolver
+            .resolve(&config.bot.runtime_target)
+            .await
+            .map_err(|error| BotManagerError::RemoteRead(error.to_string()))
     }
 
     async fn record_local(&self, version: &str) -> Result<bool, BotManagerError> {

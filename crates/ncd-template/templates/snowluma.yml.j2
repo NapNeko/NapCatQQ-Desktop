@@ -11,6 +11,7 @@ services:
     environment:
       SNOWLUMA_UID: "{{ uid }}"
       SNOWLUMA_GID: "{{ gid }}"
+      SNOWLUMA_DATA: "/app/snowluma-data"
       VNC_PASSWD: {{ vnc_passwd|tojson }}
 {% if webui_bootstrap %}      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {{ webui_bootstrap|tojson }}
 {% endif %}      SNOWLUMA_WEBUI_PORT: "5099"
