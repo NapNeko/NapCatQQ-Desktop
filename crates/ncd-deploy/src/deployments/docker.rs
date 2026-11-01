@@ -35,6 +35,9 @@ use crate::docker::{
     },
 };
 
+#[path = "snowluma_data_migration.rs"]
+mod snowluma_data_migration;
+
 /// Docker 部署实装
 #[derive(Clone)]
 pub struct DockerDeployment {
@@ -516,6 +519,17 @@ impl Deployment for DockerDeployment {
             .list_containers()
             .await
             .map_err(|error| DeploymentError::LaunchFailed(error.to_string()))?;
+        // 先保全并迁移所有旧数据，再删除任一旧容器。辅助容器只运行 Node，
+        // 不能让新协议进程先生成默认配置，掩盖待恢复的 runtime / WebUI 配置。
+        if config.bot.backend_type == BackendType::SnowLuma {
+            for stale in bot_docker_container_candidates(config.bot.backend_type, config.bot.qq_id)
+            {
+                if let Some(container) = containers.iter().find(|container| container.name == stale)
+                {
+                    snowluma_data_migration::migrate(host, &cli, &project_dir, container).await?;
+                }
+            }
+        }
         for stale in bot_docker_container_candidates(config.bot.backend_type, config.bot.qq_id) {
             if containers.iter().any(|container| container.name == stale) {
                 cli.remove(&stale).await.map_err(|error| {

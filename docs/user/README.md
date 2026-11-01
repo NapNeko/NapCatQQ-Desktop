@@ -21,6 +21,8 @@ Windows 安装包会在缺少 WebView2 时处理安装。本机 Windows 使用�
 
 Linux 请从发布页下载 `.deb` 或 `.AppImage`，需要图形桌面。Linux 本机可使用原生部署或 Docker / Podman，在「组件 → 容器部署」选择引擎，再进入「容器管理」查看容器、镜像、网络和数据卷。切换引擎会使用各自的容器和镜像。新建容器 Bot 时可单独选择 Docker 或 Podman；已有 Bot 会记住创建时的引擎，切换管理视图不影响它们。
 
+旧 SnowLuma 容器若把运行数据留在 `/app/data`，停止后首次启动时，Desktop 会先备份整个数据目录，再补入新的持久卷；已有配置优先保留。备份在 Bot 部署项目目录的 `snowluma-legacy/<旧容器 ID>` 下，确认运行配置、WebUI 和账号正常前请保留。迁移失败会停止重建并保留旧容器，可排除磁盘空间或权限问题后重试。已经使用 `/app/snowluma-data` 的实例沿用原持久卷。
+
 **Linux 验证范围目前仅限 Ubuntu。** 维护者没有其他发行版、桌面环境和第三方 AppImage 管理工具的实机验证条件；Fedora 等系统特有的问题暂无法继续做专项适配。若仍有问题，请先在 Ubuntu 上确认是否同样复现。macOS 客户端暂未提供。
 
 ### 本机创建 Bot
