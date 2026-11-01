@@ -118,6 +118,7 @@ jobs:
               - 'src-tauri/resources/**'
               - 'crates/ncd-backend-snowluma/resources/**'
               - 'crates/ncd-component/resources/**'
+              - 'crates/ncd-deploy/resources/snowluma-data-migrate*'
               - 'crates/ncd-runtime/src/metrics/remote_assets_batch*.py'
               - 'crates/ncd-runtime/src/app_framework/manager/migration_transfer.py'
               - 'crates/ncd-runtime/tests/migration_transfer_test.py'
@@ -177,6 +178,9 @@ jobs:
 
       - name: Bot migration archive tests
         run: python -B -m unittest discover -s crates/ncd-runtime/tests -p migration_transfer_test.py
+
+      - name: SnowLuma container data migration tests
+        run: node --test crates/ncd-deploy/resources/snowluma-data-migrate.test.cjs
 
   rust-core:
     name: Rust core (Windows)
