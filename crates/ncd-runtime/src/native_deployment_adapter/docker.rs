@@ -380,6 +380,7 @@ impl BotBackend for DockerDeploymentBackend {
             self.host.as_ref(),
             bot_id,
             refresh,
+            self.deployment.cli(self.host.as_ref()).engine(),
         )
         .await
     }

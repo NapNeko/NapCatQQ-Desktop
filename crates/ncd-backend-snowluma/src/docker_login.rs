@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ncd_deploy::docker::{DockerCli, DockerLoginOverlay};
 use ncd_deploy::{DockerDeployment, bot_docker_container_candidates, docker_project_dir};
+use ncd_domain::docker::ContainerEngine;
 use ncd_domain::{
     BackendType, BotConfig, BotId, ContainerState, DockerFlavor, SnowLumaQrLoginSnapshot,
     SnowLumaQrLoginState,
@@ -204,6 +205,17 @@ fn launcher(session_id: &str) -> String {
 }
 
 impl DockerLoginSession {
+    fn bind_engine(&mut self, engine: ContainerEngine) -> Result<(), BotBackendError> {
+        if self.engine.is_some_and(|saved| saved != engine) {
+            return Err(BotBackendError::InvalidConfig(
+                "容器扫码会话的引擎与 Bot 设置不符，请重新准备扫码辅助".into(),
+            ));
+        }
+        // 旧版会话没有 engine，必须使用 Bot 的归属，不能跟随管理视图。
+        self.engine = Some(engine);
+        Ok(())
+    }
+
     pub async fn prepare(
         host: &dyn Host,
         config: &BotConfig,
@@ -486,11 +498,13 @@ impl DockerLoginSession {
     pub async fn bound_pid(
         host: &dyn Host,
         bot_id: &BotId,
+        engine: ContainerEngine,
     ) -> Result<Option<u32>, BotBackendError> {
         let Some(mut session) = Self::recover(host, bot_id).await? else {
             return Ok(None);
         };
-        let cli = DockerCli::for_engine(host, session.engine);
+        session.bind_engine(engine)?;
+        let cli = DockerCli::for_engine(host, Some(engine));
         cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let (_, anchor) = session.anchor(host, &cli).await?;
         Ok(Some(anchor.pid))
@@ -590,6 +604,7 @@ impl DockerLoginSession {
         host: &dyn Host,
         bot_id: &BotId,
         refresh: bool,
+        engine: ContainerEngine,
     ) -> Result<SnowLumaQrLoginSnapshot, BotBackendError> {
         let Some(mut session) = Self::recover(host, bot_id).await? else {
             return Ok(SnowLumaQrLoginSnapshot::unavailable(
@@ -597,7 +612,8 @@ impl DockerLoginSession {
             ));
         };
         // 一轮采集复用已判定的 Docker 权限，避免慢 SSH 上重复探测占满请求期限。
-        let cli = DockerCli::for_engine(host, session.engine);
+        session.bind_engine(engine)?;
+        let cli = DockerCli::for_engine(host, Some(engine));
         cli.ensure_daemon_ready().await.map_err(|_| unavailable())?;
         let (id, anchor) = session.anchor(host, &cli).await?;
         if session
