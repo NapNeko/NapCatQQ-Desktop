@@ -13,6 +13,8 @@ Docker 页按本机 / 远端 Linux 主机提供容器、镜像、网络、数据
 
 本机项目位于 Desktop 权威数据根的 `docker/<container>`，远端项目位于 `$HOME/.napcat-bots/<container>`。本机连接宿主机发布端口，远端通过 SSH 转发访问；Windows 本机 Docker 保持不支持。
 
+SnowLuma 协议预检由 `ncd-runtime/src/snowluma/docker_agreements.rs` 通过容器文件完成，按实例引擎和容器 ID 读取 `SNOWLUMA_HOME` 下的 EULA / PRIVACY，以及 `SNOWLUMA_DATA/config/consent.json`。未同意时仍停止容器；弹窗读取与同意落盘不依赖已停止的 WebUI。停止时校验版本后用 cp 写入并回读同意记录，同时暂存到项目目录，启动重建后由 `sync_snowluma_docker_config` 写入托管卷、校验并删除暂存；运行中仍走 WebUI 以释放进程内 gate。Compose 显式设置 `SNOWLUMA_DATA=/app/snowluma-data` 与 named volume 对齐，兼容新版镜像默认 `/app/data`。首次创建前无容器则创建后补查，读文件失败不视为已同意。
+
 ## 边界
 
 Docker 页不提供任意 Compose 编辑、批量 prune 或强制删除卷。协议 Bot 的镜像安装继续使用组件页；按 Bot 调整部署参数使用「Bot 配置 → 容器」，由现有生命周期应用。

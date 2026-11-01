@@ -603,6 +603,12 @@ mod tests {
         assert!(yaml.contains("- SYS_PTRACE"));
         assert!(yaml.contains("seccomp=unconfined"));
         assert!(yaml.contains("VNC_PASSWD: \"vncpass\""));
+        // 新旧镜像的默认数据目录不同；运行目录必须与托管 named volume 相同。
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(
+            parsed["services"]["snowluma"]["environment"]["SNOWLUMA_DATA"],
+            "/app/snowluma-data"
+        );
         // named volume 以容器名为前缀,避免多容器撞卷
         assert!(yaml.contains("snowluma-data:/app/snowluma-data"));
         // Windows checkout 可能把模板变成 CRLF,断言按行比较避免 \n/\r\n 差异

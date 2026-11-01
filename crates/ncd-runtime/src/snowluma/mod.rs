@@ -2,6 +2,7 @@
 
 pub(crate) mod agreements;
 pub(crate) mod consent_files;
+mod docker_agreements;
 pub mod ui_state;
 
 pub use ncd_backend_snowluma::snowluma::*;

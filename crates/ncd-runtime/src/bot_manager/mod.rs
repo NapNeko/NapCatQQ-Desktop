@@ -23,7 +23,7 @@ use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
-// SnowLumaWebUiClient: wait_ready/login/get_agreements 的 trait 方法解析需要 in scope。
+// SnowLumaWebUiClient: WebUI 配置热更新的 trait 方法解析需要 in scope。
 use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
@@ -1956,7 +1956,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         if config.bot.backend_type != BackendType::SnowLuma {
             return Ok(());
         }
-        if let Some(payload) = self.snowluma_agreements().prepare(config).await? {
+        if let Some(payload) = self.snowluma_agreements().prepare(config).await?
+            && payload.consent_required
+        {
             return Err(Self::snowluma_consent_required_error(&payload.version));
         }
         Ok(())
@@ -2014,68 +2016,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     async fn snowluma_docker_agreements_after_attach(
         &self,
-        bot_id: &BotId,
         config: &BotConfig,
     ) -> Result<Option<AgreementsPayload>, BotManagerError> {
         let scenario = RuntimeScenario::from_config(config)?;
         if !scenario.is_docker() || scenario.backend_type() != BackendType::SnowLuma {
             return Ok(None);
         }
-        let Some(endpoint) = self
-            .remote_runtime_sessions()
-            .snowluma_docker_endpoints(bot_id)
-            .await
-        else {
-            return Ok(None);
-        };
-        let client = match ReqwestSnowLumaWebUiClient::new(
-            endpoint.webui_local_port,
-            endpoint.webui_password,
-        ) {
-            Ok(client) => client,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "SnowLuma Docker 协议检查: WebUI client 初始化失败"
-                );
-                return Ok(None);
-            }
-        };
-        if let Err(err) = client
-            .wait_ready(Duration::from_secs(20), Box::new(|| false))
-            .await
-        {
-            warn!(
-                target: "ncd_runtime::bot_manager",
-                bot_id = %bot_id,
-                err = %err,
-                "SnowLuma Docker 协议检查: WebUI 未就绪"
-            );
-            return Ok(None);
-        }
-        if let Err(err) = client.login().await {
-            warn!(
-                target: "ncd_runtime::bot_manager",
-                bot_id = %bot_id,
-                err = %err,
-                "SnowLuma Docker 协议检查: WebUI 登录失败"
-            );
-            return Ok(None);
-        }
-        match client.get_agreements().await {
-            Ok(payload) => Ok(Some(payload)),
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "SnowLuma Docker 协议检查: 读取协议失败"
-                );
-                Ok(None)
-            }
-        }
+        self.snowluma_agreements().prepare(config).await
     }
 
     async fn start_runtime_from_starting(
@@ -2318,9 +2265,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         .attach_after_runtime_start(bot_id, config)
                         .await;
                     attached_after_runtime_start = true;
-                    if let Some(payload) = self
-                        .snowluma_docker_agreements_after_attach(bot_id, config)
-                        .await?
+                    if let Some(payload) =
+                        self.snowluma_docker_agreements_after_attach(config).await?
                         && payload.consent_required
                     {
                         if cancel.is_cancelled() {
@@ -2604,10 +2550,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    /// SnowLuma 协议预检：读安装目录协议文件，不启动 QQ / node，也不 login。
+    /// SnowLuma 协议预检：读协议文件，不启动 QQ / node，也不 login。
     ///
     /// 本机与远端 Native 都只读 EULA/PRIVACY/consent.json（与本机 daemon.runtime_root 一致）；
-    /// Docker 的 WebUI 跟容器生命周期绑定，仍走启动后检测路径。
+    /// Docker 经 cp 读取容器文件，停止时仍可展示协议；首次创建后补查一次。
     pub async fn prepare_snowluma_agreements(
         &self,
         bot_id: &BotId,

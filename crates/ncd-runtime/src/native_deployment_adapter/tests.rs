@@ -52,6 +52,9 @@ struct DockerRuntimeMockHost {
     fail_login_overlay: bool,
     fail_home_probe: bool,
     fail_copy: bool,
+    pending_consent: Mutex<Option<Vec<u8>>>,
+    volume_consent: Mutex<Option<Vec<u8>>>,
+    fail_consent_readback: bool,
     launched: std::sync::atomic::AtomicBool,
 }
 
@@ -65,6 +68,9 @@ impl DockerRuntimeMockHost {
             fail_login_overlay: false,
             fail_home_probe: false,
             fail_copy: false,
+            pending_consent: Mutex::new(None),
+            volume_consent: Mutex::new(None),
+            fail_consent_readback: false,
             launched: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -111,6 +117,11 @@ impl Host for DockerRuntimeMockHost {
     }
 
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+        if path.as_posix().ends_with("/consent.json")
+            && let Some(bytes) = self.pending_consent.lock().unwrap().clone()
+        {
+            return Ok(Bytes::from(bytes));
+        }
         Err(HostError::PathNotFound { path: path.clone() })
     }
 
@@ -143,7 +154,10 @@ impl Host for DockerRuntimeMockHost {
         Ok(())
     }
 
-    async fn remove_file(&self, _: &HostPath) -> Result<(), HostError> {
+    async fn remove_file(&self, path: &HostPath) -> Result<(), HostError> {
+        if path.as_posix().ends_with("/consent.json") {
+            *self.pending_consent.lock().unwrap() = None;
+        }
         Ok(())
     }
 
@@ -197,6 +211,16 @@ impl Host for DockerRuntimeMockHost {
         }
         match cmd.args.first().map(String::as_str) {
             Some("cp") if self.fail_copy => Ok(command_output(1, "", "copy failed")),
+            Some("cp") if cmd.args.last().is_some_and(|arg| arg.ends_with("/consent.json")) => {
+                *self.volume_consent.lock().unwrap() = self.pending_consent.lock().unwrap().clone();
+                Ok(command_output(0, "", ""))
+            }
+            Some("exec") if cmd.args.iter().any(|arg| arg == "cat")
+                && cmd.args.last().is_some_and(|arg| arg.ends_with("/consent.json")) => {
+                let bytes = if self.fail_consent_readback { Vec::new() }
+                    else { self.volume_consent.lock().unwrap().clone().unwrap_or_default() };
+                Ok(command_output(0, &String::from_utf8(bytes).unwrap(), ""))
+            }
             Some("info") if cmd.args.iter().any(|arg| arg.contains("OSType")) => {
                 Ok(command_output(0, "linux/x86_64", ""))
             }
@@ -276,6 +300,59 @@ fn docker_listener_hosts_are_normalized_only_in_derived_configuration() {
             native
         );
     }
+}
+
+#[tokio::test]
+async fn snowluma_consent_survives_container_recreation_and_staging_is_consumed() {
+    let host = DockerRuntimeMockHost::new("");
+    let consent = crate::snowluma_consent_files::consent_record_json("accepted-version").unwrap();
+    *host.pending_consent.lock().unwrap() = Some(consent.clone());
+    let config = docker_config(BackendType::SnowLuma);
+    let cli = ncd_deploy::DockerCli::for_bot(&host, &config);
+    cli.ensure_daemon_ready().await.unwrap();
+    docker_helpers::sync_snowluma_docker_config(&host, &cli, &config, "slbot-10001")
+        .await
+        .unwrap();
+    assert_eq!(*host.volume_consent.lock().unwrap(), Some(consent));
+    assert!(host.pending_consent.lock().unwrap().is_none());
+    assert!(host.commands().iter().any(|command| {
+        command
+            .args
+            .iter()
+            .any(|arg| arg == "slbot-10001:/app/snowluma-data/config/consent.json")
+    }));
+}
+
+#[tokio::test]
+async fn snowluma_failed_consent_sync_retains_staging_for_retry() {
+    let mut host = DockerRuntimeMockHost::new("");
+    host.fail_consent_readback = true;
+    *host.pending_consent.lock().unwrap() =
+        Some(crate::snowluma_consent_files::consent_record_json("accepted-version").unwrap());
+    let config = docker_config(BackendType::SnowLuma);
+    let cli = ncd_deploy::DockerCli::for_bot(&host, &config);
+    cli.ensure_daemon_ready().await.unwrap();
+    assert!(
+        docker_helpers::sync_snowluma_docker_config(&host, &cli, &config, "slbot-10001")
+            .await
+            .is_err()
+    );
+    assert!(host.pending_consent.lock().unwrap().is_some());
+}
+
+#[tokio::test]
+async fn snowluma_invalid_consent_staging_cannot_be_copied_to_the_volume() {
+    let host = DockerRuntimeMockHost::new("");
+    *host.pending_consent.lock().unwrap() = Some(b"invalid".to_vec());
+    let config = docker_config(BackendType::SnowLuma);
+    let cli = ncd_deploy::DockerCli::for_bot(&host, &config);
+    cli.ensure_daemon_ready().await.unwrap();
+    assert!(
+        docker_helpers::sync_snowluma_docker_config(&host, &cli, &config, "slbot-10001")
+            .await
+            .is_err()
+    );
+    assert!(host.volume_consent.lock().unwrap().is_none());
 }
 
 #[tokio::test]
