@@ -34,6 +34,10 @@ impl DockerRestartPolicy {
 #[serde(rename_all = "camelCase", default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct BotDockerConfig {
+    /// 缺失表示旧配置，由编排层按原主机设置补齐后持久化。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub engine: Option<super::ContainerEngine>,
     /// 默认仅发布到宿主机回环；开启后监听所有 IPv4 网卡。
     pub publish_on_all_interfaces: bool,
     /// 按容器端口覆盖自动映射，也可追加额外 TCP 端口。

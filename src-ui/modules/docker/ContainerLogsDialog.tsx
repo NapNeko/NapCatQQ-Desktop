@@ -1,3 +1,4 @@
+import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 // 日志查询绑定容器 ID，切换行数或主机后旧请求不能覆盖新结果。
 import { useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -19,11 +20,13 @@ const TAIL_OPTIONS = ['100', '400', '1000', '2000'];
 
 export function ContainerLogsDialog({
     hostId,
+    engine,
     id,
     name,
     onClose,
 }: {
     hostId: string;
+    engine?: ContainerEngine;
     id: string;
     name: string;
     onClose: () => void;
@@ -31,7 +34,7 @@ export function ContainerLogsDialog({
     const [tail, setTail] = useState('400');
     const [autoRefresh, setAutoRefresh] = useState(false);
     const [search, setSearch] = useState('');
-    const logs = useDockerLogs(hostId, id, Number(tail), autoRefresh);
+    const logs = useDockerLogs(hostId, id, Number(tail), autoRefresh, engine);
     const lines = useMemo(() => {
         const raw = logs.data ?? '';
         if (!raw) return [];

@@ -13,6 +13,7 @@ pub use remote_read::remote_metrics_read_failure;
 
 pub use docker::prepare_docker_metrics_overlay;
 pub use history::{append_history_point, load_history, prune_history_file};
+pub(crate) use inject::napcat_file_uri;
 pub use inject::{
     MetricsInjectPlan, apply_metrics_env_vars, apply_metrics_to_environment,
     build_metrics_env_prefix, build_napcat_load_script, build_napcat_load_script_with_env,

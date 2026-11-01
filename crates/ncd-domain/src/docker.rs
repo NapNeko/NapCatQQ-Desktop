@@ -14,6 +14,25 @@ pub use management::*;
 mod bot_config;
 pub use bot_config::{BotDockerConfig, DockerRestartPolicy};
 
+/// 容器存储按引擎隔离；托管实例必须记住创建时使用的引擎。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum ContainerEngine {
+    #[default]
+    Docker,
+    Podman,
+}
+
+impl ContainerEngine {
+    pub const fn program(self) -> &'static str {
+        match self {
+            Self::Docker => "docker",
+            Self::Podman => "podman",
+        }
+    }
+}
+
 /// 目标主机上 Docker 的探测结果
 ///
 /// installed=false 时其余字段无意义(version 为空, 两个 bool 为 false),
@@ -23,6 +42,9 @@ pub use bot_config::{BotDockerConfig, DockerRestartPolicy};
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub compose_diagnostic: Option<String>,
     /// docker 二进制是否存在且能跑 docker version
     pub installed: bool,
     /// docker 客户端版本号(如 "27.3.1");探测不到留空
@@ -37,6 +59,7 @@ impl DockerStatus {
     /// 一个"什么都没有"的状态,探测彻底失败时返回
     pub fn absent() -> Self {
         Self {
+            compose_diagnostic: None,
             installed: false,
             version: String::new(),
             compose_available: false,
@@ -635,6 +658,7 @@ mod tests {
     #[test]
     fn docker_status_ready_requires_all_three() {
         let mut s = DockerStatus {
+            compose_diagnostic: None,
             installed: true,
             version: "27.0".into(),
             compose_available: true,

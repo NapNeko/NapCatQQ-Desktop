@@ -103,11 +103,19 @@ fn linux_snippets() -> Vec<TerminalSnippet> {
 }
 
 /// 进容器：先看要不要 sudo，再按名字找在跑的那个（SnowLuma 有旧版留下的 ncbot 名字）
-fn docker_exec_script(names: &[String]) -> String {
+fn docker_exec_script(names: &[String], engine: ncd_domain::docker::ContainerEngine) -> String {
     let list: Vec<String> = names.iter().map(|n| shell_single_quote(n)).collect();
     let shown = names.join(" / ");
+    let setup = match engine {
+        ncd_domain::docker::ContainerEngine::Docker => {
+            r#"if docker info >/dev/null 2>&1; then D=docker; else D="sudo docker"; fi"#
+        }
+        ncd_domain::docker::ContainerEngine::Podman => {
+            "D=podman\nif ! podman info; then echo '当前用户的 Podman 运行环境未就绪'; exit 1; fi"
+        }
+    };
     format!(
-        r#"if docker info >/dev/null 2>&1; then D=docker; else D="sudo docker"; fi
+        r#"{setup}
 C=
 for n in {list}; do
   if $D inspect --format '{{{{.State.Running}}}}' "$n" 2>/dev/null | grep -q true; then C=$n; break; fi
@@ -140,7 +148,7 @@ enum RemoteStart {
     /// 进第一个存在的目录，带上环境
     Dir(Vec<String>),
     /// 进容器（带 sudo 判断和按名字找）
-    Container(Vec<String>),
+    Container(Vec<String>, ncd_domain::docker::ContainerEngine),
 }
 
 pub struct DesktopTerminalPlanner {
@@ -381,17 +389,18 @@ impl DesktopTerminalPlanner {
                     (PtyProgram::Script(script), false, first)
                 }
             }
-            RemoteStart::Container(names) => {
+            RemoteStart::Container(names, engine) => {
                 files = false;
                 if info.posix {
                     (
-                        PtyProgram::Script(docker_exec_script(names)),
+                        PtyProgram::Script(docker_exec_script(names, *engine)),
                         false,
                         info.home.clone(),
                     )
                 } else {
                     banner.push(format!(
-                        "登录 shell 不是 bash 这一类，没法自动进容器；手动 docker exec -it {} sh",
+                        "登录 shell 不是 bash 这一类，没法自动进容器；手动 {} exec -it {} sh",
+                        engine.program(),
                         names.first().map(String::as_str).unwrap_or_default()
                     ));
                     (PtyProgram::LoginShell, false, info.home.clone())
@@ -460,7 +469,7 @@ impl DesktopTerminalPlanner {
                 }
                 found.unwrap_or_else(|| HostPath::from_windows(&info.home_dir))
             }
-            RemoteStart::Container(_) => {
+            RemoteStart::Container(_, _) => {
                 return Err(TerminalError::Unsupported(
                     "Windows 主机的 Linux 容器终端需要单独的容器执行目标".into(),
                 ));
@@ -675,11 +684,26 @@ mod tests {
 
     #[test]
     fn docker_script_tries_each_name_and_escapes_templates() {
-        let script = docker_exec_script(&["ncbot-1".into(), "slbot-1".into()]);
+        let script = docker_exec_script(
+            &["ncbot-1".into(), "slbot-1".into()],
+            ncd_domain::docker::ContainerEngine::Docker,
+        );
         assert!(script.contains("for n in 'ncbot-1' 'slbot-1'; do"));
         assert!(script.contains("--format '{{.State.Running}}'"));
         assert!(script.contains("（ncbot-1 / slbot-1）"));
         assert!(script.contains("exec $D exec -it \"$C\" sh -c"));
+    }
+
+    #[test]
+    fn podman_container_terminal_never_falls_back_to_docker_or_root_storage() {
+        let script = docker_exec_script(
+            &["ncbot-1".into()],
+            ncd_domain::docker::ContainerEngine::Podman,
+        );
+        assert!(script.contains("D=podman"));
+        assert!(script.contains("if ! podman info"));
+        assert!(!script.contains("docker"));
+        assert!(!script.contains("sudo"));
     }
 
     #[test]

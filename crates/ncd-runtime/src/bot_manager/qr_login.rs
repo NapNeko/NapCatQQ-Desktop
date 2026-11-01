@@ -208,6 +208,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let Some(pid) = ncd_backend_snowluma::docker_login::DockerLoginSession::bound_pid(
                 host.as_ref(),
                 bot_id,
+                ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), &config),
             )
             .await?
             else {

@@ -47,15 +47,11 @@ impl NativeLaunchTranslator for Translator {
         }
         if let Some(probe) = self.0.metrics_environment.get("NCD_METRICS_PROBE_PATH") {
             script.push_str(&format!(
-                "require({});\n",
+                "try {{ require({}); }} catch (error) {{ console.warn('[Desktop] metrics probe load failed:', error && error.stack || String(error)); }}\n",
                 serde_json::to_string(probe).unwrap()
             ));
         }
-        script.push_str(&format!(
-            "import({});",
-            serde_json::to_string(entry.as_str())
-                .map_err(|error| DeploymentError::LaunchFailed(error.to_string()))?
-        ));
+        let script = ncd_deploy::napcat_loader::render_napcat_loader(entry.as_str(), &script);
         tokio::fs::write(&load, script)
             .await
             .map_err(|error| DeploymentError::LaunchFailed(error.to_string()))?;

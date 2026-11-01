@@ -206,6 +206,14 @@ export function DockerDeploymentSection({
                         onRetry={retry}
                     />
                 </div>
+                {status?.composeDiagnostic && !engineBusy && (
+                    <p
+                        role="alert"
+                        className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-danger"
+                    >
+                        {status.composeDiagnostic}
+                    </p>
+                )}
                 {supported && engineError != null && !engineBusy ? (
                     <p
                         role="alert"
@@ -311,7 +319,9 @@ export function DockerDeploymentSection({
                                                     ? 'docker-deployment-blocked'
                                                     : undefined
                                             }
-                                            onClick={() => openCreateDockerBot({ hostId, flavor })}
+                                            onClick={() =>
+                                                openCreateDockerBot({ hostId, flavor, engine })
+                                            }
                                         >
                                             <Plus size={13} />
                                             新建 Bot

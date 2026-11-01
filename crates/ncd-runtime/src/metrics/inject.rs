@@ -182,8 +182,10 @@ pub fn merge_node_options_require(env: &mut BTreeMap<String, String>, probe: &Pa
 /// NapCat loadNapCat.js：清 cache 后 require，避免 NODE_OPTIONS 预加载的 disabled 缓存
 pub fn build_probe_load_prefix(probe: &Path) -> String {
     // Windows 路径转 file URL 不必要；CJS require 吃绝对路径
-    let p = probe.to_string_lossy().replace('\\', "\\\\");
-    format!("try {{ delete require.cache['{p}']; }} catch (_) {{}}\nrequire('{p}');\n")
+    let p = ncd_deploy::napcat_loader::js_string(&probe.to_string_lossy());
+    format!(
+        "try {{ delete require.cache[{p}]; require({p}); }} catch (error) {{ console.warn('[Desktop] metrics probe load failed:', error && error.stack || String(error)); }}\n"
+    )
 }
 
 /// 在 require 探针前写入 process.env（Electron/QQ 不一定继承 shell export）
@@ -194,19 +196,26 @@ pub fn build_metrics_env_prefix(env: &BTreeMap<String, String>) -> String {
         if !k.starts_with("NCD_METRICS_") {
             continue;
         }
-        let key = js_single_quote(k);
-        let val = js_single_quote(v);
-        s.push_str(&format!("process.env['{key}'] = '{val}';\n"));
+        let key = ncd_deploy::napcat_loader::js_string(k);
+        let val = ncd_deploy::napcat_loader::js_string(v);
+        s.push_str(&format!("process.env[{key}] = {val};\n"));
     }
     s
 }
 
-fn js_single_quote(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('\'', "\\'")
-}
-
 pub fn build_napcat_load_script(napcat_mjs_uri: &str, probe: Option<&Path>) -> String {
     build_napcat_load_script_with_env(napcat_mjs_uri, probe, None)
+}
+
+pub(crate) fn napcat_file_uri(path: &Path) -> Result<String, String> {
+    if let Ok(uri) = reqwest::Url::from_file_path(path) {
+        return Ok(uri.to_string());
+    }
+    // 远端 POSIX 路径、跨平台测试中的盘符路径都通过 URL 路径 setter 编码。
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    let mut uri = reqwest::Url::parse("file:///").map_err(|error| error.to_string())?;
+    uri.set_path(&normalized);
+    Ok(uri.to_string())
 }
 
 /// 带 metrics env 的 load 脚本：env 写进 process.env 再 require，不依赖父进程环境
@@ -222,10 +231,7 @@ pub fn build_napcat_load_script_with_env(
     if let Some(p) = probe {
         s.push_str(&build_probe_load_prefix(p));
     }
-    s.push_str(&format!(
-        "(async () => {{await import('{napcat_mjs_uri}')}})()"
-    ));
-    s
+    ncd_deploy::napcat_loader::render_napcat_loader(napcat_mjs_uri, &s)
 }
 
 #[cfg(test)]
@@ -299,7 +305,7 @@ mod tests {
     #[test]
     fn load_script_with_and_without_probe() {
         let plain = build_napcat_load_script("file:///x/napcat.mjs", None);
-        assert!(plain.starts_with("(async"));
+        assert!(plain.starts_with("console.info('[Desktop] NapCat loader entered')"));
         assert!(!plain.contains("require("));
         let with = build_napcat_load_script(
             "file:///x/napcat.mjs",
@@ -367,5 +373,73 @@ mod tests {
             opts,
             r#"--require "C:/ProgramData/NapCatQQ Desktop/metrics/ncd-ob11-stats.cjs""#
         );
+    }
+}
+
+#[cfg(test)]
+mod loader_execution_tests {
+    use super::*;
+
+    #[test]
+    fn failed_probe_and_special_path_do_not_prevent_napcat_core_import() {
+        if std::process::Command::new("node")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let entry = root.path().join("core's #模块.mjs");
+        std::fs::write(
+            &entry,
+            "console.log('NCD_CORE_EXECUTED'); export const ready = true;",
+        )
+        .unwrap();
+        let probe = root.path().join("missing's-probe.cjs");
+        let uri = napcat_file_uri(&entry).unwrap();
+        let script = build_napcat_load_script(&uri, Some(&probe));
+        let load = root.path().join("load.cjs");
+        std::fs::write(&load, script).unwrap();
+        let output = std::process::Command::new("node")
+            .arg(&load)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stdout.contains("NapCat loader entered"));
+        assert!(stdout.contains("NCD_CORE_EXECUTED"));
+        assert!(stdout.contains("NapCat core imported"));
+        assert!(stderr.contains("metrics probe load failed"));
+    }
+
+    #[test]
+    fn rejected_core_import_is_reported_with_its_original_error() {
+        if std::process::Command::new("node")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let entry = root.path().join("broken.mjs");
+        std::fs::write(&entry, "throw new Error('NCD_CORE_FAILURE_FIXTURE');").unwrap();
+        let uri = napcat_file_uri(&entry).unwrap();
+        let load = root.path().join("load.cjs");
+        std::fs::write(&load, build_napcat_load_script(&uri, None)).unwrap();
+        let output = std::process::Command::new("node")
+            .arg(&load)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("NapCat core import failed"));
+        assert!(stderr.contains("NCD_CORE_FAILURE_FIXTURE"));
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("NapCat core imported"));
     }
 }

@@ -146,3 +146,24 @@ describe('组件页 Docker 多主机查询', () => {
         expect(cancel).toHaveBeenCalledWith(schedule.mock.results[timeoutIndex].value);
     });
 });
+
+it('同一主机的 Docker 与 Podman 分别探测状态、镜像和容器', async () => {
+    service.probe.mockImplementation(async (_host, engine) => ({ ...READY, version: engine }));
+    service.imageReadyForFlavor.mockImplementation(
+        async (_host, _flavor, engine) => engine === 'podman',
+    );
+    const targets = [
+        { hostId: HOST_A, engine: 'docker' as const },
+        { hostId: HOST_A, engine: 'podman' as const },
+    ];
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useDockerHosts(targets), { wrapper });
+    await waitFor(() =>
+        expect(result.current.imageReadyByHost[`${HOST_A}::podman`]?.napcat).toBe(true),
+    );
+    expect(result.current.statusByHost[`${HOST_A}::docker`]?.version).toBe('docker');
+    expect(result.current.statusByHost[`${HOST_A}::podman`]?.version).toBe('podman');
+    expect(result.current.imageReadyByHost[`${HOST_A}::docker`]?.napcat).toBe(false);
+    expect(service.listContainers).toHaveBeenCalledWith(HOST_A, 'docker');
+    expect(service.listContainers).toHaveBeenCalledWith(HOST_A, 'podman');
+});

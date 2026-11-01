@@ -41,22 +41,12 @@ pub async fn container_engine_set(
     if host.os() != ncd_host::Os::Linux {
         return Err("容器引擎选择仅支持 Linux 主机".into());
     }
-    if state
+    // 切换管理视图前固定历史 Bot 的引擎，运行中的实例仍归原引擎管理。
+    state
         .bot_manager
-        .list_bot_configs()
+        .pin_container_engines()
         .await
-        .map_err(|e| e.to_string())?
-        .iter()
-        .any(|c| {
-            c.bot.deployment_type == ncd_domain::DeploymentType::Docker
-                && match &c.bot.runtime_target {
-                    ncd_domain::RuntimeTarget::Local => host_id == "local",
-                    ncd_domain::RuntimeTarget::Server(id) => host_id == format!("remote:{id}"),
-                }
-        })
-    {
-        return Err("这台主机已有容器 Bot 配置，请先迁移或移除这些配置再切换引擎，避免运行中的 Bot 失去管理。".into());
-    }
+        .map_err(|e| e.to_string())?;
     {
         let _guard = WRITE_LOCK.lock().map_err(|e| e.to_string())?;
         let mut value = engine::preferences();

@@ -46,20 +46,21 @@ function dockerImageGateReason(
     const { config, dockerStatus, imageReady, dockerProbing } = args;
     if (!isDockerBotConfig(config)) return null;
 
+    const engineName = config.docker?.engine === 'podman' ? 'Podman' : 'Docker';
     const label = FLAVOR_LABEL[dockerFlavorForBackend(config.bot.backend_type)];
     const later = when === 'save' ? '后再保存' : '后再启动';
 
     if (dockerProbing && !dockerStatus) {
         return when === 'save'
-            ? '正在检查 Docker 状态，请稍后再保存'
-            : '正在检查 Docker 状态，请稍后再启动';
+            ? `正在检查 ${engineName} 状态，请稍后再保存`
+            : `正在检查 ${engineName} 状态，请稍后再启动`;
     }
 
     const dockerOk =
         dockerStatus?.installed && dockerStatus.daemonRunning && dockerStatus.composeAvailable;
 
     if (!dockerOk) {
-        return '此主机 Docker 未就绪，请到「组件」页安装并启动 Docker';
+        return `此主机 ${engineName} 未就绪，请到「组件」页检查对应引擎`;
     }
 
     if (imageReady === false) {
@@ -95,15 +96,17 @@ export function dockerSaveBlockReason(args: {
 
 /** 配置页 Docker 就绪条（与启动门禁文案一致）。 */
 export function dockerReadinessNotice(args: {
+    engine?: 'docker' | 'podman';
     flavorLabel: string;
     status: DockerStatus | undefined;
     probing: boolean;
     imageReady: boolean | undefined;
 }): { tone: 'ok' | 'warn' | 'neutral'; text: string } | null {
     const { flavorLabel, status, probing, imageReady } = args;
+    const engineName = args.engine === 'podman' ? 'Podman' : 'Docker';
 
     if (probing && !status) {
-        return { tone: 'neutral', text: '正在检查 Docker…' };
+        return { tone: 'neutral', text: `正在检查 ${engineName}…` };
     }
 
     const dockerOk = status?.installed && status.daemonRunning && status.composeAvailable;
@@ -111,7 +114,7 @@ export function dockerReadinessNotice(args: {
     if (!dockerOk) {
         return {
             tone: 'warn',
-            text: '此主机 Docker 未就绪，请到「组件」页安装并启动 Docker',
+            text: `此主机 ${engineName} 未就绪，请到「组件」页检查对应引擎`,
         };
     }
 
@@ -126,12 +129,12 @@ export function dockerReadinessNotice(args: {
         const ver = status.version?.trim();
         return {
             tone: 'ok',
-            text: `${ver ? `Docker ${ver} · ` : ''}${flavorLabel} 镜像已就绪，可启动`,
+            text: `${ver ? `${engineName} ${ver} · ` : ''}${flavorLabel} 镜像已就绪，可启动`,
         };
     }
 
     return {
         tone: 'neutral',
-        text: `Docker 已就绪，正在确认 ${flavorLabel} 镜像…`,
+        text: `${engineName} 已就绪，正在确认 ${flavorLabel} 镜像…`,
     };
 }

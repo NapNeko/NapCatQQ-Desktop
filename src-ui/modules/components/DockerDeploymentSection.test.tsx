@@ -137,6 +137,7 @@ describe('Docker 部署区', () => {
         expect(navigation.create).toHaveBeenCalledWith({
             hostId: 'remote:second-host',
             flavor: 'snowluma',
+            engine: 'docker',
         });
         fireEvent.click(screen.getByRole('button', { name: '容器管理' }));
         expect(navigation.manage).toHaveBeenCalledWith('remote:second-host');

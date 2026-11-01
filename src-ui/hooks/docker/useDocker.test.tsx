@@ -128,6 +128,7 @@ describe('Docker 管理查询', () => {
             'container-id',
             'stop',
             undefined,
+            undefined,
         );
     });
     it('迟到的日志响应不会覆盖另一台主机的同名容器', async () => {
@@ -147,4 +148,34 @@ describe('Docker 管理查询', () => {
         await act(async () => pending.resolve('host A'));
         expect(result.current.data).toBe('host B');
     });
+});
+
+it('同名容器切换引擎时不复用另一引擎的列表', async () => {
+    const old = deferred<never[]>();
+    service.listContainers.mockImplementation((_host, engine) =>
+        engine === 'docker' ? old.promise : Promise.resolve([]),
+    );
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(
+        ({ engine }) => useDocker('local', 'containers', false, engine),
+        {
+            wrapper,
+            initialProps: { engine: 'docker' as 'docker' | 'podman' },
+        },
+    );
+    await waitFor(() => expect(service.listContainers).toHaveBeenCalledWith('local', 'docker'));
+    rerender({ engine: 'podman' });
+    await waitFor(() => expect(service.listContainers).toHaveBeenCalledWith('local', 'podman'));
+    await act(async () => old.resolve([]));
+    expect(result.current.containers).toEqual([]);
+    await act(async () => {
+        await result.current.containerActionAsync({ name: 'same-name', action: 'start' });
+    });
+    expect(service.containerAction).toHaveBeenCalledWith(
+        'local',
+        'same-name',
+        'start',
+        undefined,
+        'podman',
+    );
 });

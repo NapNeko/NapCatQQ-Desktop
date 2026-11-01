@@ -1,6 +1,7 @@
 //! Docker 探测 / 列表 / 生命周期 / compose down
 
 use ncd_deploy::docker::DockerCli;
+use ncd_domain::docker::ContainerEngine;
 use ncd_domain::{ContainerAction, ContainerInfo, DockerFlavor, DockerStatus, ImageInfo};
 use ncd_host::{Host, HostCommand};
 use tauri::State;
@@ -12,10 +13,11 @@ use crate::commands::host_resolve::resolve_host_with_autoconnect;
 #[tauri::command]
 pub async fn docker_probe(
     host_id: String,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<DockerStatus, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    DockerCli::new(host.as_ref())
+    DockerCli::for_engine(host.as_ref(), engine)
         .probe_checked()
         .await
         .map_err(|e| e.to_string())
@@ -24,10 +26,11 @@ pub async fn docker_probe(
 #[tauri::command]
 pub async fn docker_list_containers(
     host_id: String,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ContainerInfo>, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let cli = DockerCli::new(host.as_ref());
+    let cli = DockerCli::for_engine(host.as_ref(), engine);
     // 先 probe 定夺提权:远端没进 docker 组时裸 docker 会 permission denied,
     // ensure_daemon_ready 探一次让后续命令一致地走 sudo
     cli.ensure_daemon_ready()
@@ -41,10 +44,11 @@ pub async fn docker_list_containers(
 #[tauri::command]
 pub async fn docker_list_images(
     host_id: String,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ImageInfo>, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let cli = DockerCli::new(host.as_ref());
+    let cli = DockerCli::for_engine(host.as_ref(), engine);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -58,10 +62,11 @@ pub async fn docker_remove_image(
     host_id: String,
     image_ref: String,
     force: Option<bool>,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let cli = DockerCli::new(host.as_ref());
+    let cli = DockerCli::for_engine(host.as_ref(), engine);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -87,10 +92,11 @@ pub async fn docker_container_action(
     name: String,
     action: ContainerAction,
     force: Option<bool>,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let cli = DockerCli::new(host.as_ref());
+    let cli = DockerCli::for_engine(host.as_ref(), engine);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -115,10 +121,11 @@ pub async fn docker_logs(
     host_id: String,
     name: String,
     tail: u32,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let cli = DockerCli::new(host.as_ref());
+    let cli = DockerCli::for_engine(host.as_ref(), engine);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -131,10 +138,11 @@ pub async fn docker_logs(
 pub async fn docker_image_ready_for_flavor(
     host_id: String,
     flavor: DockerFlavor,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let cli = DockerCli::new(host.as_ref());
+    let cli = DockerCli::for_engine(host.as_ref(), engine);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -149,13 +157,14 @@ pub async fn docker_compose_down(
     host_id: String,
     name: String,
     remove_volumes: bool,
+    engine: Option<ContainerEngine>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     DockerCli::validate_project_name(&name).map_err(|e| e.to_string())?;
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let host_ref: &dyn Host = host.as_ref();
     let project_dir = resolve_project_dir(&host_id, host_ref, &state, &name).await?;
-    let cli = DockerCli::new(host_ref);
+    let cli = DockerCli::for_engine(host_ref, engine);
     // compose down 要用 compose 插件,走 ensure_ready(probe 定夺提权 + 要求 compose)
     cli.ensure_ready()
         .await

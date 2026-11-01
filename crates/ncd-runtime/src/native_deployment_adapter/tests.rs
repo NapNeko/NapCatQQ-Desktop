@@ -189,7 +189,10 @@ impl Host for DockerRuntimeMockHost {
             }
             return Ok(command_output(0, "/home/napcat\n", ""));
         }
-        if cmd.program != "docker" {
+        if cmd.program == "podman" && cmd.args == ["--version"] {
+            return Ok(command_output(0, "podman version 5.8.9\n", ""));
+        }
+        if !matches!(cmd.program.as_str(), "docker" | "podman") {
             return Ok(command_output(0, "", ""));
         }
         match cmd.args.first().map(String::as_str) {
@@ -671,4 +674,27 @@ fn docker_failed_status_keeps_reason() {
     assert_eq!(status.state, BotActorState::Crashed);
     assert_eq!(status.extra["deployment_state"], "failed");
     assert_eq!(status.extra["reason"], "docker ps failed");
+}
+
+#[tokio::test]
+async fn podman_backend_status_and_logs_keep_the_instance_engine() {
+    use ncd_domain::docker::ContainerEngine;
+    let host = Arc::new(DockerRuntimeMockHost::new(
+        r#"{"ID":"podman-id","Names":"ncbot-10001","Image":"docker.io/mlikiowa/napcat-docker:latest","State":"running","Status":"Up","Ports":""}"#,
+    ));
+    let backend = DockerDeploymentBackend::new(
+        Arc::new(DockerDeployment::new().with_engine(ContainerEngine::Podman)),
+        host.clone(),
+        BotId::new("docker"),
+        BotFlavor::NapCat,
+    );
+    let bot = BotId::new("10001");
+    backend.status(bot.clone()).await.unwrap();
+    let logs = backend.tail_log(bot, TailOpts { lines: 5 }).await.unwrap();
+    assert!(logs.lines.iter().any(|line| line == "legacy-line-a"));
+    assert!(
+        host.commands()
+            .iter()
+            .all(|c| c.program == "podman" && !c.elevated)
+    );
 }

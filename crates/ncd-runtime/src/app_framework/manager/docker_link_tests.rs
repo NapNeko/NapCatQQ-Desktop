@@ -44,6 +44,7 @@ struct LinkHost {
     next_remote: AtomicU16,
     fail_bridge: AtomicBool,
     fail_bridge_once: AtomicBool,
+    podman_rootless: AtomicBool,
 }
 
 impl LinkHost {
@@ -59,6 +60,7 @@ impl LinkHost {
             next_remote: AtomicU16::new(42001),
             fail_bridge: AtomicBool::new(false),
             fail_bridge_once: AtomicBool::new(false),
+            podman_rootless: AtomicBool::new(false),
         });
         host.put(
             &format!("{}/.ssh/authorized_keys", host.home()),
@@ -241,6 +243,16 @@ impl Host for LinkHost {
     }
     async fn run_to_string(&self, command: HostCommand) -> Result<CommandOutput, HostError> {
         self.commands.lock().unwrap().push(command.clone());
+        if command.program == "podman" {
+            return match command.args.first().map(String::as_str) {
+                Some("--version") => Self::output(0, "podman version 5.8.9\n"),
+                Some("info") if command.args.iter().any(|arg| arg.contains("Rootless")) => {
+                    Self::output(0, self.podman_rootless.load(Ordering::SeqCst).to_string())
+                }
+                Some("network") => Self::output(0, r#"[{"gateway":"10.88.0.1"}]"#),
+                _ => Self::output(0, ""),
+            };
+        }
         if command.program == "docker" {
             return match command.args.first().map(String::as_str) {
                 Some("version") => Self::output(0, "27.3.1\n"),
@@ -757,4 +769,50 @@ async fn local_linux_docker_reverse_link_binds_gateway_without_ssh() {
                 .any(|key| key.contains(":docker-bridge:"))
         );
     }
+}
+
+#[tokio::test]
+async fn podman_link_uses_its_own_network_schema_and_never_docker() {
+    use ncd_domain::docker::ContainerEngine;
+    let host = LinkHost::new("podman-link", false);
+    let gateway = docker_link::gateway(host.as_ref(), ContainerEngine::Podman)
+        .await
+        .unwrap();
+    assert_eq!(gateway.to_string(), "10.88.0.1");
+    let commands = host.commands.lock().unwrap();
+    assert!(
+        commands
+            .iter()
+            .all(|c| c.program == "podman" && !c.elevated)
+    );
+    assert!(commands.iter().any(|c| c.args
+        == [
+            "network",
+            "inspect",
+            "podman",
+            "--format",
+            "{{json .Subnets}}"
+        ]));
+}
+
+#[tokio::test]
+async fn rootless_podman_link_does_not_bind_an_unreachable_host_bridge_or_elevate() {
+    use ncd_domain::docker::ContainerEngine;
+    let host = LinkHost::new("podman-rootless-link", false);
+    host.podman_rootless.store(true, Ordering::SeqCst);
+    let error = docker_link::gateway(host.as_ref(), ContainerEngine::Podman)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("rootless"));
+    let commands = host.commands.lock().unwrap();
+    assert!(
+        commands
+            .iter()
+            .all(|c| c.program == "podman" && !c.elevated)
+    );
+    assert!(
+        !commands
+            .iter()
+            .any(|c| c.args.first().is_some_and(|arg| arg == "network"))
+    );
 }

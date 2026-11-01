@@ -30,6 +30,11 @@ impl DockerCli<'_> {
     }
 
     pub(crate) async fn verify_selected_engine(&self) -> Result<(), DockerCliError> {
+        if self.engine == ContainerEngine::Podman && self.host.os() != Os::Linux {
+            return Err(DockerCliError::InvalidArgument(
+                "Podman 仅支持 Linux 主机".into(),
+            ));
+        }
         if self.host.os() != Os::Linux || self.engine != ContainerEngine::Docker {
             return Ok(());
         }

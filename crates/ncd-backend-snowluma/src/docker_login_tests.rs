@@ -13,6 +13,7 @@ struct CaptureHost {
 impl CaptureHost {
     fn new(replace_container: bool) -> Self {
         let session = DockerLoginSession {
+            engine: None,
             method: "atspi".into(),
             directory: format!(
                 "{}/ncd-login",
@@ -106,14 +107,15 @@ impl Host for CaptureHost {
         let mut stderr = String::new();
         let stdout = if command.program == "sh" {
             "/home/u".to_owned()
-        } else if command.program != "docker" {
+        } else if !matches!(command.program.as_str(), "docker" | "podman") {
             assert_eq!(command.program, "rm");
             String::new()
         } else {
             match command.args.first().map(String::as_str) {
+                Some("--version") if command.program == "podman" => "podman version 5.8.9".into(),
                 Some("--version") => "Docker version 27.3.1, build test".into(),
                 Some("version") => "27.3.1".into(),
-                Some("info") if !command.elevated => {
+                Some("info") if command.program == "docker" && !command.elevated => {
                     code = 1;
                     stderr = "permission denied connecting to /var/run/docker.sock".into();
                     String::new()
@@ -155,9 +157,10 @@ impl Host for CaptureHost {
 #[tokio::test]
 async fn capture_reuses_checked_docker_permissions_and_still_revalidates_identity() {
     let host = CaptureHost::new(false);
-    let snapshot = DockerLoginSession::snapshot(&host, &BotId::new("123"), false)
-        .await
-        .unwrap();
+    let snapshot =
+        DockerLoginSession::snapshot(&host, &BotId::new("123"), false, ContainerEngine::Docker)
+            .await
+            .unwrap();
     assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
     let commands = host.commands.lock().unwrap();
     assert_eq!(
@@ -192,11 +195,80 @@ async fn capture_reuses_checked_docker_permissions_and_still_revalidates_identit
 async fn container_replacement_during_capture_rejects_late_qr() {
     let host = CaptureHost::new(true);
     assert!(
-        DockerLoginSession::snapshot(&host, &BotId::new("123"), false)
+        DockerLoginSession::snapshot(&host, &BotId::new("123"), false, ContainerEngine::Docker)
             .await
             .is_err()
     );
     let saved: DockerLoginSession = serde_json::from_slice(&host.session.lock().unwrap()).unwrap();
     assert_eq!(saved.container_id.as_deref(), Some("original"));
     assert!(!saved.scanned);
+}
+
+#[tokio::test]
+async fn legacy_capture_session_without_engine_uses_the_pinned_podman_instance() {
+    let host = CaptureHost::new(false);
+    let mut legacy: serde_json::Value =
+        serde_json::from_slice(&host.session.lock().unwrap()).unwrap();
+    legacy.as_object_mut().unwrap().remove("engine");
+    *host.session.lock().unwrap() = serde_json::to_vec(&legacy).unwrap();
+    let snapshot =
+        DockerLoginSession::snapshot(&host, &BotId::new("123"), false, ContainerEngine::Podman)
+            .await
+            .unwrap();
+    assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
+    let saved: DockerLoginSession = serde_json::from_slice(&host.session.lock().unwrap()).unwrap();
+    assert_eq!(saved.engine, Some(ContainerEngine::Podman));
+    let commands = host.commands.lock().unwrap();
+    assert!(!commands.iter().any(|c| c.program == "docker"));
+    assert!(
+        commands
+            .iter()
+            .filter(|c| c.program == "podman")
+            .all(|c| !c.elevated)
+    );
+    assert!(
+        commands
+            .iter()
+            .any(|c| c.program == "podman" && c.args.first().is_some_and(|a| a == "exec"))
+    );
+}
+
+#[tokio::test]
+async fn legacy_capture_pid_probe_uses_the_pinned_podman_instance() {
+    let host = CaptureHost::new(false);
+    assert_eq!(
+        DockerLoginSession::bound_pid(&host, &BotId::new("123"), ContainerEngine::Podman)
+            .await
+            .unwrap(),
+        Some(24)
+    );
+    let commands = host.commands.lock().unwrap();
+    assert!(!commands.iter().any(|c| c.program == "docker"));
+    assert!(
+        commands
+            .iter()
+            .filter(|c| c.program == "podman")
+            .all(|c| !c.elevated)
+    );
+}
+
+#[tokio::test]
+async fn capture_rejects_a_conflicting_persisted_engine_before_container_commands() {
+    let host = CaptureHost::new(false);
+    let mut saved: DockerLoginSession =
+        serde_json::from_slice(&host.session.lock().unwrap()).unwrap();
+    saved.engine = Some(ContainerEngine::Docker);
+    *host.session.lock().unwrap() = serde_json::to_vec(&saved).unwrap();
+    let error =
+        DockerLoginSession::snapshot(&host, &BotId::new("123"), false, ContainerEngine::Podman)
+            .await
+            .unwrap_err();
+    assert!(error.to_string().contains("引擎与 Bot 设置不符"));
+    assert!(
+        host.commands
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|c| !matches!(c.program.as_str(), "docker" | "podman"))
+    );
 }

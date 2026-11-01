@@ -500,9 +500,9 @@ async fn napcat_launch_plan_builds_command_env_working_dir_and_load_script() {
     );
 
     let script = std::fs::read_to_string(plan.load_script_path).unwrap();
-    assert!(script.starts_with("(async () => {await import('file:///"));
+    assert!(script.contains("[Desktop] NapCat loader entered"));
     assert!(script.contains("napcat.mjs"));
-    assert!(script.ends_with("')})()"));
+    assert!(script.contains("[Desktop] NapCat core import failed:"));
 }
 
 #[tokio::test]
@@ -1677,6 +1677,7 @@ async fn docker_recreation_preflight_failure_keeps_saved_configuration_and_actor
     let (_, repo, _, manager) = make_manager(temp.path());
     let original = bot_config_remote_docker_server(10001, "docker");
     manager.upsert_bot_config(original.clone()).await.unwrap();
+    let original = repo.get(10001).await.unwrap().unwrap();
     let bot_id = BotId::new("10001");
     manager.test_confirm_actor_running(&bot_id).await.unwrap();
     let mut raw = serde_json::to_value(&original).unwrap();
@@ -2181,4 +2182,50 @@ async fn debug_port_joins_configs_with_snapshots_and_resolves_webui_endpoints() 
 
     // 运行时装配时要能当成 trait 对象交给 DebugManager
     let _port: Arc<dyn DebugBotPort> = Arc::new(manager);
+}
+
+#[tokio::test]
+async fn legacy_podman_bot_keeps_its_engine_when_the_host_view_changes() {
+    use ncd_deploy::docker::engine::{self, ContainerEngine};
+    let root = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, _, manager) = make_manager(root.path());
+    let mut config = bot_config(10001, "legacy-podman");
+    config.bot.deployment_type = ncd_domain::DeploymentType::Docker;
+    config.bot.runtime_target = ncd_runtime::RuntimeTarget::server("engine-pin-fixture");
+    repo.upsert(config.clone()).await.unwrap();
+    let original = engine::preferences();
+    let mut prefs = original.clone();
+    prefs.insert("engine-pin-fixture".into(), ContainerEngine::Podman);
+    engine::replace_preferences(prefs.clone());
+    manager.pin_container_engines().await.unwrap();
+    prefs.insert("engine-pin-fixture".into(), ContainerEngine::Docker);
+    engine::replace_preferences(prefs);
+    manager.pin_container_engines().await.unwrap();
+    let pinned = repo.get(10001).await.unwrap().unwrap();
+    engine::replace_preferences(original);
+    assert_eq!(
+        pinned.docker.as_ref().and_then(|s| s.engine),
+        Some(ContainerEngine::Podman)
+    );
+    assert_eq!(pinned.bot, config.bot);
+}
+
+#[tokio::test]
+async fn existing_container_engine_change_is_rejected_before_persistence() {
+    use ncd_domain::docker::{BotDockerConfig, ContainerEngine};
+    let root = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, _, manager) = make_manager(root.path());
+    let mut config = bot_config(10001, "podman");
+    config.bot.deployment_type = ncd_domain::DeploymentType::Docker;
+    config.bot.runtime_target = ncd_runtime::RuntimeTarget::server("engine-reject-fixture");
+    config.docker = Some(BotDockerConfig {
+        engine: Some(ContainerEngine::Podman),
+        ..Default::default()
+    });
+    repo.upsert(config.clone()).await.unwrap();
+    let mut changed = config.clone();
+    changed.docker.as_mut().unwrap().engine = Some(ContainerEngine::Docker);
+    let error = manager.upsert_bot_config(changed).await.unwrap_err();
+    assert!(error.to_string().contains("引擎不能直接更换"));
+    assert_eq!(repo.get(10001).await.unwrap().unwrap(), config);
 }

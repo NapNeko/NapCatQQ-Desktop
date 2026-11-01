@@ -14,6 +14,7 @@ enum Provider {
 
 pub(super) struct PodmanComposeProbe {
     provider: Option<Provider>,
+    broken_provider: bool,
     diagnostic: String,
 }
 
@@ -26,6 +27,7 @@ impl DockerCli<'_> {
         self.podman_compose
             .get_or_init(|| async {
                 let mut errors = Vec::new();
+                let mut broken_provider = false;
                 for (provider, command, label) in [
                     (
                         Provider::PodmanWrapper,
@@ -47,10 +49,14 @@ impl DockerCli<'_> {
                         Ok(output) if output.success() => {
                             return PodmanComposeProbe {
                                 provider: Some(provider),
+                                broken_provider: false,
                                 diagnostic: String::new(),
                             };
                         }
                         Ok(output) => {
+                            if matches!(provider, Provider::Standalone) && output.exit_code != Some(127) {
+                                broken_provider = true;
+                            }
                             let detail = if output.stderr.trim().is_empty() {
                                 output.stdout.trim()
                             } else {
@@ -58,7 +64,14 @@ impl DockerCli<'_> {
                             };
                             errors.push(format!("{label}: exit={:?}: {detail}", output.exit_code));
                         }
-                        Err(error) => errors.push(format!("{label}: {error}")),
+                        Err(error) => {
+                            if matches!(provider, Provider::Standalone)
+                                && !matches!(&error, ncd_host::HostError::Io(e) if e.kind() == std::io::ErrorKind::NotFound)
+                            {
+                                broken_provider = true;
+                            }
+                            errors.push(format!("{label}: {error}"));
+                        }
                     }
                 }
                 let diagnostic = errors.join("\n");
@@ -68,6 +81,7 @@ impl DockerCli<'_> {
                 );
                 PodmanComposeProbe {
                     provider: None,
+                    broken_provider,
                     diagnostic,
                 }
             })
@@ -78,6 +92,10 @@ impl DockerCli<'_> {
         self.probe_podman_compose().await.provider.is_some()
     }
 
+    pub(crate) async fn podman_compose_needs_repair(&self) -> bool {
+        self.is_linux_podman() && self.probe_podman_compose().await.broken_provider
+    }
+
     pub(crate) async fn compose_diagnostic(&self) -> Option<String> {
         if !self.is_linux_podman() {
             return None;
@@ -86,7 +104,7 @@ impl DockerCli<'_> {
         probe.provider.is_none().then(|| probe.diagnostic.clone())
     }
 
-    pub(super) async fn compose_cmd(&self) -> Result<HostCommand, DockerCliError> {
+    pub async fn compose_command(&self) -> Result<HostCommand, DockerCliError> {
         self.verify_selected_engine().await?;
         if !self.is_linux_podman() {
             return Ok(self.command().arg("compose"));

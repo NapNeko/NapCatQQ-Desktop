@@ -12,6 +12,7 @@ import {
     type RemoteTransportStatus,
 } from '../../core/domain/bot/runtime-gate';
 import { useComponentNames, useRuntimeReadinessMany } from '../components/useRuntimeReadiness';
+import { dockerBotTarget, dockerHostTargetKey } from '../../core/domain/docker/engine';
 import { useDockerHosts } from '../docker/useDockerHosts';
 import { dockerHostIdForConfig } from '../../core/domain/bot/docker-start-gate';
 import { useQuery } from '@tanstack/react-query';
@@ -60,12 +61,15 @@ export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | u
     const componentNames = useComponentNames();
 
     const dockerHostIds = useMemo(() => {
-        const hosts = new Set<string>();
+        const hosts = new Map<string, ReturnType<typeof dockerBotTarget>>();
         for (const c of Object.values(configByBot)) {
             const h = c ? dockerHostIdForConfig(c) : null;
-            if (h) hosts.add(h);
+            if (h && c) {
+                const target = dockerBotTarget(c, h);
+                hosts.set(dockerHostTargetKey(target), target);
+            }
         }
-        return [...hosts];
+        return [...hosts.values()];
     }, [configByBot]);
     const { statusByHost: dockerStatusByHost, probingByHost: dockerProbingByHost } =
         useDockerHosts(dockerHostIds);
@@ -98,12 +102,13 @@ export function useBotRuntimeStartGate(configByBot: Record<string, BotConfig | u
                 out.remoteDirect = { readiness: st?.readiness, probing: st?.probing ?? true };
                 out.remoteTransport = transportFor(req.hostId);
             } else if (req.kind === 'remote-docker' || req.kind === 'local-docker') {
-                const dockerStatus = dockerStatusByHost[req.hostId];
+                const key = dockerHostTargetKey(dockerBotTarget(config, req.hostId));
+                const dockerStatus = dockerStatusByHost[key];
                 out.docker = {
                     installed: !!dockerStatus?.installed,
                     daemonRunning: !!dockerStatus?.daemonRunning,
                     composeAvailable: !!dockerStatus?.composeAvailable,
-                    probing: dockerProbingByHost[req.hostId] ?? false,
+                    probing: dockerProbingByHost[key] ?? false,
                 };
                 if (req.kind === 'remote-docker') out.remoteTransport = transportFor(req.hostId);
             }

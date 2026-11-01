@@ -71,11 +71,27 @@ pub async fn install_docker_with_progress(
     ssh_linux_username: Option<&str>,
     emit: InstallProgressEmit,
 ) -> Result<DockerInstallReport, DockerCliError> {
+    install_container_engine_with_progress(
+        host,
+        sudo_password,
+        ssh_linux_username,
+        emit,
+        super::engine::engine_for(host),
+    )
+    .await
+}
+
+pub async fn install_container_engine_with_progress(
+    host: &dyn Host,
+    sudo_password: Option<&str>,
+    ssh_linux_username: Option<&str>,
+    emit: InstallProgressEmit,
+    engine: super::engine::ContainerEngine,
+) -> Result<DockerInstallReport, DockerCliError> {
     emit(ProgressKind::Started {
         total_steps: INSTALL_TOTAL_STEPS,
     });
 
-    let engine = super::engine::engine_for(host);
     let engine_name = if engine == super::engine::ContainerEngine::Podman {
         "Podman"
     } else {
@@ -88,7 +104,7 @@ pub async fn install_docker_with_progress(
     );
     emit_step_begin(&emit, 1, &format!("检查 {engine_name} 是否已就绪…"));
 
-    let cli = DockerCli::new(host);
+    let cli = DockerCli::for_engine(host, Some(engine));
     if let Err(error) = cli.verify_selected_engine().await {
         let message = error.to_string();
         emit_log(&emit, ProgressLogLevel::Error, &message);
@@ -117,6 +133,17 @@ pub async fn install_docker_with_progress(
     }
     emit_step_end(&emit, 1, true);
     if engine == super::engine::ContainerEngine::Podman {
+        if status.installed && cli.podman_compose_needs_repair().await {
+            let message = format!(
+                "Podman Compose 已存在，但执行失败；请在当前桌面用户的环境中检查，未重复安装软件包。\n{}",
+                status.compose_diagnostic.as_deref().unwrap_or_default()
+            );
+            emit_log(&emit, ProgressLogLevel::Error, &message);
+            finish_install(&emit, false);
+            return Ok(
+                DockerInstallReport::manual_required(message, None).with_probed_status(status)
+            );
+        }
         if status.installed && status.compose_available && !status.daemon_running {
             // 已有引擎和 provider 时，运行环境异常不能靠再次装包或切到 root 修复。
             let detail = cli
@@ -461,7 +488,7 @@ async fn finalize_linux_docker_after_install(
     host: &dyn Host,
     emit: &InstallProgressEmit,
 ) -> Result<ncd_domain::DockerStatus, DockerCliError> {
-    let mut cli = DockerCli::new(host);
+    let mut cli = DockerCli::for_engine(host, Some(super::engine::ContainerEngine::Docker));
     let mut status = cli.probe().await;
 
     for attempt in 0..6u32 {
@@ -478,7 +505,7 @@ async fn finalize_linux_docker_after_install(
                 format!("等待 Docker 守护进程就绪（{}/6）…", attempt + 1),
             );
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            cli = DockerCli::new(host);
+            cli = DockerCli::for_engine(host, Some(super::engine::ContainerEngine::Docker));
             status = cli.probe().await;
             continue;
         }
@@ -497,7 +524,7 @@ async fn finalize_linux_docker_after_install(
                     "补装 compose 插件未成功，将重试探测",
                 );
             }
-            cli = DockerCli::new(host);
+            cli = DockerCli::for_engine(host, Some(super::engine::ContainerEngine::Docker));
             status = cli.probe().await;
             continue;
         }
@@ -563,7 +590,7 @@ async fn install_podman(
     }
     emit_step_end(&emit, 3, true);
     // 安装包使用 sudo；运行时恢复当前用户，绝不探测 root 的另一套存储。
-    let cli = DockerCli::new(host);
+    let cli = DockerCli::for_engine(host, Some(super::engine::ContainerEngine::Podman));
     let status = cli.probe().await;
     let ready = status.ready_to_deploy();
     finish_install(&emit, ready);

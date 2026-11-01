@@ -1,6 +1,7 @@
 // Bot 列表启动前：Docker 镜像须在组件页预拉。
 
 import { useCallback, useMemo } from 'react';
+import { dockerBotTarget, dockerHostTargetKey } from '../../core/domain/docker/engine';
 import { useDockerHosts } from '../docker/useDockerHosts';
 import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import {
@@ -15,13 +16,16 @@ export function useBotDockerStartGate(configByBot: Record<string, BotConfig | un
     saveBlock: (config: BotConfig) => string | null;
 } {
     const hostIds = useMemo(() => {
-        const set = new Set<string>();
+        const set = new Map<string, ReturnType<typeof dockerBotTarget>>();
         for (const c of Object.values(configByBot)) {
             if (!c) continue;
             const h = dockerHostIdForConfig(c);
-            if (h) set.add(h);
+            if (h) {
+                const target = dockerBotTarget(c, h);
+                set.set(dockerHostTargetKey(target), target);
+            }
         }
-        return [...set];
+        return [...set.values()];
     }, [configByBot]);
 
     const { statusByHost, probingByHost, imageReadyByHost } = useDockerHosts(hostIds);
@@ -30,12 +34,13 @@ export function useBotDockerStartGate(configByBot: Record<string, BotConfig | un
         (config: BotConfig) => {
             const hostId = dockerHostIdForConfig(config);
             if (!hostId) return null;
+            const key = dockerHostTargetKey(dockerBotTarget(config, hostId));
             const flavor = dockerFlavorForBackend(config.bot.backend_type);
             return {
                 config,
-                dockerStatus: statusByHost[hostId],
-                imageReady: imageReadyByHost[hostId]?.[flavor],
-                dockerProbing: probingByHost[hostId],
+                dockerStatus: statusByHost[key],
+                imageReady: imageReadyByHost[key]?.[flavor],
+                dockerProbing: probingByHost[key],
             };
         },
         [statusByHost, imageReadyByHost, probingByHost],

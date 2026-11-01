@@ -3,6 +3,7 @@ use crate::native_deployment_adapter::docker_helpers::tests::host;
 
 fn token_watch(published: Option<&str>) -> NapcatTokenWatch {
     NapcatTokenWatch {
+        engine: ContainerEngine::Docker,
         container: "ncbot-10001".into(),
         local_port: 16099,
         remote_webui: 6099,

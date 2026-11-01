@@ -227,6 +227,7 @@ pub(crate) async fn read_docker_imported_network(
     docker_name: &str,
     backend: BackendType,
     qq_id: &str,
+    engine: Option<ncd_domain::docker::ContainerEngine>,
 ) -> Result<Option<ImportedNetworkConfig>, String> {
     let project_dir = ncd_deploy::docker_project_dir(host, docker_name).await?;
     match backend {
@@ -240,6 +241,7 @@ pub(crate) async fn read_docker_imported_network(
                 docker_name,
                 &format!("/app/napcat/config/onebot11_{qq_id}.json"),
                 qq_id,
+                engine,
             )
             .await?
             {
@@ -256,6 +258,7 @@ pub(crate) async fn read_docker_imported_network(
                 docker_name,
                 &format!("/app/snowluma-data/config/onebot_{qq_id}.json"),
                 qq_id,
+                engine,
             )
             .await?
             {
@@ -362,8 +365,9 @@ async fn copy_container_json(
     docker_name: &str,
     src: &str,
     qq_id: &str,
+    engine: Option<ncd_domain::docker::ContainerEngine>,
 ) -> Result<Option<Value>, String> {
-    let cli = DockerCli::new(host);
+    let cli = DockerCli::for_engine(host, engine);
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪，无法从容器读取网络配置: {e}"))?;

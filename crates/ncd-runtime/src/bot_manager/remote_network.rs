@@ -37,24 +37,33 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 )
             })?;
 
+        let engine = ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), &config);
         let docker_name = match config.bot.deployment_type {
-            DeploymentType::Docker => Some(
-                ncd_deploy::resolve_bot_container_name(host.as_ref(), bot_id)
+            DeploymentType::Docker => {
+                let cli = ncd_deploy::DockerCli::for_engine(host.as_ref(), Some(engine));
+                cli.ensure_daemon_ready()
                     .await
-                    .ok()
-                    .flatten()
+                    .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?;
+                Some(
+                    ncd_deploy::deployments::docker::resolve_bot_container_name_with_cli(
+                        &cli, bot_id,
+                    )
+                    .await
+                    .map_err(|error| BotManagerError::RemoteRead(error.to_string()))?
                     .unwrap_or_else(|| ncd_deploy::DockerDeployment::container_name(&config)),
-            ),
+                )
+            }
             DeploymentType::Native => None,
         };
 
-        crate::remote::import_network::fetch_imported_network(
+        crate::remote::import_network::fetch_imported_network_for_engine(
             host.as_ref(),
             &selected,
             config.bot.backend_type,
             config.bot.deployment_type,
             bot_id.as_str(),
             docker_name.as_deref(),
+            Some(engine),
         )
         .await
         .map_err(BotManagerError::RemoteRead)

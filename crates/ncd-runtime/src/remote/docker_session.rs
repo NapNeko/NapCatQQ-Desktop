@@ -9,11 +9,11 @@ use ncd_backend_snowluma::{
     LinuxSinglePidProbe, PollerDeps, ReqwestSnowLumaWebUiClient, SnowLumaStatusPoller,
     SnowLumaWebUiClient,
 };
+use ncd_deploy::deployments::docker::resolve_bot_container_name_with_cli;
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
-use ncd_deploy::{
-    DockerDeployment, NapcatLogNoiseFilter, parse_napcat_webui_line, resolve_bot_container_name,
-};
+use ncd_deploy::{DockerDeployment, NapcatLogNoiseFilter, parse_napcat_webui_line};
+use ncd_domain::docker::ContainerEngine;
 use ncd_domain::docker::DockerDeploySpec;
 use ncd_domain::{BackendType, BotConfig, DeploymentType, RuntimeScenario};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
@@ -52,8 +52,8 @@ struct ContainerPorts<'h> {
 }
 
 impl<'h> ContainerPorts<'h> {
-    async fn probe(host: &'h dyn Host, container: &'h str) -> Self {
-        let cli = DockerCli::new(host);
+    async fn probe(host: &'h dyn Host, container: &'h str, engine: ContainerEngine) -> Self {
+        let cli = DockerCli::for_engine(host, Some(engine));
         let ready = cli.ensure_daemon_ready().await.is_ok();
         Self {
             cli: ready.then_some(cli),
@@ -90,6 +90,7 @@ impl<'h> ContainerPorts<'h> {
 /// 运行中跟着 NapCat 实际 token 走：日志里冒出新 token、或 poller 报 token 被拒时重读。
 /// 规则见 docker_webui_token
 struct NapcatTokenWatch {
+    engine: ContainerEngine,
     container: String,
     local_port: u16,
     remote_webui: u16,
@@ -111,7 +112,7 @@ impl NapcatTokenWatch {
         {
             return;
         }
-        let cli = DockerCli::new(host);
+        let cli = DockerCli::for_engine(host, Some(self.engine));
         let ready = cli.ensure_daemon_ready().await.is_ok();
         let from_file =
             read_napcat_docker_webui_token(host, ready.then_some(&cli), &self.container).await;
@@ -358,11 +359,17 @@ impl DockerBotSessionRegistry {
         self.shutdown_bot(&bot_id).await;
 
         let spec = DockerDeployment::build_spec(&config);
-        let container = resolve_bot_container_name(host.as_ref(), &bot_id)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| spec.container_name.clone());
+        let engine = ncd_deploy::docker::engine::engine_for_bot(host.as_ref(), &config);
+        let cli = DockerCli::for_engine(host.as_ref(), Some(engine));
+        let container = if cli.ensure_daemon_ready().await.is_ok() {
+            resolve_bot_container_name_with_cli(&cli, &bot_id)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        }
+        .unwrap_or_else(|| spec.container_name.clone());
         let stop_expected = Arc::new(AtomicBool::new(false));
         let sink = Arc::new(EventBusSink::new(bus.clone()));
 
@@ -378,7 +385,7 @@ impl DockerBotSessionRegistry {
                 kind: Some(DomainEventKind::NapCatWebuiAuthChanged),
             })
         });
-        let ports = ContainerPorts::probe(host.as_ref(), &container).await;
+        let ports = ContainerPorts::probe(host.as_ref(), &container, engine).await;
 
         match config.bot.backend_type {
             BackendType::NapCat => {
@@ -408,6 +415,7 @@ impl DockerBotSessionRegistry {
                         ));
                     }
                     napcat_token_watch = Some(NapcatTokenWatch {
+                        engine,
                         container: container.clone(),
                         local_port,
                         remote_webui,
@@ -463,7 +471,7 @@ impl DockerBotSessionRegistry {
         let is_napcat = config.bot.backend_type == BackendType::NapCat;
         let log_token = Arc::clone(&latest_log_token);
         let log_task = tokio::spawn(async move {
-            let cli = DockerCli::new(host_log.as_ref());
+            let cli = DockerCli::for_engine(host_log.as_ref(), Some(engine));
             // logs_follow callback 串行调用；poison 时 recover 后继续滤，避免脏行放行
             let noise = std::sync::Mutex::new(NapcatLogNoiseFilter::new());
             let _ = cli
@@ -499,7 +507,7 @@ impl DockerBotSessionRegistry {
         let bus_watch = bus.clone();
         let stop_flag = Arc::clone(&stop_expected);
         let watch_task = tokio::spawn(async move {
-            let deployment = ncd_deploy::DockerDeployment::new();
+            let deployment = ncd_deploy::DockerDeployment::new().with_engine(engine);
             let mut token_watch = napcat_token_watch;
             loop {
                 tokio::select! {

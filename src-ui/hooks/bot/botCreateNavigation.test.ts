@@ -124,3 +124,13 @@ describe('Docker Bot 新建导航', () => {
         });
     });
 });
+
+it('从组件入口新建时保存已选择的容器引擎', () => {
+    const config = createDockerBotConfig({
+        hostId: 'remote:server-profile-id',
+        flavor: 'napcat',
+        engine: 'podman',
+    });
+    expect(config.docker?.engine).toBe('podman');
+    expect(config.bot.runtime_target).toBe('server-profile-id');
+});

@@ -45,10 +45,10 @@ export const dockerService = {
         if (isTauri) await invoke('container_engine_set', { hostId, engine });
         else mockContainerEngine.set(hostId, engine);
     },
-    probe: async (hostId: string): Promise<DockerStatus> => {
-        if (isTauri) return invoke<DockerStatus>('docker_probe', { hostId });
+    probe: async (hostId: string, engine?: ContainerEngine): Promise<DockerStatus> => {
+        if (isTauri) return invoke<DockerStatus>('docker_probe', { hostId, engine });
         return withMockDelay(
-            mockContainerEngine.get(hostId) === 'podman'
+            (engine ?? mockContainerEngine.get(hostId)) === 'podman'
                 ? { ...mockDockerStatus, version: '5.8.9' }
                 : mockDockerStatus,
             200,
@@ -59,11 +59,13 @@ export const dockerService = {
         hostId: string,
         taskId: string,
         options: DockerInstallOptions = {},
+        engine?: ContainerEngine,
     ): Promise<DockerInstallReport> => {
         if (isTauri)
             return invoke<DockerInstallReport>('docker_install', {
                 hostId,
                 taskId,
+                engine,
                 sudoPassword: options.sudoPassword ?? null,
                 rememberSudo: options.rememberSudo ?? null,
             });
@@ -76,24 +78,36 @@ export const dockerService = {
         );
     },
 
-    listContainers: async (hostId: string): Promise<ContainerInfo[]> => {
-        if (isTauri) return invoke<ContainerInfo[]>('docker_list_containers', { hostId });
-        return withMockDelay([...mockDockerHost(hostId).containers], 200);
+    listContainers: async (hostId: string, engine?: ContainerEngine): Promise<ContainerInfo[]> => {
+        if (isTauri) return invoke<ContainerInfo[]>('docker_list_containers', { hostId, engine });
+        return withMockDelay(
+            [...mockDockerHost(engine ? `${hostId}::${engine}` : hostId).containers],
+            200,
+        );
     },
 
-    listImages: async (hostId: string): Promise<ImageInfo[]> => {
-        if (isTauri) return invoke<ImageInfo[]>('docker_list_images', { hostId });
-        return withMockDelay([...mockDockerHost(hostId).images], 200);
+    listImages: async (hostId: string, engine?: ContainerEngine): Promise<ImageInfo[]> => {
+        if (isTauri) return invoke<ImageInfo[]>('docker_list_images', { hostId, engine });
+        return withMockDelay(
+            [...mockDockerHost(engine ? `${hostId}::${engine}` : hostId).images],
+            200,
+        );
     },
 
-    removeImage: async (hostId: string, imageRef: string, force?: boolean): Promise<void> => {
+    removeImage: async (
+        hostId: string,
+        imageRef: string,
+        force?: boolean,
+        engine?: ContainerEngine,
+    ): Promise<void> => {
         if (isTauri)
             return invoke<void>('docker_remove_image', {
                 hostId,
                 imageRef,
                 force: force ?? null,
+                engine,
             });
-        const host = mockDockerHost(hostId);
+        const host = mockDockerHost(engine ? `${hostId}::${engine}` : hostId);
         host.images = host.images.filter(
             (i) => `${i.repository}:${i.tag}` !== imageRef && i.id !== imageRef,
         );
@@ -105,20 +119,32 @@ export const dockerService = {
         name: string,
         action: ContainerAction,
         force = false,
+        engine?: ContainerEngine,
     ): Promise<void> => {
         if (isTauri)
-            return invoke<void>('docker_container_action', { hostId, name, action, force });
-        mockContainerAction(hostId, name, action, force);
+            return invoke<void>('docker_container_action', { hostId, name, action, force, engine });
+        mockContainerAction(engine ? `${hostId}::${engine}` : hostId, name, action, force);
         return withMockDelay(undefined, 150);
     },
 
-    containerDetails: async (hostId: string, id: string): Promise<DockerContainerDetails> => {
-        if (isTauri) return invoke('docker_container_details', { hostId, id });
-        return withMockDelay(mockContainerDetails(hostId, id), 150);
+    containerDetails: async (
+        hostId: string,
+        id: string,
+        engine?: ContainerEngine,
+    ): Promise<DockerContainerDetails> => {
+        if (isTauri) return invoke('docker_container_details', { hostId, id, engine });
+        return withMockDelay(
+            mockContainerDetails(engine ? `${hostId}::${engine}` : hostId, id),
+            150,
+        );
     },
 
-    containerStats: async (hostId: string, id: string): Promise<DockerContainerStats> => {
-        if (isTauri) return invoke('docker_container_stats', { hostId, id });
+    containerStats: async (
+        hostId: string,
+        id: string,
+        engine?: ContainerEngine,
+    ): Promise<DockerContainerStats> => {
+        if (isTauri) return invoke('docker_container_stats', { hostId, id, engine });
         return withMockDelay(
             {
                 cpuPercent: '1.24%',
@@ -132,31 +158,55 @@ export const dockerService = {
         );
     },
 
-    listNetworks: async (hostId: string): Promise<DockerNetworkInfo[]> => {
-        if (isTauri) return invoke('docker_list_networks', { hostId });
-        return withMockDelay([...mockDockerHost(hostId).networks], 150);
+    listNetworks: async (
+        hostId: string,
+        engine?: ContainerEngine,
+    ): Promise<DockerNetworkInfo[]> => {
+        if (isTauri) return invoke('docker_list_networks', { hostId, engine });
+        return withMockDelay(
+            [...mockDockerHost(engine ? `${hostId}::${engine}` : hostId).networks],
+            150,
+        );
     },
 
-    listVolumes: async (hostId: string): Promise<DockerVolumeInfo[]> => {
-        if (isTauri) return invoke('docker_list_volumes', { hostId });
-        return withMockDelay([...mockDockerHost(hostId).volumes], 150);
+    listVolumes: async (hostId: string, engine?: ContainerEngine): Promise<DockerVolumeInfo[]> => {
+        if (isTauri) return invoke('docker_list_volumes', { hostId, engine });
+        return withMockDelay(
+            [...mockDockerHost(engine ? `${hostId}::${engine}` : hostId).volumes],
+            150,
+        );
     },
 
-    removeResource: async (hostId: string, kind: DockerResourceKind, id: string): Promise<void> => {
-        if (isTauri) return invoke('docker_remove_resource', { hostId, kind, id });
-        const host = mockDockerHost(hostId);
+    removeResource: async (
+        hostId: string,
+        kind: DockerResourceKind,
+        id: string,
+        engine?: ContainerEngine,
+    ): Promise<void> => {
+        if (isTauri) return invoke('docker_remove_resource', { hostId, kind, id, engine });
+        const host = mockDockerHost(engine ? `${hostId}::${engine}` : hostId);
         if (kind === 'network') host.networks = host.networks.filter((n) => n.id !== id);
         else host.volumes = host.volumes.filter((v) => v.name !== id);
         return withMockDelay(undefined, 150);
     },
 
-    logs: async (hostId: string, name: string, tail: number): Promise<string> => {
-        if (isTauri) return invoke<string>('docker_logs', { hostId, name, tail });
+    logs: async (
+        hostId: string,
+        name: string,
+        tail: number,
+        engine?: ContainerEngine,
+    ): Promise<string> => {
+        if (isTauri) return invoke<string>('docker_logs', { hostId, name, tail, engine });
         return withMockDelay(`mock logs for ${name}\nline 1\nline 2`, 150);
     },
 
-    imageReadyForFlavor: async (hostId: string, flavor: DockerFlavor): Promise<boolean> => {
-        if (isTauri) return invoke<boolean>('docker_image_ready_for_flavor', { hostId, flavor });
+    imageReadyForFlavor: async (
+        hostId: string,
+        flavor: DockerFlavor,
+        engine?: ContainerEngine,
+    ): Promise<boolean> => {
+        if (isTauri)
+            return invoke<boolean>('docker_image_ready_for_flavor', { hostId, flavor, engine });
         return withMockDelay(true, 100);
     },
 
@@ -165,18 +215,26 @@ export const dockerService = {
         flavor: DockerFlavor,
         taskId: string,
         mirror?: string | null,
+        engine?: ContainerEngine,
     ): Promise<DeployedContainer> => {
         const spec = {
             flavor,
             ...(mirror && mirror.trim() ? { mirror: mirror.trim() } : {}),
         };
-        if (isTauri) return invoke<DeployedContainer>('docker_deploy', { hostId, spec, taskId });
+        if (isTauri)
+            return invoke<DeployedContainer>('docker_deploy', { hostId, spec, taskId, engine });
         mockProgressSequence(taskId);
         return withMockDelay(mockDeployed(flavor), 2000);
     },
 
-    composeDown: async (hostId: string, name: string, removeVolumes: boolean): Promise<void> => {
-        if (isTauri) return invoke<void>('docker_compose_down', { hostId, name, removeVolumes });
+    composeDown: async (
+        hostId: string,
+        name: string,
+        removeVolumes: boolean,
+        engine?: ContainerEngine,
+    ): Promise<void> => {
+        if (isTauri)
+            return invoke<void>('docker_compose_down', { hostId, name, removeVolumes, engine });
         return withMockDelay(undefined, 200);
     },
 };
