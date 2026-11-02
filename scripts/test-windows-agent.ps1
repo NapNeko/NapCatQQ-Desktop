@@ -1,11 +1,14 @@
 # GitHub 托管 Windows runner 上，用临时普通账户执行真实 Agent 回归。
+param([switch]$ExcludeRuntime)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'This fixture is only for disposable GitHub Windows runners'
 }
 
 function Build-AgentTests {
-    $messages = @(cargo test --workspace --exclude ncd-tauri --no-run --message-format=json)
+    $cargoArgs = @('test', '--workspace', '--exclude', 'ncd-tauri', '--locked', '--no-run', '--message-format=json')
+    if ($ExcludeRuntime) { $cargoArgs += @('--exclude', 'ncd-runtime') }
+    $messages = @(& cargo @cargoArgs)
     if ($LASTEXITCODE -ne 0) {
         $messages | Write-Output
         throw 'Workspace test compilation failed'

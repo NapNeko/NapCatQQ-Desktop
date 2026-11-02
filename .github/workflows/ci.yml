@@ -1,20 +1,4 @@
-# 质量门禁：PR / main 按改动路径过滤，main 的缓存供后续 PR 复用。
-# 手动 dispatch 可选手动 suite 加速迭代（忽略路径过滤）。
-# 打包见 build-msi.yml / build-linux.yml / release.yml。
-# Rust 全量测试必须在 Windows（大量 #[cfg(windows)]）。
-#
-# 关于「虚拟机复用」：
-#   GitHub-hosted runner 每次 job 都是新 VM，不能整机复用。
-#   能复用的是 Cargo/pnpm 缓存（actions/cache、setup-node cache）。
-#   要真·常驻机只能 self-hosted runner。
-#
-# Job 拓扑：changes → frontend / rust-core / rust-shell / rust-linux（并行）→ gate。
-#   rust-core  --exclude ncd-tauri：ncd-* 纯 Rust  crate，
-#   rust-shell 只编 ncd-tauri：tauri/wry/tao/webview2 链是大头，拆开并行才省墙钟。
-#
-# 分支策略：
-#   main  ← Rust/Tauri 主线
-#   v1    ← 旧 Python 归档，不跑本 CI
+# PR / main 按路径运行完整检查；前端分片、Rust 按编译边界并行，Gate 汇总全部结果。
 
 name: CI
 
@@ -73,9 +57,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Test gate policy
-        env:
-          CI_RUST_CACHE_TEST_CARGO: "1"
-        run: node --test scripts/ci-gate.test.mjs scripts/ci-rust-cache.test.mjs
+        run: node --test scripts/ci-gate.test.mjs scripts/ci-rust-cache.test.mjs scripts/ci-release-cache.test.mjs
 
       # 版本检查在 frontend，版本文件必须进 frontend 过滤；
       # tauri.conf.json 同时在两端过滤内。
@@ -126,7 +108,7 @@ jobs:
               - '.github/workflows/ci.yml'
 
   frontend:
-    name: Frontend
+    name: Frontend (${{ matrix.shard }}/2)
     needs: changes
     if: >-
       inputs.force_full ||
@@ -134,6 +116,10 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
         (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'frontend'))
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -153,37 +139,45 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Python for external login helper
+        if: matrix.shard == 1
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Check version metadata
+        if: matrix.shard == 1
         run: pnpm run check:versions
 
       - name: Typecheck
+        if: matrix.shard == 1
         run: pnpm run typecheck
 
       - name: Unit tests
-        run: pnpm run test:unit
+        run: pnpm run test:unit --shard=${{ matrix.shard }}/2
 
       # OneBot 探针是注入用户 Bot 进程的脚本，只能靠线级回归守住
       - name: Probe tests
+        if: matrix.shard == 1
         run: pnpm run test:probe
 
       - name: Validate external SnowLuma login helper assets
+        if: matrix.shard == 1
         run: pnpm run build:sl-login-helper
 
       - name: Remote QQ and SnowLuma helper tests
+        if: matrix.shard == 1
         run: pnpm run test:sl-login-helper
 
       - name: Bot migration archive tests
+        if: matrix.shard == 1
         run: python -B -m unittest discover -s crates/ncd-runtime/tests -p migration_transfer_test.py
 
       - name: SnowLuma container data migration tests
+        if: matrix.shard == 1
         run: node --test crates/ncd-deploy/resources/snowluma-data-migrate.test.cjs
 
   rust-core:
-    name: Rust core (Windows)
+    name: Rust ${{ matrix.group }} (Windows)
     needs: changes
     if: >-
       inputs.force_full ||
@@ -191,6 +185,10 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
         (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust' || github.event.inputs.suite == 'rust-smoke'))
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(!inputs.force_full && github.event.inputs.suite == 'rust-smoke' && '["core"]' || '["core", "runtime"]') }}
     env:
       # 测试失败仍报告断言源码位置；关闭符号以减少链接和缓存传输成本。
       RUSTFLAGS: -C debuginfo=0
@@ -229,8 +227,9 @@ jobs:
             target
             ${{ steps.inputs.outputs.cargo-home }}/registry
             ${{ steps.inputs.outputs.cargo-home }}/git
-          key: rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
+          key: rust-tests-v5-${{ matrix.group }}-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
           restore-keys: |
+            rust-tests-v5-${{ matrix.group }}-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-
             rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-
 
       - name: Restore Cargo input timestamps
@@ -262,12 +261,12 @@ jobs:
 
       - name: Windows Agent tests under a standard account
         if: >-
-          inputs.force_full ||
+          matrix.group == 'core' && (inputs.force_full ||
           github.event_name != 'workflow_dispatch' ||
           github.event.inputs.suite == 'full' ||
-          github.event.inputs.suite == 'rust'
+          github.event.inputs.suite == 'rust')
         shell: pwsh
-        run: ./scripts/test-windows-agent.ps1
+        run: ./scripts/test-windows-agent.ps1 -ExcludeRuntime
 
       - name: Workspace tests
         if: >-
@@ -275,7 +274,13 @@ jobs:
           github.event_name != 'workflow_dispatch' ||
           github.event.inputs.suite == 'full' ||
           github.event.inputs.suite == 'rust'
-        run: cargo test --workspace --exclude ncd-tauri
+        shell: pwsh
+        run: |
+          if ('${{ matrix.group }}' -eq 'runtime') {
+            cargo test -p ncd-runtime --locked
+          } else {
+            cargo test --workspace --exclude ncd-tauri --exclude ncd-runtime --locked
+          }
 
       - name: Assert generated IPC types committed
         shell: pwsh
@@ -297,7 +302,7 @@ jobs:
             target
             ${{ steps.inputs.outputs.cargo-home }}/registry
             ${{ steps.inputs.outputs.cargo-home }}/git
-          key: rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
+          key: rust-tests-v5-${{ matrix.group }}-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
 
   # Tauri 独立编译；其导出用例也必须检查 generated 差异。
   rust-shell:
@@ -380,32 +385,65 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
         (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust'))
     runs-on: ubuntu-22.04
+    env:
+      RUSTFLAGS: -C debuginfo=0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Install nextest
+        uses: taiki-e/install-action@v2
         with:
-          shared-key: linux-check
+          tool: nextest@0.9
 
-      - name: Check Linux workspace
-        run: cargo check --workspace --all-targets --locked
+      - name: Compute Cargo cache keys
+        id: inputs
+        run: node scripts/ci-rust-cache.mjs keys
 
-      - name: Check Linux host and Docker contracts
-        run: |
-          cargo test -p ncd-host --lib --locked
-          cargo test -p ncd-component --lib bad_release_archive_preserves_the_installed_runtime --locked
-          cargo test -p ncd-deploy -p ncd-runtime --lib docker --locked
-          cargo test -p ncd-tauri --lib desktop_opener::tests --locked
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            target
+            ${{ steps.inputs.outputs.cargo-home }}/registry
+            ${{ steps.inputs.outputs.cargo-home }}/git
+          key: rust-tests-v5-linux-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
+          restore-keys: |
+            rust-tests-v5-linux-${{ steps.inputs.outputs.environment-key }}-
+
+      - name: Restore Cargo input timestamps
+        run: node scripts/ci-rust-cache.mjs restore
+
+      # 一次编译全部目标；执行原有 Linux 契约，避免逐包命令反复改变 feature 并重新编译。
+      - name: Build Linux workspace and test platform contracts
+        run: >-
+          cargo nextest run --workspace --all-targets --locked --test-threads=4
+          -E 'kind(lib) & (package(=ncd-host)
+          | (package(=ncd-component) & test(bad_release_archive_preserves_the_installed_runtime))
+          | ((package(=ncd-deploy) | package(=ncd-runtime)) & test(docker))
+          | (package(=ncd-tauri) & test(desktop_opener::tests)))'
+
+      - name: Verify Cargo cache invalidation
+        env:
+          CI_RUST_CACHE_TEST_CARGO: "1"
+        run: node --test scripts/ci-rust-cache.test.mjs
+
+      - name: Capture Cargo input timestamps
+        if: always()
+        run: node scripts/ci-rust-cache.mjs capture
 
   gate:
     name: Gate

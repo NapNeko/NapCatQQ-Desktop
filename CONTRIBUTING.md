@@ -93,7 +93,7 @@ Tauri command 只转换参数和错误，业务放在对应 crate。跨 IPC 的�
 | 构建 MSI（Windows） | `pnpm.cmd run tauri:build:msi`                 |
 | 构建 deb / AppImage（Linux） | `pnpm run tauri:build:linux`           |
 
-`verify` 包含类型导出、TypeScript、lint、Rust 和格式检查，不包含完整测试；导出的 `src-ui/core/ipc/generated/` 有变化时一起提交。CI 入口见 [ci.yml](.github/workflows/ci.yml)，真实环境冒烟测试按相应测试的说明单独执行。
+`verify` 包含类型导出、TypeScript、lint、Rust 和格式检查，不包含完整测试；导出的 `src-ui/core/ipc/generated/` 有变化时一起提交。CI 入口见 [ci.yml](.github/workflows/ci.yml)，分片、缓存与耗时验收见 [CI 与发版耗时](docs/context/ci.md)。真实环境冒烟测试按相应测试的说明单独执行。
 
 ## 提交 PR
 
