@@ -178,13 +178,15 @@ mod instance_flows {
     #[async_trait::async_trait]
     impl BotConfigPort for MemoryBots {
         async fn bot_config(&self, bot_id: &BotId) -> Result<Option<BotConfig>, String> {
-            Ok(self
+            let snapshot = self
                 .bots
                 .lock()
                 .await
                 .iter()
                 .find(|b| b.bot.qq_id.to_string() == bot_id.as_str())
-                .cloned())
+                .cloned();
+            tokio::task::yield_now().await;
+            Ok(snapshot)
         }
 
         async fn upsert_bot_config(&self, config: BotConfig) -> Result<(), String> {
@@ -233,6 +235,42 @@ mod instance_flows {
 
     async fn fixture(linked: bool) -> Fixture {
         fixture_on_host(linked, LOCAL_HOST_ID, AppPlacement::LocalNative).await
+    }
+
+    #[tokio::test]
+    async fn concurrent_instances_preserve_both_links_on_the_same_bot() {
+        let f = fixture(false).await;
+        let second_dir = f._tmp.path().join("karin-two");
+        std::fs::create_dir_all(second_dir.join("@karinjs/config")).unwrap();
+        std::fs::write(
+            second_dir.join(".env"),
+            "HTTP_PORT=7778\nWS_SERVER_AUTH_KEY=tok-2\n",
+        )
+        .unwrap();
+        let mut second = f.manager.store.require(&f.id).await.unwrap();
+        second.id = AppInstanceId::new("k2");
+        second.port = 7778;
+        second.install_dir = HostPath::from_windows(second_dir.to_string_lossy().as_ref())
+            .as_posix()
+            .to_owned();
+        let second_id = second.id.clone();
+        f.manager.store.upsert(second).await.unwrap();
+        let bot_id = BotId::new("10001");
+        let (first, second) = tokio::join!(
+            f.manager.apply_link(&f.id, &bot_id),
+            f.manager.apply_link(&second_id, &bot_id)
+        );
+        first.unwrap();
+        second.unwrap();
+        let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+        let names: HashSet<_> = bot
+            .connect
+            .websocket_clients
+            .iter()
+            .map(|c| c.base.name.as_str())
+            .collect();
+        assert!(names.contains("ncd-app:k1"));
+        assert!(names.contains("ncd-app:k2"));
     }
 
     #[tokio::test]

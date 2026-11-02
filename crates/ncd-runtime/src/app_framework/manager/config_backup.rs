@@ -49,7 +49,7 @@ fn check_remote_config_host(
 mod tests;
 
 impl AppManager {
-    pub async fn framework_config_transfer_guard(&self) -> tokio::sync::MutexGuard<'_, ()> {
+    pub async fn framework_config_transfer_guard(&self) -> tokio::sync::OwnedRwLockWriteGuard<()> {
         self.framework_config_gate.lock().await
     }
 

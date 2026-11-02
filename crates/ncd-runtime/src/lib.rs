@@ -51,6 +51,7 @@ pub mod data_paths {
 // server 轴已抽出 ncd-server；旧路径 re-export 保持 API。
 pub mod host_resolver {
     pub use ncd_server::host_resolver::*;
+    pub use ncd_server::{ConnectionObserver, ConnectionSnapshot, ConnectionUpdates};
 }
 pub mod server_manager {
     pub use ncd_server::server_manager::*;

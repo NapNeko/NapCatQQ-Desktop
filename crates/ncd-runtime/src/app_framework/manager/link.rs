@@ -92,8 +92,12 @@ impl AppManager {
         instance_id: &AppInstanceId,
         bot_id: &BotId,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self
+            .framework_config_gate
+            .operation(instance_id.as_str())
+            .await?;
         self.ensure_framework_write_allowed().await?;
+        let _bots = self.link_config_guards(instance_id, Some(bot_id)).await?;
         self.apply_link_inner(instance_id, bot_id).await
     }
 
@@ -333,9 +337,36 @@ impl AppManager {
         &self,
         instance_id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self
+            .framework_config_gate
+            .operation(instance_id.as_str())
+            .await?;
         self.ensure_framework_write_allowed().await?;
+        let _bots = self.link_config_guards(instance_id, None).await?;
         self.unlink_inner(instance_id).await
+    }
+
+    pub(super) async fn link_config_guards(
+        &self,
+        instance_id: &AppInstanceId,
+        new_bot: Option<&BotId>,
+    ) -> Result<Vec<super::config_gate::ConfigOperation>, AppFrameworkError> {
+        let instance = self.store.require(instance_id).await?;
+        let mut keys: Vec<String> = instance
+            .link
+            .as_ref()
+            .map(|link| &link.bot_id)
+            .into_iter()
+            .chain(new_bot)
+            .map(|id| format!("bot:{id}"))
+            .collect();
+        keys.sort();
+        keys.dedup();
+        let mut guards = Vec::new();
+        for key in keys {
+            guards.push(self.framework_config_gate.operation(&key).await?);
+        }
+        Ok(guards)
     }
 
     pub(super) async fn unlink_inner(
@@ -563,7 +594,7 @@ impl AppManager {
 
     /// 只摘对接方向对应的那张表：导入认领的连接名是用户自己起的，
     /// 另一张表里可能正好有同名的用户连接
-    async fn remove_link_connection_from_bot(
+    pub(super) async fn remove_link_connection_from_bot(
         &self,
         bot_id: &BotId,
         connection_name: &str,

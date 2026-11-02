@@ -9,11 +9,14 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
-        let _guard = self.framework_config_gate.lock().await;
-        let (instance, adapter, host) = self.config_file_context(id).await?;
-        adapter
-            .list_config_documents(host.as_ref(), &instance)
-            .await
+        read_with_deadline(id, "list", async {
+            let _guard = self.framework_config_gate.operation(id.as_str()).await?;
+            let (instance, adapter, host) = self.config_file_context(id).await?;
+            adapter
+                .list_config_documents(host.as_ref(), &instance)
+                .await
+        })
+        .await
     }
 
     pub async fn read_config_text(
@@ -21,20 +24,23 @@ impl AppManager {
         id: &AppInstanceId,
         doc_id: &str,
     ) -> Result<AppConfigText, AppFrameworkError> {
-        let _guard = self.framework_config_gate.lock().await;
-        let (instance, adapter, host) = self.config_file_context(id).await?;
-        let doc = resolve_document(adapter.as_ref(), host.as_ref(), &instance, doc_id).await?;
-        let snapshot = read_document(
-            host.as_ref(),
-            &HostPath::from_posix(&instance.install_dir),
-            &doc,
-        )
-        .await?;
-        Ok(AppConfigText {
-            doc_id: doc.id,
-            text: snapshot.text.unwrap_or_default(),
-            revision: snapshot.revision,
+        read_with_deadline(id, "read", async {
+            let _guard = self.framework_config_gate.operation(id.as_str()).await?;
+            let (instance, adapter, host) = self.config_file_context(id).await?;
+            let doc = resolve_document(adapter.as_ref(), host.as_ref(), &instance, doc_id).await?;
+            let snapshot = read_document(
+                host.as_ref(),
+                &HostPath::from_posix(&instance.install_dir),
+                &doc,
+            )
+            .await?;
+            Ok(AppConfigText {
+                doc_id: doc.id,
+                text: snapshot.text.unwrap_or_default(),
+                revision: snapshot.revision,
+            })
         })
+        .await
     }
 
     pub async fn write_config_text(
@@ -44,7 +50,7 @@ impl AppManager {
         text: &str,
         base_revision: Option<String>,
     ) -> Result<AppConfigText, AppFrameworkError> {
-        let _guard = self.framework_config_gate.lock().await;
+        let _guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         let (instance, adapter, host) = self.config_file_context(id).await?;
         adapter.validate_config_file_write(&instance, doc_id)?;
@@ -73,6 +79,49 @@ impl AppManager {
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         Ok((instance, adapter, host))
+    }
+}
+
+async fn read_with_deadline<T>(
+    id: &AppInstanceId,
+    operation: &'static str,
+    read: impl std::future::Future<Output = Result<T, AppFrameworkError>>,
+) -> Result<T, AppFrameworkError> {
+    let started = std::time::Instant::now();
+    let request_id = uuid::Uuid::new_v4();
+    tracing::debug!(%request_id, instance = id.as_str(), operation, "开始读取配置");
+    let result = match tokio::time::timeout(std::time::Duration::from_secs(8), read).await {
+        Ok(result) => result,
+        Err(_) => Err(AppFrameworkError::Host("读取配置超时，请重试".into())),
+    };
+    tracing::debug!(%request_id, instance = id.as_str(), operation, elapsed_ms = started.elapsed().as_millis(), success = result.is_ok(), "配置读取结束");
+    result
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[tokio::test(start_paused = true)]
+    async fn stalled_read_releases_its_operation_when_the_page_budget_expires() {
+        struct Finished(Arc<AtomicBool>);
+        impl Drop for Finished {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let finished = Arc::new(AtomicBool::new(false));
+        let gate = super::super::config_gate::ConfigGate::default();
+        let result = read_with_deadline(&AppInstanceId::new("app"), "read", async {
+            let _guard = gate.operation("app").await?;
+            let _finished = Finished(Arc::clone(&finished));
+            std::future::pending::<Result<(), AppFrameworkError>>().await
+        })
+        .await;
+        assert!(result.unwrap_err().to_string().contains("超时"));
+        assert!(finished.load(Ordering::SeqCst));
+        assert!(gate.operation("app").await.is_ok());
     }
 }
 

@@ -60,6 +60,9 @@ use crate::metrics::now_ms;
 mod bot_migration;
 mod config_backup;
 mod config_files;
+mod config_gate;
+#[cfg(test)]
+mod delete_tests;
 #[cfg(test)]
 mod docker_link_tests;
 mod install_dir;
@@ -288,7 +291,7 @@ pub struct AppManager {
     /// 正在盯的安装：instance id → task id。不在表里的「安装中」是上次装到一半桌面端退了
     install_watches: std::sync::Mutex<HashMap<AppInstanceId, String>>,
     /// 配置备份、恢复、起停和写盘共用，恢复期间不能启动框架或插入一次编辑。
-    framework_config_gate: tokio::sync::Mutex<()>,
+    framework_config_gate: config_gate::ConfigGate,
     migration: bot_migration::MigrationState,
     webui_endpoints: std::sync::Mutex<HashMap<AppInstanceId, WebUiEndpoint>>,
 }
@@ -318,7 +321,7 @@ impl AppManager {
             components: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
             install_watches: std::sync::Mutex::new(HashMap::new()),
-            framework_config_gate: tokio::sync::Mutex::new(()),
+            framework_config_gate: config_gate::ConfigGate::default(),
             migration: bot_migration::MigrationState::default(),
             webui_endpoints: std::sync::Mutex::new(HashMap::new()),
         }

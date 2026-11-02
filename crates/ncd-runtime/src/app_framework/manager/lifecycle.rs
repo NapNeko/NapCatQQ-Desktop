@@ -7,7 +7,10 @@ impl AppManager {
         &self,
         req: CreateAppInstanceRequest,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self
+            .framework_config_gate
+            .operation(&format!("host:{}", req.host_id))
+            .await?;
         self.ensure_framework_write_allowed().await?;
         let adapter = self.registry.get(&req.framework_id)?;
         let manifest = adapter.manifest();
@@ -141,7 +144,10 @@ impl AppManager {
         &self,
         req: ImportAppInstanceRequest,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self
+            .framework_config_gate
+            .operation(&format!("host:{}", req.host_id))
+            .await?;
         self.ensure_framework_write_allowed().await?;
         let adapter = self.registry.get(&req.framework_id)?;
         let manifest = adapter.manifest();
@@ -254,7 +260,7 @@ impl AppManager {
         task_id: Option<String>,
         install_version: Option<String>,
     ) -> Result<String, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         let components = Arc::clone(self.component_executor()?);
         let instance = self.store.require(id).await?;
@@ -500,7 +506,7 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         self.refresh_instance_inner(id).await
     }
@@ -694,7 +700,9 @@ impl AppManager {
     }
 
     async fn reconcile_one(&self, id: &AppInstanceId) {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let Ok(_config_guard) = self.framework_config_gate.operation(id.as_str()).await else {
+            return;
+        };
         if let Err(e) = self.ensure_framework_write_allowed().await {
             tracing::info!(instance = id.as_str(), error = %e, "app reconcile skipped");
             return;
@@ -705,6 +713,9 @@ impl AppManager {
         let current = match self.store.require(id).await {
             Ok(i) => i,
             Err(_) => return,
+        };
+        let Ok(_bots) = self.link_config_guards(id, None).await else {
+            return;
         };
         if current
             .link
@@ -729,21 +740,44 @@ impl AppManager {
     }
 
     pub async fn run_host_connection_recovered_listener(self: Arc<Self>) {
+        use crate::bot_manager::host_recovery::{HostChange, run_host_changes};
+        let manager = Arc::clone(&self);
+        let recovery = run_host_changes(
+            self.event_bus.subscribe(EventFilter::all()),
+            self.host_resolver
+                .connection_updates()
+                .map(ncd_server::ConnectionObserver::new),
+            move |server_id, change| {
+                let manager = Arc::clone(&manager);
+                Box::pin(async move {
+                    match change {
+                        HostChange::Recovered => manager.reconcile_for_server(&server_id).await,
+                        HostChange::Lost => {
+                            let host_id = format!("{REMOTE_HOST_ID_PREFIX}{server_id}");
+                            for instance in manager.store.list().await {
+                                if instance.host_id == host_id {
+                                    manager.drop_instance_tunnel(&instance.id).await;
+                                }
+                            }
+                        }
+                    }
+                })
+            },
+        );
         let mut subscription = self.event_bus.subscribe(EventFilter::all());
-        while let Some(event) = subscription.next().await {
-            if let DomainEvent::BotStateChanged {
-                snapshot, reason, ..
-            } = &event
-                && reason.as_deref() == Some("config_docker_recreated")
-            {
-                self.reconcile_for_bot(&snapshot.bot_id).await;
-                continue;
+        let bot_changes = async {
+            while let Some(event) = subscription.next().await {
+                if let DomainEvent::BotStateChanged {
+                    snapshot, reason, ..
+                } = &event
+                    && reason.as_deref() == Some("config_docker_recreated")
+                {
+                    self.reconcile_for_bot(&snapshot.bot_id).await;
+                    continue;
+                }
             }
-            let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
-                continue;
-            };
-            self.reconcile_for_server(&server_id).await;
-        }
+        };
+        tokio::join!(recovery, bot_changes);
     }
 
     pub(super) async fn reconcile_for_bot(&self, bot_id: &BotId) {
@@ -762,7 +796,7 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         self.start_instance_inner(id).await
     }
@@ -856,7 +890,7 @@ impl AppManager {
 
     /// 用户在同意框里点了同意
     pub async fn accept_terms(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         let adapter = self.registry.get(&instance.framework_id)?;
@@ -868,7 +902,7 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
         self.forget_webui_endpoint(id);
@@ -945,7 +979,7 @@ impl AppManager {
         id: &AppInstanceId,
         auto_start: bool,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         let updated = self.store.update(id, |i| i.auto_start = auto_start).await?;
         self.publish(&updated, "auto_start_changed");
@@ -958,23 +992,50 @@ impl AppManager {
         id: &AppInstanceId,
         remove_files: bool,
     ) -> Result<(), AppFrameworkError> {
-        let _config_guard = self.framework_config_gate.lock().await;
+        let _config_guard = self.framework_config_gate.operation(id.as_str()).await?;
         self.ensure_framework_write_allowed().await?;
         let instance = self.store.require(id).await?;
+        let _bots = self.link_config_guards(id, None).await?;
+        let host_removed = if let Some(server_id) = server_id_of_host(&instance.host_id) {
+            !self
+                .host_resolver
+                .is_registered(&RuntimeTarget::Server(server_id.to_owned()))
+                .await
+                .map_err(|error| AppFrameworkError::Host(error.to_string()))?
+        } else {
+            false
+        };
+        if host_removed && remove_files {
+            return Err(AppFrameworkError::Validation(
+                "主机已移除，无法删除远端目录；请只移除实例记录".into(),
+            ));
+        }
         self.forget_webui_endpoint(id);
-        let host = self.resolve_host(&instance.host_id).await;
+        let host = if host_removed {
+            Err(AppFrameworkError::Host("主机已移除".into()))
+        } else {
+            self.resolve_host(&instance.host_id).await
+        };
         if let Ok(host) = &host {
             if let Err(e) = self.runtime.stop(Arc::clone(host), &instance).await {
                 tracing::warn!(instance = id.as_str(), error = %e, "stop before delete");
             }
         }
-        if instance.link.is_some() {
-            if let Err(e) = self.unlink_inner(id).await {
+        if let Some(link) = &instance.link {
+            let unlink = if host_removed {
+                self.remove_link_connection_from_bot(&link.bot_id, &link.connection_name, link.mode)
+                    .await
+            } else {
+                self.unlink_inner(id).await.map(|_| ())
+            };
+            if let Err(e) = unlink {
                 tracing::warn!(instance = id.as_str(), error = %e, "unlink before delete");
             }
         }
         self.drop_instance_tunnel(id).await;
-        if instance.origin.is_imported() && !remove_files {
+        if host_removed {
+            self.adopt_store.remove(id).await?;
+        } else if instance.origin.is_imported() && !remove_files {
             let host = host?;
             self.release_imported(&instance, host.as_ref()).await?;
         } else if remove_files {

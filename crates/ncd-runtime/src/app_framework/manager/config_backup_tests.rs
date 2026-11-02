@@ -222,7 +222,13 @@ async fn backup_gate_excludes_link_changes() {
     manager.store.upsert(inst.clone()).await.unwrap();
     let guard = manager.framework_config_transfer_guard().await;
     let blocked = tokio::time::timeout(Duration::from_millis(20), manager.unlink(&inst.id)).await;
-    assert!(blocked.is_err());
+    assert!(
+        blocked
+            .expect("维护期间应立即返回忙状态")
+            .unwrap_err()
+            .to_string()
+            .contains("配置正在备份或恢复")
+    );
     assert_eq!(
         std::fs::read_to_string(project.join(".env")).unwrap(),
         "HTTP_PORT=1111\n"
@@ -278,7 +284,10 @@ async fn config_editor_reads_and_writes_only_declared_files_without_rewriting_fi
             manager.write_config_text(&inst.id, "env", "new", None)
         )
         .await
-        .is_err()
+        .expect("维护期间不应排队等待")
+        .unwrap_err()
+        .to_string()
+        .contains("配置正在备份或恢复")
     );
     drop(guard);
     assert_eq!(std::fs::read_to_string(project.join(".env")).unwrap(), text);
