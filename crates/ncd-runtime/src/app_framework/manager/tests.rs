@@ -162,16 +162,11 @@ fn token_and_id_shapes() {
     assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
 }
 
-/// 类型化配置写入的编排分支：版本冲突 / 端口同步 / 已对接时重新 upsert Bot 连接。
-/// 用真实本机 Host + 临时目录当 Karin 实例目录（只碰文件，不起进程）。
 #[cfg(windows)]
-mod write_config {
+mod instance_flows {
     use super::*;
     use crate::events::BroadcastEventBus;
     use ncd_appframework::AppFrameworkRegistry;
-    use ncd_appframework::AppInstanceConfig;
-    use ncd_appframework::karin::config::KarinInstanceConfig;
-    use ncd_domain::WebsocketClientConfig;
     use std::sync::Mutex;
     use tokio::sync::Mutex as AsyncMutex;
 
@@ -238,6 +233,32 @@ mod write_config {
 
     async fn fixture(linked: bool) -> Fixture {
         fixture_on_host(linked, LOCAL_HOST_ID, AppPlacement::LocalNative).await
+    }
+
+    #[tokio::test]
+    async fn opening_webui_rereads_port_and_key_without_loading_business_config() {
+        let f = fixture(false).await;
+        std::fs::write(f.inst_dir.join("@karinjs/config/redis.json"), "not json").unwrap();
+        std::fs::write(
+            f.inst_dir.join(".env"),
+            "HTTP_PORT=23331\nHTTP_AUTH_KEY=first\n",
+        )
+        .unwrap();
+        let first = f.manager.open_webui(&f.id, None).await.unwrap();
+        assert!(first.url.contains(":23331"));
+        assert_eq!(first.auth_key, "first");
+        std::fs::write(
+            f.inst_dir.join(".env"),
+            "HTTP_PORT=23332\nHTTP_AUTH_KEY=second\n",
+        )
+        .unwrap();
+        let second = f.manager.open_webui(&f.id, None).await.unwrap();
+        assert!(second.url.contains(":23332"));
+        assert_eq!(second.auth_key, "second");
+        assert_eq!(
+            std::fs::read_to_string(f.inst_dir.join("@karinjs/config/redis.json")).unwrap(),
+            "not json"
+        );
     }
 
     async fn fixture_on_host(linked: bool, host_id: &str, placement: AppPlacement) -> Fixture {
@@ -1125,388 +1146,7 @@ mod write_config {
         assert_eq!(inst.installed_version.as_deref(), Some("1.2.5"));
     }
 
-    #[tokio::test]
-    async fn maibot_config_writes_ports_and_chat_filter() {
-        let f = maibot_fixture("m5").await;
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
-            panic!("expected MaiBot config");
-        };
-        assert_eq!((cfg.webui_port(), cfg.legacy_ws_port()), (23001, 23002));
-        assert_eq!(cfg.webui_token, "Ncd_tok");
-        let adapter = cfg.adapter.as_mut().expect("适配器目录在");
-        assert!(adapter.chat.drops_everything());
-        adapter.chat.group_list.push("123456".into());
-        cfg.bot.webui.port = 23011;
-
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
-            .await
-            .unwrap();
-        assert!(res.port_changed);
-        assert!(!res.relinked);
-        assert_eq!(f.manager.get_instance(&f.id).await.unwrap().port, 23011);
-        let AppInstanceConfig::MaiBot(after) = res.config else {
-            panic!("expected MaiBot config");
-        };
-        assert_eq!(after.adapter.unwrap().chat.group_list, vec!["123456"]);
-        let bot_cfg = std::fs::read_to_string(f.inst_dir.join("config/bot_config.toml")).unwrap();
-        assert!(bot_cfg.contains("port = 23011"), "{bot_cfg}");
-        assert!(bot_cfg.contains("version = \"8.14.40\""));
-    }
-
-    #[tokio::test]
-    async fn maibot_stopped_write_touches_only_changed_keys() {
-        let f = maibot_fixture("m-typed").await;
-        std::fs::write(
-            f.inst_dir.join("src/config/config.py"),
-            "CONFIG_VERSION: str = \"8.14.40\"\nMODEL_CONFIG_VERSION: str = \"1.17.9\"\n",
-        )
-        .unwrap();
-
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
-            panic!("expected MaiBot config");
-        };
-        cfg.bot.personality.personality = "新人格".into();
-        cfg.models.api_providers[0].api_key = "sk-test".into();
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
-            .await
-            .unwrap();
-        assert!(!res.restart_required);
-        let bot_cfg = std::fs::read_to_string(f.inst_dir.join("config/bot_config.toml")).unwrap();
-        assert!(
-            bot_cfg.starts_with("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = 23001\n"),
-            "{bot_cfg}"
-        );
-        assert!(
-            bot_cfg.contains("[personality]\npersonality = \"新人格\""),
-            "{bot_cfg}"
-        );
-        assert!(
-            !bot_cfg.contains("[chat"),
-            "没改的默认值不写出来：{bot_cfg}"
-        );
-        let model_cfg =
-            std::fs::read_to_string(f.inst_dir.join("config/model_config.toml")).unwrap();
-        assert!(
-            model_cfg.starts_with("[inner]\nversion = \"1.17.9\""),
-            "版本号取实例源码里的常量"
-        );
-        let models =
-            ncd_appframework::maibot::schema::read_model_config_file(Some(&model_cfg)).unwrap();
-        assert_eq!(models.api_providers[0].api_key, "sk-test");
-        assert!(
-            model_cfg.contains("# 模型标识符"),
-            "从上游默认文件起的稿，注释带着"
-        );
-    }
-
-    /// 运行中不碰文件：bot 只把改动交给麦麦 WebUI 合并，model 整份交；按字段提示重启；两次写留间隔
-    #[tokio::test]
-    async fn maibot_running_write_goes_through_webui() {
-        use wiremock::matchers::{header, method, path};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
-
-        let f = maibot_fixture("m-live").await;
-        let server = MockServer::start().await;
-        let port = server.address().port();
-        let bot_path = f.inst_dir.join("config/bot_config.toml");
-        let seed = format!(
-            "[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = {port}\n\n[maim_message]\nws_server_port = 23002\n"
-        );
-        std::fs::write(&bot_path, &seed).unwrap();
-        f.manager
-            .store
-            .update(&f.id, |i| {
-                i.port = port;
-                i.state = AppInstanceState::Running;
-            })
-            .await
-            .unwrap();
-        for route in ["/api/webui/config/bot", "/api/webui/config/model"] {
-            Mock::given(method("POST"))
-                .and(path(route))
-                .and(header("cookie", "maibot_session=Ncd_tok"))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(serde_json::json!({"success": true})),
-                )
-                .mount(&server)
-                .await;
-        }
-
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
-            panic!("expected MaiBot config");
-        };
-        cfg.bot.personality.personality = "新人格".into();
-        cfg.models.api_providers[0].api_key = "sk-live".into();
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
-            .await
-            .unwrap();
-        assert!(!res.restart_required, "人格、模型上游热加载，不用重启");
-        assert_eq!(
-            std::fs::read_to_string(&bot_path).unwrap(),
-            seed,
-            "运行中写交给 WebUI，桌面端不直接改文件"
-        );
-        let webui: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(f.inst_dir.join("data/webui.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            webui["first_setup_completed"], true,
-            "模型配好了，WebUI 不必再走首次向导"
-        );
-        assert_eq!(webui["access_token"], "Ncd_tok");
-
-        let body_of = |p: &str, reqs: &[wiremock::Request]| -> serde_json::Value {
-            let req = reqs
-                .iter()
-                .rev()
-                .find(|r| r.url.path() == p)
-                .expect("该路由收到过请求");
-            serde_json::from_slice(&req.body).unwrap()
-        };
-        let reqs = server.received_requests().await.unwrap();
-        assert_eq!(
-            body_of("/api/webui/config/bot", &reqs),
-            serde_json::json!({"personality": {"personality": "新人格"}}),
-            "bot 只带改了的键"
-        );
-        let model = body_of("/api/webui/config/model", &reqs);
-        assert_eq!(model["api_providers"][0]["api_key"], "sk-live");
-        assert!(
-            model["models"].as_array().is_some_and(|m| !m.is_empty()),
-            "model 整份给"
-        );
-        assert!(
-            model["models"][0]["extra_params"].is_object(),
-            "extra_params 交出去要是表"
-        );
-
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
-            panic!("expected MaiBot config");
-        };
-        cfg.bot.maim_message.ws_server_port = 23012;
-        let t0 = std::time::Instant::now();
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
-            .await
-            .unwrap();
-        assert!(
-            res.restart_required,
-            "旧版消息口启动时才绑，走接口写也得重启"
-        );
-        assert!(
-            t0.elapsed() >= Duration::from_millis(1300),
-            "两次写之间要留出上游热加载的间隔，实际 {:?}",
-            t0.elapsed()
-        );
-        let reqs = server.received_requests().await.unwrap();
-        assert_eq!(
-            body_of("/api/webui/config/bot", &reqs),
-            serde_json::json!({"maim_message": {"ws_server_port": 23012}})
-        );
-    }
-
-    #[tokio::test]
-    async fn maibot_runtime_calls_route_by_saved_or_draft_provider() {
-        use wiremock::matchers::{header, method, path, query_param};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
-
-        let f = maibot_fixture("m-rt").await;
-        assert_eq!(
-            f.manager.maibot_status(&f.id).await.unwrap().gate,
-            MaiBotRuntimeGate::NotRunning,
-            "没在跑不发请求，直接折成 gate"
-        );
-        assert!(matches!(
-            f.manager.maibot_stats(&f.id, 24).await.unwrap_err(),
-            AppFrameworkError::NotRunning(_)
-        ));
-
-        let server = MockServer::start().await;
-        let port = server.address().port();
-        std::fs::write(
-                f.inst_dir.join("config/bot_config.toml"),
-                format!("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = {port}\n\n[maim_message]\nws_server_port = 23002\n"),
-            )
-            .unwrap();
-        f.manager
-            .store
-            .update(&f.id, |i| {
-                i.port = port;
-                i.state = AppInstanceState::Running;
-            })
-            .await
-            .unwrap();
-        let ok = |body: serde_json::Value| ResponseTemplate::new(200).set_body_json(body);
-        Mock::given(method("GET"))
-                .and(path("/api/webui/system/status"))
-                .and(header("cookie", "maibot_session=Ncd_tok"))
-                .respond_with(ok(serde_json::json!({"running": true, "uptime": 90.5, "version": "1.2.5", "start_time": "x"})))
-                .mount(&server)
-                .await;
-        Mock::given(method("GET"))
-            .and(path("/api/webui/models/list"))
-            .and(query_param("provider_name", "DeepSeek"))
-            .respond_with(ok(
-                serde_json::json!({"success": true, "models": [{"id": "deepseek-chat"}]}),
-            ))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/api/webui/models/list-by-url"))
-            .and(query_param("base_url", "https://draft.example/v1"))
-            .respond_with(
-                ResponseTemplate::new(502)
-                    .set_body_json(serde_json::json!({"detail": "API Key 无效或已过期"})),
-            )
-            .mount(&server)
-            .await;
-
-        let status = f.manager.maibot_status(&f.id).await.unwrap();
-        assert_eq!(status.gate, MaiBotRuntimeGate::Ok);
-        assert_eq!(status.version.as_deref(), Some("1.2.5"));
-        assert_eq!(status.uptime_secs, Some(90.5));
-
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let AppInstanceConfig::MaiBot(cfg) = env.config else {
-            panic!("expected MaiBot config");
-        };
-        let saved = cfg.models.api_providers[0].clone();
-        let models = f
-            .manager
-            .maibot_provider_models(&f.id, saved.clone())
-            .await
-            .unwrap();
-        assert_eq!(
-            models[0].id, "deepseek-chat",
-            "盘上一模一样的按名字查，上游放行它自己配的内网地址"
-        );
-
-        let mut draft = saved;
-        draft.base_url = "https://draft.example/v1".into();
-        let err = f
-            .manager
-            .maibot_provider_models(&f.id, draft)
-            .await
-            .unwrap_err();
-        assert!(
-            matches!(&err, AppFrameworkError::Integration(m) if m == "API Key 无效或已过期"),
-            "改过没保存的按地址查；上游 502 的原话直接给用户：{err:?}"
-        );
-    }
-
-    /// 口和 token 读一次记着（远端现读一遍要十几次 SFTP）；麦麦那边换了 token，
-    /// 详情页轮询的状态接口先撞上 401，作废后下一轮按盘上的新 token 恢复
-    #[tokio::test]
-    async fn maibot_webui_endpoint_is_cached_and_heals_after_auth_failure() {
-        use wiremock::matchers::{header, method, path};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
-
-        let f = maibot_fixture("m-cache").await;
-        let server = MockServer::start().await;
-        let port = server.address().port();
-        std::fs::write(
-                f.inst_dir.join("config/bot_config.toml"),
-                format!("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = {port}\n\n[maim_message]\nws_server_port = 23002\n"),
-            )
-            .unwrap();
-        f.manager
-            .store
-            .update(&f.id, |i| {
-                i.port = port;
-                i.state = AppInstanceState::Running;
-            })
-            .await
-            .unwrap();
-        let status_ok = serde_json::json!({"running": true, "uptime": 1.0, "version": "1.2.5", "start_time": "x"});
-        let accept = |token: &str| {
-            Mock::given(method("GET"))
-                .and(path("/api/webui/system/status"))
-                .and(header("cookie", format!("maibot_session={token}").as_str()))
-                .respond_with(ResponseTemplate::new(200).set_body_json(status_ok.clone()))
-                .with_priority(1)
-        };
-        let reject = || {
-            Mock::given(method("GET"))
-                .and(path("/api/webui/system/status"))
-                .respond_with(ResponseTemplate::new(401))
-                .with_priority(10)
-        };
-        accept("Ncd_tok").mount(&server).await;
-        reject().mount(&server).await;
-        assert_eq!(
-            f.manager.maibot_status(&f.id).await.unwrap().gate,
-            MaiBotRuntimeGate::Ok
-        );
-
-        let webui_json = f.inst_dir.join("data/webui.json");
-        std::fs::write(
-            &webui_json,
-            "{\"access_token\":\"Ncd_new\",\"token_source\":\"configured\"}\n",
-        )
-        .unwrap();
-        assert_eq!(
-            f.manager.webui_auth_key(&f.id).await,
-            "Ncd_tok",
-            "记着的不因为盘上变了就现读"
-        );
-
-        server.reset().await;
-        accept("Ncd_new").mount(&server).await;
-        reject().mount(&server).await;
-        assert_eq!(
-            f.manager.maibot_status(&f.id).await.unwrap().gate,
-            MaiBotRuntimeGate::Auth
-        );
-        assert_eq!(
-            f.manager.maibot_status(&f.id).await.unwrap().gate,
-            MaiBotRuntimeGate::Ok
-        );
-        assert_eq!(f.manager.webui_auth_key(&f.id).await, "Ncd_new");
-    }
-
-    // 插件任务的标题取框架清单里的名字，去重键按实例、资源、名字、动作拼
-    #[tokio::test]
-    async fn store_op_task_title_and_dedupe_key() {
-        let f = fixture(false).await;
-        // 没装好的实例：任务一跑就停在「尚未安装」，不会去拉插件目录
-        f.manager
-            .store
-            .update(&f.id, |i| i.state = AppInstanceState::NotInstalled)
-            .await
-            .unwrap();
-        let tasks = f.manager.task_queue().unwrap().clone();
-        let task_id = f
-            .manager
-            .submit_store_op(
-                &f.id,
-                "karin-plugin-foo",
-                AppPluginAction::Uninstall,
-                AppStoreResource::Plugin,
-            )
-            .await
-            .unwrap();
-        let list = tasks.list().await;
-        let task = list.tasks.iter().find(|t| t.task_id == task_id).unwrap();
-        assert_eq!(task.title, "Karin · 卸载插件 karin-plugin-foo");
-        assert_eq!(
-            task.dedupe_key.as_deref(),
-            Some("app-plugin:k1:plugin:karin-plugin-foo:uninstall")
-        );
-    }
-
-    // 落盘读不到账号、桌面端也没记用户名：AstrBot 用它首启写的默认用户名，没这个约定的框架给空
+    // 落盘读不到账号时，仍能显示 AstrBot 的默认用户名。
     #[tokio::test]
     async fn webui_login_username_falls_back_to_framework_default() {
         let f = fixture(false).await;
@@ -1514,8 +1154,11 @@ mod write_config {
         let mut astrbot = karin.clone();
         astrbot.id = AppInstanceId::new("a1");
         astrbot.framework_id = AppFrameworkId::new("astrbot");
-        assert_eq!(f.manager.webui_login_username(&astrbot).await, "astrbot");
-        assert_eq!(f.manager.webui_login_username(&karin).await, "");
+        assert_eq!(
+            f.manager.webui_account(&astrbot).await.unwrap().username,
+            "astrbot"
+        );
+        assert!(f.manager.webui_account(&karin).await.is_none());
     }
 
     #[tokio::test]
@@ -1546,27 +1189,12 @@ mod write_config {
         assert_eq!(created.framework_id.as_str(), "maibot");
     }
 
-    fn karin(envelope: &AppInstanceConfigEnvelope) -> KarinInstanceConfig {
-        let AppInstanceConfig::Karin(k) = &envelope.config else {
-            panic!("expected Karin config");
-        };
-        k.clone()
-    }
-
     fn client_url(plan: &OneBotLinkPlan) -> &str {
         &plan
             .connection
             .as_ws_client()
             .expect("Karin 是反向对接")
             .url
-    }
-
-    fn ws_client_urls(bot: &BotConfig) -> Vec<String> {
-        bot.connect
-            .websocket_clients
-            .iter()
-            .map(|c: &WebsocketClientConfig| c.url.clone())
-            .collect()
     }
 
     #[tokio::test]
@@ -1600,151 +1228,6 @@ mod write_config {
             "{:?}",
             snap.lines
         );
-    }
-
-    #[tokio::test]
-    async fn stale_revision_is_rejected_and_none_means_overwrite() {
-        let f = fixture(false).await;
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let mut cfg = karin(&env);
-        cfg.config.master.push("123".into());
-
-        let err = f
-            .manager
-            .write_config(
-                &f.id,
-                AppInstanceConfig::Karin(cfg.clone()),
-                Some("deadbeef".into()),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(err, AppFrameworkError::ConfigConflict(_)));
-
-        let ok = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::Karin(cfg.clone()), None)
-            .await
-            .unwrap();
-        assert!(!ok.restart_required);
-        assert!(!ok.relinked);
-        assert!(!ok.port_changed);
-        assert_ne!(ok.revision, env.revision);
-
-        // 正确的 base_revision 通过
-        let mut cfg2 = cfg.clone();
-        cfg2.env.log_level = "debug".into();
-        f.manager
-            .write_config(&f.id, AppInstanceConfig::Karin(cfg2), Some(ok.revision))
-            .await
-            .unwrap();
-        let again = karin(&f.manager.read_config(&f.id).await.unwrap());
-        assert_eq!(again.env.log_level, "debug");
-        assert_eq!(again.config.master, vec!["console", "123"]);
-    }
-
-    #[tokio::test]
-    async fn port_change_syncs_instance_and_relinks_bot() {
-        let f = fixture(true).await;
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let mut cfg = karin(&env);
-        cfg.env.http_port = 7801;
-
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::Karin(cfg), Some(env.revision))
-            .await
-            .unwrap();
-        assert!(res.port_changed);
-        assert!(res.relinked);
-        assert!(!res.restart_required, "实例未运行，不提示重启");
-
-        let inst = f.manager.get_instance(&f.id).await.unwrap();
-        assert_eq!(inst.port, 7801);
-        assert_eq!(*f.bots.upserts.lock().unwrap(), 1);
-        let bot = f
-            .bots
-            .bot_config(&BotId::new("10001"))
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            ws_client_urls(&bot),
-            vec!["ws://127.0.0.1:7801/onebot/v11/ws".to_string()]
-        );
-        assert_eq!(bot.connect.websocket_clients[0].base.token, "tok-1");
-    }
-
-    #[tokio::test]
-    async fn ws_key_change_relinks_with_new_token_but_plain_edit_does_not() {
-        let f = fixture(true).await;
-        let env = f.manager.read_config(&f.id).await.unwrap();
-        let mut cfg = karin(&env);
-        cfg.config.admin.push("42".into());
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::Karin(cfg), Some(env.revision))
-            .await
-            .unwrap();
-        assert!(!res.relinked);
-        assert_eq!(*f.bots.upserts.lock().unwrap(), 0);
-
-        let mut cfg = karin(&f.manager.read_config(&f.id).await.unwrap());
-        cfg.env.ws_server_auth_key = "tok-2".into();
-        let res = f
-            .manager
-            .write_config(&f.id, AppInstanceConfig::Karin(cfg), Some(res.revision))
-            .await
-            .unwrap();
-        assert!(res.relinked);
-        let bot = f
-            .bots
-            .bot_config(&BotId::new("10001"))
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(bot.connect.websocket_clients[0].base.token, "tok-2");
-    }
-
-    #[tokio::test]
-    async fn raw_text_write_checks_revision_and_json_syntax() {
-        let f = fixture(false).await;
-        let docs = f.manager.list_config_documents(&f.id).await.unwrap();
-        assert_eq!(docs.len(), 7);
-        let redis = f.manager.read_config_text(&f.id, "redis").await.unwrap();
-        assert!(redis.text.contains("6379"));
-
-        let bad = f
-            .manager
-            .write_config_text(&f.id, "redis", "{nope", Some(redis.revision.clone()))
-            .await
-            .unwrap_err();
-        assert!(matches!(bad, AppFrameworkError::ConfigInvalid(_)));
-
-        let stale = f
-            .manager
-            .write_config_text(&f.id, "redis", "{}", Some("old".into()))
-            .await
-            .unwrap_err();
-        assert!(matches!(stale, AppFrameworkError::ConfigConflict(_)));
-
-        let ok = f
-            .manager
-            .write_config_text(
-                &f.id,
-                "redis",
-                "{\"url\":\"redis://10.0.0.1:6379\"}\n",
-                Some(redis.revision),
-            )
-            .await
-            .unwrap();
-        assert_ne!(ok.revision, "missing");
-        let cfg = karin(&f.manager.read_config(&f.id).await.unwrap());
-        assert_eq!(cfg.redis.url, "redis://10.0.0.1:6379");
-
-        // 缺失文件读出来是空文本 + missing
-        let groups = f.manager.read_config_text(&f.id, "groups").await.unwrap();
-        assert_eq!(groups.revision, "missing");
-        assert_eq!(groups.text, "");
     }
 
     #[tokio::test]
@@ -2056,17 +1539,11 @@ mod write_config {
             "首装应已写好协议确认，还剩: {:?}",
             pending.iter().map(|p| p.id.clone()).collect::<Vec<_>>()
         );
-        let AppInstanceConfig::MaiBot(cfg) = manager.read_config(&id).await.unwrap().config else {
-            panic!("不是 MaiBot 配置");
-        };
-        eprintln!(
-            "{} 配置: webui={} legacy={} token 长度={} adapter={:?}",
-            stamp(t0),
-            cfg.webui_port(),
-            cfg.legacy_ws_port(),
-            cfg.webui_token.len(),
-            cfg.adapter.as_ref().map(|a| (a.enabled, a.napcat_port))
-        );
+        let webui = manager.open_webui(&id, None).await.unwrap();
+        assert!(webui.url.contains(&format!(":{WEBUI}")));
+        let config_text = std::fs::read_to_string(inst_dir.join("config/bot_config.toml")).unwrap();
+        let (_, legacy_port) =
+            ncd_appframework::maibot::config::read_bot_config_ports(Some(&config_text));
 
         let linked = manager
             .apply_link(&id, &BotId::new("10001"))
@@ -2168,7 +1645,7 @@ mod write_config {
             }
             let url = format!("http://127.0.0.1:{WEBUI}/api/webui/auth/verify");
             for (label, token) in [
-                ("对的 token", cfg.webui_token.as_str()),
+                ("对的 token", webui.auth_key.as_str()),
                 ("错的 token", "wrong-token"),
             ] {
                 match client
@@ -2205,7 +1682,7 @@ mod write_config {
                     && l.contains(&server.base.token)
             })
         });
-        let legacy_up = tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port()))
+        let legacy_up = tokio::net::TcpStream::connect(("127.0.0.1", legacy_port))
             .await
             .is_ok();
         eprintln!(
@@ -2242,7 +1719,7 @@ mod write_config {
         let webui_after = tokio::net::TcpStream::connect(("127.0.0.1", WEBUI))
             .await
             .is_ok();
-        let legacy_after = tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port()))
+        let legacy_after = tokio::net::TcpStream::connect(("127.0.0.1", legacy_port))
             .await
             .is_ok();
         eprintln!(
@@ -2372,16 +1849,11 @@ mod write_config {
             .await
             .unwrap();
 
-        let AppInstanceConfig::Koishi(cfg) = manager.read_config(&id).await.unwrap().config else {
-            panic!("不是 Koishi 配置");
-        };
-        eprintln!(
-            "{} 配置: 口={} 插件 {} 个",
-            stamp(t0),
-            cfg.listen_port(),
-            cfg.plugins.len()
+        let webui = manager.open_webui(&id, None).await.unwrap();
+        assert!(
+            webui.url.contains(&format!(":{PORT}")),
+            "首装应把 server 口写成实例口"
         );
-        assert_eq!(cfg.listen_port(), PORT, "首装应把 server 口写成实例口");
 
         // 停着对接：改文件；Bot 侧多一条反向 WS 客户端连过来
         let linked = manager
@@ -2434,9 +1906,7 @@ mod write_config {
         eprintln!("{} 口通: {port_up}", stamp(t0));
 
         let mut index_ok = false;
-        let mut gate_ok = false;
         let mut handshake = String::new();
-        let mut bot_seen = false;
         if port_up {
             // 控制台首页：用户点「打开控制台」看到的就是它
             match reqwest::get(format!("http://127.0.0.1:{PORT}/")).await {
@@ -2449,17 +1919,6 @@ mod write_config {
                 }
                 Err(e) => eprintln!("{} 首页: 请求失败 {e}", stamp(t0)),
             }
-
-            let deadline = Instant::now() + Duration::from_secs(60);
-            while Instant::now() < deadline {
-                let s = manager.koishi_status(&id).await.unwrap();
-                if s.gate == ncd_appframework::KoishiRuntimeGate::Ok {
-                    gate_ok = true;
-                    break;
-                }
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
-            eprintln!("{} 控制台状态接口: {gate_ok}", stamp(t0));
 
             // 冒充 NapCat 握手：URL、token 都照 Bot 配置里写的来
             let path = client
@@ -2494,17 +1953,6 @@ mod write_config {
                 .to_string();
             eprintln!("{} 反向 WS 握手: {handshake:?}（路径 {path}）", stamp(t0));
 
-            // 连接留着，等控制台推一轮状态
-            let deadline = Instant::now() + Duration::from_secs(30);
-            while Instant::now() < deadline {
-                let s = manager.koishi_status(&id).await.unwrap();
-                if let Some(b) = s.bots.iter().find(|b| b.self_id == "10001") {
-                    eprintln!("{} 控制台里的 Bot: {} {:?}", stamp(t0), b.sid, b.state);
-                    bot_seen = true;
-                    break;
-                }
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
             drop(sock);
         }
 
@@ -2554,22 +2002,10 @@ mod write_config {
 
         assert!(port_up, "Koishi 口没起来");
         assert!(index_ok, "控制台首页打不开");
-        assert!(gate_ok, "控制台状态接口不通");
         assert!(handshake.contains(" 101 "), "反向 WS 握手没过: {handshake}");
-        assert!(bot_seen, "控制台里没看到连上来的 Bot");
         assert!(leftovers.is_empty() && after.is_empty(), "停后有残留进程");
         assert!(!port_after, "停后端口没释放");
     }
-}
-
-#[test]
-fn utc_offset_from_date_z() {
-    assert_eq!(parse_utc_offset("+0800\n"), Some(8 * 3600));
-    assert_eq!(parse_utc_offset("+0000"), Some(0));
-    assert_eq!(parse_utc_offset("-0530"), Some(-(5 * 3600 + 30 * 60)));
-    assert_eq!(parse_utc_offset("CST"), None);
-    assert_eq!(parse_utc_offset("+08:00"), None);
-    assert_eq!(parse_utc_offset(""), None);
 }
 
 #[test]

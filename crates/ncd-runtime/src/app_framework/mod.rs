@@ -4,15 +4,12 @@
 
 mod adopt;
 mod docker_link;
-mod download;
 mod existing_link;
 mod instances;
 mod listen_port;
 mod log_tail;
 mod manager;
 mod native_runtime;
-mod plugin_market;
-mod plugin_task;
 mod resident_link;
 mod supervisor;
 
@@ -22,8 +19,6 @@ pub use manager::{
     AppManager, AppTerminalContext, BotConfigPort, app_link_connections, upsert_ws_client,
 };
 pub use native_runtime::{APP_PID_FILE, AppLaunchSpec, NativeAppRuntime};
-pub use ncd_appframework::astrbot::AstrBotConfigSchema;
 pub use ncd_appframework::config_backup::{
     FrameworkConfigBackup, FrameworkConfigFile, FrameworkConfigRecovery,
 };
-pub use plugin_market::KARIN_PLUGINS_LIST_URL;

@@ -442,7 +442,7 @@ async fn incomplete_handoff_rejects_public_mutations_before_host_or_component_wo
             .to_string(),
         f.manager.unlink(&id).await.unwrap_err().to_string(),
         f.manager
-            .write_config_text(&id, "env", "PORT=19000\n", None)
+            .apply_link(&id, &BotId::new("10001"))
             .await
             .unwrap_err()
             .to_string(),

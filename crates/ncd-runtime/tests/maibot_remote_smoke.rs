@@ -13,7 +13,6 @@
 
 use std::sync::Arc;
 
-use ncd_appframework::MaiBotRuntimeGate;
 use ncd_domain::{
     AdvancedConfig, AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement,
     AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotId, ConnectConfig,
@@ -21,8 +20,8 @@ use ncd_domain::{
 };
 use ncd_host::{Host, HostCommand, HostPath, Os};
 use ncd_runtime::{
-    AppFrameworkRegistry, AppInstanceConfig, AppInstanceStore, AppManager, BotConfigPort,
-    BroadcastEventBus, HostResolveError, HostResolver, NativeAppRuntime,
+    AppFrameworkRegistry, AppInstanceStore, AppManager, BotConfigPort, BroadcastEventBus,
+    HostResolveError, HostResolver, NativeAppRuntime,
 };
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -279,16 +278,14 @@ async fn maibot_remote_smoke() {
         manager.pending_terms(&id).await.unwrap().is_empty(),
         "首装应已写好协议确认"
     );
-    let AppInstanceConfig::MaiBot(cfg) = manager.read_config(&id).await.unwrap().config else {
-        panic!("不是 MaiBot 配置");
-    };
-    eprintln!(
-        "{} 配置: webui={} legacy={} token 长度={}",
-        stamp(t0),
-        cfg.webui_port(),
-        cfg.legacy_ws_port(),
-        cfg.webui_token.len()
-    );
+    let webui = manager.open_webui(&id, None).await.unwrap();
+    let config_bytes = remote
+        .read_file(&install_dir.join("config/bot_config.toml"))
+        .await
+        .unwrap();
+    let config_text = String::from_utf8_lossy(&config_bytes);
+    let (_, legacy_port) =
+        ncd_appframework::maibot::config::read_bot_config_ports(Some(&config_text));
 
     manager
         .apply_link(&id, &BotId::new("10001"))
@@ -376,18 +373,12 @@ async fn maibot_remote_smoke() {
         .post(format!(
             "http://127.0.0.1:{local_port}/api/webui/auth/verify"
         ))
-        .json(&serde_json::json!({ "token": cfg.webui_token }))
+        .json(&serde_json::json!({ "token": webui.auth_key }))
         .send()
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false);
-    let status = manager.maibot_status(&id).await.unwrap();
-    eprintln!(
-        "{} token 校验: {verify}，运行状态: {:?} {}",
-        stamp(t0),
-        status.gate,
-        status.message
-    );
+    eprintln!("{} token 校验: {verify}", stamp(t0));
 
     let mut handshake = String::new();
     let deadline = Instant::now() + Duration::from_secs(120);
@@ -425,7 +416,7 @@ async fn maibot_remote_smoke() {
     tokio::time::sleep(Duration::from_secs(3)).await;
     let after = related(remote.as_ref(), install_dir.as_posix()).await;
     let listening = remote_listening_ports(remote.as_ref()).await;
-    let ports_left: Vec<u16> = [WEBUI, cfg.legacy_ws_port()]
+    let ports_left: Vec<u16> = [WEBUI, legacy_port]
         .into_iter()
         .filter(|p| listening.contains(p))
         .collect();
@@ -458,7 +449,6 @@ async fn maibot_remote_smoke() {
 
     assert!(index_ok, "经隧道打不开 WebUI 首页");
     assert!(verify, "WebUI 不认 token");
-    assert_eq!(status.gate, MaiBotRuntimeGate::Ok, "运行状态不对");
     assert!(auth_ok, "适配器没带对的 token 连过来");
     assert!(after.is_empty(), "停后有残留进程（按进程组停没收干净）");
     assert!(ports_left.is_empty(), "停后端口没释放");

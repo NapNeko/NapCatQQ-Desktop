@@ -213,7 +213,7 @@ async fn pending_backup_survives_restart_and_is_exported_before_live_config() {
 }
 
 #[tokio::test]
-async fn backup_gate_excludes_raw_configuration_edits() {
+async fn backup_gate_excludes_link_changes() {
     let root = tempfile::tempdir().unwrap();
     let project = root.path().join("karin");
     project_files(&project);
@@ -221,19 +221,106 @@ async fn backup_gate_excludes_raw_configuration_edits() {
     let inst = instance(&project, AppInstanceState::Stopped);
     manager.store.upsert(inst.clone()).await.unwrap();
     let guard = manager.framework_config_transfer_guard().await;
-    let blocked = tokio::time::timeout(
-        Duration::from_millis(20),
-        manager.write_config_text(&inst.id, "env", "HTTP_PORT=7777\n", None),
-    )
-    .await;
+    let blocked = tokio::time::timeout(Duration::from_millis(20), manager.unlink(&inst.id)).await;
     assert!(blocked.is_err());
     assert_eq!(
         std::fs::read_to_string(project.join(".env")).unwrap(),
         "HTTP_PORT=1111\n"
     );
     drop(guard);
-    manager
-        .write_config_text(&inst.id, "env", "HTTP_PORT=7777\n", None)
+    manager.unlink(&inst.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn config_editor_reads_and_writes_only_declared_files_without_rewriting_fields() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("karin");
+    project_files(&project);
+    let manager = fixture(root.path());
+    let inst = instance(&project, AppInstanceState::Stopped);
+    manager.store.upsert(inst.clone()).await.unwrap();
+    assert!(
+        manager
+            .list_config_documents(&inst.id)
+            .await
+            .unwrap()
+            .iter()
+            .any(|doc| doc.id == "env")
+    );
+    let file = manager.read_config_text(&inst.id, "env").await.unwrap();
+    let text = "# custom\r\nHTTP_PORT=8888\r\nEXTRA=keep\r\n";
+    let saved = manager
+        .write_config_text(&inst.id, "env", text, Some(file.revision))
         .await
         .unwrap();
+    assert_eq!(saved.text, text);
+    assert_eq!(std::fs::read_to_string(project.join(".env")).unwrap(), text);
+    assert_eq!(
+        manager.store.require(&inst.id).await.unwrap().port,
+        inst.port
+    );
+    assert!(
+        manager
+            .read_config_text(&inst.id, "../package.json")
+            .await
+            .is_err()
+    );
+    assert!(
+        manager
+            .write_config_text(&inst.id, "../package.json", "{}", None)
+            .await
+            .is_err()
+    );
+    let guard = manager.framework_config_transfer_guard().await;
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(20),
+            manager.write_config_text(&inst.id, "env", "new", None)
+        )
+        .await
+        .is_err()
+    );
+    drop(guard);
+    assert_eq!(std::fs::read_to_string(project.join(".env")).unwrap(), text);
+}
+
+#[tokio::test]
+async fn nonebot_editor_tracks_active_environment_and_koishi_rejects_running_file_writes() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join(".env"), "ENVIRONMENT=dev\n").unwrap();
+    std::fs::write(project.join(".env.dev"), "PORT=13120\n").unwrap();
+    let manager = fixture(root.path());
+    let mut inst = instance(&project, AppInstanceState::Stopped);
+    inst.framework_id = AppFrameworkId::new("nonebot2");
+    manager.store.upsert(inst.clone()).await.unwrap();
+    let docs = manager.list_config_documents(&inst.id).await.unwrap();
+    assert!(docs.iter().any(|doc| doc.rel_path == ".env.dev"));
+    assert!(!docs.iter().any(|doc| doc.rel_path == ".env.prod"));
+    let file = manager
+        .read_config_text(&inst.id, "env_prod")
+        .await
+        .unwrap();
+    manager
+        .write_config_text(&inst.id, "env_prod", "PORT=13121\n", Some(file.revision))
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(project.join(".env.dev")).unwrap(),
+        "PORT=13121\n"
+    );
+    assert!(!project.join(".env.prod").exists());
+    inst.framework_id = AppFrameworkId::new("koishi");
+    inst.state = AppInstanceState::Running;
+    manager.store.upsert(inst.clone()).await.unwrap();
+    assert!(
+        manager
+            .write_config_text(&inst.id, "koishi", "port: 8080\n", None)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("停止实例")
+    );
+    assert!(!project.join("koishi.yml").exists());
 }

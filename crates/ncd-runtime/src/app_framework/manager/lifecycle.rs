@@ -376,33 +376,6 @@ impl AppManager {
         Ok(updated)
     }
 
-    /// 运行中的实例两次写配置之间留够应用要的间隔：先占好自己的时刻再睡，并发保存自然排队
-    pub(super) async fn wait_config_write_slot(
-        &self,
-        adapter: &dyn AppFrameworkAdapter,
-        instance: &AppInstance,
-    ) {
-        let Some(gap) = adapter.config_write_min_interval() else {
-            return;
-        };
-        if instance.state != AppInstanceState::Running {
-            return;
-        }
-        let wait = {
-            let mut slots = self
-                .config_write_slots
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            let now = Instant::now();
-            let at = slots.get(&instance.id).map_or(now, |next| (*next).max(now));
-            slots.insert(instance.id.clone(), at + gap);
-            at - now
-        };
-        if !wait.is_zero() {
-            tokio::time::sleep(wait).await;
-        }
-    }
-
     pub(super) fn install_watched(&self, id: &AppInstanceId) -> bool {
         self.install_watches
             .lock()

@@ -257,10 +257,6 @@ impl AppManager {
         if let Ok(adapter) = self.registry.get(&instance.framework_id) {
             adapter.forget_panel_session(instance.id.as_str());
         }
-        self.config_write_slots
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&instance.id);
         let saved = self
             .store
             .upsert(instance)

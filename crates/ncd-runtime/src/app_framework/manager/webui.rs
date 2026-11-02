@@ -1,15 +1,12 @@
-//! 应用自带的 WebUI：登录用户名、监听口、登录密钥和账号；运行期接口要的口和密钥在这里缓存
+//! 应用 WebUI 的浏览器入口、SSH 隧道与登录信息。
 
 use super::*;
 
-/// 运行期接口每次都要的 WebUI 口和登录密钥。远端读一遍配置要十几次 SFTP 往返，
-/// 麦麦的表情包网格、导入进度轮询一秒好几个请求，每次现读页面就卡住了
+/// 同一次打开共用端口与密钥，避免远端重复读取。
 #[derive(Debug, Clone)]
 pub(super) struct WebUiEndpoint {
     pub(super) listen_port: u16,
     pub(super) auth_key: String,
-    /// 远端主机相对 UTC 的秒数，本机为 None（按桌面端时区）
-    pub(super) utc_offset_secs: Option<i32>,
     read_at: Instant,
 }
 
@@ -21,19 +18,23 @@ fn webui_tunnel_key(instance: &AppInstance) -> String {
 }
 
 impl AppManager {
+    pub(super) async fn prime_live_port(
+        &self,
+        adapter: &dyn AppFrameworkAdapter,
+        instance: &AppInstance,
+    ) -> Result<(), AppFrameworkError> {
+        if !adapter.wants_live_port() || instance.state != AppInstanceState::Running {
+            return Ok(());
+        }
+        self.forget_webui_endpoint(&instance.id);
+        let port = self.desktop_webui_loopback_port(instance).await?;
+        adapter.note_live_port(instance.id.as_str(), port);
+        Ok(())
+    }
+
     pub fn webui_url(&self, instance: &AppInstance, public_host: &str) -> Option<String> {
         let adapter = self.registry.get(&instance.framework_id).ok()?;
         adapter.integration().webui_url(instance, public_host)
-    }
-
-    pub(super) async fn webui_login_username(&self, instance: &AppInstance) -> String {
-        if let Some(account) = self.webui_account(instance).await {
-            let name = account.username.trim();
-            if !name.is_empty() {
-                return name.to_string();
-            }
-        }
-        self.fallback_webui_username(instance)
     }
 
     /// WebUI 在应用机上的 HTTP 口（AstrBot 是 dashboard.port，不是 OneBot 口）。
@@ -52,19 +53,17 @@ impl AppManager {
         {
             return hit;
         }
-        match self.read_config_inner(&instance.id).await {
-            Ok(env) => {
-                let utc_offset_secs = match server_id_of_host(&instance.host_id) {
-                    Some(_) => match self.resolve_host(&instance.host_id).await {
-                        Ok(host) => remote_utc_offset(host.as_ref()).await,
-                        Err(_) => None,
-                    },
-                    None => None,
-                };
+        let result = async {
+            let adapter = self.registry.get(&instance.framework_id)?;
+            let host = self.resolve_host(&instance.host_id).await?;
+            adapter.read_webui_endpoint(host.as_ref(), instance).await
+        }
+        .await;
+        match result {
+            Ok((listen_port, auth_key)) => {
                 let endpoint = WebUiEndpoint {
-                    listen_port: env.config.webui_port().unwrap_or(instance.port),
-                    auth_key: env.config.webui_auth_key().to_string(),
-                    utc_offset_secs,
+                    listen_port,
+                    auth_key,
                     read_at: Instant::now(),
                 };
                 if let Ok(mut map) = self.webui_endpoints.lock() {
@@ -79,7 +78,6 @@ impl AppManager {
                     .map(|adapter| adapter.webui_fallback_port(instance))
                     .unwrap_or(instance.port),
                 auth_key: String::new(),
-                utc_offset_secs: None,
                 read_at: Instant::now(),
             },
         }
@@ -109,6 +107,8 @@ impl AppManager {
         path: Option<&str>,
     ) -> Result<AppInstanceWebUi, AppFrameworkError> {
         let instance = self.store.require(id).await?;
+        // 用户在框架 WebUI 中修改端口或密钥后，下次打开立即使用新值。
+        self.forget_webui_endpoint(id);
         let port = self.desktop_webui_loopback_port(&instance).await?;
         let mut view = instance.clone();
         view.port = port;
