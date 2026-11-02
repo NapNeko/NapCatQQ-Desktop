@@ -67,7 +67,9 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
                     <Switch
                         checked={on}
                         disabled={!!blocked}
-                        onCheckedChange={(v) => patchDraft({ features: { ...features, [def.key]: v } })}
+                        onCheckedChange={(v) =>
+                            patchDraft({ features: { ...features, [def.key]: v } })
+                        }
                         aria-label={`切换 ${def.label}`}
                     />
                 </div>
@@ -94,13 +96,17 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
                                     <div className="flex flex-col divide-y divide-border-subtle/70">
                                         {frameworks.map((m) => {
                                             const visible = isAppFrameworkVisible(features, m.id);
-                                            const itemBlocked = visible ? appFrameworkOffBlock(m.id, usage) : null;
+                                            const itemBlocked = visible
+                                                ? appFrameworkOffBlock(m.id, usage)
+                                                : null;
 
                                             return (
                                                 <FieldRow
                                                     key={m.id}
                                                     label={m.display_name}
-                                                    description={m.description || '控制组件页与新建时的显示'}
+                                                    description={
+                                                        m.description || '控制组件页与新建时的显示'
+                                                    }
                                                 >
                                                     <div className="flex items-center gap-2">
                                                         {itemBlocked && (
@@ -111,10 +117,16 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
                                                                         aria-label={itemBlocked}
                                                                         className="inline-flex h-6 w-6 items-center justify-center rounded-full text-warning transition-colors hover:bg-warning/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                                                                     >
-                                                                        <AlertTriangle size={13} strokeWidth={2.4} />
+                                                                        <AlertTriangle
+                                                                            size={13}
+                                                                            strokeWidth={2.4}
+                                                                        />
                                                                     </button>
                                                                 </TooltipTrigger>
-                                                                <TooltipContent side="left" sideOffset={6}>
+                                                                <TooltipContent
+                                                                    side="left"
+                                                                    sideOffset={6}
+                                                                >
                                                                     {itemBlocked}
                                                                 </TooltipContent>
                                                             </Tooltip>
@@ -124,7 +136,12 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
                                                             disabled={!!itemBlocked}
                                                             onCheckedChange={(v) =>
                                                                 patchDraft({
-                                                                    features: setAppFrameworkVisible(features, m.id, v),
+                                                                    features:
+                                                                        setAppFrameworkVisible(
+                                                                            features,
+                                                                            m.id,
+                                                                            v,
+                                                                        ),
                                                                 })
                                                             }
                                                             aria-label={`切换 ${m.display_name}`}
@@ -149,9 +166,7 @@ function Description({ text, saves }: { text: string; saves?: string }) {
     return (
         <>
             <span>{text}</span>
-            <span className="mt-0.5 block text-[11.5px] text-text-tertiary">
-                关掉后：{saves}
-            </span>
+            <span className="mt-0.5 block text-[11.5px] text-text-tertiary">关掉后：{saves}</span>
         </>
     );
 }

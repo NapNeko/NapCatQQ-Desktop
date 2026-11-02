@@ -63,8 +63,7 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
             {
                 key: 'apps',
                 label: '应用端',
-                description:
-                    '应用端框架生态，包含组件页应用端组与 Bot 自动对接',
+                description: '应用端框架生态，包含组件页应用端组与 Bot 自动对接',
                 saves: '实例不再随桌面端启动（每个实例是一个常驻的 Node / Python 进程）',
             },
         ],
@@ -76,15 +75,13 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
             {
                 key: 'dockerPage',
                 label: '容器页',
-                description:
-                    '管理远端主机上的 Docker 环境与容器应用（仅在远端支持时显示）',
+                description: '管理远端主机上的 Docker 环境与容器应用（仅在远端支持时显示）',
                 saves: '启动时不再到每台远端主机上探测 Docker',
             },
             {
                 key: 'ncdWatch',
                 label: '远端值守（ncd-watch）',
-                description:
-                    '桌面端退出后由远端主机守护进程继续盯 Bot 掉线并报警',
+                description: '桌面端退出后由远端主机守护进程继续盯 Bot 掉线并报警',
                 saves: '不再每 45 秒给远端主机写心跳，停止 watch 探测',
             },
         ],
@@ -213,14 +210,16 @@ export function featureOffBlock(
             if (!draft[other]) return '两个协议端至少留一个';
             const n = usage.botsByBackend[key];
             return n > 0
-                ? (n === 1 ? '当前有 1 个 Bot 正在使用，请先删除此 Bot' : `当前有 ${n} 个 Bot 正在使用，请先删除对应 Bot`)
+                ? n === 1
+                    ? '当前有 1 个 Bot 正在使用，请先删除此 Bot'
+                    : `当前有 ${n} 个 Bot 正在使用，请先删除对应 Bot`
                 : null;
         }
         case 'apps':
             return usage.activeAppInstances > 0
-                ? (usage.activeAppInstances === 1
+                ? usage.activeAppInstances === 1
                     ? '当前有 1 个实例运行中，请先在应用端停止'
-                    : `当前有 ${usage.activeAppInstances} 个实例运行中，请先在应用端停止`)
+                    : `当前有 ${usage.activeAppInstances} 个实例运行中，请先在应用端停止`
                 : null;
         case 'ncdWatch':
             // 心跳停了，装着的 watch 会以为桌面端退出了、自己发告警，和桌面端的重复
@@ -242,5 +241,9 @@ export function featureOffWarning(key: FeatureKey, usage: FeatureUsage): string 
 
 export function appFrameworkOffBlock(frameworkId: string, usage: FeatureUsage): string | null {
     const n = usage.instancesByFramework[frameworkId] ?? 0;
-    return n > 0 ? (n === 1 ? '已有 1 个实例，请先删除后再关闭' : `已有 ${n} 个实例，请先删除后再关闭`) : null;
+    return n > 0
+        ? n === 1
+            ? '已有 1 个实例，请先删除后再关闭'
+            : `已有 ${n} 个实例，请先删除后再关闭`
+        : null;
 }
