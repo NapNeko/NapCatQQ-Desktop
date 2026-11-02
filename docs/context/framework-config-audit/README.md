@@ -1,5 +1,7 @@
 # 七个应用端框架配置审计（2026-10-22）
 
+此文为历史审计记录。Desktop 已移除框架配置接管，配置由各框架 WebUI 管理；当前功能边界见[功能地图](../codemap.md)。下文保留当时的实现与验证结果。
+
 扫描以官方核心配置、默认文件、类型声明及 WebUI 元数据为依据。第三方插件和开放字典通过实例返回的 Schema、扩展键或原始配置入口承接，不将它们收窄为固定字段列表。
 
 | 框架 | 本轮上游基准 | 覆盖与变更 |
@@ -26,22 +28,8 @@
 
 - [Karin / NoneBot2 字段与兼容审计](karin-nonebot2-2026-10-22.md)
 - [MaiBot 字段、默认值与元数据差异](2026-10-22-maibot.json)
-- [MaiBot 生成源记录](../../../src-ui/core/domain/apps/maibotSchema/upstream.json)
-- [AstrBot 配置覆盖清单](../../../crates/ncd-appframework/src/astrbot/schema/coverage.json)
 - [Koishi / Yunzai 审计](../../audits/2026-10-22-koishi-yunzai-config.json)
 - [NeoBot 审计](../../audits/framework-config/2026-10-22/neobot.json)
-
-## 再生成
-
-对固定上游源码运行以下命令，再导出 IPC 类型并检查生成差异：
-
-```sh
-python scripts/maibot/codegen.py --src "$MAIBOT_SOURCE" --revision c602a2780f4f4dda4a6be46d67abc1cfb1ad420c
-python scripts/astrbot/codegen.py --src "$ASTRBOT_SOURCE" --commit 0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e --version 4.29.1
-cargo test -p ncd-appframework export_bindings_ -- --test-threads=2
-```
-
-生成器仅加载受限配置声明或解释白名单 AST，不启动上游应用。运行时元数据优先于离线快照。
 
 ## 验证记录
 
