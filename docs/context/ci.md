@@ -1,6 +1,6 @@
 # CI 与发版耗时
 
-目标是将缓存命中的常规 PR 门禁和 Desktop 发版分别压到约 5 分钟。冷缓存、Rust 工具链升级、依赖大改和 runner 排队另行记录；不靠跳过失败用例或缩短超时达标。新流程的实际耗时以合入后的 Actions 运行结果为准。
+目标是将缓存命中的常规 PR 门禁和 Desktop 发版分别压到约 5 分钟。冷缓存、Rust 工具链升级、依赖大改和 runner 排队另行记录；不靠跳过失败用例或缩短超时达标。本轮全量 CI 已达到目标，Desktop 发版仍有差距，实测见下方验收记录。
 
 ## 调整依据
 
@@ -23,7 +23,7 @@ PR 中前端单测步骤为 3 分 27 秒。两端打包本来已经并行，继�
 
 ## 发版
 
-release profile 使用 `lto = false` 和 16 个 codegen units，保留 crate 内 ThinLTO、原有 `opt-level = "z"`、panic abort 与符号裁剪。缓存命中后跨 crate ThinLTO 的 Windows 应用编译仍需 5 分 44 秒，因此取消这一步整程序优化；包体积和运行性能需要与实际制品一起权衡。[Cargo profile 说明](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)
+release profile 使用 `lto = false` 和 16 个 codegen units，保留 crate 内 ThinLTO、原有 `opt-level = "z"`、panic abort 与符号裁剪，移除跨 crate LTO。此前 [ThinLTO 快照的发布演练](https://github.com/NapNeko/NapCatQQ-Desktop/actions/runs/41497764514)为 10 分 59 秒；本次源码和 runner 不同，尚不能证明这项参数调整的独立提速效果。[Cargo profile 说明](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)
 
 [release-cache.yml](../../.github/workflows/release-cache.yml) 在 main 的 Rust / 构建配置变化后预热 Windows、Linux 的第三方依赖。精确命中时跳过编译；缺失时调用同一份构建工作流，不打包、不上传，也不继承发布 secrets。后续提交不打断正在进行的预热，避免反复冷启动。它独立于 PR Gate 和发版，亦可从 Actions 手动触发。
 
@@ -35,8 +35,21 @@ release profile 使用 `lto = false` 和 16 个 codegen units，保留 crate 内
 
 MSI 布局、UpgradeCode、AppImage 桌面集成、版本与发布校验保留。已压缩制品上传时不再二次压缩。
 
-## 验收
+## 验收（2026-11-03）
 
-合入后先等 main 的预热完成，再比较一次 Rust PR、一次前端 PR 和一次 Desktop 发版。记录总耗时、最慢 job、缓存是否命中及其恢复/保存耗时；冷构建单独记录。发布时启用 `run_gates` 仍会执行完整门禁，两端打包与门禁并行，发布等待全部成功。
+最终构建配置和源码为 `ff334a01`。全量套件在 main 上手动运行；打包使用 `dry_run=true`、`run_gates=false`，同一提交的完整 CI 已通过。以下均为 Actions 实测，未新建 PR 或发布正式版本。
+
+| 运行 | 耗时 | 条件与结果 |
+| :--- | :--- | :--- |
+| [全量 CI](https://github.com/NapNeko/NapCatQQ-Desktop/actions/runs/41505237713) | **4 分 05 秒** | 缓存命中，全绿；core 3 分 32 秒、runtime/MCP 3 分 34 秒、Tauri 2 分 07 秒、Linux 1 分 17 秒；前端两片 2 分 40 秒 / 1 分 03 秒 |
+| [分组切换后的首次 CI](https://github.com/NapNeko/NapCatQQ-Desktop/actions/runs/41503833645) | 7 分 44 秒 | 全绿；core 的依赖组合变化，首次重新编译用了 3 分 11 秒 |
+| [Desktop 打包演练](https://github.com/NapNeko/NapCatQQ-Desktop/actions/runs/41505742187) | **11 分 45 秒** | 两端依赖缓存精确命中；MSI job 11 分 27 秒、Linux job 7 分 14 秒，制品校验通过；不含正式发布上传 |
+| [新 profile 首次依赖预热](https://github.com/NapNeko/NapCatQQ-Desktop/actions/runs/41502435339) | Windows 19 分 46 秒 / Linux 8 分 41 秒 | 冷构建，独立于 PR 门禁和发版；后续相同依赖与配置复用缓存 |
+
+发布尚未达到 5 分钟。Windows 依赖恢复耗时 34 秒，Agent 编译 2 分 12 秒、桌面程序编译 6 分 31 秒，两者串行；Linux 应用编译 3 分 40 秒，随后打包约 1 分 53 秒。后续应针对应用 crate 编译和 runner 性能继续优化。
+
+本次 MSI 为 17,170,432 字节，UpgradeCode 与布局检查通过，Linux AppImage 桌面集成检查通过。此前 ThinLTO 快照 MSI 为 17,002,496 字节；两次源码不同，这些数据不能隔离 LTO 对体积和性能的影响。本轮未进行应用运行性能基准测试。
+
+后续比较实际 Rust PR、前端 PR 与发版时，继续记录队列、编译和缓存耗时。启用 `run_gates` 仍会执行完整门禁，两端打包与门禁并行，发布等待全部成功。
 
 本地维护入口为 `pnpm run test:ci`；更改缓存恢复逻辑时再设置 `CI_RUST_CACHE_TEST_CARGO=1` 执行真实 Cargo 失效测试。Linux nextest 命令应在 Ubuntu runner 验证，普通账户测试仅在可销毁的 GitHub Windows runner 执行。
