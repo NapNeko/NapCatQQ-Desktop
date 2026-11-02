@@ -256,6 +256,34 @@ describe('chat window handoff', () => {
         await releaseChatAccount(store);
         expect(inlineImageService.has(target.bot_id, '99', reference)).toBe(false);
     });
+    it('does not reconnect a remount that leaves before the previous release finishes', async () => {
+        const wire = transport();
+        wire.subscribe.mockResolvedValue({
+            subscription_id: 'departed-remount',
+            receiver: { state: { state: 'connected' } },
+        });
+        wire.call.mockRejectedValue(new Error('联系人服务暂时不可用'));
+        let disconnected!: () => void;
+        wire.unsubscribe.mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    disconnected = resolve;
+                }),
+        );
+        const store = new ChatAccountStore({ ...target, running: true, online: true }, wire);
+        await store.connect();
+        const leaving = releaseChatAccount(store);
+        await vi.waitFor(() => expect(wire.unsubscribe).toHaveBeenCalledOnce());
+        const unlisten = store.subscribe(() => {});
+        const returning = store.initialize();
+        unlisten();
+        expect(releaseChatAccount(store)).toBe(leaving);
+        disconnected();
+        await Promise.all([leaving, returning]);
+        expect(wire.subscribe).toHaveBeenCalledOnce();
+        expect(store.getSnapshot().connection.state).toBe('stopped');
+        expect(chatDesktopService.releaseAccount).toHaveBeenCalledOnce();
+    });
     it('does not establish a late connection after leaving during archive restoration', async () => {
         let restore!: (archive: null) => void;
         const wire = transport();

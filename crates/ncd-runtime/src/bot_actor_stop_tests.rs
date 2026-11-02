@@ -151,3 +151,35 @@ async fn cancelled_commit_before_ack_settles_only_its_own_running_generation() {
     );
     assert_eq!(actor.snapshot(), replacement);
 }
+
+#[tokio::test]
+async fn explicit_stop_cancels_a_queued_restart_without_invalidating_stop_confirmation() {
+    for queued_during_stop in [false, true] {
+        let actor = BotActorHandle::spawn("cancel-queued-restart");
+        actor.request_start().await.unwrap();
+        let running = actor.confirm_running().await.unwrap();
+        if queued_during_stop {
+            actor.request_stop().await.unwrap();
+        }
+        let restarting = actor.request_restart().await.unwrap();
+        assert!(restarting.pending_restart);
+        assert_eq!(restarting.state, BotActorState::Stopping);
+
+        let stopping = actor.request_stop().await.unwrap();
+        assert!(!stopping.pending_restart);
+        assert_eq!(stopping.state, BotActorState::Stopping);
+        assert_eq!(stopping.revision, restarting.revision);
+        assert_eq!(stopping.token_generation, running.token_generation);
+        assert!(actor.cancellation_token().is_cancelled());
+
+        // 已发出的停止仍能按原 revision 收口，不会卡在 Stopping 或再进入 Starting。
+        let stopped = actor
+            .confirm_stopped_revision(restarting.revision)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.state, BotActorState::Stopped);
+        assert!(!stopped.pending_restart);
+        actor.shutdown().await.unwrap();
+    }
+}

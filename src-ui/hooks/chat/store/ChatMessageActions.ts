@@ -135,16 +135,26 @@ export class ChatMessageActions {
             this.state.snapshot.connection.state !== 'connected'
         )
             return;
+        const epoch = this.state.session.epoch;
+        const scope = accountKey(
+            this.state.session.target.bot_id,
+            String(this.state.session.target.qq_id),
+        );
         const group = key.startsWith('group:');
-        dataOf(
-            await this.state.session.transport.call(
+        try {
+            const response = await this.state.session.transport.call(
                 this.state.session.target.bot_id,
                 group ? 'group_poke' : 'friend_poke',
                 group
                     ? { group_id: this.state.session.peer(key), user_id: userId }
                     : { user_id: userId },
-            ),
-        );
+            );
+            if (!this.state.session.isCurrent(epoch, scope)) return;
+            dataOf(response);
+        } catch (error) {
+            if (!this.state.session.isCurrent(epoch, scope)) return;
+            throw error;
+        }
         // 成功后乐观上墙；后端回显的 poke 通知在 ingestMessage 里按时间窗去重
         const echo: Record<string, unknown> = {
             notice_type: 'notify',

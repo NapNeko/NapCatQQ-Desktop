@@ -5,6 +5,7 @@ import {
     isRuntimeTargetLocal,
     remoteHostIdFromRuntimeTarget,
     serverProfileIdFromRuntimeTarget,
+    runtimeModeForTarget,
 } from './runtime-target';
 
 type RuntimeConfig = Pick<BotBasicConfig, 'runtime_target' | 'deploymentType' | 'backend_type'>;
@@ -21,16 +22,17 @@ export function runtimeSelection(
     const server = servers.find((item) => item.id === profileId);
     const remoteHostId = remoteHostIdFromRuntimeTarget(data.runtime_target);
     const dockerHostId = isRemote ? remoteHostId : localDockerAllowed ? 'local' : null;
+    const dockerAllowed = isRemote ? server?.platform !== 'windows' : localDockerAllowed;
     return {
         mode: isRemote ? ('remote' as const) : ('local' as const),
         isRemote,
         selectedServerId: server?.id,
         hostId: isRemote ? remoteHostId : 'local',
         deploymentType: data.deploymentType,
-        dockerAllowed: isRemote ? server?.platform !== 'windows' : localDockerAllowed,
+        dockerAllowed,
         dockerHostId,
         showHostFields: isRemote || localDockerAllowed,
-        showContainer: data.deploymentType === 'docker' && dockerHostId != null,
+        showContainer: dockerAllowed && data.deploymentType === 'docker' && dockerHostId != null,
         showSnowLumaMode: data.backend_type === 'snowluma' && data.deploymentType !== 'docker',
     };
 }
@@ -53,6 +55,8 @@ export function selectRuntimeMode(
     servers: readonly Host[],
     localDockerAllowed: boolean,
 ): Partial<BotBasicConfig> {
+    // 单选项重复点击不能丢掉已经选定的具体远端。
+    if (mode === runtimeModeForTarget(data.runtime_target)) return {};
     if (mode === 'local')
         return {
             runtime_target: 'local',

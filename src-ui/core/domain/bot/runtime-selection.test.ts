@@ -33,12 +33,24 @@ describe('运行场景选择的配置约束', () => {
         });
     });
 
+    it('重复选择远程模式保留已选主机，不把保存目标改成占位符', () => {
+        const selected = { ...config, runtime_target: 'linux' };
+        expect(selectRuntimeMode('remote', selected, hosts, true)).toEqual({});
+    });
+
     it('唯一远端自动选择并应用其能力，多个远端保留待选状态', () => {
-        expect(selectRuntimeMode('remote', config, [hosts[0]], true)).toEqual({
+        expect(
+            selectRuntimeMode('remote', { ...config, runtime_target: 'local' }, [hosts[0]], true),
+        ).toEqual({
             runtime_target: 'win',
             deploymentType: 'native',
         });
-        const patch = selectRuntimeMode('remote', config, hosts, true);
+        const patch = selectRuntimeMode(
+            'remote',
+            { ...config, runtime_target: 'local' },
+            hosts,
+            true,
+        );
         const selected = runtimeSelection({ ...config, ...patch }, hosts, true);
         expect(selected.hostId).toBeNull();
         expect(selected.selectedServerId).toBeUndefined();

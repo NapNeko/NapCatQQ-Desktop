@@ -30,6 +30,18 @@ function readBase64(file: File): Promise<string> {
     });
 }
 
+// 普通会话切换保留原草稿目标；窗口交接或账号释放后，迟到结果不能再写旧视图。
+function attachmentOwner(store: ChatAccountStore) {
+    const revision = store.viewRevision;
+    const ownerRevision = store.ownerRevision;
+    const selfId = store.getSnapshot().account.selfId;
+    return () =>
+        !store.releaseWhenIdle &&
+        store.viewRevision === revision &&
+        store.ownerRevision === ownerRevision &&
+        store.getSnapshot().account.selfId === selfId;
+}
+
 export function useComposerAttachments({
     store,
     editor,
@@ -109,26 +121,29 @@ export function useComposerAttachments({
         };
     }, [onFileDragDrop, composer, input, append, editor, onError]);
     const pick = async (type: 'image' | 'file') => {
+        const isCurrent = attachmentOwner(store);
         onError('');
         setPending((count) => count + 1);
         try {
             const file = await pickFile();
-            if (!file) return;
+            if (!isCurrent() || !file) return;
             if (type === 'image' && !IMAGE_EXTENSION.test(file.name))
                 throw new Error('请选择 PNG、JPG、GIF、WebP 或 BMP 图片');
             append([{ ...file, key: crypto.randomUUID(), type }]);
         } catch (error) {
-            onError(errorText(error));
+            if (isCurrent()) onError(errorText(error));
         } finally {
             setPending((count) => count - 1);
         }
     };
     const addFiles = async (files: File[]) => {
+        const isCurrent = attachmentOwner(store);
         const slots = Math.max(0, ATTACHMENT_LIMIT - editor.read().attachments.length);
         const overflow = files.length > slots;
         onError(overflow ? LIMIT_MESSAGE : '');
         // 顺序读取，避免多份大附件同时膨胀成 base64 驻留内存。
         for (const file of files.slice(0, slots)) {
+            if (!isCurrent()) return;
             setPending((count) => count + 1);
             try {
                 const image = file.type.startsWith('image/');
@@ -139,10 +154,13 @@ export function useComposerAttachments({
                             : '浏览器附件不能超过 64 MB，请用附件按钮选择',
                     );
                 const name = file.name || '粘贴的图片.png';
-                const path = await stageAttachment(name, await readBase64(file));
+                const base64 = await readBase64(file);
+                if (!isCurrent()) return;
+                const path = await stageAttachment(name, base64);
+                if (!isCurrent()) return;
                 append([{ key: crypto.randomUUID(), path, name, type: image ? 'image' : 'file' }]);
             } catch (error) {
-                onError(errorText(error));
+                if (isCurrent()) onError(errorText(error));
             } finally {
                 setPending((count) => count - 1);
             }

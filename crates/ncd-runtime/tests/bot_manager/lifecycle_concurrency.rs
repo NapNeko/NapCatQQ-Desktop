@@ -200,3 +200,36 @@ async fn stopping_a_crashed_actor_clears_error_only_after_confirming_exit() {
     assert!(stopped.last_error.is_none());
     assert!(!backend.running.lock().await.contains(&bot));
 }
+
+#[tokio::test]
+async fn explicit_stop_during_restart_prevents_a_replacement_process() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, backend, manager) = make_manager(temp.path());
+    let bot = BotId::new("10405");
+    manager
+        .upsert_bot_config(bot_config(10405, "cancel restart"))
+        .await
+        .unwrap();
+    manager.start_bot(&bot).await.unwrap();
+    let release = backend.block_next_stop().await;
+    let restart_manager = manager.clone();
+    let restart_bot = bot.clone();
+    let restart = tokio::spawn(async move { restart_manager.restart_bot(&restart_bot).await });
+    wait_for(|| async { backend.stop_count(bot.clone()).await == 1 }).await;
+    assert!(manager.get_snapshot(&bot).await.unwrap().pending_restart);
+
+    let stop_manager = manager.clone();
+    let stop_bot = bot.clone();
+    let stop = tokio::spawn(async move { stop_manager.stop_bot(&stop_bot).await });
+    wait_for(|| async { !manager.get_snapshot(&bot).await.unwrap().pending_restart }).await;
+    release.send(()).unwrap();
+
+    assert_eq!(
+        restart.await.unwrap().unwrap().state,
+        BotActorState::Stopped
+    );
+    assert_eq!(stop.await.unwrap().unwrap().state, BotActorState::Stopped);
+    assert_eq!(backend.start_count(bot.clone()).await, 1);
+    assert_eq!(backend.stop_count(bot.clone()).await, 1);
+    assert!(!backend.running.lock().await.contains(&bot));
+}

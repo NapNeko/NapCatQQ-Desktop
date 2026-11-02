@@ -1259,6 +1259,42 @@ async fn bootstrap_respects_4_bot_limit_and_reports_skipped() {
     assert_eq!(result.skipped[1], BotId::new("10006"));
 }
 
+#[tokio::test]
+async fn repeated_bootstrap_keeps_registered_bots_eligible_at_capacity() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo, backend, manager) = make_manager(temp.path());
+    for id in 10001..=10006 {
+        repo.upsert(bot_config_auto_start(id, "restore twice"))
+            .await
+            .unwrap();
+    }
+    let first = manager.bootstrap_with_auto_start(false).await.unwrap();
+    assert_eq!(manager.bot_count().await, 4);
+    assert_eq!(
+        first.skipped,
+        vec![BotId::new("10005"), BotId::new("10006")]
+    );
+    assert!(first.started.succeeded.is_empty());
+
+    for _ in 0..2 {
+        let restored = manager.bootstrap().await.unwrap();
+        assert_eq!(restored.skipped, first.skipped);
+        assert!(restored.started.failed.is_empty());
+        assert_eq!(restored.started.succeeded.len(), 4);
+        for id in 10001..=10004 {
+            let bot = BotId::new(id.to_string());
+            assert_eq!(
+                manager.get_snapshot(&bot).await.unwrap().state,
+                BotActorState::Running
+            );
+            assert_eq!(backend.start_count(bot).await, 1);
+        }
+        assert_eq!(manager.bot_count().await, 4);
+    }
+    assert_eq!(backend.start_count("10005").await, 0);
+    assert_eq!(backend.start_count("10006").await, 0);
+}
+
 // ─── 删除 ─────────────────────────────────────────────────────────────────────
 
 #[tokio::test]

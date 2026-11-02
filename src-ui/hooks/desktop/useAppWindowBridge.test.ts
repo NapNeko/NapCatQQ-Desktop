@@ -57,7 +57,14 @@ describe('main window chat handoff recovery', () => {
         const showChat = vi.fn();
         const showOverview = vi.fn();
         renderHook(() =>
-            useAppWindowBridge({ route: 'chat', showChat, showOverview, showChatQuiet: vi.fn() }),
+            useAppWindowBridge({
+                showChat,
+                releaseChat: () => {
+                    showOverview();
+                    return showChat;
+                },
+                showChatQuiet: vi.fn(),
+            }),
         );
         act(() => receive({ v: 1, requestId: 'old', action: 'popout' }));
         await waitFor(() => expect(bridge.prepare).toHaveBeenCalledOnce());
@@ -80,9 +87,8 @@ describe('main window chat handoff recovery', () => {
         );
         renderHook(() =>
             useAppWindowBridge({
-                route: 'chat',
                 showChat: vi.fn(),
-                showOverview: vi.fn(),
+                releaseChat: vi.fn(),
                 showChatQuiet: vi.fn(),
             }),
         );
@@ -100,14 +106,13 @@ describe('main window chat handoff recovery', () => {
         expect(bridge.reply).toHaveBeenCalledOnce();
     });
 
-    it('still restores the chat route and reports an active handoff failure', async () => {
+    it('reports a handoff failure before releasing without forcing a navigation', async () => {
         bridge.prepare.mockRejectedValueOnce(new Error('消息仍在发送'));
         const showChat = vi.fn();
         renderHook(() =>
             useAppWindowBridge({
-                route: 'chat',
                 showChat,
-                showOverview: vi.fn(),
+                releaseChat: vi.fn(),
                 showChatQuiet: vi.fn(),
             }),
         );
@@ -115,6 +120,6 @@ describe('main window chat handoff recovery', () => {
         await waitFor(() =>
             expect(bridge.reply).toHaveBeenCalledWith('current', 'Error: 消息仍在发送'),
         );
-        expect(showChat).toHaveBeenCalledOnce();
+        expect(showChat).not.toHaveBeenCalled();
     });
 });

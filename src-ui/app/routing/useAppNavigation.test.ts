@@ -8,7 +8,8 @@ const state = vi.hoisted(() => ({
     focusChatIfOpen: vi.fn(),
     focusDebugIfOpen: vi.fn(),
     preload: vi.fn(),
-    window: null as null | { showChat: () => void; showOverview: () => void },
+    error: vi.fn(),
+    window: null as null | { showChat: () => void; releaseChat: () => (() => void) | undefined },
 }));
 vi.mock('../../hooks/preferences/featureTogglesStore', () => ({
     useFeatures: () => state.features,
@@ -25,6 +26,7 @@ vi.mock('../../hooks/desktop/useAppWindowBridge', () => ({
         return state;
     },
 }));
+vi.mock('../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: state.error }));
 vi.mock('./pageLoaders', () => ({ preloadRoute: state.preload }));
 
 beforeEach(() => {
@@ -107,6 +109,70 @@ describe('main window navigation', () => {
             act(() => result.current.navigate('bots'));
             await act(async () => pending.resolve(false));
             expect(result.current.route).toBe('bots');
+        },
+    );
+
+    it('finishes the latest navigation when handing off an outgoing chat page', () => {
+        const { result } = renderHook(useAppNavigation);
+        act(() => state.window!.showChat());
+        act(() => result.current.navigate('bots'));
+        expect(result.current.displayedRoute).toBe('chat');
+        let restore: (() => void) | undefined;
+        act(() => {
+            restore = state.window!.releaseChat();
+        });
+        expect(result.current).toMatchObject({
+            route: 'bots',
+            displayedRoute: 'bots',
+            pageVisible: true,
+        });
+        expect(restore).toBeUndefined();
+    });
+
+    it('releases chat entered while handoff is preparing and restores it only until a newer navigation', () => {
+        const { result } = renderHook(useAppNavigation);
+        const release = state.window!.releaseChat;
+        act(() => state.window!.showChat());
+        let restore: (() => void) | undefined;
+        act(() => {
+            restore = release();
+        });
+        expect(result.current.displayedRoute).toBe('overview');
+        act(() => restore!());
+        expect(result.current.displayedRoute).toBe('chat');
+        act(() => {
+            restore = release();
+        });
+        act(() => result.current.navigate('settings'));
+        act(() => result.current.onPageExited());
+        act(() => restore!());
+        expect(result.current).toMatchObject({ route: 'settings', displayedRoute: 'settings' });
+    });
+
+    it('keeps an allowed window navigation when a different feature changes', async () => {
+        const pending = deferred<boolean>();
+        state.focusChatIfOpen.mockReturnValue(pending.promise);
+        const { result, rerender } = renderHook(useAppNavigation);
+        act(() => result.current.navigate('chat'));
+        state.features = { ...state.features, apps: false };
+        rerender();
+        await act(async () => pending.resolve(false));
+        expect(result.current.route).toBe('chat');
+    });
+
+    it.each(['chat', 'debug'] as const)(
+        'reports failed %s window probes and allows retry without opening two workspaces',
+        async (route) => {
+            const probe = route === 'chat' ? state.focusChatIfOpen : state.focusDebugIfOpen;
+            probe.mockRejectedValueOnce(new Error('窗口状态暂不可用'));
+            const { result } = renderHook(useAppNavigation);
+            await act(async () => result.current.navigate(route));
+            expect(result.current.route).toBe('overview');
+            expect(state.error).toHaveBeenCalledWith(
+                expect.objectContaining({ raw: '窗口状态暂不可用' }),
+            );
+            await act(async () => result.current.navigate(route));
+            expect(result.current.route).toBe(route);
         },
     );
 

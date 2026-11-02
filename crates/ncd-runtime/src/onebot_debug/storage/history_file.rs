@@ -5,6 +5,7 @@ use std::io::ErrorKind;
 use std::path::Path;
 
 use ncd_domain::onebot_debug::{DebugHistoryEntry, DebugStorageNotice};
+use serde::Deserialize;
 use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter,
 };
@@ -234,6 +235,24 @@ async fn read_history_line_bounded(
     Ok(count)
 }
 
+#[derive(Deserialize)]
+struct HistoryId {
+    id: String,
+}
+
+fn has_history_id(line: &[u8], id: &str, prefix: &[u8]) -> bool {
+    if line.starts_with(prefix) {
+        return true;
+    }
+    if let Some(value) = line.strip_prefix(b"{\"id\":") {
+        // 正常写入的行将 id 放在最前；不同 ID 只解码这个字符串，不解析回包。
+        let mut deserializer = serde_json::Deserializer::from_slice(value);
+        return String::deserialize(&mut deserializer).is_ok_and(|candidate| candidate == id);
+    }
+    // 加载器同样接受字段重排、空白和转义；补读不能因 JSON 字面格式不同而丢掉全文。
+    serde_json::from_slice::<HistoryId>(line).is_ok_and(|candidate| candidate.id == id)
+}
+
 pub(super) async fn read_history_entry_bounded(
     path: &Path,
     id: &str,
@@ -246,35 +265,38 @@ pub(super) async fn read_history_entry_bounded(
     let mut reader = BufReader::new(file);
     let mut buf = Vec::new();
     let mut scanned_bytes = 0;
+    let mut found = None;
     loop {
         buf.clear();
         if read_history_line_bounded(&mut reader, &mut buf, &mut scanned_bytes).await? == 0 {
-            return Ok(None);
+            return Ok(found);
         }
         let line = trim_line(&buf);
-        if line.starts_with(prefix.as_bytes()) {
-            return serde_json::from_slice(line)
-                .map(Some)
-                .map_err(|error| std::io::Error::new(ErrorKind::InvalidData, error));
+        if has_history_id(line, id, prefix.as_bytes()) {
+            found = Some(
+                serde_json::from_slice(line)
+                    .map_err(|error| std::io::Error::new(ErrorKind::InvalidData, error))?,
+            );
         }
     }
 }
 
-/// 在文件里找 `id` 这一条，读出完整记录。本模块写的每一行都以 `{"id":"<id>",` 开头
-/// （`id` 是结构体第一个字段），先比前缀，命中了才解析，不必把每行的回包都解析一遍
+/// 在文件里找 `id` 这一条，读出完整记录。先比前缀或只读 ID，命中后才解析全文。
+/// 同 ID 可能存在多行，必须和内存查找一样选择最后一条。
 pub(super) async fn read_history_entry(path: &Path, id: &str) -> Option<DebugHistoryEntry> {
     let prefix = format!("{{\"id\":{},", serde_json::to_string(id).ok()?);
     let file = tokio::fs::File::open(path).await.ok()?;
     let mut reader = BufReader::new(file);
     let mut buf = Vec::new();
+    let mut found = None;
     loop {
         buf.clear();
         if reader.read_until(b'\n', &mut buf).await.ok()? == 0 {
-            return None;
+            return found;
         }
         let line = trim_line(&buf);
-        if line.starts_with(prefix.as_bytes()) {
-            return serde_json::from_slice(line).ok();
+        if has_history_id(line, id, prefix.as_bytes()) {
+            found = serde_json::from_slice(line).ok();
         }
     }
 }

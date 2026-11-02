@@ -2,44 +2,36 @@
 // 聊天与调试入口对已开弹出窗的让位。事件订阅与弹出窗 IPC 收在此处，
 // 路由壳只给路由切换动作（订阅在挂载期，动作全部稳定）。
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { chatDesktopService } from '../../core/services/chat-desktop.service';
 import { debugWindowService } from '../../core/services/debug-window.service';
 import { windowEventService } from '../../core/services/desktop.service';
 import { markWorkspaceStale } from '../debug/debugWorkspaceStore';
 import { featureTogglesStore } from '../preferences/featureTogglesStore';
-import type { AppRoute } from '../../core/domain/ui/route';
 
 export interface AppWindowBridgeHandlers {
-    /** 当前路由；聊天交接要按「此刻是否在聊天页」决定先卸载聊天页还是原样准备 */
-    route: AppRoute;
-    /** 进聊天页并立即上屏（resume / embed 收回 / 交接失败的恢复回滚） */
+    /** 独立窗口收回时进聊天页并立即上屏。 */
     showChat: () => void;
     /** 进聊天页但不动可见性（启动时补做已错过的 embed，对齐原逻辑不强制淡入） */
     showChatQuiet: () => void;
-    /** 回概览并上屏（聊天页要让位给弹出窗时的卸载过渡） */
-    showOverview: () => void;
+    /** 同步卸载聊天视图，并返回仅对本次导航仍有效的恢复动作。 */
+    releaseChat: () => (() => void) | undefined;
 }
 
 export function useAppWindowBridge({
-    route,
     showChat,
     showChatQuiet,
-    showOverview,
+    releaseChat,
 }: AppWindowBridgeHandlers): {
     focusChatIfOpen: () => Promise<boolean>;
     focusDebugIfOpen: () => Promise<boolean>;
 } {
     const queryClient = useQueryClient();
-    const routeRef = useRef(route);
-    useEffect(() => {
-        routeRef.current = route;
-    }, [route]);
 
     useEffect(() => {
         let disposed = false;
-        let resumeChat = false;
+        let restoreChat: (() => void) | undefined;
         let requestVersion = 0;
         let pending = Promise.resolve();
         const handoff = chatDesktopService.onRequest((request) => {
@@ -57,7 +49,7 @@ export function useAppWindowBridge({
             if (request.action === 'resume') {
                 // 旧保存/释放全部结束后再认领视图，避免迟到清理影响恢复后的账号与草稿。
                 pending = pending.then(() => {
-                    if (current() && resumeChat) showChat();
+                    if (current()) restoreChat?.();
                 });
                 return;
             }
@@ -70,19 +62,22 @@ export function useAppWindowBridge({
                         await import('../chat/chatStore');
                     const { flushSync } = await import('react-dom');
                     if (!current()) return;
-                    const wasChat = routeRef.current === 'chat';
-                    resumeChat = wasChat;
+                    restoreChat = undefined;
                     try {
                         await prepareChatHandoff(
                             getChatSelectedBot(),
                             () => {
-                                if (current() && wasChat) flushSync(() => showOverview());
+                                // 截图取消/草稿保存可能等待异步结果，期间用户仍可切入聊天。
+                                if (current())
+                                    flushSync(() => {
+                                        restoreChat = releaseChat();
+                                    });
                             },
                             request.action === 'popout',
                         );
                         if (current()) await chatDesktopService.reply(request.requestId, null);
                     } catch (error) {
-                        if (current() && wasChat) flushSync(() => showChat());
+                        if (current()) flushSync(() => restoreChat?.());
                         throw error;
                     }
                 } catch (error) {

@@ -193,13 +193,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let mut actors = self.actors.write().await;
             for config in &configs {
                 let bot_id = BotId::new(config.bot.qq_id.to_string());
+                // 重复恢复时已有 Actor 不占新名额，也不能误列 skipped 跳过接管/自动启动。
+                if actors.contains_key(&bot_id) {
+                    continue;
+                }
                 if actors.len() >= MAX_BOTS {
                     skipped.push(bot_id);
                     continue;
                 }
-                actors
-                    .entry(bot_id.clone())
-                    .or_insert_with(|| BotActorHandle::spawn(bot_id.clone()));
+                actors.insert(bot_id.clone(), BotActorHandle::spawn(bot_id));
             }
         }
 

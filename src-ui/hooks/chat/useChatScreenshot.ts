@@ -31,6 +31,7 @@ interface Capture {
     session: SessionKey;
     selfId: string;
     revision: number;
+    ownerRevision: number;
     addToChat: boolean;
     cancelled: boolean;
     nativeId?: string;
@@ -161,6 +162,18 @@ function configureAppShortcut() {
     );
 }
 
+function scheduleShortcutRelease() {
+    // 会话切换会重挂 Composer，同一轮交接不反复注册原生快捷键。
+    shortcutCleanup = setTimeout(() => {
+        shortcutCleanup = undefined;
+        if (!shortcutConsumers) {
+            configureShortcut(null, true, '', true, true);
+            if (appShortcutConsumers) configureAppShortcut();
+            if (!activeCapture) shortcutContexts.clear();
+        }
+    }, 0);
+}
+
 export async function cancelChatScreenshot(store?: ChatAccountStore): Promise<void> {
     const capture = activeCapture;
     if (!capture) {
@@ -195,6 +208,7 @@ export async function captureChatScreenshot(
         session,
         selfId: account.selfId,
         revision: store.viewRevision,
+        ownerRevision: store.ownerRevision,
         addToChat: options.addToChat,
         cancelled: false,
     };
@@ -207,7 +221,7 @@ export async function captureChatScreenshot(
         });
         applyScreenshot(capture, file);
     } catch (error) {
-        if (!capture.cancelled)
+        if (isCaptureCurrent(capture))
             pushInfoBar({
                 key: 'chat:screenshot:capture',
                 tone: 'danger',
@@ -223,16 +237,20 @@ export async function captureChatScreenshot(
     }
 }
 
+function isCaptureCurrent(capture: Capture) {
+    const { store } = capture;
+    return (
+        !capture.cancelled &&
+        !store.releaseWhenIdle &&
+        store.ownerRevision === capture.ownerRevision &&
+        store.viewRevision === capture.revision &&
+        store.getSnapshot().account.selfId === capture.selfId
+    );
+}
+
 function applyScreenshot(capture: Capture, file: ChatScreenshotAttachment | null) {
     const { store, session } = capture;
-    if (
-        !file ||
-        capture.cancelled ||
-        store.releaseWhenIdle ||
-        store.viewRevision !== capture.revision ||
-        store.getSnapshot().account.selfId !== capture.selfId
-    )
-        return;
+    if (!file || !isCaptureCurrent(capture)) return;
     const latest = store.getSnapshot().account.drafts[session] ?? EMPTY_DRAFT;
     if (file.clipboardError)
         pushInfoBar({
@@ -265,7 +283,7 @@ function receiveShortcut(event: ChatScreenshotShortcutEvent) {
     if (completedNativeCaptures.has(event.capture_id)) return;
     if (event.result.kind === 'started') {
         const context = shortcutContexts.get(event.context);
-        if (!context || nativeCaptures.has(event.capture_id)) return;
+        if (!context || !isCaptureCurrent(context) || nativeCaptures.has(event.capture_id)) return;
         const capture = { ...context, nativeId: event.capture_id, cancelled: false };
         nativeCaptures.set(event.capture_id, capture);
         if (!activeCapture) activeCapture = capture;
@@ -282,12 +300,13 @@ function receiveShortcut(event: ChatScreenshotShortcutEvent) {
         completedNativeCaptures.delete(oldest);
     }
     try {
+        if (!isCaptureCurrent(capture)) return;
         if (event.result.kind === 'failed') throw new Error(event.result.message);
         applyScreenshot(capture, event.result.file);
         if (capture.addToChat && capture.store.getSnapshot().account.active === capture.session)
             capture.onFinished?.();
     } catch (error) {
-        if (!capture.cancelled)
+        if (isCaptureCurrent(capture))
             pushInfoBar({
                 key: 'chat:screenshot:capture',
                 tone: 'danger',
@@ -316,9 +335,18 @@ export function useChatScreenshot(
     const finished = useRef(onFinished);
     const selfId = store.getSnapshot().account.selfId;
     const viewRevision = store.viewRevision;
+    const ownerRevision = store.ownerRevision;
     const context = useMemo(
-        () => [store.target.bot_id, selfId, session, viewRevision, crypto.randomUUID()].join('/'),
-        [store, selfId, session, viewRevision],
+        () =>
+            [
+                store.target.bot_id,
+                selfId,
+                session,
+                viewRevision,
+                ownerRevision,
+                crypto.randomUUID(),
+            ].join('/'),
+        [store, selfId, session, viewRevision, ownerRevision],
     );
     finished.current = onFinished;
     useEffect(() => {
@@ -338,14 +366,23 @@ export function useChatScreenshot(
         if (collapsed || activeCapture) return;
         const options = getPreferences();
         await captureChatScreenshot(store, session, options);
-        if (options.addToChat && mounted.current && store.getSnapshot().account.active === session)
+        if (
+            options.addToChat &&
+            mounted.current &&
+            !store.releaseWhenIdle &&
+            store.ownerRevision === ownerRevision &&
+            store.viewRevision === viewRevision &&
+            store.getSnapshot().account.selfId === selfId &&
+            store.getSnapshot().account.active === session
+        )
             finished.current?.();
-    }, [store, session, collapsed]);
+    }, [store, session, collapsed, ownerRevision, viewRevision, selfId]);
     useEffect(() => {
         if (shortcutSuspended) {
             if (shortcutCleanup !== undefined) clearTimeout(shortcutCleanup);
             configureShortcut(null);
-            return;
+            // 录制期间也持有原生注册；直接离开聊天页时须归还给应用级快捷键。
+            return scheduleShortcutRelease;
         }
         if (collapsed || !shortcutReady) return;
         shortcutConsumers++;
@@ -355,6 +392,7 @@ export function useChatScreenshot(
             session,
             selfId,
             revision: viewRevision,
+            ownerRevision,
             addToChat: preference.addToChat,
             cancelled: false,
             onFinished: () => {
@@ -394,14 +432,7 @@ export function useChatScreenshot(
         return () => {
             window.removeEventListener('keydown', handle);
             shortcutConsumers--;
-            // 会话切换会重挂 Composer，同一轮交接不反复注册原生快捷键。
-            shortcutCleanup = setTimeout(() => {
-                if (!shortcutConsumers) {
-                    configureShortcut(null, true, '', true, true);
-                    if (appShortcutConsumers) configureAppShortcut();
-                    if (!activeCapture) shortcutContexts.clear();
-                }
-            }, 0);
+            scheduleShortcutRelease();
         };
     }, [
         collapsed,
@@ -417,6 +448,7 @@ export function useChatScreenshot(
         session,
         selfId,
         viewRevision,
+        ownerRevision,
     ]);
     return { capturing, preferences: preference, updatePreferences, start, suspendShortcut };
 }

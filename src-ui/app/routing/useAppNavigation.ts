@@ -12,6 +12,8 @@ import { registerComponentsNavigator } from '../../hooks/components/componentsNa
 import { registerDockerNavigator } from '../../hooks/docker/dockerNavigation';
 import { registerBotCreateNavigator } from '../../hooks/bot/botCreateNavigation';
 import { preloadRoute } from './pageLoaders';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+import { errorText } from '../../core/domain/errors';
 
 // 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
@@ -29,10 +31,11 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 
 export function useAppNavigation() {
     const navigationVersion = useRef(0);
+    const pendingWindowRoute = useRef<AppRoute | null>(null);
     const [route, setRoute] = useState<AppRoute>('overview');
     const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
     const [pageVisible, setPageVisible] = useState<boolean>(true);
-    // 弹出窗事件要做的路由切换：每组动作与原内联 effect 里的 setState 批次一一对应
+    // 独立窗口收回时同步切换目标与显示页，并作废旧导航请求。
     const showChatPage = useCallback(() => {
         if (!featureTogglesStore.getSnapshot().chat) return;
         navigationVersion.current += 1;
@@ -46,17 +49,27 @@ export function useAppNavigation() {
         setRoute('chat');
         setDisplayedRoute('chat');
     }, []);
-    const showOverviewPage = useCallback(() => {
-        navigationVersion.current += 1;
-        setRoute('overview');
-        setDisplayedRoute('overview');
+    const currentPage = useRef({ route, displayedRoute });
+    currentPage.current = { route, displayedRoute };
+    const releaseChatPage = useCallback(() => {
+        const current = currentPage.current;
+        if (current.route !== 'chat' && current.displayedRoute !== 'chat') return;
+        const target = current.route === 'chat' ? 'overview' : current.route;
+        const version = ++navigationVersion.current;
+        pendingWindowRoute.current = null;
+        setRoute(target);
+        setDisplayedRoute(target);
         setPageVisible(true);
-    }, []);
+        // 用户已经在离开聊天时只完成原目标导航，不为旧页留下回滚。
+        if (current.route !== 'chat') return;
+        return () => {
+            if (version === navigationVersion.current) showChatPage();
+        };
+    }, [showChatPage]);
     const { focusChatIfOpen, focusDebugIfOpen } = useAppWindowBridge({
-        route,
         showChat: showChatPage,
         showChatQuiet: showChatPageQuiet,
-        showOverview: showOverviewPage,
+        releaseChat: releaseChatPage,
     });
     const debugEnabled = useDebugConsoleEnabled();
     const { data: servers } = useServers();
@@ -80,12 +93,19 @@ export function useAppNavigation() {
         if (!debugEnabled) hidden.add('debug');
         return hidden;
     }, [showDocker, features.apps, features.chat, debugEnabled]);
-    // 功能可用性变化或卸载后，旧窗口探测不能再提交导航。
+    // 只取消目标已被禁用的请求，其他功能变化不应吞掉仍有效的导航。
+    useEffect(() => {
+        if (pendingWindowRoute.current && hiddenRoutes.has(pendingWindowRoute.current)) {
+            navigationVersion.current += 1;
+            pendingWindowRoute.current = null;
+        }
+    }, [hiddenRoutes]);
+    // 卸载后，旧窗口探测不能再提交导航。
     useEffect(
         () => () => {
             navigationVersion.current += 1;
         },
-        [hiddenRoutes],
+        [],
     );
     useEffect(() => {
         if (hiddenRoutes.has(route)) {
@@ -97,23 +117,30 @@ export function useAppNavigation() {
         (nextRoute: AppRoute) => {
             const version = ++navigationVersion.current;
             const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
-            if (target === 'chat') {
-                void focusChatIfOpen().then((focused) => {
-                    if (
-                        version === navigationVersion.current &&
-                        !focused &&
-                        featureTogglesStore.getSnapshot().chat
-                    )
-                        setRoute('chat');
-                });
-                return;
-            }
+            pendingWindowRoute.current = null;
             // 调试台弹出窗开着时主窗不进调试页（工作区 / 收藏落盘 JSON 是两窗同一份文件，
             // 两边同时写会互相盖），入口一律把弹出窗叫到前面；没开着才正常切路由
-            if (target === 'debug') {
-                void focusDebugIfOpen().then((focused) => {
-                    if (version === navigationVersion.current && !focused) setRoute('debug');
-                });
+            if (target === 'chat' || target === 'debug') {
+                pendingWindowRoute.current = target;
+                const focus = target === 'chat' ? focusChatIfOpen : focusDebugIfOpen;
+                void focus()
+                    .then((focused) => {
+                        if (version !== navigationVersion.current) return;
+                        pendingWindowRoute.current = null;
+                        if (
+                            !focused &&
+                            (target !== 'chat' || featureTogglesStore.getSnapshot().chat)
+                        )
+                            setRoute(target);
+                    })
+                    .catch((error) => {
+                        if (version !== navigationVersion.current) return;
+                        pendingWindowRoute.current = null;
+                        pushErrorBar({
+                            title: target === 'chat' ? '无法打开聊天' : '无法打开调试台',
+                            raw: errorText(error),
+                        });
+                    });
                 return;
             }
             // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。

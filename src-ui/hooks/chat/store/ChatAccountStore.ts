@@ -25,8 +25,13 @@ export class ChatAccountStore {
     private releaseOnIdle?: () => void;
     private releaseRequest: Promise<void> | null = null;
     private releasePending = false;
+    private releaseRevision = 0;
     get releaseWhenIdle() {
         return this.releasePending;
+    }
+    /** 释放请求永久使先前视图任务失效，重新挂载不会复用其所有权。 */
+    get ownerRevision() {
+        return this.releaseRevision;
     }
     viewRevision = 0;
     get target() {
@@ -139,6 +144,7 @@ export class ChatAccountStore {
         return this.operations.busy();
     }
     requestRelease(onIdle: () => void) {
+        this.releaseRevision++;
         this.releasePending = true;
         this.releaseOnIdle = onIdle;
     }
@@ -170,7 +176,10 @@ export class ChatAccountStore {
         return release;
     }
     async initialize() {
+        const revision = this.releaseRevision;
         if (this.releaseRequest) await this.releaseRequest;
+        // 重挂可能在旧释放链结束前再次离开，不能让迟到的初始化重建无人使用的连接。
+        if (revision !== this.releaseRevision && !this.hasViewers()) return;
         this.releasePending = false;
         await this.archive.restore();
         if (this.releaseWhenIdle && !this.hasViewers()) return;

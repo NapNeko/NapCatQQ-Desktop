@@ -1289,6 +1289,56 @@ async fn response_budget_evicts_oldest_and_history_entry_reads_disk() {
 }
 
 #[tokio::test]
+async fn disk_lookup_uses_newest_duplicate_id_after_response_eviction() {
+    let root = tempfile::tempdir().unwrap();
+    let store = DebugStore::load_with_budget(root.path(), 1).await;
+    let older = entry("duplicate", "old_action", "old_bot", true);
+    let mut newer = entry("duplicate", "new_action", "new_bot", false);
+    newer.response = Some(json!({"version": "newest"}));
+    store.append_history(older).await.unwrap();
+    store.append_history(newer.clone()).await.unwrap();
+
+    // ID 查找已经按最新条目选择，回包被预算淘汰后也必须返回同一份记录。
+    assert!(matches!(
+        store.history.lock().await.lookup("duplicate"),
+        Some(HistoryLookup::NeedsResponse(_))
+    ));
+    assert_eq!(store.history_entry("duplicate").await, Some(newer.clone()));
+    assert_eq!(
+        store.history_entry_read_only("duplicate").await.unwrap(),
+        Some(newer.clone())
+    );
+    let reloaded = DebugStore::load_with_budget(root.path(), 1).await;
+    assert_eq!(reloaded.history_entry("duplicate").await, Some(newer));
+}
+
+#[tokio::test]
+async fn disk_lookup_accepts_valid_history_json_field_order_and_spacing() {
+    let record = entry("formatted", "get_status", "1", true);
+    let canonical = serde_json::to_string(&record).unwrap();
+    let fields = canonical.strip_prefix("{\"id\":\"formatted\",").unwrap();
+    let reordered = format!(
+        "{{{},\"id\":\"formatted\"}}",
+        fields.strip_suffix('}').unwrap()
+    );
+    let spaced = canonical.replacen("{\"id\":", "{ \"id\" : ", 1);
+    for row in [reordered, spaced] {
+        let root = tempfile::tempdir().unwrap();
+        let path = debug_dir(root.path()).join(HISTORY_FILE);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, format!("{row}\n")).unwrap();
+        let store = DebugStore::load_with_budget(root.path(), 1).await;
+        assert_eq!(store.history(query()).await.total, 1);
+        assert_eq!(store.history_entry("formatted").await, Some(record.clone()));
+        assert_eq!(
+            store.history_entry_read_only("formatted").await.unwrap(),
+            Some(record.clone())
+        );
+        assert!(store.take_storage_notices().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn evicted_response_missing_from_disk_is_flagged_truncated() {
     let root = tempfile::tempdir().unwrap();
     let store = DebugStore::load_with_budget(root.path(), 30 * 1024).await;

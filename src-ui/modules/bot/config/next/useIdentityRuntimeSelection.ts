@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useServers } from '../../../../hooks/remote/useServers';
 import { localOs } from '../../../../core/domain/runtime/env';
 import {
@@ -16,6 +16,11 @@ export function useIdentityRuntimeSelection(
     const { data: servers = [], isLoading } = useServers();
     const localDockerAllowed = localOs() === 'linux';
     const selection = runtimeSelection(data, servers, localDockerAllowed);
+    // 主机平台可在档案异步加载/探测后才确定；禁用按钮之外也要修正待保存值。
+    useEffect(() => {
+        if (data.deploymentType === 'docker' && !selection.dockerAllowed)
+            onChange({ deploymentType: 'native' });
+    }, [data.deploymentType, selection.dockerAllowed, onChange]);
     const serverItems = useMemo(
         () =>
             servers.map((server) => ({

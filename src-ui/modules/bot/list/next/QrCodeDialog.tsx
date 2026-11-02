@@ -93,7 +93,7 @@ export function QrCodeDialog({
             hasQrCode={hasQrCode}
             viewport={
                 qrcodeUrl ? (
-                    <QrCanvas content={qrcodeUrl} />
+                    <QrCanvas key={qrcodeUrl} content={qrcodeUrl} />
                 ) : (
                     <QrStagePlaceholder
                         variant="loading"

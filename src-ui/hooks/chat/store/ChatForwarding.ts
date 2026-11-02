@@ -54,6 +54,10 @@ export class ChatForwarding {
         if (!known || known.id !== contact.id || known.type !== contact.type)
             throw new Error('转发目标不属于当前账号');
         const epoch = this.state.session.epoch;
+        const scope = accountKey(
+            this.state.session.target.bot_id,
+            String(this.state.session.target.qq_id),
+        );
         if (this.operations.isSending(contact.key, epoch))
             throw new Error('该会话仍在发送，请稍后转发');
         if (mode === 'individual') {
@@ -75,14 +79,14 @@ export class ChatForwarding {
             });
             this.operations.startSend(contact.key, epoch);
             let sent = 0;
+            const requireCurrent = () => {
+                if (!this.state.session.isCurrent(epoch, scope))
+                    throw new ChatForwardError('连接已改变，转发已停止', sent > 0);
+                this.state.requireConnected();
+            };
             try {
                 for (const message of source) {
-                    this.state.requireConnected();
-                    if (epoch !== this.state.session.epoch)
-                        throw new ChatForwardError(
-                            `连接已改变，已转发 ${sent}/${source.length} 条，请查看目标会话`,
-                            true,
-                        );
+                    requireCurrent();
                     const segments = message.segments.filter(
                         (segment) => segment.type !== 'reply' && segment.type !== 'file',
                     );
@@ -123,6 +127,8 @@ export class ChatForwarding {
                               : /^https?:\/\//i.test(local)
                                 ? local
                                 : '';
+                        // 文件缓存可能跨过断连或账号切换，不能让旧任务进入新代次的发送队列。
+                        requireCurrent();
                         if (!file) throw new Error('文件消息缺少可转发的来源');
                         operations.push({
                             action:
@@ -156,10 +162,6 @@ export class ChatForwarding {
             }
             return;
         }
-        const scope = accountKey(
-            this.state.session.target.bot_id,
-            String(this.state.session.target.qq_id),
-        );
         const requestId = crypto.randomUUID();
         const peer = this.state.session.peer(contact.key);
         const content = source.map((message) => ({

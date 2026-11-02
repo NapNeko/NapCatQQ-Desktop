@@ -342,6 +342,58 @@ describe('native composer keyboard', () => {
 });
 
 describe('attachment drag and drop', () => {
+    it.each(['revision', 'release', 'identity', 'remount'] as const)(
+        'does not append a pending file after its %s owner is invalidated',
+        async (reason) => {
+            let finish!: (file: { path: string; name: string }) => void;
+            vi.spyOn(chatService, 'pickFile').mockReturnValue(
+                new Promise((resolve) => {
+                    finish = resolve;
+                }),
+            );
+            const { store } = setup();
+            fireEvent.click(screen.getByRole('button', { name: '添加文件' }));
+            await waitFor(() => expect(chatService.pickFile).toHaveBeenCalledOnce());
+            if (reason === 'revision') store.viewRevision++;
+            if (reason === 'release') store.requestRelease(() => {});
+            if (reason === 'identity') store.getSnapshot().account.selfId = '100';
+            if (reason === 'remount') {
+                store.requestRelease(() => {});
+                store.getSnapshot().hydrated = true;
+                store.target.online = false;
+                await act(async () => store.initialize());
+                expect(store.releaseWhenIdle).toBe(false);
+            }
+            await act(async () => finish({ path: '/tmp/late.pdf', name: 'late.pdf' }));
+            expect(store.getSnapshot().account.drafts['private:12'].attachments).toEqual([]);
+        },
+    );
+    it('stops a browser file batch after the view is handed off while staging its first file', async () => {
+        let finish!: (path: string) => void;
+        const stage = vi.spyOn(chatService, 'stageAttachment').mockResolvedValue('/tmp/second.pdf');
+        stage.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    finish = resolve;
+                }),
+        );
+        const { store, input } = setup();
+        fireEvent.drop(input, {
+            dataTransfer: {
+                files: [
+                    new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+                    new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+                ],
+            },
+        });
+        await waitFor(() => expect(stage).toHaveBeenCalledOnce());
+        store.viewRevision++;
+        await act(async () => finish('/tmp/first.pdf'));
+        await waitFor(() => expect(screen.getByRole('button', { name: '发送消息' })).toBeEnabled());
+        expect(stage).toHaveBeenCalledOnce();
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toEqual([]);
+    });
+
     it('keeps a pending file bound to its original conversation and preserves later draft edits', async () => {
         const store = new ChatAccountStore({
             bot_id: 'attachment-target',

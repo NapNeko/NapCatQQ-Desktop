@@ -3,14 +3,18 @@ import userEvent from '@testing-library/user-event';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import gsap from 'gsap';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import { createDefaultBotConfig } from '../../../../core/domain/bot/config-defaults';
 import { IdentityTab } from './IdentityTab';
 
+const serverProfiles = vi.hoisted(() => ({
+    data: [
+        { id: 'linux', name: 'Linux', host: 'example.com', platform: 'linux' },
+        { id: 'windows', name: 'Windows', host: 'windows.example.com', platform: 'windows' },
+    ],
+}));
 vi.mock('../../../../hooks/remote/useServers', () => ({
-    useServers: () => ({
-        data: [{ id: 'linux', name: 'Linux', host: 'example.com' }],
-        isLoading: false,
-    }),
+    useServers: () => ({ data: serverProfiles.data, isLoading: false }),
 }));
 vi.mock('../../../../hooks/preferences/featureTogglesStore', () => ({
     useFeatures: () => ({ napcat: true, snowluma: true }),
@@ -29,8 +33,8 @@ vi.mock('../../../../hooks/bot/useCronPreview', () => ({
     useCronPreview: () => ({ status: 'idle' }),
 }));
 
-function IdentityForm() {
-    const [data, setData] = useState(createDefaultBotConfig().bot);
+function IdentityForm({ initialData }: { initialData?: BotBasicConfig } = {}) {
+    const [data, setData] = useState(initialData ?? createDefaultBotConfig().bot);
     return (
         <IdentityTab
             data={data}
@@ -47,7 +51,10 @@ function finishMotion() {
     });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    serverProfiles.data[0].platform = 'linux';
+});
 
 describe('身份配置动态区域', () => {
     it('NC / SL 切换时启动模式有完整退出阶段', () => {
@@ -108,4 +115,42 @@ it('新建容器 Bot 可选择 Podman，已有容器的引擎归属保持锁定'
     expect(onEngine).toHaveBeenCalledWith('docker');
     rerender(<IdentityTab {...props} isEditMode containerEngineLocked />);
     expect(screen.getByRole('combobox', { name: '容器引擎' })).toBeDisabled();
+});
+
+it('再次点击已选中的远程模式不会清空目标主机', () => {
+    render(
+        <IdentityForm initialData={{ ...createDefaultBotConfig().bot, runtime_target: 'linux' }} />,
+    );
+    finishMotion();
+    const selected = screen.getByRole('combobox', { name: '目标远程主机' });
+    expect(selected).toHaveTextContent('Linux · example.com');
+    fireEvent.click(
+        within(screen.getByRole('radiogroup', { name: '运行宿主' })).getByRole('radio', {
+            name: /^远程主机/,
+        }),
+    );
+    expect(selected).toHaveTextContent('Linux · example.com');
+});
+
+it('平台探测确认为 Windows 后把容器草稿切回直接运行', () => {
+    serverProfiles.data[0].platform = 'auto';
+    const initialData = {
+        ...createDefaultBotConfig().bot,
+        runtime_target: 'linux',
+        deploymentType: 'docker' as const,
+    };
+    const { rerender } = render(<IdentityForm initialData={initialData} />);
+    finishMotion();
+    expect(screen.getByRole('radio', { name: '容器', exact: true })).toHaveAttribute(
+        'aria-checked',
+        'true',
+    );
+    serverProfiles.data[0].platform = 'windows';
+    rerender(<IdentityForm initialData={initialData} />);
+    finishMotion();
+    expect(screen.getByRole('radio', { name: '容器', exact: true })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: '直接运行', exact: true })).toHaveAttribute(
+        'aria-checked',
+        'true',
+    );
 });

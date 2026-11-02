@@ -202,6 +202,33 @@ describe('screenshot draft lifecycle', () => {
         );
         hook.unmount();
     });
+    it('restores the application shortcut if the composer unmounts while recording a replacement', async () => {
+        const { store } = setup();
+        const app = renderHook(() => useAppScreenshotShortcut(true));
+        const composer = renderHook(() => useChatScreenshot(store, 'private:12', false));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    enabled: true,
+                    context: expect.stringContaining('/private:12/'),
+                }),
+            ),
+        );
+        act(() => composer.result.current.suspendShortcut(true));
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: false, releaseOwner: false }),
+            ),
+        );
+        composer.unmount();
+        await waitFor(() =>
+            expect(screenshot.shortcut).toHaveBeenLastCalledWith(
+                expect.objectContaining({ enabled: true, context: '' }),
+            ),
+        );
+        app.unmount();
+    });
+
     it('receives a native hotkey result without asking the hidden page to start capture', async () => {
         const { store } = setup();
         const receive = (event: ChatScreenshotShortcutEvent) => screenshot.handler?.(event);
@@ -356,6 +383,51 @@ describe('screenshot draft lifecycle', () => {
         expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
         hook.unmount();
     });
+
+    it.each(['finished', 'failed'] as const)(
+        'ignores a late native %s event after the same store is released and reinitialized',
+        async (kind) => {
+            const { store } = setup();
+            const onFinished = vi.fn();
+            const hook = renderHook(() =>
+                useChatScreenshot(store, 'private:12', false, onFinished),
+            );
+            await waitFor(() =>
+                expect(screenshot.shortcut).toHaveBeenCalledWith(
+                    expect.objectContaining({ enabled: true }),
+                ),
+            );
+            const { context } = screenshot.shortcut.mock.calls.at(-1)![0];
+            store.requestRelease(() => {});
+            store.target.online = false;
+            await act(async () => store.initialize());
+            expect(store.releaseWhenIdle).toBe(false);
+            hook.rerender();
+            act(() => {
+                screenshot.handler?.({
+                    v: 1,
+                    context,
+                    capture_id: `native-remounted-${kind}`,
+                    result: { kind: 'started' },
+                });
+            });
+            expect(hook.result.current.capturing).toBe(false);
+            act(() => {
+                screenshot.handler?.({
+                    v: 1,
+                    context,
+                    capture_id: `native-remounted-${kind}`,
+                    result:
+                        kind === 'finished' ? { kind, file } : { kind, message: '旧视图截图失败' },
+                });
+            });
+            expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
+            expect(screenshot.notice).not.toHaveBeenCalled();
+            expect(onFinished).not.toHaveBeenCalled();
+            expect(hook.result.current.capturing).toBe(false);
+            hook.unmount();
+        },
+    );
 
     it('receives completion while the composer is unmounted and releases the capture lock', async () => {
         const { store } = setup();
@@ -514,7 +586,7 @@ describe('screenshot draft lifecycle', () => {
         expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);
     });
 
-    it.each(['revision', 'release', 'identity'] as const)(
+    it.each(['revision', 'release', 'identity', 'remount'] as const)(
         'ignores an invalidated %s owner',
         async (reason) => {
             const { store } = setup();
@@ -523,6 +595,12 @@ describe('screenshot draft lifecycle', () => {
             if (reason === 'revision') store.viewRevision++;
             if (reason === 'release') store.requestRelease(() => {});
             if (reason === 'identity') store.getSnapshot().account.selfId = '100';
+            if (reason === 'remount') {
+                store.requestRelease(() => {});
+                store.target.online = false;
+                await store.initialize();
+                expect(store.releaseWhenIdle).toBe(false);
+            }
             complete();
             await pending;
             expect(store.getSnapshot().account.drafts['private:12'].attachments).toHaveLength(0);

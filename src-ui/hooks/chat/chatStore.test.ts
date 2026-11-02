@@ -1550,7 +1550,101 @@ describe('chat reconnect and attachment progress', () => {
     });
 });
 
+describe('stale poke results', () => {
+    it.each(['success', 'failure'] as const)(
+        'ignores a late %s after disconnect',
+        async (result) => {
+            const { store, transport } = setup();
+            await store.connect();
+            let resolve!: (response: DebugCallResponse) => void;
+            let reject!: (error: Error) => void;
+            transport.call.mockImplementationOnce(
+                () =>
+                    new Promise((done, fail) => {
+                        resolve = done;
+                        reject = fail;
+                    }),
+            );
+            const pending = store.poke('private:22', '22');
+            const outcome = pending.then(
+                () => 'settled',
+                () => 'rejected',
+            );
+            await store.disconnect();
+            if (result === 'success') resolve(ok(null));
+            else reject(new Error('旧连接失败'));
+            expect(await outcome).toBe('settled');
+            expect(store.getSnapshot().account.messages).toEqual([]);
+            expect(store.getSnapshot().account.conversations).toEqual({});
+        },
+    );
+});
+
 describe('individual message forwarding', () => {
+    it('does not let an old file forward overwrite a newer send lock after reconnect', async () => {
+        const { store, transport, destination } = transferSetup();
+        await store.connect();
+        const source = store.getSnapshot().account.messages[0];
+        source.segments = [{ type: 'file', data: { file_id: 'report', name: '报告.txt' } }];
+        let cached!: (path: string) => void;
+        vi.spyOn(chatService, 'cacheFile').mockImplementationOnce(
+            () =>
+                new Promise<string>((resolve) => {
+                    cached = resolve;
+                }),
+        );
+        const forwarding = store.forward([source.key], destination, 'individual');
+        const outcome = forwarding.catch((error: unknown) => error);
+        await store.disconnect();
+        await store.connect();
+        let sent!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    sent = resolve;
+                }),
+        );
+        const sending = store.send(destination.key);
+        cached('/cache/report.txt');
+        expect(await outcome).toBeInstanceOf(Error);
+        expect(store.isSending()).toBe(true);
+        store.draft(destination.key, { text: '下一条草稿', reply: null, attachments: [] });
+        await store.send(destination.key);
+        expect(transport.call).toHaveBeenCalledOnce();
+        sent(ok({ message_id: 80 }));
+        await sending;
+        expect(store.isSending()).toBe(false);
+        expect(store.getSnapshot().account.drafts[destination.key].text).toBe('下一条草稿');
+    });
+
+    it.each(['disconnect', 'reconnect', 'account switch'] as const)(
+        'stops a cached file forward after %s',
+        async (change) => {
+            const { store, transport, destination } = transferSetup();
+            await store.connect();
+            const source = store.getSnapshot().account.messages[0];
+            source.segments = [{ type: 'file', data: { file_id: 'report', name: '报告.txt' } }];
+            let cached!: (path: string) => void;
+            vi.spyOn(chatService, 'cacheFile').mockImplementationOnce(
+                () =>
+                    new Promise<string>((resolve) => {
+                        cached = resolve;
+                    }),
+            );
+            const forwarding = store.forward([source.key], destination, 'individual');
+            const outcome = forwarding.catch((error: unknown) => error);
+            if (change === 'account switch') store.target = { ...target, qq_id: 100 };
+            else {
+                await store.disconnect();
+                if (change === 'reconnect') await store.connect();
+            }
+            cached('/cache/report.txt');
+            expect(await outcome).toBeInstanceOf(Error);
+            expect(transport.call).not.toHaveBeenCalled();
+            expect(store.isSending()).toBe(false);
+        },
+    );
+
     it('sends in source order and preserves the destination draft', async () => {
         const { store, transport, destination } = transferSetup();
         await store.connect();

@@ -610,8 +610,11 @@ fn request_stop(
             snapshot.advance(BotActorState::Stopping, "stop_requested");
             Ok(true)
         }
-        BotActorState::Stopped | BotActorState::Stopping => Ok(false),
-        BotActorState::Crashed => Ok(false),
+        BotActorState::Stopping => {
+            // 最新停止意图取消排队重启，但保持当前停止代次，仍由在途 stop 确认退出。
+            Ok(std::mem::take(&mut snapshot.pending_restart))
+        }
+        BotActorState::Stopped | BotActorState::Crashed => Ok(false),
         BotActorState::Repairing => Ok(false),
     }
 }
