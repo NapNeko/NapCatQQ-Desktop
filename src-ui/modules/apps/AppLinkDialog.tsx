@@ -31,7 +31,6 @@ import {
     runtimeTargetDisplayLabel,
 } from '../../core/domain/bot/runtime-target';
 import { hostIdDisplayLabel } from './hostLabel';
-import { errorText } from '../../core/domain/errors';
 import {
     appLinkPairEnabled,
     appLinkPairNote,
@@ -203,20 +202,14 @@ export function AppLinkDialog({
                     )}
 
                     {previewError && (
-                        <div
-                            role="alert"
-                            className="rounded-md border border-danger/20 bg-danger/5 p-3"
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="self-start"
+                            onClick={() => void retryPreview()}
                         >
-                            <p className="text-xs text-danger">{previewError}</p>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="mt-2"
-                                onClick={() => void retryPreview()}
-                            >
-                                重新生成计划
-                            </Button>
-                        </div>
+                            重新生成计划
+                        </Button>
                     )}
 
                     <ExpandPresence visible={!!plan && !previewing}>
@@ -229,14 +222,6 @@ export function AppLinkDialog({
                             />
                         )}
                     </ExpandPresence>
-
-                    {applyLink.isError &&
-                        applyLink.variables?.botId === botId &&
-                        applyLink.variables.instanceId === instanceId && (
-                            <p role="alert" className="text-xs text-danger">
-                                {errorText(applyLink.error)}
-                            </p>
-                        )}
                 </div>
 
                 <DialogFooter>
@@ -306,9 +291,6 @@ function PlanPreview({
                         新增发布端口时会重建运行中的容器，连接短暂中断，数据卷保留。
                     </p>
                 )}
-                <p className="mt-1 text-2xs text-text-tertiary">
-                    应用时创建并检查所需端口与隧道，失败时会显示具体原因。
-                </p>
             </div>
             <div>
                 <p className="mb-1.5 text-2xs uppercase tracking-wide text-text-tertiary">

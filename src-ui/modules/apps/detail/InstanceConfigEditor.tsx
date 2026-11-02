@@ -26,10 +26,10 @@ export function InstanceConfigEditor({ instance }: { instance: AppInstance }) {
     const selected = documents.data?.find((doc) => doc.id === selectedId) ?? documents.data?.[0];
 
     if (documents.isLoading) return <PaneLoading text="正在读取配置文件…" />;
-    if (documents.error)
+    if (documents.error && !documents.data)
         return (
             <PaneLoadError
-                message={toAppConfigError(documents.error).message}
+                message="配置文件列表暂不可用"
                 onRetry={() => void documents.refetch()}
             />
         );
@@ -42,6 +42,9 @@ export function InstanceConfigEditor({ instance }: { instance: AppInstance }) {
             document={selected}
             documents={documents.data ?? []}
             onSelect={setSelectedId}
+            retryDocuments={
+                documents.error ? () => documents.refetch({ throwOnError: true }) : undefined
+            }
         />
     );
 }
@@ -51,14 +54,18 @@ function ConfigFileEditor({
     document,
     documents,
     onSelect,
+    retryDocuments,
 }: {
     instance: AppInstance;
     document: AppConfigDocument;
     documents: AppConfigDocument[];
     onSelect: (id: string) => void;
+    retryDocuments?: () => Promise<unknown>;
 }) {
     const file = useAppConfigFile(instance.id, document);
     const [confirm, setConfirm] = useState<'reload' | 'conflict' | null>(null);
+    const [reloading, setReloading] = useState(false);
+    const busy = file.busy || reloading;
 
     const save = async (overwrite = false) => {
         try {
@@ -83,11 +90,15 @@ function ConfigFileEditor({
         }
     };
     const reload = async () => {
+        setReloading(true);
         try {
+            await retryDocuments?.();
             await file.reload();
-            setConfirm(null);
         } catch {
+            // 读取失败由 hook 提示，保留当前草稿。
+        } finally {
             setConfirm(null);
+            setReloading(false);
         }
     };
 
@@ -95,18 +106,20 @@ function ConfigFileEditor({
         <div className="flex min-h-0 flex-1 flex-col gap-3 pb-3">
             <div className="flex flex-wrap items-center gap-2">
                 <Select
+                    size="sm"
                     aria-label="配置文件"
+                    title={`${instance.install_dir}/${document.rel_path}`}
                     className="min-w-48 flex-1"
                     items={documents.map((doc) => ({ value: doc.id, label: doc.label }))}
                     value={document.id}
                     onValueChange={onSelect}
-                    disabled={file.busy}
+                    disabled={busy}
                 />
                 {file.dirty && <span className="text-xs text-warning">未保存</span>}
                 <Button
                     size="sm"
                     variant="secondary"
-                    disabled={file.busy}
+                    disabled={busy}
                     onClick={() => (file.dirty ? setConfirm('reload') : void reload())}
                 >
                     <ActionMotionIcon icon={RefreshCw} size={13} />
@@ -115,33 +128,13 @@ function ConfigFileEditor({
                 <Button
                     size="sm"
                     variant="primary"
-                    disabled={file.busy || !file.dirty}
+                    disabled={busy || !file.dirty}
                     onClick={() => void save()}
                 >
                     <ActionMotionIcon icon={Save} size={13} />
-                    保存
+                    {file.base?.revision === 'missing' ? '创建并保存' : '保存'}
                 </Button>
             </div>
-            <div className="flex items-center justify-between gap-3 text-xs text-text-tertiary">
-                <span
-                    className="truncate font-mono"
-                    title={`${instance.install_dir}/${document.rel_path}`}
-                >
-                    {document.rel_path}
-                </span>
-                <span className="shrink-0">
-                    {file.base?.revision === 'missing'
-                        ? '保存后创建文件'
-                        : document.format === 'dot_env'
-                          ? 'ENV'
-                          : document.format.toUpperCase()}
-                </span>
-            </div>
-            {file.error && (
-                <p role="alert" className="whitespace-pre-wrap text-sm text-danger">
-                    {file.error.message}
-                </p>
-            )}
             {file.isLoading && !file.base ? (
                 <PaneLoading text="正在读取文件…" />
             ) : file.base ? (
@@ -149,14 +142,14 @@ function ConfigFileEditor({
                     value={file.text}
                     onChange={file.change}
                     mode={document.format}
-                    disabled={file.busy}
+                    disabled={busy}
                     invalid={file.error?.kind === 'invalid'}
                     aria-label={`${document.rel_path} 配置原文`}
                 />
             ) : null}
             <Dialog
                 open={confirm !== null}
-                onOpenChange={(open) => !open && !file.busy && setConfirm(null)}
+                onOpenChange={(open) => !open && !busy && setConfirm(null)}
             >
                 <DialogContent size="sm">
                     <DialogHeader>
@@ -173,7 +166,7 @@ function ConfigFileEditor({
                         <Button
                             size="sm"
                             variant="ghost"
-                            disabled={file.busy}
+                            disabled={busy}
                             onClick={() => setConfirm(null)}
                         >
                             取消
@@ -181,7 +174,7 @@ function ConfigFileEditor({
                         <Button
                             size="sm"
                             variant="secondary"
-                            disabled={file.busy}
+                            disabled={busy}
                             onClick={() => void reload()}
                         >
                             重新加载
@@ -190,7 +183,7 @@ function ConfigFileEditor({
                             <Button
                                 size="sm"
                                 variant="primary"
-                                disabled={file.busy}
+                                disabled={busy}
                                 onClick={() => void save(true)}
                             >
                                 覆盖保存

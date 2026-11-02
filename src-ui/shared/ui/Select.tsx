@@ -29,6 +29,8 @@ export interface SelectProps<V extends string = string> {
     hint?: ReactNode;
     error?: ReactNode;
     required?: boolean;
+    size?: 'sm' | 'md';
+    title?: string;
     placeholder?: string;
     items: ReadonlyArray<SelectItem<V>>;
     value: V | undefined;
@@ -46,6 +48,8 @@ function SelectInner<V extends string>(
         hint,
         error,
         required,
+        size = 'md',
+        title,
         placeholder,
         items,
         value,
@@ -96,10 +100,11 @@ function SelectInner<V extends string>(
                     aria-labelledby={labelId}
                     aria-invalid={invalid || undefined}
                     aria-describedby={describedById}
-                    title={selectedTitle}
+                    title={title ?? selectedTitle}
                     className={cn(
-                        'inline-flex w-full items-center justify-between gap-2 rounded-sm bg-field px-3 py-2',
-                        'text-sm text-text border outline-none transition-colors',
+                        'inline-flex w-full items-center justify-between gap-2 rounded-sm bg-field',
+                        size === 'sm' ? 'h-7 px-2.5 text-xs' : 'px-3 py-2 text-sm',
+                        'text-text border outline-none transition-colors',
                         // inset ring：避免 offset 被 overflow 父级裁切
                         'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
                         'data-[state=open]:ring-2 data-[state=open]:ring-brand data-[state=open]:ring-inset',

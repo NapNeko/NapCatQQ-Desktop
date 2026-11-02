@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigDocument, AppInstance } from '../../../core/ipc/types';
 import { appFrameworkService } from '../../../core/services/app-framework.service';
-import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { dismissInfoBar, pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { InstanceConfigEditor } from './InstanceConfigEditor';
 import { AppInstancePageNext } from './AppInstancePage.next';
 
@@ -15,7 +15,10 @@ vi.mock('../../../core/services/app-framework.service', () => ({
         writeConfigText: vi.fn(),
     },
 }));
-vi.mock('../../../hooks/ui/globalInfoBarStore', () => ({ pushInfoBar: vi.fn() }));
+vi.mock('../../../hooks/ui/globalInfoBarStore', () => ({
+    pushInfoBar: vi.fn(),
+    dismissInfoBar: vi.fn(),
+}));
 vi.mock('../../../hooks/apps/useAppInstances', () => ({
     useAppInstances: () => ({ instances: [instance], isLoading: false }),
     useAppFrameworks: () => ({
@@ -98,6 +101,9 @@ const documents: AppConfigDocument[] = [
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(appFrameworkService.listConfigDocuments).mockReset();
+    vi.mocked(appFrameworkService.readConfigText).mockReset();
+    vi.mocked(appFrameworkService.writeConfigText).mockReset();
     client = new QueryClient({
         defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
@@ -142,6 +148,37 @@ function renderEditor() {
 const editor = () => screen.getByRole('textbox', { hidden: true }) as HTMLTextAreaElement;
 
 describe('框架配置文件编辑', () => {
+    it('远端列表刷新失败时保留编辑器和草稿，允许重试', async () => {
+        renderEditor();
+        await screen.findByRole('textbox');
+        fireEvent.change(editor(), { target: { value: 'PORT=22222' } });
+        await screen.findByText('未保存');
+        vi.mocked(appFrameworkService.listConfigDocuments).mockRejectedValueOnce(
+            new Error('读取配置超时，请重试'),
+        );
+        await act(async () => {
+            await client.invalidateQueries({ queryKey: ['appConfigDocuments', instance.id] });
+        });
+        expect(pushInfoBar).toHaveBeenCalledWith(
+            expect.objectContaining({ tone: 'danger', content: '读取配置超时，请重试' }),
+        );
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(editor().value).toBe('PORT=22222');
+        expect(screen.getByText('未保存')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
+        fireEvent.click(
+            within(await screen.findByRole('dialog')).getByRole('button', { name: '取消' }),
+        );
+        await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).toBeNull());
+        expect(editor().value).toBe('PORT=22222');
+        fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
+        fireEvent.click(
+            within(await screen.findByRole('dialog')).getByRole('button', { name: '重新加载' }),
+        );
+        await waitFor(() => expect(editor().value).toBe('PORT=13120\n'));
+        expect(appFrameworkService.listConfigDocuments).toHaveBeenCalledTimes(3);
+        expect(dismissInfoBar).toHaveBeenCalledWith('key:app-config-documents:one');
+    });
     it.each([
         { running: false, hot: true, note: undefined, expected: '下次启动实例时生效。' },
         { running: true, hot: false, note: undefined, expected: '重启实例后生效。' },
@@ -173,18 +210,23 @@ describe('框架配置文件编辑', () => {
             ),
         );
     });
-    it.each(['nonebot2', 'karin'])('%s 不论是否提供 WebUI 都默认进入编辑器', async (framework) => {
-        instance.framework_id = framework;
-        instance.state = 'running';
-        render(
-            <QueryClientProvider client={client}>
-                <AppInstancePageNext instanceId="one" onBack={vi.fn()} />
-            </QueryClientProvider>,
-        );
-        await screen.findByRole('textbox');
-        expect(editor().value).toBe('PORT=13120\n');
-        expect(screen.getByRole('tab', { name: '配置' }).getAttribute('data-state')).toBe('active');
-    });
+    it.each(['karin', 'nonebot2', 'astrbot', 'maibot', 'koishi', 'yunzai', 'neobot'])(
+        '%s 不论是否提供 WebUI 都默认进入编辑器',
+        async (framework) => {
+            instance.framework_id = framework;
+            instance.state = 'running';
+            render(
+                <QueryClientProvider client={client}>
+                    <AppInstancePageNext instanceId="one" onBack={vi.fn()} />
+                </QueryClientProvider>,
+            );
+            await screen.findByRole('textbox');
+            expect(editor().value).toBe('PORT=13120\n');
+            expect(screen.getByRole('tab', { name: '配置' }).getAttribute('data-state')).toBe(
+                'active',
+            );
+        },
+    );
 
     it('切换文件和离开详情保留草稿，保存使用读入时的版本', async () => {
         const view = renderEditor();
@@ -233,7 +275,7 @@ describe('框架配置文件编辑', () => {
                 null,
             ),
         );
-        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).toBeNull());
     });
 
     it('重新加载失败仍保留草稿，重试成功才替换', async () => {
@@ -246,14 +288,93 @@ describe('框架配置文件编辑', () => {
         fireEvent.click(
             within(await screen.findByRole('dialog')).getByRole('button', { name: '重新加载' }),
         );
-        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).toBeNull());
         expect(editor().value).toBe('PORT=22222');
-        expect(screen.getByRole('alert').textContent).toContain('SSH 断开');
+        expect(pushInfoBar).toHaveBeenCalledWith(
+            expect.objectContaining({ tone: 'danger', content: 'SSH 断开' }),
+        );
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
         fireEvent.click(
             within(await screen.findByRole('dialog')).getByRole('button', { name: '重新加载' }),
         );
         await waitFor(() => expect(editor().value).toBe('PORT=13120\n'));
         expect(screen.queryByText('未保存')).toBeNull();
+    });
+
+    it.each(['karin', 'nonebot2', 'astrbot', 'maibot', 'koishi', 'yunzai', 'neobot'])(
+        '%s 保存失败只发 InfoBar，保留草稿并支持重试',
+        async (framework) => {
+            instance.framework_id = framework;
+            vi.mocked(appFrameworkService.writeConfigText).mockRejectedValueOnce({
+                kind: 'invalid',
+                message: '配置格式错误',
+                issues: [],
+            });
+            renderEditor();
+            await screen.findByRole('textbox');
+            fireEvent.change(editor(), { target: { value: 'PORT=22222' } });
+            await screen.findByText('未保存');
+            fireEvent.click(screen.getByRole('button', { name: '保存' }));
+            await waitFor(() =>
+                expect(pushInfoBar).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        tone: 'danger',
+                        title: '保存 .env 失败',
+                        content: '配置格式错误',
+                    }),
+                ),
+            );
+            expect(pushInfoBar).toHaveBeenCalledTimes(1);
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+            expect(screen.queryByText('配置格式错误')).not.toBeInTheDocument();
+            expect(editor().value).toBe('PORT=22222');
+            await waitFor(() => expect(screen.getByRole('button', { name: '保存' })).toBeEnabled());
+            fireEvent.click(screen.getByRole('button', { name: '保存' }));
+            await waitFor(() => expect(screen.queryByText('未保存')).not.toBeInTheDocument());
+            expect(dismissInfoBar).toHaveBeenCalledWith('key:app-config-file:one:env:.env');
+        },
+    );
+
+    it('首次读取列表失败只发 InfoBar，页面保留重试入口', async () => {
+        vi.mocked(appFrameworkService.listConfigDocuments).mockRejectedValueOnce(
+            new Error('主机不可达'),
+        );
+        renderEditor();
+        fireEvent.click(await screen.findByRole('button', { name: '重试' }));
+        await screen.findByRole('textbox');
+        expect(pushInfoBar).toHaveBeenCalledWith(
+            expect.objectContaining({ title: '读取配置文件列表失败', content: '主机不可达' }),
+        );
+        expect(screen.queryByText('主机不可达')).not.toBeInTheDocument();
+    });
+
+    it('首次读取文件失败只发 InfoBar，重新加载后恢复编辑', async () => {
+        vi.mocked(appFrameworkService.readConfigText).mockRejectedValueOnce(new Error('实例正忙'));
+        renderEditor();
+        await waitFor(() =>
+            expect(pushInfoBar).toHaveBeenCalledWith(
+                expect.objectContaining({ title: '读取 .env 失败', content: '实例正忙' }),
+            ),
+        );
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
+        await screen.findByRole('textbox');
+    });
+
+    it('离开编辑器后迟到的读取失败不弹提示', async () => {
+        let rejectRead!: (error: Error) => void;
+        vi.mocked(appFrameworkService.readConfigText).mockReturnValueOnce(
+            new Promise((_, reject) => {
+                rejectRead = reject;
+            }),
+        );
+        const view = renderEditor();
+        await waitFor(() => expect(appFrameworkService.readConfigText).toHaveBeenCalledTimes(1));
+        view.unmount();
+        await act(async () => {
+            rejectRead(new Error('请求已过期'));
+        });
+        expect(pushInfoBar).not.toHaveBeenCalled();
     });
 });

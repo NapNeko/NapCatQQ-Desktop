@@ -174,20 +174,22 @@ describe('AppLinkDialog Docker and cross-host links', () => {
         expect(screen.getByText(/新增发布端口时会重建/)).toHaveTextContent('数据卷保留');
     });
 
-    it('shows the backend failure, disables apply and lets the user regenerate the plan', () => {
+    it('keeps plan retry without duplicating the global error notice', () => {
         mocks.plan = null;
         mocks.previewError = '服务器 B 的 SSH 登录失败，请检查主机档案';
         render(<AppLinkDialog open onOpenChange={() => {}} instanceId="app-1" botId="10001" />);
-        expect(screen.getByRole('alert')).toHaveTextContent(mocks.previewError);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByText(mocks.previewError)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: '应用对接' })).toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: '重新生成计划' }));
         expect(mocks.retry).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps a concrete application failure visible in the dialog', () => {
+    it('keeps apply available without duplicating the global error notice', () => {
         mocks.applyError = '无法建立服务器 B 的 SSH 隧道：认证失败';
         render(<AppLinkDialog open onOpenChange={() => {}} instanceId="app-1" botId="10001" />);
-        expect(screen.getByRole('alert')).toHaveTextContent(mocks.applyError);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByText(mocks.applyError)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: '应用对接' })).toBeEnabled();
     });
 });

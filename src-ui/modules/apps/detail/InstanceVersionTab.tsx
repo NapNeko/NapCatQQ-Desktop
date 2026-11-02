@@ -20,11 +20,10 @@ export const InstanceVersionTab: React.FC<{
     /** 可安装的版本（新到旧）；null = 该框架不支持按版本安装 */
     versions: readonly string[] | null;
     loading: boolean;
-    error?: string;
     busy: boolean;
     /** 选定一版去重装；null = 最新正式版 */
     onSwitch: (version: string | null) => void;
-}> = ({ instance, latestVersion, versions, loading, error, busy, onSwitch }) => {
+}> = ({ instance, latestVersion, versions, loading, busy, onSwitch }) => {
     const current = instance.installed_version?.trim() || null;
     const installed = isInstalled(instance);
     const updatable = hasAppUpdate(current, latestVersion);
@@ -70,9 +69,7 @@ export const InstanceVersionTab: React.FC<{
                         这个框架不支持按版本安装，只能装上游最新正式版—— 在「更多」里点重装即可。
                     </p>
                 ) : versions.length === 0 ? (
-                    <p className="text-xs leading-relaxed text-text-secondary">
-                        {error ? '版本清单没取到：' + error : '没查到可用版本，稍后刷新再试。'}
-                    </p>
+                    <p className="text-xs leading-relaxed text-text-secondary">暂无可用版本</p>
                 ) : (
                     <>
                         <p className="text-xs leading-relaxed text-text-secondary">

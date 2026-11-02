@@ -2,14 +2,31 @@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
+import { dismissInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import type { AppConfigDocument, AppConfigText } from '../../core/ipc/types';
 
 const documentsKey = (id: string) => ['appConfigDocuments', id] as const;
 
+function reportConfigError(key: string, title: string, error: unknown) {
+    const { message } = toAppConfigError(error);
+    pushErrorBar({ key, title, raw: message, content: message });
+}
+
 export function useAppConfigDocuments(instanceId: string) {
+    const noticeKey = `app-config-documents:${instanceId}`;
     return useQuery({
         queryKey: documentsKey(instanceId),
-        queryFn: () => appFrameworkService.listConfigDocuments(instanceId),
+        queryFn: async ({ signal }) => {
+            try {
+                const result = await appFrameworkService.listConfigDocuments(instanceId);
+                if (!signal.aborted) dismissInfoBar(`key:${noticeKey}`);
+                return result;
+            } catch (error) {
+                if (!signal.aborted) reportConfigError(noticeKey, '读取配置文件列表失败', error);
+                throw error;
+            }
+        },
         retry: false,
     });
 }
@@ -23,9 +40,21 @@ export function useAppConfigFile(instanceId: string, document: AppConfigDocument
     const client = useQueryClient();
     const fileKey = ['appConfigText', instanceId, document.id, document.rel_path] as const;
     const draftKey = ['appConfigDraft', instanceId, document.id, document.rel_path] as const;
+    const noticeKey = `app-config-file:${instanceId}:${document.id}:${document.rel_path}`;
     const file = useQuery({
         queryKey: fileKey,
-        queryFn: () => appFrameworkService.readConfigText(instanceId, document.id),
+        queryFn: async ({ signal }) => {
+            try {
+                const result = await appFrameworkService.readConfigText(instanceId, document.id);
+                if (!signal.aborted) dismissInfoBar(`key:${noticeKey}`);
+                return result;
+            } catch (error) {
+                if (!signal.aborted) {
+                    reportConfigError(noticeKey, `读取 ${document.label} 失败`, error);
+                }
+                throw error;
+            }
+        },
         retry: false,
         refetchOnWindowFocus: false,
     });
@@ -53,10 +82,16 @@ export function useAppConfigFile(instanceId: string, document: AppConfigDocument
             );
         },
         onSuccess: (result) => {
+            dismissInfoBar(`key:${noticeKey}`);
             client.setQueryData(fileKey, result);
             client.setQueryData(draftKey, null);
             void client.invalidateQueries({ queryKey: documentsKey(instanceId) });
             void client.invalidateQueries({ queryKey: ['appWebUiAccount', instanceId] });
+        },
+        onError: (error) => {
+            if (toAppConfigError(error).kind !== 'conflict') {
+                reportConfigError(noticeKey, `保存 ${document.label} 失败`, error);
+            }
         },
     });
     const reload = useMutation({
@@ -64,10 +99,12 @@ export function useAppConfigFile(instanceId: string, document: AppConfigDocument
         onMutate: () => client.cancelQueries({ queryKey: fileKey }),
         mutationFn: () => appFrameworkService.readConfigText(instanceId, document.id),
         onSuccess: (result) => {
+            dismissInfoBar(`key:${noticeKey}`);
             client.setQueryData(fileKey, result);
             client.setQueryData(draftKey, null);
             save.reset();
         },
+        onError: (error) => reportConfigError(noticeKey, `重新加载 ${document.label} 失败`, error),
     });
     const pendingWrites = useIsMutating({ mutationKey: fileKey });
 

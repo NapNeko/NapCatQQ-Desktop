@@ -55,9 +55,6 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
     ];
 
     const notes: string[] = [];
-    if (versions.error) {
-        notes.push(`查不到可用版本（${versions.error.message}）；将安装最新正式版`);
-    }
     if (versions.data?.has_prerelease) {
         notes.push('该框架有预发布版本；不显式选择时默认装正式版');
     }

@@ -22,7 +22,7 @@ import { ReinstallDialog } from './ReinstallDialog';
 import { AppLinkDialog } from '../AppLinkDialog';
 import { DetailInstallProgress } from '../InstallProgress';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
-import { hostIdDisplayLabel } from '../hostLabel';
+import { hostIdDisplayLabel, isAppHostRemoved } from '../hostLabel';
 import { isInstalled } from '../../../core/domain/apps/instanceState';
 import { cn } from '../../../shared/utils/cn';
 import { DetailHeader } from './DetailHeader';
@@ -51,7 +51,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
 }) => {
     const apps = useAppInstances();
     const frameworks = useAppFrameworks();
-    const { servers } = useServerManager();
+    const { servers, isSuccess: serversLoaded } = useServerManager();
 
     const instance = apps.instances.find((i) => i.id === instanceId) ?? null;
     const manifest = useMemo(
@@ -181,7 +181,6 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         latestVersion={latestVersion}
                                         versions={versions.data?.versions ?? null}
                                         loading={versions.isLoading}
-                                        error={versions.error?.message}
                                         busy={busy}
                                         onSwitch={(v) => {
                                             setInstallVersion(v);
@@ -231,6 +230,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
 
                 <DeleteInstanceDialog
                     instance={deleteOpen ? instance : null}
+                    hostRemoved={isAppHostRemoved(instance.host_id, servers, serversLoaded)}
                     isRemoving={apps.isRemoving}
                     onClose={() => setDeleteOpen(false)}
                     onConfirm={async (removeFiles) => {
