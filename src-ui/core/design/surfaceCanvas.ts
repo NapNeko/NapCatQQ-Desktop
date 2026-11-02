@@ -10,14 +10,13 @@ export function readSurfaceCanvasColor(): string {
     return v || CANVAS_FALLBACK_LIGHT;
 }
 
-/** Linux 窗口四角保留 alpha；画布色只画在根内容，其他平台保持原有背景。 */
+/** Linux 原生窗口不透明，页面留空会露出宿主底色；三层背景必须与主题一致。 */
 export function syncRootChromeBackground(): void {
     if (typeof document === 'undefined') return;
     const bg = readSurfaceCanvasColor();
     const html = document.documentElement;
-    const chrome = html.dataset.nativeOs === 'linux' ? 'transparent' : bg;
-    html.style.backgroundColor = chrome;
-    document.body.style.backgroundColor = chrome;
+    html.style.backgroundColor = bg;
+    document.body.style.backgroundColor = bg;
     const root = document.getElementById('root');
     if (root) root.style.backgroundColor = bg;
 }
