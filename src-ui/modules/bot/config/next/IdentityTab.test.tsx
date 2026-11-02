@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultBotConfig } from '../../../../core/domain/bot/config-defaults';
 import { IdentityTab } from './IdentityTab';
 
-vi.mock('../../../../hooks/remote/useServerManager', () => ({
-    useServerManager: () => ({
-        servers: [{ id: 'linux', name: 'Linux', host: 'example.com' }],
+vi.mock('../../../../hooks/remote/useServers', () => ({
+    useServers: () => ({
+        data: [{ id: 'linux', name: 'Linux', host: 'example.com' }],
         isLoading: false,
     }),
 }));

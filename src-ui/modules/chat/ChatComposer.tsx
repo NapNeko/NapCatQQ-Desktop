@@ -1,5 +1,6 @@
 // 会话草稿即时写回账号分区，异步选文件不改变发送目标。
 import {
+    memo,
     useEffect,
     useId,
     useMemo,
@@ -10,7 +11,7 @@ import {
     type KeyboardEvent,
     type RefObject,
 } from 'react';
-import { ArrowUp, AtSign, File, ImagePlus, Loader2, Paperclip, Smile, X } from 'lucide-react';
+import { ArrowUp, AtSign, ImagePlus, Loader2, Paperclip, Smile, X } from 'lucide-react';
 import {
     EMPTY_DRAFT,
     type Attachment,
@@ -21,10 +22,11 @@ import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/d
 import { errorText } from '../../core/domain/errors';
 import { useCommittedCaret } from '../../hooks/ui/useCommittedCaret';
 import { useChatSend } from '../../hooks/chat/useChatSend';
-import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
+import { useChatSelector, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
 import { ChatEmojiPicker } from './media/ChatEmojiPicker';
-import { QQFace } from '../../shared/chat/media/QQFace';
+import { ChatAttachmentStrip } from './ChatAttachmentStrip';
+import { createSendingSelector } from './chatViewSelectors';
 import { ChatAvatar } from '../../shared/chat/ChatAvatar';
 import { useComposerResize } from './useComposerResize';
 import { Button } from '../../shared/ui/Button';
@@ -34,7 +36,7 @@ import { useComposerCollapse } from './useComposerCollapse';
 import { useChatScreenshot } from '../../hooks/chat/useChatScreenshot';
 import { ChatScreenshotTools } from './ChatScreenshotTools';
 
-export function ChatComposer({
+export const ChatComposer = memo(function ChatComposer({
     store,
     contact,
     disabledReason,
@@ -47,9 +49,13 @@ export function ChatComposer({
     inputRef?: RefObject<HTMLTextAreaElement>;
     collapsed?: boolean;
 }) {
-    const snapshot = useChatSnapshot(store);
+    const draft = useChatSelector(
+        store,
+        (snapshot) => snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT,
+    );
+    const sendingSelector = useMemo(() => createSendingSelector(contact.key), [contact.key]);
+    const sending = useChatSelector(store, sendingSelector);
     const { pickFile, readLocalImage, onFileDragDrop, stageAttachment } = useChatSend(store);
-    const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const localInput = useRef<HTMLTextAreaElement>(null);
     const input = inputRef ?? localInput;
     const commitCaret = useCommittedCaret(input, draft.text);
@@ -164,13 +170,26 @@ export function ChatComposer({
             cancelled = true;
         };
     }, [mentionOpen, store, contact.key, disabledReason, memberRetry, collapsed]);
-    const filteredMembers = query
-        ? members
-              .filter((m) =>
-                  `${m.name} ${m.id}`.toLocaleLowerCase().includes(query.query.toLocaleLowerCase()),
-              )
-              .slice(0, 30)
-        : [];
+    const memberSearch = useMemo(
+        () =>
+            members.map((member) => ({
+                member,
+                text: `${member.name} ${member.id}`.toLocaleLowerCase(),
+            })),
+        [members],
+    );
+    const mentionQuery = query?.query;
+    const filteredMembers = useMemo(() => {
+        if (mentionQuery === undefined) return [];
+        const needle = mentionQuery.toLocaleLowerCase();
+        const matches: typeof members = [];
+        for (const { member, text } of memberSearch) {
+            if (!text.includes(needle)) continue;
+            matches.push(member);
+            if (matches.length === 30) break;
+        }
+        return matches;
+    }, [mentionQuery, memberSearch]);
     const selectedMember = Math.min(memberIndex, Math.max(0, filteredMembers.length - 1));
     useEffect(() => {
         setMemberIndex(0);
@@ -282,9 +301,6 @@ export function ChatComposer({
         const files = Array.from(event.dataTransfer.files);
         void addAttachments(files);
     };
-    const sending = snapshot.account.messages.some(
-        (m) => m.session === contact.key && m.status === 'sending',
-    );
     const canSend =
         !collapsed &&
         !disabledReason &&
@@ -618,114 +634,4 @@ export function ChatComposer({
             </div>
         </div>
     );
-}
-
-function ChatAttachmentStrip({
-    attachments,
-    onRemove,
-    readLocalImage,
-}: {
-    attachments: Attachment[];
-    onRemove: (key: string) => void;
-    readLocalImage: (path: string) => Promise<string>;
-}) {
-    const [retained, setRetained] = useState(attachments);
-    const currentKeys = useMemo(() => new Set(attachments.map((file) => file.key)), [attachments]);
-    const latestKeys = useRef(currentKeys);
-    latestKeys.current = currentKeys;
-    const displayed = useMemo(
-        () => [...attachments, ...retained.filter((file) => !currentKeys.has(file.key))],
-        [attachments, retained, currentKeys],
-    );
-    useEffect(() => {
-        if (!attachments.length) return;
-        setRetained((previous) => {
-            const files = new Map(previous.map((file) => [file.key, file]));
-            for (const file of attachments) files.set(file.key, file);
-            return [...files.values()];
-        });
-    }, [attachments]);
-    if (!displayed.length) return null;
-    return (
-        <div className="native-chat-attachments" role="list" aria-label="待发送附件">
-            {displayed.map((file) => (
-                <ChatPresence
-                    key={file.key}
-                    visible={currentKeys.has(file.key)}
-                    onExited={() => {
-                        if (!latestKeys.current.has(file.key))
-                            setRetained((previous) =>
-                                previous.filter((item) => item.key !== file.key),
-                            );
-                    }}
-                >
-                    <div className="native-chat-attachment" data-type={file.type} role="listitem">
-                        <div className="native-chat-attachment-preview">
-                            <AttachmentPreview attachment={file} readLocalImage={readLocalImage} />
-                        </div>
-                        <span className="native-chat-attachment-name" title={file.name}>
-                            {file.name}
-                        </span>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="native-chat-attachment-remove"
-                            aria-label={`移除${file.name}`}
-                            title={`移除${file.name}`}
-                            onClick={() => onRemove(file.key)}
-                        >
-                            <X size={12} />
-                        </Button>
-                    </div>
-                </ChatPresence>
-            ))}
-        </div>
-    );
-}
-
-function AttachmentPreview({
-    attachment,
-    readLocalImage,
-}: {
-    attachment: Attachment;
-    readLocalImage: (path: string) => Promise<string>;
-}) {
-    const [failed, setFailed] = useState('');
-    const [preview, setPreview] = useState({ path: '', source: '' });
-    const previewPath = attachment.type === 'image' ? attachment.previewPath : undefined;
-    useEffect(() => {
-        if (!previewPath) return;
-        let disposed = false;
-        void readLocalImage(previewPath)
-            .then((bytes) => {
-                if (!disposed)
-                    setPreview({ path: previewPath, source: `data:image/png;base64,${bytes}` });
-            })
-            .catch(() => {});
-        return () => {
-            disposed = true;
-        };
-    }, [previewPath, readLocalImage]);
-    if (attachment.type === 'face') return <QQFace id={attachment.id} size={40} />;
-    if (attachment.type === 'file') return <File size={28} strokeWidth={1.5} />;
-    const source =
-        previewPath && preview.path === previewPath
-            ? preview.source
-            : attachment.path.startsWith('base64://')
-              ? 'data:image/png;base64,' + attachment.path.slice(9)
-              : /^https?:\/\//i.test(attachment.path)
-                ? attachment.path
-                : '';
-    return source && attachment.path !== failed ? (
-        <img
-            src={source}
-            alt={attachment.name}
-            referrerPolicy="no-referrer"
-            decoding="async"
-            draggable={false}
-            onError={() => setFailed(attachment.path)}
-        />
-    ) : (
-        <ImagePlus size={28} strokeWidth={1.5} />
-    );
-}
+});

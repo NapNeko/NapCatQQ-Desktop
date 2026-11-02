@@ -1,7 +1,8 @@
 // ServerManager CRUD + 连接测试的 React 适配层。
 // 远端组件部署走组件页 (run_component_action with host_id = "remote:<id>")。
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useServers } from './useServers';
 import { serverService } from '../../core/services/server.service';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
@@ -25,10 +26,7 @@ function invalidateServerLists(queryClient: ReturnType<typeof useQueryClient>) {
 export function useServerManager() {
     const queryClient = useQueryClient();
 
-    const serversQuery = useQuery({
-        queryKey: ['servers'],
-        queryFn: () => serverService.list(),
-    });
+    const serversQuery = useServers();
 
     const addMutation = useMutation({
         mutationFn: (args: { profile: ServerProfile; password?: string }) =>

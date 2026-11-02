@@ -1,5 +1,5 @@
 // 当前会话栏：头部、群文件/群成员弹层、时间线与输入区；状态与动作仍由 ChatWorkspace 持有。
-import { type MutableRefObject, type RefObject } from 'react';
+import { useCallback, type MutableRefObject, type RefObject, type ReactNode } from 'react';
 import { ArrowLeft, FolderOpen, MessagesSquare, Search, Users } from 'lucide-react';
 import type { ChatAccountStore } from '../../hooks/chat/chatStore';
 import type { Contact, Conversation, Message } from '../../core/domain/chat/model';
@@ -80,6 +80,25 @@ export function ChatConversationPane({
     onSelectionChange,
     onShowContacts,
 }: ChatConversationPaneProps) {
+    const renderAvatar = useCallback(
+        (message: Message, avatar: ReactNode) =>
+            active ? (
+                <ChatGroupMemberMenu
+                    target={target}
+                    store={store}
+                    contact={active}
+                    message={message}
+                    onMessage={onOpen}
+                    onViewMember={onShowMembers}
+                    onFocusComposer={onFocusComposer}
+                >
+                    {avatar}
+                </ChatGroupMemberMenu>
+            ) : (
+                avatar
+            ),
+        [target, store, active, onOpen, onShowMembers, onFocusComposer],
+    );
     return (
         <main className="native-chat-message-pane" aria-label="当前会话">
             <div className="native-chat-conversation-surface">
@@ -202,19 +221,7 @@ export function ChatConversationPane({
                                 visible={narrowFocus}
                                 onFocusComposer={onFocusComposer}
                                 onSelectionChange={onSelectionChange}
-                                renderAvatar={(message, avatar) => (
-                                    <ChatGroupMemberMenu
-                                        target={target}
-                                        store={store}
-                                        contact={active}
-                                        message={message}
-                                        onMessage={onOpen}
-                                        onViewMember={onShowMembers}
-                                        onFocusComposer={onFocusComposer}
-                                    >
-                                        {avatar}
-                                    </ChatGroupMemberMenu>
-                                )}
+                                renderAvatar={renderAvatar}
                             />
                         </div>
                         <ChatComposer

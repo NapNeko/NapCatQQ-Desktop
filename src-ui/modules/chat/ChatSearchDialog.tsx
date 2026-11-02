@@ -9,7 +9,7 @@ interface ChatSearchDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     target: DebugTarget;
-    account: Account;
+    account: Pick<Account, 'archiveMessages' | 'messages' | 'conversations' | 'active'>;
     messages: Message[];
     searchExpanded: boolean;
     searchScope: 'conversation' | 'account';

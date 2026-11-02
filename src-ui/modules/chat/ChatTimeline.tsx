@@ -14,36 +14,29 @@ import { ArrowDown } from 'lucide-react';
 import { ChatViewContext, useChatView, type MarkdownCommand } from '../../shared/chat/chatContext';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
-import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
+import { useChatSelector, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { accountKey, EMPTY_DRAFT, type Contact, type Message } from '../../core/domain/chat/model';
 import { useChatMedia } from '../../hooks/chat/useChatMedia';
 import { useChatSend } from '../../hooks/chat/useChatSend';
 import { ChatImageViewer } from '../../shared/chat/ChatImageViewer';
-import { ChatAvatar as Avatar } from '../../shared/chat/ChatAvatar';
-import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { messagePreview } from '../../core/domain/debug/segments';
-import { cn } from '../../shared/utils/cn';
 import { useHistoryPaging } from './useHistoryPaging';
-import { ChatMessageActions } from './ChatMessageActions';
-import { ChatAvatarMenu } from './ChatAvatarMenu';
 import { MessageSkeleton } from './ChatSkeleton';
 import { preserveTimelineReading } from '../../shared/chat/timelineReadingAnchor';
-import { ChatMessageEntrance, ChatPresence } from './chatMotion';
-import { ChatSendStatus } from './ChatSendStatus';
+import { ChatPresence } from './chatMotion';
+import { TimelineMessage } from './TimelineMessage';
+import { selectTimeline, equalTimeline } from './chatViewSelectors';
 import { useTimelinePosition } from './useTimelinePosition';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
-import { errorText } from '../../core/domain/errors';
-import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
 import { useSmoothWheel } from './useSmoothWheel';
 import { useLatestScroll } from './useLatestScroll';
 import { ChatFileAction } from './files/ChatFileAction';
 import { FORWARD_MESSAGE_LIMIT } from '../../core/domain/chat/messageTransfer';
 import { ChatForwardDialog } from './ChatForwardDialog';
-import { ChatMessageContent } from './ChatMessageContent';
 import { ChatSelectionBar } from './ChatSelectionBar';
 import { recordConversationTimelineMount } from './conversationMotionProbe';
 
-export function NativeTimeline({
+export const NativeTimeline = memo(function NativeTimeline({
     store,
     contact,
     messages,
@@ -83,7 +76,7 @@ export function NativeTimeline({
     const [selecting, setSelecting] = useState(false);
     const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
     const [forwardKeys, setForwardKeys] = useState<string[]>([]);
-    const snapshot = useChatSnapshot(store);
+    const snapshot = useChatSelector(store, selectTimeline, equalTimeline);
     // target 经 hook 内部 ref 每次调用时求值，与原闭包直读 store.target 的时机一致。
     const media = useChatMedia(() => store.target);
     const chatSend = useChatSend(store);
@@ -274,10 +267,9 @@ export function NativeTimeline({
     const fallback = useChatView();
     const senderNames = useMemo(() => {
         const names = new Map<string, string>();
-        for (const message of snapshot.account.messages)
-            names.set(message.senderId, message.senderName);
+        for (const message of snapshot.messages) names.set(message.senderId, message.senderName);
         return names;
-    }, [snapshot.account.messages]);
+    }, [snapshot.messages]);
     const messageById = useMemo(
         () =>
             new Map(
@@ -369,6 +361,31 @@ export function NativeTimeline({
             media,
             chatSend,
             onFocusComposer,
+        ],
+    );
+    const cancelLatestScroll = latestScroll.cancel;
+    const cancelPositionRestore = position.cancelRestore;
+    const detachTimeline = stick.detach;
+    const loadGap = useCallback(
+        (message: Message) => {
+            if (!message.id) return;
+            const index = latest.current.findIndex((item) => item.key === message.key);
+            if (index < 0) return;
+            cancelWheel();
+            cancelLatestScroll();
+            cancelPositionRestore();
+            detachTimeline();
+            virtual.scrollToIndex(index, { align: 'start' });
+            void store.history(contact.key, message.id);
+        },
+        [
+            cancelWheel,
+            cancelLatestScroll,
+            cancelPositionRestore,
+            detachTimeline,
+            virtual,
+            store,
+            contact.key,
         ],
     );
     const latestLabel = stick.unseen > 0 ? `回到最新，${stick.unseen} 条新消息` : '回到最新';
@@ -487,20 +504,7 @@ export function NativeTimeline({
                                         onSelect={beginSelection}
                                         onToggleSelection={toggleSelection}
                                         onForward={forwardOne}
-                                        onLoadGap={
-                                            message.id
-                                                ? () => {
-                                                      cancelWheel();
-                                                      latestScroll.cancel();
-                                                      position.cancelRestore();
-                                                      stick.detach();
-                                                      virtual.scrollToIndex(row.index, {
-                                                          align: 'start',
-                                                      });
-                                                      void store.history(contact.key, message.id);
-                                                  }
-                                                : undefined
-                                        }
+                                        onLoadGap={loadGap}
                                         historyLoading={!!history?.loading}
                                         enter={row.index >= stick.enterFrom}
                                         takeEnter={stick.takeEnter}
@@ -559,210 +563,5 @@ export function NativeTimeline({
                 />
             )}
         </ChatViewContext.Provider>
-    );
-}
-
-const TimelineMessage = memo(function TimelineMessage({
-    store,
-    contact,
-    message,
-    animateEntry,
-    progress,
-    previous,
-    highlighted,
-    retryDisabled,
-    preventRecall,
-    renderAvatar,
-    onFocusComposer,
-    onError,
-    selecting,
-    selected,
-    selectionFull,
-    onSelect,
-    onToggleSelection,
-    onForward,
-    onLoadGap,
-    historyLoading,
-    enter,
-    takeEnter,
-    order,
-}: {
-    store: ChatAccountStore;
-    contact: Contact;
-    message: Message;
-    animateEntry: boolean;
-    progress?: DebugStreamProgress;
-    previous?: Message;
-    highlighted: boolean;
-    retryDisabled: boolean;
-    preventRecall: boolean;
-    renderAvatar?: (message: Message, avatar: ReactNode) => ReactNode;
-    onFocusComposer?: () => void;
-    onError: (error: string) => void;
-    selecting: boolean;
-    selected: boolean;
-    selectionFull: boolean;
-    onSelect: (messageKey: string) => void;
-    onToggleSelection: (messageKey: string) => void;
-    onForward: (messageKey: string) => void;
-    onLoadGap?: () => void;
-    historyLoading: boolean;
-    enter: boolean;
-    takeEnter: (key: string) => boolean;
-    order: number;
-}) {
-    const showTime =
-        !previous ||
-        message.at - previous.at > 5 * 60_000 ||
-        new Date(message.at).toDateString() !== new Date(previous.at).toDateString();
-    const continuation =
-        !showTime &&
-        previous?.senderId === message.senderId &&
-        previous?.mine === message.mine &&
-        message.at - previous.at < 3 * 60_000;
-    const gap = message.gapBefore && (
-        <div className="native-chat-notice">
-            <button
-                type="button"
-                className="native-chat-text-button"
-                disabled={historyLoading || !onLoadGap}
-                onClick={onLoadGap}
-            >
-                {historyLoading ? '正在加载…' : '加载这段消息'}
-            </button>
-        </div>
-    );
-    if (message.notice) {
-        return (
-            <>
-                {gap}
-                {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
-                <div className="native-chat-notice">{message.notice}</div>
-            </>
-        );
-    }
-    const avatar = (
-        <Avatar
-            contact={{
-                type: 'private',
-                id: message.senderId,
-                name: message.mine ? store.target.name : message.senderName,
-            }}
-            small
-        />
-    );
-    return (
-        <>
-            {gap}
-            {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
-            <ChatMessageEntrance
-                messageKey={message.key}
-                mine={message.mine}
-                enter={enter}
-                takeEnter={takeEnter}
-                order={order}
-                animate={animateEntry}
-            >
-                <ChatMessageActions
-                    store={store}
-                    contact={contact}
-                    message={message}
-                    onFocusComposer={onFocusComposer}
-                    onError={onError}
-                    onForward={onForward}
-                    onSelect={onSelect}
-                    selecting={selecting}
-                    selected={selected}
-                    selectionDisabled={!selected && selectionFull}
-                    onToggleSelection={onToggleSelection}
-                >
-                    {(controls, wrapContent) => (
-                        <article
-                            className={cn(
-                                'native-chat-message',
-                                message.mine && 'is-mine',
-                                continuation && 'is-continuation',
-                                showTime && 'is-after-time',
-                            )}
-                            data-highlight={highlighted}
-                            data-selected={selected}
-                            data-selecting={selecting}
-                            data-local-send={!!message.requestId}
-                        >
-                            {continuation ? (
-                                <span className="native-chat-avatar-space" aria-hidden />
-                            ) : renderAvatar ? (
-                                renderAvatar(message, avatar)
-                            ) : (
-                                <ChatAvatarMenu
-                                    store={store}
-                                    contact={contact}
-                                    message={message}
-                                    onFocusComposer={onFocusComposer}
-                                    onError={onError}
-                                >
-                                    {avatar}
-                                </ChatAvatarMenu>
-                            )}
-                            <div className="native-chat-message-body">
-                                {contact.type === 'group' && !message.mine && !continuation && (
-                                    <div className="native-chat-sender" title={message.senderName}>
-                                        {message.senderName}
-                                    </div>
-                                )}
-                                <div className="native-chat-message-content-line">
-                                    {wrapContent(
-                                        <ChatMessageContent
-                                            message={message}
-                                            preventRecall={preventRecall}
-                                        />,
-                                    )}
-                                    {message.mine && (
-                                        <span className="native-chat-delivery-slot">
-                                            <ChatSendStatus
-                                                status={message.status}
-                                                progress={progress}
-                                                onCancel={
-                                                    selecting
-                                                        ? undefined
-                                                        : async () => {
-                                                              try {
-                                                                  await store.cancelSend(
-                                                                      message.key,
-                                                                  );
-                                                              } catch (error) {
-                                                                  onError(errorText(error));
-                                                                  throw error;
-                                                              }
-                                                          }
-                                                }
-                                                error={message.error}
-                                                retryDisabled={retryDisabled || selecting}
-                                                onRetry={
-                                                    message.recalled ||
-                                                    message.segments.some(
-                                                        (segment) => segment.type === 'forward',
-                                                    )
-                                                        ? undefined
-                                                        : () => {
-                                                              onError('');
-                                                              void store
-                                                                  .retry(message.key)
-                                                                  .catch((error) =>
-                                                                      onError(errorText(error)),
-                                                                  );
-                                                          }
-                                                }
-                                            />
-                                        </span>
-                                    )}
-                                    {controls}
-                                </div>
-                            </div>
-                        </article>
-                    )}
-                </ChatMessageActions>
-            </ChatMessageEntrance>
-        </>
     );
 });

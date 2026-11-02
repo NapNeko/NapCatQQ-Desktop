@@ -1,6 +1,14 @@
 // 聊天工作区：持有双栏的全部会话状态与动作，渲染只组合三个子栏，DOM 结构与拆分前一致。
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { chatAccount, releaseChatAccount, useChatSnapshot } from '../../hooks/chat/chatStore';
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type ReactNode,
+} from 'react';
+import { chatAccount, releaseChatAccount, useChatSelector } from '../../hooks/chat/chatStore';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { useChatGroupSelf } from '../../hooks/chat/useChatGroupPermissions';
 import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
@@ -20,6 +28,7 @@ import { useConversationNavigation } from './ConversationList';
 import { ChatListPane } from './ChatListPane';
 import { ChatConversationPane } from './ChatConversationPane';
 import { ChatSearchDialog } from './ChatSearchDialog';
+import { selectWorkspace, equalWorkspace } from './chatViewSelectors';
 import {
     conversationSwitchDirection,
     useConversationTransition,
@@ -39,7 +48,7 @@ export function ChatWorkspace({
     onTrayHandled: () => void;
 }) {
     const store = chatAccount(target);
-    const snapshot = useChatSnapshot(store);
+    const snapshot = useChatSelector(store, selectWorkspace, equalWorkspace);
     const { account } = snapshot;
     const preferences = useChatPreferences();
     const motion = useMotion();
@@ -206,14 +215,17 @@ export function ChatWorkspace({
         store.close(contact.key);
         setNarrowFocus(false);
     };
-    const focusComposer = () =>
-        requestAnimationFrame(() => {
-            const input = composerInput.current;
-            if (input?.isConnected && input.closest('[data-collapsed="true"]') === null) {
-                input.focus();
-                input.setSelectionRange(input.value.length, input.value.length);
-            }
-        });
+    const focusComposer = useCallback(
+        () =>
+            requestAnimationFrame(() => {
+                const input = composerInput.current;
+                if (input?.isConnected && input.closest('[data-collapsed="true"]') === null) {
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            }),
+        [],
+    );
     const showMembers = (memberId?: string) => {
         setMemberFocus(memberId);
         setMembersOpen(true);

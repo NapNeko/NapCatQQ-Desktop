@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ChatAccountStore } from './chatStore';
+import { act, renderHook } from '@testing-library/react';
+import { ChatAccountStore, useChatSelector } from './chatStore';
 import { archiveOf } from '../../core/domain/chat/archive';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import { inlineImageService } from '../../core/services/inline-image.service';
@@ -82,6 +83,29 @@ function transferSetup() {
     result.store.draft(destination.key, { text: '目标会话草稿', attachments: [], reply: null });
     return { ...result, destination };
 }
+
+it('草稿更新不刷新未消费草稿的视图，切换选择器后读取当前会话', () => {
+    const { store, destination } = transferSetup();
+    const renderView = vi.fn(() => useChatSelector(store, (snapshot) => snapshot.account.messages));
+    const view = renderHook(renderView);
+    const before = renderView.mock.calls.length;
+    const draft = renderHook(
+        ({ session }: { session: Contact['key'] }) =>
+            useChatSelector(store, (snapshot) => snapshot.account.drafts[session]?.text ?? ''),
+        { initialProps: { session: destination.key } },
+    );
+    act(() => store.draft(destination.key, { text: '新草稿', attachments: [], reply: null }));
+    expect(draft.result.current).toBe('新草稿');
+    expect(renderView).toHaveBeenCalledTimes(before);
+    draft.rerender({ session: 'group:12' });
+    expect(draft.result.current).toBe('');
+    act(() => store.draft('group:12', { text: '群草稿', attachments: [], reply: null }));
+    expect(draft.result.current).toBe('群草稿');
+    expect(renderView).toHaveBeenCalledTimes(before);
+    view.unmount();
+    draft.unmount();
+});
+
 describe('latest navigation and inline images', () => {
     it('waits for an earlier page then fetches the actual latest page without a cursor', async () => {
         const { store, transport } = setup();

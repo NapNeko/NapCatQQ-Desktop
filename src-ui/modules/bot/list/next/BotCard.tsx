@@ -1,37 +1,17 @@
 // 列表 Bot 卡：头像/标题行 + 中间配置 Chip/指标行 + 底栏状态与操作。
 
 import { useEffect, useRef, useState } from 'react';
+import { LinkIcon, Power, RefreshCw, Server, WifiOff } from 'lucide-react';
+import { ContextMenu, ContextMenuTrigger } from '../../../../shared/ui';
 import {
-    Activity,
-    Copy,
-    FileText,
-    FlaskConical,
-    Globe,
-    LinkIcon,
-    Monitor,
-    MoreHorizontal,
-    Play,
-    Power,
-    QrCode,
-    RefreshCw,
-    Server,
-    Settings,
-    Square,
-    SquareTerminal,
-    WifiOff,
-} from 'lucide-react';
-import {
-    ContextMenu,
-    ContextMenuTrigger,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuLabel,
-    ContextMenuSeparator,
-    Popover,
-    PopoverTrigger,
-    PopoverContent,
-} from '../../../../shared/ui';
-import { ActionMotionIcon } from '../../../../shared/ui/motion';
+    BotCardToolbar,
+    BotCardContextMenu,
+    type BotCardActionProps,
+    type ActionState,
+} from './BotCardActions';
+import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesStore';
+import { useDebugConsoleEnabled } from '../../../../hooks/debug/useDebugConsoleEnabled';
+import { BotCardMetrics } from './BotCardMetrics';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type {
     BotActorSnapshot,
@@ -41,12 +21,7 @@ import type {
     SnowLumaLoginState,
 } from '../../../../core/ipc/types';
 import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
-import {
-    canStartBot,
-    canStopBot,
-    isBotActive,
-    isBotStarting,
-} from '../../../../core/domain/bot/status';
+import { isBotActive, isBotStarting } from '../../../../core/domain/bot/status';
 import {
     isWebuiAvailable,
     webuiTooltip,
@@ -60,10 +35,6 @@ import {
 } from '../../../../core/domain/bot/snowluma-remote-ui';
 import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
-import { openTerminal } from '../../../../hooks/terminal/terminalStore';
-import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesStore';
-import { useDebugConsoleEnabled } from '../../../../hooks/debug/useDebugConsoleEnabled';
-import { openDebugConsole } from '../../../../hooks/debug/debugNav';
 import { QrCodeDialog } from './QrCodeDialog';
 import { RemoteSnowLumaQrLoginDialog } from './RemoteSnowLumaQrLoginDialog';
 import { useRemoteSnowlumaQrEnabled } from '../../../../hooks/webui/useRemoteSnowlumaQrLogin';
@@ -72,23 +43,19 @@ import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
 import {
     BotAvatar,
-    IconButton,
     InfoChip,
-    ToolbarMotionIcon,
     channelDetailLabel,
     countEnabledChannels,
     formatRestartHint,
 } from './botCardParts';
 import { formatRelativeTime } from '../../../../core/domain/ui/relativeTime';
 import { useIsHostReachable, useServerProfiles } from '../../../../hooks/remote/useIsHostReachable';
-import { useBotRuntimeMetrics } from '../../../../hooks/bot/useBotRuntimeMetrics';
 import {
     isRuntimeTargetLocal,
     remoteHostIdFromRuntimeTarget,
     runtimeTargetDisplayLabel,
     runtimeTargetTooltip,
 } from '../../../../core/domain/bot/runtime-target';
-import { BotRuntimeMetricsStrip } from './BotRuntimeMetricsStrip';
 import { BotMigrationDialog } from '../../dialogs/BotMigrationDialog';
 
 interface BotCardProps {
@@ -172,9 +139,6 @@ export function BotCard({
                     !isRuntimeTargetLocal(config.bot.runtime_target))),
         localQrEligible,
     );
-    const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
-    const debugEnabled = useDebugConsoleEnabled();
-    const { enabled: metricsEnabled, metrics: runtimeMetrics } = useBotRuntimeMetrics(bot.bot_id);
 
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
@@ -234,16 +198,10 @@ export function BotCard({
     const restartHint = config ? formatRestartHint(config) : null;
     const runtimeTarget = config?.bot.runtime_target ?? null;
     const isDockerBot = config?.bot.deploymentType === 'docker';
-    const terminalEnabled = useFeatureEnabled('terminal');
     const slStartMode = config?.bot.snowlumaStartMode;
 
     const handleRowClick = () => {
         if (isBatchMode) onToggleSelect(bot.bot_id);
-    };
-
-    const stopAction = (fn: () => void) => (e: React.MouseEvent) => {
-        e.stopPropagation();
-        fn();
     };
 
     const lastTransitionRel = bot.last_transition ? formatRelativeTime(bot.last_transition) : null;
@@ -291,16 +249,6 @@ export function BotCard({
         active: bot.state === 'running',
         transportFailed,
     });
-
-    const runSnowlumaUiRetry = async () => {
-        if (!onRetrySnowlumaUi || retryingSnowlumaUi) return;
-        setRetryingSnowlumaUi(true);
-        try {
-            await onRetrySnowlumaUi(bot.bot_id);
-        } finally {
-            setRetryingSnowlumaUi(false);
-        }
-    };
 
     const chips: React.ReactNode[] = [];
     if (runtimeTarget && runtimeTarget !== 'local') {
@@ -369,40 +317,35 @@ export function BotCard({
         );
     }
     const visibleChips = chips.slice(0, 4);
-    const metricsStrip = (
-        <BotRuntimeMetricsStrip
-            enabled={metricsEnabled}
-            metrics={runtimeMetrics}
-            onOpenDetail={() => onViewMetrics(bot.bot_id)}
-        />
-    );
-    const standbyStrip = !isActive ? (
-        <div className="flex items-center gap-1.5 text-2xs text-text-tertiary">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-text-disabled" />
-            <span className="font-medium text-text-secondary">待机中</span>
-            {lastTransitionRel ? (
-                <>
-                    <span aria-hidden className="text-border">
-                        ·
-                    </span>
-                    <span className="tabular-nums">上次运行 {lastTransitionRel}</span>
-                </>
-            ) : null}
-        </div>
-    ) : null;
-    const handleCopyQqid = async () => {
-        try {
-            await navigator.clipboard.writeText(bot.bot_id);
-            pushInfoBar({
-                tone: 'info',
-                title: '已复制 QQ 号',
-                content: bot.bot_id,
-                autoDismissMs: 2000,
-            });
-        } catch {
-            // ignore
-        }
-    };
+    const actions = useBotCardActionState({
+        botId: bot.bot_id,
+        state: bot.state,
+        displayName,
+        flavor,
+        napcatBinding,
+        isBatchMode,
+        isActive,
+        isDockerBot,
+        hasQrcode,
+        startPending,
+        transportFailed,
+        webuiAvailable,
+        webuiTip,
+        novncAvailable,
+        remoteQrAvailable,
+        snowlumaUiRetryAvailable,
+        onStart,
+        onStop,
+        onConfigure,
+        onViewLogs,
+        onViewMetrics,
+        onOpenWebui,
+        onOpenNovnc,
+        onRetrySnowlumaUi,
+        onOpenQr: () => setQrOpen(true),
+        onOpenRemoteQr: () => setRemoteQrOpen(true),
+        onOpenMigration: () => setMigrationOpen(true),
+    });
 
     return (
         <ContextMenu>
@@ -415,7 +358,9 @@ export function BotCard({
                         accent={cardAccent}
                         onRowClick={isBatchMode ? handleRowClick : undefined}
                         processBadgeRef={badgeRef}
-                        metaExtra={metricsStrip ?? standbyStrip}
+                        metaExtra={
+                            <BotCardMetrics botId={bot.bot_id} onViewMetrics={onViewMetrics} />
+                        }
                         header={
                             <>
                                 <BotAvatar
@@ -470,389 +415,12 @@ export function BotCard({
                             </>
                         }
                         meta={null}
-                        footerActions={
-                            isBatchMode ? (
-                                <span className="text-2xs text-text-tertiary">点击卡片选择</span>
-                            ) : (
-                                <>
-                                    {/* 扫码登录提示 */}
-                                    {hasQrcode ? (
-                                        <IconButton
-                                            visible={true}
-                                            tooltip="扫码登录"
-                                            onClick={() => setQrOpen(true)}
-                                            tone="brand"
-                                        >
-                                            <ToolbarMotionIcon
-                                                icon={QrCode}
-                                                size={15}
-                                                strokeWidth={2.2}
-                                                hoverAccent
-                                            />
-                                        </IconButton>
-                                    ) : null}
-
-                                    {/* 主操作：启动或停止 */}
-                                    {!isActive && canStartBot(bot.state) ? (
-                                        <IconButton
-                                            visible={true}
-                                            tooltip={
-                                                startPending
-                                                    ? '正在准备启动'
-                                                    : transportFailed
-                                                      ? '远端主机不可达，无法启动'
-                                                      : '启动 Bot'
-                                            }
-                                            onClick={stopAction(() => onStart(bot.bot_id))}
-                                            disabled={
-                                                !canStartBot(bot.state) ||
-                                                transportFailed ||
-                                                startPending
-                                            }
-                                            tone="success"
-                                        >
-                                            {startPending ? (
-                                                <ActionMotionIcon
-                                                    icon={RefreshCw}
-                                                    size={14}
-                                                    strokeWidth={2.4}
-                                                    motion="spin"
-                                                />
-                                            ) : (
-                                                <ToolbarMotionIcon
-                                                    icon={Play}
-                                                    size={14}
-                                                    strokeWidth={2.2}
-                                                    hoverAccent
-                                                />
-                                            )}
-                                        </IconButton>
-                                    ) : isActive ? (
-                                        <IconButton
-                                            visible={true}
-                                            tooltip="停止 Bot"
-                                            onClick={stopAction(() => onStop(bot.bot_id))}
-                                            disabled={!canStopBot(bot.state)}
-                                            tone="danger"
-                                        >
-                                            <ActionMotionIcon
-                                                icon={Square}
-                                                size={13}
-                                                strokeWidth={2.6}
-                                                motion="none"
-                                            />
-                                        </IconButton>
-                                    ) : null}
-
-                                    {/* WebUI 快速入口 */}
-                                    {webuiAvailable ? (
-                                        <IconButton
-                                            visible={true}
-                                            tooltip={webuiTip}
-                                            onClick={stopAction(() =>
-                                                onOpenWebui({
-                                                    botId: bot.bot_id,
-                                                    flavor,
-                                                    napcat: napcatBinding ?? null,
-                                                }),
-                                            )}
-                                            tone="brand"
-                                        >
-                                            <ToolbarMotionIcon
-                                                icon={Globe}
-                                                size={14}
-                                                strokeWidth={2.2}
-                                                hoverAccent
-                                            />
-                                        </IconButton>
-                                    ) : null}
-
-                                    {/* 日志 */}
-                                    <IconButton
-                                        visible={true}
-                                        tooltip="查看日志"
-                                        onClick={stopAction(() => onViewLogs(bot.bot_id))}
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={FileText}
-                                            size={14}
-                                            strokeWidth={2.2}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-
-                                    {/* 配置 */}
-                                    <IconButton
-                                        visible={true}
-                                        tooltip="配置参数"
-                                        onClick={stopAction(() => onConfigure(bot.bot_id))}
-                                    >
-                                        <ToolbarMotionIcon
-                                            icon={Settings}
-                                            size={14}
-                                            strokeWidth={2.2}
-                                            hoverAccent
-                                        />
-                                    </IconButton>
-
-                                    {/* 次要工具折叠菜单 */}
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <button
-                                                type="button"
-                                                title="更多工具"
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                                            >
-                                                <MoreHorizontal size={14} />
-                                            </button>
-                                        </PopoverTrigger>
-                                        <PopoverContent align="end" className="w-40 p-1">
-                                            <div className="flex flex-col gap-0.5 text-xs">
-                                                <button
-                                                    type="button"
-                                                    className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                    onClick={stopAction(() =>
-                                                        setMigrationOpen(true),
-                                                    )}
-                                                >
-                                                    <Server
-                                                        size={13}
-                                                        className="text-text-tertiary"
-                                                    />
-                                                    <span>迁移到服务器</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                    onClick={stopAction(() =>
-                                                        onViewMetrics(bot.bot_id),
-                                                    )}
-                                                >
-                                                    <Activity
-                                                        size={13}
-                                                        className="text-text-tertiary"
-                                                    />
-                                                    <span>运行监控</span>
-                                                </button>
-                                                {terminalEnabled ? (
-                                                    <button
-                                                        type="button"
-                                                        className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                        onClick={stopAction(
-                                                            () =>
-                                                                void openTerminal({
-                                                                    kind: 'bot',
-                                                                    bot_id: bot.bot_id,
-                                                                    host_dir: false,
-                                                                }),
-                                                        )}
-                                                    >
-                                                        <SquareTerminal
-                                                            size={13}
-                                                            className="text-text-tertiary"
-                                                        />
-                                                        <span>
-                                                            {isDockerBot
-                                                                ? '终端（容器内）'
-                                                                : '打开终端'}
-                                                        </span>
-                                                    </button>
-                                                ) : null}
-                                                {novncAvailable && onOpenNovnc ? (
-                                                    <button
-                                                        type="button"
-                                                        className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                        onClick={stopAction(() =>
-                                                            onOpenNovnc(bot.bot_id),
-                                                        )}
-                                                    >
-                                                        <Monitor
-                                                            size={13}
-                                                            className="text-text-tertiary"
-                                                        />
-                                                        <span>noVNC 桌面</span>
-                                                    </button>
-                                                ) : null}
-                                                {remoteQrAvailable ? (
-                                                    <button
-                                                        type="button"
-                                                        className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                        onClick={stopAction(() =>
-                                                            setRemoteQrOpen(true),
-                                                        )}
-                                                    >
-                                                        <QrCode
-                                                            size={13}
-                                                            className="text-text-tertiary"
-                                                        />
-                                                        <span>扫码登录</span>
-                                                    </button>
-                                                ) : null}
-                                                {debugEnabled && bot.state === 'running' ? (
-                                                    <button
-                                                        type="button"
-                                                        className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                        onClick={stopAction(() =>
-                                                            openDebugConsole(bot.bot_id),
-                                                        )}
-                                                    >
-                                                        <FlaskConical
-                                                            size={13}
-                                                            className="text-text-tertiary"
-                                                        />
-                                                        <span>调试控制台</span>
-                                                    </button>
-                                                ) : null}
-                                                {snowlumaUiRetryAvailable && onRetrySnowlumaUi ? (
-                                                    <button
-                                                        type="button"
-                                                        className="flex items-center gap-2 rounded-xs px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-inset hover:text-text"
-                                                        disabled={retryingSnowlumaUi}
-                                                        onClick={stopAction(
-                                                            () => void runSnowlumaUiRetry(),
-                                                        )}
-                                                    >
-                                                        <RefreshCw
-                                                            size={13}
-                                                            className="text-text-tertiary"
-                                                        />
-                                                        <span>重建连接</span>
-                                                    </button>
-                                                ) : null}
-                                            </div>
-                                        </PopoverContent>
-                                    </Popover>
-                                </>
-                            )
-                        }
+                        footerActions={<BotCardToolbar {...actions} />}
                     />
                 </div>
             </ContextMenuTrigger>
 
-            <ContextMenuContent className="w-52">
-                <ContextMenuLabel className="font-mono text-2xs truncate">
-                    QQ {bot.bot_id} {displayName !== bot.bot_id ? `(${displayName})` : ''}
-                </ContextMenuLabel>
-                <ContextMenuSeparator />
-
-                {/* 运行控制 */}
-                {!isActive && canStartBot(bot.state) && (
-                    <ContextMenuItem
-                        tone="brand"
-                        disabled={startPending || transportFailed}
-                        onClick={() => onStart(bot.bot_id)}
-                    >
-                        <Play size={13} className="text-brand" />
-                        <span>启动实例</span>
-                    </ContextMenuItem>
-                )}
-                {isActive && (
-                    <ContextMenuItem
-                        tone="danger"
-                        disabled={!canStopBot(bot.state)}
-                        onClick={() => onStop(bot.bot_id)}
-                    >
-                        <Square size={13} className="text-danger" />
-                        <span>停止实例</span>
-                    </ContextMenuItem>
-                )}
-                {webuiAvailable && (
-                    <ContextMenuItem
-                        onClick={() =>
-                            onOpenWebui({
-                                botId: bot.bot_id,
-                                flavor,
-                                napcat: napcatBinding ?? null,
-                            })
-                        }
-                    >
-                        <Globe size={13} className="text-brand" />
-                        <span>打开 WebUI</span>
-                    </ContextMenuItem>
-                )}
-                {novncAvailable && onOpenNovnc && (
-                    <ContextMenuItem onClick={() => onOpenNovnc(bot.bot_id)}>
-                        <Monitor size={13} className="text-brand" />
-                        <span>打开 noVNC 桌面</span>
-                    </ContextMenuItem>
-                )}
-                {remoteQrAvailable && (
-                    <ContextMenuItem onClick={() => setRemoteQrOpen(true)}>
-                        <QrCode size={13} className="text-brand" />
-                        <span>扫码登录</span>
-                    </ContextMenuItem>
-                )}
-                {snowlumaUiRetryAvailable && onRetrySnowlumaUi && (
-                    <ContextMenuItem
-                        disabled={retryingSnowlumaUi}
-                        onClick={() => void runSnowlumaUiRetry()}
-                    >
-                        <RefreshCw size={13} className="text-brand" />
-                        <span>重建 WebUI 连接</span>
-                    </ContextMenuItem>
-                )}
-                {hasQrcode && (
-                    <ContextMenuItem onClick={() => setQrOpen(true)}>
-                        <QrCode size={13} />
-                        <span>扫码登录</span>
-                    </ContextMenuItem>
-                )}
-
-                <ContextMenuSeparator />
-
-                {/* 导航跳转 */}
-                <ContextMenuItem onClick={() => onConfigure(bot.bot_id)}>
-                    <Settings size={13} />
-                    <span>配置参数</span>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => setMigrationOpen(true)}>
-                    <Server size={13} />
-                    <span>迁移到服务器</span>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => onViewLogs(bot.bot_id)}>
-                    <FileText size={13} />
-                    <span>查看日志</span>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => onViewMetrics(bot.bot_id)}>
-                    <Monitor size={13} />
-                    <span>运行监控</span>
-                </ContextMenuItem>
-                {debugEnabled && (
-                    <ContextMenuItem onClick={() => openDebugConsole(bot.bot_id)}>
-                        <FlaskConical size={13} />
-                        <span>在调试台打开</span>
-                    </ContextMenuItem>
-                )}
-                {terminalEnabled && (
-                    <ContextMenuItem
-                        onClick={() =>
-                            void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })
-                        }
-                    >
-                        <SquareTerminal size={13} />
-                        <span>{isDockerBot ? '终端（进容器）' : '打开终端'}</span>
-                    </ContextMenuItem>
-                )}
-                {terminalEnabled && isDockerBot && (
-                    <ContextMenuItem
-                        onClick={() =>
-                            void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: true })
-                        }
-                    >
-                        <SquareTerminal size={13} />
-                        <span>终端（宿主机部署目录）</span>
-                    </ContextMenuItem>
-                )}
-
-                <ContextMenuSeparator />
-
-                {/* 快捷复制 */}
-                <ContextMenuItem onClick={handleCopyQqid}>
-                    <Copy size={13} />
-                    <span>复制 QQ 号</span>
-                </ContextMenuItem>
-            </ContextMenuContent>
+            <BotCardContextMenu {...actions} />
 
             <BotMigrationDialog
                 botId={bot.bot_id}
@@ -904,4 +472,21 @@ export function BotCard({
             )}
         </ContextMenu>
     );
+}
+
+// 一份重试状态供工具栏和右键菜单共享；切换入口也不会发出重复重建请求。
+function useBotCardActionState(props: BotCardActionProps): ActionState {
+    const terminalEnabled = useFeatureEnabled('terminal');
+    const debugEnabled = useDebugConsoleEnabled();
+    const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
+    const runSnowlumaUiRetry = async () => {
+        if (!props.onRetrySnowlumaUi || retryingSnowlumaUi) return;
+        setRetryingSnowlumaUi(true);
+        try {
+            await props.onRetrySnowlumaUi(props.botId);
+        } finally {
+            setRetryingSnowlumaUi(false);
+        }
+    };
+    return { ...props, terminalEnabled, debugEnabled, retryingSnowlumaUi, runSnowlumaUiRetry };
 }

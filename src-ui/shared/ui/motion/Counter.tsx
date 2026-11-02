@@ -18,6 +18,9 @@ interface CounterProps {
 export function Counter({ value, className }: CounterProps) {
     const m = useMotion();
     const enabled = m.enabled && m.preset.feel.popPeak > 1;
+    const duration = m.duration('base');
+    const exitEase = m.ease.exit;
+    const popEase = m.ease.pop;
     const containerRef = useRef<HTMLSpanElement>(null);
     const prevValueRef = useRef<number>(value);
 
@@ -44,26 +47,33 @@ export function Counter({ value, className }: CounterProps) {
         oldClone.dataset.digit = 'old';
         container.appendChild(oldClone);
 
-        gsap.to(oldClone, {
-            yPercent: -110,
-            autoAlpha: 0,
-            duration: m.duration('base'),
-            ease: m.ease.exit,
-            onComplete: () => oldClone.remove(),
+        const context = gsap.context(() => {
+            gsap.to(oldClone, {
+                yPercent: -110,
+                autoAlpha: 0,
+                duration,
+                ease: exitEase,
+                onComplete: () => oldClone.remove(),
+            });
+            gsap.fromTo(
+                newDigit,
+                { yPercent: 110, autoAlpha: 0 },
+                {
+                    yPercent: 0,
+                    autoAlpha: 1,
+                    duration,
+                    ease: popEase,
+                },
+            );
         });
-        gsap.fromTo(
-            newDigit,
-            { yPercent: 110, autoAlpha: 0 },
-            {
-                yPercent: 0,
-                autoAlpha: 1,
-                duration: m.duration('base'),
-                ease: m.ease.pop,
-            },
-        );
 
         prevValueRef.current = value;
-    }, [value, enabled, m.level, m.speed, m.duration, m.ease]);
+        return () => {
+            // 连续更新或卸载时终止上一轮，避免旧数字和 tween 不断叠加。
+            context.revert();
+            oldClone.remove();
+        };
+    }, [value, enabled, duration, exitEase, popEase]);
 
     if (!enabled) {
         return <span className={className}>{value}</span>;

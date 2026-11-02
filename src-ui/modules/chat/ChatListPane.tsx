@@ -35,7 +35,10 @@ export interface ChatBoxSummary {
 interface ChatListPaneProps {
     target: DebugTarget;
     store: ChatAccountStore;
-    snapshot: ChatSnapshot;
+    snapshot: Pick<
+        ChatSnapshot,
+        'contacts' | 'contactsLoading' | 'hydrated' | 'archiveError' | 'recentLoading'
+    >;
     ignoredGroups: Set<string>;
     qqMuted: Map<string, boolean | null>;
     notificationBusy: boolean;

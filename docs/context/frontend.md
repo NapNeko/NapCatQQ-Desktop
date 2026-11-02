@@ -311,6 +311,16 @@ React 端用法统一：
 - 把 linger / autoDismiss 计时器写在组件 effect 里 —— 组件卸载时计时器被 cleanup。计时器应该和 state 一起放在 store 模块作用域（`Map<id, Timer>`）
 - `setState({ ...current, foo: 1 })` 每次都新对象 —— 工厂内部已经做引用相等短路，直接传新对象就行；但 reducer 端如果数据没变要返回 `current` 本体让短路生效
 
+### 高频视图与状态边界
+
+聊天账号的连接、档案和分页仍由 `hooks/chat/chatStore.ts` 管理；发送、重试、撤回和转发归 `chatMessageActions.ts`，图片引用的缓存与传输转换归 `chatMediaCodec.ts`，共用类型位于 `chatStore.types.ts`。动作读取当前快照与连接代次，避免抽取模块后捕获旧账号状态。
+
+`useChatSelector` 供界面选择所需字段；`modules/chat/chatViewSelectors.ts` 定义工作区和时间线的比较规则。草稿、上传进度和消息列表各自刷新。消息与档案数组未变时不重新扫描图片引用，群成员检索复用小写索引并在 30 条命中后停止；`TimelineMessage.tsx` 独立渲染消息行，缺口加载回调保持稳定。
+
+Bot 卡片的指标订阅位于 `BotCardMetrics.tsx`，轮询只更新指标区域；工具栏和右键菜单在 `BotCardActions.tsx` 共享操作状态。身份配置由 `IdentityTab.tsx` 组合账号、运行宿主、自愈三个区域；只读主机列表使用 `hooks/remote/useServers.ts`，避免为表单建立 CRUD mutation observers。
+
+保留页面、列表、卡片和附件进退场。数字滚动 `Counter` 在值更新、关闭动效或卸载时回收上一轮 GSAP 动画与旧数字，避免连续更新叠加动画。
+
 ## 12. 动画体系（GSAP + 三档语义）
 
 统一框架 GSAP 3.15 + @gsap/react 2.1。三档语义 + 速度滑块 + reduced-motion 兜底。所有过渡走这套，禁止再在业务代码里手写 `@keyframes` 或重新接入 framer-motion 等其它动画库。Spinner / progress-indeterminate 这俩遗留 CSS animation 保留即可（跟动画库无关）。
