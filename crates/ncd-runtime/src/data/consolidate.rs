@@ -137,6 +137,14 @@ fn has_unmigrated_napcat_user_config(paths: &DataPaths) -> bool {
 
 /// 启动期入口:需要则备份并收敛;已是 v1 时仍归档 runtime/log 空壳并 GC。
 pub fn consolidate_data_root(root: &Path) -> Result<ConsolidateReport, ConsolidateError> {
+    let backup_dir = dirs::desktop_dir().or_else(dirs::home_dir);
+    consolidate_data_root_with_backup_dir(root, backup_dir.as_deref())
+}
+
+fn consolidate_data_root_with_backup_dir(
+    root: &Path,
+    backup_dir: Option<&Path>,
+) -> Result<ConsolidateReport, ConsolidateError> {
     let paths = DataPaths::new(root);
     if !needs_consolidate(root) {
         light_gc(&paths);
@@ -149,7 +157,7 @@ pub fn consolidate_data_root(root: &Path) -> Result<ConsolidateReport, Consolida
         if has_legacy_shells(&paths) && can_archive_legacy_shells(&paths) {
             archive_legacy_shells(&paths, &mut report);
         }
-        prune_desktop_backup_zips(MAX_DESKTOP_BACKUP_ZIPS);
+        prune_backup_zips(backup_dir, MAX_DESKTOP_BACKUP_ZIPS);
         return Ok(report);
     }
 
@@ -159,15 +167,15 @@ pub fn consolidate_data_root(root: &Path) -> Result<ConsolidateReport, Consolida
         ..Default::default()
     };
 
-    match backup_user_data_to_desktop(root) {
+    match backup_user_data(root, backup_dir) {
         Ok(path) => {
             info!(
                 target: "ncd_runtime::data_consolidate",
                 backup = %path.display(),
-                "data_root 用户数据已备份到桌面"
+                "data_root 用户数据已备份"
             );
             report.backup_path = Some(path);
-            prune_desktop_backup_zips(MAX_DESKTOP_BACKUP_ZIPS);
+            prune_backup_zips(backup_dir, MAX_DESKTOP_BACKUP_ZIPS);
         }
         Err(err) => {
             // 空目录/无用户数据时备份可跳过;有用户数据则必须成功
@@ -373,11 +381,11 @@ fn prune_pre_consolidate_archives(tmp_dir: &Path, keep: usize) {
     }
 }
 
-fn prune_desktop_backup_zips(keep: usize) {
-    let Some(desktop) = dirs::desktop_dir().or_else(dirs::home_dir) else {
+fn prune_backup_zips(backup_dir: Option<&Path>, keep: usize) {
+    let Some(backup_dir) = backup_dir else {
         return;
     };
-    let Ok(entries) = fs::read_dir(&desktop) else {
+    let Ok(entries) = fs::read_dir(backup_dir) else {
         return;
     };
     let mut zips: Vec<(PathBuf, std::time::SystemTime)> = entries
@@ -786,17 +794,16 @@ fn cleanup_legacy_noise(paths: &DataPaths, report: &mut ConsolidateReport) {
     }
 }
 
-fn backup_user_data_to_desktop(root: &Path) -> Result<PathBuf, ConsolidateError> {
-    let desktop = dirs::desktop_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| ConsolidateError::Backup("cannot resolve desktop/home".into()))?;
+fn backup_user_data(root: &Path, backup_dir: Option<&Path>) -> Result<PathBuf, ConsolidateError> {
+    let backup_dir =
+        backup_dir.ok_or_else(|| ConsolidateError::Backup("cannot resolve desktop/home".into()))?;
     // 秒级 stamp + 纳秒,避免并行测试/同秒二次 force 撞名
     let stamp = Local::now().format("%Y%m%d-%H%M%S");
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
-    let zip_path = desktop.join(format!("NapCatQQ-Desktop-backup-2x-{stamp}-{nanos}.zip"));
+    let zip_path = backup_dir.join(format!("NapCatQQ-Desktop-backup-2x-{stamp}-{nanos}.zip"));
 
     let file = fs::File::create(&zip_path).map_err(|e| ConsolidateError::Backup(e.to_string()))?;
     let mut zip = ZipWriter::new(file);
@@ -969,9 +976,12 @@ mod tests {
         )
         .unwrap();
 
-        let report = consolidate_data_root(root).expect("consolidate");
+        let report = consolidate_data_root_with_backup_dir(root, Some(root)).expect("consolidate");
 
         assert!(report.performed);
+        let backup = report.backup_path.as_ref().expect("backup");
+        assert_eq!(backup.parent(), Some(root));
+        assert!(backup.is_file());
         assert!(paths.bot_config_path().is_file());
         assert!(paths.app_settings_path().is_file());
         assert!(
@@ -997,7 +1007,7 @@ mod tests {
         assert_eq!(archives.len(), 1);
 
         // 二次调用应跳过(无 unmigrated / 无壳)
-        let report2 = consolidate_data_root(root).expect("second");
+        let report2 = consolidate_data_root_with_backup_dir(root, Some(root)).expect("second");
         assert!(!report2.performed);
     }
 
@@ -1026,7 +1036,8 @@ mod tests {
         )
         .unwrap();
 
-        let report = consolidate_data_root(root).expect("consolidate napcat config");
+        let report = consolidate_data_root_with_backup_dir(root, Some(root))
+            .expect("consolidate napcat config");
         assert!(report.performed);
         assert!(
             paths
@@ -1055,7 +1066,8 @@ mod tests {
         fs::create_dir_all(paths.legacy_desktop_log_dir()).unwrap();
         fs::write(paths.legacy_desktop_log_dir().join("old.log"), b"x").unwrap();
 
-        let report = consolidate_data_root(root).expect("archive shells");
+        let report =
+            consolidate_data_root_with_backup_dir(root, Some(root)).expect("archive shells");
         assert!(!report.performed);
         assert!(!paths.legacy_runtime_dir().exists());
         assert!(!paths.legacy_desktop_log_dir().exists());
