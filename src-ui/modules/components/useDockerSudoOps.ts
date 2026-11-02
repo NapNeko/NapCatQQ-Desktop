@@ -101,7 +101,7 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
                 pushErrorBar({
                     key: `docker-install:${hostId}`,
                     title: `准备容器环境失败 · ${hostNameOf(hostId)}`,
-                    raw: errorText(err, '无法准备 Docker 环境，请检查主机连接后重试'),
+                    raw: errorText(err, '无法准备容器环境，请检查主机连接后重试'),
                 });
             }
         },
@@ -113,8 +113,8 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
             const framework = flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
             pushErrorBar({
                 key: `docker-deploy:${hostId}:${flavor}`,
-                title: `${framework} Docker 部署失败 · ${hostNameOf(hostId)}`,
-                raw: errorText(err, 'Docker 部署失败，请检查 Docker 状态、镜像源与端口占用后重试'),
+                title: `${framework} 容器部署失败 · ${hostNameOf(hostId)}`,
+                raw: errorText(err, '容器部署失败，请检查引擎状态、镜像源与端口占用后重试'),
             });
         },
         [hostNameOf],
@@ -141,8 +141,7 @@ export function useDockerSudoOps(args: DockerSudoOpsInput): DockerSudoOps {
         [startAction, onTaskTerminal, refetch, hostNameOf, probeQqDependencies],
     );
 
-    // 弹框确认:带用户输入的密码重试。装成功就关弹框;密码不对(后端再次返回
-    // needSudoPassword)就抛出去,让弹框内联显示"密码不正确"并保持打开。
+    // 再次需要密码时保留弹框，由确认入口发送错误提示。
     const handleSudoConfirm = useCallback(
         async (password: string, remember: boolean) => {
             if (!sudoPrompt) return;

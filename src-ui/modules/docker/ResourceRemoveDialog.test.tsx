@@ -5,7 +5,7 @@ import { ResourceRemoveDialog } from './ResourceRemoveDialog';
 afterEach(cleanup);
 
 describe('Docker 删除保护', () => {
-    it('数据卷必须输入完整名称，失败保持弹窗并显示原因', async () => {
+    it('数据卷必须输入完整名称，失败保留输入且不重复显示页内错误', async () => {
         const confirm = vi.fn().mockRejectedValue(new Error('volume is in use'));
         const close = vi.fn();
         render(
@@ -24,9 +24,9 @@ describe('Docker 删除保护', () => {
             target: { value: 'data' },
         });
         fireEvent.click(button);
-        await waitFor(() =>
-            expect(screen.getByRole('alert')).toHaveTextContent('volume is in use'),
-        );
+        await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('输入数据卷名称确认')).toHaveValue('data');
         expect(confirm).toHaveBeenCalledWith(false);
         expect(close).not.toHaveBeenCalled();
     });

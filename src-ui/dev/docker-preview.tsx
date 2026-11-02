@@ -2,6 +2,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AppNext } from '../app/AppNext';
+import { WindowFrame } from '../shared/components/next/WindowFrame';
 import { DockerPageNext } from '../modules/docker/DockerPage.next';
 import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
 import { BotPageNext } from '../modules/bot/BotPage.next';
@@ -80,4 +82,16 @@ export function Preview() {
     );
 }
 
-if (import.meta.env.DEV) createRoot(document.getElementById('root')!).render(<Preview />);
+if (import.meta.env.DEV) {
+    createRoot(document.getElementById('root')!).render(
+        new URLSearchParams(location.search).has('shell') ? (
+            <QueryClientProvider client={client}>
+                <WindowFrame>
+                    <AppNext />
+                </WindowFrame>
+            </QueryClientProvider>
+        ) : (
+            <Preview />
+        ),
+    );
+}

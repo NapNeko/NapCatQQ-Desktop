@@ -28,7 +28,6 @@ import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
-import { useDockerStatusByHost } from '../hooks/docker/useDockerStatusByHost';
 import { useDeploymentTaskBridge } from '../hooks/task-queue/useDeploymentTaskBridge';
 import { useAppInstanceEventsBridge } from '../hooks/apps/useAppInstanceEventsBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
@@ -47,7 +46,6 @@ import { registerDebugNavigator } from '../hooks/debug/debugNav';
 import { registerComponentsNavigator } from '../hooks/components/componentsNavigation';
 import { registerDockerNavigator } from '../hooks/docker/dockerNavigation';
 import { registerBotCreateNavigator } from '../hooks/bot/botCreateNavigation';
-import { dockerManagementSummary } from '../core/domain/docker/status';
 import { dockerProbeHosts } from '../core/domain/docker/hosts';
 import { localOs } from '../core/domain/runtime/env';
 import { PageTransition } from '../shared/ui/motion';
@@ -146,8 +144,6 @@ function preloadRoute(route: AppRoute): void {
     if (load) void load();
 }
 
-const NO_HOSTS: string[] = [];
-
 function RouteFallback() {
     return (
         <PagePlaceholder>
@@ -206,23 +202,14 @@ export const AppNext: React.FC = () => {
         () =>
             dockerProbeHosts(
                 localOs(),
-                servers.map((p) => p.id),
+                servers.filter((p) => p.platform !== 'windows').map((p) => p.id),
             ),
         [servers],
     );
     const features = useFeatures();
     useAppScreenshotShortcut(features.chat);
-    // 容器页关闭时不探测主机；入口只要求引擎可管理，部署另行检查 Compose。
-    const dockerProbeHostIds = features.dockerPage ? dockerHostIds : NO_HOSTS;
-    const dockerStatusByHost = useDockerStatusByHost(dockerProbeHostIds);
-    const showDocker = useMemo(
-        () =>
-            dockerProbeHostIds.some((hostId) => {
-                const status = dockerStatusByHost[hostId];
-                return status ? dockerManagementSummary(status).ready : false;
-            }),
-        [dockerProbeHostIds, dockerStatusByHost],
-    );
+    // 切换引擎会清空状态缓存，入口不能因探测中的空值或失败而消失。
+    const showDocker = features.dockerPage && dockerHostIds.length > 0;
     // 侧栏不显示、也不许切过去的页
     const hiddenRoutes = useMemo(() => {
         const hidden = new Set<AppRoute>();

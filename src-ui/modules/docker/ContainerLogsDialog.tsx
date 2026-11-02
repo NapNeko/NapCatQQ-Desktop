@@ -14,7 +14,6 @@ import {
 } from '../../shared/ui';
 import { ActionMotionIcon, refreshMotion } from '../../shared/ui/motion';
 import { useDockerLogs } from '../../hooks/docker/useDockerContainer';
-import { errorText } from '../../core/domain/errors';
 
 const TAIL_OPTIONS = ['100', '400', '1000', '2000'];
 
@@ -91,15 +90,6 @@ export function ContainerLogsDialog({
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col gap-2 py-3">
-                    {logs.isError && (
-                        <p
-                            role="alert"
-                            className="shrink-0 rounded-md border border-danger/30 bg-danger-soft/40 px-3 py-2 text-xs text-text-secondary"
-                        >
-                            <span className="font-medium text-danger">读取日志失败</span> ·{' '}
-                            {errorText(logs.error)}
-                        </p>
-                    )}
                     <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-border-subtle/60 bg-canvas/70">
                         {logs.isLoading ? (
                             <div className="flex h-full min-h-[16rem] items-center justify-center gap-2 text-xs text-text-tertiary">

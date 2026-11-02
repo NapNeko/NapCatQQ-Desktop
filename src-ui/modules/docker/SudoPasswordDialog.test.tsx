@@ -3,10 +3,33 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SudoPasswordDialog } from './SudoPasswordDialog';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+
+vi.mock('../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 afterEach(cleanup);
 
 describe('sudo password dialog', () => {
+    it('验证失败通过 InfoBar 展示，保留密码框供重试', async () => {
+        const onClose = vi.fn();
+        render(
+            <SudoPasswordDialog
+                hostName="远端"
+                isSubmitting={false}
+                onConfirm={vi.fn().mockRejectedValue(new Error('sudo denied'))}
+                onClose={onClose}
+            />,
+        );
+        fireEvent.change(screen.getByLabelText('sudo 密码'), { target: { value: 'password' } });
+        await act(async () =>
+            fireEvent.click(screen.getByRole('button', { name: '准备容器环境' })),
+        );
+        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ raw: 'sudo denied' }));
+        expect(screen.queryByText('sudo denied')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
     it('keeps local sudo passwords limited to the current operation', async () => {
         const onConfirm = vi.fn();
         render(

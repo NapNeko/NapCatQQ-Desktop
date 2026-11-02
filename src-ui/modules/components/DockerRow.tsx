@@ -1,6 +1,6 @@
 // Docker 引擎的行内状态、环境操作与安装进度。
 import React from 'react';
-import { Info, Container, Copy, Download, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { Info, Copy, Download, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
 import {
     Button,
     Badge,
@@ -19,7 +19,8 @@ import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { dockerSetupAction } from '../../core/domain/docker/setup';
-import { errorText } from '../../core/domain/errors';
+import { containerEngineLabel } from '../../core/domain/docker/engine';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DockerStatus, Os } from '../../core/ipc/types';
 import { shouldShowProgressBar, ProgressBarOverlay } from '../../shared/components/progressView';
@@ -42,7 +43,7 @@ interface DockerRowProps {
 }
 
 export const DockerRow: React.FC<DockerRowProps> = ({
-    engine = 'docker',
+    engine,
     engineControl,
     probeLabel,
     os,
@@ -57,7 +58,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
     onRetry,
 }) => {
     const openExternal = useOpenExternal();
-    const engineName = engine === 'podman' ? 'Podman' : 'Docker';
+    const engineName = containerEngineLabel(engine);
     const summary = status ? dockerStatusSummary(status, engineName) : null;
     const failed = probeError != null;
     const ready = !failed && (summary?.ready ?? false);
@@ -68,7 +69,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
         engine === 'podman' && status?.installed && !status.daemonRunning
             ? { label: '检查 Podman 环境', pendingLabel: '正在检查' }
             : setup && { ...setup, label: setup.label.replace('Docker', engineName) };
-    const canSetup = !failed && !isProbing && !!status && !ready;
+    const canSetup = !!engine && !failed && !isProbing && !!status && !ready;
     const statusBadge: StatusBadgeSpec = isInstalling
         ? { tone: 'brand' as const, label: action?.pendingLabel ?? '处理中' }
         : failed
@@ -116,43 +117,39 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                 autoDismissMs: 2000,
             });
         } catch {
-            // ignore
+            pushErrorBar({ title: '复制版本号失败', content: '请重试复制。' });
         }
     };
 
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
-                <div className="relative min-w-0 overflow-hidden border-b border-border-subtle bg-inset/20 px-4 py-3">
-                    <div className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                        <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-info-soft text-info">
-                                <Container size={21} strokeWidth={1.8} />
-                            </span>
+                <div className="relative min-w-0 overflow-hidden border-b border-border-subtle px-4 py-3">
+                    <div className="flex min-h-7 min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
                             {engineControl ?? (
                                 <h4 className="truncate text-sm font-semibold text-text">
-                                    {engineName} 引擎
+                                    {engine ? `${engineName} 引擎` : '容器引擎'}
                                 </h4>
                             )}
+                            <Badge
+                                tone={statusBadge.tone}
+                                appearance="soft"
+                                dot={statusBadge.dot}
+                                className="max-w-full shrink-0 whitespace-nowrap text-xs"
+                            >
+                                {statusBadge.label}
+                            </Badge>
                         </div>
-                        <div className="flex min-w-0 flex-1 items-center">
-                            {engineControl ? (
-                                <p
-                                    className="min-w-0 truncate text-xs text-text-secondary"
-                                    title="容器和镜像按引擎分别管理"
-                                >
-                                    容器和镜像按引擎分别管理
-                                </p>
-                            ) : null}
-                        </div>
-                        <div className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                        <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
+                            {footer}
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <button
                                         type="button"
                                         aria-label={`${engineName} 环境详情`}
                                         disabled={!!probeLabel}
-                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-tertiary hover:bg-field hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary hover:bg-field hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50"
                                     >
                                         <Info size={15} />
                                     </button>
@@ -169,6 +166,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                                         <Button
                                             size="sm"
                                             variant="ghost"
+                                            disabled={!engine}
                                             onClick={() =>
                                                 openExternal(
                                                     engine === 'podman'
@@ -199,14 +197,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                                                   : '待检测'}
                                         </dd>
                                     </dl>
-                                    {probeError != null ? (
-                                        <p
-                                            role="status"
-                                            className="mt-3 break-words text-sm text-danger"
-                                        >
-                                            {errorText(probeError)}
-                                        </p>
-                                    ) : isInstalling ? (
+                                    {isInstalling ? (
                                         <p
                                             role="status"
                                             className="mt-3 break-words text-sm text-text-secondary"
@@ -218,15 +209,6 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                                     ) : null}
                                 </PopoverContent>
                             </Popover>
-                            <Badge
-                                tone={statusBadge.tone}
-                                appearance="soft"
-                                dot={statusBadge.dot}
-                                className="max-w-full shrink-0 whitespace-nowrap text-xs"
-                            >
-                                {statusBadge.label}
-                            </Badge>
-                            {footer}
                         </div>
                     </div>
                     {isInstalling && installProgress && shouldShowProgressBar(installProgress) ? (
@@ -256,6 +238,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                 )}
 
                 <ContextMenuItem
+                    disabled={!engine}
                     onClick={() =>
                         openExternal(
                             engine === 'podman' ? 'https://podman.io/' : 'https://www.docker.com/',

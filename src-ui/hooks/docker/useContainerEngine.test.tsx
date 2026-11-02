@@ -3,11 +3,14 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useContainerEngine } from './useContainerEngine';
+import { pushErrorBar } from '../ui/pushErrorBar';
+vi.mock('../ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
 const service = vi.hoisted(() => ({ getEngine: vi.fn(), setEngine: vi.fn() }));
 vi.mock('../../core/services/docker.service', () => ({ dockerService: service }));
 afterEach(cleanup);
 beforeEach(() => {
+    vi.mocked(pushErrorBar).mockClear();
     service.getEngine.mockReset().mockResolvedValue('docker');
     service.setEngine.mockReset().mockResolvedValue(undefined);
 });
@@ -23,6 +26,15 @@ function setup(enabled = true) {
     return { client, ...renderHook(() => useContainerEngine('local', enabled), { wrapper }) };
 }
 describe('container engine selection', () => {
+    it('读取失败不猜测引擎，并发送全局提示', async () => {
+        service.getEngine.mockRejectedValueOnce(new Error('unavailable'));
+        const { result } = setup();
+        await waitFor(() => expect(result.current.error).toBeTruthy());
+        expect(result.current.engine).toBeUndefined();
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ title: '读取容器引擎失败' }),
+        );
+    });
     it('does not query an unsupported desktop host', () => {
         const { result } = setup(false);
         expect(result.current.loading).toBe(false);

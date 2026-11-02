@@ -6,6 +6,10 @@ export interface DockerHostTarget {
     engine?: ContainerEngine;
 }
 
+export function containerEngineLabel(engine?: ContainerEngine): string {
+    return engine === 'podman' ? 'Podman' : engine === 'docker' ? 'Docker' : '容器引擎';
+}
+
 export function dockerHostTarget(target: string | DockerHostTarget): DockerHostTarget {
     return typeof target === 'string' ? { hostId: target } : target;
 }

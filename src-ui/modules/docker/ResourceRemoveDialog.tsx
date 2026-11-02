@@ -11,7 +11,6 @@ import {
     Button,
     Checkbox,
 } from '../../shared/ui';
-import { errorText } from '../../core/domain/errors';
 
 export type RemovalTarget = { kind: 'container' | 'network' | 'volume'; id: string; name: string };
 
@@ -28,19 +27,17 @@ export function ResourceRemoveDialog({
 }) {
     const [force, setForce] = useState(false);
     const [name, setName] = useState('');
-    const [error, setError] = useState<string | null>(null);
     const submitting = useRef(false);
     const label = { container: '容器', network: '网络', volume: '数据卷' }[target.kind];
     const confirm = async () => {
         if (busy || submitting.current || (target.kind === 'volume' && name !== target.name))
             return;
         submitting.current = true;
-        setError(null);
         try {
             await onConfirm(force);
             onClose();
-        } catch (err) {
-            setError(errorText(err));
+        } catch {
+            // useDocker 已发送全局提示；保留确认内容供重试。
         } finally {
             submitting.current = false;
         }
@@ -87,14 +84,6 @@ export function ResourceRemoveDialog({
                             className="rounded-sm border border-border-subtle bg-field px-3 py-2 text-text"
                         />
                     </label>
-                )}
-                {error && (
-                    <p
-                        role="alert"
-                        className="break-all rounded-md border border-danger/30 bg-danger-soft/40 px-3 py-2 text-xs text-text-secondary"
-                    >
-                        <span className="font-medium text-danger">删除失败</span> · {error}
-                    </p>
                 )}
                 <DialogFooter>
                     <Button variant="secondary" onClick={onClose} disabled={busy}>

@@ -7,14 +7,14 @@ import { openCreateDockerBot } from '../../hooks/bot/botCreateNavigation';
 import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DeployedContainer, DockerFlavor, DockerStatus, Os } from '../../core/ipc/types';
-import { ContainerEngineSelect } from './ContainerEngineSelect';
+import { ContainerEngineSelect } from '../../shared/components/ContainerEngineSelect';
 import { DockerRow } from './DockerRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
 import { componentLogoIcon } from './componentLogos';
 import { dockerManagementSummary } from '../../core/domain/docker/status';
 import { useContainerEngine } from '../../hooks/docker/useContainerEngine';
-import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
-import { errorText } from '../../core/domain/errors';
+import { containerEngineLabel } from '../../core/domain/docker/engine';
+import { useDockerQueryNotice } from '../../hooks/docker/useDockerQueryNotice';
 
 export interface DockerDeploymentSectionProps {
     hostId: string;
@@ -67,9 +67,30 @@ export function DockerDeploymentSection({
     const supported = os === 'linux';
     const engineState = useContainerEngine(hostId, supported);
     const engine = engineState.engine;
-    const engineName = engine === 'podman' ? 'Podman' : 'Docker';
+    const engineName = containerEngineLabel(engine);
     const engineBusy = engineState.loading || engineState.switching;
     const engineError = engineState.error ?? probeError;
+    const showNotices = supported && !!engine && !engineBusy && !engineState.error;
+    useDockerQueryNotice(
+        `container-deploy-probe:${hostId}:${engine}`,
+        `读取 ${engineName} 状态失败`,
+        showNotices ? probeError : null,
+    );
+    useDockerQueryNotice(
+        `container-compose:${hostId}:${engine}`,
+        `${engineName} Compose 不可用`,
+        showNotices ? status?.composeDiagnostic : null,
+    );
+    useDockerQueryNotice(
+        `container-image:${hostId}:${engine}:napcat`,
+        '检查 NapCat 镜像失败',
+        showNotices && flavors.includes('napcat') ? imageErrorByFlavor?.napcat : null,
+    );
+    useDockerQueryNotice(
+        `container-image:${hostId}:${engine}:snowluma`,
+        '检查 SnowLuma 镜像失败',
+        showNotices && flavors.includes('snowluma') ? imageErrorByFlavor?.snowluma : null,
+    );
     const busyLabel = engineState.switching
         ? '正在切换引擎'
         : engineState.loading
@@ -85,6 +106,7 @@ export function DockerDeploymentSection({
     );
     const canPull =
         supported &&
+        !!engine &&
         engineError == null &&
         !engineBusy &&
         !isProbing &&
@@ -150,6 +172,7 @@ export function DockerDeploymentSection({
                             onClick={() => openDockerManagement(hostId)}
                             disabled={
                                 engineBusy ||
+                                !engine ||
                                 isInstalling ||
                                 !!engineError ||
                                 !status ||
@@ -171,24 +194,26 @@ export function DockerDeploymentSection({
                     )}
                 </div>
             </div>
-            <div className="min-w-0 overflow-hidden rounded-md border border-border-subtle bg-surface shadow-card">
+            <div className="min-w-0 overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-card">
                 <div data-tour-id="comp-row-docker" className="min-w-0">
                     <DockerRow
+                        key={`${hostId}:${engine}:${engineBusy}`}
                         engine={engine}
                         engineControl={
                             supported ? (
                                 <ContainerEngineSelect
+                                    size="sm"
                                     value={engineState.pendingEngine ?? engine}
                                     disabled={
-                                        engineBusy || isInstalling || isProbing || pullingForHost
+                                        engineBusy ||
+                                        !!engineState.error ||
+                                        engineState.busy ||
+                                        isInstalling ||
+                                        isProbing ||
+                                        pullingForHost
                                     }
                                     onValueChange={(next) =>
-                                        void engineState.select(next).catch((error) =>
-                                            pushErrorBar({
-                                                title: '无法切换容器引擎',
-                                                raw: errorText(error),
-                                            }),
-                                        )
+                                        void engineState.select(next).catch(() => {})
                                     }
                                 />
                             ) : undefined
@@ -206,26 +231,8 @@ export function DockerDeploymentSection({
                         onRetry={retry}
                     />
                 </div>
-                {status?.composeDiagnostic && !engineBusy && (
-                    <p
-                        role="alert"
-                        className="whitespace-pre-wrap break-words px-4 py-3 text-xs text-danger"
-                    >
-                        {status.composeDiagnostic}
-                    </p>
-                )}
-                {supported && engineError != null && !engineBusy ? (
-                    <p
-                        role="alert"
-                        className="px-4 py-3 text-xs leading-relaxed text-danger break-words"
-                    >
-                        {errorText(engineError)}
-                    </p>
-                ) : null}
                 <div
-                    className={
-                        flavors.length > 1 ? 'grid min-w-0 @min-[48rem]:grid-cols-2' : 'min-w-0'
-                    }
+                    className={`grid min-w-0 gap-3 bg-inset/20 p-3 ${flavors.length > 1 ? '@min-[48rem]:grid-cols-2' : ''}`}
                 >
                     {flavors.map((flavor) => {
                         const label = flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
@@ -255,14 +262,14 @@ export function DockerDeploymentSection({
                             <article
                                 key={flavor}
                                 aria-label={`${label} 容器镜像`}
-                                className="grid min-h-[4.25rem] min-w-0 grid-cols-1 items-center gap-2 border-t border-border-subtle px-4 py-3 first:border-t-0 @min-[24rem]:grid-cols-[minmax(0,1fr)_auto] @min-[24rem]:gap-3 @min-[48rem]:border-l @min-[48rem]:border-t-0 @min-[48rem]:first:border-l-0"
+                                className="grid min-h-18 min-w-0 grid-cols-1 items-center gap-3 rounded-md border border-border-subtle bg-surface px-3 py-3 @min-[24rem]:grid-cols-[minmax(0,1fr)_auto]"
                             >
                                 <div className="flex min-w-0 items-center gap-2.5">
-                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-field/60">
+                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-inset/50">
                                         {componentLogoIcon(flavor)}
                                     </span>
-                                    <div className="flex h-10 min-w-0 flex-col justify-center">
-                                        <p className="truncate text-sm font-medium text-text">
+                                    <div className="flex min-w-0 flex-col justify-center gap-0.5">
+                                        <p className="truncate text-sm font-semibold text-text">
                                             {label}
                                         </p>
                                         {showImageStatus ? (

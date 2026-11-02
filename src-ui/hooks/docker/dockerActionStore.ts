@@ -4,7 +4,7 @@ import { createStore } from '../utils/createStore';
 import { taskQueueMetaStore } from '../task-queue/taskQueueMetaStore';
 import type { DockerFlavor } from '../../core/ipc/types';
 
-const INSTALL_HINT = '正在安装 Docker…';
+const INSTALL_HINT = '正在安装容器引擎…';
 const PULL_HINT = '正在拉取框架镜像…';
 
 export function dockerPullTargetKey(hostId: string, flavor: DockerFlavor): string {

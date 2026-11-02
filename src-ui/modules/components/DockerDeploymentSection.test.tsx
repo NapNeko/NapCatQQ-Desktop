@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render as renderUI, screen } from '@testing-library/react';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+vi.mock('../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 import {
     DockerDeploymentSection,
     type DockerDeploymentSectionProps,
@@ -16,11 +18,11 @@ function render(ui: ReactNode) {
 
 const navigation = vi.hoisted(() => ({ create: vi.fn(), manage: vi.fn() }));
 const engine = vi.hoisted(() => ({
-    engine: 'docker' as 'docker' | 'podman',
+    engine: 'docker' as 'docker' | 'podman' | undefined,
     loading: false,
     switching: false,
     pendingEngine: undefined as 'docker' | 'podman' | undefined,
-    error: null,
+    error: null as Error | null,
     select: vi.fn(),
     refetch: vi.fn(),
 }));
@@ -37,6 +39,8 @@ vi.mock('../../hooks/useOpenExternal', () => ({ useOpenExternal: () => vi.fn() }
 beforeEach(() => {
     preferencesStore.setMotionEnabled(false);
     engine.engine = 'docker';
+    engine.error = null;
+    vi.mocked(pushErrorBar).mockClear();
     engine.loading = false;
     engine.switching = false;
     engine.pendingEngine = undefined;
@@ -74,6 +78,34 @@ function props(
 }
 
 describe('Docker 部署区', () => {
+    it('引擎读取失败不选择 Docker，也不允许安装、拉取或新建', () => {
+        engine.engine = undefined;
+        engine.error = new Error('settings unavailable');
+        render(<DockerDeploymentSection {...props()} />);
+        expect(screen.getByRole('radio', { name: 'Docker' })).not.toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Podman' })).not.toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Docker' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: '容器管理' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: '新建 NapCat Bot' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: '拉镜像' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: '安装 Docker' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('Compose 和镜像诊断只出现在全局 InfoBar', () => {
+        const input = props({ imageErrorByFlavor: { napcat: new Error('image denied') } });
+        input.status!.composeDiagnostic = 'provider failed';
+        input.status!.composeAvailable = false;
+        render(<DockerDeploymentSection {...input} />);
+        expect(pushErrorBar).toHaveBeenCalledWith(
+            expect.objectContaining({ raw: 'provider failed' }),
+        );
+        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ raw: 'image denied' }));
+        expect(screen.queryByText('provider failed')).not.toBeInTheDocument();
+        expect(screen.queryByText('image denied')).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
     it.each([
         ['安装 Docker', { installed: false, daemonRunning: false, composeAvailable: false }],
         ['启动 Docker', { installed: true, daemonRunning: false, composeAvailable: true }],
@@ -172,7 +204,8 @@ describe('Docker 部署区', () => {
                 {...props({ status: undefined, probeError: new Error(message) })}
             />,
         );
-        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(pushErrorBar).toHaveBeenCalledWith(expect.objectContaining({ raw: message }));
         expect(screen.getByRole('radio', { name: 'Podman' })).toBeEnabled();
         expect(screen.getByRole('button', { name: '容器管理' })).toBeDisabled();
         expect(screen.queryByRole('button', { name: '安装 Docker' })).not.toBeInTheDocument();

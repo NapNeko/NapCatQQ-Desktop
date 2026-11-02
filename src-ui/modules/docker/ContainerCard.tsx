@@ -152,7 +152,7 @@ export const ContainerCard: React.FC<ContainerCardProps> = ({
                         size="sm"
                         variant="ghost"
                         onClick={onViewLogs}
-                        title="查看容器运行日志（docker logs）"
+                        title="查看容器运行日志"
                         aria-label={`查看容器 ${container.name} 的运行日志`}
                     >
                         <ActionMotionIcon icon={ScrollText} size={13} />

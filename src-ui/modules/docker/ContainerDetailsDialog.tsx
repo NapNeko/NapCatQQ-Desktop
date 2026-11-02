@@ -15,7 +15,6 @@ import {
 import { ActionMotionIcon, refreshMotion } from '../../shared/ui/motion';
 import { useDockerContainer } from '../../hooks/docker/useDockerContainer';
 import { compactPorts, containerStateBadge } from '../../core/domain/docker/status';
-import { errorText } from '../../core/domain/errors';
 import { cn } from '../../shared/utils/cn';
 
 function dateText(value: string) {
@@ -65,28 +64,6 @@ function PillList({ items, empty }: { items: string[]; empty: string }) {
                     {item}
                 </span>
             ))}
-        </div>
-    );
-}
-
-function ErrorNotice({
-    title,
-    message,
-    onRetry,
-}: {
-    title: string;
-    message: string;
-    onRetry?: () => void;
-}) {
-    return (
-        <div role="alert" className="rounded-md border border-danger/30 bg-danger-soft/40 p-3">
-            <p className="text-sm font-medium text-danger">{title}</p>
-            <p className="mt-1 break-all text-xs leading-relaxed text-text-secondary">{message}</p>
-            {onRetry && (
-                <Button size="sm" variant="secondary" className="mt-2" onClick={onRetry}>
-                    重试
-                </Button>
-            )}
         </div>
     );
 }
@@ -152,17 +129,9 @@ export function ContainerDetailsDialog({
                             正在读取容器详情…
                         </div>
                     ) : details.isError ? (
-                        <ErrorNotice
-                            title="读取容器详情失败"
-                            message={errorText(details.error)}
-                            onRetry={refresh}
-                        />
+                        <p className="text-sm text-text-tertiary">详情暂不可用</p>
                     ) : data ? (
                         <div className="space-y-5">
-                            {data.error && (
-                                <ErrorNotice title="容器状态异常" message={data.error} />
-                            )}
-
                             <div className="grid gap-5 sm:grid-cols-2">
                                 <Section title="基本信息">
                                     <dl className="rounded-md border border-border-subtle/60 bg-inset/25 px-3">
@@ -183,6 +152,9 @@ export function ContainerDetailsDialog({
                                 <Section title="运行状态">
                                     <dl className="rounded-md border border-border-subtle/60 bg-inset/25 px-3">
                                         <InfoRow label="退出码" value={String(data.exitCode)} />
+                                        {data.error && (
+                                            <InfoRow label="最近错误" value={data.error} />
+                                        )}
                                         <InfoRow
                                             label="内存不足终止"
                                             value={data.oomKilled ? '是' : '否'}
@@ -211,10 +183,7 @@ export function ContainerDetailsDialog({
                                         运行后可查看资源占用
                                     </p>
                                 ) : stats.isError ? (
-                                    <ErrorNotice
-                                        title="读取资源占用失败"
-                                        message={errorText(stats.error)}
-                                    />
+                                    <p className="text-xs text-text-tertiary">暂不可用</p>
                                 ) : stats.data ? (
                                     <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                                         {Object.entries({

@@ -1,6 +1,6 @@
-// Docker 管理页按主机挂载，避免旧弹窗对新主机执行操作。
+// 管理视图按主机和引擎挂载，避免旧弹窗操作切换后的资源。
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Container, Disc3, HardDrive, Network, RefreshCw } from 'lucide-react';
+import { Container, Disc3, HardDrive, Network, RefreshCw, Search } from 'lucide-react';
 import { Button, Select } from '../../shared/ui';
 import { ActionMotionIcon, ListItem, refreshMotion, Shimmer } from '../../shared/ui/motion';
 import { useDocker, type DockerTab } from '../../hooks/docker/useDocker';
@@ -8,7 +8,7 @@ import { useServerManager } from '../../hooks/remote/useServerManager';
 import { openDockerDeployment } from '../../hooks/components/componentsNavigation';
 import { useDockerHostSelection } from '../../hooks/docker/dockerNavigation';
 import { dockerManagementSummary, imageRemoveRef } from '../../core/domain/docker/status';
-import { errorText } from '../../core/domain/errors';
+import { containerEngineLabel } from '../../core/domain/docker/engine';
 import { localOs } from '../../core/domain/runtime/env';
 import { useContainerEngine } from '../../hooks/docker/useContainerEngine';
 import { cn } from '../../shared/utils/cn';
@@ -22,6 +22,7 @@ import { DockerResourceList } from './DockerResourceList';
 import { ResourceRemoveDialog, type RemovalTarget } from './ResourceRemoveDialog';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import type { ContainerInfo, ImageInfo } from '../../core/ipc/types';
+import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
 const TABS = [
@@ -72,31 +73,70 @@ export function DockerPageNext() {
     );
 }
 
-export function DockerHostPage({
-    hostId,
-    servers,
-    onChangeHost,
-}: {
+interface DockerHostPageProps {
     hostId: string;
     servers: ServerProfile[];
     onChangeHost: (id: string) => void;
-}) {
+}
+
+export function DockerHostPage(props: DockerHostPageProps) {
+    const selection = useContainerEngine(props.hostId);
     const [tab, setTab] = useState<DockerTab>('containers');
+    const engine =
+        selection.loading || selection.switching || selection.error ? undefined : selection.engine;
+    return (
+        <DockerEnginePage
+            key={`${props.hostId}:${engine ?? 'unavailable'}`}
+            {...props}
+            tab={tab}
+            onChangeTab={setTab}
+            engine={engine}
+            selectedEngine={selection.pendingEngine ?? selection.engine}
+            engineLoading={selection.loading || selection.switching}
+            engineBlocked={selection.busy || !!selection.error}
+            onChangeEngine={(next) => void selection.select(next).catch(() => {})}
+            onRetryEngine={() => void selection.refetch()}
+        />
+    );
+}
+
+function DockerEnginePage({
+    hostId,
+    servers,
+    onChangeHost,
+    tab,
+    onChangeTab,
+    engine,
+    selectedEngine,
+    engineLoading,
+    engineBlocked,
+    onChangeEngine,
+    onRetryEngine,
+}: DockerHostPageProps & {
+    tab: DockerTab;
+    onChangeTab: (tab: DockerTab) => void;
+    engine?: ContainerEngine;
+    selectedEngine?: ContainerEngine;
+    engineLoading: boolean;
+    engineBlocked: boolean;
+    onChangeEngine: (engine: ContainerEngine) => void;
+    onRetryEngine: () => void;
+}) {
     const [search, setSearch] = useState('');
     const [stateFilter, setStateFilter] = useState('all');
-    const [autoRefresh, setAutoRefresh] = useState(false);
-    const { engine, loading: engineLoading } = useContainerEngine(hostId);
-    const docker = useDocker(engineLoading ? '' : hostId, tab, autoRefresh, engine);
-    const engineName = engine === 'podman' ? 'Podman' : 'Docker';
+    const docker = useDocker(engine ? hostId : '', tab, engine);
+    const engineName = containerEngineLabel(engine);
     const [logs, setLogs] = useState<ContainerInfo | null>(null);
     const [details, setDetails] = useState<ContainerInfo | null>(null);
     const [remove, setRemove] = useState<RemovalTarget | null>(null);
     const [image, setImage] = useState<ImageInfo | null>(null);
-    const summary = docker.statusError
-        ? { ready: false, label: `${engineName} 状态读取失败` }
-        : docker.status
-          ? dockerManagementSummary(docker.status, engineName)
-          : null;
+    const summary = !engine
+        ? null
+        : docker.statusError
+          ? { ready: false, label: `${engineName} 状态读取失败` }
+          : docker.status
+            ? dockerManagementSummary(docker.status, engineName)
+            : null;
     const label = TABS.find((t) => t.id === tab)!.label;
     const term = search.trim().toLowerCase();
     const matches = (...values: string[]) =>
@@ -130,98 +170,106 @@ export function DockerHostPage({
                 hostId={hostId}
                 servers={servers}
                 onChangeHost={onChangeHost}
+                engine={selectedEngine}
+                onChangeEngine={onChangeEngine}
+                engineDisabled={engineLoading || engineBlocked || docker.isActing}
                 summary={summary}
-                isProbing={docker.isProbing}
+                isProbing={engineLoading || docker.isProbing}
                 resourceCount={
                     docker.ready && !docker.isLoading && !docker.listError ? total : null
                 }
                 resourceLabel={label}
-                autoRefresh={autoRefresh}
-                onAutoRefreshChange={setAutoRefresh}
-                isRefreshing={docker.isRefreshing}
-                onRefresh={docker.refetch}
+                isRefreshing={engineLoading || docker.isRefreshing}
+                onRefresh={engine ? docker.refetch : onRetryEngine}
                 onOpenDeployment={() => openDockerDeployment(hostId)}
             >
-                <nav
-                    className="inline-flex w-fit max-w-full flex-wrap items-center gap-0.5 rounded-md bg-inset p-0.5"
-                    aria-label="容器管理视图"
-                >
-                    {TABS.map(({ id, label: title, icon: Icon }) => (
-                        <button
-                            key={id}
-                            type="button"
-                            aria-pressed={tab === id}
-                            onClick={() => setTab(id)}
-                            className={cn(
-                                'inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-[13px] font-medium transition-colors',
-                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                                tab === id
-                                    ? 'bg-elevated text-text shadow-sm ring-1 ring-border-subtle'
-                                    : 'text-text-tertiary hover:bg-elevated/35 hover:text-text',
-                            )}
-                        >
-                            <Icon size={14} />
-                            {title}
-                        </button>
-                    ))}
-                </nav>
-            </DockerToolbar>
-            <div className="shrink-0 space-y-3 pb-4">
-                {docker.ready && (
-                    <div className="flex flex-wrap items-center gap-3">
-                        <input
-                            aria-label={`搜索${label}`}
-                            placeholder={`搜索${label}名称、ID${tab === 'containers' ? '或镜像' : ''}`}
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            className="min-w-0 flex-1 rounded-sm border border-border-subtle bg-field px-3 py-2 text-sm text-text"
-                        />
-                        {tab === 'containers' && (
-                            <Select
-                                id="docker-state-filter"
-                                value={stateFilter}
-                                onValueChange={setStateFilter}
-                                items={[
-                                    { value: 'all', label: '全部状态' },
-                                    { value: 'running', label: '运行中' },
-                                    { value: 'exited', label: '已停止' },
-                                    { value: 'created', label: '已创建' },
-                                    { value: 'paused', label: '已暂停' },
-                                    { value: 'restarting', label: '重启中' },
-                                    { value: 'other', label: '其他状态' },
-                                ]}
-                            />
-                        )}
-                    </div>
-                )}
-                {error && (
-                    <div
-                        role="alert"
-                        className="rounded-md border border-danger/30 bg-danger-soft p-3 text-sm"
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                    <nav
+                        className="inline-flex w-fit max-w-full flex-wrap items-center gap-0.5 rounded-md bg-inset p-0.5"
+                        aria-label="容器管理视图"
                     >
-                        <p className="font-medium text-danger">
-                            {docker.statusError
-                                ? `无法读取 ${engineName} 状态`
-                                : `无法刷新${label}`}
-                        </p>
-                        <p className="mt-1 break-all text-text-secondary">{errorText(error)}</p>
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={docker.refetch}
-                            disabled={docker.isRefreshing}
-                            className="mt-2"
-                        >
-                            重试
-                        </Button>
-                    </div>
-                )}
-            </div>
+                        {TABS.map(({ id, label: title, icon: Icon }) => (
+                            <button
+                                key={id}
+                                type="button"
+                                aria-pressed={tab === id}
+                                onClick={() => onChangeTab(id)}
+                                className={cn(
+                                    'inline-flex h-6 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors',
+                                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
+                                    tab === id
+                                        ? 'bg-elevated text-text shadow-sm ring-1 ring-border-subtle'
+                                        : 'text-text-tertiary hover:bg-elevated/35 hover:text-text',
+                                )}
+                            >
+                                <Icon size={14} />
+                                {title}
+                            </button>
+                        ))}
+                    </nav>
+                    {docker.ready && (
+                        <div className="ml-auto flex min-w-0 max-w-lg flex-1 basis-72 items-center gap-2">
+                            <div className="relative min-w-0 flex-1">
+                                <Search
+                                    size={13}
+                                    aria-hidden
+                                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary"
+                                />
+                                <input
+                                    aria-label={`搜索${label}`}
+                                    placeholder={`搜索${label}名称、ID${tab === 'containers' ? '或镜像' : ''}`}
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                    className="h-7 w-full min-w-0 rounded-sm border border-border-subtle bg-field pl-8 pr-2.5 text-xs text-text outline-none placeholder:text-text-tertiary focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand"
+                                />
+                            </div>
+                            {tab === 'containers' && (
+                                <Select
+                                    id="docker-state-filter"
+                                    aria-label="容器状态"
+                                    size="sm"
+                                    className="w-28 shrink-0"
+                                    value={stateFilter}
+                                    onValueChange={setStateFilter}
+                                    items={[
+                                        { value: 'all', label: '全部状态' },
+                                        { value: 'running', label: '运行中' },
+                                        { value: 'exited', label: '已停止' },
+                                        { value: 'created', label: '已创建' },
+                                        { value: 'paused', label: '已暂停' },
+                                        { value: 'restarting', label: '重启中' },
+                                        { value: 'other', label: '其他状态' },
+                                    ]}
+                                />
+                            )}
+                        </div>
+                    )}
+                </div>
+            </DockerToolbar>
             <div
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6"
                 aria-busy={docker.ready && docker.isLoading}
             >
-                {!docker.ready && !error && (
+                {!engine && (
+                    <PagePlaceholder className="min-h-[280px] gap-3">
+                        <p className="text-sm text-text-secondary">
+                            {engineLoading ? '正在读取容器引擎…' : '引擎设置暂不可用'}
+                        </p>
+                        {!engineLoading && (
+                            <Button size="sm" onClick={onRetryEngine}>
+                                重试
+                            </Button>
+                        )}
+                    </PagePlaceholder>
+                )}
+                {engine && error && (
+                    <PagePlaceholder className="min-h-[160px] gap-3">
+                        <Button size="sm" onClick={docker.refetch} disabled={docker.isRefreshing}>
+                            重试
+                        </Button>
+                    </PagePlaceholder>
+                )}
+                {engine && !docker.ready && !error && (
                     <PagePlaceholder className="min-h-[280px] gap-3">
                         {docker.isProbing ? (
                             <>

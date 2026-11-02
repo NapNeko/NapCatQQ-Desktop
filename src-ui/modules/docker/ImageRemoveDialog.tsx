@@ -103,7 +103,7 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
                         onCheckedChange={setForce}
                         disabled={isRemoving}
                         label="强制删除"
-                        hint="仍有容器引用时执行 docker rmi -f。若仍失败，先到「容器」页停掉这些容器。"
+                        hint="若仍被容器引用，请先移除引用该镜像的容器。"
                     />
                 </div>
 

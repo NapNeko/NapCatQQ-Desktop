@@ -1,5 +1,10 @@
 import type { ContainerEngine } from '../../core/ipc/generated/domain/ContainerEngine';
-import { dockerHostTargetKey, dockerQueryMatchesHost } from '../../core/domain/docker/engine';
+import {
+    containerEngineLabel,
+    dockerHostTargetKey,
+    dockerQueryMatchesHost,
+} from '../../core/domain/docker/engine';
+import { useDockerQueryNotice } from './useDockerQueryNotice';
 // Docker 查询和操作绑定发起时的主机，切换主机后仍只刷新原主机。
 import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
@@ -33,7 +38,6 @@ const ACTION_VERB: Record<ContainerAction, string> = {
 export function useDocker(
     hostId: string,
     activeTab: DockerTab = 'containers',
-    autoRefresh = false,
     engine?: ContainerEngine,
 ) {
     const client = useQueryClient();
@@ -42,7 +46,7 @@ export function useDocker(
     const mutationKey = ['docker', hostId];
     const isBusy = useIsMutating({ mutationKey }) > 0;
     const enabled = hostId.length > 0;
-    const interval = autoRefresh && !isBusy ? 15000 : false;
+    const interval = !isBusy ? 15000 : false;
     const statusQuery = useQuery({
         queryKey: ['docker', 'status', targetKey],
         queryFn: () => dockerService.probe(hostId, ...engineArgs),
@@ -82,6 +86,16 @@ export function useDocker(
         networks: networksQuery,
         volumes: volumesQuery,
     }[activeTab];
+    useDockerQueryNotice(
+        `container-status:${targetKey}`,
+        `读取 ${containerEngineLabel(engine)} 状态失败`,
+        enabled ? statusQuery.error : null,
+    );
+    useDockerQueryNotice(
+        `container-list:${targetKey}:${activeTab}`,
+        `读取${{ containers: '容器', images: '镜像', networks: '网络', volumes: '数据卷' }[activeTab]}失败`,
+        ready ? activeQuery.error : null,
+    );
 
     const invalidateHost = useCallback(
         (target: string) =>

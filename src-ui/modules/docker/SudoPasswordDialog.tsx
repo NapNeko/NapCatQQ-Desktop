@@ -1,6 +1,4 @@
-// sudo 密码对话框：远端 Linux 以 SSH 密钥登录、未保存密码时，装 Docker 要提权。
-// 后端探测到这种情况会回需要密码的信号，这里收集 sudo 密码交给上层带着重试安装。
-// onConfirm 由上层真正发起安装并在成功时关闭；失败(密码错等)抛出，这里 catch 内联报错保持打开。
+// sudo 验证失败时保留弹窗，供用户修改密码后重试。
 
 import React, { useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -16,6 +14,7 @@ import {
     Checkbox,
 } from '../../shared/ui';
 import { errorText } from '../../core/domain/errors';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
 interface SudoPasswordDialogProps {
     hostName: string;
@@ -29,7 +28,7 @@ interface SudoPasswordDialogProps {
 
 export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
     hostName,
-    actionLabel = '安装 Docker',
+    actionLabel = '准备容器环境',
     reason,
     isSubmitting,
     allowRemember = true,
@@ -38,26 +37,22 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
 }) => {
     const [password, setPassword] = useState('');
     const [remember, setRemember] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [pending, setPending] = useState(false);
     const pendingRef = useRef(false);
     const busy = isSubmitting || pending;
 
     const handleConfirm = async () => {
-        if (isSubmitting || pendingRef.current) return;
-        if (!password) {
-            setError('请输入 sudo 密码');
-            return;
-        }
-        setError(null);
+        if (isSubmitting || pendingRef.current || !password) return;
         pendingRef.current = true;
         setPending(true);
         try {
-            // 上层负责真正下发安装并在成功时关闭对话框。失败(密码错 / 提权被拒等)它会抛出，
-            // 这里就地显示原因，对话框保持打开让用户改密码重试，而不是默默关掉。
             await onConfirm(password, allowRemember && remember);
         } catch (e) {
-            setError(errorText(e, '安装失败'));
+            pushErrorBar({
+                key: `sudo:${hostName}:${actionLabel}`,
+                title: `${actionLabel}失败 · ${hostName}`,
+                raw: errorText(e),
+            });
         } finally {
             pendingRef.current = false;
             setPending(false);
@@ -96,8 +91,6 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
                             disabled={busy}
                         />
                     )}
-
-                    {error && <p className="text-xs text-danger">{error}</p>}
                 </div>
 
                 <DialogFooter>

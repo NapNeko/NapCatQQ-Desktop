@@ -239,7 +239,7 @@ export function useDockerHosts(
                         () =>
                             reject(
                                 new Error(
-                                    'Docker 安装超时（10 分钟）。请检查 SSH 与远端网络，或在远端手动安装后点刷新。',
+                                    '容器引擎安装超时（10 分钟）。请检查 SSH 与远端网络，或在远端手动安装后点刷新。',
                                 ),
                             ),
                         DOCKER_INSTALL_TIMEOUT_MS,
